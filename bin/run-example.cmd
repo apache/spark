@@ -19,4 +19,7 @@ rem
 
 set SPARK_HOME=%~dp0..
 set _SPARK_CMD_USAGE=Usage: ./bin/run-example [options] example-class [example args]
-cmd /V /E /C "%~dp0spark-submit.cmd" run-example %*
+
+rem The outermost quotes are used to prevent Windows command line parse error
+rem when there are some quotes in parameters, see SPARK-21877.
+cmd /V /E /C ""%~dp0spark-submit.cmd" run-example %*"

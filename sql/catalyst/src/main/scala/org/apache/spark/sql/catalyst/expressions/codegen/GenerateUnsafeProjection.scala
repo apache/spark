@@ -391,8 +391,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           ${ctx.initPartition()}
         }
 
-        ${ctx.declareAddedFunctions()}
-
         // Scala.Function1 need this
         public java.lang.Object apply(java.lang.Object row) {
           return apply((InternalRow) row);
@@ -403,8 +401,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           return ${eval.value};
         }
 
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
+        ${ctx.declareAddedFunctions()}
       }
       """
 
@@ -412,7 +409,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = CodeGenerator.compile(code)
-    c.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]
   }
 }

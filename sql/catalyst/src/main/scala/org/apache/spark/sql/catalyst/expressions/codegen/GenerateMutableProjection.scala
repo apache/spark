@@ -115,8 +115,6 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           ${ctx.initPartition()}
         }
 
-        ${ctx.declareAddedFunctions()}
-
         public ${classOf[BaseMutableProjection].getName} target(InternalRow row) {
           mutableRow = row;
           return this;
@@ -136,8 +134,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           return mutableRow;
         }
 
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
+        ${ctx.declareAddedFunctions()}
       }
     """
 
@@ -145,7 +142,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = CodeGenerator.compile(code)
-    c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
   }
 }

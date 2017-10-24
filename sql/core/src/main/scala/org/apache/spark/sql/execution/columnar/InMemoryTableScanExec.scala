@@ -34,7 +34,7 @@ case class InMemoryTableScanExec(
     @transient relation: InMemoryRelation)
   extends LeafExecNode {
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -102,7 +102,8 @@ case class InMemoryTableScanExec(
     case IsNull(a: Attribute) => statsFor(a).nullCount > 0
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
 
-    case In(a: AttributeReference, list: Seq[Expression]) if list.forall(_.isInstanceOf[Literal]) =>
+    case In(a: AttributeReference, list: Seq[Expression])
+      if list.forall(_.isInstanceOf[Literal]) && list.nonEmpty =>
       list.map(l => statsFor(a).lowerBound <= l.asInstanceOf[Literal] &&
         l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
   }
@@ -166,12 +167,13 @@ case class InMemoryTableScanExec(
         if (inMemoryPartitionPruningEnabled) {
           cachedBatchIterator.filter { cachedBatch =>
             if (!partitionFilter.eval(cachedBatch.stats)) {
-              def statsString: String = schemaIndex.map {
-                case (a, i) =>
+              logDebug {
+                val statsString = schemaIndex.map { case (a, i) =>
                   val value = cachedBatch.stats.get(i, a.dataType)
                   s"${a.name}: $value"
-              }.mkString(", ")
-              logInfo(s"Skipping partition based on stats $statsString")
+                }.mkString(", ")
+                s"Skipping partition based on stats $statsString"
+              }
               false
             } else {
               true

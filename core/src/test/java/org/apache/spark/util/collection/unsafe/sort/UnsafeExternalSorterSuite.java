@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.UUID;
 
+import org.hamcrest.Matchers;
 import scala.Tuple2$;
 
 import org.junit.After;
@@ -154,7 +155,7 @@ public class UnsafeExternalSorterSuite {
       blockManager,
       serializerManager,
       taskContext,
-      recordComparator,
+      () -> recordComparator,
       prefixComparator,
       /* initialSize */ 1024,
       pageSizeBytes,
@@ -395,7 +396,7 @@ public class UnsafeExternalSorterSuite {
         sorter.spill();
       }
     }
-    UnsafeSorterIterator iter = sorter.getIterator();
+    UnsafeSorterIterator iter = sorter.getIterator(0);
     for (int i = 0; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
@@ -440,7 +441,7 @@ public class UnsafeExternalSorterSuite {
       blockManager,
       serializerManager,
       taskContext,
-      recordComparator,
+      () -> recordComparator,
       prefixComparator,
       1024,
       pageSizeBytes,
@@ -479,5 +480,72 @@ public class UnsafeExternalSorterSuite {
     }
   }
 
+  @Test
+  public void testGetIterator() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    for (int i = 0; i < 100; i++) {
+      insertNumber(sorter, i);
+    }
+    verifyIntIterator(sorter.getIterator(0), 0, 100);
+    verifyIntIterator(sorter.getIterator(79), 79, 100);
+
+    sorter.spill();
+    for (int i = 100; i < 200; i++) {
+      insertNumber(sorter, i);
+    }
+    sorter.spill();
+    verifyIntIterator(sorter.getIterator(79), 79, 200);
+
+    for (int i = 200; i < 300; i++) {
+      insertNumber(sorter, i);
+    }
+    verifyIntIterator(sorter.getIterator(79), 79, 300);
+    verifyIntIterator(sorter.getIterator(139), 139, 300);
+    verifyIntIterator(sorter.getIterator(279), 279, 300);
+  }
+
+  @Test
+  public void testOOMDuringSpill() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    // we assume that given default configuration,
+    // the size of the data we insert to the sorter (ints)
+    // and assuming we shouldn't spill before pointers array is exhausted
+    // (memory manager is not configured to throw at this point)
+    // - so this loop runs a reasonable number of iterations (<2000).
+    // test indeed completed within <30ms (on a quad i7 laptop).
+    for (int i = 0; sorter.hasSpaceForAnotherRecord(); ++i) {
+      insertNumber(sorter, i);
+    }
+    // we expect the next insert to attempt growing the pointerssArray first
+    // allocation is expected to fail, then a spill is triggered which
+    // attempts another allocation which also fails and we expect to see this
+    // OOM here.  the original code messed with a released array within the
+    // spill code and ended up with a failed assertion.  we also expect the
+    // location of the OOM to be
+    // org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset
+    memoryManager.markconsequentOOM(2);
+    try {
+      insertNumber(sorter, 1024);
+      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
+    }
+    // we expect an OutOfMemoryError here, anything else (i.e the original NPE is a failure)
+    catch (OutOfMemoryError oom){
+      String oomStackTrace = Utils.exceptionString(oom);
+      assertThat("expected OutOfMemoryError in " +
+        "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
+        oomStackTrace,
+        Matchers.containsString(
+          "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
+    }
+  }
+
+  private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
+      throws IOException {
+    for (int i = start; i < end; i++) {
+      assert (iter.hasNext());
+      iter.loadNext();
+      assert (Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()) == i);
+    }
+  }
 }
 

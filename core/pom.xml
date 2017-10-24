@@ -69,6 +69,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kvstore_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-network-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -190,8 +195,8 @@
       <artifactId>snappy-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>net.jpountz.lz4</groupId>
-      <artifactId>lz4</artifactId>
+      <groupId>org.lz4</groupId>
+      <artifactId>lz4-java</artifactId>
     </dependency>
     <dependency>
       <groupId>org.roaringbitmap</groupId>
@@ -335,7 +340,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.4</version>
+      <version>0.10.6</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -429,6 +434,7 @@
           <!-- When using SPARK_PREPEND_CLASSES Spark classes compiled locally don't use
                shaded deps. So here we store jars in their original form which are added
                when the classpath is computed. -->
+          <!-- See similar execution in mllib/pom.xml -->
           <execution>
             <id>copy-dependencies</id>
             <phase>package</phase>
@@ -482,6 +488,7 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
+            <version>1.6.0</version>
             <executions>
               <execution>
                 <id>sparkr-pkg</id>
@@ -492,7 +499,7 @@
               </execution>
             </executions>
             <configuration>
-              <executable>..${file.separator}R${file.separator}install-dev${script.extension}</executable>
+              <executable>${project.basedir}${file.separator}..${file.separator}R${file.separator}install-dev${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>

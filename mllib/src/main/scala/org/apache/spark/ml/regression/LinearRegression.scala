@@ -27,11 +27,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
-import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.optim.aggregator.LeastSquaresAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
@@ -64,7 +64,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
    *
    * @group param
    */
-  @Since("2.3.0")
+  @Since("1.6.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
       s"${supportedSolvers.mkString(", ")}. (Default auto)",
@@ -194,7 +194,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.6.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> AUTO)
+  setDefault(solver -> Auto)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -224,8 +224,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
-    if (($(solver) == AUTO &&
-      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == NORMAL) {
+    if (($(solver) == Auto &&
+      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == Normal) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
@@ -251,7 +251,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       return lrModel
     }
 
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (featuresSummarizer, ySummarizer) = {
@@ -265,7 +265,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
       instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer
+        (new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
 
@@ -286,7 +286,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
             s"training is not needed.")
         }
         if (handlePersistence) instances.unpersist()
-        val coefficients = Vectors.sparse(numFeatures, Seq())
+        val coefficients = Vectors.sparse(numFeatures, Seq.empty)
         val intercept = yMean
 
         val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
@@ -336,10 +336,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val getAggregatorFunc = new LeastSquaresAggregator(yStd, yMean, $(fitIntercept),
       bcFeaturesStd, bcFeaturesMean)(_)
+    val getFeaturesStd = (j: Int) => if (j >= 0 && j < numFeatures) featuresStd(j) else 0.0
     val regularization = if (effectiveL2RegParam != 0.0) {
       val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
       Some(new L2Regularization(effectiveL2RegParam, shouldApply,
-        if ($(standardization)) None else Some(featuresStd)))
+        if ($(standardization)) None else Some(getFeaturesStd)))
     } else {
       None
     }
@@ -460,16 +461,16 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
   val MAX_FEATURES_FOR_NORMAL_SOLVER: Int = WeightedLeastSquares.MAX_NUM_FEATURES
 
   /** String name for "auto". */
-  private[regression] val AUTO = "auto"
+  private[regression] val Auto = "auto"
 
   /** String name for "normal". */
-  private[regression] val NORMAL = "normal"
+  private[regression] val Normal = "normal"
 
   /** String name for "l-bfgs". */
   private[regression] val LBFGS = "l-bfgs"
 
   /** Set of solvers that LinearRegression supports. */
-  private[regression] val supportedSolvers = Array(AUTO, NORMAL, LBFGS)
+  private[regression] val supportedSolvers = Array(Auto, Normal, LBFGS)
 }
 
 /**

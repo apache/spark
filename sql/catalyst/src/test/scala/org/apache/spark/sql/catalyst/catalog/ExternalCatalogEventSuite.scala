@@ -176,6 +176,15 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     }
     checkEvents(RenameFunctionPreEvent("db5", "fn7", "fn4") :: Nil)
 
+    // ALTER
+    val alteredFunctionDefinition = CatalogFunction(
+      identifier = FunctionIdentifier("fn4", Some("db5")),
+      className = "org.apache.spark.AlterFunction",
+      resources = Seq.empty)
+    catalog.alterFunction("db5", alteredFunctionDefinition)
+    checkEvents(
+      AlterFunctionPreEvent("db5", "fn4") :: AlterFunctionEvent("db5", "fn4") :: Nil)
+
     // DROP
     intercept[AnalysisException] {
       catalog.dropFunction("db5", "fn7")

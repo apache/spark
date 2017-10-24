@@ -126,22 +126,22 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
 
   /** Increase our size to newSize and grow the backing array if needed. */
   private def growToSize(newSize: Int): Unit = {
-    if (newSize < 0) {
-      throw new UnsupportedOperationException("Can't grow buffer past Int.MaxValue elements")
+    // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat
+    // smaller. Be conservative and lower the cap a little.
+    val arrayMax = Int.MaxValue - 8
+    if (newSize < 0 || newSize - 2 > arrayMax) {
+      throw new UnsupportedOperationException(s"Can't grow buffer past $arrayMax elements")
     }
     val capacity = if (otherElements != null) otherElements.length + 2 else 2
     if (newSize > capacity) {
-      var newArrayLen = 8
+      var newArrayLen = 8L
       while (newSize - 2 > newArrayLen) {
         newArrayLen *= 2
-        if (newArrayLen == Int.MinValue) {
-          // Prevent overflow if we double from 2^30 to 2^31, which will become Int.MinValue.
-          // Note that we set the new array length to Int.MaxValue - 2 so that our capacity
-          // calculation above still gives a positive integer.
-          newArrayLen = Int.MaxValue - 2
-        }
       }
-      val newArray = new Array[T](newArrayLen)
+      if (newArrayLen > arrayMax) {
+        newArrayLen = arrayMax
+      }
+      val newArray = new Array[T](newArrayLen.toInt)
       if (otherElements != null) {
         System.arraycopy(otherElements, 0, newArray, 0, otherElements.length)
       }

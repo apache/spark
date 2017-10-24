@@ -326,10 +326,6 @@ class InMemoryCatalog(
     catalog(db).tables(table).table
   }
 
-  override def getTableOption(db: String, table: String): Option[CatalogTable] = synchronized {
-    if (!tableExists(db, table)) None else Option(catalog(db).tables(table).table)
-  }
-
   override def tableExists(db: String, table: String): Boolean = synchronized {
     requireDbExists(db)
     catalog(db).tables.contains(table)
@@ -553,18 +549,6 @@ class InMemoryCatalog(
     }
   }
 
-  /**
-   * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
-   * partial partition spec w.r.t. PARTITION (a=1,b=2).
-   */
-  private def isPartialPartitionSpec(
-      spec1: TablePartitionSpec,
-      spec2: TablePartitionSpec): Boolean = {
-    spec1.forall {
-      case (partitionColumn, value) => spec2(partitionColumn) == value
-    }
-  }
-
   override def listPartitionsByFilter(
       db: String,
       table: String,
@@ -588,6 +572,12 @@ class InMemoryCatalog(
   override protected def doDropFunction(db: String, funcName: String): Unit = synchronized {
     requireFunctionExists(db, funcName)
     catalog(db).functions.remove(funcName)
+  }
+
+  override protected def doAlterFunction(db: String, func: CatalogFunction): Unit = synchronized {
+    requireDbExists(db)
+    requireFunctionExists(db, func.identifier.funcName)
+    catalog(db).functions.put(func.identifier.funcName, func)
   }
 
   override protected def doRenameFunction(

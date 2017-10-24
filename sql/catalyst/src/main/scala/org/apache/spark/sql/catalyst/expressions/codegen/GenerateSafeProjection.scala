@@ -175,16 +175,13 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${ctx.initPartition()}
         }
 
-        ${ctx.declareAddedFunctions()}
-
         public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allExpressions
           return mutableRow;
         }
 
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
+        ${ctx.declareAddedFunctions()}
       }
     """
 
@@ -192,8 +189,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = CodeGenerator.compile(code)
+    val (clazz, _) = CodeGenerator.compile(code)
     val resultRow = new SpecificInternalRow(expressions.map(_.dataType))
-    c.generate(ctx.references.toArray :+ resultRow).asInstanceOf[Projection]
+    clazz.generate(ctx.references.toArray :+ resultRow).asInstanceOf[Projection]
   }
 }

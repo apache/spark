@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.{LambdaVariable, MapObjects, NewInstance, UnresolvedMapObjects}
-import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
@@ -141,6 +141,7 @@ class Analyzer(
       ResolveFunctions ::
       ResolveAliases ::
       ResolveSubquery ::
+      ResolveSubqueryColumnAliases ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -267,7 +268,7 @@ class Analyzer(
      *  We need to get all of its subsets for the rule described above, the subset is
      *  represented as sequence of expressions.
      */
-    def rollupExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.inits.toSeq
+    def rollupExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.inits.toIndexedSeq
 
     /*
      *  GROUP BY a, b, c WITH CUBE
@@ -278,9 +279,15 @@ class Analyzer(
      *  We need to get all of its subsets for a given GROUPBY expression, the subsets are
      *  represented as sequence of expressions.
      */
-    def cubeExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.toList match {
+    def cubeExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = {
+      // `cubeExprs0` is recursive and returns a lazy Stream. Here we call `toIndexedSeq` to
+      // materialize it and avoid serialization problems later on.
+      cubeExprs0(exprs).toIndexedSeq
+    }
+
+    def cubeExprs0(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.toList match {
       case x :: xs =>
-        val initial = cubeExprs(xs)
+        val initial = cubeExprs0(xs)
         initial.map(x +: _) ++ initial
       case Nil =>
         Seq(Seq.empty)
@@ -313,7 +320,7 @@ class Analyzer(
                 s"grouping columns (${groupByExprs.mkString(",")})")
           }
         case e @ Grouping(col: Expression) =>
-          val idx = groupByExprs.indexOf(col)
+          val idx = groupByExprs.indexWhere(_.semanticEquals(col))
           if (idx >= 0) {
             Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
               Literal(1)), ByteType), toPrettySQL(e))()
@@ -591,25 +598,7 @@ class Analyzer(
       case u: UnresolvedRelation if !isRunningDirectlyOnFiles(u.tableIdentifier) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
         val foundRelation = lookupTableFromCatalog(u, defaultDatabase)
-
-        // Add `Project` to rename output column names if a query has alias names:
-        // e.g., SELECT col1, col2 FROM testData AS t(col1, col2)
-        val relation = if (u.outputColumnNames.nonEmpty) {
-          val outputAttrs = foundRelation.output
-          // Checks if the number of the aliases equals to the number of columns in the table.
-          if (u.outputColumnNames.size != outputAttrs.size) {
-            u.failAnalysis(s"Number of column aliases does not match number of columns. " +
-              s"Table name: ${u.tableName}; number of column aliases: " +
-              s"${u.outputColumnNames.size}; number of columns: ${outputAttrs.size}.")
-          }
-          val aliases = outputAttrs.zip(u.outputColumnNames).map {
-            case (attr, name) => Alias(attr, name)()
-          }
-          Project(aliases, foundRelation)
-        } else {
-          foundRelation
-        }
-        resolveRelation(relation)
+        resolveRelation(foundRelation)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
@@ -1303,8 +1292,10 @@ class Analyzer(
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(e, plans)(Exists(_, _, exprId))
-        case In(value, Seq(l @ ListQuery(sub, _, exprId))) if value.resolved && !sub.resolved =>
-          val expr = resolveSubQuery(l, plans)(ListQuery(_, _, exprId))
+        case In(value, Seq(l @ ListQuery(sub, _, exprId, _))) if value.resolved && !l.resolved =>
+          val expr = resolveSubQuery(l, plans)((plan, exprs) => {
+            ListQuery(plan, exprs, exprId, plan.output)
+          })
           In(value, Seq(expr))
       }
     }
@@ -1320,6 +1311,30 @@ class Analyzer(
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q.children)
+    }
+  }
+
+  /**
+   * Replaces unresolved column aliases for a subquery with projections.
+   */
+  object ResolveSubqueryColumnAliases extends Rule[LogicalPlan] {
+
+     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case u @ UnresolvedSubqueryColumnAliases(columnNames, child) if child.resolved =>
+        // Resolves output attributes if a query has alias names in its subquery:
+        // e.g., SELECT * FROM (SELECT 1 AS a, 1 AS b) t(col1, col2)
+        val outputAttrs = child.output
+        // Checks if the number of the aliases equals to the number of output columns
+        // in the subquery.
+        if (columnNames.size != outputAttrs.size) {
+          u.failAnalysis("Number of column aliases does not match number of columns. " +
+            s"Number of column aliases: ${columnNames.size}; " +
+            s"number of columns: ${outputAttrs.size}.")
+        }
+        val aliases = outputAttrs.zip(columnNames).map { case (attr, aliasName) =>
+          Alias(attr, aliasName)()
+        }
+        Project(aliases, child)
     }
   }
 
@@ -1518,9 +1533,9 @@ class Analyzer(
        */
       def unapply(e: Expression): Option[(Generator, Seq[String], Boolean)] = e match {
         case Alias(GeneratorOuter(g: Generator), name) if g.resolved => Some((g, name :: Nil, true))
-        case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some(g, names, true)
+        case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some((g, names, true))
         case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil, false))
-        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names, false)
+        case MultiAlias(g: Generator, names) if g.resolved => Some((g, names, false))
         case _ => None
       }
     }
@@ -1950,7 +1965,7 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(func, _, inputs, _, _, _) =>
+        case udf @ ScalaUDF(func, _, inputs, _, _, _, _) =>
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
@@ -2234,7 +2249,9 @@ object EliminateUnions extends Rule[LogicalPlan] {
 /**
  * Cleans up unnecessary Aliases inside the plan. Basically we only need Alias as a top level
  * expression in Project(project list) or Aggregate(aggregate expressions) or
- * Window(window expressions).
+ * Window(window expressions). Notice that if an expression has other expression parameters which
+ * are not in its `children`, e.g. `RuntimeReplaceable`, the transformation for Aliases in this
+ * rule can't work for those parameters.
  */
 object CleanupAliases extends Rule[LogicalPlan] {
   private def trimAliases(e: Expression): Expression = {
@@ -2245,7 +2262,10 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
   def trimNonTopLevelAliases(e: Expression): Expression = e match {
     case a: Alias =>
-      a.withNewChildren(trimAliases(a.child) :: Nil)
+      a.copy(child = trimAliases(a.child))(
+        exprId = a.exprId,
+        qualifier = a.qualifier,
+        explicitMetadata = Some(a.metadata))
     case other => trimAliases(other)
   }
 
@@ -2334,8 +2354,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
       val windowExpressions =
         p.expressions.flatMap(_.collect { case t: TimeWindow => t }).toSet
 
+      val numWindowExpr = windowExpressions.size
       // Only support a single window expression for now
-      if (windowExpressions.size == 1 &&
+      if (numWindowExpr == 1 &&
           windowExpressions.head.timeColumn.resolved &&
           windowExpressions.head.checkInputDataTypes().isSuccess) {
 
@@ -2369,7 +2390,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         if (window.windowDuration == window.slideDuration) {
           val windowStruct = Alias(getWindow(0, 1), WINDOW_COL_NAME)(
-            exprId = windowAttr.exprId)
+            exprId = windowAttr.exprId, explicitMetadata = Some(metadata))
 
           val replacedPlan = p transformExpressions {
             case t: TimeWindow => windowAttr
@@ -2402,7 +2423,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
           renamedPlan.withNewChildren(substitutedPlan :: Nil)
         }
-      } else if (windowExpressions.size > 1) {
+      } else if (numWindowExpr > 1) {
         p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
           "of rows, therefore they are currently not supported.")
       } else {

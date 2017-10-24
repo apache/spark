@@ -39,6 +39,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
@@ -241,6 +242,9 @@ class CodegenContext {
   private val classFunctions: mutable.Map[String, mutable.Map[String, String]] =
     mutable.Map(outerClassName -> mutable.Map.empty[String, String])
 
+  // Verbatim extra code to be added to the OuterClass.
+  private val extraClasses: mutable.ListBuffer[String] = mutable.ListBuffer[String]()
+
   // Returns the size of the most recently added class.
   private def currClassSize(): Int = classSize(classes.head._1)
 
@@ -302,29 +306,20 @@ class CodegenContext {
   }
 
   /**
-   * Instantiates all nested, private sub-classes as objects to the `OuterClass`
+   * Declares all function code. If the added functions are too many, split them into nested
+   * sub-classes to avoid hitting Java compiler constant pool limitation.
    */
-  private[sql] def initNestedClasses(): String = {
+  def declareAddedFunctions(): String = {
+    val inlinedFunctions = classFunctions(outerClassName).values
+
     // Nested, private sub-classes have no mutable state (though they do reference the outer class'
     // mutable state), so we declare and initialize them inline to the OuterClass.
-    classes.filter(_._1 != outerClassName).map {
+    val initNestedClasses = classes.filter(_._1 != outerClassName).map {
       case (className, classInstance) =>
         s"private $className $classInstance = new $className();"
-    }.mkString("\n")
-  }
+    }
 
-  /**
-   * Declares all function code that should be inlined to the `OuterClass`.
-   */
-  private[sql] def declareAddedFunctions(): String = {
-    classFunctions(outerClassName).values.mkString("\n")
-  }
-
-  /**
-   * Declares all nested, private sub-classes and the function code that should be inlined to them.
-   */
-  private[sql] def declareNestedClasses(): String = {
-    classFunctions.filterKeys(_ != outerClassName).map {
+    val declareNestedClasses = classFunctions.filterKeys(_ != outerClassName).map {
       case (className, functions) =>
         s"""
            |private class $className {
@@ -332,7 +327,24 @@ class CodegenContext {
            |}
            """.stripMargin
     }
-  }.mkString("\n")
+
+    (inlinedFunctions ++ initNestedClasses ++ declareNestedClasses).mkString("\n")
+  }
+
+  /**
+   * Emits extra inner classes added with addExtraCode
+   */
+  def emitExtraCode(): String = {
+    extraClasses.mkString("\n")
+  }
+
+  /**
+   * Add extra source code to the outermost generated class.
+   * @param code verbatim source code of the inner class to be added.
+   */
+  def addInnerClass(code: String): Unit = {
+    extraClasses.append(code)
+  }
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -456,14 +468,13 @@ class CodegenContext {
   /**
    * Returns the specialized code to set a given value in a column vector for a given `DataType`.
    */
-  def setValue(batch: String, row: String, dataType: DataType, ordinal: Int,
-      value: String): String = {
+  def setValue(vector: String, rowId: String, dataType: DataType, value: String): String = {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) =>
-        s"$batch.column($ordinal).put${primitiveTypeName(jt)}($row, $value);"
-      case t: DecimalType => s"$batch.column($ordinal).putDecimal($row, $value, ${t.precision});"
-      case t: StringType => s"$batch.column($ordinal).putByteArray($row, $value.getBytes());"
+        s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
+      case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
+      case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
@@ -474,37 +485,36 @@ class CodegenContext {
    * that could potentially be nullable.
    */
   def updateColumn(
-      batch: String,
-      row: String,
+      vector: String,
+      rowId: String,
       dataType: DataType,
-      ordinal: Int,
       ev: ExprCode,
       nullable: Boolean): String = {
     if (nullable) {
       s"""
          if (!${ev.isNull}) {
-           ${setValue(batch, row, dataType, ordinal, ev.value)}
+           ${setValue(vector, rowId, dataType, ev.value)}
          } else {
-           $batch.column($ordinal).putNull($row);
+           $vector.putNull($rowId);
          }
        """
     } else {
-      s"""${setValue(batch, row, dataType, ordinal, ev.value)};"""
+      s"""${setValue(vector, rowId, dataType, ev.value)};"""
     }
   }
 
   /**
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
-  def getValue(batch: String, row: String, dataType: DataType, ordinal: Int): String = {
+  def getValue(vector: String, rowId: String, dataType: DataType): String = {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) =>
-        s"$batch.column($ordinal).get${primitiveTypeName(jt)}($row)"
+        s"$vector.get${primitiveTypeName(jt)}($rowId)"
       case t: DecimalType =>
-        s"$batch.column($ordinal).getDecimal($row, ${t.precision}, ${t.scale})"
+        s"$vector.getDecimal($rowId, ${t.precision}, ${t.scale})"
       case StringType =>
-        s"$batch.column($ordinal).getUTF8String($row)"
+        s"$vector.getUTF8String($rowId)"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
@@ -588,6 +598,7 @@ class CodegenContext {
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
+    case NullType => "false"
     case _ =>
       throw new IllegalArgumentException(
         "cannot generate equality code for un-comparable type: " + dataType.simpleString)
@@ -761,16 +772,19 @@ class CodegenContext {
       foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
+    var length = 0
     for (code <- expressions) {
       // We can't know how many bytecode will be generated, so use the length of source code
       // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
       // also not be too small, or it will have many function calls (for wide table), see the
       // results in BenchmarkWideTable.
-      if (blockBuilder.length > 1024) {
+      if (length > 1024) {
         blocks += blockBuilder.toString()
         blockBuilder.clear()
+        length = 0
       }
       blockBuilder.append(code)
+      length += CodeFormatter.stripExtraNewLinesAndComments(code).length
     }
     blocks += blockBuilder.toString()
 
@@ -995,10 +1009,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 }
 
 object CodeGenerator extends Logging {
+
+  // This is the value of HugeMethodLimit in the OpenJDK JVM settings
+  val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+
   /**
    * Compile the Java source code into a Java class, using Janino.
+   *
+   * @return a pair of a generated class and the max bytecode size of generated functions.
    */
-  def compile(code: CodeAndComment): GeneratedClass = try {
+  def compile(code: CodeAndComment): (GeneratedClass, Int) = try {
     cache.get(code)
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
@@ -1011,7 +1031,7 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  private[this] def doCompile(code: CodeAndComment): GeneratedClass = {
+  private[this] def doCompile(code: CodeAndComment): (GeneratedClass, Int) = {
     val evaluator = new ClassBodyEvaluator()
 
     // A special classloader used to wrap the actual parent classloader of
@@ -1044,34 +1064,38 @@ object CodeGenerator extends Logging {
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    lazy val formatted = CodeFormatter.format(code)
-
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      s"\n$formatted"
+      s"\n${CodeFormatter.format(code)}"
     })
 
-    try {
+    val maxCodeSize = try {
       evaluator.cook("generated.java", code.body)
-      recordCompilationStats(evaluator)
+      updateAndGetCompilationStats(evaluator)
     } catch {
       case e: JaninoRuntimeException =>
-        val msg = s"failed to compile: $e\n$formatted"
+        val msg = s"failed to compile: $e"
         logError(msg, e)
+        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
+        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
         throw new JaninoRuntimeException(msg, e)
       case e: CompileException =>
-        val msg = s"failed to compile: $e\n$formatted"
+        val msg = s"failed to compile: $e"
         logError(msg, e)
+        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
+        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
         throw new CompileException(msg, e.getLocation)
     }
-    evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
+
+    (evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
   }
 
   /**
-   * Records the generated class and method bytecode sizes by inspecting janino private fields.
+   * Returns the max bytecode size of the generated functions by inspecting janino private fields.
+   * Also, this method updates the metrics information.
    */
-  private def recordCompilationStats(evaluator: ClassBodyEvaluator): Unit = {
+  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): Int = {
     // First retrieve the generated classes.
     val classes = {
       val resultField = classOf[SimpleCompiler].getDeclaredField("result")
@@ -1086,23 +1110,26 @@ object CodeGenerator extends Logging {
     val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
     val codeAttrField = codeAttr.getDeclaredField("code")
     codeAttrField.setAccessible(true)
-    classes.foreach { case (_, classBytes) =>
+    val codeSizes = classes.flatMap { case (_, classBytes) =>
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-        cf.methodInfos.asScala.foreach { method =>
-          method.getAttributes().foreach { a =>
-            if (a.getClass.getName == codeAttr.getName) {
-              CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
-                codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
-            }
+        val stats = cf.methodInfos.asScala.flatMap { method =>
+          method.getAttributes().filter(_.getClass.getName == codeAttr.getName).map { a =>
+            val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
+            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
+            byteCodeSize
           }
         }
+        Some(stats)
       } catch {
         case NonFatal(e) =>
           logWarning("Error calculating stats of compiled class.", e)
+          None
       }
-    }
+    }.flatten
+
+    codeSizes.max
   }
 
   /**
@@ -1117,8 +1144,8 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[CodeAndComment, GeneratedClass]() {
-        override def load(code: CodeAndComment): GeneratedClass = {
+      new CacheLoader[CodeAndComment, (GeneratedClass, Int)]() {
+        override def load(code: CodeAndComment): (GeneratedClass, Int) = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()

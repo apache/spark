@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.eclipse.jetty.util.ConcurrentHashSet
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.concurrent.Timeouts._
+import org.scalatest.concurrent.TimeLimits._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite

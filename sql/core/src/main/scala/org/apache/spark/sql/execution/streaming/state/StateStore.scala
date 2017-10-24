@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -92,10 +93,14 @@ trait StateStore {
    */
   def abort(): Unit
 
+  /**
+   * Return an iterator containing all the key-value pairs in the SateStore. Implementations must
+   * ensure that updates (puts, removes) can be made while iterating over this iterator.
+   */
   def iterator(): Iterator[UnsafeRowPair]
 
-  /** Number of keys in the state store */
-  def numKeys(): Long
+  /** Current metrics of the state store */
+  def metrics: StateStoreMetrics
 
   /**
    * Whether all updates have been committed
@@ -103,6 +108,38 @@ trait StateStore {
   def hasCommitted: Boolean
 }
 
+/**
+ * Metrics reported by a state store
+ * @param numKeys         Number of keys in the state store
+ * @param memoryUsedBytes Memory used by the state store
+ * @param customMetrics   Custom implementation-specific metrics
+ *                        The metrics reported through this must have the same `name` as those
+ *                        reported by `StateStoreProvider.customMetrics`.
+ */
+case class StateStoreMetrics(
+    numKeys: Long,
+    memoryUsedBytes: Long,
+    customMetrics: Map[StateStoreCustomMetric, Long])
+
+object StateStoreMetrics {
+  def combine(allMetrics: Seq[StateStoreMetrics]): StateStoreMetrics = {
+    StateStoreMetrics(
+      allMetrics.map(_.numKeys).sum,
+      allMetrics.map(_.memoryUsedBytes).sum,
+      allMetrics.flatMap(_.customMetrics).toMap)
+  }
+}
+
+/**
+ * Name and description of custom implementation-specific metrics that a
+ * state store may wish to expose.
+ */
+trait StateStoreCustomMetric {
+  def name: String
+  def desc: String
+}
+case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric
+case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric
 
 /**
  * Trait representing a provider that provide [[StateStore]] instances representing
@@ -158,22 +195,36 @@ trait StateStoreProvider {
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
+
+  /**
+   * Optional custom metrics that the implementation may want to report.
+   * @note The StateStore objects created by this provider must report the same custom metrics
+   * (specifically, same names) through `StateStore.metrics`.
+   */
+  def supportedCustomMetrics: Seq[StateStoreCustomMetric] = Nil
 }
 
 object StateStoreProvider {
+
   /**
-   * Return a provider instance of the given provider class.
-   * The instance will be already initialized.
+   * Return a instance of the given provider class name. The instance will not be initialized.
    */
-  def instantiate(
+  def create(providerClassName: String): StateStoreProvider = {
+    val providerClass = Utils.classForName(providerClassName)
+    providerClass.newInstance().asInstanceOf[StateStoreProvider]
+  }
+
+  /**
+   * Return a instance of the required provider, initialized with the given configurations.
+   */
+  def createAndInit(
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
       indexOrdinal: Option[Int], // for sorting the data
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
-    val providerClass = Utils.classForName(storeConf.providerClass)
-    val provider = providerClass.newInstance().asInstanceOf[StateStoreProvider]
+    val provider = create(storeConf.providerClass)
     provider.init(stateStoreId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
     provider
   }
@@ -185,6 +236,17 @@ object StateStoreProvider {
  * instance is not reused across query restarts.
  */
 case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID)
+
+object StateStoreProviderId {
+  private[sql] def apply(
+      stateInfo: StatefulOperatorStateInfo,
+      partitionIndex: Int,
+      storeName: String): StateStoreProviderId = {
+    val storeId = StateStoreId(
+      stateInfo.checkpointLocation, stateInfo.operatorId, partitionIndex, storeName)
+    StateStoreProviderId(storeId, stateInfo.queryRunId)
+  }
+}
 
 /**
  * Unique identifier for a bunch of keyed state data.
@@ -298,7 +360,7 @@ object StateStore extends Logging {
       startMaintenanceIfNeeded()
       val provider = loadedProviders.getOrElseUpdate(
         storeProviderId,
-        StateStoreProvider.instantiate(
+        StateStoreProvider.createAndInit(
           storeProviderId.storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
       )
       reportActiveStoreInstance(storeProviderId)
