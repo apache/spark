@@ -187,8 +187,8 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val VERIFY_STATS_FROM_FILESYSTEM_WHEN_BROADCASTJOIN =
-    buildConf("spark.sql.statistics.verifyStatsFromFileSystemWhenBroadcastJoin")
+  val VERIFY_STATS_FROM_FILESYSTEM_WHEN_JOIN =
+    buildConf("spark.sql.statistics.verifyStatsFromFileSystemWhenJoin")
     .doc("If table size in metastore is below spark.sql.autoBroadcastJoinThreshold, check the" +
       " real size on file system and set table size to be the bigger one. This is for defense" +
       " and help avoid OOM caused by broadcast join. It's useful when metastore failed to" +
@@ -1113,8 +1113,8 @@ class SQLConf extends Serializable with Logging {
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
-  def verifyStatsFromFileSystemWhenBroadcastJoin: Boolean =
-    getConf(VERIFY_STATS_FROM_FILESYSTEM_WHEN_BROADCASTJOIN)
+  def verifyStatsFromFileSystemWhenJoin: Boolean =
+    getConf(VERIFY_STATS_FROM_FILESYSTEM_WHEN_JOIN)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 

@@ -79,8 +79,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("Check Hdfs for stats of small table.") {
-    withSQLConf(SQLConf.VERIFY_STATS_FROM_FILESYSTEM_WHEN_BROADCASTJOIN.key -> "true") {
+  test("Verify stats from file system when join.") {
+    withSQLConf(SQLConf.VERIFY_STATS_FROM_FILESYSTEM_WHEN_JOIN.key -> "true") {
       withTable("csv_table") {
         withTempDir { tempDir =>
           // EXTERNAL OpenCSVSerde table pointing to LOCATION
@@ -111,7 +111,22 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
                |""".stripMargin)
           val relation = spark.table("csv_table").queryExecution.analyzed.children.head
             .asInstanceOf[HiveTableRelation]
-          assert(relation.stats.sizeInBytes === BigInt(file1.length() + file2.length()))
+          val sizeInBytes = relation.stats.sizeInBytes
+          assert(sizeInBytes === 1)
+
+          val df = sql(
+            """
+              |SELECT * FROM
+              |csv_table a LEFT JOIN csv_table b
+              |on a.page_id = b.page_id
+            """.stripMargin)
+          val relations = df.queryExecution.analyzed.collect {
+            case relation: HiveTableRelation => relation
+          }
+          assert(relations.length === 2)
+          val realSize = BigInt(file1.length() + file2.length())
+          assert(relations(0).stats.sizeInBytes === realSize)
+          assert(relations(1).stats.sizeInBytes === realSize)
         }
       }
     }

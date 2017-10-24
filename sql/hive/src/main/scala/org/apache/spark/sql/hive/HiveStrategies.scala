@@ -120,7 +120,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       val table = relation.tableMeta
       val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
-        getSizeFromHdfs(table.location)
+        getSizeFromFileSystem(table.location)
       } else {
         session.sessionState.conf.defaultSizeInBytes
       }
@@ -128,23 +128,35 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
       relation.copy(tableMeta = withStats)
 
-    case relation: HiveTableRelation
-        if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.nonEmpty &&
-          session.sessionState.conf.verifyStatsFromFileSystemWhenBroadcastJoin &&
-          relation.tableMeta.stats.get.sizeInBytes <
-            session.sessionState.conf.autoBroadcastJoinThreshold =>
+    case r: Join =>
+      r.transformUp {
+        case relation: HiveTableRelation => verifySize(relation)
+      }
+  }
+
+  private[this] def verifySize(relation: HiveTableRelation): HiveTableRelation = {
+    if (DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.nonEmpty &&
+      session.sessionState.conf.verifyStatsFromFileSystemWhenJoin &&
+      relation.tableMeta.stats.get.sizeInBytes <
+        session.sessionState.conf.autoBroadcastJoinThreshold) {
       val table = relation.tableMeta
-      val sizeInBytes = getSizeFromHdfs(table.location)
+      val sizeInBytes = getSizeFromFileSystem(table.location)
       if (sizeInBytes > relation.tableMeta.stats.get.sizeInBytes) {
+        logWarning(s"For hive table ${relation.tableMeta.qualifiedName}, its size" +
+          s" ${relation.tableMeta.stats.get.sizeInBytes} from metastore is smaller than its" +
+          s" real size $sizeInBytes on file system. Please update stats in metastore accurately.")
         val newTable =
           table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
         relation.copy(tableMeta = newTable)
       } else {
         relation
       }
+    } else {
+      relation
+    }
   }
 
-  private[this] def getSizeFromHdfs(loc: URI): Long = {
+  private[this] def getSizeFromFileSystem(loc: URI): Long = {
     try {
       val hadoopConf = session.sessionState.newHadoopConf()
       val tablePath = new Path(loc)
