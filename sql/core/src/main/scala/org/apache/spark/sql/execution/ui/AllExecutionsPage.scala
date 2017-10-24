@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.ui
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
-import scala.xml.Node
+import scala.xml.{Node, NodeSeq}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -38,19 +38,19 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       if (listener.getRunningExecutions.nonEmpty) {
         _content ++=
           new RunningExecutionTable(
-            parent, "Running Queries", currentTime,
+            parent, s"Running Queries (${listener.getRunningExecutions.size})", currentTime,
             listener.getRunningExecutions.sortBy(_.submissionTime).reverse).toNodeSeq
       }
       if (listener.getCompletedExecutions.nonEmpty) {
         _content ++=
           new CompletedExecutionTable(
-            parent, "Completed Queries", currentTime,
+            parent, s"Completed Queries (${listener.getCompletedExecutions.size})", currentTime,
             listener.getCompletedExecutions.sortBy(_.submissionTime).reverse).toNodeSeq
       }
       if (listener.getFailedExecutions.nonEmpty) {
         _content ++=
           new FailedExecutionTable(
-            parent, "Failed Queries", currentTime,
+            parent, s"Failed Queries (${listener.getFailedExecutions.size})", currentTime,
             listener.getFailedExecutions.sortBy(_.submissionTime).reverse).toNodeSeq
       }
       _content
@@ -61,7 +61,36 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           details.parentNode.querySelector('.stage-details').classList.toggle('collapsed')
         }}
       </script>
-    UIUtils.headerSparkPage("SQL", content, parent, Some(5000))
+    val summary: NodeSeq =
+      <div>
+        <ul class="unstyled">
+          {
+            if (listener.getRunningExecutions.nonEmpty) {
+              <li>
+                <a href="#running-execution-table"><strong>Running Queries:</strong></a>
+                {listener.getRunningExecutions.size}
+              </li>
+            }
+          }
+          {
+            if (listener.getCompletedExecutions.nonEmpty) {
+              <li>
+                <a href="#completed-execution-table"><strong>Completed Queries:</strong></a>
+                {listener.getCompletedExecutions.size}
+              </li>
+            }
+          }
+          {
+            if (listener.getFailedExecutions.nonEmpty) {
+              <li>
+                <a href="#failed-execution-table"><strong>Failed Queries:</strong></a>
+                {listener.getFailedExecutions.size}
+              </li>
+            }
+          }
+        </ul>
+      </div>
+    UIUtils.headerSparkPage("SQL", summary ++ content, parent, Some(5000))
   }
 }
 

@@ -385,7 +385,7 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 #' @return A SparkDataFrame.
 #' @rdname summarize
 #' @export
-setGeneric("agg", function (x, ...) { standardGeneric("agg") })
+setGeneric("agg", function(x, ...) { standardGeneric("agg") })
 
 #' alias
 #'
@@ -731,7 +731,7 @@ setGeneric("schema", function(x) { standardGeneric("schema") })
 
 #' @rdname select
 #' @export
-setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
+setGeneric("select", function(x, col, ...) { standardGeneric("select") })
 
 #' @rdname selectExpr
 #' @export

@@ -662,7 +662,9 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
     "spark.yarn.access.hadoopFileSystems" -> Seq(
-      AlternateConfig("spark.yarn.access.namenodes", "2.2"))
+      AlternateConfig("spark.yarn.access.namenodes", "2.2")),
+    "spark.maxRemoteBlockSizeFetchToMem" -> Seq(
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3"))
   )
 
   /**

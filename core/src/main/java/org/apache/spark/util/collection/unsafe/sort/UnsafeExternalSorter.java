@@ -480,6 +480,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
+  @VisibleForTesting boolean hasSpaceForAnotherRecord() {
+    return inMemSorter.hasSpaceForAnotherRecord();
+  }
+
   private static void spillIterator(UnsafeSorterIterator inMemIterator,
       UnsafeSorterSpillWriter spillWriter) throws IOException {
     while (inMemIterator.hasNext()) {
