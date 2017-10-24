@@ -446,6 +446,8 @@ class SparkSession(object):
             else:
                 schema = schema_from_arrow
         else:
+            if not isinstance(schema, StructType) and isinstance(schema, DataType):
+                schema = StructType().add("value", schema)
             arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
             batches = [_create_batch([(c, t)
                                       for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)])
