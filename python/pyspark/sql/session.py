@@ -445,9 +445,9 @@ class SparkSession(object):
                 schema = StructType(fields)
             else:
                 schema = schema_from_arrow
+        elif not isinstance(schema, StructType) and isinstance(schema, DataType):
+            raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
         else:
-            if not isinstance(schema, StructType) and isinstance(schema, DataType):
-                schema = StructType().add("value", schema)
             arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
             batches = [_create_batch([(c, t)
                                       for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)])

@@ -3186,6 +3186,12 @@ class ArrowTests(ReusedPySparkTestCase):
         df = self.spark.createDataFrame(pdf, schema=list('abcde'))
         self.assertEquals(df.schema.fieldNames(), list('abcde'))
 
+    def test_createDataFrame_with_single_data_type(self):
+        import pandas as pd
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(TypeError, ".*IntegerType.*tuple"):
+                self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
+
     def test_schema_conversion_roundtrip(self):
         from pyspark.sql.types import from_arrow_schema, to_arrow_schema
         arrow_schema = to_arrow_schema(self.schema)
