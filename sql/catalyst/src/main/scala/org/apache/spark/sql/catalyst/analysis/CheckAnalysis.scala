@@ -270,25 +270,25 @@ trait CheckAnalysis extends PredicateHelper {
 
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
+            val missingAttributes = o.missingInput.mkString(",")
+            val input = o.inputSet.mkString(",")
+            val msgForMissingAttributes = s"Resolved attribute(s) $missingAttributes missing " +
+              s"from $input in operator ${operator.simpleString}."
+
             val resolver = plan.conf.resolver
             val attrsWithSameName = o.missingInput.filter { missing =>
               o.inputSet.exists(input => resolver(missing.name, input.name))
             }
-            val repeatedNameHint = if (attrsWithSameName.nonEmpty) {
+
+            val msg = if (attrsWithSameName.nonEmpty) {
               val sameNames = attrsWithSameName.map(_.name).mkString(",")
-              s"""Attribute(s) with the same name appear in the operation: `$sameNames`.
-                  |Please check if the right attribute(s) are used.""".stripMargin
+              s"$msgForMissingAttributes Attribute(s) with the same name appear in the " +
+                s"operation: $sameNames. Please check if the right attribute(s) are used."
             } else {
-              ""
+              msgForMissingAttributes
             }
 
-            val missingAttributes = o.missingInput.mkString(",")
-            val input = o.inputSet.mkString(",")
-
-            val msg = s"""Resolved attribute(s) $missingAttributes missing from $input
-                          |in operator ${operator.simpleString}.""".stripMargin
-
-            failAnalysis(if (repeatedNameHint.nonEmpty) msg + "\n" + repeatedNameHint else msg)
+            failAnalysis(msg)
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(

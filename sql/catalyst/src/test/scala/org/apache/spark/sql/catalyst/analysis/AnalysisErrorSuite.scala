@@ -421,10 +421,10 @@ class AnalysisErrorSuite extends AnalysisTest {
 
     val resolved = s"${attrA.toString},${attrC.toString}"
 
-    val errorMsg = s"""Resolved attribute(s) $resolved missing from ${otherA.toString}
-                     |in operator !Aggregate [${aliases.mkString(", ")}].
-                     |Attribute(s) with the same name appear in the operation: `a`.
-                     |Please check if the right attribute(s) are used.""".stripMargin
+    val errorMsg = s"Resolved attribute(s) $resolved missing from ${otherA.toString} " +
+                     s"in operator !Aggregate [${aliases.mkString(", ")}]. " +
+                     s"Attribute(s) with the same name appear in the operation: a. " +
+                     "Please check if the right attribute(s) are used."
 
     assertAnalysisError(plan, errorMsg :: Nil)
   }
