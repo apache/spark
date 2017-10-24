@@ -639,6 +639,63 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(hiveHashPlan(wideRow).getInt(0) == hiveHashEval)
   }
 
+  test("SPARK-22284: Compute hash for nested structs") {
+    val M = 80
+    val N = 10
+    val L = M * N
+    val O = 50
+    val seed = 42
+
+    val wideRow1 = new GenericInternalRow(Seq.tabulate(O)(j =>
+        new GenericInternalRow(Seq.tabulate(L)(i =>
+          new GenericInternalRow(Array[Any](
+            UTF8String.fromString((j * L + i).toString))))
+          .toArray[Any])).toArray[Any])
+    var inner1 = new StructType()
+    for (_ <- 0 until L) {
+      inner1 = inner1.add("structOfString", structOfString)
+    }
+    var schema1 = new StructType()
+    for (_ <- 0 until O) {
+      schema1 = schema1.add("structOfStructOfStrings", inner1)
+    }
+    val exprs1 = schema1.fields.zipWithIndex.map { case (f, i) =>
+      BoundReference(i, f.dataType, true)
+    }
+    val murmur3HashExpr1 = Murmur3Hash(exprs1, seed)
+    val murmur3HashPlan1 = GenerateMutableProjection.generate(Seq(murmur3HashExpr1))
+
+    val murmursHashEval1 = Murmur3Hash(exprs1, seed).eval(wideRow1)
+    assert(murmur3HashPlan1(wideRow1).getInt(0) == murmursHashEval1)
+
+    val wideRow2 = new GenericInternalRow(Seq.tabulate(O)(k =>
+        new GenericInternalRow(Seq.tabulate(M)(j =>
+          new GenericInternalRow(Seq.tabulate(N)(i =>
+            new GenericInternalRow(Array[Any](
+              UTF8String.fromString((k * L + j * N + i).toString))))
+            .toArray[Any])).toArray[Any])).toArray[Any])
+    var outer2 = new StructType()
+    for (_ <- 0 until M) {
+      var inner2 = new StructType()
+      for (_ <- 0 until N) {
+        inner2 = inner2.add("structOfString", structOfString)
+      }
+      outer2 = outer2.add("structOfStructOfString", inner2)
+    }
+    var schema2 = new StructType()
+    for (_ <- 0 until O) {
+      schema2 = schema2.add("structOfStructOfStructOfStrings", outer2)
+    }
+    val exprs2 = schema2.fields.zipWithIndex.map { case (f, i) =>
+      BoundReference(i, f.dataType, true)
+    }
+    val murmur3HashExpr2 = Murmur3Hash(exprs2, 42)
+    val murmur3HashPlan2 = GenerateMutableProjection.generate(Seq(murmur3HashExpr2))
+
+    val murmursHashEval2 = Murmur3Hash(exprs2, 42).eval(wideRow2)
+    assert(murmur3HashPlan2(wideRow2).getInt(0) == murmursHashEval2)
+  }
+
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
     val encoder = RowEncoder(inputSchema)
