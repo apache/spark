@@ -130,7 +130,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
     case relation: HiveTableRelation
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.nonEmpty &&
-          session.sessionState.conf.verifyStatsFromHdfsWhenBroadcastJoin &&
+          session.sessionState.conf.verifyStatsFromFileSystemWhenBroadcastJoin &&
           relation.tableMeta.stats.get.sizeInBytes <
             session.sessionState.conf.autoBroadcastJoinThreshold =>
       val table = relation.tableMeta

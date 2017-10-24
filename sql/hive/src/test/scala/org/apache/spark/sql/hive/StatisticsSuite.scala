@@ -80,7 +80,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("Check Hdfs for stats of small table.") {
-    withSQLConf(SQLConf.VERIFY_STATS_FROM_HDFS_WHEN_BROADCASTJOIN.key -> "true") {
+    withSQLConf(SQLConf.VERIFY_STATS_FROM_FILESYSTEM_WHEN_BROADCASTJOIN.key -> "true") {
       withTable("csv_table") {
         withTempDir { tempDir =>
           // EXTERNAL OpenCSVSerde table pointing to LOCATION
