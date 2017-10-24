@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.{LambdaVariable, MapObjects, NewInstance, UnresolvedMapObjects}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -293,12 +293,6 @@ class Analyzer(
         Seq(Seq.empty)
     }
 
-    private def hasGroupingAttribute(expr: Expression): Boolean = {
-      expr.collectFirst {
-        case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) => u
-      }.isDefined
-    }
-
     private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
       e.collectFirst {
         case g: Grouping => g
@@ -452,9 +446,6 @@ class Analyzer(
     // This require transformUp to replace grouping()/grouping_id() in resolved Filter/Sort
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
-      case p if p.expressions.exists(hasGroupingAttribute) =>
-        failAnalysis(
-          s"${VirtualColumn.hiveGroupingIdName} is deprecated; use grouping_id() instead")
 
       // Ensure group by expressions and aggregate expressions have been resolved.
       case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child)
@@ -1174,6 +1165,10 @@ class Analyzer(
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
+          case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
+            withPosition(u) {
+              Alias(GroupingID(Nil), VirtualColumn.hiveGroupingIdName)()
+            }
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {
               catalog.lookupFunction(name, children) match {

@@ -532,10 +532,17 @@ public class UnsafeExternalSorterSuite {
     catch (OutOfMemoryError oom){
       String oomStackTrace = Utils.exceptionString(oom);
       assertThat("expected OutOfMemoryError in " +
+<<<<<<< HEAD
               "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
               oomStackTrace,
               Matchers.containsString(
                   "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
+=======
+        "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
+        oomStackTrace,
+        Matchers.containsString(
+          "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
+>>>>>>> origin/master
     }
   }
 

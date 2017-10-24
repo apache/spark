@@ -21,8 +21,9 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.AttributeSet
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -428,5 +429,29 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       val agg_with_cache = df3.groupBy($"item").count()
       checkAnswer(agg_without_cache, agg_with_cache)
     }
+  }
+
+  test("SPARK-22249: IN should work also with cached DataFrame") {
+    val df = spark.range(10).cache()
+    // with an empty list
+    assert(df.filter($"id".isin()).count() == 0)
+    // with a non-empty list
+    assert(df.filter($"id".isin(2)).count() == 1)
+    assert(df.filter($"id".isin(2, 3)).count() == 2)
+    df.unpersist()
+    val dfNulls = spark.range(10).selectExpr("null as id").cache()
+    // with null as value for the attribute
+    assert(dfNulls.filter($"id".isin()).count() == 0)
+    assert(dfNulls.filter($"id".isin(2, 3)).count() == 0)
+    dfNulls.unpersist()
+  }
+
+  test("SPARK-22249: buildFilter should not throw exception when In contains an empty list") {
+    val attribute = AttributeReference("a", IntegerType)()
+    val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY,
+      LocalTableScanExec(Seq(attribute), Nil), None)
+    val tableScanExec = InMemoryTableScanExec(Seq(attribute),
+      Seq(In(attribute, Nil)), testRelation)
+    assert(tableScanExec.partitionFilters.isEmpty)
   }
 }

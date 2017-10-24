@@ -585,6 +585,35 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
    * Unsupported predicates are skipped.
    */
   def convertFilters(table: Table, filters: Seq[Expression]): String = {
+    if (SQLConf.get.advancedPartitionPredicatePushdownEnabled) {
+      convertComplexFilters(table, filters)
+    } else {
+      convertBasicFilters(table, filters)
+    }
+  }
+
+  private def convertBasicFilters(table: Table, filters: Seq[Expression]): String = {
+    // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
+    lazy val varcharKeys = table.getPartitionKeys.asScala
+      .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
+        col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
+      .map(col => col.getName).toSet
+
+    filters.collect {
+      case op @ BinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
+        s"${a.name} ${op.symbol} $v"
+      case op @ BinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
+        s"$v ${op.symbol} ${a.name}"
+      case op @ BinaryComparison(a: Attribute, Literal(v, _: StringType))
+        if !varcharKeys.contains(a.name) =>
+        s"""${a.name} ${op.symbol} ${quoteStringLiteral(v.toString)}"""
+      case op @ BinaryComparison(Literal(v, _: StringType), a: Attribute)
+        if !varcharKeys.contains(a.name) =>
+        s"""${quoteStringLiteral(v.toString)} ${op.symbol} ${a.name}"""
+    }.mkString(" and ")
+  }
+
+  private def convertComplexFilters(table: Table, filters: Seq[Expression]): String = {
     // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
     lazy val varcharKeys = table.getPartitionKeys.asScala
       .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||

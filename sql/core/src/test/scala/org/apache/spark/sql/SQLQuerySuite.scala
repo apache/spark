@@ -27,6 +27,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2714,5 +2715,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         """.stripMargin)
       checkAnswer(df, Row(1, 1, 1))
     }
+  }
+
+  test("SRARK-22266: the same aggregate function was calculated multiple times") {
+    val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
+    val df = sql(query)
+    val physical = df.queryExecution.sparkPlan
+    val aggregateExpressions = physical.collectFirst {
+      case agg : HashAggregateExec => agg.aggregateExpressions
+      case agg : SortAggregateExec => agg.aggregateExpressions
+    }
+    assert (aggregateExpressions.isDefined)
+    assert (aggregateExpressions.get.size == 1)
+    checkAnswer(df, Row(1, 3, 4) :: Row(2, 3, 4) :: Row(3, 3, 4) :: Nil)
+  }
+
+  test("Non-deterministic aggregate functions should not be deduplicated") {
+    val query = "SELECT a, first_value(b), first_value(b) + 1 FROM testData2 GROUP BY a"
+    val df = sql(query)
+    val physical = df.queryExecution.sparkPlan
+    val aggregateExpressions = physical.collectFirst {
+      case agg : HashAggregateExec => agg.aggregateExpressions
+      case agg : SortAggregateExec => agg.aggregateExpressions
+    }
+    assert (aggregateExpressions.isDefined)
+    assert (aggregateExpressions.get.size == 2)
   }
 }

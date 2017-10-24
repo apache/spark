@@ -110,4 +110,4 @@ class MyDummyPythonUDF extends UserDefinedPythonFunction(
   name = "dummyUDF",
   func = new DummyUDF,
   dataType = BooleanType,
-  vectorized = false)
+  pythonUdfType = PythonUdfType.NORMAL_UDF)

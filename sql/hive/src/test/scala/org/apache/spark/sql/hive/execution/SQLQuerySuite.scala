@@ -1376,113 +1376,125 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-8976 Wrong Result for Rollup #1") {
-    checkAnswer(sql(
-      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH ROLLUP"),
-      Seq(
-        (113, 3, 0),
-        (91, 0, 0),
-        (500, null, 1),
-        (84, 1, 0),
-        (105, 2, 0),
-        (107, 4, 0)
-      ).map(i => Row(i._1, i._2, i._3)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"SELECT count(*) AS cnt, key % 5, $gid FROM src GROUP BY key%5 WITH ROLLUP"),
+        Seq(
+          (113, 3, 0),
+          (91, 0, 0),
+          (500, null, 1),
+          (84, 1, 0),
+          (105, 2, 0),
+          (107, 4, 0)
+        ).map(i => Row(i._1, i._2, i._3)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for Rollup #2") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM src GROUP BY key%5, key-5
-        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-      Seq(
-        (1, 0, 5, 0),
-        (1, 0, 15, 0),
-        (1, 0, 25, 0),
-        (1, 0, 60, 0),
-        (1, 0, 75, 0),
-        (1, 0, 80, 0),
-        (1, 0, 100, 0),
-        (1, 0, 140, 0),
-        (1, 0, 145, 0),
-        (1, 0, 150, 0)
-      ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM src GROUP BY key%5, key-5
+          |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, 0, 5, 0),
+          (1, 0, 15, 0),
+          (1, 0, 25, 0),
+          (1, 0, 60, 0),
+          (1, 0, 75, 0),
+          (1, 0, 80, 0),
+          (1, 0, 100, 0),
+          (1, 0, 140, 0),
+          (1, 0, 145, 0),
+          (1, 0, 150, 0)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for Rollup #3") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
-        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-      Seq(
-        (1, 0, 5, 0),
-        (1, 0, 15, 0),
-        (1, 0, 25, 0),
-        (1, 0, 60, 0),
-        (1, 0, 75, 0),
-        (1, 0, 80, 0),
-        (1, 0, 100, 0),
-        (1, 0, 140, 0),
-        (1, 0, 145, 0),
-        (1, 0, 150, 0)
-      ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+          |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, 0, 5, 0),
+          (1, 0, 15, 0),
+          (1, 0, 25, 0),
+          (1, 0, 60, 0),
+          (1, 0, 75, 0),
+          (1, 0, 80, 0),
+          (1, 0, 100, 0),
+          (1, 0, 140, 0),
+          (1, 0, 145, 0),
+          (1, 0, 150, 0)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for CUBE #1") {
-    checkAnswer(sql(
-      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH CUBE"),
-      Seq(
-        (113, 3, 0),
-        (91, 0, 0),
-        (500, null, 1),
-        (84, 1, 0),
-        (105, 2, 0),
-        (107, 4, 0)
-      ).map(i => Row(i._1, i._2, i._3)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"SELECT count(*) AS cnt, key % 5, $gid FROM src GROUP BY key%5 WITH CUBE"),
+        Seq(
+          (113, 3, 0),
+          (91, 0, 0),
+          (500, null, 1),
+          (84, 1, 0),
+          (105, 2, 0),
+          (107, 4, 0)
+        ).map(i => Row(i._1, i._2, i._3)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for CUBE #2") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
-        |WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-    Seq(
-      (1, null, -3, 2),
-      (1, null, -1, 2),
-      (1, null, 3, 2),
-      (1, null, 4, 2),
-      (1, null, 5, 2),
-      (1, null, 6, 2),
-      (1, null, 12, 2),
-      (1, null, 14, 2),
-      (1, null, 15, 2),
-      (1, null, 22, 2)
-    ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+          |WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, null, -3, 2),
+          (1, null, -1, 2),
+          (1, null, 3, 2),
+          (1, null, 4, 2),
+          (1, null, 5, 2),
+          (1, null, 6, 2),
+          (1, null, 12, 2),
+          (1, null, 14, 2),
+          (1, null, 15, 2),
+          (1, null, 22, 2)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for GroupingSet") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
-        |GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-    Seq(
-      (1, null, -3, 2),
-      (1, null, -1, 2),
-      (1, null, 3, 2),
-      (1, null, 4, 2),
-      (1, null, 5, 2),
-      (1, null, 6, 2),
-      (1, null, 12, 2),
-      (1, null, 14, 2),
-      (1, null, 15, 2),
-      (1, null, 22, 2)
-    ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+          |GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, null, -3, 2),
+          (1, null, -1, 2),
+          (1, null, 3, 2),
+          (1, null, 4, 2),
+          (1, null, 5, 2),
+          (1, null, 6, 2),
+          (1, null, 12, 2),
+          (1, null, 14, 2),
+          (1, null, 15, 2),
+          (1, null, 22, 2)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   ignore("SPARK-10562: partition by column with mixed case name") {
@@ -2019,8 +2031,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
     Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      withTable("t21912") {
-        Seq("ORC", "PARQUET").foreach { source =>
+      Seq("ORC", "PARQUET").foreach { source =>
+        withTable("t21912") {
           val m = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
           }.getMessage
@@ -2037,15 +2049,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             }.getMessage
             assert(m3.contains(s"contains invalid character(s)"))
           }
-        }
 
-        // TODO: After SPARK-21929, we need to check ORC, too.
-        Seq("PARQUET").foreach { source =>
           sql(s"CREATE TABLE t21912(`col` INT) USING $source")
-          val m = intercept[AnalysisException] {
+          val m4 = intercept[AnalysisException] {
             sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
           }.getMessage
-          assert(m.contains(s"contains invalid character(s)"))
+          assert(m4.contains(s"contains invalid character(s)"))
         }
       }
     }
@@ -2107,6 +2116,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
               Row("12", "2", 12345, null, "98765", "01"))
           }
         }
+      }
+    }
+  }
+
+  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
+    test(s"Writing empty datasets should not fail - $format") {
+      withTempDir { dir =>
+        Seq("str").toDS.limit(0).write.format(format).save(dir.getCanonicalPath + "/tmp")
       }
     }
   }
