@@ -464,7 +464,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.constraints</code></td>
   <td>(none)</td>
   <td>
-    Same as <code>spark.mesos.constraints</code> except applied to drivers.
+    Same as <code>spark.mesos.constraints</code> except applied to drivers when launched through the dispatcher. By default,
+    all resource offers will be accepted.
   </td>
 </tr>
 <tr>
