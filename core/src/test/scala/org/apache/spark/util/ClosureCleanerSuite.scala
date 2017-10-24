@@ -152,6 +152,30 @@ class ClosureCleanerSuite extends SparkFunSuite {
       assert(rdd.collect() === Seq((111, 222, "aaa", "bbb", 1.0d, 2.0d)))
     }
   }
+
+  test("SPARK-22328: multiple outer classes have the same parent class") {
+    val concreteObject = new TestAbstractClass2 {
+
+      val innerObject = new TestAbstractClass2 {
+        override val n1 = 222
+        override val s1 = "bbb"
+      }
+
+      val innerObject2 = new TestAbstractClass2 {
+        override val n1 = 444
+        val n3 = 333
+        val s3 = "ccc"
+        val d3 = 3.0d
+
+        def getData: Int => (Int, Int, String, String, Double, Double, Int, String) =
+          _ => (n1, n3, s1, s3, d1, d3, innerObject.n1, innerObject.s1)
+      }
+    }
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val rdd = sc.parallelize(1 to 1).map(concreteObject.innerObject2.getData)
+      assert(rdd.collect() === Seq((444, 333, "aaa", "ccc", 1.0d, 3.0d, 222, "bbb")))
+    }
+  }
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
