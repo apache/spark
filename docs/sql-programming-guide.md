@@ -1640,6 +1640,19 @@ Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` a
 You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
+# Usage Guide for Pandas with Arrow
+
+## Arrow in Spark
+[brief description of what arrow is and how used in Spark]
+
+## How to Enable for Conversion to Pandas DataFrame
+
+## How to Write Vectorized UDFs
+
+## Usage Notes
+
+### Date and Timestamp Semantics
+
 # Migration Guide
 
 ## Upgrading From Spark SQL 2.2 to 2.3
