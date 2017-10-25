@@ -180,8 +180,8 @@ class PowerIterationClustering private[clustering] (
         case Row(id: Long, nbr: Vector, weight: Vector) =>
         require(nbr.size == weight.size,
           "The length of neighbor list must be equal to the the length of the weight list.")
-        val ids = Array.fill(nbr.size)(id)
-        for (i <- 0 until ids.size) yield (ids(i), nbr(i).toLong, weight(i))}
+        nbr.toArray.toIterator.zip(weight.toArray.toIterator)
+          .map(x => (id, x._1.toLong, x._2.toLong))}
     val algorithm = new MLlibPowerIterationClustering()
       .setK($(k))
       .setInitializationMode($(initMode))
