@@ -842,27 +842,30 @@ class CodegenContext {
         .filter(_.subclassName.isEmpty)
         .map(_.functionName)
 
+      val argsString = arguments.map(_._2).mkString(", ")
+
       // Here we handle all the methods which have been added to the nested subclasses and
       // not to the outer class.
       // Since they can be many, their direct invocation in the outer class adds many entries
       // to the outer class' constant pool. This can cause the constant pool to past JVM limit.
       // To avoid this problem, we group them and we call only the grouping methods in the
       // outer class.
-      val innerClassFunctions = functions
+      val innerClassToFunctions = functions
         .filter(_.subclassName.isDefined)
         .foldLeft(ListMap.empty[(String, String), Seq[String]]) { case (acc, f) =>
           val key = (f.subclassName.get, f.subclassInstance.get)
           acc.updated(key, acc.getOrElse(key, Seq.empty[String]) ++ Seq(f.functionName))
         }
-        .flatMap { case ((subclassName, subclassInstance), subclassFunctions) =>
+      val innerClassFunctions = innerClassToFunctions.flatMap {
+        case ((subclassName, subclassInstance), subclassFunctions) =>
           if (subclassFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
             // Adding a new function to each subclass which contains
             // the invocation of all the ones which have been added to
             // that subclass
+            val body = foldFunctions(subclassFunctions.map(name => s"$name($argsString)"))
             val code = s"""
                 |private $returnType $func($argString) {
-                |  ${makeSplitFunction(foldFunctions(subclassFunctions.map(name =>
-                      s"$name(${arguments.map(_._2).mkString(", ")})")))}
+                |  ${makeSplitFunction(body)}
                 |}
               """.stripMargin
             addNewFunctionToClass(func, code, subclassName)
@@ -873,7 +876,7 @@ class CodegenContext {
         }
 
       foldFunctions((outerClassFunctions ++ innerClassFunctions).map(
-        name => s"$name(${arguments.map(_._2).mkString(", ")})"))
+        name => s"$name($argsString)"))
     }
   }
 
