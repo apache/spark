@@ -101,7 +101,7 @@ private[impl] class FeatureVector(
     // gives us the split bit value for each instance based on the instance's index.
     // We copy our feature values into @tempVals and @tempIndices either:
     // 1) in the [from, numLeftRows) range if the bit is false, or
-    // 2) in the [numBitsNotSet, to) range if the bit is true.
+    // 2) in the [numLeftRows, to) range if the bit is true.
     var (leftInstanceIdx, rightInstanceIdx) = (0, numLeftRows)
     var idx = from
     while (idx < to) {

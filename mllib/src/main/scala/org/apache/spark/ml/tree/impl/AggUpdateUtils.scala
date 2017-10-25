@@ -44,7 +44,7 @@ private[impl] object AggUpdateUtils {
 
   /**
    * Update aggregator for an (unordered feature, label) pair
-   * @param splits Array of arrays of splits for each feature; splits(i) = splits for feature i.
+   * @param featureSplits Array of splits for the current feature
    */
   private[impl] def updateUnorderedFeature(
       agg: DTStatsAggregator,
@@ -52,14 +52,13 @@ private[impl] object AggUpdateUtils {
       label: Double,
       featureIndex: Int,
       featureIndexIdx: Int,
-      splits: Array[Array[Split]],
+      featureSplits: Array[Split],
       instanceWeight: Double): Unit = {
     val leftNodeFeatureOffset = agg.getFeatureOffset(featureIndexIdx)
     // Each unordered split has a corresponding bin for impurity stats of data points that fall
     // onto the left side of the split. For each unordered split, update left-side bin if applicable
     // for the current data point.
     val numSplits = agg.metadata.numSplits(featureIndex)
-    val featureSplits = splits(featureIndex)
     var splitIndex = 0
     while (splitIndex < numSplits) {
       if (featureSplits(splitIndex).shouldGoLeft(featureValue, featureSplits)) {

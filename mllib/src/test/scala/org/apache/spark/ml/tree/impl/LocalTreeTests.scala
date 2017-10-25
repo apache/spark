@@ -93,16 +93,15 @@ private[impl] object LocalTreeTests extends Logging {
   }
 
   /**
-   * Returns an array containing a single element; an array of continuous splits for
-   * the feature with index featureIndex and the passed-in set of values. Creates one
-   * continuous split per value in the array.
+   * Returns an array of continuous splits for the feature with index featureIndex and the passed-in
+   * set of values. Creates one continuous split per value in values.
    */
   private[impl] def getContinuousSplits(
       values: Array[Int],
-      featureIndex: Int): Array[Array[Split]] = {
+      featureIndex: Int): Array[Split] = {
     val splits = values.sorted.map {
       new ContinuousSplit(featureIndex, _).asInstanceOf[Split]
     }
-    Array(splits)
+    splits
   }
 }

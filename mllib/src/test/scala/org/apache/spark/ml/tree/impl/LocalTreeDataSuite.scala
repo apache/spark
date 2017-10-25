@@ -83,11 +83,9 @@ class LocalTreeDataSuite
     val col2 = FeatureVector(featureIndex = catFeatureIdx, featureArity = 3,
       values = Array(0, 0, 2, 1))
 
-    // Get all-1 instance weights
-    val instanceWeights = Array.fill[Double](col1.values.length)(1.0)
     val nodeOffsets = Array((0, numRows))
     val activeNodes = Array(LearningNode.emptyNode(nodeIndex = -1))
-    TrainingInfo(Array(col1, col2), instanceWeights, nodeOffsets, activeNodes)
+    TrainingInfo(Array(col1, col2), nodeOffsets, activeNodes)
   }
 
    // Check that TrainingInfo correctly updates node offsets, sorts column values during update()
@@ -103,7 +101,7 @@ class LocalTreeDataSuite
 
     // Update TrainingInfo for continuous split
     val contValues = info.columns(contFeatureIdx).values
-    val splits: Array[Array[Split]] = LocalTreeTests.getContinuousSplits(contValues, contFeatureIdx)
+    val splits = Array(LocalTreeTests.getContinuousSplits(contValues, contFeatureIdx))
     val newInfo = info.update(splits, newActiveNodes = Array(contNode))
 
     assert(newInfo.columns.length === 2)

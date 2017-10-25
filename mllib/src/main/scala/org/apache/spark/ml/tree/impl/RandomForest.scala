@@ -281,8 +281,8 @@ private[spark] object RandomForest extends Logging {
       if (unorderedFeatures.contains(featureIndex)) {
         AggUpdateUtils.updateUnorderedFeature(agg,
           featureValue = treePoint.binnedFeatures(featureIndex), label = treePoint.label,
-          featureIndex = featureIndex, featureIndexIdx = featureIndexIdx, splits = splits,
-          instanceWeight = instanceWeight)
+          featureIndex = featureIndex, featureIndexIdx = featureIndexIdx,
+          featureSplits = splits(featureIndex), instanceWeight = instanceWeight)
       } else {
         AggUpdateUtils.updateOrderedFeature(agg,
           featureValue = treePoint.binnedFeatures(featureIndex), label = treePoint.label,
@@ -642,7 +642,7 @@ private[spark] object RandomForest extends Logging {
     val parentImpurityCalc = if (node.stats == null) None else Some(node.stats.impurityCalculator)
     val splitsAndImpurityInfo =
       validFeatureSplits.map { case (featureIndexIdx, featureIndex) =>
-        SplitUtils.chooseSplit(binAggregates, featureIndex, featureIndexIdx, splits,
+        SplitUtils.chooseSplit(binAggregates, featureIndex, featureIndexIdx, splits(featureIndex),
           parentImpurityCalc)
       }
 

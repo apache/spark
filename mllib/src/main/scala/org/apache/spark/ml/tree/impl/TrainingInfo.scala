@@ -35,7 +35,6 @@ import org.apache.spark.util.collection.BitSet
  *                 all columns share this first level of sorting.
  *                 Within each node's group, each column is sorted based on feature value;
  *                 this second level of sorting differs across columns.
- * @param instanceWeights Array of weights for each training example
  * @param nodeOffsets  Offsets into the columns indicating the first level of sorting (by node).
  *                     The rows corresponding to the node activeNodes(i) are in the range
  *                     [nodeOffsets(i)(0), nodeOffsets(i)(1)) .
@@ -44,7 +43,6 @@ import org.apache.spark.util.collection.BitSet
  */
 private[impl] case class TrainingInfo(
     columns: Array[FeatureVector],
-    instanceWeights: Array[Double],
     nodeOffsets: Array[(Int, Int)],
     activeNodes: Array[LearningNode]) extends Serializable {
 
@@ -55,7 +53,7 @@ private[impl] case class TrainingInfo(
 
   /** For debugging */
   override def toString: String = {
-    "PartitionInfo(" +
+    "TrainingInfo(" +
       "  columns: {\n" +
       columns.mkString(",\n") +
       "  },\n" +
@@ -91,7 +89,7 @@ private[impl] case class TrainingInfo(
         val col = columns(split.featureIndex)
         val (from, to) = nodeOffsets(nodeIdx)
         // Compute bitset indicating whether each training example splits left/right
-        val bitset = TrainingInfo.bitSetFromSplit(col, from, to, split, splits)
+        val bitset = TrainingInfo.bitSetFromSplit(col, from, to, split, splits(split.featureIndex))
         // Update each column according to the bitset
         val numRows = to - from
         // Allocate shared temp buffers (shared across all columns) for reordering
@@ -108,7 +106,7 @@ private[impl] case class TrainingInfo(
       }
       nodeIdx += 1
     }
-    TrainingInfo(columns, instanceWeights, newNodeOffsets.toArray, newActiveNodes)
+    TrainingInfo(columns, newNodeOffsets.toArray, newActiveNodes)
   }
 
 }
@@ -132,10 +130,10 @@ private[impl] object TrainingInfo {
       from: Int,
       to: Int,
       split: Split,
-      allSplits: Array[Array[Split]]): BitSet = {
+      featureSplits: Array[Split]): BitSet = {
     val bitset = new BitSet(to - from)
     from.until(to).foreach { i =>
-      if (!split.shouldGoLeft(col.values(i), allSplits(col.featureIndex))) {
+      if (!split.shouldGoLeft(col.values(i), featureSplits)) {
         bitset.set(i - from)
       }
     }
