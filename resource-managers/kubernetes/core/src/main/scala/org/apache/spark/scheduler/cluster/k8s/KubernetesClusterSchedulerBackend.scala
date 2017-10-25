@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
-
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
@@ -34,7 +33,7 @@ import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointAddress, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorExited, SlaveLost, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.util.Utils
 
 private[spark] class KubernetesClusterSchedulerBackend(
@@ -86,7 +85,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     conf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT),
     CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
 
-  private val initialExecutors = getInitialTargetExecutorNumber()
+  private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
   private val podAllocationInterval = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
   require(podAllocationInterval > 0, s"Allocation batch delay " +
@@ -171,22 +170,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
         }.getOrElse(logWarning(s"Unable to remove pod for unknown executor $executorId"))
       }
     }
-  }
-
-  private def getInitialTargetExecutorNumber(defaultNumExecutors: Int = 1): Int = {
-    if (Utils.isDynamicAllocationEnabled(conf)) {
-      val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
-      val initialNumExecutors = Utils.getDynamicAllocationInitialExecutors(conf)
-      val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", 1)
-      require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
-        s"initial executor number $initialNumExecutors must between min executor number " +
-          s"$minNumExecutors and max executor number $maxNumExecutors")
-
-      initialNumExecutors
-    } else {
-      conf.getInt("spark.executor.instances", defaultNumExecutors)
-    }
-
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
