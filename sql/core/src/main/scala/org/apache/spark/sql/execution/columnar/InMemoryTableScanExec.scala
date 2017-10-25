@@ -226,7 +226,6 @@ case class InMemoryTableScanExec(
     // Using these variables here to avoid serialization of entire objects (if referenced directly)
     // within the map Partitions closure.
     val relOutput: AttributeSeq = relation.output
-    val buffers = filteredCachedBatches()
 
     filteredCachedBatches().mapPartitionsInternal { cachedBatchIterator =>
       // Find the ordinals and data types of the requested columns.
