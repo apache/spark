@@ -227,7 +227,7 @@ def _create_batch(series):
     def cast_series(s, t):
         if type(t) == pa.TimestampType:
             # NOTE: convert to 'us' with astype here, unit ignored in `from_pandas` see ARROW-1680
-            return _check_series_convert_timestamps_internal(s)\
+            return _check_series_convert_timestamps_internal(s.fillna(0))\
                 .values.astype('datetime64[us]', copy=False)
         elif t == pa.date32():
             # TODO: this converts the series to Python objects, possibly avoid with Arrow >= 0.8
