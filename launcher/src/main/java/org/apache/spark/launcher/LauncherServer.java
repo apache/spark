@@ -240,7 +240,7 @@ class LauncherServer implements Closeable {
         synchronized (clients) {
           clients.add(clientConnection);
         }
-        
+
         long timeoutMs = getConnectionTimeout();
         // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
         // and force an immediate timeout.
@@ -249,7 +249,7 @@ class LauncherServer implements Closeable {
         } else {
           timeout.run();
         }
-            
+
         clientThread.start();
       }
     } catch (IOException ioe) {
