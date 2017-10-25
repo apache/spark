@@ -473,20 +473,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
                                         None
                                       }
 
-    val stats: RDD[(BDM[Double], Option[BDV[Double]], Long)] = batch.mapPartitions { docs =>
-      val stat = BDM.zeros[Double](k, vocabSize)
-      val logphatPartOption = logphatPartOptionBase()
-      var batchSize: Long = 0L
-      docs.foreach { case (_, termCounts: Vector) =>
-        batchSize += 1
-        val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, expElogbetaBc.value, alpha, gammaShape, k)
-        stat(::, ids) := stat(::, ids) + sstats
-        logphatPartOption.foreach(_ += LDAUtils.dirichletExpectation(gammad))
-      }
-      Iterator((stat, logphatPartOption, batchSize))
-    }
-
     val elementWiseSum = (
         u: (BDM[Double], Option[BDV[Double]], Long),
         v: (BDM[Double], Option[BDV[Double]], Long)) => {
@@ -495,10 +481,18 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
       (u._1, u._2, u._3 + v._3)
     }
 
-    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], batchSize: Long) = stats
-      .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase(), 0L))(
-        elementWiseSum, elementWiseSum
-      )
+    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], batchSize: Long) =
+      batch.treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase(), 0L))({
+        case (acc, (_, termCounts)) =>
+          val stat = BDM.zeros[Double](k, vocabSize)
+          val logphatPartOption = logphatPartOptionBase()
+          val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
+            termCounts, expElogbetaBc.value, alpha, gammaShape, k)
+          stat(::, ids) := stat(::, ids) + sstats
+          logphatPartOption.foreach(_ += LDAUtils.dirichletExpectation(gammad))
+
+          elementWiseSum(acc, (stat, logphatPartOption, 1))
+        }, elementWiseSum)
 
     expElogbetaBc.destroy(false)
 
