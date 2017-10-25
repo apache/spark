@@ -89,7 +89,9 @@ case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprElimi
  *                         the outer class, otherwise it contains the name of the
  *                         instance of the inner class in the outer class.
  */
-private[codegen] case class NewFunction(functionName: String, subclassName: Option[String],
+private[codegen] case class NewFunction(
+    functionName: String,
+    subclassName: Option[String],
     subclassInstance: Option[String])
 
 /**
