@@ -28,7 +28,7 @@ import org.apache.mesos.protobuf.ByteString
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
 
-import org.apache.spark.deploy.mesos.MesosSecretConfig
+import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 
 object Utils {
 

@@ -24,8 +24,8 @@ import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.mesos.MesosSecretConfig
 import org.apache.spark.deploy.mesos.config.{NETWORK_LABELS, NETWORK_NAME}
+import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 import org.apache.spark.internal.Logging
 
 /**
@@ -126,8 +126,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
-  def buildContainerInfo(conf: SparkConf):
-    ContainerInfo.Builder = {
+  def buildContainerInfo(conf: SparkConf): ContainerInfo.Builder = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
       ContainerInfo.Type.DOCKER
@@ -228,16 +227,15 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
           s"reference secrets got secrets $secrets, and paths $secretPaths")
     }
 
-    secrets.zip(secretPaths).map {
-      case (s, p) =>
-        val source = Volume.Source.newBuilder()
-          .setType(Volume.Source.Type.SECRET)
-          .setSecret(s)
-        Volume.newBuilder()
-          .setContainerPath(p)
-          .setSource(source)
-          .setMode(Volume.Mode.RO)
-          .build
+    secrets.zip(secretPaths).map { case (s, p) =>
+      val source = Volume.Source.newBuilder()
+        .setType(Volume.Source.Type.SECRET)
+        .setSecret(s)
+      Volume.newBuilder()
+        .setContainerPath(p)
+        .setSource(source)
+        .setMode(Volume.Mode.RO)
+        .build
     }.toList
   }
 
@@ -252,13 +250,12 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
           s"and keys $secretEnvKeys")
     }
 
-    secrets.zip(secretEnvKeys).map {
-      case (s, k) =>
-        Variable.newBuilder()
-          .setName(k)
-          .setType(Variable.Type.SECRET)
-          .setSecret(s)
-          .build
+    secrets.zip(secretEnvKeys).map { case (s, k) =>
+      Variable.newBuilder()
+        .setName(k)
+        .setType(Variable.Type.SECRET)
+        .setSecret(s)
+        .build
     }.toList
   }
 

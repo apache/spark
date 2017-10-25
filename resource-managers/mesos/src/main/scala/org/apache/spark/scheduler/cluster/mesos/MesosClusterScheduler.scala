@@ -395,13 +395,13 @@ private[spark] class MesosClusterScheduler(
     // add secret environment variables
     MesosSchedulerBackendUtil.getSecretEnvVar(desc.conf, config.driverSecretConfig)
       .foreach { variable =>
-      if (variable.getSecret.getReference.isInitialized) {
-        logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName} " +
-          s"on file ${variable.getName}")
-      } else {
-        logInfo(s"Setting secret on environment variable name=${variable.getName}")
-      }
-      envBuilder.addVariables(variable)
+        if (variable.getSecret.getReference.isInitialized) {
+          logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName} " +
+            s"on file ${variable.getName}")
+        } else {
+          logInfo(s"Setting secret on environment variable name=${variable.getName}")
+        }
+        envBuilder.addVariables(variable)
     }
 
     envBuilder.build()
@@ -425,13 +425,13 @@ private[spark] class MesosClusterScheduler(
 
     MesosSchedulerBackendUtil.getSecretVolume(desc.conf, config.driverSecretConfig)
       .foreach { volume =>
-      if (volume.getSource.getSecret.getReference.isInitialized) {
-        logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName} " +
-          s"on file ${volume.getContainerPath}")
-      } else {
-        logInfo(s"Setting secret on file name=${volume.getContainerPath}")
-      }
-      containerInfo.addVolumes(volume)
+        if (volume.getSource.getSecret.getReference.isInitialized) {
+          logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName} " +
+            s"on file ${volume.getContainerPath}")
+        } else {
+          logInfo(s"Setting secret on file name=${volume.getContainerPath}")
+        }
+        containerInfo.addVolumes(volume)
     }
 
     containerInfo
