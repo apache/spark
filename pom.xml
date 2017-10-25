@@ -136,7 +136,7 @@
     <retrofit.version>2.3.0</retrofit.version>
     <bouncycastle.version>1.54</bouncycastle.version>
     <jetty.version>9.4.7.v20170914</jetty.version>
-    <orc.version>1.4.0</orc.version>
+    <orc.version>1.4.1</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.4</chill.version>
@@ -1987,6 +1987,10 @@
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>io.airlift</groupId>
+            <artifactId>slice</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -3052,7 +3056,7 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.3</scala.version>
+        <scala.version>2.12.4</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>
