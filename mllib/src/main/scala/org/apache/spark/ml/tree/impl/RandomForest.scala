@@ -620,6 +620,25 @@ private[spark] object RandomForest extends Logging {
   }
 
   /**
+   * Return a list of pairs (featureIndex, featureIndexIdx) where featureIndex is the global
+   * (across all trees) index of a feature and featureIndexIdx is the index of a feature within the
+   * list of features for a given node.
+   * @param metadata
+   * @param featuresForNode
+   * @return
+   */
+  private[impl] def getValidFeatureSplits(
+      metadata: DecisionTreeMetadata,
+      featuresForNode: Option[Array[Int]]): Seq[(Int, Int)] = {
+    Range(0, metadata.numFeaturesPerNode).map { featureIndexIdx =>
+      featuresForNode.map(features => (featureIndexIdx, features(featureIndexIdx)))
+        .getOrElse((featureIndexIdx, featureIndexIdx))
+    }.filter { case (_, featureIndex) =>
+      metadata.numSplits(featureIndex) != 0
+    }
+  }
+
+  /**
    * Find the best split for a node.
    *
    * @param binAggregates Bin statistics.
@@ -630,14 +649,7 @@ private[spark] object RandomForest extends Logging {
       splits: Array[Array[Split]],
       featuresForNode: Option[Array[Int]],
       node: LearningNode): (Split, ImpurityStats) = {
-    val validFeatureSplits
-    = Range(0, binAggregates.metadata.numFeaturesPerNode).map { featureIndexIdx =>
-      featuresForNode.map(features => (featureIndexIdx, features(featureIndexIdx)))
-        .getOrElse((featureIndexIdx, featureIndexIdx))
-    }.withFilter { case (_, featureIndex) =>
-      binAggregates.metadata.numSplits(featureIndex) != 0
-    }
-
+    val validFeatureSplits = getValidFeatureSplits(binAggregates.metadata, featuresForNode)
     // For each (feature, split), calculate the gain, and select the best (feature, split).
     val parentImpurityCalc = if (node.stats == null) None else Some(node.stats.impurityCalculator)
     val splitsAndImpurityInfo =

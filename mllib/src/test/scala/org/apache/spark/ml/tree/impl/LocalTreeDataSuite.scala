@@ -92,7 +92,7 @@ class LocalTreeDataSuite
   test("TrainingInfo.update(): correctness when splitting on continuous features") {
     // Get TrainingInfo
     val info = getTrainingInfo()
-    val activeNodes = info.activeNodes
+    val activeNodes = info.currentLevelActiveNodes
     val contFeatureIdx = 0
 
     // For continuous feature, active node has a split with threshold 1
@@ -119,7 +119,7 @@ class LocalTreeDataSuite
   test("TrainingInfo.update(): correctness when splitting on categorical features") {
     // Get TrainingInfo
     val info = getTrainingInfo()
-    val activeNodes = info.activeNodes
+    val activeNodes = info.currentLevelActiveNodes
     val catFeatureIdx = 0
 
     // For categorical feature, active node puts categories (1, 2) on left side of split

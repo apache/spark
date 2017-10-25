@@ -97,7 +97,7 @@ private[ml] object LocalDecisionTree {
     // Create a new TrainingInfo describing the status of our partially-trained subtree
     // at each iteration of training
     var trainingInfo: TrainingInfo = TrainingInfo(colStore,
-      nodeOffsets = Array[(Int, Int)]((0, numRows)), activeNodes = Array(rootNode))
+      nodeOffsets = Array[(Int, Int)]((0, numRows)), currentLevelActiveNodes = Array(rootNode))
 
     // Iteratively learn, one level of the tree at a time.
     // Note: We do not use node IDs.
@@ -106,15 +106,15 @@ private[ml] object LocalDecisionTree {
 
     while (currentLevel < metadata.maxDepth && !doneLearning) {
       // Splits each active node if possible, returning an array of new active nodes
-      val activeNodes: Array[LearningNode] =
+      val nextLevelNodes: Array[LearningNode] =
         computeBestSplits(trainingInfo, instanceWeights, labels, metadata, splits)
-      // Count number of nodes in the current level that are being split
-      val estimatedRemainingActive = activeNodes.count(!_.isLeaf)
+      // Count number of non-leaf nodes in the next level
+      val estimatedRemainingActive = nextLevelNodes.count(!_.isLeaf)
       // TODO: Check to make sure we split something, and stop otherwise.
       doneLearning = currentLevel + 1 >= metadata.maxDepth || estimatedRemainingActive == 0
       if (!doneLearning) {
         // Obtain a new trainingInfo instance describing our current training status
-        trainingInfo = trainingInfo.update(splits, activeNodes)
+        trainingInfo = trainingInfo.update(splits, nextLevelNodes)
       }
       currentLevel += 1
     }

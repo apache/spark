@@ -38,13 +38,13 @@ import org.apache.spark.util.collection.BitSet
  * @param nodeOffsets  Offsets into the columns indicating the first level of sorting (by node).
  *                     The rows corresponding to the node activeNodes(i) are in the range
  *                     [nodeOffsets(i)(0), nodeOffsets(i)(1)) .
- * @param activeNodes  Nodes which are active (still being split).
- *                     Inactive nodes are known to be leaves in the final tree.
+ * @param currentLevelActiveNodes  Nodes which are active (still being split).
+ *                                 Inactive nodes are known to be leaves in the final tree.
  */
 private[impl] case class TrainingInfo(
     columns: Array[FeatureVector],
     nodeOffsets: Array[(Int, Int)],
-    activeNodes: Array[LearningNode]) extends Serializable {
+    currentLevelActiveNodes: Array[LearningNode]) extends Serializable {
 
   // pre-allocated temporary buffers that we use to sort
   // instances in left and right children during update
@@ -58,7 +58,7 @@ private[impl] case class TrainingInfo(
       columns.mkString(",\n") +
       "  },\n" +
       s"  nodeOffsets: ${nodeOffsets.mkString(", ")},\n" +
-      s"  activeNodes: ${activeNodes.iterator.mkString(", ")},\n" +
+      s"  activeNodes: ${currentLevelActiveNodes.iterator.mkString(", ")},\n" +
       ")\n"
   }
 
@@ -80,8 +80,8 @@ private[impl] case class TrainingInfo(
     val newNodeOffsets = new ArrayBuffer[(Int, Int)]()
     // Update (per-node) sorting of each column to account for creation of new nodes
     var nodeIdx = 0
-    while (nodeIdx < activeNodes.length) {
-      val node = activeNodes(nodeIdx)
+    while (nodeIdx < currentLevelActiveNodes.length) {
+      val node = currentLevelActiveNodes(nodeIdx)
       // Get new active node offsets from active nodes that were split
       if (node.split.isDefined) {
         // Get split and FeatureVector corresponding to feature for split
