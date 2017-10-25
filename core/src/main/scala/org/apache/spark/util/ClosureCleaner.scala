@@ -97,10 +97,12 @@ private[spark] object ClosureCleaner extends Logging {
       outerClasses: Seq[Class[_]]): Unit = {
     for (cls <- outerClasses) {
       var currentClass = cls
-      do {
+      assert(currentClass != null, "The outer class can't be null.")
+
+      while (currentClass != null) {
         accessedFields(currentClass) = Set.empty[String]
         currentClass = currentClass.getSuperclass()
-      } while (currentClass != null)
+      }
     }
   }
 
