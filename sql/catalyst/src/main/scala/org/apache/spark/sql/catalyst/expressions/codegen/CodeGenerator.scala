@@ -304,13 +304,9 @@ class CodegenContext {
       funcName: String,
       funcCode: String,
       inlineToOuterClass: Boolean): NewFunction = {
-    // The number of named constants that can exist in the class is limited by the Constant Pool
-    // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
-    // threshold of 1000k bytes to determine when a function should be inlined to a private, nested
-    // sub-class.
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
-    } else if (currClassSize > 1000000) {
+    } else if (currClassSize > CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD) {
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
 
@@ -1088,6 +1084,12 @@ object CodeGenerator extends Logging {
   // This is the threshold over which the methods in an inner class are grouped in a single
   // method which is going to be called by the outer class instead of the many small ones
   val MERGE_SPLIT_METHODS_THRESHOLD = 3
+
+  // The number of named constants that can exist in the class is limited by the Constant Pool
+  // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
+  // threshold of 1000k bytes to determine when a function should be inlined to a private, nested
+  // sub-class.
+  val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
 
   /**
    * Compile the Java source code into a Java class, using Janino.
