@@ -25,7 +25,7 @@ import org.apache.spark.ml.param._
 // scalastyle:off
 
 /**
- * Trait for shared param regParam. These traits may be changed or
+ * Trait for shared param regParam. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -42,7 +42,7 @@ trait HasRegParam extends Params {
 }
 
 /**
- * Trait for shared param maxIter. These traits may be changed or
+ * Trait for shared param maxIter. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -59,7 +59,7 @@ trait HasMaxIter extends Params {
 }
 
 /**
- * Trait for shared param featuresCol (default: "features"). These traits may be changed or
+ * Trait for shared param featuresCol (default: "features"). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -78,7 +78,7 @@ trait HasFeaturesCol extends Params {
 }
 
 /**
- * Trait for shared param labelCol (default: "label"). These traits may be changed or
+ * Trait for shared param labelCol (default: "label"). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -97,7 +97,7 @@ trait HasLabelCol extends Params {
 }
 
 /**
- * Trait for shared param predictionCol (default: "prediction"). These traits may be changed or
+ * Trait for shared param predictionCol (default: "prediction"). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -116,7 +116,7 @@ trait HasPredictionCol extends Params {
 }
 
 /**
- * Trait for shared param rawPredictionCol (default: "rawPrediction"). These traits may be changed or
+ * Trait for shared param rawPredictionCol (default: "rawPrediction"). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -135,7 +135,7 @@ trait HasRawPredictionCol extends Params {
 }
 
 /**
- * Trait for shared param probabilityCol (default: "probability"). These traits may be changed or
+ * Trait for shared param probabilityCol (default: "probability"). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -154,7 +154,7 @@ trait HasProbabilityCol extends Params {
 }
 
 /**
- * Trait for shared param varianceCol. These traits may be changed or
+ * Trait for shared param varianceCol. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -171,7 +171,7 @@ trait HasVarianceCol extends Params {
 }
 
 /**
- * Trait for shared param threshold. These traits may be changed or
+ * Trait for shared param threshold. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -188,7 +188,7 @@ trait HasThreshold extends Params {
 }
 
 /**
- * Trait for shared param thresholds. These traits may be changed or
+ * Trait for shared param thresholds. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -205,7 +205,7 @@ trait HasThresholds extends Params {
 }
 
 /**
- * Trait for shared param inputCol. These traits may be changed or
+ * Trait for shared param inputCol. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -222,7 +222,7 @@ trait HasInputCol extends Params {
 }
 
 /**
- * Trait for shared param inputCols. These traits may be changed or
+ * Trait for shared param inputCols. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -239,7 +239,7 @@ trait HasInputCols extends Params {
 }
 
 /**
- * Trait for shared param outputCol (default: uid + "__output"). These traits may be changed or
+ * Trait for shared param outputCol (default: uid + "__output"). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -258,7 +258,7 @@ trait HasOutputCol extends Params {
 }
 
 /**
- * Trait for shared param checkpointInterval. These traits may be changed or
+ * Trait for shared param checkpointInterval. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -275,7 +275,7 @@ trait HasCheckpointInterval extends Params {
 }
 
 /**
- * Trait for shared param fitIntercept (default: true). These traits may be changed or
+ * Trait for shared param fitIntercept (default: true). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -294,7 +294,7 @@ trait HasFitIntercept extends Params {
 }
 
 /**
- * Trait for shared param handleInvalid. These traits may be changed or
+ * Trait for shared param handleInvalid. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -311,7 +311,7 @@ trait HasHandleInvalid extends Params {
 }
 
 /**
- * Trait for shared param standardization (default: true). These traits may be changed or
+ * Trait for shared param standardization (default: true). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -330,7 +330,7 @@ trait HasStandardization extends Params {
 }
 
 /**
- * Trait for shared param seed (default: this.getClass.getName.hashCode.toLong). These traits may be changed or
+ * Trait for shared param seed (default: this.getClass.getName.hashCode.toLong). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -349,7 +349,7 @@ trait HasSeed extends Params {
 }
 
 /**
- * Trait for shared param elasticNetParam. These traits may be changed or
+ * Trait for shared param elasticNetParam. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -366,7 +366,7 @@ trait HasElasticNetParam extends Params {
 }
 
 /**
- * Trait for shared param tol. These traits may be changed or
+ * Trait for shared param tol. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -383,7 +383,7 @@ trait HasTol extends Params {
 }
 
 /**
- * Trait for shared param stepSize. These traits may be changed or
+ * Trait for shared param stepSize. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -400,7 +400,7 @@ trait HasStepSize extends Params {
 }
 
 /**
- * Trait for shared param weightCol. These traits may be changed or
+ * Trait for shared param weightCol. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -417,7 +417,7 @@ trait HasWeightCol extends Params {
 }
 
 /**
- * Trait for shared param solver. These traits may be changed or
+ * Trait for shared param solver. This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -434,7 +434,7 @@ trait HasSolver extends Params {
 }
 
 /**
- * Trait for shared param aggregationDepth (default: 2). These traits may be changed or
+ * Trait for shared param aggregationDepth (default: 2). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi

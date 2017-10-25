@@ -177,7 +177,7 @@ private[shared] object SharedParamsCodeGen {
 
     s"""
       |/**
-      | * Trait for shared param $name$defaultValueDoc. These traits may be changed or
+      | * Trait for shared param $name$defaultValueDoc. This trait may be changed or
       | * removed between minor versions.
       | */
       |@DeveloperApi
