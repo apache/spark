@@ -31,7 +31,7 @@ trait SharedSparkContext extends BeforeAndAfterAll with BeforeAndAfterEach { sel
 
   /**
    * Initialize the [[SparkContext]].  Generally, this is just called from beforeAll; however, in
-   * test using styles other than FunSuite, there is often code that relies on the session between 
+   * test using styles other than FunSuite, there is often code that relies on the session between
    * test group constructs and the actual tests, which may need this session.  It is purely a
    * semantic difference, but semantically, it makes more sense to call 'initializeContext' between
    * a 'describe' and an 'it' call than it does to call 'beforeAll'.
