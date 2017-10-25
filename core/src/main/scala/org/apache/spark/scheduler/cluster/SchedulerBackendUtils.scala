@@ -24,10 +24,10 @@ private[spark] object SchedulerBackendUtils {
   val DEFAULT_NUMBER_EXECUTORS = 2
 
   /**
-    * Getting the initial target number of executors depends on whether dynamic allocation is
-    * enabled.
-    * If not using dynamic allocation it gets the number of executors requested by the user.
-    */
+   * Getting the initial target number of executors depends on whether dynamic allocation is
+   * enabled.
+   * If not using dynamic allocation it gets the number of executors requested by the user.
+   */
   def getInitialTargetExecutorNumber(
       conf: SparkConf,
       numExecutors: Int = DEFAULT_NUMBER_EXECUTORS): Int = {
