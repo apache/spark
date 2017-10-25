@@ -790,7 +790,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
 
   private def doAsUser[T](fn: => T): T = {
     ugi.doAs(new PrivilegedExceptionAction[T]() {
-      def run: T = fn
+      override def run: T = fn
     })
   }
 
