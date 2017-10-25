@@ -66,16 +66,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
     requestExecutorsService)
 
-  private val driverPod = try {
-    kubernetesClient.pods()
-      .inNamespace(kubernetesNamespace)
-      .withName(kubernetesDriverPodName)
-      .get()
-  } catch {
-    case throwable: Throwable =>
-      logError(s"Executor cannot find driver pod.", throwable)
-      throw new SparkException(s"Executor cannot find driver pod", throwable)
-  }
+  private val driverPod = kubernetesClient.pods()
+    .inNamespace(kubernetesNamespace)
+    .withName(kubernetesDriverPodName)
+    .get()
 
   override val minRegisteredRatio =
     if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
@@ -142,13 +136,16 @@ private[spark] class KubernetesClusterSchedulerBackend(
         knownExitReason.fold {
           removeExecutorOrIncrementLossReasonCheckCount(executorId)
         } { executorExited =>
-          logDebug(s"Removing executor $executorId with loss reason " + executorExited.message)
+          logWarning(s"Removing executor $executorId with loss reason " + executorExited.message)
           removeExecutor(executorId, executorExited)
           // We keep around executors that have exit conditions caused by the application. This
           // allows them to be debugged later on. Otherwise, mark them as to be deleted from the
           // the API server.
           if (!executorExited.exitCausedByApp) {
+            logInfo(s"Executor $executorId failed because of a framework error.")
             deleteExecutorFromClusterAndDataStructures(executorId)
+          } else {
+            logInfo(s"Executor $executorId exited because of the application.")
           }
         }
       }
@@ -191,8 +188,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
 
   }
-
-  override def applicationId(): String = conf.get("spark.app.id", super.applicationId())
 
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= initialExecutors * minRegisteredRatio
@@ -331,10 +326,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     override def eventReceived(action: Action, pod: Pod): Unit = {
       if (action == Action.MODIFIED && pod.getStatus.getPhase == "Running"
-        && pod.getMetadata.getDeletionTimestamp == null) {
+          && pod.getMetadata.getDeletionTimestamp == null) {
         val podIP = pod.getStatus.getPodIP
         val clusterNodeName = pod.getSpec.getNodeName
-        logDebug(s"Executor pod $pod ready, launched at $clusterNodeName as IP $podIP.")
+        logInfo(s"Executor pod $pod ready, launched at $clusterNodeName as IP $podIP.")
         executorPodsByIPs.put(podIP, pod)
       } else if ((action == Action.MODIFIED && pod.getMetadata.getDeletionTimestamp != null) ||
         action == Action.DELETED || action == Action.ERROR) {
@@ -345,10 +340,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
           executorPodsByIPs.remove(podIP)
         }
         if (action == Action.ERROR) {
-          logInfo(s"Received pod $podName exited event. Reason: " + pod.getStatus.getReason)
+          logWarning(s"Received pod $podName exited event. Reason: " + pod.getStatus.getReason)
           handleErroredPod(pod)
         } else if (action == Action.DELETED) {
-          logInfo(s"Received delete pod $podName event. Reason: " + pod.getStatus.getReason)
+          logWarning(s"Received delete pod $podName event. Reason: " + pod.getStatus.getReason)
           handleDeletedPod(pod)
         }
       }
@@ -386,8 +381,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
       // container was probably actively killed by the driver.
       val exitReason = if (isPodAlreadyReleased(pod)) {
         ExecutorExited(containerExitStatus, exitCausedByApp = false,
-          s"Container in pod " + pod.getMetadata.getName +
-            " exited from explicit termination request.")
+          s"Container in pod ${pod.getMetadata.getName} exited from explicit termination" +
+            " request.")
       } else {
         val containerExitReason = s"Pod ${pod.getMetadata.getName}'s executor container " +
           s"exited with exit status code $containerExitStatus."

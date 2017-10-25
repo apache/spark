@@ -93,13 +93,13 @@ package object config extends Logging {
 
   private[spark] val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
-      .doc("Number of pods to launch at once in each round of dynamic allocation. ")
+      .doc("Number of pods to launch at once in each round of executor allocation.")
       .intConf
       .createWithDefault(5)
 
   private[spark] val KUBERNETES_ALLOCATION_BATCH_DELAY =
     ConfigBuilder("spark.kubernetes.allocation.batch.delay")
-      .doc("Number of seconds to wait between each round of executor allocation. ")
+      .doc("Number of seconds to wait between each round of executor allocation.")
       .longConf
       .createWithDefault(1)
 
@@ -129,7 +129,7 @@ package object config extends Logging {
       masterWithoutK8sPrefix
     } else {
       val resolvedURL = s"https://$masterWithoutK8sPrefix"
-      logDebug(s"No scheme specified for kubernetes master URL, so defaulting to https. Resolved" +
+      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved" +
         s" URL is $resolvedURL")
       resolvedURL
     }
