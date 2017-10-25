@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.api.java
+
+import java.io.Serializable
 
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.api.java.JavaUtils
 
-class JavaUtils extends SparkFunSuite {
+class JavaUtilsSuite extends SparkFunSuite {
 
   test("containsKey implementation without iteratively entrySet call") {
     val src = new scala.collection.mutable.HashMap[String, String]
@@ -32,6 +33,8 @@ class JavaUtils extends SparkFunSuite {
     val map: java.util.Map[String, String] = spy(JavaUtils.mapAsSerializableJavaMap(src))
 
     assert(map.containsKey(key))
+    assert(map.isInstanceOf[Serializable])
+
     verify(map, never()).entrySet()
   }
 }
