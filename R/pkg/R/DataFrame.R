@@ -3236,7 +3236,7 @@ setMethod("as.data.frame",
 #'
 #' @family SparkDataFrame functions
 #' @rdname attach
-#' @aliases attach,SparkDataFrame-method
+#' @aliases attach attach,SparkDataFrame-method
 #' @param what (SparkDataFrame) The SparkDataFrame to attach
 #' @param pos (integer) Specify position in search() where to attach.
 #' @param name (character) Name to use for the attached SparkDataFrame. Names
