@@ -514,7 +514,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
   /**
    * Update lambda based on the batch submitted. batchSize can be different for each iteration.
    */
-  private def updateLambda(stat: BDM[Double], batchSize: Double): Unit = {
+  private def updateLambda(stat: BDM[Double], batchSize: Long): Unit = {
     // weight of the mini-batch.
     val weight = rho()
 
