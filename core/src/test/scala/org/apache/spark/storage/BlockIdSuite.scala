@@ -33,13 +33,8 @@ class BlockIdSuite extends SparkFunSuite {
   }
 
   test("test-bad-deserialization") {
-    try {
-      // Try to deserialize an invalid block id.
+    intercept[UnrecognizedBlockId] {
       BlockId("myblock")
-      fail()
-    } catch {
-      case e: IllegalStateException => // OK
-      case _: Throwable => fail()
     }
   }
 
