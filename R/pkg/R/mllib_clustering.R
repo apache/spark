@@ -60,9 +60,9 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @param maxIter maximum iteration number.
 #' @param seed the random seed.
 #' @param minDivisibleClusterSize The minimum number of points (if greater than or equal to 1.0)
-#'                                or the minimum proportion of points (if less than 1.0) of a divisible cluster.
-#'                                Note that it is an expert parameter. The default value should be good enough
-#'                                for most cases.
+#'                                or the minimum proportion of points (if less than 1.0) of a
+#'                                divisible cluster. Note that it is an expert parameter. The
+#'                                default value should be good enough for most cases.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.bisectingKmeans} returns a fitted bisecting k-means model.
 #' @rdname spark.bisectingKmeans
@@ -325,10 +325,11 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 #'                Note that the response variable of formula is empty in spark.kmeans.
 #' @param k number of centers.
 #' @param maxIter maximum iteration number.
-#' @param initMode the initialization algorithm choosen to fit the model.
+#' @param initMode the initialization algorithm chosen to fit the model.
 #' @param seed the random seed for cluster initialization.
 #' @param initSteps the number of steps for the k-means|| initialization mode.
-#'                  This is an advanced setting, the default of 2 is almost always enough. Must be > 0.
+#'                  This is an advanced setting, the default of 2 is almost always enough.
+#'                  Must be > 0.
 #' @param tol convergence tolerance of iterations.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.kmeans} returns a fitted k-means model.
@@ -548,8 +549,8 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
 #'         \item{\code{topics}}{top 10 terms and their weights of all topics}
 #'         \item{\code{vocabulary}}{whole terms of the training corpus, NULL if libsvm format file
 #'               used as training set}
-#'         \item{\code{trainingLogLikelihood}}{Log likelihood of the observed tokens in the training set,
-#'               given the current parameter estimates:
+#'         \item{\code{trainingLogLikelihood}}{Log likelihood of the observed tokens in the
+#'               training set, given the current parameter estimates:
 #'               log P(docs | topics, topic distributions for docs, Dirichlet hyperparameters)
 #'               It is only for distributed LDA model (i.e., optimizer = "em")}
 #'         \item{\code{logPrior}}{Log probability of the current parameter estimate:

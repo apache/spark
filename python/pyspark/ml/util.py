@@ -175,7 +175,9 @@ class JavaMLWriter(MLWriter):
 
         .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
+        warnings.warn(
+            "Deprecated in 2.1 and will be removed in 3.0, use session instead.",
+            DeprecationWarning)
         self._jwrite.context(sqlContext._ssql_ctx)
         return self
 
@@ -256,7 +258,9 @@ class JavaMLReader(MLReader):
 
         .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
+        warnings.warn(
+            "Deprecated in 2.1 and will be removed in 3.0, use session instead.",
+            DeprecationWarning)
         self._jread.context(sqlContext._ssql_ctx)
         return self
 

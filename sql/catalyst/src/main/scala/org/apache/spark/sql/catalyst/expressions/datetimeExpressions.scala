@@ -978,12 +978,13 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
- * Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
- * that corresponds to the same time of day in the given timezone.
+ * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+ * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+ * '2017-07-14 03:40:00.0'.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, timezone) - Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp that corresponds to the same time of day in the given timezone.",
+  usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14 03:40:00.0'.",
   examples = """
     Examples:
       > SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul');
@@ -1153,12 +1154,13 @@ case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Optio
 }
 
 /**
- * Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
- * another timestamp that corresponds to the same time of day in UTC.
+ * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time zone,
+ * and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+ * '2017-07-14 01:40:00.0'.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, timezone) - Given a timestamp, which corresponds to a certain time of day in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.",
+  usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield '2017-07-14 01:40:00.0'.",
   examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');

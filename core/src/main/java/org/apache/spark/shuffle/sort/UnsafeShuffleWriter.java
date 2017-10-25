@@ -208,7 +208,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
   }
 
-  private void open() throws IOException {
+  private void open() {
     assert (sorter == null);
     sorter = new ShuffleExternalSorter(
       memoryManager,

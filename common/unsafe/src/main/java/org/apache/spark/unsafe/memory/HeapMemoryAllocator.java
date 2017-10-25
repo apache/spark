@@ -56,6 +56,9 @@ public class HeapMemoryAllocator implements MemoryAllocator {
             final MemoryBlock memory = blockReference.get();
             if (memory != null) {
               assert (memory.size() == size);
+              if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
+                memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+              }
               return memory;
             }
           }
