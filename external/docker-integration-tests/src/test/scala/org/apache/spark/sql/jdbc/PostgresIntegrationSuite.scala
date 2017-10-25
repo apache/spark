@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.Connection
-import java.util.Properties
+import java.util.{Properties, UUID}
 
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -61,6 +61,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .executeUpdate()
     conn.prepareStatement("INSERT INTO ts_with_timezone VALUES " +
       "(1, TIMESTAMP WITH TIME ZONE '2016-08-12 10:22:31.949271-07', TIME WITH TIME ZONE '17:22:31.949271+00')")
+      .executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE arrtypes (c0 uuid[], c1 inet[], c2 cidr[])")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO arrtypes VALUES (ARRAY" +
+      "['7be8aaf8-650e-4dbb-8186-0a749840ecf2','205f9bfc-018c-4452-a605-609c0cfad228']::uuid[]," +
+      "ARRAY['172.16.0.41', '172.16.0.42']::inet[]," +
+      "ARRAY['192.168.0.0/24', '10.1.0.0/16']::cidr[])")
       .executeUpdate()
   }
 
@@ -140,5 +148,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(1).equals("class java.sql.Timestamp"))
     assert(types(2).equals("class java.sql.Timestamp"))
+  }
+
+  test("SPARK-22291: Postgresql UUID[] to Cassandra: Conversion Error") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "arrtypes", new Properties)
+    val rows = df.collect()
+    assert(rows(0).getSeq(0) == Seq("7be8aaf8-650e-4dbb-8186-0a749840ecf2",
+      "205f9bfc-018c-4452-a605-609c0cfad228"))
+    assert(rows(0).getSeq(1) == Seq("172.16.0.41", "172.16.0.42"))
+    assert(rows(0).getSeq(2) == Seq("192.168.0.0/24", "10.1.0.0/16"))
   }
 }

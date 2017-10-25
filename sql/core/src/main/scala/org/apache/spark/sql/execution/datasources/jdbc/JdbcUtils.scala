@@ -457,12 +457,15 @@ object JdbcUtils extends Logging {
         case StringType =>
           (array: Object) =>
             array match {
+              case _: Array[java.lang.String] =>
+                array.asInstanceOf[Array[java.lang.String]]
+                  .map(UTF8String.fromString)
               case _: Array[java.util.UUID] =>
                 array.asInstanceOf[Array[java.util.UUID]]
                   .map(uuid => UTF8String.fromString(uuid.toString))
               case _ =>
-                array.asInstanceOf[Array[java.lang.String]]
-                  .map(UTF8String.fromString)
+                array.asInstanceOf[Array[java.lang.Object]]
+                  .map(obj => UTF8String.fromString(obj.toString))
             }
 
         case DateType =>
