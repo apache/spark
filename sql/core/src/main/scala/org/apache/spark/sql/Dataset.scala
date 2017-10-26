@@ -1755,10 +1755,10 @@ class Dataset[T] private[sql](
    *
    * Notice that the column positions in the schema aren't necessarily matched with the
    * fields in the typed objects in a Dataset. This function resolves columns by their positions
-   * in the schema, not the fields in the typed objects:
+   * in the schema, not the fields in the typed objects, as this Scala example shows:
    *
    * {{{
-   *   case class Test(a : String, b : String)
+   *   case class Test(a: String, b: String)
    *   val ds1 = Seq(("a", "b")).toDF("a", "b").as[Test] // ds1's schema: [a: String, b: String]
    *   val ds2 = Seq(("b", "a")).toDF("b", "a").as[Test] // ds2's schema: [b: String, a: String]
    *   ds1.union(ds2).show
