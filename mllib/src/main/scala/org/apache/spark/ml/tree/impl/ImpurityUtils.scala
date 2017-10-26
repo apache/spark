@@ -32,13 +32,6 @@ private[impl] object ImpurityUtils {
     }
   }
 
-  private[impl] def getImpurityCalculator(
-    impurityAggregator: ImpurityAggregator): ImpurityCalculator = {
-    val statsSize = impurityAggregator.statsSize
-    val stats = new Array[Double](statsSize)
-    impurityAggregator.getCalculator(stats, 0)
-  }
-
   /**
    * Calculate the impurity statistics for a given (feature, split) based upon left/right
    * aggregates.

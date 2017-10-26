@@ -18,7 +18,6 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.ml.tree.Split
-import org.apache.spark.mllib.tree.impurity.{ImpurityAggregator, ImpurityCalculator}
 
 /**
  * Helpers for updating DTStatsAggregators during collection of sufficient stats for tree training.
@@ -40,25 +39,6 @@ private[impl] object AggUpdateUtils {
       val rowIndex = col.indices(idx)
       val label = labels(rowIndex)
       statsAggregator.updateParent(label, instanceWeights(rowIndex))
-    }
-  }
-
-  /**
-   * Updates the parent node stats of the passed-in impurity aggregator with the labels
-   * corresponding to the feature values at indices [from, to).
-   */
-  private[impl] def updateImpurityCalc(
-                                          calc: ImpurityCalculator,
-                                          agg: ImpurityAggregator,
-                                          col: FeatureVector,
-                                          from: Int,
-                                          to: Int,
-                                          instanceWeights: Array[Double],
-                                          labels: Array[Double]): Unit = {
-    from.until(to).foreach { idx =>
-      val rowIndex = col.indices(idx)
-      val label = labels(rowIndex)
-      agg.update(calc.stats, 0, label, instanceWeights(rowIndex))
     }
   }
 

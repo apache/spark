@@ -18,7 +18,6 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.ml.tree._
-import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 
 /** Object exposing methods for local training of decision trees */
@@ -178,11 +177,11 @@ private[ml] object LocalDecisionTree {
           // Features for the current node start at fromOffset and end at toOffset
           val (from, to) = nodeOffsets(nodeIndex)
           // Compute sufficient stats (e.g. label counts) for all data at the current node,
-          val parentImpurityAgg = ImpurityUtils.getImpurityAggregator(metadata)
-          val parentImpurityCalc = ImpurityUtils.getImpurityCalculator(parentImpurityAgg)
-          AggUpdateUtils.updateImpurityCalc(parentImpurityCalc, parentImpurityAgg, columns.head,
-            from, to, instanceWeights, labels)
-
+          // store result in dummyStatsAggregator.parentStats
+          // TODO(smurching) rename dummyStatsAggregator and/or
+          val dummyStatsAggregator = new DTStatsAggregator(metadata, featureSubset = None)
+          AggUpdateUtils.updateParentImpurity(dummyStatsAggregator, columns(0), from, to,
+            instanceWeights, labels)
           val validFeatureSplits = RandomForest.getNonConstantFeatures(metadata,
             featuresForNode = None)
           // Compute sufficient stats for each feature/bin at the current node
@@ -193,10 +192,10 @@ private[ml] object LocalDecisionTree {
             updateAggregator(statsAggregator, col, instanceWeights, labels, from, to,
               featureIndexIdx = 0, splits(col.featureIndex))
             SplitUtils.chooseSplit(statsAggregator, featureIndex, featureIndexIdx = 0,
-              splits(featureIndex), Some(parentImpurityCalc))
+              splits(featureIndex), Some(dummyStatsAggregator.getParentImpurityCalculator()))
           }
           val (bestSplit, bestStats) = RandomForest.getBestSplitByGain(
-            parentImpurityCalc, metadata,
+            dummyStatsAggregator.getParentImpurityCalculator(), metadata,
             featuresForNode = None, splitsAndImpurityInfo)
           // Split current node, get an iterator over its children
           splitIfPossible(node, metadata, bestStats, bestSplit)
