@@ -42,7 +42,7 @@ private[spark] object MergeUtil {
   /**
    * Merge-sort a sequence of (K, C) iterators using a given a comparator for the keys.
    */
-  private def mergeSort[K, C](iterators: Seq[Iterator[Product2[K, C]]], comparator: Comparator[K])
+  def mergeSort[K, C](iterators: Seq[Iterator[Product2[K, C]]], comparator: Comparator[K])
       : Iterator[Product2[K, C]] =
   {
     val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
@@ -75,7 +75,7 @@ private[spark] object MergeUtil {
    * (e.g. when we sort objects by hash code and different keys may compare as equal although
    * they're not), we still merge them by doing equality tests for all keys that compare as equal.
    */
-  private def mergeWithAggregation[K, C](
+  def mergeWithAggregation[K, C](
       iterators: Seq[Iterator[Product2[K, C]]],
       mergeCombiners: (C, C) => C,
       comparator: Comparator[K],

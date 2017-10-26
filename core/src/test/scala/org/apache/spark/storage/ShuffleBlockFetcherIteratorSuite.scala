@@ -101,7 +101,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       (remoteBmId, remoteBlocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq)
     )
 
-    val iterator = new ShuffleBlockFetcherIterator(
+    val iterator = new ShuffleBlockFetcherIterator[InputStream](
       TaskContext.empty(),
       transfer,
       blockManager,
@@ -123,7 +123,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       // Make sure we release buffers when a wrapped input stream is closed.
       val mockBuf = localBlocks.getOrElse(blockId, remoteBlocks(blockId))
       // Note: ShuffleBlockFetcherIterator wraps input streams in a BufferReleasingInputStream
-      val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream]
+      val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream[InputStream]]
       verify(mockBuf, times(0)).release()
       val delegateAccess = PrivateMethod[InputStream]('delegate)
 
@@ -179,7 +179,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       (remoteBmId, blocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq))
 
     val taskContext = TaskContext.empty()
-    val iterator = new ShuffleBlockFetcherIterator(
+    val iterator = new ShuffleBlockFetcherIterator[InputStream](
       taskContext,
       transfer,
       blockManager,

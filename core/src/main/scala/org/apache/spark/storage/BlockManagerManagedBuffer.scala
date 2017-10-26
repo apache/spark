@@ -64,4 +64,6 @@ private[storage] class BlockManagerManagedBuffer(
     }
     this
   }
+
+  override def isDirect: Boolean = data.toByteBuffer().isDirect
 }
