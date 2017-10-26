@@ -29,6 +29,7 @@ import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -622,12 +623,9 @@ private[spark] object RandomForest extends Logging {
   /**
    * Return a list of pairs (featureIndex, featureIndexIdx) where featureIndex is the global
    * (across all trees) index of a feature and featureIndexIdx is the index of a feature within the
-   * list of features for a given node.
-   * @param metadata
-   * @param featuresForNode
-   * @return
+   * list of features for a given node. Filters out constant features (features with 0 splits)
    */
-  private[impl] def getValidFeatureSplits(
+  private[impl] def getNonConstantFeatures(
       metadata: DecisionTreeMetadata,
       featuresForNode: Option[Array[Int]]): Seq[(Int, Int)] = {
     Range(0, metadata.numFeaturesPerNode).map { featureIndexIdx =>
@@ -636,6 +634,31 @@ private[spark] object RandomForest extends Logging {
     }.filter { case (_, featureIndex) =>
       metadata.numSplits(featureIndex) != 0
     }
+  }
+
+  private[impl] def getBestSplitByGain(
+      parentImpurityCalculator: ImpurityCalculator,
+      metadata: DecisionTreeMetadata,
+      featuresForNode: Option[Array[Int]],
+      splitsAndImpurityInfo: Seq[(Split, ImpurityStats)]): (Split, ImpurityStats) = {
+    val (bestSplit, bestSplitStats) =
+      if (splitsAndImpurityInfo.isEmpty) {
+        // If no valid splits for features, then this split is invalid,
+        // return invalid information gain stats.  Take any split and continue.
+        // Splits is empty, so arbitrarily choose to split on any threshold
+        val dummyFeatureIndex = featuresForNode.map(_.head).getOrElse(0)
+        if (metadata.isContinuous(dummyFeatureIndex)) {
+          (new ContinuousSplit(dummyFeatureIndex, 0),
+            ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
+        } else {
+          val numCategories = metadata.featureArity(dummyFeatureIndex)
+          (new CategoricalSplit(dummyFeatureIndex, Array(), numCategories),
+            ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
+        }
+      } else {
+        splitsAndImpurityInfo.maxBy(_._2.gain)
+      }
+    (bestSplit, bestSplitStats)
   }
 
   /**
@@ -649,7 +672,7 @@ private[spark] object RandomForest extends Logging {
       splits: Array[Array[Split]],
       featuresForNode: Option[Array[Int]],
       node: LearningNode): (Split, ImpurityStats) = {
-    val validFeatureSplits = getValidFeatureSplits(binAggregates.metadata, featuresForNode)
+    val validFeatureSplits = getNonConstantFeatures(binAggregates.metadata, featuresForNode)
     // For each (feature, split), calculate the gain, and select the best (feature, split).
     val parentImpurityCalc = if (node.stats == null) None else Some(node.stats.impurityCalculator)
     val splitsAndImpurityInfo =
@@ -657,26 +680,8 @@ private[spark] object RandomForest extends Logging {
         SplitUtils.chooseSplit(binAggregates, featureIndex, featureIndexIdx, splits(featureIndex),
           parentImpurityCalc)
       }
-
-    val (bestSplit, bestSplitStats) =
-      if (splitsAndImpurityInfo.isEmpty) {
-        // If no valid splits for features, then this split is invalid,
-        // return invalid information gain stats.  Take any split and continue.
-        // Splits is empty, so arbitrarily choose to split on any threshold
-        val dummyFeatureIndex = featuresForNode.map(_.head).getOrElse(0)
-        val parentImpurityCalculator = binAggregates.getParentImpurityCalculator()
-        if (binAggregates.metadata.isContinuous(dummyFeatureIndex)) {
-          (new ContinuousSplit(dummyFeatureIndex, 0),
-            ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
-        } else {
-          val numCategories = binAggregates.metadata.featureArity(dummyFeatureIndex)
-          (new CategoricalSplit(dummyFeatureIndex, Array(), numCategories),
-            ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
-        }
-      } else {
-        splitsAndImpurityInfo.maxBy(_._2.gain)
-      }
-    (bestSplit, bestSplitStats)
+    getBestSplitByGain(binAggregates.getParentImpurityCalculator(), binAggregates.metadata,
+      featuresForNode, splitsAndImpurityInfo)
   }
 
   private[impl] def findUnorderedSplits(
