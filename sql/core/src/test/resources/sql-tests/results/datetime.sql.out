@@ -5,7 +5,7 @@
 -- !query 0
 select current_date = current_date(), current_timestamp = current_timestamp()
 -- !query 0 schema
-struct<(current_date() = current_date()):boolean,(current_timestamp() = current_timestamp()):boolean>
+struct<(current_date() AS `current_date()` = current_date()):boolean,(current_timestamp() AS `current_timestamp()` = current_timestamp()):boolean>
 -- !query 0 output
 true	true
 
