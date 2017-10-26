@@ -350,6 +350,30 @@ class SQLTests(ReusedPySparkTestCase):
         res = data.select(pudf(data['number']).alias('plus_four'))
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
 
+    def test_udf_with_conditional_expr_when(self):
+        from pyspark.sql.functions import col, udf, when
+
+        df = self.sc.parallelize([Row(x=5), Row(x=0)]).toDF()
+        f = udf(lambda value: 10 / int(value), IntegerType())
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    Exception,
+                    "Python UDFs can't be used in conditional expressions"):
+                df.select(when((col('x') > 0), f(col('x')))).collect()
+
+    def test_udf_with_conditional_expr_if(self):
+        self.spark.createDataFrame(self.sc.parallelize([Row(a=0)]))\
+            .createOrReplaceTempView("test")
+
+        self.spark.catalog.registerFunction("divideByVal",
+                                            lambda value: 10 / int(value), IntegerType())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    Exception,
+                    "Python UDFs can't be used in conditional expressions"):
+                self.spark.sql("SELECT if(a > 0, divideByVal(a), 0) FROM test").collect()
+
     def test_udf(self):
         self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
