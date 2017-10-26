@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
+import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode, Node}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -353,6 +353,31 @@ class DecisionTreeClassifierSuite
     dt.fit(df)
   }
 
+  test("SPARK-3159: Check for reducible DecisionTree") {
+    import DecisionTreeClassifierSuite.hasPairsOfSameChildren
+
+    val df: DataFrame = TreeTests.getIrisDataset(sc).toDF()
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxBins(2)
+      .setMinInfoGain(0)
+      .setMinInstancesPerNode(1)
+      .setMaxDepth(3)
+      .setSeed(0)
+
+    val m1 = dt.setCanMergeChildren(false).fit(df)
+    assert(true === hasPairsOfSameChildren(m1.rootNode))
+
+    val m2 = dt.setCanMergeChildren(true).fit(df)
+    assert(false === hasPairsOfSameChildren(m2.rootNode))
+
+    val p1 = m1.transform(df).select(m1.getPredictionCol).collect()
+    val p2 = m2.transform(df).select(m2.getPredictionCol).collect()
+    assert(p1.zip(p2).forall { case (y1, y2) =>
+      y1.getDouble(0) === y2.getDouble(0)
+    })
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
@@ -424,5 +449,26 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
       oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
     assert(newTree.numFeatures === numFeatures)
+  }
+
+  /** check if there exists pairs of leaf nodes with same prediction of the same parent. */
+  def hasPairsOfSameChildren(node: Node): Boolean = {
+    def check(node: Node): (Boolean, Option[Double]) = node match {
+      case n: LeafNode => (false, Some(n.prediction))
+      case n: InternalNode =>
+        val (leftFound, leftPredict) = check(n.leftChild)
+        val (rightFound, rightPredict) = check(n.rightChild)
+
+        if (leftFound || rightFound ||
+          (leftPredict.isDefined && leftPredict == rightPredict)) {
+          (true, None)
+        } else {
+          (false, None)
+        }
+    }
+
+    val (found, _) = check(node)
+
+    found
   }
 }

@@ -106,8 +106,18 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
 
+  /**
+   * If true, tree will try to merge its leaf nodes which share the same parent and output
+   * the same prediction.
+   * (default = false)
+   * @group expertParam
+   */
+  final val canMergeChildren: BooleanParam = new BooleanParam(this, "canMergeChildren", "If true," +
+    " the tree will try to merge its leaf nodes which share the same parent and output.")
+
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
-    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
+    maxMemoryInMB -> 256, cacheNodeIds -> false, canMergeChildren -> false,
+    checkpointInterval -> 10)
 
   /**
    * @deprecated This method is deprecated and will be removed in 3.0.0.
@@ -176,6 +186,9 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
+  /** @group expertGetParam */
+  final def getCanMergeChildren: Boolean = $(canMergeChildren)
+
   /**
    * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
@@ -199,6 +212,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     strategy.minInfoGain = getMinInfoGain
     strategy.minInstancesPerNode = getMinInstancesPerNode
     strategy.useNodeIdCache = getCacheNodeIds
+    strategy.canMergeChildren = getCanMergeChildren
     strategy.numClasses = numClasses
     strategy.categoricalFeaturesInfo = categoricalFeatures
     strategy.subsamplingRate = subsamplingRate

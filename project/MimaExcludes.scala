@@ -36,6 +36,10 @@ object MimaExcludes {
 
   // Exclude rules for 2.3.x
   lazy val v23excludes = v22excludes ++ Seq(
+    // [SPARK-3159][MLlib] Check for reducible DecisionTree.
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.tree.configuration.Strategy.<init>$default$13")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this")
+
     // [SPARK-20495][SQL] Add StorageLevel to cacheTable API
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.cacheTable"),
 

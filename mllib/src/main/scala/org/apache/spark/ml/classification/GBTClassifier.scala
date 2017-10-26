@@ -91,6 +91,10 @@ class GBTClassifier @Since("1.4.0") (
   @Since("1.4.0")
   override def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
+  /** @group expertSetParam */
+  @Since("2.2.0")
+  def setCanMergeChildren(value: Boolean): this.type = set(canMergeChildren, value)
+
   /**
    * Specifies how often to checkpoint the cached node IDs.
    * E.g. 10 means that the cache will get checkpointed every 10 iterations.
