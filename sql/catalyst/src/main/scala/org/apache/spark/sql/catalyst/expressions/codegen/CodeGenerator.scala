@@ -82,17 +82,17 @@ case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprElimi
  * The main information about a new added function.
  *
  * @param functionName String representing the name of the function
- * @param subclassName Optional value which is empty if the function is added to
- *                     the outer class, otherwise it contains the name of the
- *                     inner class in which the function has been added.
- * @param subclassInstance Optional value which is empty if the function is added to
- *                         the outer class, otherwise it contains the name of the
- *                         instance of the inner class in the outer class.
+ * @param innerClassName Optional value which is empty if the function is added to
+ *                       the outer class, otherwise it contains the name of the
+ *                       inner class in which the function has been added.
+ * @param innerClassInstance Optional value which is empty if the function is added to
+ *                           the outer class, otherwise it contains the name of the
+ *                           instance of the inner class in the outer class.
  */
-private[codegen] case class NewFunction(
+private[codegen] case class NewFunctionSpec(
     functionName: String,
-    subclassName: Option[String],
-    subclassInstance: Option[String])
+    innerClassName: Option[String],
+    innerClassInstance: Option[String])
 
 /**
  * A context for codegen, tracking a list of objects that could be passed into generated Java
@@ -245,8 +245,8 @@ class CodegenContext {
   /**
    * Holds the class and instance names to be generated, where `OuterClass` is a placeholder
    * standing for whichever class is generated as the outermost class and which will contain any
-   * nested sub-classes. All other classes and instance names in this list will represent private,
-   * nested sub-classes.
+   * inner sub-classes. All other classes and instance names in this list will represent private,
+   * inner sub-classes.
    */
   private val classes: mutable.ListBuffer[(String, String)] =
     mutable.ListBuffer[(String, String)](outerClassName -> null)
@@ -277,8 +277,8 @@ class CodegenContext {
 
   /**
    * Adds a function to the generated class. If the code for the `OuterClass` grows too large, the
-   * function will be inlined into a new private, nested class, and a class-qualified name for the
-   * function will be returned. Otherwise, the function will be inined to the `OuterClass` the
+   * function will be inlined into a new private, inner class, and a class-qualified name for the
+   * function will be returned. Otherwise, the function will be inlined to the `OuterClass` the
    * simple `funcName` will be returned.
    *
    * @param funcName the class-unqualified name of the function
@@ -288,7 +288,7 @@ class CodegenContext {
    *                           it is eventually referenced and a returned qualified function name
    *                           cannot otherwise be accessed.
    * @return the name of the function, qualified by class if it will be inlined to a private,
-   *         nested sub-class
+   *         inner class
    */
   def addNewFunction(
       funcName: String,
@@ -296,16 +296,16 @@ class CodegenContext {
       inlineToOuterClass: Boolean = false): String = {
     val newFunction = addNewFunctionInternal(funcName, funcCode, inlineToOuterClass)
     newFunction match {
-      case NewFunction(functionName, None, None) => functionName
-      case NewFunction(functionName, Some(_), Some(subclassInstance)) =>
-        subclassInstance + "." + functionName
+      case NewFunctionSpec(functionName, None, None) => functionName
+      case NewFunctionSpec(functionName, Some(_), Some(innerClassInstance)) =>
+        innerClassInstance + "." + functionName
     }
   }
 
   private[this] def addNewFunctionInternal(
       funcName: String,
       funcCode: String,
-      inlineToOuterClass: Boolean): NewFunction = {
+      inlineToOuterClass: Boolean): NewFunctionSpec = {
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
     } else if (currClassSize > CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD) {
@@ -322,9 +322,9 @@ class CodegenContext {
     addNewFunctionToClass(funcName, funcCode, className)
 
     if (className == outerClassName) {
-      NewFunction(funcName, None, None)
+      NewFunctionSpec(funcName, None, None)
     } else {
-      NewFunction(funcName, Some(className), Some(classInstance))
+      NewFunctionSpec(funcName, Some(className), Some(classInstance))
     }
   }
 
@@ -769,7 +769,7 @@ class CodegenContext {
   /**
    * Splits the generated code of expressions into multiple functions, because function has
    * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
-   * beyond 1600kb, we declare a private, nested sub-class, and the function is inlined to it
+   * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
    * instead, because classes have a constant pool limit of 65,536 named values.
    *
    * @param row the variable name of row that is used by expressions
@@ -837,39 +837,39 @@ class CodegenContext {
 
       // Here we store all the methods which have been added to the outer class.
       val outerClassFunctions = functions
-        .filter(_.subclassName.isEmpty)
+        .filter(_.innerClassName.isEmpty)
         .map(_.functionName)
 
       val argsString = arguments.map(_._2).mkString(", ")
 
-      // Here we handle all the methods which have been added to the nested subclasses and
+      // Here we handle all the methods which have been added to the inner classes and
       // not to the outer class.
       // Since they can be many, their direct invocation in the outer class adds many entries
       // to the outer class' constant pool. This can cause the constant pool to past JVM limit.
       // To avoid this problem, we group them and we call only the grouping methods in the
       // outer class.
       val innerClassToFunctions = functions
-        .filter(_.subclassName.isDefined)
+        .filter(_.innerClassName.isDefined)
         .foldLeft(ListMap.empty[(String, String), Seq[String]]) { case (acc, f) =>
-          val key = (f.subclassName.get, f.subclassInstance.get)
+          val key = (f.innerClassName.get, f.innerClassInstance.get)
           acc.updated(key, acc.getOrElse(key, Seq.empty[String]) ++ Seq(f.functionName))
         }
       val innerClassFunctions = innerClassToFunctions.flatMap {
-        case ((subclassName, subclassInstance), subclassFunctions) =>
-          if (subclassFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
-            // Adding a new function to each subclass which contains
+        case ((innerClassName, innerClassInstance), innerClassFunctions) =>
+          if (innerClassFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
+            // Adding a new function to each inner class which contains
             // the invocation of all the ones which have been added to
-            // that subclass
-            val body = foldFunctions(subclassFunctions.map(name => s"$name($argsString)"))
+            // that inner class
+            val body = foldFunctions(innerClassFunctions.map(name => s"$name($argsString)"))
             val code = s"""
                 |private $returnType $func($argString) {
                 |  ${makeSplitFunction(body)}
                 |}
               """.stripMargin
-            addNewFunctionToClass(func, code, subclassName)
-            Seq(s"$subclassInstance.$func")
+            addNewFunctionToClass(func, code, innerClassName)
+            Seq(s"$innerClassInstance.$func")
           } else {
-            subclassFunctions.map(f => s"$subclassInstance.$f")
+            innerClassFunctions.map(f => s"$innerClassInstance.$f")
           }
         }
 
@@ -1089,8 +1089,8 @@ object CodeGenerator extends Logging {
 
   // The number of named constants that can exist in the class is limited by the Constant Pool
   // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
-  // threshold of 1000k bytes to determine when a function should be inlined to a private, nested
-  // sub-class.
+  // threshold of 1000k bytes to determine when a function should be inlined to a private, inner
+  // class.
   val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
 
   /**
