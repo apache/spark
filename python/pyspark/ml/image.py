@@ -15,39 +15,45 @@
 # limitations under the License.
 #
 
-import pyspark
-from pyspark import SparkContext
+from pyspark.ml.util import *
+from pyspark.ml.param.shared import *
 from pyspark.sql.types import *
 from pyspark.sql.types import Row, _create_row
-from pyspark.sql import DataFrame
-from pyspark.ml.param.shared import *
+from pyspark.sql import DataFrame, SparkSession, SQLContext
 import numpy as np
 
 undefinedImageType = "Undefined"
 
 imageFields = ["origin", "height", "width", "nChannels", "mode", "data"]
 
-ocvTypes = {
-    undefinedImageType: -1,
-    "CV_8U": 0, "CV_8UC1": 0, "CV_8UC2": 8, "CV_8UC3": 16, "CV_8UC4": 24,
-    "CV_8S": 1, "CV_8SC1": 1, "CV_8SC2": 9, "CV_8SC3": 17, "CV_8SC4": 25,
-    "CV_16U": 2, "CV_16UC1": 2, "CV_16UC2": 10, "CV_16UC3": 18, "CV_16UC4": 26,
-    "CV_16S": 3, "CV_16SC1": 3, "CV_16SC2": 11, "CV_16SC3": 19, "CV_16SC4": 27,
-    "CV_32S": 4, "CV_32SC1": 4, "CV_32SC2": 12, "CV_32SC3": 20, "CV_32SC4": 28,
-    "CV_32F": 5, "CV_32FC1": 5, "CV_32FC2": 13, "CV_32FC3": 21, "CV_32FC4": 29,
-    "CV_64F": 6, "CV_64FC1": 6, "CV_64FC2": 14, "CV_64FC3": 22, "CV_64FC4": 30
-}
+
+def getOcvTypes(spark=None):
+    """
+    Returns the OpenCV type mapping supported
+
+    :param sparkSession (SparkSession): The current spark session
+    :rtype dict: The OpenCV type mapping supported
+
+    .. versionadded:: 2.3.0
+    """
+    spark = spark or SparkSession.builder.getOrCreate()
+    ctx = spark.sparkContext
+    return ctx._jvm.org.apache.spark.ml.image.ImageSchema.ocvTypes
+
 
 # DataFrame with a single column of images named "image" (nullable)
-imageSchema = StructType(StructField("image", StructType([
-    StructField(imageFields[0], StringType(),  True),
-    StructField(imageFields[1], IntegerType(), False),
-    StructField(imageFields[2], IntegerType(), False),
-    StructField(imageFields[3], IntegerType(), False),
-    # OpenCV-compatible type: CV_8UC3 in most cases
-    StructField(imageFields[4], StringType(), False),
-    # bytes in OpenCV-compatible order: row-wise BGR in most cases
-    StructField(imageFields[5], BinaryType(), False)]), True))
+def getImageSchema(spark=None):
+    """
+    Returns the image schema
+
+    :param spark (SparkSession): The current spark session
+    :rtype StructType: The image schema
+
+    .. versionadded:: 2.3.0
+    """
+    spark = spark or SparkSession.builder.getOrCreate()
+    ctx = spark.sparkContext
+    return ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageSchema
 
 
 def toNDArray(image):
@@ -69,18 +75,21 @@ def toNDArray(image):
         strides=(width * nChannels, nChannels, 1))
 
 
-def toImage(array, origin="", mode=ocvTypes["CV_8UC3"]):
+def toImage(array, origin="", mode=None, spark=None):
     """
     Converts a one-dimensional array to a two-dimensional image.
 
     :param array (array): The array to convert to image
     :param origin (str): Path to the image
     :param mode (str): OpenCV compatible type
-
+    :param spark (SparkSession): The current spark session
     :rtype object: Two dimensional image
 
     .. versionadded:: 2.3.0
     """
+    spark = spark or SparkSession.builder.getOrCreate()
+    ocvTypes = getOcvTypes(spark)
+    mode = mode or ocvTypes["CV_8UC3"]
     data = bytearray(array.astype(dtype=np.uint8).ravel())
     height = array.shape[0]
     width = array.shape[1]
@@ -93,7 +102,7 @@ def toImage(array, origin="", mode=ocvTypes["CV_8UC3"]):
 
 
 def readImages(path, recursive=False, numPartitions=0,
-               dropImageFailures=False, sampleRatio=1.0):
+               dropImageFailures=False, sampleRatio=1.0, spark=None):
     """
     Reads the directory of images from the local or remote source.
 
@@ -102,21 +111,23 @@ def readImages(path, recursive=False, numPartitions=0,
     :param numPartitions (int): Number of DataFrame partitions
     :param dropImageFailures (bool): Drop the files that are not valid images
     :param sampleRatio (double): Fraction of the images loaded
+    :param spark (SparkSession): The current spark session
     :rtype DataFrame: DataFrame with a single column of "images",
            see ImageSchema for details
 
     Examples:
 
-    >>> df = readImages('python/test_support/image/kittens', recursive=true)
+    >>> df = readImages('python/test_support/image/kittens', recursive=True)
     >>> df.count
     4
 
     .. versionadded:: 2.3.0
     """
-    ctx = SparkContext.getOrCreate()
-    schema = ctx._jvm.org.apache.spark.image.ImageSchema
-    sql_ctx = pyspark.SQLContext.getOrCreate(ctx)
-    jsession = sql_ctx.sparkSession._jsparkSession
+    spark = spark or SparkSession.builder.getOrCreate()
+    ctx = spark.sparkContext
+    schema = ctx._jvm.org.apache.spark.ml.image.ImageSchema
+    sql_ctx = SQLContext(ctx)
+    jsession = spark._jsparkSession
     jresult = schema.readImages(path, jsession, recursive, numPartitions,
                                 dropImageFailures, float(sampleRatio))
     return DataFrame(jresult, sql_ctx)
