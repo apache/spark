@@ -21,7 +21,6 @@ import java.io.ByteArrayInputStream
 import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -840,41 +839,73 @@ class CodegenContext {
         .filter(_.innerClassName.isEmpty)
         .map(_.functionName)
 
+      val innerClassFunctions = generateInnerClassesMethodsCalls(
+        functions.filter(_.innerClassName.nonEmpty),
+        func,
+        arguments,
+        returnType,
+        makeSplitFunction,
+        foldFunctions)
+
       val argsString = arguments.map(_._2).mkString(", ")
-
-      // Here we handle all the methods which have been added to the inner classes and
-      // not to the outer class.
-      // Since they can be many, their direct invocation in the outer class adds many entries
-      // to the outer class' constant pool. This can cause the constant pool to past JVM limit.
-      // To avoid this problem, we group them and we call only the grouping methods in the
-      // outer class.
-      val innerClassToFunctions = functions
-        .filter(_.innerClassName.isDefined)
-        .foldLeft(ListMap.empty[(String, String), Seq[String]]) { case (acc, f) =>
-          val key = (f.innerClassName.get, f.innerClassInstance.get)
-          acc.updated(key, acc.getOrElse(key, Seq.empty[String]) ++ Seq(f.functionName))
-        }
-      val innerClassFunctions = innerClassToFunctions.flatMap {
-        case ((innerClassName, innerClassInstance), innerClassFunctions) =>
-          if (innerClassFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
-            // Adding a new function to each inner class which contains
-            // the invocation of all the ones which have been added to
-            // that inner class
-            val body = foldFunctions(innerClassFunctions.map(name => s"$name($argsString)"))
-            val code = s"""
-                |private $returnType $func($argString) {
-                |  ${makeSplitFunction(body)}
-                |}
-              """.stripMargin
-            addNewFunctionToClass(func, code, innerClassName)
-            Seq(s"$innerClassInstance.$func")
-          } else {
-            innerClassFunctions.map(f => s"$innerClassInstance.$f")
-          }
-        }
-
       foldFunctions((outerClassFunctions ++ innerClassFunctions).map(
         name => s"$name($argsString)"))
+    }
+  }
+
+  /**
+   * Here we handle all the methods which have been added to the inner classes and
+   * not to the outer class.
+   * Since they can be many, their direct invocation in the outer class adds many entries
+   * to the outer class' constant pool. This can cause the constant pool to past JVM limit.
+   * Moreover, this can cause also the outer class method where all the invocations are
+   * performed to grow beyond the 64k limit.
+   * To avoid these problems, we group them and we call only the grouping methods in the
+   * outer class.
+   *
+   * @param functions a [[Seq]] of [[NewFunctionSpec]] defined in the inner classes
+   * @param funcName the split function name base.
+   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
+   * @return an [[Iterable]] containing the methods' invocations
+   */
+  private def generateInnerClassesMethodsCalls(
+      functions: Seq[NewFunctionSpec],
+      funcName: String,
+      arguments: Seq[(String, String)],
+      returnType: String,
+      makeSplitFunction: String => String,
+      foldFunctions: Seq[String] => String): Iterable[String] = {
+    val innerClassToFunctions = mutable.ListMap.empty[(String, String), Seq[String]]
+    functions.foreach(f => {
+      val key = (f.innerClassName.get, f.innerClassInstance.get)
+      innerClassToFunctions.update(key, f.functionName +:
+        innerClassToFunctions.getOrElse(key, Seq.empty[String]))
+    })
+
+    val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
+    val argInvocationString = arguments.map(_._2).mkString(", ")
+
+    innerClassToFunctions.flatMap {
+      case ((innerClassName, innerClassInstance), innerClassFunctions) =>
+        if (innerClassFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
+          // Adding a new function to each inner class which contains
+          // the invocation of all the ones which have been added to
+          // that inner class
+          val body = foldFunctions(innerClassFunctions.map(name =>
+            s"$name($argInvocationString)"))
+          val code = s"""
+              |private $returnType $funcName($argDefinitionString) {
+              |  ${makeSplitFunction(body)}
+              |}
+            """.stripMargin
+          addNewFunctionToClass(funcName, code, innerClassName)
+          Seq(s"$innerClassInstance.$funcName")
+        } else {
+          innerClassFunctions.map(f => s"$innerClassInstance.$f")
+        }
     }
   }
 
