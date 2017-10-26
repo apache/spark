@@ -787,19 +787,31 @@ class Analyzer(
      * Literal functions do not require the user to specify braces when calling them
      * When an attributes is not resolvable, we try to resolve it as a literal function.
      */
-    private def resolveAsLiteralFunctions(nameParts: Seq[String]): Option[NamedExpression] = {
+    private def resolveAsLiteralFunctions(
+        nameParts: Seq[String],
+        attribute: UnresolvedAttribute,
+        plan: LogicalPlan): Option[Expression] = {
       if (nameParts.length != 1) {
         return None
+      }
+      val isNamedExpression = plan match {
+        case a @ Aggregate(_, aggs, _) if (aggs.contains(attribute)) =>
+          true
+        case p @ Project(projList, _) if (projList.contains(attribute)) =>
+          true
+        case _ =>
+          false
+      }
+      val wrapper: Expression => Expression = if (isNamedExpression) {
+        f => Alias(f, toPrettySQL(f))()
+      } else {
+        f => f
       }
       // support CURRENT_DATE and CURRENT_TIMESTAMP
       val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
       val name = nameParts.head
       val func = literalFunctions.find(e => resolver(e.prettyName, name))
-      if (func.isDefined) {
-        Some(Alias(func.get, toPrettySQL(func.get))())
-      } else {
-        None
-      }
+      func.map(wrapper)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
@@ -865,9 +877,9 @@ class Analyzer(
             // Leave unchanged if resolution fails. Hopefully will be resolved next round.
             val result =
               withPosition(u) {
-                q.resolveChildren(nameParts, resolver).getOrElse {
-                  resolveAsLiteralFunctions(nameParts).getOrElse(u)
-                }
+                q.resolveChildren(nameParts, resolver)
+                  .orElse(resolveAsLiteralFunctions(nameParts, u, q))
+                  .getOrElse(u)
               }
             logDebug(s"Resolving $u to $result")
             result
