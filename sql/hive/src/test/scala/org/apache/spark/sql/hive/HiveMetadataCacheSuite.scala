@@ -86,7 +86,6 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
               |location "${dir.toURI}"""".stripMargin)
             spark.sql("msck repair table test")
 
-            val df = spark.sql("select * from test")
             assert(sql("select * from test").count() == 5)
 
             def deleteRandomFile(): Unit = {

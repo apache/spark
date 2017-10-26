@@ -59,8 +59,8 @@ case class HadoopFsRelation(
         overlappedPartCols += getColName(partitionField) -> partitionField
       }
     }
-    StructType(dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f), f)) ++
-      partitionSchema.filterNot(f => overlappedPartCols.contains(getColName(f))))
+    StructType(dataSchema.filterNot(f => overlappedPartCols.contains(getColName(f))) ++
+      partitionSchema.map(f => overlappedPartCols.getOrElse(getColName(f), f)))
   }
 
   def partitionSchemaOption: Option[StructType] =

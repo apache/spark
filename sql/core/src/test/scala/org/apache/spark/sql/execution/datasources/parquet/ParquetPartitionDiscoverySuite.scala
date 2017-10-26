@@ -519,7 +519,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", "bar")
-          } yield Row(i, pi, i.toString, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -534,14 +534,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
-          } yield Row(i, 1, i.toString, ps))
+          } yield Row(i, i.toString, 1, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, pi, i.toString, "foo"))
+          } yield Row(i, i.toString, pi, "foo"))
       }
     }
   }
@@ -608,14 +608,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield Row(i, pi, i.toString, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, pi, i.toString, null))
+          } yield Row(i, i.toString, pi, null))
       }
     }
   }
@@ -1019,7 +1019,9 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         val path = dir.getCanonicalPath
         val df = Seq((1L, 2.0)).toDF("a", "b")
         df.write.parquet(s"$path/a=1")
-        checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1, 2.0)))
+        // partition columns are always at the end of the schema.
+        assert(spark.read.parquet(s"$path").columns === Array("b", "a"))
+        checkAnswer(spark.read.parquet(s"$path"), Seq(Row(2.0, 1)))
       }
     }
   }
@@ -1048,7 +1050,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
         checkAnswer(
           readBack,
-          Seq(Row("2017-01-01-00", 1), Row("2017-01-01-01", 2))
+          Seq(Row(1, "2017-01-01-00"), Row(2, "2017-01-01-01"))
         )
       } finally {
         spark.streams.active.foreach(_.stop())
