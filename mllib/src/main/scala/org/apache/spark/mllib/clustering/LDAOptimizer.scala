@@ -452,7 +452,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
    * Submit a subset (like 1%, decide by the miniBatchFraction) of the corpus to the Online LDA
    * model, and it will update the topic distribution adaptively for the terms appearing in the
    * subset.
-   * The methods assumes no empty documents are submitted.
+   * The method assumes no empty documents are submitted.
    */
   private[clustering] def submitMiniBatch(batch: RDD[(Long, Vector)]): OnlineLDAOptimizer = {
     iteration += 1
