@@ -351,9 +351,7 @@ object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
  */
 private[feature] object OneHotEncoderCommon {
 
-  private def genOutputAttrNames(
-      inputCol: StructField,
-      outputColName: String): Option[Array[String]] = {
+  private def genOutputAttrNames(inputCol: StructField): Option[Array[String]] = {
     val inputAttr = Attribute.fromStructField(inputCol)
     inputAttr match {
       case nominal: NominalAttribute =>
@@ -399,7 +397,7 @@ private[feature] object OneHotEncoderCommon {
       inputCol: StructField,
       dropLast: Boolean,
       outputColName: String): StructField = {
-    val outputAttrNames = genOutputAttrNames(inputCol, outputColName)
+    val outputAttrNames = genOutputAttrNames(inputCol)
     val filteredOutputAttrNames = outputAttrNames.map { names =>
       if (dropLast) {
         require(names.length > 1,
