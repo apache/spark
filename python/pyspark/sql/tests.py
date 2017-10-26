@@ -350,6 +350,38 @@ class SQLTests(ReusedPySparkTestCase):
         res = data.select(pudf(data['number']).alias('plus_four'))
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
 
+    def test_udf_with_conditional_expr_when(self):
+        from pyspark.sql.functions import col, udf, when
+
+        df = self.sc.parallelize([Row(x=5), Row(x=0)]).toDF()
+        f = udf(lambda value: 10 // int(value), IntegerType())
+        whenExpr1 = when((col('x') > 0), f(col('x')))
+
+        results1 = df.select(whenExpr1).collect()
+        self.assertEqual(results1[0][0], 2)
+        self.assertEqual(results1[1][0], None)
+
+        whenExpr2 = when((col('x') <= 0), None).otherwise(f(col('x')))
+
+        results2 = df.select(whenExpr2).collect()
+        self.assertEqual(results2[0][0], 2)
+        self.assertEqual(results2[1][0], None)
+
+    def test_udf_with_conditional_expr_if(self):
+        self.spark.createDataFrame(self.sc.parallelize([Row(a=0), Row(a=2)]))\
+            .createOrReplaceTempView("test")
+
+        self.spark.catalog.registerFunction("divideByVal",
+                                            lambda value: 10 // int(value), IntegerType())
+
+        results1 = self.spark.sql("SELECT if(a > 0, divideByVal(a), 0) FROM test").collect()
+        self.assertEqual(results1[0][0], 0)
+        self.assertEqual(results1[1][0], 5)
+
+        results2 = self.spark.sql("SELECT if(a <= 0, 0, divideByVal(a)) FROM test").collect()
+        self.assertEqual(results2[0][0], 0)
+        self.assertEqual(results2[1][0], 5)
+
     def test_udf(self):
         self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()

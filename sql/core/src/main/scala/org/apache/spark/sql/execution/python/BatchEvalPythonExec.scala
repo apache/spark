@@ -28,11 +28,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StructField, StructType}
 
-/**
- * A physical plan that evaluates a [[PythonUDF]]
- */
-case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
-  extends EvalPythonExec(udfs, output, child) {
+abstract class BatchEvalPythonExecBase(
+    udfs: Seq[PythonUDF],
+    output: Seq[Attribute],
+    child: SparkPlan) extends EvalPythonExec(udfs, output, child) {
+
+  protected val evalType: Int
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
@@ -69,7 +70,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
     // Output iterator for results from Python.
     val outputIterator = new PythonUDFRunner(
-        funcs, bufferSize, reuseWorker, PythonEvalType.SQL_BATCHED_UDF, argOffsets)
+        funcs, bufferSize, reuseWorker, evalType, argOffsets)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -92,4 +93,12 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       }
     }
   }
+}
+
+/**
+ * A physical plan that evaluates a [[PythonUDF]]
+ */
+case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
+    extends BatchEvalPythonExecBase(udfs, output, child) {
+  protected override val evalType: Int = PythonEvalType.SQL_BATCHED_UDF
 }
