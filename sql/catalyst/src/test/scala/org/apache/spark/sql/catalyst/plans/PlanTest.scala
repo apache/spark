@@ -31,8 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Provides helper methods for comparing plans.
  */
-trait PlanTest extends SparkFunSuite with PlanTestBase {
-}
+trait PlanTest extends SparkFunSuite with PlanTestBase
 
 /**
  * Provides helper methods for comparing plans, but without the overhead of
