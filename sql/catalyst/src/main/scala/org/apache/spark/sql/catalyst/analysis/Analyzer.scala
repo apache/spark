@@ -139,7 +139,6 @@ class Analyzer(
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
-      ResolveLiteralFunctions ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
@@ -784,6 +783,25 @@ class Analyzer(
       }
     }
 
+    /**
+     * Literal functions do not require the user to specify braces when calling them
+     * When an attributes is not resolvable, we try to resolve it as a literal function.
+     */
+    private def resolveAsLiteralFunctions(nameParts: Seq[String]): Option[NamedExpression] = {
+      if (nameParts.length != 1) {
+        return None
+      }
+      // support CURRENT_DATE and CURRENT_TIMESTAMP
+      val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
+      val name = nameParts.head
+      val func = literalFunctions.find(e => resolver(e.prettyName, name))
+      if (func.isDefined) {
+        Some(Alias(func.get, toPrettySQL(func.get))())
+      } else {
+        None
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -845,7 +863,12 @@ class Analyzer(
         q.transformExpressionsUp  {
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails. Hopefully will be resolved next round.
-            val result = withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
+            val result =
+              withPosition(u) {
+                q.resolveChildren(nameParts, resolver).getOrElse {
+                  resolveAsLiteralFunctions(nameParts).getOrElse(u)
+                }
+              }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
@@ -1202,39 +1225,6 @@ class Analyzer(
                   }
               }
             }
-        }
-    }
-  }
-
-  /**
-   * Literal functions do not require the user to specify braces when calling them
-   * When an UnresolvedAttribute cannot be resolved as a column reference, we try to
-   * resolve it as a Literal function.
-   */
-  object ResolveLiteralFunctions extends Rule[LogicalPlan] {
-    // support CURRENT_DATE and CURRENT_TIMESTAMP
-    val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
-
-    def resolveAsFunctions(name: String): Option[NamedExpression] = {
-      val func = literalFunctions.find(e => resolver(e.prettyName, name))
-      if (func.isDefined) {
-        Some(Alias(func.get, toPrettySQL(func.get))())
-      } else {
-        None
-      }
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case p: LogicalPlan if p.childrenResolved =>
-        p transformExpressionsUp {
-          case u if !u.childrenResolved => u
-          case u @ UnresolvedAttribute(nameParts) if (nameParts.length == 1) =>
-            val result =
-              withPosition(u) {
-                resolveAsFunctions(nameParts.head).getOrElse(u)
-              }
-            logDebug(s"Resolving $u as Literal function $result")
-            result
         }
     }
   }

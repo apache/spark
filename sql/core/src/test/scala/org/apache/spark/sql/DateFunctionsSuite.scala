@@ -69,7 +69,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     withTempView("ttf1") {
       checkAnswer(
         sql("SELECT current_date = current_date(), current_timestamp = current_timestamp(), " +
-          "a, b FROM ttf"),
+          "a, b FROM ttf1"),
         Seq(Row(true, true, 1, 2), Row(true, true, 2, 3)))
     }
   }
