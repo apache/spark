@@ -227,7 +227,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsToAdd(manager) === 1)
   }
 
-  test("Ignore task end events from completed stages") {
+  test("ignore task end events from completed stages") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
     val stage = createStageInfo(0, 5)

@@ -495,6 +495,7 @@ private[spark] class ExecutorAllocationManager(
         s"when it is already pending to be removed!")
       return false
     }
+
     true
   }
 
