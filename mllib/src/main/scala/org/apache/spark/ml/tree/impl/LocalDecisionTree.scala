@@ -177,10 +177,10 @@ private[ml] object LocalDecisionTree {
           // Features for the current node start at fromOffset and end at toOffset
           val (from, to) = nodeOffsets(nodeIndex)
           // Compute sufficient stats (e.g. label counts) for all data at the current node,
-          // store result in dummyStatsAggregator.parentStats
-          // TODO(smurching) rename dummyStatsAggregator and/or
-          val dummyStatsAggregator = new DTStatsAggregator(metadata, featureSubset = None)
-          AggUpdateUtils.updateParentImpurity(dummyStatsAggregator, columns(0), from, to,
+          // store result in currNodeStatsAgg.parentStats so that we can share it across
+          // all features for the current node
+          val currNodeStatsAgg = new DTStatsAggregator(metadata, featureSubset = None)
+          AggUpdateUtils.updateParentImpurity(currNodeStatsAgg, columns(0), from, to,
             instanceWeights, labels)
           val validFeatureSplits = RandomForest.getNonConstantFeatures(metadata,
             featuresForNode = None)
@@ -192,10 +192,10 @@ private[ml] object LocalDecisionTree {
             updateAggregator(statsAggregator, col, instanceWeights, labels, from, to,
               featureIndexIdx = 0, splits(col.featureIndex))
             SplitUtils.chooseSplit(statsAggregator, featureIndex, featureIndexIdx = 0,
-              splits(featureIndex), Some(dummyStatsAggregator.getParentImpurityCalculator()))
+              splits(featureIndex), Some(currNodeStatsAgg.getParentImpurityCalculator()))
           }
           val (bestSplit, bestStats) = RandomForest.getBestSplitByGain(
-            dummyStatsAggregator.getParentImpurityCalculator(), metadata,
+            currNodeStatsAgg.getParentImpurityCalculator(), metadata,
             featuresForNode = None, splitsAndImpurityInfo)
           // Split current node, get an iterator over its children
           splitIfPossible(node, metadata, bestStats, bestSplit)
