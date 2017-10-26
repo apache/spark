@@ -1212,7 +1212,7 @@ class Analyzer(
    * resolve it as a Literal function.
    */
   object ResolveLiteralFunctions extends Rule[LogicalPlan] {
-    //support CURRENT_DATE and CURRENT_TIMESTAMP
+    // support CURRENT_DATE and CURRENT_TIMESTAMP
     val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
 
     def resolveAsFunctions(name: String): Option[NamedExpression] = {
