@@ -1629,24 +1629,33 @@ def to_arrow_type(dt):
     return arrow_type
 
 
-def _check_dataframe_localize_timestamps(df):
-    """ Convert timezone aware timestamps to timezone-naive in local time
+def _check_dataframe_localize_timestamps(pdf):
+    """
+    Convert timezone aware timestamps to timezone-naive in local time
+
+    :param pdf: pandas.DataFrame
+    :return pandas.DataFrame where any timezone aware columns have be converted to tz-naive
     """
     from pandas.api.types import is_datetime64tz_dtype
-    for column, series in df.iteritems():
+    for column, series in pdf.iteritems():
         # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
         if is_datetime64tz_dtype(series.dtype):
-            df[column] = series.dt.tz_convert('tzlocal()').dt.tz_localize(None)
-    return df
+            pdf[column] = series.dt.tz_convert('tzlocal()').dt.tz_localize(None)
+    return pdf
 
 
 def _check_series_convert_timestamps_internal(s):
-    """ Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
     """
-    from pandas.api.types import is_datetime64_dtype
+    Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
+    :param s: a pandas.Series
+    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
+    """
+    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
         return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC')
+    elif is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert('UTC')
     else:
         return s
 

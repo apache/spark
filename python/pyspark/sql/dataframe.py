@@ -1885,8 +1885,8 @@ class DataFrame(object):
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)
-                    df = table.to_pandas()
-                    return _check_dataframe_localize_timestamps(df)
+                    pdf = table.to_pandas()
+                    return _check_dataframe_localize_timestamps(pdf)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
             except ImportError as e:

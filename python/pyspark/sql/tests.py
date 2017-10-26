@@ -3458,6 +3458,24 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
             self.assertEquals(data[i][1], result[i][1])  # "timestamp" col
             self.assertTrue(result[i][3])  # "is_equal" data in udf was as expected
 
+    def test_vectorized_udf_return_timestamp_tz(self):
+        from pyspark.sql.functions import pandas_udf, col
+        import pandas as pd
+        df = self.spark.range(10)
+
+        @pandas_udf(returnType=TimestampType())
+        def gen_timestamps(id):
+            ts = [pd.Timestamp(i, unit='D', tz='America/Los_Angeles') for i in id]
+            return pd.Series(ts)
+
+        result = df.withColumn("ts", gen_timestamps(col("id"))).collect()
+        spark_ts_t = TimestampType()
+        for r in result:
+            i, ts = r
+            ts_tz = pd.Timestamp(i, unit='D', tz='America/Los_Angeles').to_pydatetime()
+            expected = spark_ts_t.fromInternal(spark_ts_t.toInternal(ts_tz))
+            self.assertEquals(expected, ts)
+
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class GroupbyApplyTests(ReusedPySparkTestCase):
