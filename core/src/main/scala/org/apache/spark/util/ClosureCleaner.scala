@@ -129,10 +129,12 @@ private[spark] object ClosureCleaner extends Logging {
     val clone = instantiateClass(outerClass, parent)
 
     var currentClass = outerClass
-    do {
+    assert(currentClass != null, "The outer class can't be null.")
+
+    while (currentClass != null) {
       setAccessedFields(currentClass, clone, obj, accessedFields)
       currentClass = currentClass.getSuperclass()
-    } while (currentClass != null)
+    }
 
     clone
   }
@@ -437,11 +439,13 @@ private[util] class FieldAccessFinder(
               visitedMethods += m
 
               var currentClass = cl
-              do {
+              assert(currentClass != null, "The outer class can't be null.")
+
+              while (currentClass != null) {
                 ClosureCleaner.getClassReader(currentClass).accept(
                   new FieldAccessFinder(fields, findTransitively, Some(m), visitedMethods), 0)
                 currentClass = currentClass.getSuperclass()
-              } while (currentClass != null)
+              }
             }
           }
         }
