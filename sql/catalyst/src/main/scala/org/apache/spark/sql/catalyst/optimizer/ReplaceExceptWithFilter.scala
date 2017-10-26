@@ -40,9 +40,15 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Except(left, right) if isEligible(left, right) =>
-      Distinct(Filter(Not(transformCondition(left, skipProject(right))), left))
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!plan.conf.replaceExceptWithFilter) {
+      return plan
+    }
+
+    plan.transform {
+      case Except(left, right) if isEligible(left, right) =>
+        Distinct(Filter(Not(transformCondition(left, skipProject(right))), left))
+    }
   }
 
   private def transformCondition(left: LogicalPlan, right: LogicalPlan): Expression = {
@@ -66,25 +72,12 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     val leftProjectList = projectList(left)
     val rightProjectList = projectList(right)
 
-    left.output.size == left.output.distinct.size &&
-      verifyFilterCondition(skipProject(left)) && verifyFilterCondition(skipProject(right)) &&
-        Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
-          Project(rightProjectList, nonFilterChild(skipProject(right))))
+    left.output.size == left.output.map(_.name).distinct.size &&
+      left.find(_.expressions.exists(SubqueryExpression.hasSubquery)).isEmpty &&
+        right.find(_.expressions.exists(SubqueryExpression.hasSubquery)).isEmpty &&
+          Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
+            Project(rightProjectList, nonFilterChild(skipProject(right))))
   }
-
-  private def verifyFilterCondition(plan: LogicalPlan): Boolean = {
-    var i = 0
-    val filterConditions = new collection.mutable.ArrayBuffer[Expression]
-    while (plan.p(i).isInstanceOf[Filter]) {
-      val condition = plan.p(i).asInstanceOf[Filter].condition
-      filterConditions.insertAll(i, collectAllExpressions(condition))
-      i += 1
-    }
-
-    filterConditions.forall(!SubqueryExpression.hasSubquery(_))
-  }
-
-  private def collectAllExpressions(exp: Expression): Seq[Expression] = exp.p(0) +: exp.children
 
   private def projectList(node: LogicalPlan): Seq[NamedExpression] = node match {
     case p: Project => p.projectList
