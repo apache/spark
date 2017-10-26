@@ -884,6 +884,9 @@ class CodegenContext {
       innerClassToFunctions.update(key, f.functionName +:
         innerClassToFunctions.getOrElse(key, Seq.empty[String]))
     })
+    // for performance reasons, the functions are prepended, instead of appended,
+    // thus they are in reversed order
+    innerClassToFunctions.transform { case (_, functions) => functions.reverse }
 
     val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
     val argInvocationString = arguments.map(_._2).mkString(", ")
