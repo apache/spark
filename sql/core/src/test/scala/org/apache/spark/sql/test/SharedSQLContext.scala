@@ -17,8 +17,4 @@
 
 package org.apache.spark.sql.test
 
-trait SharedSQLContext extends SQLTestUtils with SharedSparkSession {
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-  }
-}
+trait SharedSQLContext extends SQLTestUtils with SharedSparkSession
