@@ -29,7 +29,7 @@ import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.serializer.{JavaSerializer, SerializationStream, SerializerManager}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializationStream, SerializationStream, SerializerManager}
 import org.apache.spark.storage.memory.{MemoryStore, PartiallySerializedBlock, RedirectableOutputStream}
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream}
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
@@ -72,10 +72,26 @@ class PartiallySerializedBlockSuite
     val redirectableOutputStream = Mockito.spy(new RedirectableOutputStream)
     redirectableOutputStream.setOutputStream(bbos)
     val serializationStream = Mockito.spy(serializer.serializeStream(redirectableOutputStream))
+    val kryoSerializationStream: KryoSerializationStream = {
+      if (serializationStream.isInstanceOf[KryoSerializationStream]) {
+        serializationStream.asInstanceOf[KryoSerializationStream]
+      } else {
+        null
+      }
+    }
 
     (1 to numItemsToBuffer).foreach { _ =>
       assert(iter.hasNext)
-      serializationStream.writeObject[T](iter.next())
+      val value = iter.next()
+      if (kryoSerializationStream != null) {
+        if (!kryoSerializationStream.classWrote) {
+          kryoSerializationStream.writeClass(value.getClass)
+        }
+
+        kryoSerializationStream.writeObjectWithoutClass[T](value)
+      } else {
+        serializationStream.writeObject[T](value)
+      }
     }
 
     val unrollMemory = bbos.size

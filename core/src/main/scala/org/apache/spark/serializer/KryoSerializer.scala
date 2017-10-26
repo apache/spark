@@ -24,7 +24,7 @@ import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
+import scala.reflect._
 
 import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
@@ -40,7 +40,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf, Utils}
+import org.apache.spark.util._
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -205,8 +205,42 @@ class KryoSerializationStream(
 
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
+  // This is only used when we write object and class separately.
+  var classWrote = false
+
   override def writeObject[T: ClassTag](t: T): SerializationStream = {
     kryo.writeClassAndObject(output, t)
+    this
+  }
+
+  /**
+   * For iterator, we only write the class once at the beginning. Then we only write
+   * the object not included the class. The deserialization should followed the
+   * pattern: read the class once at the beginning and then only read the object.
+   */
+  override def writeAll[T: ClassTag](iter: Iterator[T]): SerializationStream = {
+    while (iter.hasNext) {
+      val value = iter.next()
+      if (!classWrote) {
+        writeClass(value.getClass)
+      }
+
+      writeObjectWithoutClass(value)
+    }
+
+    this
+  }
+
+  def writeClass[T](clazz: Class[T]): SerializationStream = {
+    kryo.writeClass(output, clazz)
+    classWrote = true
+    this
+  }
+
+  def writeObjectWithoutClass[T: ClassTag](t: T): SerializationStream = {
+    // Make sure the class information has written.
+    assert(classWrote)
+    kryo.writeObjectOrNull(output, t, t.getClass)
     this
   }
 
@@ -225,6 +259,7 @@ class KryoSerializationStream(
         serInstance.releaseKryo(kryo)
         kryo = null
         output = null
+        classWrote = false
       }
     }
   }
@@ -241,9 +276,68 @@ class KryoDeserializationStream(
 
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
+  // This is only used when we read object and class separately.
+  var classRead = false
+  var clazz: Class[_] = null
+
   override def readObject[T: ClassTag](): T = {
     try {
       kryo.readClassAndObject(input).asInstanceOf[T]
+    } catch {
+      // DeserializationStream uses the EOF exception to indicate stopping condition.
+      case e: KryoException
+        if e.getMessage.toLowerCase(Locale.ROOT).contains("buffer underflow") =>
+        throw new EOFException
+    }
+  }
+
+  def readClass(): Class[_] = {
+    safeCall {
+      clazz = kryo.readClass(input).getType
+      classRead = true
+      clazz
+    }
+  }
+
+  def readObjectWithoutClass[T: ClassTag](clazz: Class[T]): T = {
+    safeCall {
+      // Make sure the class information has read.
+      assert(classRead)
+      assert(clazz != null)
+      kryo.readObjectOrNull(input, clazz)
+    }
+  }
+
+  /**
+   * Read the elements of this stream through an iterator. This can only be called once, as
+   * reading each element will consume data from the input source.
+   *
+   * For iterator, we only read the class once at the beginning. Then we only read
+   * the object not included the class. The serialization should followed the
+   * pattern: write the class once at the beginning and then only write the object.
+   */
+  override def asIterator: Iterator[Any] = new NextIterator[Any] {
+    override protected def getNext() = {
+      try {
+        if (!classRead) {
+          clazz = readClass()
+        }
+        readObjectWithoutClass(clazz)
+      } catch {
+        case eof: EOFException =>
+          finished = true
+          null
+      }
+    }
+
+    override protected def close() {
+      KryoDeserializationStream.this.close()
+    }
+  }
+
+  def safeCall[T](block: => T): T = {
+    try {
+      block
     } catch {
       // DeserializationStream uses the EOF exception to indicate stopping condition.
       case e: KryoException
@@ -261,6 +355,8 @@ class KryoDeserializationStream(
         serInstance.releaseKryo(kryo)
         kryo = null
         input = null
+        classRead = false
+        clazz = null
       }
     }
   }
