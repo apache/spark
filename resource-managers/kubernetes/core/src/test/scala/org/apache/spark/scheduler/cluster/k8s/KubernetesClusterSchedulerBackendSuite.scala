@@ -18,9 +18,6 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{ExecutorService, ScheduledExecutorService, TimeUnit}
 
-import scala.collection.JavaConverters._
-import scala.concurrent.Future
-
 import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder, PodList}
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
@@ -30,6 +27,8 @@ import org.mockito.Matchers.{any, eq => mockitoEq}
 import org.mockito.Mockito.{doNothing, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar._
+import scala.collection.JavaConverters._
+import scala.concurrent.Future
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.k8s.config._
@@ -142,7 +141,6 @@ class KubernetesClusterSchedulerBackendSuite
   before {
     MockitoAnnotations.initMocks(this)
     sparkConf = new SparkConf()
-      .set("spark.app.id", APP_ID)
       .set(KUBERNETES_DRIVER_POD_NAME, DRIVER_POD_NAME)
       .set(KUBERNETES_NAMESPACE, NAMESPACE)
       .set("spark.driver.host", SPARK_DRIVER_HOST)
@@ -368,7 +366,10 @@ class KubernetesClusterSchedulerBackendSuite
       executorPodFactory,
       kubernetesClient,
       allocatorExecutor,
-      requestExecutorsService)
+      requestExecutorsService) {
+
+      override def applicationId(): String = APP_ID
+    }
   }
 
   private def exitPod(basePod: Pod, exitCode: Int): Pod = {
