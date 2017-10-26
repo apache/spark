@@ -846,7 +846,7 @@ class CrossValidatorTests(SparkSessionTestCase):
             ["features", "label"])
 
         lr = LogisticRegression()
-        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 6]).build()
         evaluator = BinaryClassificationEvaluator()
 
         # test save/load of CrossValidator
@@ -1016,7 +1016,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
              (Vectors.dense([1.0]), 1.0)] * 10,
             ["features", "label"])
         lr = LogisticRegression()
-        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 6]).build()
         evaluator = BinaryClassificationEvaluator()
         tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         tvs.setParallelism(1)
