@@ -611,7 +611,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Manually overwrite the version in the listing db; this should cause the new provider to
     // discard all data because the versions don't match.
-    val meta = new KVStoreMetadata(FsHistoryProvider.CURRENT_LISTING_VERSION + 1,
+    val meta = new FsHistoryProviderMetadata(FsHistoryProvider.CURRENT_LISTING_VERSION + 1,
       conf.get(LOCAL_STORE_DIR).get)
     oldProvider.listing.setMetadata(meta)
     oldProvider.stop()
