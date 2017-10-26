@@ -993,7 +993,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     spark.sql("""drop database if exists testdb8156 CASCADE""")
   }
 
-
   test("skip hive metadata on table creation") {
     withTempDir { tempPath =>
       val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
@@ -1341,6 +1340,17 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           sql(s"INSERT OVERWRITE TABLE $tableName SELECT 1")
           checkAnswer(spark.table(tableName), Row(1))
         }
+      }
+    }
+  }
+
+  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
+    test(s"SPARK-22146: read files containing special characters using $format") {
+      val nameWithSpecialChars = s"sp&cial%chars"
+      withTempDir { dir =>
+        val tmpFile = s"$dir/$nameWithSpecialChars"
+        spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
+        spark.read.format(format).load(tmpFile)
       }
     }
   }

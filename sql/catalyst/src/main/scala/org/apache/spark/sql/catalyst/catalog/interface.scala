@@ -22,8 +22,6 @@ import java.util.Date
 
 import scala.collection.mutable
 
-import com.google.common.base.Objects
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -307,7 +305,7 @@ case class CatalogTable(
 
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
-    if (owner.nonEmpty) map.put("Owner", owner)
+    if (owner != null && owner.nonEmpty) map.put("Owner", owner)
     map.put("Created Time", new Date(createTime).toString)
     map.put("Last Access", new Date(lastAccessTime).toString)
     map.put("Created By", "Spark " + createVersion)
@@ -405,6 +403,11 @@ object CatalogTypes {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+
+  /**
+   * Initialize an empty spec.
+   */
+  lazy val emptyTablePartitionSpec: TablePartitionSpec = Map.empty[String, String]
 }
 
 /**
@@ -434,15 +437,6 @@ case class HiveTableRelation(
   override def output: Seq[AttributeReference] = dataCols ++ partitionCols
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
-
-  override def equals(relation: Any): Boolean = relation match {
-    case other: HiveTableRelation => tableMeta == other.tableMeta && output == other.output
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Objects.hashCode(tableMeta.identifier, output)
-  }
 
   override lazy val canonicalized: HiveTableRelation = copy(
     tableMeta = tableMeta.copy(
