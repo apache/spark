@@ -1029,6 +1029,43 @@ class ExecutorAllocationManagerSuite
     assert(removeTimes(manager) === Map.empty)
   }
 
+  test("correctly handle task failure introduces stage abortion scenario") {
+    sc = createSparkContext()
+    val manager = sc.executorAllocationManager.get
+    assert(maxNumExecutorsNeeded(manager) === 0)
+
+    val stageInfo = createStageInfo(0, 3)
+    post(sc.listenerBus, SparkListenerStageSubmitted(stageInfo))
+    assert(maxNumExecutorsNeeded(manager) === 3)
+
+    val taskInfos = Seq(
+      createTaskInfo(1, 1, "executor-1"),
+      createTaskInfo(2, 2, "executor-1"),
+      createTaskInfo(3, 3, "executor-1"))
+
+    taskInfos.foreach(task => post(sc.listenerBus, SparkListenerTaskStart(0, 0, task)))
+    assert(maxNumExecutorsNeeded(manager) === 3)
+
+    // Simulate task 1 failed due to exception more than 4 times
+    post(sc.listenerBus,
+      SparkListenerTaskEnd(
+        0, 0, null, ExceptionFailure(null, null, null, null, None), taskInfos(0), null))
+    // 1 pending + 2 running
+    assert(maxNumExecutorsNeeded(manager) === 3)
+
+    // Stage will be aborted when task is failed more than 4 times
+    post(sc.listenerBus, SparkListenerStageCompleted(stageInfo))
+    // When stage is completed, all the related tasks should be finished
+    assert(maxNumExecutorsNeeded(manager) === 0)
+
+    // Simulate task 2 is killed intentionally because of stage abortion
+    post(sc.listenerBus, SparkListenerTaskEnd(0, 0, null, TaskKilled(""), taskInfos(1), null))
+    assert(maxNumExecutorsNeeded(manager) === 0)
+
+    // TaskEnd event may never be delivered, still we should guarantee executor-1 can be removed.
+    assert(removeTimes(manager).keySet === Set("executor-1"))
+  }
+
   private def createSparkContext(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
