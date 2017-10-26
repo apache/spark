@@ -231,28 +231,6 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   )
 
   testInnerJoin(
-    "inner join without codegen",
-    myUpperCaseData,
-    myLowerCaseData,
-    () => {
-      // test equality with a UDF that will not generate code to exercise CodegenFallback
-      // val udfEquals = org.apache.spark.sql.functions.udf((a: String, b: String) =>
-      //   a != null && a.toLowerCase(Locale.ENGLISH) == b.toLowerCase(Locale.ENGLISH))
-      And(
-        (myUpperCaseData.col("N") === myLowerCaseData.col("n")).expr,
-        EqNoCodegen(
-          org.apache.spark.sql.functions.lower(myUpperCaseData.col("L")).expr,
-          myLowerCaseData.col("l").expr))
-    },
-    Seq(
-      (1, "A", 1, "a"),
-      (2, "B", 2, "b"),
-      (3, "C", 3, "c"),
-      (4, "D", 4, "d")
-    )
-  )
-
-  testInnerJoin(
     "inner join with CodegenFallback filter",
     myUpperCaseData,
     myLowerCaseData,
