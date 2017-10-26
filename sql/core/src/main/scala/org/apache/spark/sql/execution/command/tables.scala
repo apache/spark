@@ -235,11 +235,10 @@ case class AlterTableAddColumnsCommand(
       DataSource.lookupDataSource(catalogTable.provider.get).newInstance() match {
         // For datasource table, this command can only support the following File format.
         // TextFileFormat only default to one column "value"
-        // OrcFileFormat can not handle difference between user-specified schema and
-        // inferred schema yet. TODO, once this issue is resolved , we can add Orc back.
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
         case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat =>
+        case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
         case s =>
           throw new AnalysisException(
             s"""

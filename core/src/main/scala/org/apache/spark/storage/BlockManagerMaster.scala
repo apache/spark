@@ -84,6 +84,12 @@ class BlockManagerMaster(
     driverEndpoint.askSync[Seq[BlockManagerId]](GetLocations(blockId))
   }
 
+  /** Get locations as well as status of the blockId from the driver */
+  def getLocationsAndStatus(blockId: BlockId): Option[BlockLocationsAndStatus] = {
+    driverEndpoint.askSync[Option[BlockLocationsAndStatus]](
+      GetLocationsAndStatus(blockId))
+  }
+
   /** Get locations of multiple blockIds from the driver */
   def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
     driverEndpoint.askSync[IndexedSeq[Seq[BlockManagerId]]](
