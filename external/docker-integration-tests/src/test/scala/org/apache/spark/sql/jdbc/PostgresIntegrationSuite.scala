@@ -63,12 +63,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "(1, TIMESTAMP WITH TIME ZONE '2016-08-12 10:22:31.949271-07', TIME WITH TIME ZONE '17:22:31.949271+00')")
       .executeUpdate()
 
-    conn.prepareStatement("CREATE TABLE arrtypes (c0 uuid[], c1 inet[], c2 cidr[])")
+    conn.prepareStatement("CREATE TABLE arrtypes (c0 uuid[], c1 inet[], c2 cidr[]," +
+      "c3 uuid, c4 inet, c5 cidr)")
       .executeUpdate()
     conn.prepareStatement("INSERT INTO arrtypes VALUES (ARRAY" +
       "['7be8aaf8-650e-4dbb-8186-0a749840ecf2','205f9bfc-018c-4452-a605-609c0cfad228']::uuid[]," +
       "ARRAY['172.16.0.41', '172.16.0.42']::inet[]," +
-      "ARRAY['192.168.0.0/24', '10.1.0.0/16']::cidr[])")
+      "ARRAY['192.168.0.0/24', '10.1.0.0/16']::cidr[]," +
+      "'0a532531-cdf1-45e3-963d-5de90b6a30f1'::uuid," +
+      "'172.168.22.1'::inet, '192.168.100.128/25'::cidr)")
       .executeUpdate()
   }
 
@@ -157,5 +160,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "205f9bfc-018c-4452-a605-609c0cfad228"))
     assert(rows(0).getSeq(1) == Seq("172.16.0.41", "172.16.0.42"))
     assert(rows(0).getSeq(2) == Seq("192.168.0.0/24", "10.1.0.0/16"))
+    assert(rows(0).getString(3) == "0a532531-cdf1-45e3-963d-5de90b6a30f1")
+    assert(rows(0).getString(4) == "172.168.22.1")
+    assert(rows(0).getString(5) == "192.168.100.128/25")
   }
 }
