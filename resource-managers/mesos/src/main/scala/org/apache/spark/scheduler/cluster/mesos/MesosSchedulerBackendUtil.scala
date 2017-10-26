@@ -193,14 +193,14 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     }
 
     val referenceSecrets: Seq[Secret] =
-      conf.get(secretConfig.SECRET_NAMES).getOrElse(Nil).map(s => createReferenceSecret(s))
+      conf.get(secretConfig.SECRET_NAMES).getOrElse(Nil).map { s => createReferenceSecret(s) }
 
     val valueSecrets: Seq[Secret] = {
-      conf.get(secretConfig.SECRET_VALUES).getOrElse(Nil).map(s => createValueSecret(s))
+      conf.get(secretConfig.SECRET_VALUES).getOrElse(Nil).map { s => createValueSecret(s) }
     }
 
     if (valueSecrets.nonEmpty && referenceSecrets.nonEmpty) {
-      throw new SparkException("Cannot specify VALUE type secrets and REFERENCE types ones")
+      throw new SparkException("Cannot specify both value-type and reference-type secrets.")
     }
 
     if (referenceSecrets.nonEmpty) referenceSecrets else valueSecrets

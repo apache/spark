@@ -493,33 +493,44 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td><code>(none)</code></td>
   <td>
-    A secret is specified by its contents and destination. These properties
-    specify a secret's contents. To specify a secret's destination, see the cell below.
-
-    You can specify a secret's contents either (1) by value or (2) by reference.
-    (1) To specify a secret by value, set the
-    <code>spark.mesos.[driver|executor].secret.values</code>
-    property, to make the secret available in the driver or executors.
-    For example, to make a secret password "guessme" available to the driver process, set:
+    <p>
+      A secret is specified by its contents and destination. These properties
+      specify a secret's contents. To specify a secret's destination, see the cell below.
+    </p>
+    <p>
+      You can specify a secret's contents either (1) by value or (2) by reference.
+    </p>
+    <p>
+      (1) To specify a secret by value, set the
+      <code>spark.mesos.[driver|executor].secret.values</code>
+      property, to make the secret available in the driver or executors.
+      For example, to make a secret password "guessme" available to the driver process, set:
     
-    <pre>spark.mesos.driver.secret.values=guessme</pre>
-    
-    (2) To specify a secret that has been placed in a secret store
-    by reference, specify its name within the secret store
-    by setting the <code>spark.mesos.[driver|executor].secret.names</code>
-    property. For example, to make a secret password named "password" in a secret store
-    available to the driver process, set:
+      <pre>spark.mesos.driver.secret.values=guessme</pre>
+    </p>
+    <p>
+      (2) To specify a secret that has been placed in a secret store
+      by reference, specify its name within the secret store
+      by setting the <code>spark.mesos.[driver|executor].secret.names</code>
+      property. For example, to make a secret password named "password" in a secret store
+      available to the driver process, set:
 
-    <pre>spark.mesos.driver.secret.names=password</pre>
+      <pre>spark.mesos.driver.secret.names=password</pre>
+    </p>
+    <p>
+      Note: To use a secret store, make sure one has been integrated with Mesos via a custom
+      <a href="http://mesos.apache.org/documentation/latest/secrets/">SecretResolver
+      module</a>.
+    </p>
+    <p>
+      To specify multiple secrets, provide a comma-separated list:
 
-    To specify multiple secrets, provide a comma-separated list:
+      <pre>spark.mesos.driver.secret.values=guessme,passwd123</pre>
 
-    <pre>spark.mesos.driver.secret.values=guessme,passwd123</pre>
+      or
 
-    or
-
-    <pre>spark.mesos.driver.secret.names=password1,password2</pre>
-    
+      <pre>spark.mesos.driver.secret.names=password1,password2</pre>
+    </p>
   </td>
 </tr>
 
@@ -532,40 +543,48 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td><code>(none)</code></td>
   <td>
-    A secret is specified by its contents and destination. These properties
-    specify a secret's destination. To specify a secret's contents, see the cell above.
+    <p>
+      A secret is specified by its contents and destination. These properties
+      specify a secret's destination. To specify a secret's contents, see the cell above.
+    </p>
+    <p>
+      You can specify a secret's destination in the driver or
+      executors as either (1) an environment variable or (2) as a file.
+    </p>
+    <p>
+      (1) To make an environment-based secret, set the
+      <code>spark.mesos.[driver|executor].secret.envkeys</code> property.
+      The secret will appear as an environment variable with the
+      given name in the driver or executors. For example, to make a secret password available
+      to the driver process as $PASSWORD, set:
 
-    You can specify a secret's destination in the driver or
-    executors as either (1) an environment variable or (2) as a file.
-    (1) To make an environment-based secret, set the
-    <code>spark.mesos.[driver|executor].secret.envkeys</code> property.
-    The secret will appear as an environment variable with the
-    given name in the driver or executors. For example, to make a secret password available
-    to the driver process as $PASSWORD, set:
+      <pre>spark.mesos.driver.secret.envkeys=PASSWORD</pre>
+    </p>
+    <p>
+      (2) To make a file-based secret, set the
+      <code>spark.mesos.[driver|executor].secret.filenames</code> property.
+      The secret will appear in the contents of a file with the given file name in
+      the driver or executors. For example, to make a secret password available in a
+      file named "pwdfile" in the driver process, set:
 
-    <pre>spark.mesos.driver.secret.envkeys=PASSWORD</pre>
+      <pre>spark.mesos.driver.secret.filenames=pwdfile</pre>
+    </p>
+    <p>
+      Paths are relative to the container's work directory. Absolute paths must
+      already exist. Note: File-based secrets require a custom
+      <a href="http://mesos.apache.org/documentation/latest/secrets/">SecretResolver
+      module</a>.
+    </p>
+    <p>
+      To specify env vars or file names corresponding to multiple secrets,
+      provide a comma-separated list:
 
-    (2) To make a file-based secret, set the
-    <code>spark.mesos.[driver|executor].secret.filenames</code> property.
-    The secret will appear in the contents of a file with the given file name in
-    the driver or executors. For example, to make a secret password available in a
-    file named "pwdfile" in the driver process, set:
-
-    <pre>spark.mesos.driver.secret.filenames=pwdfile</pre>
-
-    Paths are relative to the container's work directory. Absolute paths must
-    already exist. Note: File-based secrets require a custom
-    <a href="http://mesos.apache.org/documentation/latest/secrets/">SecretResolver
-    module</a>.
+      <pre>spark.mesos.driver.secret.envkeys=PASSWORD1,PASSWORD2</pre>
     
-    To specify env vars or file names corresponding to multiple secrets,
-    provide a comma-separated list:
-
-    <pre>spark.mesos.driver.secret.envkeys=PASSWORD1,PASSWORD2</pre>
+      or
     
-    or
-    
-    <pre>spark.mesos.driver.secret.filenames=pwdfile1,pwdfile2</pre>
+      <pre>spark.mesos.driver.secret.filenames=pwdfile1,pwdfile2</pre>
+    </p>
   </td>
 </tr>
 
