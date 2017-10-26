@@ -881,32 +881,39 @@ class Analyzer(
 
     /**
      * Returns true if `exprs` contains a [[Star]].
+     * @param deepInto Whether to traverse all the subtrees, true by default.
      */
-    def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+    def containsStar(exprs: Seq[Expression], deepInto: Boolean = true): Boolean = {
+      if (deepInto) {
+        exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+      } else {
+        exprs.exists{ case _: Star => true}
+      }
+    }
+
 
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
-        case f1: UnresolvedFunction if containsStar(f1.children) =>
+        case f1: UnresolvedFunction if containsStar(f1.children, false) =>
           f1.copy(children = f1.children.flatMap {
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
           })
-        case c: CreateNamedStruct if containsStar(c.valExprs) =>
+        case c: CreateNamedStruct if containsStar(c.valExprs, false) =>
           val newChildren = c.children.grouped(2).flatMap {
             case Seq(k, s : Star) => CreateStruct(s.expand(child, resolver)).children
             case kv => kv
           }
           c.copy(children = newChildren.toList )
-        case c: CreateArray if containsStar(c.children) =>
+        case c: CreateArray if containsStar(c.children, false) =>
           c.copy(children = c.children.flatMap {
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
           })
-        case p: Murmur3Hash if containsStar(p.children) =>
+        case p: Murmur3Hash if containsStar(p.children, false) =>
           p.copy(children = p.children.flatMap {
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
