@@ -2657,6 +2657,9 @@ class Dataset[T] private[sql](
    */
   def toLocalIterator(): java.util.Iterator[T] = {
     withAction("toLocalIterator", queryExecution) { plan =>
+      // This projection writes output to a `InternalRow`, which means applying this projection is
+      // not thread-safe. Here we create the projection inside this method to make `Dataset`
+      // thread-safe.
       val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
       plan.executeToIterator().map { row =>
         // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
@@ -3103,6 +3106,8 @@ class Dataset[T] private[sql](
    * Collect all elements from a spark plan.
    */
   private def collectFromPlan(plan: SparkPlan): Array[T] = {
+    // This projection writes output to a `InternalRow`, which means applying this projection is not
+    // thread-safe. Here we create the projection inside this method to make `Dataset` thread-safe.
     val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
     plan.executeCollect().map { row =>
       // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
