@@ -94,6 +94,10 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       // empty schema in metastore and infer it at runtime. Note that this also means the new
       // scalable partitioning handling feature(introduced at Spark 2.1) is disabled in this case.
       case r: HadoopFsRelation if r.overlappedPartCols.nonEmpty =>
+        logWarning("It is not recommended to create a table with overlapped data and partition " +
+          "columns, as Spark cannot store a valid table schema and has to infer it at runtime, " +
+          "which hurts performance. Please check your data files and remove the partition " +
+          "columns in it.")
         table.copy(schema = new StructType(), partitionColumnNames = Nil)
 
       case _ =>
