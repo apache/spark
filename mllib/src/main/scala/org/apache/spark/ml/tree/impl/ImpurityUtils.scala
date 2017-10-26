@@ -17,12 +17,20 @@
 
 package org.apache.spark.ml.tree.impl
 
-import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
+import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model.ImpurityStats
 
 /** Helper methods for impurity-related calculations during node split decisions. */
 private[impl] object ImpurityUtils {
 
+  private[impl] def getImpurityAggregator(metadata: DecisionTreeMetadata): ImpurityAggregator = {
+    metadata.impurity match {
+      case Gini => new GiniAggregator(metadata.numClasses)
+      case Entropy => new EntropyAggregator(metadata.numClasses)
+      case Variance => new VarianceAggregator()
+      case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
+    }
+  }
 
   /**
    * Calculate the impurity statistics for a given (feature, split) based upon left/right

@@ -34,12 +34,7 @@ private[spark] class DTStatsAggregator(
   /**
    * [[ImpurityAggregator]] instance specifying the impurity type.
    */
-  val impurityAggregator: ImpurityAggregator = metadata.impurity match {
-    case Gini => new GiniAggregator(metadata.numClasses)
-    case Entropy => new EntropyAggregator(metadata.numClasses)
-    case Variance => new VarianceAggregator()
-    case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
-  }
+  val impurityAggregator: ImpurityAggregator = ImpurityUtils.getImpurityAggregator(metadata)
 
   /**
    * Number of elements (Double values) used for the sufficient statistics of each bin.

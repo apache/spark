@@ -621,7 +621,7 @@ private[spark] object RandomForest extends Logging {
   }
 
   /**
-   * Return a list of pairs (featureIndex, featureIndexIdx) where featureIndex is the global
+   * Return a list of pairs (featureIndexIdx, featureIndex) where featureIndex is the global
    * (across all trees) index of a feature and featureIndexIdx is the index of a feature within the
    * list of features for a given node. Filters out constant features (features with 0 splits)
    */
