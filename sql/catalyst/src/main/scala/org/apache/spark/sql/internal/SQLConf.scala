@@ -136,7 +136,7 @@ object SQLConf {
   val IN_MEMORY_PARTITION_PRUNING =
     buildConf("spark.sql.inMemoryColumnarStorage.partitionPruning")
       .internal()
-      .doc("When true, enable partition pruning for in-memory columnar tables.")
+      .doc("When true, enable partition batch pruning for in-memory columnar tables.")
       .booleanConf
       .createWithDefault(true)
 
@@ -144,6 +144,12 @@ object SQLConf {
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
       .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+
+  val IN_MEMORY_PARTITION_METADATA =
+    buildConf("spark.sql.inMemoryColumnarStorage.partitionMetadata")
+      .internal()
+      .doc("When true, spark sql will collect partition level stats for in-memory columnar" +
+        " tables and do coarse-grained pruning")
       .booleanConf
       .createWithDefault(false)
 
