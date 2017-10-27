@@ -879,8 +879,8 @@ class CodegenContext {
     val innerClassToFunctions = mutable.LinkedHashMap.empty[(String, String), Seq[String]]
     functions.foreach(f => {
       val key = (f.innerClassName.get, f.innerClassInstance.get)
-      innerClassToFunctions.update(key, f.functionName +:
-        innerClassToFunctions.getOrElse(key, Seq.empty[String]))
+      val value = f.functionName +: innerClassToFunctions.getOrElse(key, Seq.empty[String])
+      innerClassToFunctions.update(key, value)
     })
 
     val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
@@ -892,9 +892,18 @@ class CodegenContext {
         // thus here they are in reversed order
         val orderedFunctions = innerClassFunctions.reverse
         if (orderedFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
-          // Adding a new function to each inner class which contains
-          // the invocation of all the ones which have been added to
-          // that inner class
+          // Adding a new function to each inner class which contains the invocation of all the
+          // ones which have been added to that inner class. For example,
+          //   private class NestedClass {
+          //     private void apply_862(InternalRow i) { ... }
+          //     private void apply_863(InternalRow i) { ... }
+          //       ...
+          //     private void apply(InternalRow i) {
+          //       apply_862(i);
+          //       apply_863(i);
+          //       ...
+          //     }
+          //   }
           val body = foldFunctions(orderedFunctions.map(name =>
             s"$name($argInvocationString)"))
           val code = s"""
