@@ -880,7 +880,7 @@ class CodegenContext {
     functions.foreach(f => {
       val key = (f.innerClassName.get, f.innerClassInstance.get)
       val value = f.functionName +: innerClassToFunctions.getOrElse(key, Seq.empty[String])
-      innerClassToFunctions.update(key, value)
+      innerClassToFunctions.put(key, value)
     })
 
     val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
@@ -904,8 +904,7 @@ class CodegenContext {
           //       ...
           //     }
           //   }
-          val body = foldFunctions(orderedFunctions.map(name =>
-            s"$name($argInvocationString)"))
+          val body = foldFunctions(orderedFunctions.map(name => s"$name($argInvocationString)"))
           val code = s"""
               |private $returnType $funcName($argDefinitionString) {
               |  ${makeSplitFunction(body)}
