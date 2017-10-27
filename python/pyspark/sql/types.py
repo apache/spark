@@ -1661,6 +1661,10 @@ def from_arrow_type(at):
         spark_type = DecimalType(precision=at.precision, scale=at.scale)
     elif at == pa.string():
         spark_type = StringType()
+    elif at == pa.date32():
+        spark_type = DateType()
+    elif type(at) == pa.TimestampType:
+        spark_type = TimestampType()
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type

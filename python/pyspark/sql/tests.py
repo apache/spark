@@ -3106,9 +3106,9 @@ class ArrowTests(ReusedPySparkTestCase):
             StructField("5_double_t", DoubleType(), True),
             StructField("6_date_t", DateType(), True),
             StructField("7_timestamp_t", TimestampType(), True)])
-        cls.data = [("a", 1, 10, 0.2, 2.0, datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
-                    ("b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
-                    ("c", 3, 30, 0.8, 6.0, datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+        cls.data = [(u"a", 1, 10, 0.2, 2.0, datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+                    (u"b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                    (u"c", 3, 30, 0.8, 6.0, datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
 
     @classmethod
     def tearDownClass(cls):
@@ -3198,8 +3198,8 @@ class ArrowTests(ReusedPySparkTestCase):
 
     def test_createDataFrame_with_names(self):
         pdf = self.createPandasDataFrameFromData()
-        df = self.spark.createDataFrame(pdf, schema=list('abcde'))
-        self.assertEquals(df.schema.fieldNames(), list('abcde'))
+        df = self.spark.createDataFrame(pdf, schema=list('abcdefg'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
 
     def test_createDataFrame_with_single_data_type(self):
         import pandas as pd
