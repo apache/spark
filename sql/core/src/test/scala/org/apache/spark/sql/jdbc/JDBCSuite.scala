@@ -815,6 +815,12 @@ class JDBCSuite extends SparkFunSuite
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null) ==
+      Some(FloatType))
+    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
+      Some(DoubleType))
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
+      Some(TimestampType))
   }
 
   test("table exists query by jdbc dialect") {

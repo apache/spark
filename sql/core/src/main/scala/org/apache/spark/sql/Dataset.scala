@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
@@ -198,15 +199,10 @@ class Dataset[T] private[sql](
    */
   private[sql] implicit val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
 
-  /**
-   * Encoder is used mostly as a container of serde expressions in Dataset.  We build logical
-   * plans by these serde expressions and execute it within the query framework.  However, for
-   * performance reasons we may want to use encoder as a function to deserialize internal rows to
-   * custom objects, e.g. collect.  Here we resolve and bind the encoder so that we can call its
-   * `fromRow` method later.
-   */
-  private val boundEnc =
-    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
+  // The deserializer expression which can be used to build a projection and turn rows to objects
+  // of type T, after collecting rows to the driver side.
+  private val deserializer =
+    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer).deserializer
 
   private implicit def classTag = exprEnc.clsTag
 
@@ -2661,7 +2657,15 @@ class Dataset[T] private[sql](
    */
   def toLocalIterator(): java.util.Iterator[T] = {
     withAction("toLocalIterator", queryExecution) { plan =>
-      plan.executeToIterator().map(boundEnc.fromRow).asJava
+      // This projection writes output to a `InternalRow`, which means applying this projection is
+      // not thread-safe. Here we create the projection inside this method to make `Dataset`
+      // thread-safe.
+      val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
+      plan.executeToIterator().map { row =>
+        // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
+        // parameter of its `get` method, so it's safe to use null here.
+        objProj(row).get(0, null).asInstanceOf[T]
+      }.asJava
     }
   }
 
@@ -3102,7 +3106,14 @@ class Dataset[T] private[sql](
    * Collect all elements from a spark plan.
    */
   private def collectFromPlan(plan: SparkPlan): Array[T] = {
-    plan.executeCollect().map(boundEnc.fromRow)
+    // This projection writes output to a `InternalRow`, which means applying this projection is not
+    // thread-safe. Here we create the projection inside this method to make `Dataset` thread-safe.
+    val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
+    plan.executeCollect().map { row =>
+      // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
+      // parameter of its `get` method, so it's safe to use null here.
+      objProj(row).get(0, null).asInstanceOf[T]
+    }
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
@@ -3143,9 +3154,11 @@ class Dataset[T] private[sql](
   private[sql] def toArrowPayload: RDD[ArrowPayload] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     queryExecution.toRdd.mapPartitionsInternal { iter =>
       val context = TaskContext.get()
-      ArrowConverters.toPayloadIterator(iter, schemaCaptured, maxRecordsPerBatch, context)
+      ArrowConverters.toPayloadIterator(
+        iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, context)
     }
   }
 }

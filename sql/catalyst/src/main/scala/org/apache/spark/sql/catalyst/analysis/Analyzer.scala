@@ -783,6 +783,22 @@ class Analyzer(
       }
     }
 
+    private def resolve(e: Expression, q: LogicalPlan): Expression = e match {
+      case u @ UnresolvedAttribute(nameParts) =>
+        // Leave unchanged if resolution fails. Hopefully will be resolved next round.
+        val result =
+          withPosition(u) {
+            q.resolveChildren(nameParts, resolver)
+              .orElse(resolveLiteralFunction(nameParts, u, q))
+              .getOrElse(u)
+          }
+        logDebug(s"Resolving $u to $result")
+        result
+      case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+        ExtractValue(child, fieldExpr, resolver)
+      case _ => e.mapChildren(resolve(_, q))
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -841,20 +857,7 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q.transformExpressionsUp  {
-          case u @ UnresolvedAttribute(nameParts) =>
-            // Leave unchanged if resolution fails. Hopefully will be resolved next round.
-            val result =
-              withPosition(u) {
-                q.resolveChildren(nameParts, resolver)
-                  .orElse(resolveLiteralFunction(nameParts, u, q))
-                  .getOrElse(u)
-              }
-            logDebug(s"Resolving $u to $result")
-            result
-          case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
-            ExtractValue(child, fieldExpr, resolver)
-        }
+        q.mapExpressions(resolve(_, q))
     }
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {

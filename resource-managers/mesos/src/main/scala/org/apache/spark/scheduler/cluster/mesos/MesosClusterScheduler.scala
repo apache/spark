@@ -28,7 +28,6 @@ import org.apache.mesos.{Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
-import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.MesosDriverDescription
@@ -394,37 +393,18 @@ private[spark] class MesosClusterScheduler(
     }
 
     // add secret environment variables
-    getSecretEnvVar(desc).foreach { variable =>
-      if (variable.getSecret.getReference.isInitialized) {
-        logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName}" +
-          s"on file ${variable.getName}")
-      } else {
-        logInfo(s"Setting secret on environment variable name=${variable.getName}")
-      }
-      envBuilder.addVariables(variable)
+    MesosSchedulerBackendUtil.getSecretEnvVar(desc.conf, config.driverSecretConfig)
+      .foreach { variable =>
+        if (variable.getSecret.getReference.isInitialized) {
+          logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName} " +
+            s"on file ${variable.getName}")
+        } else {
+          logInfo(s"Setting secret on environment variable name=${variable.getName}")
+        }
+        envBuilder.addVariables(variable)
     }
 
     envBuilder.build()
-  }
-
-  private def getSecretEnvVar(desc: MesosDriverDescription): List[Variable] = {
-    val secrets = getSecrets(desc)
-    val secretEnvKeys = desc.conf.get(config.SECRET_ENVKEY).getOrElse(Nil)
-    if (illegalSecretInput(secretEnvKeys, secrets)) {
-      throw new SparkException(
-        s"Need to give equal numbers of secrets and environment keys " +
-          s"for environment-based reference secrets got secrets $secrets, " +
-          s"and keys $secretEnvKeys")
-    }
-
-    secrets.zip(secretEnvKeys).map {
-      case (s, k) =>
-        Variable.newBuilder()
-          .setName(k)
-          .setType(Variable.Type.SECRET)
-          .setSecret(s)
-          .build
-    }.toList
   }
 
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
@@ -438,6 +418,23 @@ private[spark] class MesosClusterScheduler(
 
     ((jarUrl :: confUris) ++ getDriverExecutorURI(desc).toList).map(uri =>
       CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
+  }
+
+  private def getContainerInfo(desc: MesosDriverDescription): ContainerInfo.Builder = {
+    val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(desc.conf)
+
+    MesosSchedulerBackendUtil.getSecretVolume(desc.conf, config.driverSecretConfig)
+      .foreach { volume =>
+        if (volume.getSource.getSecret.getReference.isInitialized) {
+          logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName} " +
+            s"on file ${volume.getContainerPath}")
+        } else {
+          logInfo(s"Setting secret on file name=${volume.getContainerPath}")
+        }
+        containerInfo.addVolumes(volume)
+    }
+
+    containerInfo
   }
 
   private def getDriverCommandValue(desc: MesosDriverDescription): String = {
@@ -577,89 +574,6 @@ private[spark] class MesosClusterScheduler(
       .addAllResources(memResourcesToUse.asJava)
       .setLabels(driverLabels)
       .build
-  }
-
-  private def getContainerInfo(desc: MesosDriverDescription): ContainerInfo.Builder = {
-    val containerInfo = MesosSchedulerBackendUtil.containerInfo(desc.conf)
-
-    getSecretVolume(desc).foreach { volume =>
-      if (volume.getSource.getSecret.getReference.isInitialized) {
-        logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName}" +
-          s"on file ${volume.getContainerPath}")
-      } else {
-        logInfo(s"Setting secret on file name=${volume.getContainerPath}")
-      }
-      containerInfo.addVolumes(volume)
-    }
-
-    containerInfo
-  }
-
-
-  private def getSecrets(desc: MesosDriverDescription): Seq[Secret] = {
-    def createValueSecret(data: String): Secret = {
-      Secret.newBuilder()
-        .setType(Secret.Type.VALUE)
-        .setValue(Secret.Value.newBuilder().setData(ByteString.copyFrom(data.getBytes)))
-        .build()
-    }
-
-    def createReferenceSecret(name: String): Secret = {
-      Secret.newBuilder()
-        .setReference(Secret.Reference.newBuilder().setName(name))
-        .setType(Secret.Type.REFERENCE)
-        .build()
-    }
-
-    val referenceSecrets: Seq[Secret] =
-      desc.conf.get(config.SECRET_NAME).getOrElse(Nil).map(s => createReferenceSecret(s))
-
-    val valueSecrets: Seq[Secret] = {
-      desc.conf.get(config.SECRET_VALUE).getOrElse(Nil).map(s => createValueSecret(s))
-    }
-
-    if (valueSecrets.nonEmpty && referenceSecrets.nonEmpty) {
-      throw new SparkException("Cannot specify VALUE type secrets and REFERENCE types ones")
-    }
-
-    if (referenceSecrets.nonEmpty) referenceSecrets else valueSecrets
-  }
-
-  private def illegalSecretInput(dest: Seq[String], s: Seq[Secret]): Boolean = {
-    if (dest.isEmpty) {  // no destination set (ie not using secrets of this type
-      return false
-    }
-    if (dest.nonEmpty && s.nonEmpty) {
-      // make sure there is a destination for each secret of this type
-      if (dest.length != s.length) {
-        return true
-      }
-    }
-    false
-  }
-
-  private def getSecretVolume(desc: MesosDriverDescription): List[Volume] = {
-    val secrets = getSecrets(desc)
-    val secretPaths: Seq[String] =
-      desc.conf.get(config.SECRET_FILENAME).getOrElse(Nil)
-
-    if (illegalSecretInput(secretPaths, secrets)) {
-      throw new SparkException(
-        s"Need to give equal numbers of secrets and file paths for file-based " +
-          s"reference secrets got secrets $secrets, and paths $secretPaths")
-    }
-
-    secrets.zip(secretPaths).map {
-      case (s, p) =>
-        val source = Volume.Source.newBuilder()
-          .setType(Volume.Source.Type.SECRET)
-          .setSecret(s)
-        Volume.newBuilder()
-          .setContainerPath(p)
-          .setSource(source)
-          .setMode(Volume.Mode.RO)
-          .build
-    }.toList
   }
 
   /**

@@ -2741,4 +2741,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert (aggregateExpressions.isDefined)
     assert (aggregateExpressions.get.size == 2)
   }
+
+  test("SPARK-22356: overlapped columns between data and partition schema in data source tables") {
+    withTempPath { path =>
+      Seq((1, 1, 1), (1, 2, 1)).toDF("i", "p", "j")
+        .write.mode("overwrite").parquet(new File(path, "p=1").getCanonicalPath)
+      withTable("t") {
+        sql(s"create table t using parquet options(path='${path.getCanonicalPath}')")
+        // We should respect the column order in data schema.
+        assert(spark.table("t").columns === Array("i", "p", "j"))
+        checkAnswer(spark.table("t"), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
+        // The DESC TABLE should report same schema as table scan.
+        assert(sql("desc t").select("col_name")
+          .as[String].collect().mkString(",").contains("i,p,j"))
+      }
+    }
+  }
 }

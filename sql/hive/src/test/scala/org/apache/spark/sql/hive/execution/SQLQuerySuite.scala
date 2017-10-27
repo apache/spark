@@ -2010,6 +2010,32 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-21101 UDTF should override initialize(ObjectInspector[] args)") {
+    withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack1
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      val cnt =
+        sql("SELECT udtf_stack1(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')").count()
+      assert(cnt === 2)
+
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack2
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        sql("SELECT udtf_stack2(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')")
+      }
+      assert(
+        e.getMessage.contains("public StructObjectInspector initialize(ObjectInspector[] args)"))
+    }
+  }
+
   test("SPARK-21721: Clear FileSystem deleterOnExit cache if path is successfully removed") {
     val table = "test21721"
     withTable(table) {
@@ -2031,8 +2057,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
     Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      withTable("t21912") {
-        Seq("ORC", "PARQUET").foreach { source =>
+      Seq("ORC", "PARQUET").foreach { source =>
+        withTable("t21912") {
           val m = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
           }.getMessage
@@ -2049,15 +2075,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             }.getMessage
             assert(m3.contains(s"contains invalid character(s)"))
           }
-        }
 
-        // TODO: After SPARK-21929, we need to check ORC, too.
-        Seq("PARQUET").foreach { source =>
           sql(s"CREATE TABLE t21912(`col` INT) USING $source")
-          val m = intercept[AnalysisException] {
+          val m4 = intercept[AnalysisException] {
             sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
           }.getMessage
-          assert(m.contains(s"contains invalid character(s)"))
+          assert(m4.contains(s"contains invalid character(s)"))
         }
       }
     }
