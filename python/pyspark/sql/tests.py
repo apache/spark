@@ -3484,11 +3484,11 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
             df = self.spark.range(10, numPartitions=1)
 
             @pandas_udf(returnType=LongType())
-            def checkRecordsPerBatch(x):
+            def check_records_per_batch(x):
                 self.assertTrue(x.size <= 3)
                 return x
 
-            result = df.select(checkRecordsPerBatch(col("id")))
+            result = df.select(check_records_per_batch(col("id")))
             self.assertEquals(df.collect(), result.collect())
         finally:
             if orig_value is None:
