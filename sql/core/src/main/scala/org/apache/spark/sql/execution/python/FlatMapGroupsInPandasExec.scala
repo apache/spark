@@ -94,8 +94,8 @@ case class FlatMapGroupsInPandasExec(
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc, bufferSize, reuseWorker,
-        PythonEvalType.SQL_PANDAS_GROUPED_UDF, argOffsets, schema)
-        .compute(grouped, context.partitionId(), context)
+        PythonEvalType.SQL_PANDAS_GROUPED_UDF, argOffsets, schema, conf.sessionLocalTimeZone)
+          .compute(grouped, context.partitionId(), context)
 
       columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
     }

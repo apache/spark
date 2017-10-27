@@ -3086,18 +3086,38 @@ class ArrowTests(ReusedPySparkTestCase):
 
     @classmethod
     def setUpClass(cls):
+        from datetime import datetime
         ReusedPySparkTestCase.setUpClass()
+
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
+
         cls.spark = SparkSession(cls.sc)
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
         cls.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
         cls.schema = StructType([
             StructField("1_str_t", StringType(), True),
             StructField("2_int_t", IntegerType(), True),
             StructField("3_long_t", LongType(), True),
             StructField("4_float_t", FloatType(), True),
-            StructField("5_double_t", DoubleType(), True)])
-        cls.data = [("a", 1, 10, 0.2, 2.0),
-                    ("b", 2, 20, 0.4, 4.0),
-                    ("c", 3, 30, 0.8, 6.0)]
+            StructField("5_double_t", DoubleType(), True),
+            StructField("6_date_t", DateType(), True),
+            StructField("7_timestamp_t", TimestampType(), True)])
+        cls.data = [("a", 1, 10, 0.2, 2.0, datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+                    ("b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                    ("c", 3, 30, 0.8, 6.0, datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
 
     def assertFramesEqual(self, df_with_arrow, df_without):
         msg = ("DataFrame from Arrow is not equal" +
@@ -3106,8 +3126,8 @@ class ArrowTests(ReusedPySparkTestCase):
         self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
 
     def test_unsupported_datatype(self):
-        schema = StructType([StructField("dt", DateType(), True)])
-        df = self.spark.createDataFrame([(datetime.date(1970, 1, 1),)], schema=schema)
+        schema = StructType([StructField("decimal", DecimalType(), True)])
+        df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             self.assertRaises(Exception, lambda: df.toPandas())
 
@@ -3385,12 +3405,76 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
 
     def test_vectorized_udf_unsupported_types(self):
         from pyspark.sql.functions import pandas_udf, col
-        schema = StructType([StructField("dt", DateType(), True)])
-        df = self.spark.createDataFrame([(datetime.date(1970, 1, 1),)], schema=schema)
-        f = pandas_udf(lambda x: x, DateType())
+        schema = StructType([StructField("dt", DecimalType(), True)])
+        df = self.spark.createDataFrame([(None,)], schema=schema)
+        f = pandas_udf(lambda x: x, DecimalType())
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
                 df.select(f(col('dt'))).collect()
+
+    def test_vectorized_udf_null_date(self):
+        from pyspark.sql.functions import pandas_udf, col
+        from datetime import date
+        schema = StructType().add("date", DateType())
+        data = [(date(1969, 1, 1),),
+                (date(2012, 2, 2),),
+                (None,),
+                (date(2100, 4, 4),)]
+        df = self.spark.createDataFrame(data, schema=schema)
+        date_f = pandas_udf(lambda t: t, returnType=DateType())
+        res = df.select(date_f(col("date")))
+        self.assertEquals(df.collect(), res.collect())
+
+    def test_vectorized_udf_timestamps(self):
+        from pyspark.sql.functions import pandas_udf, col
+        from datetime import datetime
+        schema = StructType([
+            StructField("idx", LongType(), True),
+            StructField("timestamp", TimestampType(), True)])
+        data = [(0, datetime(1969, 1, 1, 1, 1, 1)),
+                (1, datetime(2012, 2, 2, 2, 2, 2)),
+                (2, None),
+                (3, datetime(2100, 4, 4, 4, 4, 4))]
+        df = self.spark.createDataFrame(data, schema=schema)
+
+        # Check that a timestamp passed through a pandas_udf will not be altered by timezone calc
+        f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType())
+        df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
+
+        @pandas_udf(returnType=BooleanType())
+        def check_data(idx, timestamp, timestamp_copy):
+            is_equal = timestamp.isnull()  # use this array to check values are equal
+            for i in range(len(idx)):
+                # Check that timestamps are as expected in the UDF
+                is_equal[i] = (is_equal[i] and data[idx[i]][1] is None) or \
+                    timestamp[i].to_pydatetime() == data[idx[i]][1]
+            return is_equal
+
+        result = df.withColumn("is_equal", check_data(col("idx"), col("timestamp"),
+                                                      col("timestamp_copy"))).collect()
+        # Check that collection values are correct
+        self.assertEquals(len(data), len(result))
+        for i in range(len(result)):
+            self.assertEquals(data[i][1], result[i][1])  # "timestamp" col
+            self.assertTrue(result[i][3])  # "is_equal" data in udf was as expected
+
+    def test_vectorized_udf_return_timestamp_tz(self):
+        from pyspark.sql.functions import pandas_udf, col
+        import pandas as pd
+        df = self.spark.range(10)
+
+        @pandas_udf(returnType=TimestampType())
+        def gen_timestamps(id):
+            ts = [pd.Timestamp(i, unit='D', tz='America/Los_Angeles') for i in id]
+            return pd.Series(ts)
+
+        result = df.withColumn("ts", gen_timestamps(col("id"))).collect()
+        spark_ts_t = TimestampType()
+        for r in result:
+            i, ts = r
+            ts_tz = pd.Timestamp(i, unit='D', tz='America/Los_Angeles').to_pydatetime()
+            expected = spark_ts_t.fromInternal(spark_ts_t.toInternal(ts_tz))
+            self.assertEquals(expected, ts)
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
@@ -3550,8 +3634,8 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
     def test_unsupported_types(self):
         from pyspark.sql.functions import pandas_udf, col
         schema = StructType(
-            [StructField("id", LongType(), True), StructField("dt", DateType(), True)])
-        df = self.spark.createDataFrame([(1, datetime.date(1970, 1, 1),)], schema=schema)
+            [StructField("id", LongType(), True), StructField("dt", DecimalType(), True)])
+        df = self.spark.createDataFrame([(1, None,)], schema=schema)
         f = pandas_udf(lambda x: x, df.schema)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
