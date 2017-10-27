@@ -680,7 +680,7 @@ private[spark] class ExecutorAllocationManager(
 
       allocationManager.synchronized {
         if (stageIdToNumRunningTask.contains(stageId)) {
-          stageIdToNumRunningTask(stageId) = stageIdToNumRunningTask(stageId) + 1
+          stageIdToNumRunningTask(stageId) += 1
         }
         // This guards against the race condition in which the `SparkListenerTaskStart`
         // event is posted before the `SparkListenerBlockManagerAdded` event, which is
@@ -713,7 +713,7 @@ private[spark] class ExecutorAllocationManager(
       val stageId = taskEnd.stageId
       allocationManager.synchronized {
         if (stageIdToNumRunningTask.contains(stageId)) {
-          stageIdToNumRunningTask(stageId) = stageIdToNumRunningTask(stageId) - 1
+          stageIdToNumRunningTask(stageId) -= 1
         }
         // If the executor is no longer running any scheduled tasks, mark it as idle
         if (executorIdToTaskIds.contains(executorId)) {
