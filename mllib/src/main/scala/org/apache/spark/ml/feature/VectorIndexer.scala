@@ -18,11 +18,12 @@
 package org.apache.spark.ml.feature
 
 import java.lang.{Double => JDouble, Integer => JInt}
-import java.util.{Map => JMap}
+import java.util.{NoSuchElementException, Map => JMap}
 
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
+import org.apache.spark.SparkException
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
@@ -37,7 +38,25 @@ import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.collection.OpenHashSet
 
 /** Private trait for params for VectorIndexer and VectorIndexerModel */
-private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOutputCol {
+private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOutputCol
+  with HasHandleInvalid {
+
+  /**
+   * Param for how to handle invalid data (unseen labels or NULL values).
+   * Options are 'skip' (filter out rows with invalid data),
+   * 'error' (throw an error), or 'keep' (put invalid data in a special additional
+   * bucket, at index numLabels).
+   * Default: "error"
+   * @group param
+   */
+  @Since("2.3.0")
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "How to handle invalid data (unseen labels or NULL values). " +
+    "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
+    "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
+    ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
+
+  setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
 
   /**
    * Threshold for the number of values a categorical feature can take.
@@ -113,6 +132,10 @@ class VectorIndexer @Since("1.4.0") (
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group setParam */
+  @Since("2.3.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): VectorIndexerModel = {
     transformSchema(dataset.schema, logging = true)
@@ -148,6 +171,11 @@ class VectorIndexer @Since("1.4.0") (
 
 @Since("1.6.0")
 object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
+  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val ERROR_INVALID: String = "error"
+  private[feature] val KEEP_INVALID: String = "keep"
+  private[feature] val supportedHandleInvalids: Array[String] =
+    Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
 
   @Since("1.6.0")
   override def load(path: String): VectorIndexer = super.load(path)
@@ -287,9 +315,12 @@ class VectorIndexerModel private[ml] (
     while (featureIndex < numFeatures) {
       if (categoryMaps.contains(featureIndex)) {
         // categorical feature
-        val featureValues: Array[String] =
+        var featureValues: Array[String] =
           categoryMaps(featureIndex).toArray.sortBy(_._1).map(_._1).map(_.toString)
-        if (featureValues.length == 2) {
+        if (getHandleInvalid == VectorIndexer.KEEP_INVALID) {
+          featureValues = (featureValues.toList :+ "__unknown").toArray
+        }
+        if (featureValues.length == 2 && getHandleInvalid != VectorIndexer.KEEP_INVALID) {
           attrs(featureIndex) = new BinaryAttribute(index = Some(featureIndex),
             values = Some(featureValues))
         } else {
@@ -311,22 +342,39 @@ class VectorIndexerModel private[ml] (
   // TODO: Check more carefully about whether this whole class will be included in a closure.
 
   /** Per-vector transform function */
-  private val transformFunc: Vector => Vector = {
+  private lazy val transformFunc: Vector => Vector = {
     val sortedCatFeatureIndices = categoryMaps.keys.toArray.sorted
     val localVectorMap = categoryMaps
     val localNumFeatures = numFeatures
+    val localHandleInvalid = getHandleInvalid
     val f: Vector => Vector = { (v: Vector) =>
       assert(v.size == localNumFeatures, "VectorIndexerModel expected vector of length" +
         s" $numFeatures but found length ${v.size}")
+      val exceptMsg = "VectorIndexer encountered NULL value. To handle" +
+        " or skip NULLS, try setting VectorIndexer.handleInvalid."
       v match {
         case dv: DenseVector =>
+          var hasExist = false
           val tmpv = dv.copy
           localVectorMap.foreach { case (featureIndex: Int, categoryMap: Map[Double, Int]) =>
-            tmpv.values(featureIndex) = categoryMap(tmpv(featureIndex))
+            try {
+              tmpv.values(featureIndex) = categoryMap(tmpv(featureIndex))
+            } catch {
+              case _: NoSuchElementException =>
+                localHandleInvalid match {
+                  case VectorIndexer.ERROR_INVALID =>
+                    throw new SparkException(exceptMsg)
+                  case VectorIndexer.KEEP_INVALID =>
+                    tmpv.values(featureIndex) = categoryMap.size
+                  case VectorIndexer.SKIP_INVALID =>
+                    hasExist = true
+                }
+            }
           }
-          tmpv
+          if (hasExist) null else tmpv
         case sv: SparseVector =>
           // We use the fact that categorical value 0 is always mapped to index 0.
+          var hasInvalid = false
           val tmpv = sv.copy
           var catFeatureIdx = 0 // index into sortedCatFeatureIndices
           var k = 0 // index into non-zero elements of sparse vector
@@ -337,12 +385,24 @@ class VectorIndexerModel private[ml] (
             } else if (featureIndex > tmpv.indices(k)) {
               k += 1
             } else {
-              tmpv.values(k) = localVectorMap(featureIndex)(tmpv.values(k))
+              try {
+                tmpv.values(k) = localVectorMap(featureIndex)(tmpv.values(k))
+              } catch {
+                case _: NoSuchElementException =>
+                  localHandleInvalid match {
+                    case VectorIndexer.ERROR_INVALID =>
+                      throw new SparkException(exceptMsg)
+                    case VectorIndexer.KEEP_INVALID =>
+                      tmpv.values(k) = localVectorMap(featureIndex).size
+                    case VectorIndexer.SKIP_INVALID =>
+                      hasInvalid = true
+                  }
+              }
               catFeatureIdx += 1
               k += 1
             }
           }
-          tmpv
+          if (hasInvalid) null else tmpv
       }
     }
     f
@@ -362,7 +422,12 @@ class VectorIndexerModel private[ml] (
     val newField = prepOutputField(dataset.schema)
     val transformUDF = udf { (vector: Vector) => transformFunc(vector) }
     val newCol = transformUDF(dataset($(inputCol)))
-    dataset.withColumn($(outputCol), newCol, newField.metadata)
+    val ds = dataset.withColumn($(outputCol), newCol, newField.metadata)
+    if (getHandleInvalid == VectorIndexer.SKIP_INVALID) {
+      ds.na.drop(Array($(outputCol)))
+    } else {
+      ds
+    }
   }
 
   @Since("1.4.0")
