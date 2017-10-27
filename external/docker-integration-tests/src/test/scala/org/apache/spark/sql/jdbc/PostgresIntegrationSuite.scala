@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.Connection
-import java.util.{Properties, UUID}
+import java.util.Properties
 
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -60,7 +60,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "(id integer, tstz TIMESTAMP WITH TIME ZONE, ttz TIME WITH TIME ZONE)")
       .executeUpdate()
     conn.prepareStatement("INSERT INTO ts_with_timezone VALUES " +
-      "(1, TIMESTAMP WITH TIME ZONE '2016-08-12 10:22:31.949271-07', TIME WITH TIME ZONE '17:22:31.949271+00')")
+      "(1, TIMESTAMP WITH TIME ZONE '2016-08-12 10:22:31.949271-07', " +
+      "TIME WITH TIME ZONE '17:22:31.949271+00')")
       .executeUpdate()
 
     conn.prepareStatement("CREATE TABLE arrtypes (c0 uuid[], c1 inet[], c2 cidr[]," +
@@ -145,7 +146,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(schema(1).dataType == ShortType)
   }
 
-  test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE should be recognized") {
+  test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
+    "should be recognized") {
     val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
     val rows = dfRead.collect()
     val types = rows(0).toSeq.map(x => x.getClass.toString)
