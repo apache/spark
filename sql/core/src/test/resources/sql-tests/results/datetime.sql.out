@@ -38,7 +38,7 @@ struct<dayofweek(CAST(2007-02-03 AS DATE)):int,dayofweek(CAST(2009-07-30 AS DATE
 create temporary view ttf1 as select * from values
   (1, 2),
   (2, 3)
-  as ttf1(current_date, current_timestamp);
+  as ttf1(current_date, current_timestamp)
 -- !query 4 schema
 struct<>
 -- !query 4 output
@@ -57,7 +57,7 @@ struct<current_date:int,current_timestamp:int>
 create temporary view ttf2 as select * from values
   (1, 2),
   (2, 3)
-  as ttf2(a, b);
+  as ttf2(a, b)
 -- !query 6 schema
 struct<>
 -- !query 6 output
