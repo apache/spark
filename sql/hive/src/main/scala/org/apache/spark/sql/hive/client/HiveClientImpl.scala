@@ -116,9 +116,11 @@ private[hive] class HiveClientImpl(
         throw new SparkException(s"Keytab file: ${keytabFileName}" +
           " specified in spark.yarn.keytab does not exist")
       } else {
+        logInfo(s"Old UGI(hashcode): ${UserGroupInformation.getCurrentUser.hashCode}")
         logInfo("Attempting to login to Kerberos" +
           s" using principal: ${principalName} and keytab: ${keytabFileName}")
         UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
+        logInfo(s"Session UGI(hashcode): ${UserGroupInformation.getCurrentUser.hashCode}")
       }
     }
 

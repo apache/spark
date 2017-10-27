@@ -32,6 +32,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hive.common.cli.HiveFileProcessor;
 import org.apache.hadoop.hive.common.cli.IHiveFileProcessor;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -47,6 +48,7 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.processors.SetProcessor;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.common.util.HiveVersionInfo;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.FetchOrientation;
@@ -565,6 +567,11 @@ public class HiveSessionImpl implements HiveSession {
       }
       try {
         sessionState.close();
+        if (hiveConf.get("spark.yarn.principal") != null &&
+          hiveConf.get("spark.yarn.keytab") != null) {
+          LOG.info("closeAllForUGI: " + UserGroupInformation.getCurrentUser().hashCode());
+          FileSystem.closeAllForUGI(UserGroupInformation.getCurrentUser());
+        }
       } finally {
         sessionState = null;
       }
