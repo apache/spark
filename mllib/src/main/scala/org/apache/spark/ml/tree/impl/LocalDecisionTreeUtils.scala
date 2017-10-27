@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.collection.BitSet
 
 /**
  * Utility methods specific to local decision tree training.
@@ -52,6 +53,51 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
     require(numFeatures > 0, "Local decision tree training requires numFeatures > 0.")
     // Return the transpose of the rowStore matrix
     rowStore.transpose
+  }
+
+  /**
+   * Reorders the subset of array values at indices [from, to)
+   * according to the split information encoded in instanceBitVector (values for rows
+   * that split left appear before feature values for rows that split right).
+   *
+   * @param numLeftRows Number of rows on the left side of the split
+   * @param tempVals Destination buffer for reordered feature values
+   * @param instanceBitVector instanceBitVector(i) = true if the row corresponding to the
+   *                          (from + i)th array value splits right, false otherwise
+   */
+  private[ml] def updateArrayForSplit(
+      values: Array[Int],
+      from: Int,
+      to: Int,
+      numLeftRows: Int,
+      tempVals: Array[Int],
+      instanceBitVector: BitSet): Unit = {
+
+    // BEGIN SORTING
+    // We sort the [from, to) slice of col based on instance bit.
+    // All instances going "left" in the split (which are false)
+    // should be ordered before the instances going "right". The instanceBitVector
+    // gives us the split bit value for each instance based on the instance's index.
+    // We copy our feature values into @tempVals and @tempIndices either:
+    // 1) in the [from, numLeftRows) range if the bit is false, or
+    // 2) in the [numLeftRows, to) range if the bit is true.
+    var (leftInstanceIdx, rightInstanceIdx) = (0, numLeftRows)
+    var idx = from
+    while (idx < to) {
+      val bit = instanceBitVector.get(idx - from)
+      if (bit) {
+        tempVals(rightInstanceIdx) = values(idx)
+        rightInstanceIdx += 1
+      } else {
+        tempVals(leftInstanceIdx) = values(idx)
+        leftInstanceIdx += 1
+      }
+      idx += 1
+    }
+    // END SORTING
+    // update the column values and indices
+    // with the corresponding indices
+    System.arraycopy(tempVals, 0, values, from, to - from)
   }
 
 }

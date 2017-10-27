@@ -23,13 +23,25 @@ import org.apache.spark.mllib.tree.model.ImpurityStats
 /** Helper methods for impurity-related calculations during node split decisions. */
 private[impl] object ImpurityUtils {
 
-  private[impl] def getImpurityAggregator(metadata: DecisionTreeMetadata): ImpurityAggregator = {
-    metadata.impurity match {
-      case Gini => new GiniAggregator(metadata.numClasses)
-      case Entropy => new EntropyAggregator(metadata.numClasses)
-      case Variance => new VarianceAggregator()
-      case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
-    }
+  /**
+   * Get impurity calculator containing statistics for all labels for rows corresponding to
+   * feature values in [from, to).
+   * @param indices indices(i) = row index corresponding to ith feature value
+   */
+  private[impl] def getParentImpurityCalculator(
+      metadata: DecisionTreeMetadata,
+      indices: Array[Int],
+      from: Int,
+      to: Int,
+      instanceWeights: Array[Double],
+      labels: Array[Double]): ImpurityCalculator = {
+    // Compute sufficient stats (e.g. label counts) for all data at the current node,
+    // store result in currNodeStatsAgg.parentStats so that we can share it across
+    // all features for the current node
+    val currNodeStatsAgg = new DTStatsAggregator(metadata, featureSubset = None)
+    AggUpdateUtils.updateParentImpurity(currNodeStatsAgg, indices, from, to,
+      instanceWeights, labels)
+    currNodeStatsAgg.getParentImpurityCalculator()
   }
 
   /**

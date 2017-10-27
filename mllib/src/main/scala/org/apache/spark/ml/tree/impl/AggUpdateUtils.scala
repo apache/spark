@@ -27,16 +27,18 @@ private[impl] object AggUpdateUtils {
   /**
    * Updates the parent node stats of the passed-in impurity aggregator with the labels
    * corresponding to the feature values at indices [from, to).
+   * @param indices Array of row indices for feature values; indices(i) = row index of the ith
+   *                feature value
    */
   private[impl] def updateParentImpurity(
       statsAggregator: DTStatsAggregator,
-      col: FeatureVector,
+      indices: Array[Int],
       from: Int,
       to: Int,
       instanceWeights: Array[Double],
       labels: Array[Double]): Unit = {
     from.until(to).foreach { idx =>
-      val rowIndex = col.indices(idx)
+      val rowIndex = indices(idx)
       val label = labels(rowIndex)
       statsAggregator.updateParent(label, instanceWeights(rowIndex))
     }

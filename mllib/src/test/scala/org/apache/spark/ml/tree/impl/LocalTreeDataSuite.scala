@@ -33,7 +33,7 @@ class LocalTreeDataSuite
     val vecLength = 100
     // Create a column of vecLength values
     val values = 0.until(vecLength).toArray
-    val col = FeatureVector(-1, 0, values)
+    val col = FeatureColumn(-1, values)
     // Pick a random subset of indices to split left
     val rng = new Random(seed = 42)
     val leftProb = 0.5
@@ -46,8 +46,8 @@ class LocalTreeDataSuite
     // Update column, compare new values to expected result
     val tempVals = new Array[Int](vecLength)
     val tempIndices = new Array[Int](vecLength)
-    col.updateForSplit(from = 0, to = vecLength, leftIdxs.length, tempVals, tempIndices,
-      instanceBitVector)
+    LocalDecisionTreeUtils.updateArrayForSplit(col.values, from = 0, to = vecLength,
+      leftIdxs.length, tempVals, instanceBitVector)
     assert(col.values.sameElements(expected))
   }
 
@@ -55,19 +55,10 @@ class LocalTreeDataSuite
   test("FeatureVector: constructor and deepCopy") {
     // Create a feature vector v, modify a deep copy of v, and check that
     // v itself was not modified
-    val v = new FeatureVector(1, 0, Array(1, 2, 3), Some(Array(1, 2, 0)))
+    val v = new FeatureColumn(1, Array(1, 2, 3))
     val vCopy = v.deepCopy()
     vCopy.values(0) = 1000
     assert(v.values(0) !== vCopy.values(0))
-
-    // Check that fromOriginal properly converts an Array representation
-    // of a feature vector to an equivalent FeatureVector
-    val original = Array(3, 1, 2)
-    val v2 = FeatureVector(1, 0, original)
-
-    val valsIndices = v.values.zip(v.indices).sortBy(_._2)
-    val otherValsIndices = v2.values.zip(v2.indices).sortBy(_._2)
-    assert(valsIndices.sameElements(otherValsIndices))
   }
 
   // Get common TrainingInfo for tests
@@ -77,11 +68,10 @@ class LocalTreeDataSuite
   private def getTrainingInfo(): TrainingInfo = {
     val numRows = 4
     // col1 is continuous features
-    val col1 = FeatureVector(featureIndex = 0, featureArity = 0, Array(3, 2, 0, 1))
+    val col1 = FeatureColumn(featureIndex = 0, Array(3, 2, 0, 1))
     // col2 is categorical features
     val catFeatureIdx = 1
-    val col2 = FeatureVector(featureIndex = catFeatureIdx, featureArity = 3,
-      values = Array(0, 0, 2, 1))
+    val col2 = FeatureColumn(featureIndex = catFeatureIdx, values = Array(0, 0, 2, 1))
 
     val nodeOffsets = Array((0, numRows))
     val activeNodes = Array(LearningNode.emptyNode(nodeIndex = -1))
@@ -91,6 +81,8 @@ class LocalTreeDataSuite
    // Check that TrainingInfo correctly updates node offsets, sorts column values during update()
   test("TrainingInfo.update(): correctness when splitting on continuous features") {
     // Get TrainingInfo
+    // Feature 0 (continuous): [3, 2, 0, 1]
+    // Feature 1 (categorical):[0, 0, 2, 1]
     val info = getTrainingInfo()
     val activeNodes = info.currentLevelActiveNodes
     val contFeatureIdx = 0
@@ -106,42 +98,46 @@ class LocalTreeDataSuite
 
     assert(newInfo.columns.length === 2)
     // Continuous split should send feature values [0, 1] to the left, [3, 2] to the right
-    val expectedContCol = new FeatureVector(0, 0, values = Array(0, 1, 3, 2),
-      rowIndices = Some(Array(2, 3, 0, 1)))
-    val expectedCatCol = new FeatureVector(1, 3, values = Array(2, 1, 0, 0),
-      rowIndices = Some(Array(2, 3, 0, 1)))
+    // ==> row indices (2, 3) should split left, row indices (0, 1) should split right
+    val expectedContCol = new FeatureColumn(0, values = Array(0, 1, 3, 2))
+    val expectedCatCol = new FeatureColumn(1, values = Array(2, 1, 0, 0))
+    val expectedIndices = Array(2, 3, 0, 1)
     assert(newInfo.columns(0) === expectedContCol)
     assert(newInfo.columns(1) === expectedCatCol)
+    assert(newInfo.indices === expectedIndices)
     // Check that node offsets were updated properly
     assert(newInfo.nodeOffsets === Array((0, 2), (2, 4)))
   }
 
   test("TrainingInfo.update(): correctness when splitting on categorical features") {
     // Get TrainingInfo
+    // Feature 0 (continuous): [3, 2, 0, 1]
+    // Feature 1 (categorical):[0, 0, 2, 1]
     val info = getTrainingInfo()
     val activeNodes = info.currentLevelActiveNodes
-    val catFeatureIdx = 0
+    val catFeatureIdx = 1
 
-    // For categorical feature, active node puts categories (1, 2) on left side of split
+    // For categorical feature, active node puts category 2 on left side of split
     val catNode = activeNodes(0)
-    val catSplit = new CategoricalSplit(catFeatureIdx,
-      _leftCategories = Array(1, 2), numCategories = 3)
+    val catSplit = new CategoricalSplit(catFeatureIdx, _leftCategories = Array(2),
+      numCategories = 3)
     catNode.split = Some(catSplit)
 
     // Update TrainingInfo for categorical split
-    val contValues = info.columns(catFeatureIdx).values
-    val newInfo = info.update(splits = Array(Array(catSplit)), newActiveNodes = Array(catNode))
+    val splits: Array[Array[Split]] = Array(Array.empty, Array(catSplit))
+    val newInfo = info.update(splits, newActiveNodes = Array(catNode))
 
     assert(newInfo.columns.length === 2)
-    // Categorical split should send feature values [1, 2] to the left, [0, 0] to the right
-    val expectedContCol = new FeatureVector(0, 0, values = Array(3, 2, 1, 0),
-      rowIndices = Some(Array(0, 1, 3, 2)))
-    val expectedCatCol = new FeatureVector(1, 3, values = Array(0, 0, 1, 2),
-      rowIndices = Some(Array(0, 1, 3, 2)))
+    // Categorical split should send feature values [2] to the left, [0, 1] to the right
+    // ==> row 2 should split left, rows [0, 1, 3] should split right
+    val expectedContCol = new FeatureColumn(0, values = Array(0, 3, 2, 1))
+    val expectedCatCol = new FeatureColumn(1, values = Array(2, 0, 0, 1))
+    val expectedIndices = Array(2, 0, 1, 3)
     assert(newInfo.columns(0) === expectedContCol)
     assert(newInfo.columns(1) === expectedCatCol)
+    assert(newInfo.indices === expectedIndices)
     // Check that node offsets were updated properly
-    assert(newInfo.nodeOffsets === Array((0, 3), (3, 4)))
+    assert(newInfo.nodeOffsets === Array((0, 1), (1, 4)))
   }
 
   private def getSetBits(bitset: BitSet): Set[Int] = {
@@ -153,7 +149,7 @@ class LocalTreeDataSuite
     val thresholds = Array(1, 2, 4, 6, 7)
     val values = thresholds.indices.toArray
     val splits = LocalTreeTests.getContinuousSplits(thresholds, featureIndex)
-    val col = FeatureVector(0, 0, values)
+    val col = FeatureColumn(0, values)
     val fromOffset = 0
     val toOffset = col.values.length
     val numRows = toOffset
@@ -172,8 +168,7 @@ class LocalTreeDataSuite
     val thresholds = Array(1, 2, 4, 6, 7)
     val values = thresholds.indices.toArray
     val splits = LocalTreeTests.getContinuousSplits(thresholds, featureIndex = 0)
-    val col = new FeatureVector(0, 0, values,
-      Some(Array(4, 2, 0, 1, 3)))
+    val col = new FeatureColumn(0, values)
 
     /**
      * Computes a bitset for splitting rows in with indices in [fromOffset, toOffset) using a

@@ -33,18 +33,19 @@ class TreeSplitUtilsSuite
    * with the data from the specified training points.
    */
   private def getAggregator(
-      metadata: DecisionTreeMetadata,
-      col: FeatureVector,
-      from: Int,
-      to: Int,
-      labels: Array[Double],
-      featureSplits: Array[Split]): DTStatsAggregator = {
+                             metadata: DecisionTreeMetadata,
+                             col: FeatureColumn,
+                             from: Int,
+                             to: Int,
+                             labels: Array[Double],
+                             featureSplits: Array[Split]): DTStatsAggregator = {
 
     val statsAggregator = new DTStatsAggregator(metadata, featureSubset = None)
     val instanceWeights = Array.fill[Double](col.values.length)(1.0)
-    AggUpdateUtils.updateParentImpurity(statsAggregator, col, from, to, instanceWeights, labels)
-    LocalDecisionTree.updateAggregator(statsAggregator, col, instanceWeights, labels, from, to,
-      col.featureIndex, featureSplits)
+    val indices = col.values.indices.toArray
+    AggUpdateUtils.updateParentImpurity(statsAggregator, indices, from, to, instanceWeights, labels)
+    LocalDecisionTree.updateAggregator(statsAggregator, col, indices, instanceWeights, labels,
+      from, to, col.featureIndex, featureSplits)
     statsAggregator
   }
 
@@ -72,8 +73,7 @@ class TreeSplitUtilsSuite
   test("chooseSplit: choose correct type of split (continuous split)") {
     // Construct (binned) continuous data
     val labels = Array(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0)
-    val col = FeatureVector(featureIndex = 0, featureArity = 0,
-      values = Array(8, 1, 1, 2, 3, 5, 6))
+    val col = FeatureColumn(featureIndex = 0, values = Array(8, 1, 1, 2, 3, 5, 6))
     // Get an array of continuous splits corresponding to values in our binned data
     val splits = LocalTreeTests.getContinuousSplits(1.to(8).toArray, featureIndex = 0)
     // Construct DTStatsAggregator, compute sufficient stats
@@ -92,7 +92,7 @@ class TreeSplitUtilsSuite
     val featureIndex = 0
     val featureArity = 3
     val values = Array(0, 0, 1, 1, 1, 2, 2)
-    val col = FeatureVector(featureIndex, featureArity, values)
+    val col = FeatureColumn(featureIndex, values)
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = 7,
       numFeatures = 1, numClasses = 2, Map(featureIndex -> featureArity))
@@ -117,8 +117,7 @@ class TreeSplitUtilsSuite
       // Construct FeatureVector to store categorical data
       val featureArity = values.max + 1
       val arityMap = Map[Int, Int](featureIndex -> featureArity)
-      val col = FeatureVector(featureIndex = 0, featureArity = featureArity,
-        values = values)
+      val col = FeatureColumn(featureIndex = 0, values = values)
       // Construct DTStatsAggregator, compute sufficient stats
       val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
         numClasses = 2, arityMap, unorderedFeatures = Some(Set.empty))
@@ -157,7 +156,7 @@ class TreeSplitUtilsSuite
     val values = Array(0, 0, 1, 2, 2, 2, 2)
     val featureArity = values.max + 1
     val labels = Array(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
-    val col = FeatureVector(featureIndex, featureArity, values)
+    val col = FeatureColumn(featureIndex, values)
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 2, Map(featureIndex -> featureArity), unorderedFeatures = Some(Set.empty))
@@ -178,7 +177,7 @@ class TreeSplitUtilsSuite
     val values = Array(1, 1, 0, 2, 2)
     val featureArity = values.max + 1
     val labels = Array(0.0, 0.0, 1.0, 1.0, 2.0)
-    val col = FeatureVector(featureIndex, featureArity, values)
+    val col = FeatureColumn(featureIndex, values)
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 3, Map(featureIndex -> featureArity))
@@ -209,7 +208,7 @@ class TreeSplitUtilsSuite
     val featureArity = 4
     val values = Array(3, 1, 0, 2, 2)
     val labels = Array(1.0, 1.0, 1.0, 1.0, 1.0)
-    val col = FeatureVector(featureIndex, featureArity, values)
+    val col = FeatureColumn(featureIndex, values)
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 2, Map(featureIndex -> featureArity))
@@ -228,8 +227,7 @@ class TreeSplitUtilsSuite
     val thresholds = Array(0, 1, 2, 3)
     val values = thresholds.indices.toArray
     val labels = Array(0.0, 0.0, 1.0, 1.0)
-    val col = FeatureVector(featureIndex = featureIndex,
-      featureArity = 0, values = values)
+    val col = FeatureColumn(featureIndex = featureIndex, values = values)
 
     // Construct DTStatsAggregator, compute sufficient stats
     val splits = LocalTreeTests.getContinuousSplits(thresholds, featureIndex)
@@ -259,7 +257,7 @@ class TreeSplitUtilsSuite
     val thresholds = Array(0, 1, 2, 3)
     val values = thresholds.indices.toArray
     val labels = Array(0.0, 0.0, 0.0, 0.0, 0.0)
-    val col = FeatureVector(featureIndex = featureIndex, featureArity = 0, values = values)
+    val col = FeatureColumn(featureIndex = featureIndex, values = values)
     // Construct DTStatsAggregator, compute sufficient stats
     val splits = LocalTreeTests.getContinuousSplits(thresholds, featureIndex)
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,

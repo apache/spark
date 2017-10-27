@@ -33,23 +33,26 @@ import org.apache.spark.util.collection.BitSet
  * @param columns  Array of columns.
  *                 Each column is sorted first by nodes (left-to-right along the tree periphery);
  *                 all columns share this first level of sorting.
- *                 Within each node's group, each column is sorted based on feature value;
- *                 this second level of sorting differs across columns.
  * @param nodeOffsets  Offsets into the columns indicating the first level of sorting (by node).
  *                     The rows corresponding to the node activeNodes(i) are in the range
  *                     [nodeOffsets(i)(0), nodeOffsets(i)(1)) .
- * @param currentLevelActiveNodes  Nodes which are active (still being split).
+ * @param currentLevelActiveNodes  Nodes which are active (could still be split).
  *                                 Inactive nodes are known to be leaves in the final tree.
  */
 private[impl] case class TrainingInfo(
-    columns: Array[FeatureVector],
+    columns: Array[FeatureColumn],
     nodeOffsets: Array[(Int, Int)],
-    currentLevelActiveNodes: Array[LearningNode]) extends Serializable {
+    currentLevelActiveNodes: Array[LearningNode],
+    rowIndices: Option[Array[Int]] = None) extends Serializable {
 
   // pre-allocated temporary buffers that we use to sort
   // instances in left and right children during update
-  val tempVals: Array[Int] = new Array[Int](columns(0).values.length)
-  val tempIndices: Array[Int] = new Array[Int](columns(0).values.length)
+  val tempVals: Array[Int] = new Array[Int](columns.head.values.length)
+
+  // Array of row indices for feature values, shared across all columns.
+  // For each column (col) in [[columns]], col(j) is the feature value corresponding to the row
+  // with index indices(j).
+  val indices: Array[Int] = rowIndices.getOrElse(columns.head.values.indices.toArray)
 
   /** For debugging */
   override def toString: String = {
@@ -83,7 +86,7 @@ private[impl] case class TrainingInfo(
     while (nodeIdx < currentLevelActiveNodes.length) {
       val node = currentLevelActiveNodes(nodeIdx)
       // Get new active node offsets from active nodes that were split
-      if (node.split.isDefined) {
+      if (!node.isLeaf) {
         // Get split and FeatureVector corresponding to feature for split
         val split = node.split.get
         val col = columns(split.featureIndex)
@@ -95,10 +98,14 @@ private[impl] case class TrainingInfo(
         // Allocate shared temp buffers (shared across all columns) for reordering
         // feature values/indices for current node.
         val tempVals = new Array[Int](numRows)
-        val tempIndices = new Array[Int](numRows)
         val numLeftRows = numRows - bitset.cardinality()
-        columns.foreach(_.updateForSplit(from, to, numLeftRows, tempVals, tempIndices, bitset))
-
+        // Reorder values for each column
+        columns.foreach { col =>
+          LocalDecisionTreeUtils.updateArrayForSplit(col.values, from, to, numLeftRows, tempVals,
+            bitset)
+        }
+        // Reorder indices (shared across all columns)
+        LocalDecisionTreeUtils.updateArrayForSplit(indices, from, to, numLeftRows, tempVals, bitset)
         // Add new node offsets to array
         val leftIndices = (from, from + numLeftRows)
         val rightIndices = (from + numLeftRows, to)
@@ -106,7 +113,7 @@ private[impl] case class TrainingInfo(
       }
       nodeIdx += 1
     }
-    TrainingInfo(columns, newNodeOffsets.toArray, newActiveNodes)
+    TrainingInfo(columns, newNodeOffsets.toArray, newActiveNodes, Some(indices))
   }
 
 }
@@ -126,11 +133,11 @@ private[impl] object TrainingInfo {
    *          bitset(i) = true if ith example for current node splits right, false otherwise.
    */
   private[impl] def bitSetFromSplit(
-      col: FeatureVector,
-      from: Int,
-      to: Int,
-      split: Split,
-      featureSplits: Array[Split]): BitSet = {
+                                     col: FeatureColumn,
+                                     from: Int,
+                                     to: Int,
+                                     split: Split,
+                                     featureSplits: Array[Split]): BitSet = {
     val bitset = new BitSet(to - from)
     from.until(to).foreach { i =>
       if (!split.shouldGoLeft(col.values(i), featureSplits)) {

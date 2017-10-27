@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.ml.tree._
+import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 
 /** Object exposing methods for local training of decision trees */
@@ -84,9 +85,9 @@ private[ml] object LocalDecisionTree {
       splits: Array[Array[Split]]): Node = {
 
     // Sort each column by decision tree node.
-    val colStore: Array[FeatureVector] = colStoreInit.zipWithIndex.map { case (col, featureIndex) =>
+    val colStore: Array[FeatureColumn] = colStoreInit.zipWithIndex.map { case (col, featureIndex) =>
       val featureArity: Int = metadata.featureArity.getOrElse(featureIndex, 0)
-      FeatureVector(featureIndex, featureArity, col)
+      FeatureColumn(featureIndex, col)
     }
 
     val numRows = colStore.headOption match {
@@ -129,7 +130,8 @@ private[ml] object LocalDecisionTree {
    */
   private[impl] def updateAggregator(
       statsAggregator: DTStatsAggregator,
-      col: FeatureVector,
+      col: FeatureColumn,
+      indices: Array[Int],
       instanceWeights: Array[Double],
       labels: Array[Double],
       from: Int,
@@ -139,14 +141,14 @@ private[ml] object LocalDecisionTree {
     val metadata = statsAggregator.metadata
     if (metadata.isUnordered(col.featureIndex)) {
       from.until(to).foreach { idx =>
-        val rowIndex = col.indices(idx)
+        val rowIndex = indices(idx)
         AggUpdateUtils.updateUnorderedFeature(statsAggregator, col.values(idx), labels(rowIndex),
           featureIndex = col.featureIndex, featureIndexIdx, featureSplits,
           instanceWeight = instanceWeights(rowIndex))
       }
     } else {
       from.until(to).foreach { idx =>
-        val rowIndex = col.indices(idx)
+        val rowIndex = indices(idx)
         AggUpdateUtils.updateOrderedFeature(statsAggregator, col.values(idx), labels(rowIndex),
           featureIndex = col.featureIndex, featureIndexIdx,
           instanceWeight = instanceWeights(rowIndex))
@@ -168,34 +170,33 @@ private[ml] object LocalDecisionTree {
       splits: Array[Array[Split]]): Array[LearningNode] = {
     // For each node, select the best split across all features
     trainingInfo match {
-      case TrainingInfo(columns: Array[FeatureVector],
-      nodeOffsets: Array[(Int, Int)], activeNodes: Array[LearningNode]) => {
+      case TrainingInfo(columns: Array[FeatureColumn], nodeOffsets: Array[(Int, Int)],
+        currentLevelActiveNodes: Array[LearningNode], _) => {
         // Filter out leaf nodes from the previous iteration
-        val activeNonLeafs = activeNodes.zipWithIndex.filterNot(_._1.isLeaf)
+        val activeNonLeafs = currentLevelActiveNodes.zipWithIndex.filterNot(_._1.isLeaf)
         // Iterate over the active nodes in the current level.
         activeNonLeafs.flatMap { case (node: LearningNode, nodeIndex: Int) =>
           // Features for the current node start at fromOffset and end at toOffset
           val (from, to) = nodeOffsets(nodeIndex)
-          // Compute sufficient stats (e.g. label counts) for all data at the current node,
-          // store result in currNodeStatsAgg.parentStats so that we can share it across
-          // all features for the current node
-          val currNodeStatsAgg = new DTStatsAggregator(metadata, featureSubset = None)
-          AggUpdateUtils.updateParentImpurity(currNodeStatsAgg, columns(0), from, to,
-            instanceWeights, labels)
+          // Get impurityCalculator containing label stats for all data points at the current node
+          val parentImpurityCalc = ImpurityUtils.getParentImpurityCalculator(metadata,
+            trainingInfo.indices, from, to, instanceWeights, labels)
           val validFeatureSplits = RandomForest.getNonConstantFeatures(metadata,
             featuresForNode = None)
-          // Compute sufficient stats for each feature/bin at the current node
+          // Find the best split for each feature for the current node
           val splitsAndImpurityInfo = validFeatureSplits.map { case (_, featureIndex) =>
             val col = columns(featureIndex)
-            val statsAggregator = new DTStatsAggregator(metadata,
-              featureSubset = Some(Array(featureIndex)))
-            updateAggregator(statsAggregator, col, instanceWeights, labels, from, to,
-              featureIndexIdx = 0, splits(col.featureIndex))
+            // Create a DTStatsAggregator to hold label statistics for each bin of the current
+            // feature & compute said label statistics
+            val statsAggregator = new DTStatsAggregator(metadata, Some(Array(featureIndex)))
+            updateAggregator(statsAggregator, col, trainingInfo.indices, instanceWeights,
+              labels, from, to, featureIndexIdx = 0, splits(col.featureIndex))
+            // Choose best split for current feature based on label statistics
             SplitUtils.chooseSplit(statsAggregator, featureIndex, featureIndexIdx = 0,
-              splits(featureIndex), Some(currNodeStatsAgg.getParentImpurityCalculator()))
+              splits(featureIndex), Some(parentImpurityCalc))
           }
-          val (bestSplit, bestStats) = RandomForest.getBestSplitByGain(
-            currNodeStatsAgg.getParentImpurityCalculator(), metadata,
+          // Find the best split overall (across all features) for the current node
+          val (bestSplit, bestStats) = RandomForest.getBestSplitByGain(parentImpurityCalc, metadata,
             featuresForNode = None, splitsAndImpurityInfo)
           // Split current node, get an iterator over its children
           splitIfPossible(node, metadata, bestStats, bestSplit)
