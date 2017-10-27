@@ -50,7 +50,138 @@ object InMemoryRelation {
  * @param stats The stat of columns
  */
 private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: Option[InternalRow])
+
+private[columnar] class CachedPartitionIterator(
+    rowIterator: Iterator[InternalRow],
+    output: Seq[Attribute],
+    batchSize: Int,
+    useCompression: Boolean,
+    batchStats: LongAccumulator) extends Iterator[(CachedBatch, InternalRow)] {
+
+  def next(): (CachedBatch, InternalRow) = {
+    val columnBuilders = output.map { attribute =>
+      ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
+    }.toArray
+
+    var rowCount = 0
+    var totalSize = 0L
+    while (rowIterator.hasNext) {
+      val row = rowIterator.next()
+
+      // Added for SPARK-6082. This assertion can be useful for scenarios when something
+      // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
+      // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
+      // hard to decipher.
+      assert(
+        row.numFields == columnBuilders.length,
+        s"Row column number mismatch, expected ${output.size} columns, " +
+          s"but got ${row.numFields}." +
+          s"\nRow content: $row")
+
+      var i = 0
+      totalSize = 0
+      while (i < row.numFields) {
+        columnBuilders(i).appendFrom(row, i)
+        totalSize += columnBuilders(i).columnStats.sizeInBytes
+        i += 1
+      }
+      rowCount += 1
+    }
+
+    batchStats.add(totalSize)
+    val stats = InternalRow.fromSeq(columnBuilders.flatMap(_.columnStats.collectedStatistics))
+    (CachedBatch(rowCount, columnBuilders.map { builder =>
+      JavaUtils.bufferToArray(builder.build())
+    }, None), stats)
+    /*
+    while (rowIterator.hasNext && rowCount < batchSize
+      && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
+      val row = rowIterator.next()
+
+      // Added for SPARK-6082. This assertion can be useful for scenarios when something
+      // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
+      // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
+      // hard to decipher.
+      assert(
+        row.numFields == columnBuilders.length,
+        s"Row column number mismatch, expected ${output.size} columns, " +
+          s"but got ${row.numFields}." +
+          s"\nRow content: $row")
+
+      var i = 0
+      totalSize = 0
+      while (i < row.numFields) {
+        columnBuilders(i).appendFrom(row, i)
+        totalSize += columnBuilders(i).columnStats.sizeInBytes
+        i += 1
+      }
+      rowCount += 1
+    }
+
+    batchStats.add(totalSize)
+
+    val stats = InternalRow.fromSeq(
+      columnBuilders.flatMap(_.columnStats.collectedStatistics))
+    CachedBatch(rowCount, columnBuilders.map { builder =>
+      JavaUtils.bufferToArray(builder.build())
+    }, stats)
+    */
+  }
+
+  def hasNext: Boolean = rowIterator.hasNext
+}
+
+private[columnar] class CachedBatchIterator(
+    rowIterator: Iterator[InternalRow],
+    output: Seq[Attribute],
+    batchSize: Int,
+    useCompression: Boolean,
+    batchStats: LongAccumulator) extends Iterator[CachedBatch] {
+
+    def next(): CachedBatch = {
+      val columnBuilders = output.map { attribute =>
+        ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
+      }.toArray
+
+      var rowCount = 0
+      var totalSize = 0L
+
+      while (rowIterator.hasNext && rowCount < batchSize
+        && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
+        val row = rowIterator.next()
+
+        // Added for SPARK-6082. This assertion can be useful for scenarios when something
+        // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
+        // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
+        // hard to decipher.
+        assert(
+          row.numFields == columnBuilders.length,
+          s"Row column number mismatch, expected ${output.size} columns, " +
+            s"but got ${row.numFields}." +
+            s"\nRow content: $row")
+
+        var i = 0
+        totalSize = 0
+        while (i < row.numFields) {
+          columnBuilders(i).appendFrom(row, i)
+          totalSize += columnBuilders(i).columnStats.sizeInBytes
+          i += 1
+        }
+        rowCount += 1
+      }
+
+      batchStats.add(totalSize)
+
+      val stats = InternalRow.fromSeq(
+        columnBuilders.flatMap(_.columnStats.collectedStatistics))
+      CachedBatch(rowCount, columnBuilders.map { builder =>
+        JavaUtils.bufferToArray(builder.build())
+      }, Some(stats))
+    }
+
+    def hasNext: Boolean = rowIterator.hasNext
+}
 
 case class InMemoryRelation(
     output: Seq[Attribute],
@@ -68,6 +199,8 @@ case class InMemoryRelation(
   override def producedAttributes: AttributeSet = outputSet
 
   @transient val partitionStatistics = new PartitionStatistics(output)
+
+  private val usePartitionLevelMetadata = conf.inMemoryPartitionMetadata
 
   override def computeStats(): Statistics = {
     if (batchStats.value == 0L) {
@@ -87,56 +220,29 @@ case class InMemoryRelation(
 
   private def buildBuffers(): Unit = {
     val output = child.output
-    val cached = child.execute().mapPartitionsInternal { rowIterator =>
-      new Iterator[CachedBatch] {
-        def next(): CachedBatch = {
-          val columnBuilders = output.map { attribute =>
-            ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
-          }.toArray
 
-          var rowCount = 0
-          var totalSize = 0L
-          while (rowIterator.hasNext && rowCount < batchSize
-            && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
-            val row = rowIterator.next()
-
-            // Added for SPARK-6082. This assertion can be useful for scenarios when something
-            // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
-            // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
-            // hard to decipher.
-            assert(
-              row.numFields == columnBuilders.length,
-              s"Row column number mismatch, expected ${output.size} columns, " +
-                s"but got ${row.numFields}." +
-                s"\nRow content: $row")
-
-            var i = 0
-            totalSize = 0
-            while (i < row.numFields) {
-              columnBuilders(i).appendFrom(row, i)
-              totalSize += columnBuilders(i).columnStats.sizeInBytes
-              i += 1
-            }
-            rowCount += 1
-          }
-
-          batchStats.add(totalSize)
-
-          val stats = InternalRow.fromSeq(
-            columnBuilders.flatMap(_.columnStats.collectedStatistics))
-          CachedBatch(rowCount, columnBuilders.map { builder =>
-            JavaUtils.bufferToArray(builder.build())
-          }, stats)
-        }
-
-        def hasNext: Boolean = rowIterator.hasNext
+    // TODO:
+    val batchedRDD = child.execute().mapPartitionsInternal { rowIterator =>
+      if (!usePartitionLevelMetadata) {
+        new CachedBatchIterator(rowIterator, output, batchSize, useCompression, batchStats)
+      } else {
+        new CachedPartitionIterator(rowIterator, output, batchSize, useCompression, batchStats)
       }
-    }.persist(storageLevel)
+    }
+
+    val cached = if (!usePartitionLevelMetadata) {
+      batchedRDD.persist(storageLevel)
+    } else {
+      val r = batchedRDD.map(_.asInstanceOf[(CachedBatch, InternalRow)])
+      val partitionLevelStats = r.map(_._2).collect()
+      new CachedColumnarRDD(batchedRDD.sparkContext, batchedRDD.dependencies, r.map(_._1),
+        partitionLevelStats)
+    }
 
     cached.setName(
       tableName.map(n => s"In-memory table $n")
         .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
-    _cachedColumnBuffers = cached
+    _cachedColumnBuffers = cached.asInstanceOf[RDD[CachedBatch]]
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {

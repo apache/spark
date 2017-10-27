@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -200,30 +201,46 @@ case class InMemoryTableScanExec(
     val schemaIndex = schema.zipWithIndex
     val buffers = relation.cachedColumnBuffers
 
-    buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
-      val partitionFilter = newPredicate(
-        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-        schema)
-      partitionFilter.initialize(index)
-
-      // Do partition batch pruning if enabled
-      if (inMemoryPartitionPruningEnabled) {
-        cachedBatchIterator.filter { cachedBatch =>
-          if (!partitionFilter.eval(cachedBatch.stats)) {
-            logDebug {
-              val statsString = schemaIndex.map { case (a, i) =>
-                val value = cachedBatch.stats.get(i, a.dataType)
-                s"${a.name}: $value"
-              }.mkString(", ")
-              s"Skipping partition based on stats $statsString"
-            }
-            false
-          } else {
-            true
-          }
+    if (sqlContext.conf.inMemoryPartitionMetadata) {
+      val cachedColumnarRDD = buffers.asInstanceOf[CachedColumnarRDD]
+      val partitions = cachedColumnarRDD.partitions.map(_.asInstanceOf[CachedColumnarRDDPartition])
+      buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
+        val partitionFilter = newPredicate(
+          partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+          schema)
+        partitionFilter.initialize(index)
+        if (!partitionFilter.eval(partitions(index).columnStats)) {
+          Iterator()
+        } else {
+          cachedBatchIterator
         }
-      } else {
-        cachedBatchIterator
+      }
+    } else {
+      buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
+        val partitionFilter = newPredicate(
+          partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+          schema)
+        partitionFilter.initialize(index)
+
+        // Do partition batch pruning if enabled
+        if (inMemoryPartitionPruningEnabled) {
+          cachedBatchIterator.filter { cachedBatch =>
+            if (!partitionFilter.eval(cachedBatch.stats.get)) {
+              logDebug {
+                val statsString = schemaIndex.map { case (a, i) =>
+                  val value = cachedBatch.stats.get.get(i, a.dataType)
+                  s"${a.name}: $value"
+                }.mkString(", ")
+                s"Skipping partition based on stats $statsString"
+              }
+              false
+            } else {
+              true
+            }
+          }
+        } else {
+          cachedBatchIterator
+        }
       }
     }
   }

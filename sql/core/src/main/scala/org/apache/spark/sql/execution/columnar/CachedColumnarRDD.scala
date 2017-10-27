@@ -25,25 +25,25 @@ import org.apache.spark.sql.catalyst.InternalRow
 
 private[columnar] class CachedColumnarRDDPartition(
     partitionIndex: Int,
-    columnnStats: Array[InternalRow]) extends Partition {
+    columnnStats: InternalRow) extends Partition {
 
   override def index: Int = partitionIndex
 
-  def columnStats: Array[InternalRow] = columnnStats
+  def columnStats: InternalRow = columnnStats
 }
 
-private[columnar] class CachedColumnarRDD[T: ClassTag](
+private[columnar] class CachedColumnarRDD(
     @transient private var _sc: SparkContext,
     @transient private var deps: Seq[Dependency[_]],
-    dataRDD: RDD[T],
-    partitionStats: Array[Array[InternalRow]]) extends RDD[T](_sc, deps) {
+    dataRDD: RDD[CachedBatch],
+    partitionStats: Array[InternalRow]) extends RDD[CachedBatch](_sc, deps) {
 
   /**
    * :: DeveloperApi ::
    * Implemented by subclasses to compute a given partition.
    */
-  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
-    Iterator()
+  override def compute(split: Partition, context: TaskContext): Iterator[CachedBatch] = {
+    dataRDD.iterator(split, context)
   }
 
   /**
