@@ -38,6 +38,10 @@ sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkRTestMaster <- "local[1]"
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   sparkRTestMaster <- ""
+} else {
+  # Disable hsperfdata on CRAN
+  old_java_opt <- Sys.getenv("_JAVA_OPTIONS")
+  Sys.setenv("_JAVA_OPTIONS"=paste("-XX:-UsePerfData", old_java_opt, sep=" "))
 }
 
 test_package("SparkR")

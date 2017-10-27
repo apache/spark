@@ -18,7 +18,11 @@
 context("basic tests for CRAN")
 
 test_that("create DataFrame from list or data.frame", {
-  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
+  r_tmp_dir <- tempdir()
+  tmp_arg <- paste("-Djava.io.tmpdir=", r_tmp_dir, sep = "")
+  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE,
+                 sparkConfig = list(spark.driver.extraJavaOptions = tmp_arg,
+                                    spark.executor.extraJavaOptions = tmp_arg))
 
   i <- 4
   df <- createDataFrame(data.frame(dummy = 1:i))
@@ -49,7 +53,11 @@ test_that("create DataFrame from list or data.frame", {
 })
 
 test_that("spark.glm and predict", {
-  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
+  r_tmp_dir <- tempdir()
+  tmp_arg <- paste("-Djava.io.tmpdir=", r_tmp_dir, sep = "")
+  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE,
+                 sparkConfig = list(spark.driver.extraJavaOptions = tmp_arg,
+                                    spark.executor.extraJavaOptions = tmp_arg))
 
   training <- suppressWarnings(createDataFrame(iris))
   # gaussian family
