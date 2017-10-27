@@ -315,14 +315,14 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     } else {
       ""
     }
-    ctx.addMutableState(setName, setTerm,
+    val setTermAccessor = ctx.addMutableState(setName, setTerm,
       s"$setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();")
     ev.copy(code = s"""
       ${childGen.code}
       boolean ${ev.isNull} = ${childGen.isNull};
       boolean ${ev.value} = false;
       if (!${ev.isNull}) {
-        ${ev.value} = $setTerm.contains(${childGen.value});
+        ${ev.value} = $setTermAccessor.contains(${childGen.value});
         $setNull
       }
      """)

@@ -63,35 +63,35 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
         if (e.nullable) {
           val isNull = s"isNull_$i"
           val value = s"value_$i"
-          ctx.addMutableState("boolean", isNull, s"$isNull = true;")
-          ctx.addMutableState(ctx.javaType(e.dataType), value,
+          val isNullAccessor = ctx.addMutableState("boolean", isNull, s"$isNull = true;")
+          val valueAccessor = ctx.addMutableState(ctx.javaType(e.dataType), value,
             s"$value = ${ctx.defaultValue(e.dataType)};")
-          s"""
+          (s"""
             ${ev.code}
-            $isNull = ${ev.isNull};
-            $value = ${ev.value};
-           """
+            $isNullAccessor = ${ev.isNull};
+            $valueAccessor = ${ev.value};
+           """, isNullAccessor, valueAccessor, i)
         } else {
           val value = s"value_$i"
-          ctx.addMutableState(ctx.javaType(e.dataType), value,
+          val valueAccessor = ctx.addMutableState(ctx.javaType(e.dataType), value,
             s"$value = ${ctx.defaultValue(e.dataType)};")
-          s"""
+          (s"""
             ${ev.code}
-            $value = ${ev.value};
-           """
+            $valueAccessor = ${ev.value};
+           """, ev.isNull, valueAccessor, i)
         }
     }
 
     // Evaluate all the subexpressions.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
-    val updates = validExpr.zip(index).map {
-      case (e, i) =>
-        val ev = ExprCode("", s"isNull_$i", s"value_$i")
+    val updates = validExpr.zip(projectionCodes).map {
+      case (e, (_, isNullAccessor, valueAccessor, i)) =>
+        val ev = ExprCode("", s"$isNullAccessor", s"$valueAccessor")
         ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
     }
 
-    val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
+    val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes.map(_._1))
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
     val codeBody = s"""

@@ -136,7 +136,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           return 0;
         """
       },
-      foldFunctions = { funCalls =>
+      transformFunctions = { funCalls =>
         funCalls.zipWithIndex.map { case (funCall, i) =>
           val comp = ctx.freshName("comp")
           s"""
@@ -145,7 +145,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
               return $comp;
             }
           """
-        }.mkString
+        }
       })
     // make sure INPUT_ROW is declared even if splitExpressions
     // returns an inlined block

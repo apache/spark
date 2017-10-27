@@ -113,8 +113,9 @@ class CodegenContext {
     val idx = references.length
     references += obj
     val clsName = Option(className).getOrElse(obj.getClass.getName)
-    addMutableState(clsName, term, s"$term = ($clsName) references[$idx];")
-    term
+    val termAccessor = addMutableState(clsName, term, s"$term = ($clsName) references[$idx];")
+
+    termAccessor
   }
 
   /**
@@ -148,12 +149,93 @@ class CodegenContext {
    *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
    */
-  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
-    mutable.ArrayBuffer.empty[(String, String, String)]
+  val mutableStates: mutable.ListBuffer[(String, String, String)] =
+    mutable.ListBuffer.empty[(String, String, String)]
 
-  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
-    mutableStates += ((javaType, variableName, initCode))
+  // An array keyed by the tuple of mutable states' types and initialization code, holds the
+  // current max index of the array
+  var mutableStateArrayIdx: mutable.Map[(String, String), Int] =
+    mutable.Map.empty[(String, String), Int]
+
+  // An array keyed by the tuple of mutable states' types and initialization code, holds the name
+  // of the mutableStateArray into which state of the given key will be compacted
+  var mutableStateArrayNames: mutable.Map[(String, String), String] =
+    mutable.Map.empty[(String, String), String]
+
+  // An array keyed by the tuple of mutable states' types and initialization code, holds the code
+  // that will initialize the mutableStateArray when initialized in loops
+  var mutableStateArrayInitCodes: mutable.Map[(String, String), String] =
+    mutable.Map.empty[(String, String), String]
+
+  /**
+   * Adds an instance of globally-accessible mutable state. Mutable state may either be inlined
+   * as a private member variable to the class, or it may be compacted into arrays of the same
+   * type and initialization in order to avoid Constant Pool limit errors for both state declaration
+   * and initialization.
+   *
+   * We compact state into arrays when we can anticipate variables of the same type and `initCode`
+   * may appear numerous times. Variable names with integer suffixes (as given by the `freshName`
+   * function), that are either simply assigned (null, to the empty/base constructor of the type, or
+   * having no initialization) or are primitive are workable candidates for array compaction, as
+   * these variable types are likely to appear numerous times, and can be easily initialized in
+   * loops.
+   *
+   * @param javaType the javaType
+   * @param variableName the variable name
+   * @param initCode the initialization code for the variable
+   * @param inline whether the declaration and initialization code should be inlined rather than
+   *               compacted
+   * @return the name of the mutable state variable, which is either the original name if the
+   *         variable is inlined to the class, or an array access if the variable is to be stored
+   *         in an array of variables of the same type and initialization.
+   */
+  def addMutableState(
+    javaType: String,
+    variableName: String,
+    initCode: String,
+    inline: Boolean = false): String = {
+    if (!inline &&
+      // identifies a 'freshname' style variable with a numerical suffix, and possible
+      // underscore-delimited prefix.
+      variableName.matches("[\\w_]+\\d+") &&
+      // identifies a simply-assigned object, or a primitive type
+      (initCode.matches("(^[\\w_]+\\d+\\s*=\\s*null;|"
+        + "^[\\w_]+\\d+\\s*=\\s*new\\s*[\\w\\.]+\\(\\);$|"
+        + "^$)")
+        || isPrimitiveType(javaType))) {
+
+      // Create an initialization code agnostic to the actual variable name which we can key by
+      val initCodeKey = initCode.replaceAll(variableName, "*VALUE*")
+
+      if (mutableStateArrayIdx.contains((javaType, initCodeKey))) {
+        // a mutableStateArray for the given type and initialization has already been declared,
+        // update the max index of the array and return the array-based alias for the variable
+        val arrayName = mutableStateArrayNames((javaType, initCodeKey))
+        val idx = mutableStateArrayIdx((javaType, initCodeKey)) + 1
+
+        mutableStateArrayIdx.update((javaType, initCodeKey), idx)
+
+        s"$arrayName[$idx]"
+      } else {
+        // no mutableStateArray has been declared yet for the given type and initialization code.
+        // Create a new name for the array, and add entries keeping track of the new array name,
+        // its current index, and initialization code
+        val arrayName = freshName("mutableStateArray")
+        val qualifiedInitCode = initCode.replaceAll(variableName, s"$arrayName[i]")
+        mutableStateArrayNames += (javaType, initCodeKey) -> arrayName
+        mutableStateArrayIdx += (javaType, initCodeKey) -> 0
+        mutableStateArrayInitCodes += (javaType, initCodeKey) -> qualifiedInitCode
+
+        s"$arrayName[0]"
+      }
+    } else {
+      // non-primitive and non-simply-assigned state is declared inline to the outer class
+      mutableStates += Tuple3(javaType, variableName, initCode)
+
+      variableName
+    }
   }
+
 
   /**
    * Add buffer variable which stores data coming from an [[InternalRow]]. This methods guarantees
@@ -161,31 +243,56 @@ class CodegenContext {
    * data types like: UTF8String, ArrayData, MapData & InternalRow.
    */
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
-    val value = freshName(variableName)
-    addMutableState(javaType(dataType), value, "")
+    val valueAccessor = addMutableState(javaType(dataType), freshName(variableName), "")
     val code = dataType match {
-      case StringType => s"$value = $initCode.clone();"
-      case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
-      case _ => s"$value = $initCode;"
+      case StringType => s"$valueAccessor = $initCode.clone();"
+      case _: StructType | _: ArrayType | _: MapType => s"$valueAccessor = $initCode.copy();"
+      case _ => s"$valueAccessor = $initCode;"
     }
-    ExprCode(code, "false", value)
+    ExprCode(code, "false", valueAccessor)
   }
 
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map { case (javaType, variableName, _) =>
+    val inlinedStates = mutableStates.distinct.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
-    }.mkString("\n")
+    }
+
+    val arrayStates = mutableStateArrayNames.map { case ((javaType, initCode), arrayName) =>
+      val length = mutableStateArrayIdx((javaType, initCode)) + 1
+      if (javaType.matches("^.*\\[\\]$")) {
+        val baseType = javaType.substring(0, javaType.length - 2)
+        s"private $javaType[] $arrayName = new $baseType[$length][];"
+      } else {
+        s"private $javaType[] $arrayName = new $javaType[$length];"
+      }
+    }
+
+    (inlinedStates ++ arrayStates).mkString("\n")
   }
 
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
     val initCodes = mutableStates.distinct.map(_._3 + "\n")
+    // array state is initialized in loops
+    val arrayInitCodes = mutableStateArrayNames.map { case ((javaType, initCode), arrayName) =>
+      val qualifiedInitCode = mutableStateArrayInitCodes((javaType, initCode))
+      if (qualifiedInitCode.equals("")) {
+        ""
+      } else {
+        s"""
+           for (int i = 0; i < $arrayName.length; i++) {
+             $qualifiedInitCode
+           }
+         """
+      }
+    }
+
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
-    splitExpressions(initCodes, "init", Nil)
+    splitExpressions(initCodes ++ arrayInitCodes, "init", Nil)
   }
 
   /**
@@ -761,7 +868,7 @@ class CodegenContext {
    * @param arguments the list of (type, name) of the arguments of the split function.
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
-   * @param foldFunctions folds the split function calls.
+   * @param transformFunctions processes the function calls with an additional transformation.
    */
   def splitExpressions(
       expressions: Seq[String],
@@ -769,7 +876,7 @@ class CodegenContext {
       arguments: Seq[(String, String)],
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
-      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
+      transformFunctions: Seq[String] => Seq[String] = _.map(s => s + ";\n")): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     var length = 0
@@ -804,7 +911,10 @@ class CodegenContext {
         addNewFunction(name, code)
       }
 
-      foldFunctions(functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")})"))
+      val exprs = transformFunctions(functions.map(name =>
+        s"$name(${arguments.map(_._2).mkString(", ")})"))
+
+      splitExpressions(exprs, funcName, arguments)
     }
   }
 
@@ -898,12 +1008,12 @@ class CodegenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-      addMutableState("boolean", isNull, s"$isNull = false;")
-      addMutableState(javaType(expr.dataType), value,
+      val isNullAccessor = addMutableState("boolean", isNull, s"$isNull = false;")
+      val valueAccessor = addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
+      val state = SubExprEliminationState(isNullAccessor, valueAccessor)
       e.foreach(subExprEliminationExprs.put(_, state))
     }
   }

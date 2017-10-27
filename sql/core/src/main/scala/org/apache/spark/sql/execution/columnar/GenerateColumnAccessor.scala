@@ -89,19 +89,22 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case array: ArrayType => classOf[ArrayColumnAccessor].getName
         case t: MapType => classOf[MapColumnAccessor].getName
       }
-      ctx.addMutableState(accessorCls, accessorName, "")
+      val accessorNameAccessor = ctx.addMutableState(accessorCls, accessorName, "")
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>
-          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
+          s"$accessorNameAccessor = " +
+            s"new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case NullType | StringType | BinaryType =>
-          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
+          s"$accessorNameAccessor = " +
+            s"new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case other =>
-          s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
-             (${dt.getClass.getName}) columnTypes[$index]);"""
+          s"""$accessorNameAccessor = new $accessorCls(
+                ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
+                (${dt.getClass.getName}) columnTypes[$index]);"""
       }
 
-      val extract = s"$accessorName.extractTo(mutableRow, $index);"
+      val extract = s"$accessorNameAccessor.extractTo(mutableRow, $index);"
       val patch = dt match {
         case DecimalType.Fixed(p, s) if p > Decimal.MAX_LONG_DIGITS =>
           // For large Decimal, it should have 16 bytes for future update even it's null now.

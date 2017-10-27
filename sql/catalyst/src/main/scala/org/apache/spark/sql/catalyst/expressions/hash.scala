@@ -270,17 +270,19 @@ abstract class HashExpression[E] extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.isNull = "false"
+    val evValueAccessor = ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
+
     val childrenHash = ctx.splitExpressions(ctx.INPUT_ROW, children.map { child =>
       val childGen = child.genCode(ctx)
       childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
-        computeHash(childGen.value, child.dataType, ev.value, ctx)
+        computeHash(childGen.value, child.dataType, evValueAccessor, ctx)
       }
     })
 
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
     ev.copy(code = s"""
-      ${ev.value} = $seed;
-      $childrenHash""")
+      $evValueAccessor = $seed;
+      $childrenHash""",
+      value = evValueAccessor)
   }
 
   protected def nullSafeElementHash(
@@ -607,19 +609,23 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.isNull = "false"
     val childHash = ctx.freshName("childHash")
+
+    val evValueAccessor = ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
+    val childHashAccessor = ctx.addMutableState("int", childHash, s"$childHash = 0;")
+
     val childrenHash = ctx.splitExpressions(ctx.INPUT_ROW, children.map { child =>
       val childGen = child.genCode(ctx)
       childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
-        computeHash(childGen.value, child.dataType, childHash, ctx)
-      } + s"${ev.value} = (31 * ${ev.value}) + $childHash;" +
-        s"\n$childHash = 0;"
+        computeHash(childGen.value, child.dataType, childHashAccessor, ctx)
+      } + s"$evValueAccessor = (31 * $evValueAccessor) + $childHashAccessor;" +
+        s"\n$childHashAccessor = 0;"
     })
 
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
-    ctx.addMutableState("int", childHash, s"$childHash = 0;")
+
     ev.copy(code = s"""
-      ${ev.value} = $seed;
-      $childrenHash""")
+      $evValueAccessor = $seed;
+      $childrenHash""",
+      value = evValueAccessor)
   }
 
   override def eval(input: InternalRow = null): Int = {
