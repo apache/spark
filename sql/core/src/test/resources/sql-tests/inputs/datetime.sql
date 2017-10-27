@@ -15,11 +15,11 @@ create temporary view ttf1 as select * from values
   (2, 3),
   as ttf1(current_date, current_timestamp);
   
-select current_date, current_timestamp from ttf1
+select current_date, current_timestamp from ttf1;
 
 create temporary view ttf2 as select * from values
   (1, 2),
   (2, 3),
   as ttf2(a, b);
   
-select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2
+select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2;
