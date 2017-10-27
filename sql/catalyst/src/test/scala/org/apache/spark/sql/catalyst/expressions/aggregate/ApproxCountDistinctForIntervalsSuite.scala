@@ -32,7 +32,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     val wrongColumnTypes = Seq(BinaryType, BooleanType, StringType, ArrayType(IntegerType),
       MapType(IntegerType, IntegerType), StructType(Seq(StructField("s", IntegerType))))
     wrongColumnTypes.foreach { dataType =>
-      val wrongColumn = new ApproxCountDistinctForIntervals(
+      val wrongColumn = ApproxCountDistinctForIntervals(
         AttributeReference("a", dataType)(),
         endpointsExpression = CreateArray(Seq(1, 10).map(Literal(_))))
       assert(
@@ -43,7 +43,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         })
     }
 
-    var wrongEndpoints = new ApproxCountDistinctForIntervals(
+    var wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = Literal(0.5d))
     assert(
@@ -52,19 +52,19 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         case _ => false
       })
 
-    wrongEndpoints = new ApproxCountDistinctForIntervals(
+    wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Seq(AttributeReference("b", DoubleType)())))
     assert(wrongEndpoints.checkInputDataTypes() ==
       TypeCheckFailure("The endpoints provided must be constant literals"))
 
-    wrongEndpoints = new ApproxCountDistinctForIntervals(
+    wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array(10L).map(Literal(_))))
     assert(wrongEndpoints.checkInputDataTypes() ==
       TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals"))
 
-    wrongEndpoints = new ApproxCountDistinctForIntervals(
+    wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array("foobar").map(Literal(_))))
     assert(wrongEndpoints.checkInputDataTypes() ==
@@ -75,25 +75,18 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
   private def createEstimator[T](
       endpoints: Array[T],
       dt: DataType,
-      rsd: Double = 0.05): (ApproxCountDistinctForIntervals, InternalRow, InternalRow) = {
+      rsd: Double = 0.05): (ApproxCountDistinctForIntervals, InternalRow, Array[Long]) = {
     val input = new SpecificInternalRow(Seq(dt))
     val aggFunc = ApproxCountDistinctForIntervals(
       BoundReference(0, dt, nullable = true), CreateArray(endpoints.map(Literal(_))), rsd)
-    val buffer = createBuffer(aggFunc)
-    (aggFunc, input, buffer)
-  }
-
-  private def createBuffer(aggFunc: ApproxCountDistinctForIntervals): InternalRow = {
-    val buffer = new SpecificInternalRow(aggFunc.aggBufferAttributes.map(_.dataType))
-    aggFunc.initialize(buffer)
-    buffer
+    (aggFunc, input, aggFunc.createAggregationBuffer())
   }
 
   test("merging ApproxCountDistinctForIntervals instances") {
     val (aggFunc, input, buffer1a) =
       createEstimator(Array[Int](0, 10, 2000, 345678, 1000000), IntegerType)
-    val buffer1b = createBuffer(aggFunc)
-    val buffer2 = createBuffer(aggFunc)
+    val buffer1b = aggFunc.createAggregationBuffer()
+    val buffer2 = aggFunc.createAggregationBuffer()
 
     // Add the lower half to `buffer1a`.
     var i = 0
@@ -123,7 +116,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     }
 
     // Check if the buffers are equal.
-    assert(buffer2 == buffer1a, "Buffers should be equal")
+    assert(buffer2.sameElements(buffer1a), "Buffers should be equal")
   }
 
   test("test findHllppIndex(value) for values in the range") {
@@ -150,6 +143,13 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     checkHllppIndex(endpoints = Array(7, 7, 7, 9), value = 7, expectedIntervalIndex = 0)
     checkHllppIndex(endpoints = Array(3, 5, 7, 7, 7), value = 7, expectedIntervalIndex = 1)
     checkHllppIndex(endpoints = Array(1, 3, 5, 7, 7, 9), value = 7, expectedIntervalIndex = 2)
+  }
+
+  test("round trip serialization") {
+    val (aggFunc, _, _) = createEstimator(Array(1, 2), DoubleType)
+    val longArray = (1L to 100L).toArray
+    val roundtrip = aggFunc.deserialize(aggFunc.serialize(longArray))
+    assert(roundtrip.sameElements(longArray))
   }
 
   test("basic operations: update, merge, eval...") {

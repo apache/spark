@@ -1619,6 +1619,11 @@ def to_arrow_type(dt):
         arrow_type = pa.decimal(dt.precision, dt.scale)
     elif type(dt) == StringType:
         arrow_type = pa.string()
+    elif type(dt) == DateType:
+        arrow_type = pa.date32()
+    elif type(dt) == TimestampType:
+        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
+        arrow_type = pa.timestamp('us', tz='UTC')
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
@@ -1669,14 +1674,35 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
-def _cast_pandas_series_type(series, arrow_type):
-    """ Cast a pandas.Series to the given arrow_type
+def _check_dataframe_localize_timestamps(pdf):
     """
-    to_pandas_dtype = arrow_type.to_pandas_dtype()
-    if series.dtype == to_pandas_dtype:
-        return series
+    Convert timezone aware timestamps to timezone-naive in local time
+
+    :param pdf: pandas.DataFrame
+    :return pandas.DataFrame where any timezone aware columns have be converted to tz-naive
+    """
+    from pandas.api.types import is_datetime64tz_dtype
+    for column, series in pdf.iteritems():
+        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+        if is_datetime64tz_dtype(series.dtype):
+            pdf[column] = series.dt.tz_convert('tzlocal()').dt.tz_localize(None)
+    return pdf
+
+
+def _check_series_convert_timestamps_internal(s):
+    """
+    Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
+    :param s: a pandas.Series
+    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
+    """
+    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64_dtype(s.dtype):
+        return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC')
+    elif is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert('UTC')
     else:
-        return series.fillna(0).astype(to_pandas_dtype, copy=False)
+        return s
 
 
 def _test():

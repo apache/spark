@@ -42,6 +42,7 @@ import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
+import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
@@ -129,29 +130,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dbPath = new File(path, "listing.ldb")
-
-    def openDB(): LevelDB = new LevelDB(dbPath, new KVStoreScalaSerializer())
+    val metadata = new FsHistoryProviderMetadata(CURRENT_LISTING_VERSION, logDir.toString())
 
     try {
-      val db = openDB()
-      val meta = db.getMetadata(classOf[KVStoreMetadata])
-
-      if (meta == null) {
-        db.setMetadata(new KVStoreMetadata(CURRENT_LISTING_VERSION, logDir))
-        db
-      } else if (meta.version != CURRENT_LISTING_VERSION || !logDir.equals(meta.logDir)) {
-        logInfo("Detected mismatched config in existing DB, deleting...")
-        db.close()
-        Utils.deleteRecursively(dbPath)
-        openDB()
-      } else {
-        db
-      }
+      open(new File(path, "listing.ldb"), metadata)
     } catch {
-      case _: UnsupportedStoreVersionException =>
+      case _: UnsupportedStoreVersionException | _: MetadataMismatchException =>
         logInfo("Detected incompatible DB versions, deleting...")
         Utils.deleteRecursively(dbPath)
-        openDB()
+        open(new File(path, "listing.ldb"), metadata)
     }
   }.getOrElse(new InMemoryStore())
 
@@ -720,19 +707,7 @@ private[history] object FsHistoryProvider {
   private[history] val CURRENT_LISTING_VERSION = 1L
 }
 
-/**
- * A KVStoreSerializer that provides Scala types serialization too, and uses the same options as
- * the API serializer.
- */
-private class KVStoreScalaSerializer extends KVStoreSerializer {
-
-  mapper.registerModule(DefaultScalaModule)
-  mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
-  mapper.setDateFormat(v1.JacksonMessageWriter.makeISODateFormat)
-
-}
-
-private[history] case class KVStoreMetadata(
+private[history] case class FsHistoryProviderMetadata(
   version: Long,
   logDir: String)
 

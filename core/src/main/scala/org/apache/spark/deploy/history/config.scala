@@ -19,15 +19,9 @@ package org.apache.spark.deploy.history
 
 import java.util.concurrent.TimeUnit
 
-import scala.annotation.meta.getter
-
 import org.apache.spark.internal.config.ConfigBuilder
-import org.apache.spark.util.kvstore.KVIndex
 
 private[spark] object config {
-
-  /** Use this to annotate constructor params to be used as KVStore indices. */
-  type KVIndexParam = KVIndex @getter
 
   val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
 

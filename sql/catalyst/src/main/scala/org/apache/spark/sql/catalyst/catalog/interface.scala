@@ -22,8 +22,6 @@ import java.util.Date
 
 import scala.collection.mutable
 
-import com.google.common.base.Objects
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -439,15 +437,6 @@ case class HiveTableRelation(
   override def output: Seq[AttributeReference] = dataCols ++ partitionCols
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
-
-  override def equals(relation: Any): Boolean = relation match {
-    case other: HiveTableRelation => tableMeta == other.tableMeta && output == other.output
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Objects.hashCode(tableMeta.identifier, output)
-  }
 
   override lazy val canonicalized: HiveTableRelation = copy(
     tableMeta = tableMeta.copy(
