@@ -783,30 +783,6 @@ class Analyzer(
       }
     }
 
-    /**
-     * Literal functions do not require the user to specify braces when calling them
-     * When an attributes is not resolvable, we try to resolve it as a literal function.
-     */
-    private def resolveAsLiteralFunctions(
-        nameParts: Seq[String],
-        attribute: UnresolvedAttribute,
-        plan: LogicalPlan): Option[Expression] = {
-      if (nameParts.length != 1) return None
-      val isNamedExpression = plan match {
-        case Aggregate(_, aggregateExpressions, _) => aggregateExpressions.contains(attribute)
-        case Project(projectList, _) => projectList.contains(attribute)
-        case Window(windowExpressions, _, _, _) => windowExpressions.contains(attribute)
-        case _ => false
-      }
-      val wrapper: Expression => Expression =
-        if (isNamedExpression) f => Alias(f, toPrettySQL(f))() else identity
-      // support CURRENT_DATE and CURRENT_TIMESTAMP
-      val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
-      val name = nameParts.head
-      val func = literalFunctions.find(e => resolver(e.prettyName, name))
-      func.map(wrapper)
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -871,7 +847,7 @@ class Analyzer(
             val result =
               withPosition(u) {
                 q.resolveChildren(nameParts, resolver)
-                  .orElse(resolveAsLiteralFunctions(nameParts, u, q))
+                  .orElse(resolveLiteralFunction(nameParts, u, q))
                   .getOrElse(u)
               }
             logDebug(s"Resolving $u to $result")
@@ -951,6 +927,30 @@ class Analyzer(
     exprs.exists(_.find(_.isInstanceOf[UnresolvedDeserializer]).isDefined)
   }
 
+  /**
+    * Literal functions do not require the user to specify braces when calling them
+    * When an attributes is not resolvable, we try to resolve it as a literal function.
+    */
+  private def resolveLiteralFunction(
+      nameParts: Seq[String],
+      attribute: UnresolvedAttribute,
+      plan: LogicalPlan): Option[Expression] = {
+    if (nameParts.length != 1) return None
+    val isNamedExpression = plan match {
+      case Aggregate(_, aggregateExpressions, _) => aggregateExpressions.contains(attribute)
+      case Project(projectList, _) => projectList.contains(attribute)
+      case Window(windowExpressions, _, _, _) => windowExpressions.contains(attribute)
+      case _ => false
+    }
+    val wrapper: Expression => Expression =
+      if (isNamedExpression) f => Alias(f, toPrettySQL(f))() else identity
+    // support CURRENT_DATE and CURRENT_TIMESTAMP
+    val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
+    val name = nameParts.head
+    val func = literalFunctions.find(e => resolver(e.prettyName, name))
+    func.map(wrapper)
+  }
+
   protected[sql] def resolveExpression(
       expr: Expression,
       plan: LogicalPlan,
@@ -963,7 +963,11 @@ class Analyzer(
       expr transformUp {
         case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
         case u @ UnresolvedAttribute(nameParts) =>
-          withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
+          withPosition(u) {
+            plan.resolveChildren(nameParts, resolver)
+              .orElse(resolveLiteralFunction(nameParts, u, plan))
+              .getOrElse(u)
+          }
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
           ExtractValue(child, fieldName, resolver)
       }
