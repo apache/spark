@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * Note:
  * Before flipping the filter condition of the right node, we should:
  * 1. Combine all it's [[Filter]].
- * 2. Apply InferFiltersFromConstraints rule (to support NULL values of the condition).
+ * 2. Apply InferFiltersFromConstraints rule (to take into account of NULL values in the condition).
  */
 object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
@@ -52,17 +52,15 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
   }
 
   private def transformCondition(left: LogicalPlan, right: LogicalPlan): Expression = {
-    val filterCondition = InferFiltersFromConstraints(combineFilters(right)
-    ).asInstanceOf[Filter].condition
+    val filterCondition =
+      InferFiltersFromConstraints(combineFilters(right)).asInstanceOf[Filter].condition
 
     val attributeNameMap: Map[String, Attribute] = left.output.map(x => (x.name, x)).toMap
-    val transformedCondition = filterCondition transform { case a : AttributeReference =>
-      attributeNameMap(a.name)
-    }
 
-    transformedCondition
+    filterCondition.transform { case a : AttributeReference => attributeNameMap(a.name) }
   }
 
+  // TODO: This can be further extended in the future.
   private def isEligible(left: LogicalPlan, right: LogicalPlan): Boolean = (left, right) match {
     case (_, right @ (Project(_, _: Filter) | Filter(_, _))) => verifyConditions(left, right)
     case _ => false
@@ -98,7 +96,6 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     def iterate(plan: LogicalPlan, acc: LogicalPlan): LogicalPlan = {
       if (acc.fastEquals(plan)) acc else iterate(acc, CombineFilters(acc))
     }
-
     iterate(plan, CombineFilters(plan))
   }
 }

@@ -104,8 +104,8 @@ class ReplaceOperatorSuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(table1.output, table1.output,
-        Filter(Not((attributeA.isNotNull && attributeB.isNotNull)
-          && (attributeA >= 2 && attributeB < 1)),
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+          (attributeA >= 2 && attributeB < 1)),
           Project(Seq(attributeA, attributeB), table1))).analyze
 
     comparePlans(optimized, correctAnswer)
