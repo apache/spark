@@ -964,7 +964,7 @@ class Analyzer(
         case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
         case u @ UnresolvedAttribute(nameParts) =>
           withPosition(u) {
-            plan.resolveChildren(nameParts, resolver)
+            plan.resolve(nameParts, resolver)
               .orElse(resolveLiteralFunction(nameParts, u, plan))
               .getOrElse(u)
           }
