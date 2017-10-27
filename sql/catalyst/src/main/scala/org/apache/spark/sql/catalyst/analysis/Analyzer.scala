@@ -928,9 +928,9 @@ class Analyzer(
   }
 
   /**
-    * Literal functions do not require the user to specify braces when calling them
-    * When an attributes is not resolvable, we try to resolve it as a literal function.
-    */
+   * Literal functions do not require the user to specify braces when calling them
+   * When an attributes is not resolvable, we try to resolve it as a literal function.
+   */
   private def resolveLiteralFunction(
       nameParts: Seq[String],
       attribute: UnresolvedAttribute,
