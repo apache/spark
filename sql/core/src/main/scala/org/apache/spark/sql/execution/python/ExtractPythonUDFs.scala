@@ -116,10 +116,28 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
     case plan: SparkPlan => extract(plan)
   }
 
+  private def hasUDFInConditionalExpr(expressions: Seq[Expression]): Boolean = {
+    expressions.flatMap { expr =>
+      expr.collect {
+        case e: CaseWhenBase if e.children.exists(hasPythonUDF) => true
+        case e: If if e.children.exists(hasPythonUDF) => true
+      }
+    }.nonEmpty
+  }
+
   /**
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
   private def extract(plan: SparkPlan): SparkPlan = {
+    // SPARK-22347:
+    // Running all PythonUDFs from the current operator breaks original semantics when they are used
+    // in conditional expressions such as CaseWhen. It can cause failure when the udfs are run on
+    // invalid input data that are expected to be filtered out by conditional expressions.
+    if (hasUDFInConditionalExpr(plan.expressions)) {
+      throw new IllegalArgumentException("Python UDFs can't be used in conditional expressions " +
+        "such as CaseWhen. Please incorporate conditional logic into Python UDFs.")
+    }
+
     val udfs = plan.expressions.flatMap(collectEvaluatableUDF)
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
