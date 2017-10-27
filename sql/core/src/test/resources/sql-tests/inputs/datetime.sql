@@ -24,4 +24,4 @@ create temporary view ttf2 as select * from values
   
 select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2;
 
-select a, b from ttf2 order by a, current_date
+select a, b from ttf2 order by a, current_date;
