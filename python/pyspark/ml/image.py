@@ -75,7 +75,7 @@ def toNDArray(image):
         strides=(width * nChannels, nChannels, 1))
 
 
-def toImage(array, origin="", mode=None, spark=None):
+def toImage(array, origin="", spark=None):
     """
     Converts a one-dimensional array to a two-dimensional image.
 
@@ -88,12 +88,19 @@ def toImage(array, origin="", mode=None, spark=None):
     .. versionadded:: 2.3.0
     """
     spark = spark or SparkSession.builder.getOrCreate()
+    if array.ndim != 3:
+        raise
+    height, width, nChannels = array.shape
     ocvTypes = getOcvTypes(spark)
-    mode = mode or ocvTypes["CV_8UC3"]
+    if nChannels == 1:
+        mode = ocvTypes["CV_8UC1"]
+    elif nChannels == 3:
+        mode = ocvTypes["CV_8UC3"]
+    elif nChannels == 4:
+        mode = ocvTypes["CV_8UC4"]
+    else:
+        raise
     data = bytearray(array.astype(dtype=np.uint8).ravel())
-    height = array.shape[0]
-    width = array.shape[1]
-    nChannels = array.shape[2]
     # Creating new Row with _create_row(), because Row(name = value, ... )
     # orders fields by name, which conflicts with expected schema order
     # when the new DataFrame is created by UDF
