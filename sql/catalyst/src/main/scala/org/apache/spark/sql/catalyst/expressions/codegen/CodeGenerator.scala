@@ -834,22 +834,20 @@ class CodegenContext {
         addNewFunctionInternal(name, code, inlineToOuterClass = false)
       }
 
-      // Here we store all the methods which have been added to the outer class.
-      val outerClassFunctions = functions
-        .filter(_.innerClassName.isEmpty)
-        .map(_.functionName)
+      val (outerClassFunctions, innerClassFunctions) = functions.partition(_.innerClassName.isEmpty)
 
-      val innerClassFunctions = generateInnerClassesMethodsCalls(
-        functions.filter(_.innerClassName.nonEmpty),
+      val argsString = arguments.map(_._2).mkString(", ")
+      val outerClassFunctionCalls = outerClassFunctions.map(f => s"${f.functionName}($argsString)")
+
+      val innerClassFunctionCalls = generateInnerClassesFunctionCalls(
+        innerClassFunctions,
         func,
         arguments,
         returnType,
         makeSplitFunction,
         foldFunctions)
 
-      val argsString = arguments.map(_._2).mkString(", ")
-      foldFunctions((outerClassFunctions ++ innerClassFunctions).map(
-        name => s"$name($argsString)"))
+      foldFunctions(outerClassFunctionCalls ++ innerClassFunctionCalls)
     }
   }
 
@@ -871,33 +869,33 @@ class CodegenContext {
    * @param foldFunctions folds the split function calls.
    * @return an [[Iterable]] containing the methods' invocations
    */
-  private def generateInnerClassesMethodsCalls(
+  private def generateInnerClassesFunctionCalls(
       functions: Seq[NewFunctionSpec],
       funcName: String,
       arguments: Seq[(String, String)],
       returnType: String,
       makeSplitFunction: String => String,
       foldFunctions: Seq[String] => String): Iterable[String] = {
-    val innerClassToFunctions = mutable.ListMap.empty[(String, String), Seq[String]]
+    val innerClassToFunctions = mutable.LinkedHashMap.empty[(String, String), Seq[String]]
     functions.foreach(f => {
       val key = (f.innerClassName.get, f.innerClassInstance.get)
       innerClassToFunctions.update(key, f.functionName +:
         innerClassToFunctions.getOrElse(key, Seq.empty[String]))
     })
-    // for performance reasons, the functions are prepended, instead of appended,
-    // thus they are in reversed order
-    innerClassToFunctions.transform { case (_, functions) => functions.reverse }
 
     val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
     val argInvocationString = arguments.map(_._2).mkString(", ")
 
     innerClassToFunctions.flatMap {
       case ((innerClassName, innerClassInstance), innerClassFunctions) =>
-        if (innerClassFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
+        // for performance reasons, the functions are prepended, instead of appended,
+        // thus here they are in reversed order
+        val orderedFunctions = innerClassFunctions.reverse
+        if (orderedFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
           // Adding a new function to each inner class which contains
           // the invocation of all the ones which have been added to
           // that inner class
-          val body = foldFunctions(innerClassFunctions.map(name =>
+          val body = foldFunctions(orderedFunctions.map(name =>
             s"$name($argInvocationString)"))
           val code = s"""
               |private $returnType $funcName($argDefinitionString) {
@@ -905,9 +903,9 @@ class CodegenContext {
               |}
             """.stripMargin
           addNewFunctionToClass(funcName, code, innerClassName)
-          Seq(s"$innerClassInstance.$funcName")
+          Seq(s"$innerClassInstance.$funcName($argInvocationString)")
         } else {
-          innerClassFunctions.map(f => s"$innerClassInstance.$f")
+          orderedFunctions.map(f => s"$innerClassInstance.$f($argInvocationString)")
         }
     }
   }
