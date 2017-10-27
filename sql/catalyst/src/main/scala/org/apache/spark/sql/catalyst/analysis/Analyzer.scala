@@ -791,22 +791,15 @@ class Analyzer(
         nameParts: Seq[String],
         attribute: UnresolvedAttribute,
         plan: LogicalPlan): Option[Expression] = {
-      if (nameParts.length != 1) {
-        return None
-      }
+      if (nameParts.length != 1) return None
       val isNamedExpression = plan match {
-        case a @ Aggregate(_, aggs, _) if (aggs.contains(attribute)) =>
-          true
-        case p @ Project(projList, _) if (projList.contains(attribute)) =>
-          true
-        case _ =>
-          false
+        case Aggregate(_, aggregateExpressions, _) => aggregateExpressions.contains(attribute)
+        case Project(projectList, _) => projectList.contains(attribute)
+        case Window(windowExpressions, _, _, _) => windowExpressions.contains(attribute)
+        case _ => false
       }
-      val wrapper: Expression => Expression = if (isNamedExpression) {
-        f => Alias(f, toPrettySQL(f))()
-      } else {
-        f => f
-      }
+      val wrapper: Expression => Expression =
+        if (isNamedExpression) f => Alias(f, toPrettySQL(f))() else identity
       // support CURRENT_DATE and CURRENT_TIMESTAMP
       val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
       val name = nameParts.head
