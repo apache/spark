@@ -267,7 +267,7 @@ private[spark] class ExecutorAllocationManager(
     (numRunningOrPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
   }
 
-  private def totalRunningTasks(): Int = {
+  private def totalRunningTasks(): Int = synchronized {
     listener.totalRunningTasks
   }
 
