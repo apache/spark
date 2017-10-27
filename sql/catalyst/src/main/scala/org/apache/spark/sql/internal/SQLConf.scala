@@ -948,6 +948,18 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val GENERATED_CLASS_LENGTH_THRESHOLD =
+    buildConf("spark.sql.codegen.generatedClass.size.threshold")
+      .internal()
+      .doc("Threshold in bytes for the size of a generated class. If the generated class " +
+        "size is higher of this value, a private nested class is created and used." +
+        "This is useful to limit the number of named constants in the class " +
+        "and therefore its Constant Pool. The default is 1600k.")
+      .intConf
+      .checkValue(bytes => bytes > 0, "The maximum size of a generated class " +
+        "in bytes must be a positive number.")
+      .createWithDefault(1600000)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1232,6 +1244,8 @@ class SQLConf extends Serializable with Logging {
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def generatedClassLengthThreshold: Int = getConf(GENERATED_CLASS_LENGTH_THRESHOLD)
 
   /** ********************** SQLConf functionality methods ************ */
 
