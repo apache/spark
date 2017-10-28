@@ -274,29 +274,69 @@ case class Trunc(data: Expression, truncExpr: Expression)
         if (truncFormat == -1) {
           ev.copy(code = s"""
             boolean ${ev.isNull} = true;
-            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-            """)
+            int ${ev.value} = ${ctx.defaultValue(DateType)};""")
         } else {
           val d = data.genCode(ctx)
-          ev.copy(code = s"""
+          val dt = ctx.freshName("dt")
+          val pre = s"""
             ${d.code}
             boolean ${ev.isNull} = ${d.isNull};
-            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-            if (!${ev.isNull}) {
-              ${ev.value} = $dtu.truncDate(${d.value}, $truncFormat);
-            }""")
+            int ${ev.value} = ${ctx.defaultValue(DateType)};"""
+          data.dataType match {
+            case DateType =>
+              ev.copy(code = pre + s"""
+                if (!${ev.isNull}) {
+                  ${ev.value} = $dtu.truncDate(${d.value}, $truncFormat);
+                }""")
+            case TimestampType =>
+              val ts = ctx.freshName("ts")
+              ev.copy(code = pre + s"""
+                String $ts = $dtu.timestampToString(${d.value});
+                scala.Option<SQLDate> $dt = $dtu.stringToDate(UTF8String.fromString($ts));
+                if (!${ev.isNull}) {
+                  ${ev.value} = $dtu.truncDate((Integer)dt.get(), $truncFormat);
+                }""")
+            case StringType =>
+              ev.copy(code = pre + s"""
+                scala.Option<SQLDate> $dt = $dtu.stringToDate(${d.value});
+                if (!${ev.isNull} && $dt.isDefined()) {
+                  ${ev.value} = $dtu.truncDate((Integer)$dt.get(), $truncFormat);
+                }""")
+          }
         }
       } else {
         nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
           val truncParam = ctx.freshName("truncParam")
-          s"""
-            int $truncParam = $dtu.parseTruncLevel($fmt);
-            if ($truncParam == -1) {
-              ${ev.isNull} = true;
-            } else {
-              ${ev.value} = $dtu.truncDate($dateVal, $truncParam);
-            }
-          """
+          val dt = ctx.freshName("dt")
+          val pre = s"int $truncParam = $dtu.parseTruncLevel($fmt);"
+          data.dataType match {
+            case DateType =>
+              pre + s"""
+                if ($truncParam == -1) {
+                  ${ev.isNull} = true;
+                } else {
+                  ${ev.value} = $dtu.truncDate($dateVal, $truncParam);
+                }"""
+            case TimestampType =>
+              val ts = ctx.freshName("ts")
+              pre + s"""
+                String $ts = $dtu.timestampToString($dateVal);
+                scala.Option<SQLDate> $dt = $dtu.stringToDate(UTF8String.fromString($ts));
+                if ($truncParam == -1 || $dt.isEmpty()) {
+                  ${ev.isNull} = true;
+                } else {
+                  ${ev.value} = $dtu.truncDate((Integer)$dt.get(), $truncParam);
+                }"""
+            case StringType =>
+              pre + s"""
+                scala.Option<SQLDate> $dt = $dtu.stringToDate($dateVal);
+                ${ev.value} = ${ctx.defaultValue(DateType)};
+                if ($truncParam == -1 || $dt.isEmpty()) {
+                  ${ev.isNull} = true;
+                } else {
+                  ${ev.value} = $dtu.truncDate((Integer)$dt.get(), $truncParam);
+                }"""
+          }
         })
       }
     } else {
