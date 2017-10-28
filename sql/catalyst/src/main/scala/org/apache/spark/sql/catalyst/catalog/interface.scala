@@ -438,7 +438,7 @@ case class HiveTableRelation(
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
-  override lazy val canonicalized: HiveTableRelation = copy(
+  override def doCanonicalize(): HiveTableRelation = copy(
     tableMeta = tableMeta.copy(
       storage = CatalogStorageFormat.empty,
       createTime = -1
@@ -448,7 +448,8 @@ case class HiveTableRelation(
     },
     partitionCols = partitionCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
-    })
+    }
+  )
 
   override def computeStats(): Statistics = {
     tableMeta.stats.map(_.toPlanStats(output)).getOrElse {
