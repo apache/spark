@@ -76,7 +76,8 @@ case class JoinEstimation(join: Join) extends Logging {
         case FullOuter =>
           // T(A FOJ B) = T(A LOJ B) + T(A ROJ B) - T(A IJ B)
           leftRows.max(numInnerJoinedRows) + rightRows.max(numInnerJoinedRows) - numInnerJoinedRows
-        case Inner | Cross =>
+        case _ =>
+          assert(joinType == Inner || joinType == Cross)
           // Don't change for inner or cross join
           numInnerJoinedRows
       }
@@ -110,7 +111,9 @@ case class JoinEstimation(join: Join) extends Logging {
               val oriColStat = inputAttrStats(a)
               (a, oriColStat.copy(nullCount = oriColStat.nullCount + leftRows))
             }
-          case Inner | Cross => Nil
+          case _ =>
+            assert(joinType == Inner || joinType == Cross)
+            Nil
         }
       } else if (numInnerJoinedRows == leftRows * rightRows) {
         // Cartesian product, just propagate the original column stats
@@ -126,7 +129,8 @@ case class JoinEstimation(join: Join) extends Logging {
               fromRight.map(a => (a, inputAttrStats(a)))
           case FullOuter =>
             inputAttrStats.toSeq
-          case Inner | Cross =>
+          case _ =>
+            assert(joinType == Inner || joinType == Cross)
             // Update column stats from both sides for inner or cross join.
             updateOutputStats(outputRows, attributesWithStat, inputAttrStats, keyStatsAfterJoin)
         }
