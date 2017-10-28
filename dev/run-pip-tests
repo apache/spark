@@ -83,8 +83,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     if [ -n "$USE_CONDA" ]; then
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
       source activate "$VIRTUALENV_PATH"
-      conda install -y -c conda-forge pyarrow=0.4.0
-      TEST_PYARROW=1
     else
       mkdir -p "$VIRTUALENV_PATH"
       virtualenv --python=$python "$VIRTUALENV_PATH"
@@ -122,10 +120,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     python "$FWDIR"/dev/pip-sanity-check.py
     echo "Run the tests for context.py"
     python "$FWDIR"/python/pyspark/context.py
-    if [ -n "$TEST_PYARROW" ]; then
-      echo "Run tests for pyarrow"
-      SPARK_TESTING=1 "$FWDIR"/bin/pyspark pyspark.sql.tests ArrowTests
-    fi
 
     cd "$FWDIR"
 

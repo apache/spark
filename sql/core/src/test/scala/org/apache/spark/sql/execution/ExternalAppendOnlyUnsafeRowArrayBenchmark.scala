@@ -67,7 +67,10 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
     benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iterations) {
-        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold)
+        val array = new ExternalAppendOnlyUnsafeRowArray(
+          ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer,
+          numSpillThreshold)
+
         rows.foreach(x => array.add(x))
 
         val iterator = array.generateIterator()
@@ -130,7 +133,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
             false))
 
         val unsafeRow = new UnsafeRow(1)
-        val iter = array.getIterator
+        val iter = array.getIterator(0)
         while (iter.hasNext) {
           iter.loadNext()
           unsafeRow.pointTo(iter.getBaseObject, iter.getBaseOffset, iter.getRecordLength)
@@ -143,7 +146,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
     benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iterations) {
-        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold)
+        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold, numSpillThreshold)
         rows.foreach(x => array.add(x))
 
         val iterator = array.generateIterator()

@@ -20,20 +20,23 @@ package org.apache.spark.ml.tuning
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.Future
+import scala.concurrent.duration.Duration
 
-import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml._
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.shared.HasParallelism
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
@@ -64,12 +67,10 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
 @Since("1.2.0")
 class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   extends Estimator[CrossValidatorModel]
-  with CrossValidatorParams with MLWritable with Logging {
+  with CrossValidatorParams with HasParallelism with MLWritable with Logging {
 
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("cv"))
-
-  private val f2jBLAS = new F2jBLAS
 
   /** @group setParam */
   @Since("1.2.0")
@@ -91,6 +92,15 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /**
+   * Set the mamixum level of parallelism to evaluate models in parallel.
+   * Default is 1 for serial evaluation
+   *
+   * @group expertSetParam
+   */
+  @Since("2.3.0")
+  def setParallelism(value: Int): this.type = set(parallelism, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CrossValidatorModel = {
     val schema = dataset.schema
@@ -99,32 +109,49 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
-    val numModels = epm.length
-    val metrics = new Array[Double](epm.length)
+
+    // Create execution context based on $(parallelism)
+    val executionContext = getExecutionContext
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(numFolds, seed)
+    instr.logParams(numFolds, seed, parallelism)
     logTuningParams(instr)
 
+    // Compute metrics for each model over each split
     val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
-    splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
+    val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
-      // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
-      val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
-      trainingDataset.unpersist()
-      var i = 0
-      while (i < numModels) {
-        // TODO: duplicate evaluator to take extra params from input
-        val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
-        logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
-        metrics(i) += metric
-        i += 1
+
+      // Fit models in a Future for training in parallel
+      val modelFutures = epm.map { paramMap =>
+        Future[Model[_]] {
+          val model = est.fit(trainingDataset, paramMap)
+          model.asInstanceOf[Model[_]]
+        } (executionContext)
       }
+
+      // Unpersist training data only when all models have trained
+      Future.sequence[Model[_], Iterable](modelFutures)(implicitly, executionContext)
+        .onComplete { _ => trainingDataset.unpersist() } (executionContext)
+
+      // Evaluate models in a Future that will calulate a metric and allow model to be cleaned up
+      val foldMetricFutures = modelFutures.zip(epm).map { case (modelFuture, paramMap) =>
+        modelFuture.map { model =>
+          // TODO: duplicate evaluator to take extra params from input
+          val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+          logDebug(s"Got metric $metric for model trained with $paramMap.")
+          metric
+        } (executionContext)
+      }
+
+      // Wait for metrics to be calculated before unpersisting validation dataset
+      val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
       validationDataset.unpersist()
-    }
-    f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
+      foldMetrics
+    }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
+
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
@@ -185,14 +212,13 @@ object CrossValidator extends MLReadable[CrossValidator] {
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
-      val numFolds = (metadata.params \ "numFolds").extract[Int]
-      val seed = (metadata.params \ "seed").extract[Long]
-      new CrossValidator(metadata.uid)
+      val cv = new CrossValidator(metadata.uid)
         .setEstimator(estimator)
         .setEvaluator(evaluator)
         .setEstimatorParamMaps(estimatorParamMaps)
-        .setNumFolds(numFolds)
-        .setSeed(seed)
+      DefaultParamsReader.getAndSetParams(cv, metadata,
+        skipParams = Option(List("estimatorParamMaps")))
+      cv
     }
   }
 }
@@ -275,17 +301,17 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
-      val numFolds = (metadata.params \ "numFolds").extract[Int]
-      val seed = (metadata.params \ "seed").extract[Long]
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
       val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
+
       val model = new CrossValidatorModel(metadata.uid, bestModel, avgMetrics)
       model.set(model.estimator, estimator)
         .set(model.evaluator, evaluator)
         .set(model.estimatorParamMaps, estimatorParamMaps)
-        .set(model.numFolds, numFolds)
-        .set(model.seed, seed)
+      DefaultParamsReader.getAndSetParams(model, metadata,
+        skipParams = Option(List("estimatorParamMaps")))
+      model
     }
   }
 }

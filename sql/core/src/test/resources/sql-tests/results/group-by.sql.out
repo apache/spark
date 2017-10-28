@@ -134,7 +134,7 @@ struct<skewness(CAST(a AS DOUBLE)):double,kurtosis(CAST(a AS DOUBLE)):double,min
 
 
 -- !query 14
-SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t GROUP BY a
+SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY a
 -- !query 14 schema
 struct<count(DISTINCT b):bigint,count(DISTINCT b, c):bigint>
 -- !query 14 output
@@ -202,7 +202,7 @@ SELECT a AS k, COUNT(b) FROM testData GROUP BY k
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`k`' given input columns: [a, b]; line 1 pos 47
+cannot resolve '`k`' given input columns: [testdata.a, testdata.b]; line 1 pos 47
 
 
 -- !query 22

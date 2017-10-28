@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.sasl;
 
-import java.io.IOException;
 import java.util.Map;
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;
@@ -125,7 +124,7 @@ public class SparkSaslClient implements SaslEncryptionBackend {
    */
   private class ClientCallbackHandler implements CallbackHandler {
     @Override
-    public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+    public void handle(Callback[] callbacks) throws UnsupportedCallbackException {
 
       for (Callback callback : callbacks) {
         if (callback instanceof NameCallback) {

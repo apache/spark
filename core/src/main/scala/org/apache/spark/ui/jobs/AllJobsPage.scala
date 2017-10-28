@@ -241,7 +241,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     }.getOrElse(jobIdTitle)
     val jobSortDesc = Option(parameterJobSortDesc).map(_.toBoolean).getOrElse(
       // New jobs should be shown above old jobs by default.
-      if (jobSortColumn == jobIdTitle) true else false
+      jobSortColumn == jobIdTitle
     )
     val jobPageSize = Option(parameterJobPageSize).map(_.toInt).getOrElse(100)
     val jobPrevPageSize = Option(parameterJobPrevPageSize).map(_.toInt).getOrElse(jobPageSize)

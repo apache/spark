@@ -97,7 +97,7 @@ private[mesos] object MesosClusterDispatcher
   with CommandLineUtils {
 
   override def main(args: Array[String]) {
-    Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
+    Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler)
     Utils.initDaemon(log)
     val conf = new SparkConf
     val dispatcherArgs = new MesosClusterDispatcherArguments(args, conf)

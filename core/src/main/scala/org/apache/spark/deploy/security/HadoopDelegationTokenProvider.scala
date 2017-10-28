@@ -20,6 +20,8 @@ package org.apache.spark.deploy.security
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 
+import org.apache.spark.SparkConf
+
 /**
  * Hadoop delegation token provider.
  */
@@ -35,7 +37,7 @@ private[spark] trait HadoopDelegationTokenProvider {
    * Returns true if delegation tokens are required for this service. By default, it is based on
    * whether Hadoop security is enabled.
    */
-  def delegationTokensRequired(hadoopConf: Configuration): Boolean
+  def delegationTokensRequired(sparkConf: SparkConf, hadoopConf: Configuration): Boolean
 
   /**
    * Obtain delegation tokens for this service and get the time of the next renewal.
@@ -46,5 +48,6 @@ private[spark] trait HadoopDelegationTokenProvider {
    */
   def obtainDelegationTokens(
     hadoopConf: Configuration,
+    sparkConf: SparkConf,
     creds: Credentials): Option[Long]
 }

@@ -133,7 +133,7 @@ class StreamingTest @Since("1.6.0") () extends Logging with Serializable {
       if (time.milliseconds > data.slideDuration.milliseconds * peacePeriod) {
         rdd
       } else {
-        data.context.sparkContext.parallelize(Seq())
+        data.context.sparkContext.parallelize(Seq.empty)
       }
     }
   }

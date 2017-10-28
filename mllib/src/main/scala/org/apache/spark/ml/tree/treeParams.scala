@@ -458,7 +458,7 @@ private[ml] trait RandomForestRegressorParams
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.
@@ -484,12 +484,9 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
    * (default = 0.1)
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
+  final override val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
     "(a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator.",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
-
-  /** @group getParam */
-  final def getStepSize: Double = $(stepSize)
 
   /**
    * @deprecated This method is deprecated and will be removed in 3.0.0.
