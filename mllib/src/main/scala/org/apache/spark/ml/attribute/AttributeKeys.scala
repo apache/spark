@@ -22,9 +22,13 @@ package org.apache.spark.ml.attribute
  */
 private[attribute] object AttributeKeys {
   val ML_ATTR: String = "ml_attr"
+  val ML_ATTRV2: String = "ml_attr_v2"
+
   val TYPE: String = "type"
   val NAME: String = "name"
+  val NAMES: String = "names"
   val INDEX: String = "idx"
+  val INDICES: String = "idices"
   val MIN: String = "min"
   val MAX: String = "max"
   val STD: String = "std"

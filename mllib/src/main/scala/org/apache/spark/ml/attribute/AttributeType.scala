@@ -51,6 +51,12 @@ object AttributeType {
     Binary
   }
 
+  /** Vector type. */
+  val Vector: AttributeType = {
+    case object Vector extends AttributeType("vector")
+    Vector
+  }
+
   /** Unresolved type. */
   val Unresolved: AttributeType = {
     case object Unresolved extends AttributeType("unresolved")
