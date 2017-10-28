@@ -186,6 +186,7 @@ case class GetArrayStructFields(
       val values = ctx.freshName("values")
       val j = ctx.freshName("j")
       val row = ctx.freshName("row")
+      val nullCheckElement = if (!field.nullable) "false" else s"$row.isNullAt($ordinal)"
       s"""
         final int $n = $eval.numElements();
         final Object[] $values = new Object[$n];
@@ -194,7 +195,7 @@ case class GetArrayStructFields(
             $values[$j] = null;
           } else {
             final InternalRow $row = $eval.getStruct($j, $numFields);
-            if ($row.isNullAt($ordinal)) {
+            if ($nullCheckElement) {
               $values[$j] = null;
             } else {
               $values[$j] = ${ctx.getValue(row, field.dataType, ordinal.toString)};
@@ -242,9 +243,11 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
+      val nullCheck = if (!child.dataType.asInstanceOf[ArrayType].containsNull) ""
+        else s" || $eval1.isNullAt($index)"
       s"""
         final int $index = (int) $eval2;
-        if ($index >= $eval1.numElements() || $index < 0 || $eval1.isNullAt($index)) {
+        if ($index >= $eval1.numElements() || $index < 0$nullCheck) {
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${ctx.getValue(eval1, dataType, index)};
@@ -309,6 +312,8 @@ case class GetMapValue(child: Expression, key: Expression)
     val found = ctx.freshName("found")
     val key = ctx.freshName("key")
     val values = ctx.freshName("values")
+    val nullCheck = if (!child.dataType.asInstanceOf[MapType].valueContainsNull) ""
+      else s" || $values.isNullAt($index)"
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int $length = $eval1.numElements();
@@ -326,7 +331,7 @@ case class GetMapValue(child: Expression, key: Expression)
           }
         }
 
-        if (!$found || $values.isNullAt($index)) {
+        if (!$found$nullCheck) {
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${ctx.getValue(values, dataType, index)};
