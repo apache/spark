@@ -158,7 +158,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(2).equals("class java.sql.Timestamp"))
   }
 
-  test("SPARK-22291: Postgresql UUID[] to Cassandra: Conversion Error") {
+  test("SPARK-22291: PostgreSQL UUID[] to StringType: Conversion Error") {
     val df = sqlContext.read.jdbc(jdbcUrl, "st_with_array", new Properties)
     val rows = df.collect()
     assert(rows(0).getString(0) == "0a532531-cdf1-45e3-963d-5de90b6a30f1")
