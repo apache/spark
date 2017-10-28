@@ -25,6 +25,12 @@ import org.apache.spark.sql.types.{DataType, StructType}
 abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
+  /**
+    * The active config object within the current scope.
+    * Note that if you want to refer config values during execution, you have to capture them
+    * in Driver and use the captured values in Executors.
+    * See [[SQLConf.get]] for more information.
+    */
   def conf: SQLConf = SQLConf.get
 
   def output: Seq[Attribute]
