@@ -1276,7 +1276,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .write.option("lineSep", lineSep).csv(path.getAbsolutePath)
         val partFile = Utils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
         val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
-        assert(readBack === s"a${lineSep}b${lineSep}c${lineSep}")
+        assert(readBack === s"a${lineSep}b${lineSep}c$lineSep")
       }
 
       // Roundtrip

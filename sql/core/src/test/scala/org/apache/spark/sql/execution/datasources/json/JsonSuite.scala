@@ -2071,9 +2071,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val data =
         s"""
           |  {"f":
-          |"a", "f0": 1}${lineSep}{"f":
+          |"a", "f0": 1}$lineSep{"f":
           |
-          |"c",  "f0": 2}${lineSep}{"f": "d",  "f0": 3}
+          |"c",  "f0": 2}$lineSep{"f": "d",  "f0": 3}
         """.stripMargin
       val dataWithTrailingLineSep = s"$data$lineSep"
 
@@ -2095,7 +2095,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         val partFile = Utils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
         val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
         assert(
-          readBack === s"""{"value":"a"}${lineSep}{"value":"b"}${lineSep}{"value":"c"}${lineSep}""")
+          readBack === s"""{"value":"a"}$lineSep{"value":"b"}$lineSep{"value":"c"}$lineSep""")
       }
 
       // Roundtrip
