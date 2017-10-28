@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1);
        -1
@@ -89,7 +89,7 @@ case class UnaryPositive(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric value.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(-1);
        1
@@ -141,7 +141,7 @@ object BinaryArithmetic {
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 1 _FUNC_ 2;
        3
@@ -177,7 +177,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`-`expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 2 _FUNC_ 1;
        1
@@ -213,7 +213,7 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 2 _FUNC_ 3;
        6
@@ -233,7 +233,7 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`/`expr2`. It always performs floating point division.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
        1.5
@@ -316,7 +316,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 2 _FUNC_ 1.8;
        0.2
@@ -403,7 +403,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the positive value of `expr1` mod `expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(10, 3);
        1
@@ -562,7 +562,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns the least value of all parameters, skipping null values.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        2
@@ -628,7 +628,7 @@ case class Least(children: Seq[Expression]) extends Expression {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns the greatest value of all parameters, skipping null values.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        10

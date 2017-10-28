@@ -30,8 +30,8 @@ import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
-import org.apache.spark.deploy.mesos.config
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.config
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
@@ -386,9 +386,24 @@ private[spark] class MesosClusterScheduler(
     val env = desc.conf.getAllWithPrefix("spark.mesos.driverEnv.") ++ commandEnv
 
     val envBuilder = Environment.newBuilder()
+
+    // add normal environment variables
     env.foreach { case (k, v) =>
       envBuilder.addVariables(Variable.newBuilder().setName(k).setValue(v))
     }
+
+    // add secret environment variables
+    MesosSchedulerBackendUtil.getSecretEnvVar(desc.conf, config.driverSecretConfig)
+      .foreach { variable =>
+        if (variable.getSecret.getReference.isInitialized) {
+          logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName} " +
+            s"on file ${variable.getName}")
+        } else {
+          logInfo(s"Setting secret on environment variable name=${variable.getName}")
+        }
+        envBuilder.addVariables(variable)
+    }
+
     envBuilder.build()
   }
 
@@ -403,6 +418,23 @@ private[spark] class MesosClusterScheduler(
 
     ((jarUrl :: confUris) ++ getDriverExecutorURI(desc).toList).map(uri =>
       CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
+  }
+
+  private def getContainerInfo(desc: MesosDriverDescription): ContainerInfo.Builder = {
+    val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(desc.conf)
+
+    MesosSchedulerBackendUtil.getSecretVolume(desc.conf, config.driverSecretConfig)
+      .foreach { volume =>
+        if (volume.getSource.getSecret.getReference.isInitialized) {
+          logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName} " +
+            s"on file ${volume.getContainerPath}")
+        } else {
+          logInfo(s"Setting secret on file name=${volume.getContainerPath}")
+        }
+        containerInfo.addVolumes(volume)
+    }
+
+    containerInfo
   }
 
   private def getDriverCommandValue(desc: MesosDriverDescription): String = {
@@ -529,15 +561,18 @@ private[spark] class MesosClusterScheduler(
 
     val appName = desc.conf.get("spark.app.name")
 
+    val driverLabels = MesosProtoUtils.mesosLabels(desc.conf.get(config.DRIVER_LABELS)
+      .getOrElse(""))
+
     TaskInfo.newBuilder()
       .setTaskId(taskId)
       .setName(s"Driver for ${appName}")
       .setSlaveId(offer.offer.getSlaveId)
       .setCommand(buildDriverCommand(desc))
+      .setContainer(getContainerInfo(desc))
       .addAllResources(cpuResourcesToUse.asJava)
       .addAllResources(memResourcesToUse.asJava)
-      .setLabels(MesosProtoUtils.mesosLabels(desc.conf.get(config.DRIVER_LABELS).getOrElse("")))
-      .setContainer(MesosSchedulerBackendUtil.containerInfo(desc.conf))
+      .setLabels(driverLabels)
       .build
   }
 
@@ -584,9 +619,14 @@ private[spark] class MesosClusterScheduler(
         } catch {
           case e: SparkException =>
             afterLaunchCallback(submission.submissionId)
-            finishedDrivers += new MesosClusterSubmissionState(submission, TaskID.newBuilder().
-              setValue(submission.submissionId).build(), SlaveID.newBuilder().setValue("").
-              build(), None, null, None, getDriverFrameworkID(submission))
+            finishedDrivers += new MesosClusterSubmissionState(
+              submission,
+              TaskID.newBuilder().setValue(submission.submissionId).build(),
+              SlaveID.newBuilder().setValue("").build(),
+              None,
+              null,
+              None,
+              getDriverFrameworkID(submission))
             logError(s"Failed to launch the driver with id: ${submission.submissionId}, " +
               s"cpu: $driverCpu, mem: $driverMem, reason: ${e.getMessage}")
         }

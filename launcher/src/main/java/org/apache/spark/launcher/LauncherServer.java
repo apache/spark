@@ -232,20 +232,20 @@ class LauncherServer implements Closeable {
         };
         ServerConnection clientConnection = new ServerConnection(client, timeout);
         Thread clientThread = factory.newThread(clientConnection);
-        synchronized (timeout) {
-          clientThread.start();
-          synchronized (clients) {
-            clients.add(clientConnection);
-          }
-          long timeoutMs = getConnectionTimeout();
-          // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
-          // and force an immediate timeout.
-          if (timeoutMs > 0) {
-            timeoutTimer.schedule(timeout, getConnectionTimeout());
-          } else {
-            timeout.run();
-          }
+        synchronized (clients) {
+          clients.add(clientConnection);
         }
+
+        long timeoutMs = getConnectionTimeout();
+        // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
+        // and force an immediate timeout.
+        if (timeoutMs > 0) {
+          timeoutTimer.schedule(timeout, timeoutMs);
+        } else {
+          timeout.run();
+        }
+
+        clientThread.start();
       }
     } catch (IOException ioe) {
       if (running) {

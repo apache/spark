@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.test
 
 import java.io.File
+import java.net.URI
 import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
@@ -51,11 +52,13 @@ object TestHive
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
+        .set(SQLConf.CODEGEN_FALLBACK.key, "false")
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
-        .set("spark.ui.enabled", "false")))
+        .set("spark.ui.enabled", "false")
+        .set("spark.unsafe.exceptionOnMemoryLeak", "true")))
 
 
 case class TestHiveVersion(hiveClient: HiveClient)
@@ -496,6 +499,11 @@ private[hive] class TestHiveSparkSession(
         }
       }
 
+      // Clean out the Hive warehouse between each suite
+      val warehouseDir = new File(new URI(sparkContext.conf.get("spark.sql.warehouse.dir")).getPath)
+      Utils.deleteRecursively(warehouseDir)
+      warehouseDir.mkdir()
+
       sharedState.cacheManager.clearCache()
       loadedTables.clear()
       sessionState.catalog.reset()
@@ -554,7 +562,7 @@ private[hive] class TestHiveQueryExecution(
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
+        logical.collect { case UnresolvedRelation(tableIdent) => tableIdent.table }
     val resolver = sparkSession.sessionState.conf.resolver
     val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
       referencedTables.exists(resolver(_, testTable))

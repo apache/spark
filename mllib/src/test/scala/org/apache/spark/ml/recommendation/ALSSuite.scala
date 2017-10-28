@@ -20,10 +20,10 @@ package org.apache.spark.ml.recommendation
 import java.io.File
 import java.util.Random
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.WrappedArray
-import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -723,9 +723,9 @@ class ALSSuite
     val numUsers = model.userFactors.count
     val numItems = model.itemFactors.count
     val expected = Map(
-      0 -> Array((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
-      1 -> Array((3, 39f), (5, 33f), (4, 26f), (6, 16f)),
-      2 -> Array((3, 51f), (5, 45f), (4, 30f), (6, 18f))
+      0 -> Seq((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
+      1 -> Seq((3, 39f), (5, 33f), (4, 26f), (6, 16f)),
+      2 -> Seq((3, 51f), (5, 45f), (4, 30f), (6, 18f))
     )
 
     Seq(2, 4, 6).foreach { k =>
@@ -743,10 +743,10 @@ class ALSSuite
     val numUsers = model.userFactors.count
     val numItems = model.itemFactors.count
     val expected = Map(
-      3 -> Array((0, 54f), (2, 51f), (1, 39f)),
-      4 -> Array((0, 44f), (2, 30f), (1, 26f)),
-      5 -> Array((2, 45f), (0, 42f), (1, 33f)),
-      6 -> Array((0, 28f), (2, 18f), (1, 16f))
+      3 -> Seq((0, 54f), (2, 51f), (1, 39f)),
+      4 -> Seq((0, 44f), (2, 30f), (1, 26f)),
+      5 -> Seq((2, 45f), (0, 42f), (1, 33f)),
+      6 -> Seq((0, 28f), (2, 18f), (1, 16f))
     )
 
     Seq(2, 3, 4).foreach { k =>
@@ -759,9 +759,93 @@ class ALSSuite
     }
   }
 
+  test("recommendForUserSubset with k <, = and > num_items") {
+    val spark = this.spark
+    import spark.implicits._
+    val model = getALSModel
+    val numItems = model.itemFactors.count
+    val expected = Map(
+      0 -> Seq((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
+      2 -> Seq((3, 51f), (5, 45f), (4, 30f), (6, 18f))
+    )
+    val userSubset = expected.keys.toSeq.toDF("user")
+    val numUsersSubset = userSubset.count
+
+    Seq(2, 4, 6).foreach { k =>
+      val n = math.min(k, numItems).toInt
+      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val topItems = model.recommendForUserSubset(userSubset, k)
+      assert(topItems.count() == numUsersSubset)
+      assert(topItems.columns.contains("user"))
+      checkRecommendations(topItems, expectedUpToN, "item")
+    }
+  }
+
+  test("recommendForItemSubset with k <, = and > num_users") {
+    val spark = this.spark
+    import spark.implicits._
+    val model = getALSModel
+    val numUsers = model.userFactors.count
+    val expected = Map(
+      3 -> Seq((0, 54f), (2, 51f), (1, 39f)),
+      6 -> Seq((0, 28f), (2, 18f), (1, 16f))
+    )
+    val itemSubset = expected.keys.toSeq.toDF("item")
+    val numItemsSubset = itemSubset.count
+
+    Seq(2, 3, 4).foreach { k =>
+      val n = math.min(k, numUsers).toInt
+      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val topUsers = model.recommendForItemSubset(itemSubset, k)
+      assert(topUsers.count() == numItemsSubset)
+      assert(topUsers.columns.contains("item"))
+      checkRecommendations(topUsers, expectedUpToN, "user")
+    }
+  }
+
+  test("subset recommendations eliminate duplicate ids, returns same results as unique ids") {
+    val spark = this.spark
+    import spark.implicits._
+    val model = getALSModel
+    val k = 2
+
+    val users = Seq(0, 1).toDF("user")
+    val dupUsers = Seq(0, 1, 0, 1).toDF("user")
+    val singleUserRecs = model.recommendForUserSubset(users, k)
+    val dupUserRecs = model.recommendForUserSubset(dupUsers, k)
+      .as[(Int, Seq[(Int, Float)])].collect().toMap
+    assert(singleUserRecs.count == dupUserRecs.size)
+    checkRecommendations(singleUserRecs, dupUserRecs, "item")
+
+    val items = Seq(3, 4, 5).toDF("item")
+    val dupItems = Seq(3, 4, 5, 4, 5).toDF("item")
+    val singleItemRecs = model.recommendForItemSubset(items, k)
+    val dupItemRecs = model.recommendForItemSubset(dupItems, k)
+      .as[(Int, Seq[(Int, Float)])].collect().toMap
+    assert(singleItemRecs.count == dupItemRecs.size)
+    checkRecommendations(singleItemRecs, dupItemRecs, "user")
+  }
+
+  test("subset recommendations on full input dataset equivalent to recommendForAll") {
+    val spark = this.spark
+    import spark.implicits._
+    val model = getALSModel
+    val k = 2
+
+    val userSubset = model.userFactors.withColumnRenamed("id", "user").drop("features")
+    val userSubsetRecs = model.recommendForUserSubset(userSubset, k)
+    val allUserRecs = model.recommendForAllUsers(k).as[(Int, Seq[(Int, Float)])].collect().toMap
+    checkRecommendations(userSubsetRecs, allUserRecs, "item")
+
+    val itemSubset = model.itemFactors.withColumnRenamed("id", "item").drop("features")
+    val itemSubsetRecs = model.recommendForItemSubset(itemSubset, k)
+    val allItemRecs = model.recommendForAllItems(k).as[(Int, Seq[(Int, Float)])].collect().toMap
+    checkRecommendations(itemSubsetRecs, allItemRecs, "user")
+  }
+
   private def checkRecommendations(
       topK: DataFrame,
-      expected: Map[Int, Array[(Int, Float)]],
+      expected: Map[Int, Seq[(Int, Float)]],
       dstColName: String): Unit = {
     val spark = this.spark
     import spark.implicits._

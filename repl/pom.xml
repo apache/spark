@@ -171,7 +171,6 @@
     </plugins>
   </build>
   
-  <!--
   <profiles>
     <profile>
       <id>scala-2.12</id>
@@ -181,6 +180,5 @@
       </properties>
     </profile>
   </profiles>
-  -->
 
 </project>
