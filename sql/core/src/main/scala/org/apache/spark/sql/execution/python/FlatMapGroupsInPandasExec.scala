@@ -77,6 +77,7 @@ case class FlatMapGroupsInPandasExec(
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
     val argOffsets = Array((0 until (child.output.length - groupingAttributes.length)).toArray)
     val schema = StructType(child.schema.drop(groupingAttributes.length))
+    val sessionLocalTimeZone = conf.sessionLocalTimeZone
 
     inputRDD.mapPartitionsInternal { iter =>
       val grouped = if (groupingAttributes.isEmpty) {
@@ -94,7 +95,7 @@ case class FlatMapGroupsInPandasExec(
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc, bufferSize, reuseWorker,
-        PythonEvalType.SQL_PANDAS_GROUPED_UDF, argOffsets, schema, conf.sessionLocalTimeZone)
+        PythonEvalType.SQL_PANDAS_GROUPED_UDF, argOffsets, schema, sessionLocalTimeZone)
           .compute(grouped, context.partitionId(), context)
 
       columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))

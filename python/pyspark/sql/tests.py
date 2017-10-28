@@ -3476,6 +3476,26 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
             expected = spark_ts_t.fromInternal(spark_ts_t.toInternal(ts_tz))
             self.assertEquals(expected, ts)
 
+    def test_vectorized_udf_check_config(self):
+        from pyspark.sql.functions import pandas_udf, col
+        orig_value = self.spark.conf.get("spark.sql.execution.arrow.maxRecordsPerBatch", None)
+        self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", 3)
+        try:
+            df = self.spark.range(10, numPartitions=1)
+
+            @pandas_udf(returnType=LongType())
+            def check_records_per_batch(x):
+                self.assertTrue(x.size <= 3)
+                return x
+
+            result = df.select(check_records_per_batch(col("id")))
+            self.assertEquals(df.collect(), result.collect())
+        finally:
+            if orig_value is None:
+                self.spark.conf.unset("spark.sql.execution.arrow.maxRecordsPerBatch")
+            else:
+                self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", orig_value)
+
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class GroupbyApplyTests(ReusedPySparkTestCase):
