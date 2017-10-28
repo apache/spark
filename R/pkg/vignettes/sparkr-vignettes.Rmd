@@ -41,7 +41,7 @@ tmp_arg <- paste("-Djava.io.tmpdir=", r_tmp_dir, sep = "")
 sparkSessionConfig <- list(spark.driver.extraJavaOptions = tmp_arg,
                            spark.executor.extraJavaOptions = tmp_arg)
 old_java_opt <- Sys.getenv("_JAVA_OPTIONS")
-new_java_opt <- Sys.setenv("_JAVA_OPTIONS"=paste("-XX:-UsePerfData", old_java_opt, sep = " "))
+Sys.setenv("_JAVA_OPTIONS" = paste("-XX:-UsePerfData", old_java_opt, sep = " "))
 ```
 
 ## Overview
