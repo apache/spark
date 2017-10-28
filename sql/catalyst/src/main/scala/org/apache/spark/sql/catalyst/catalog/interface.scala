@@ -438,15 +438,6 @@ case class HiveTableRelation(
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
-  override def equals(relation: Any): Boolean = relation match {
-    case other: CatalogRelation => tableMeta == other.tableMeta && output == other.output
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Objects.hashCode(tableMeta.identifier, output)
-  }
-
   override def doCanonicalize(): LogicalPlan = copy(
     tableMeta = tableMeta.copy(
       storage = CatalogStorageFormat.empty,
