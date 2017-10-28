@@ -438,7 +438,7 @@ case class HiveTableRelation(
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
-  override def doCanonicalize(): LogicalPlan = copy(
+  override def doCanonicalize(): HiveTableRelation = copy(
     tableMeta = tableMeta.copy(
       storage = CatalogStorageFormat.empty,
       createTime = -1
