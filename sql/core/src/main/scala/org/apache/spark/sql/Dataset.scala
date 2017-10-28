@@ -1754,8 +1754,10 @@ class Dataset[T] private[sql](
    * Also as standard in SQL, this function resolves columns by position (not by name).
    *
    * Notice that the column positions in the schema aren't necessarily matched with the
-   * fields in the typed objects in a Dataset. This function resolves columns by their positions
-   * in the schema, not the fields in the typed objects, as this Scala example shows:
+   * fields in the strongly typed objects in a Dataset. This function resolves columns
+   * by their positions in the schema, not the fields in the strongly typed objects, as
+   * this Scala example shows (using Scala case class for example, it is also applicable
+   * to the strongly-typed JVM objects):
    *
    * {{{
    *   case class Test(a: String, b: String)
