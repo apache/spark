@@ -173,6 +173,13 @@ object SQLConf {
     .intConf
     .createWithDefault(4)
 
+  val ADVANCED_PARTITION_PREDICATE_PUSHDOWN =
+    buildConf("spark.sql.hive.advancedPartitionPredicatePushdown.enabled")
+      .internal()
+      .doc("When true, advanced partition predicate pushdown into Hive metastore is enabled.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
     buildConf("spark.sql.statistics.fallBackToHdfs")
     .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
@@ -607,6 +614,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val IGNORE_MISSING_FILES = buildConf("spark.sql.files.ignoreMissingFiles")
+    .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
+      "encountering missing files and the contents that have been read will still be returned.")
+    .booleanConf
+    .createWithDefault(false)
+
   val MAX_RECORDS_PER_FILE = buildConf("spark.sql.files.maxRecordsPerFile")
     .doc("Maximum number of records to write out to a single file. " +
       "If this value is zero or negative, there is no limit.")
@@ -1007,6 +1020,8 @@ class SQLConf extends Serializable with Logging {
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
+  def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
+
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
@@ -1091,6 +1106,9 @@ class SQLConf extends Serializable with Logging {
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
+
+  def advancedPartitionPredicatePushdownEnabled: Boolean =
+    getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 

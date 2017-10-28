@@ -384,7 +384,7 @@ class SymmetricHashJoinStateManager(
   }
 
   /** A wrapper around a [[StateStore]] that stores [(key, index) -> value]. */
-  private class KeyWithIndexToValueStore extends StateStoreHandler(KeyWithIndexToValuesType) {
+  private class KeyWithIndexToValueStore extends StateStoreHandler(KeyWithIndexToValueType) {
     private val keyWithIndexExprs = keyAttributes :+ Literal(1L)
     private val keyWithIndexSchema = keySchema.add("index", LongType)
     private val indexOrdinalInKeyWithIndexRow = keyAttributes.size
@@ -471,7 +471,7 @@ class SymmetricHashJoinStateManager(
 object SymmetricHashJoinStateManager {
 
   def allStateStoreNames(joinSides: JoinSide*): Seq[String] = {
-    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToNumValuesType, KeyWithIndexToValuesType)
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToNumValuesType, KeyWithIndexToValueType)
     for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
       getStateStoreName(joinSide, stateStoreType)
     }
@@ -483,8 +483,8 @@ object SymmetricHashJoinStateManager {
     override def toString(): String = "keyToNumValues"
   }
 
-  private case object KeyWithIndexToValuesType extends StateStoreType {
-    override def toString(): String = "keyWithIndexToNumValues"
+  private case object KeyWithIndexToValueType extends StateStoreType {
+    override def toString(): String = "keyWithIndexToValue"
   }
 
   private def getStateStoreName(joinSide: JoinSide, storeType: StateStoreType): String = {

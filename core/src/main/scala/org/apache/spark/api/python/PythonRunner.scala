@@ -36,6 +36,7 @@ private[spark] object PythonEvalType {
   val NON_UDF = 0
   val SQL_BATCHED_UDF = 1
   val SQL_PANDAS_UDF = 2
+  val SQL_PANDAS_GROUPED_UDF = 3
 }
 
 /**
