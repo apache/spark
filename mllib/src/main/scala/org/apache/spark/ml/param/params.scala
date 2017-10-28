@@ -18,7 +18,7 @@
 package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
-import java.util.{List => JList}
+import java.util.{List => JList, Locale}
 import java.util.NoSuchElementException
 
 import scala.annotation.varargs
@@ -440,6 +440,43 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
  * Specialized version of `Param[Array[String]]` for Java.
  */
 @DeveloperApi
+private[ml] class StringParam(parent: Params, name: String, doc: String, isValid: String => Boolean)
+  extends Param[String](parent, name, doc, isValid) {
+
+  private var options: Option[Array[String]] = None
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  /** construct a StringParam with limited options (case-insensitive) */
+  def this(parent: Params, name: String, doc: String, options: Array[String]) = {
+    this(parent, name, doc + s" Supported options (case-insensitive): ${options.mkString(", ")}.",
+      s => options.exists(s.equalsIgnoreCase))
+    this.options = Some(options)
+  }
+
+  private[spark] def getOptions: Option[Array[String]] = options
+
+  /** Creates a param pair with a `java.util.List` of values (for Java and Python). */
+  override def w(value: String): ParamPair[String] = super.w(value)
+
+  override def validate(value: String): Unit = {
+    if (!isValid(value)) {
+      val optionStr = options match {
+        case Some(a) => s" Supported options: ${a.mkString(", ")}."
+        case None => ""
+      }
+      throw new IllegalArgumentException(
+        s"$parent parameter $name given invalid value $value.$optionStr")
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Specialized version of `Param[Array[String]]` for Java.
+ */
+@DeveloperApi
 class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
   extends Param[Array[String]](parent, name, doc, isValid) {
 
@@ -656,6 +693,12 @@ trait Params extends Identifiable with Serializable {
    * An alias for `getOrDefault()`.
    */
   protected final def $[T](param: Param[T]): T = getOrDefault(param)
+
+  /**
+   * Return lower case (Local.ROOT) of `getOrDefault()` for String params.
+   */
+  protected[ml] final def $lc(param: Param[String]): String = getOrDefault(param)
+    .toLowerCase(Locale.ROOT)
 
   /**
    * Sets a default value for a param.

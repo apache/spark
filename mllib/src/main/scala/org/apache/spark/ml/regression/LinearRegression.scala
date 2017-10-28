@@ -34,7 +34,7 @@ import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.optim.aggregator.LeastSquaresAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
-import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{ParamMap, StringParam}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
@@ -58,17 +58,15 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   import LinearRegression._
 
   /**
-   * The solver algorithm for optimization.
+   * The solver algorithm for optimization (case-insensitive).
    * Supported options: "l-bfgs", "normal" and "auto".
    * Default: "auto"
    *
    * @group param
    */
   @Since("1.6.0")
-  final override val solver: Param[String] = new Param[String](this, "solver",
-    "The solver algorithm for optimization. Supported options: " +
-      s"${supportedSolvers.mkString(", ")}. (Default auto)",
-    ParamValidators.inArray[String](supportedSolvers))
+  final override val solver: StringParam = new StringParam(this, "solver",
+    s"The solver algorithm for optimization. (Default ${LinearRegression.Auto})", supportedSolvers)
 }
 
 /**
@@ -224,8 +222,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
-    if (($(solver) == Auto &&
-      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == Normal) {
+    if (($(solver).equalsIgnoreCase(Auto) && numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES)
+      || $(solver).equalsIgnoreCase(Normal)) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 

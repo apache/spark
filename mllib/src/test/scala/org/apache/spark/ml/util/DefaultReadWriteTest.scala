@@ -133,7 +133,8 @@ class MyParams(override val uid: String) extends Params with MLWritable {
   final val floatParam: FloatParam = new FloatParam(this, "floatParam", "doc")
   final val doubleParam: DoubleParam = new DoubleParam(this, "doubleParam", "doc")
   final val longParam: LongParam = new LongParam(this, "longParam", "doc")
-  final val stringParam: Param[String] = new Param[String](this, "stringParam", "doc")
+  final val stringParam: Param[String] = new Param[String](this, "Param[String]", "doc")
+  final val stringParam2: StringParam = new StringParam(this, "stringParam", "doc", Array("a", "b"))
   final val intArrayParam: IntArrayParam = new IntArrayParam(this, "intArrayParam", "doc")
   final val doubleArrayParam: DoubleArrayParam =
     new DoubleArrayParam(this, "doubleArrayParam", "doc")
@@ -146,6 +147,7 @@ class MyParams(override val uid: String) extends Params with MLWritable {
   set(doubleParam -> 3.0)
   set(longParam -> 4L)
   set(stringParam -> "5")
+  set(stringParam -> "a")
   set(intArrayParam -> Array(6, 7))
   set(doubleArrayParam -> Array(8.0, 9.0))
   set(stringArrayParam -> Array("10", "11"))

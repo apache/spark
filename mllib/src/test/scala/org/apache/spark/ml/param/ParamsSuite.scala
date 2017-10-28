@@ -140,6 +140,17 @@ class ParamsSuite extends SparkFunSuite {
     }
 
     { // StringArrayParam
+    // scalastyle:off nonascii
+    val param = new StringParam(dummy, "name", "doc", Array("x", "y"))
+      val values: Seq[String] = Seq("", "1", "abc", "ABC", "中文", "quote\"", "newline\n")
+      for (value <- values) {
+        val json = param.jsonEncode(value)
+        assert(param.jsonDecode(json) === value)
+      }
+    }
+    // scalastyle:on nonascii
+
+    { // StringArrayParam
       val param = new StringArrayParam(dummy, "name", "doc")
       val values: Seq[Array[String]] = Seq(
         Array(),
@@ -372,6 +383,7 @@ class ParamsSuite extends SparkFunSuite {
     val objOut = new ObjectOutputStream(new ByteArrayOutputStream())
     objOut.writeObject(filteredParamMap)
   }
+
 }
 
 object ParamsSuite extends SparkFunSuite {
@@ -392,6 +404,10 @@ object ParamsSuite extends SparkFunSuite {
     params.foreach { p =>
       assert(p.parent === obj.uid)
       assert(obj.getParam(p.name) === p)
+      p match {
+        case sp: StringParam => checkStringParamsCI(obj, sp)
+        case _ => // do nothing
+      }
       // TODO: Check that setters return self, which needs special handling for generic types.
     }
 
@@ -399,5 +415,20 @@ object ParamsSuite extends SparkFunSuite {
     val copyReturnType = copyMethod.getReturnType
     require(copyReturnType === obj.getClass,
       s"${clazz.getName}.copy should return ${clazz.getName} instead of ${copyReturnType.getName}.")
+  }
+
+  /**
+   * Checks StringParam should be case-insensitive
+   */
+  private def checkStringParamsCI(obj: Params, param: StringParam): Unit = {
+    param.getOptions match {
+      case Some(a) =>
+        a.foreach { opt =>
+          obj.set(param, opt)
+          obj.set(param, opt.toLowerCase())
+          obj.set(param, opt.toUpperCase())
+        }
+      case None => // do nothing
+    }
   }
 }

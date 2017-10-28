@@ -17,12 +17,14 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
@@ -46,14 +48,13 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
   final def getSmoothing: Double = $(smoothing)
 
   /**
-   * The model type which is a string (case-sensitive).
+   * The model type which is a string (case-insensitive).
    * Supported options: "multinomial" and "bernoulli".
    * (default = multinomial)
    * @group param
    */
-  final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
-    "which is a string (case-sensitive). Supported options: multinomial (default) and bernoulli.",
-    ParamValidators.inArray[String](NaiveBayes.supportedModelTypes.toArray))
+  final val modelType: StringParam = new StringParam(this, "modelType", "The model type " +
+    s"which is a string. Default: ${NaiveBayes.Multinomial}", NaiveBayes.supportedModelTypes)
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
@@ -133,7 +134,7 @@ class NaiveBayes @Since("1.5.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val modelTypeValue = $(modelType)
+    val modelTypeValue = $lc(modelType)
     val requireValues: Vector => Unit = {
       modelTypeValue match {
         case Multinomial =>
@@ -186,7 +187,7 @@ class NaiveBayes @Since("1.5.0") (
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
       labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
-      val thetaLogDenom = $(modelType) match {
+      val thetaLogDenom = $lc(modelType) match {
         case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
         case Bernoulli => math.log(n + 2.0 * lambda)
         case _ =>
@@ -215,13 +216,13 @@ class NaiveBayes @Since("1.5.0") (
 @Since("1.6.0")
 object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   /** String name for multinomial model type. */
-  private[classification] val Multinomial: String = "multinomial"
+  private[classification] val Multinomial: String = "multinomial".toLowerCase(Locale.ROOT)
 
   /** String name for Bernoulli model type. */
-  private[classification] val Bernoulli: String = "bernoulli"
+  private[classification] val Bernoulli: String = "bernoulli".toLowerCase(Locale.ROOT)
 
   /* Set of modelTypes that NaiveBayes supports */
-  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[classification] val supportedModelTypes = Array(Multinomial, Bernoulli)
 
   private[NaiveBayes] def requireNonnegativeValues(v: Vector): Unit = {
     val values = v match {
@@ -281,7 +282,7 @@ class NaiveBayesModel private[ml] (
    * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
    * application of this condition (in predict function).
    */
-  private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
+  private lazy val (thetaMinusNegTheta, negThetaSum) = $lc(modelType) match {
     case Multinomial => (None, None)
     case Bernoulli =>
       val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
@@ -319,7 +320,7 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    $(modelType) match {
+    $lc(modelType) match {
       case Multinomial =>
         multinomialCalculation(features)
       case Bernoulli =>
