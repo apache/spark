@@ -1747,7 +1747,26 @@ class Dataset[T] private[sql](
    * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
    * deduplication of elements), use this function followed by a [[distinct]].
    *
-   * Also as standard in SQL, this function resolves columns by position (not by name).
+   * Also as standard in SQL, this function resolves columns by position (not by name):
+   *
+   * {{{
+   *   val df1 = Seq((1, 2, 3)).toDF("col0", "col1", "col2")
+   *   val df2 = Seq((4, 5, 6)).toDF("col1", "col2", "col0")
+   *   df1.union(df2).show
+   *
+   *   // output:
+   *   // +----+----+----+
+   *   // |col0|col1|col2|
+   *   // +----+----+----+
+   *   // |   1|   2|   3|
+   *   // |   4|   5|   6|
+   *   // +----+----+----+
+   * }}}
+   *
+   * Notice that the column positions in the schema aren't necessarily matched with the
+   * fields in the strongly typed objects in a Dataset. This function resolves columns
+   * by their positions in the schema, not the fields in the strongly typed objects. Use
+   * [[unionByName]] to resolve columns by field name in the typed objects.
    *
    * @group typedrel
    * @since 2.0.0
