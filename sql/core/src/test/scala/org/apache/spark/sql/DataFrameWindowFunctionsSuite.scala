@@ -468,7 +468,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       spark.read.schema(sampleSchema).json(input.toDS()).select(c0, c1).foreach { _ => () }
     }
   }
-  
+
   test("window functions in multiple selects") {
     val df = Seq(
       ("S1", "P1", 100),
