@@ -591,6 +591,9 @@ case class MapObjects private(
       case _ => inputData.dataType
     }
 
+    // `MapObjects` generates a while loop to traverse the elements of the input collection. We
+    // need to take care of Seq and List because they may have O(n) complexity for indexed accessing
+    // like `list.get(1)`. Here we use Iterator to travers Seq and List.
     val (getLength, prepareLoop, getLoopVar) = inputDataType match {
       case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
         val it = ctx.freshName("it")
