@@ -437,7 +437,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
 
 /**
  * :: DeveloperApi ::
- * Specialized version of `Param[Array[String]]` for Java.
+ * Specialized version of `Param[String]` for Java.
  */
 @DeveloperApi
 private[ml] class StringParam(parent: Params, name: String, doc: String, isValid: String => Boolean)
