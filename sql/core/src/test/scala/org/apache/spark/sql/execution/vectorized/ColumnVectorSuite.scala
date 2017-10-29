@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.vectorized
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.execution.columnar.ColumnAccessor
 import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
@@ -393,6 +393,349 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getDouble(i) == i.toDouble)
+      }
+    }
+  }
+
+  test("CachedBatch boolean array Apis") {
+    val N = 16
+    val dataType = ArrayType(BooleanType, false)
+    val columnBuilder = ColumnBuilderHelper(dataType, 4096, "col", true)
+    val row = new GenericInternalRow(N)
+    val data = new Array[Array[Boolean]](N)
+    val nulls = Seq(0, 6, 11)
+
+    for (i <- 0 until N) {
+      if (nulls.contains(i)) {
+        row.setNullAt(0)
+      } else {
+        data(i) = Array.tabulate(i)(i => i % 2 == 0)
+        row.update(0, UnsafeArrayData.fromPrimitiveArray(data(i)))
+      }
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(N, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      for (i <- 0 until N) {
+        if (nulls.contains(i)) {
+          assert(testVector.isNullAt(i) == true)
+        } else {
+          assert(testVector.isNullAt(i) == false)
+          assert(testVector.getArray(i).toBooleanArray() === data(i))
+        }
+      }
+      for (i <- 0 to N / 3) {
+        if (nulls.contains(i * 3)) {
+          assert(testVector.isNullAt(i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(i * 3) == false)
+          assert(testVector.getArray(i * 3).toBooleanArray() === data(i * 3))
+        }
+      }
+      for (i <- 1 to N / 3) {
+        if (nulls.contains(N - i * 3)) {
+          assert(testVector.isNullAt(N - i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(N - i * 3) == false)
+          assert(testVector.getArray(N - i * 3).toBooleanArray() === data(N - i * 3))
+        }
+      }
+    }
+  }
+
+  test("CachedBatch byte array Apis") {
+    val N = 16
+    val dataType = ArrayType(ByteType, false)
+    val columnBuilder = ColumnBuilderHelper(dataType, 4096, "col", true)
+    val row = new GenericInternalRow(N)
+    val data = new Array[Array[Byte]](N)
+    val nulls = Seq(0, 6, 11)
+
+    for (i <- 0 until N) {
+      if (nulls.contains(i)) {
+        row.setNullAt(0)
+      } else {
+        data(i) = Array.tabulate(i)(i => i.toByte)
+        row.update(0, UnsafeArrayData.fromPrimitiveArray(data(i)))
+      }
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(N, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      for (i <- 0 until N) {
+        if (nulls.contains(i)) {
+          assert(testVector.isNullAt(i) == true)
+        } else {
+          assert(testVector.isNullAt(i) == false)
+          assert(testVector.getArray(i).toByteArray() === data(i))
+        }
+      }
+      for (i <- 0 to N / 3) {
+        if (nulls.contains(i * 3)) {
+          assert(testVector.isNullAt(i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(i * 3) == false)
+          assert(testVector.getArray(i * 3).toByteArray() === data(i * 3))
+        }
+      }
+      for (i <- 1 to N / 3) {
+        if (nulls.contains(N - i * 3)) {
+          assert(testVector.isNullAt(N - i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(N - i * 3) == false)
+          assert(testVector.getArray(N - i * 3).toByteArray() === data(N - i * 3))
+        }
+      }
+    }
+  }
+
+  test("CachedBatch short array Apis") {
+    val N = 16
+    val dataType = ArrayType(ShortType, false)
+    val columnBuilder = ColumnBuilderHelper(dataType, 4096, "col", true)
+    val row = new GenericInternalRow(N)
+    val data = new Array[Array[Short]](N)
+    val nulls = Seq(0, 6, 11)
+
+    for (i <- 0 until N) {
+      if (nulls.contains(i)) {
+        row.setNullAt(0)
+      } else {
+        data(i) = Array.tabulate(i)(i => i.toShort)
+        row.update(0, UnsafeArrayData.fromPrimitiveArray(data(i)))
+      }
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(N, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      for (i <- 0 until N) {
+        if (nulls.contains(i)) {
+          assert(testVector.isNullAt(i) == true)
+        } else {
+          assert(testVector.isNullAt(i) == false)
+          assert(testVector.getArray(i).toShortArray() === data(i))
+        }
+      }
+      for (i <- 0 to N / 3) {
+        if (nulls.contains(i * 3)) {
+          assert(testVector.isNullAt(i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(i * 3) == false)
+          assert(testVector.getArray(i * 3).toShortArray() === data(i * 3))
+        }
+      }
+      for (i <- 1 to N / 3) {
+        if (nulls.contains(N - i * 3)) {
+          assert(testVector.isNullAt(N - i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(N - i * 3) == false)
+          assert(testVector.getArray(N - i * 3).toShortArray() === data(N - i * 3))
+        }
+      }
+    }
+  }
+
+  test("CachedBatch int array Apis") {
+    val N = 16
+    val dataType = ArrayType(IntegerType, false)
+    val columnBuilder = ColumnBuilderHelper(dataType, 4096, "col", true)
+    val row = new GenericInternalRow(N)
+    val data = new Array[Array[Int]](N)
+    val nulls = Seq(0, 6, 11)
+
+    for (i <- 0 until N) {
+      if (nulls.contains(i)) {
+        row.setNullAt(0)
+      } else {
+        data(i) = Array.range(0, i)
+        row.update(0, UnsafeArrayData.fromPrimitiveArray(data(i)))
+      }
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(N, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      for (i <- 0 until N) {
+        if (nulls.contains(i)) {
+          assert(testVector.isNullAt(i) == true)
+        } else {
+          assert(testVector.isNullAt(i) == false)
+          assert(testVector.getArray(i).toIntArray() === data(i))
+        }
+      }
+      for (i <- 0 to N / 3) {
+        if (nulls.contains(i * 3)) {
+          assert(testVector.isNullAt(i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(i * 3) == false)
+          assert(testVector.getArray(i * 3).toIntArray() === data(i * 3))
+        }
+      }
+      for (i <- 1 to N / 3) {
+        if (nulls.contains(N - i * 3)) {
+          assert(testVector.isNullAt(N - i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(N - i * 3) == false)
+          assert(testVector.getArray(N - i * 3).toIntArray() === data(N - i * 3))
+        }
+      }
+    }
+  }
+
+  test("CachedBatch long array Apis") {
+    val N = 16
+    val dataType = ArrayType(LongType, false)
+    val columnBuilder = ColumnBuilderHelper(dataType, 4096, "col", true)
+    val row = new GenericInternalRow(N)
+    val data = new Array[Array[Long]](N)
+    val nulls = Seq(0, 6, 11)
+
+    for (i <- 0 until N) {
+      if (nulls.contains(i)) {
+        row.setNullAt(0)
+      } else {
+        data(i) = Array.tabulate(i)(i => i.toLong)
+        row.update(0, UnsafeArrayData.fromPrimitiveArray(data(i)))
+      }
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(N, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      for (i <- 0 until N) {
+        if (nulls.contains(i)) {
+          assert(testVector.isNullAt(i) == true)
+        } else {
+          assert(testVector.isNullAt(i) == false)
+          assert(testVector.getArray(i).toLongArray() === data(i))
+        }
+      }
+      for (i <- 0 to N / 3) {
+        if (nulls.contains(i * 3)) {
+          assert(testVector.isNullAt(i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(i * 3) == false)
+          assert(testVector.getArray(i * 3).toLongArray() === data(i * 3))
+        }
+      }
+      for (i <- 1 to N / 3) {
+        if (nulls.contains(N - i * 3)) {
+          assert(testVector.isNullAt(N - i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(N - i * 3) == false)
+          assert(testVector.getArray(N - i * 3).toLongArray() === data(N - i * 3))
+        }
+      }
+    }
+  }
+
+  test("CachedBatch float array Apis") {
+    val N = 16
+    val dataType = ArrayType(FloatType, false)
+    val columnBuilder = ColumnBuilderHelper(dataType, 4096, "col", true)
+    val row = new GenericInternalRow(N)
+    val data = new Array[Array[Float]](N)
+    val nulls = Seq(0, 6, 11)
+
+    for (i <- 0 until N) {
+      if (nulls.contains(i)) {
+        row.setNullAt(0)
+      } else {
+        data(i) = Array.tabulate(i)(i => i.toFloat)
+        row.update(0, UnsafeArrayData.fromPrimitiveArray(data(i)))
+      }
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(N, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      for (i <- 0 until N) {
+        if (nulls.contains(i)) {
+          assert(testVector.isNullAt(i) == true)
+        } else {
+          assert(testVector.isNullAt(i) == false)
+          assert(testVector.getArray(i).toFloatArray() === data(i))
+        }
+      }
+      for (i <- 0 to N / 3) {
+        if (nulls.contains(i * 3)) {
+          assert(testVector.isNullAt(i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(i * 3) == false)
+          assert(testVector.getArray(i * 3).toFloatArray() === data(i * 3))
+        }
+      }
+      for (i <- 1 to N / 3) {
+        if (nulls.contains(N - i * 3)) {
+          assert(testVector.isNullAt(N - i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(N - i * 3) == false)
+          assert(testVector.getArray(N - i * 3).toFloatArray() === data(N - i * 3))
+        }
+      }
+    }
+  }
+
+  test("CachedBatch double array Apis") {
+    val N = 16
+    val dataType = ArrayType(DoubleType, false)
+    val columnBuilder = ColumnBuilderHelper(dataType, 4096, "col", true)
+    val row = new GenericInternalRow(N)
+    val data = new Array[Array[Double]](N)
+    val nulls = Seq(0, 6, 11)
+
+    for (i <- 0 until N) {
+      if (nulls.contains(i)) {
+        row.setNullAt(0)
+      } else {
+        data(i) = Array.tabulate(i)(i => i.toDouble)
+        row.update(0, UnsafeArrayData.fromPrimitiveArray(data(i)))
+      }
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(N, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      for (i <- 0 until N) {
+        if (nulls.contains(i)) {
+          assert(testVector.isNullAt(i) == true)
+        } else {
+          assert(testVector.isNullAt(i) == false)
+          assert(testVector.getArray(i).toDoubleArray() === data(i))
+        }
+      }
+      for (i <- 0 to N / 3) {
+        if (nulls.contains(i * 3)) {
+          assert(testVector.isNullAt(i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(i * 3) == false)
+          assert(testVector.getArray(i * 3).toDoubleArray() === data(i * 3))
+        }
+      }
+      for (i <- 1 to N / 3) {
+        if (nulls.contains(N - i * 3)) {
+          assert(testVector.isNullAt(N - i * 3) == true)
+        } else {
+          assert(testVector.isNullAt(N - i * 3) == false)
+          assert(testVector.getArray(N - i * 3).toDoubleArray() === data(N - i * 3))
+        }
       }
     }
   }

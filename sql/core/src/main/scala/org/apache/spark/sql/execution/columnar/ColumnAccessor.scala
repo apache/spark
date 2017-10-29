@@ -156,6 +156,9 @@ private[sql] object ColumnAccessor {
     if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
       val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
       nativeAccessor.decompress(columnVector, numRows)
+    } else if (columnAccessor.isInstanceOf[ArrayColumnAccessor]) {
+      val arrayAccessor = columnAccessor.asInstanceOf[ArrayColumnAccessor]
+      arrayAccessor.extract(columnVector, numRows)
     } else {
       throw new RuntimeException("Not support non-primitive type now")
     }

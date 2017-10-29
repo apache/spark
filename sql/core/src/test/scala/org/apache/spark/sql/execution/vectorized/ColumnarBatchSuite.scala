@@ -645,26 +645,26 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putArray(2, 2, 0)
       column.putArray(3, 3, 3)
 
-      val a1 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
-      val a2 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(1)).asInstanceOf[Array[Int]]
-      val a3 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(2)).asInstanceOf[Array[Int]]
-      val a4 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(3)).asInstanceOf[Array[Int]]
+      val a1 = column.getArray(0).toIntArray()
+      val a2 = column.getArray(1).toIntArray()
+      val a3 = column.getArray(2).toIntArray()
+      val a4 = column.getArray(3).toIntArray()
       assert(a1 === Array(0))
       assert(a2 === Array(1, 2))
       assert(a3 === Array.empty[Int])
       assert(a4 === Array(3, 4, 5))
 
       // Verify the ArrayData APIs
-      assert(column.getArray(0).length == 1)
+      assert(column.getArray(0).numElements == 1)
       assert(column.getArray(0).getInt(0) == 0)
 
-      assert(column.getArray(1).length == 2)
+      assert(column.getArray(1).numElements == 2)
       assert(column.getArray(1).getInt(0) == 1)
       assert(column.getArray(1).getInt(1) == 2)
 
-      assert(column.getArray(2).length == 0)
+      assert(column.getArray(2).numElements == 0)
 
-      assert(column.getArray(3).length == 3)
+      assert(column.getArray(3).numElements == 3)
       assert(column.getArray(3).getInt(0) == 3)
       assert(column.getArray(3).getInt(1) == 4)
       assert(column.getArray(3).getInt(2) == 5)
@@ -677,8 +677,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(data.capacity == array.length * 2)
       data.putInts(0, array.length, array, 0)
       column.putArray(0, 0, array.length)
-      assert(ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
-        === array)
+      assert(column.getArray(0).toIntArray === array)
   }
 
   test("toArray for primitive types") {

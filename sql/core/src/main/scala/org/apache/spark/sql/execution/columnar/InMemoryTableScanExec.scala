@@ -56,6 +56,8 @@ case class InMemoryTableScanExec(
     relation.schema.fields.forall(f => f.dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType |
            FloatType | DoubleType => true
+      case ArrayType(dt, _) if (dt == BooleanType || dt == ByteType || dt == ShortType ||
+        dt == IntegerType || dt == LongType || dt == FloatType || dt == DoubleType) => true
       case _ => false
     }) && !WholeStageCodegenExec.isTooManyFields(conf, relation.schema)
   }

@@ -74,11 +74,13 @@ class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
     assert(df.select("b").first() === Row(outerStruct))
   }
 
+  //     checkAnswer(sparkContext.parallelize(Seq[java.lang.Integer](0, null, 2), 1).toDF,
+
   test("primitive data type accesses in persist data") {
     val data = Seq(true, 1.toByte, 3.toShort, 7, 15.toLong,
-      31.25.toFloat, 63.75, null)
+      31.25.toFloat, 63.75, null, Array(1.2, 2.3), Array[java.lang.Double](1.2, null))
     val dataTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType,
-      FloatType, DoubleType, IntegerType)
+      FloatType, DoubleType, IntegerType, ArrayType(DoubleType, false), ArrayType(DoubleType, true))
     val schemas = dataTypes.zipWithIndex.map { case (dataType, index) =>
       StructField(s"col$index", dataType, true)
     }

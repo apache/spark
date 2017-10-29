@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 
 private[columnar] trait NullableColumnAccessor extends ColumnAccessor {
   private var nullsBuffer: ByteBuffer = _
@@ -56,4 +57,15 @@ private[columnar] trait NullableColumnAccessor extends ColumnAccessor {
   }
 
   abstract override def hasNext: Boolean = seenNulls < nullCount || super.hasNext
+
+  def extract(columnVector: WritableColumnVector, capacity: Int): Unit = {
+    if (nextNullIndex != -1) {
+      columnVector.putNull(nextNullIndex)
+      for (_ <- 1 until nullCount) {
+        val ordinal = ByteBufferHelper.getInt(nullsBuffer)
+        columnVector.putNull(ordinal)
+      }
+    }
+    columnVector.putUnsafeArrayData(underlyingBuffer)
+  }
 }

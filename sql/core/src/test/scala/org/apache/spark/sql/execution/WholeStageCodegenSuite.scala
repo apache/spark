@@ -135,6 +135,20 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     )
     assert(dsIntFilter.collect() === Array(1, 2))
 
+    val dsIntArray = sparkContext.parallelize(Seq(Array(1, 2), Array(-1, -2)), 1).toDS.cache
+    dsIntArray.count
+    val dsIntArrayFilter = dsIntArray.filter(a => a(0) > 0)
+    val planIntArray = dsIntArrayFilter.queryExecution.executedPlan
+    assert(planIntArray.find(p =>
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
+          .isInstanceOf[InMemoryTableScanExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
+          .asInstanceOf[InMemoryTableScanExec].supportCodegen).isDefined
+    )
+    assert(dsIntArrayFilter.collect() === Array(Array(1, 2)))
+
     // cache for string type is not supported for InMemoryTableScanExec
     val dsString = spark.range(3).map(_.toString).cache
     dsString.count
