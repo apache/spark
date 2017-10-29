@@ -23,16 +23,25 @@ import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
 
+
 class JavaUtilsSuite extends SparkFunSuite {
 
   test("containsKey implementation without iteratively entrySet call") {
-    val src = new scala.collection.mutable.HashMap[String, String]
-    val key = "key"
+    val src = new scala.collection.mutable.HashMap[Double, String]
+    val key: Double = 42.5
+    val key2 = "key"
+
     src.put(key, "42")
 
-    val map: java.util.Map[String, String] = spy(JavaUtils.mapAsSerializableJavaMap(src))
+    val map: java.util.Map[Double, String] = spy(JavaUtils.mapAsSerializableJavaMap(src))
 
     assert(map.containsKey(key))
+
+    // ClassCast checking, shouldn't throw exception
+    assert(!map.containsKey(key2))
+    assert(map.get(key2) == null)
+
+    assert(map.get(key).eq("42"))
     assert(map.isInstanceOf[Serializable])
 
     verify(map, never()).entrySet()

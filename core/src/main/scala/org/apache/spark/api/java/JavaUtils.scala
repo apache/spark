@@ -44,14 +44,16 @@ private[spark] object JavaUtils {
     override def size: Int = underlying.size
 
     // Delegate to implementation because AbstractMap implementation iterates over whole key set
-    override def containsKey(key: AnyRef): Boolean = key match {
-      case key: A => underlying.contains(key)
-      case _ => false
+    override def containsKey(key: AnyRef): Boolean = {
+      underlying.contains(key.asInstanceOf[A])
     }
 
-    override def get(key: AnyRef): B = key match {
-      case key: A => underlying.getOrElse(key, null.asInstanceOf[B])
-      case _ => null.asInstanceOf[B]
+    override def get(key: AnyRef): B = {
+      val value = underlying.get(key.asInstanceOf[A])
+      if (value.isDefined && value.get.isInstanceOf[B]) {
+        return value.get
+      }
+      null.asInstanceOf[B]
     }
 
     override def entrySet: ju.Set[ju.Map.Entry[A, B]] = new ju.AbstractSet[ju.Map.Entry[A, B]] {
