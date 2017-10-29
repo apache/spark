@@ -458,8 +458,7 @@ object JdbcUtils extends Logging {
           (array: Object) =>
             // some underling types are not String such as uuid, inet, cidr, etc.
             array.asInstanceOf[Array[java.lang.Object]]
-              .map(obj => UTF8String.fromString(
-                if (obj == null) null else obj.toString))
+              .map(obj => if (obj == null) null else UTF8String.fromString(obj.toString))
 
         case DateType =>
           (array: Object) =>
