@@ -53,11 +53,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   // These are only updated by readExternal() or read()
   @Nonnull
   private MemoryBlock base;
-  private long offset;
   private int numBytes;
 
   public MemoryBlock getBaseObject() { return base; }
-  public long getBaseOffset() { return offset; }
+  public long getBaseOffset() { return base.getBaseOffset(); }
 
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -102,7 +101,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Creates an UTF8String from given address (base and offset) and length.
    */
   public static UTF8String fromAddress(MemoryBlock base, long offset, int numBytes) {
-    return new UTF8String(base, offset, numBytes);
+    return new UTF8String(base.allocate(offset, numBytes), numBytes);
+  }
+
+  /**
+   * Creates an UTF8String from given memory block.
+   */
+  public static UTF8String fromMemoryBlock(MemoryBlock base) {
+    return new UTF8String(base, (int)base.size());
   }
 
   /**
@@ -122,18 +128,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   protected UTF8String(byte[] bytes, long offset, int numBytes) {
-    this(new ByteArrayMemoryBlock(bytes, offset, numBytes), offset, numBytes);
+    this(new ByteArrayMemoryBlock(bytes, offset, numBytes), numBytes);
   }
 
-  protected UTF8String(MemoryBlock base, long offset, int numBytes) {
+  protected UTF8String(MemoryBlock base, int numBytes) {
     this.base = base;
-    this.offset = offset;
     this.numBytes = numBytes;
   }
 
   // for serialization
   public UTF8String() {
-    this((MemoryBlock)null, 0, 0);
+    this((MemoryBlock)null,0);
   }
 
   /**
@@ -142,11 +147,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * bytes in this string.
    */
   public void writeToMemory(byte[] target, long targetOffset) {
-    MemoryBlock.copyMemory(base, offset, target, targetOffset, numBytes);
+    MemoryBlock.copyMemory(base, base.getBaseOffset(), target, targetOffset, numBytes);
   }
 
   public void writeToMemory(MemoryBlock target, long targetOffset) {
-    MemoryBlock.copyMemory(base, offset, target, targetOffset, numBytes);
+    MemoryBlock.copyMemory(base, base.getBaseOffset(), target, targetOffset, numBytes);
   }
 
   public void writeTo(ByteBuffer buffer) {
@@ -166,6 +171,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   @Nonnull
   public ByteBuffer getByteBuffer() {
+    long offset = base.getBaseOffset();
     if (base instanceof ByteArrayMemoryBlock && offset >= BYTE_ARRAY_OFFSET) {
       final byte[] bytes = ((ByteArrayMemoryBlock) base).getByteArray();
 
@@ -231,6 +237,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // After getting the data, we use a mask to mask out data that is not part of the string.
     long p;
     long mask = 0;
+    long offset = base.getBaseOffset();
     if (IS_LITTLE_ENDIAN) {
       if (numBytes >= 8) {
         p = base.getLong(offset);
@@ -267,6 +274,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public byte[] getBytes() {
     // avoid copy if `base` is `byte[]`
+    long offset = base.getBaseOffset();
     if (offset == BYTE_ARRAY_OFFSET && base instanceof ByteArrayMemoryBlock
       && (((ByteArrayMemoryBlock) base).getByteArray()).length == numBytes) {
       return ((ByteArrayMemoryBlock) base).getByteArray();
@@ -302,7 +310,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     if (i > j) {
       byte[] bytes = new byte[i - j];
-      MemoryBlock.copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
+      MemoryBlock.copyMemory(base, base.getBaseOffset() + j, bytes, BYTE_ARRAY_OFFSET, i - j);
       return fromBytes(bytes);
     } else {
       return EMPTY_UTF8;
@@ -343,14 +351,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the byte at position `i`.
    */
   private byte getByte(int i) {
-    return base.getByte(offset + i);
+    return base.getByte(getBaseOffset() + i);
   }
 
   private boolean matchAt(final UTF8String s, int pos) {
     if (s.numBytes + pos > numBytes || pos < 0) {
       return false;
     }
-    return ByteArrayMethods.arrayEqualsBlock(base, offset + pos, s.base, s.offset, s.numBytes);
+    return ByteArrayMethods.arrayEqualsBlock(base, getBaseOffset() + pos, s.base, s.getBaseOffset(), s.numBytes);
   }
 
   public boolean startsWith(final UTF8String prefix) {
@@ -473,11 +481,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return 0;
     }
 
+    long offset = getBaseOffset();
+    long matchOffset = match.getBaseOffset();
     int n = 1, lastComma = -1;
     for (int i = 0; i < numBytes; i++) {
       if (getByte(i) == (byte) ',') {
         if (i - (lastComma + 1) == match.numBytes &&
-          ByteArrayMethods.arrayEqualsBlock(base, offset + (lastComma + 1), match.base, match.offset,
+          ByteArrayMethods.arrayEqualsBlock(base, offset + (lastComma + 1), match.base, matchOffset,
             match.numBytes)) {
           return n;
         }
@@ -486,7 +496,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
     if (numBytes - (lastComma + 1) == match.numBytes &&
-      ByteArrayMethods.arrayEqualsBlock(base, offset + (lastComma + 1), match.base, match.offset,
+      ByteArrayMethods.arrayEqualsBlock(base, offset + (lastComma + 1), match.base, matchOffset,
         match.numBytes)) {
       return n;
     }
@@ -502,7 +512,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private UTF8String copyUTF8String(int start, int end) {
     int len = end - start + 1;
     byte[] newBytes = new byte[len];
-    MemoryBlock.copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
+    MemoryBlock.copyMemory(base, getBaseOffset() + start, newBytes, BYTE_ARRAY_OFFSET, len);
     return UTF8String.fromBytes(newBytes);
   }
 
@@ -646,10 +656,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String reverse() {
     byte[] result = new byte[this.numBytes];
 
+    long offset = getBaseOffset();
     int i = 0; // position in byte
     while (i < numBytes) {
       int len = numBytesForFirstByte(getByte(i));
-      MemoryBlock.copyMemory(this.base, this.offset + i, result,
+      MemoryBlock.copyMemory(this.base, offset + i, result,
         BYTE_ARRAY_OFFSET + result.length - i - len, len);
 
       i += len;
@@ -664,7 +675,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     byte[] newBytes = new byte[numBytes * times];
-    MemoryBlock.copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
+    MemoryBlock.copyMemory(this.base, this.getBaseOffset(), newBytes, BYTE_ARRAY_OFFSET, numBytes);
 
     int copied = 1;
     while (copied < times) {
@@ -697,11 +708,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       c += 1;
     }
 
+    long offset = getBaseOffset();
+    long vOffset = v.getBaseOffset();
     do {
       if (i + v.numBytes > numBytes) {
         return -1;
       }
-      if (ByteArrayMethods.arrayEqualsBlock(base, offset + i, v.base, v.offset, v.numBytes)) {
+      if (ByteArrayMethods.arrayEqualsBlock(base, offset + i, v.base, vOffset, v.numBytes)) {
         return c;
       }
       i += numBytesForFirstByte(getByte(i));
@@ -716,8 +729,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   private int find(UTF8String str, int start) {
     assert (str.numBytes > 0);
+    long offset = getBaseOffset();
+    long strOffset = str.getBaseOffset();
     while (start <= numBytes - str.numBytes) {
-      if (ByteArrayMethods.arrayEqualsBlock(base, offset + start, str.base, str.offset, str.numBytes)) {
+      if (ByteArrayMethods.arrayEqualsBlock(base, offset + start, str.base, strOffset, str.numBytes)) {
         return start;
       }
       start += 1;
@@ -730,8 +745,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   private int rfind(UTF8String str, int start) {
     assert (str.numBytes > 0);
+    long offset = getBaseOffset();
+    long strOffset = str.getBaseOffset();
     while (start >= 0) {
-      if (ByteArrayMethods.arrayEqualsBlock(base, offset + start, str.base, str.offset, str.numBytes)) {
+      if (ByteArrayMethods.arrayEqualsBlock(base, offset + start, str.base, strOffset, str.numBytes)) {
         return start;
       }
       start -= 1;
@@ -764,7 +781,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         return EMPTY_UTF8;
       }
       byte[] bytes = new byte[idx];
-      MemoryBlock.copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, idx);
+      MemoryBlock.copyMemory(base, getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
       return fromBytes(bytes);
 
     } else {
@@ -784,7 +801,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       int size = numBytes - delim.numBytes - idx;
       byte[] bytes = new byte[size];
-      MemoryBlock.copyMemory(base, offset + idx + delim.numBytes, bytes, BYTE_ARRAY_OFFSET, size);
+      MemoryBlock.copyMemory(base, getBaseOffset() + idx + delim.numBytes, bytes, BYTE_ARRAY_OFFSET, size);
       return fromBytes(bytes);
     }
   }
@@ -807,15 +824,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       UTF8String remain = pad.substring(0, spaces - padChars * count);
 
       byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
-      MemoryBlock.copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
+      MemoryBlock.copyMemory(this.base, this.getBaseOffset(), data, BYTE_ARRAY_OFFSET, this.numBytes);
       int offset = this.numBytes;
       int idx = 0;
+      long padOffset = pad.getBaseOffset();
       while (idx < count) {
-        MemoryBlock.copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
+        MemoryBlock.copyMemory(pad.base, padOffset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
         ++ idx;
         offset += pad.numBytes;
       }
-      MemoryBlock.copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
+      MemoryBlock.copyMemory(remain.base, remain.getBaseOffset(), data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
 
       return UTF8String.fromBytes(data);
     }
@@ -842,14 +860,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
       int offset = 0;
       int idx = 0;
+      long padOffset = pad.getBaseOffset();
       while (idx < count) {
-        MemoryBlock.copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
+        MemoryBlock.copyMemory(pad.base, padOffset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
         ++ idx;
         offset += pad.numBytes;
       }
-      MemoryBlock.copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
+      MemoryBlock.copyMemory(remain.base, remain.getBaseOffset(), data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
       offset += remain.numBytes;
-      MemoryBlock.copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET + offset, numBytes());
+      MemoryBlock.copyMemory(this.base, this.getBaseOffset(), data, BYTE_ARRAY_OFFSET + offset, numBytes());
 
       return UTF8String.fromBytes(data);
     }
@@ -875,7 +894,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     for (int i = 0; i < inputs.length; i++) {
       int len = inputs[i].numBytes;
       MemoryBlock.copyMemory(
-        inputs[i].base, inputs[i].offset,
+        inputs[i].base, inputs[i].getBaseOffset(),
         result, BYTE_ARRAY_OFFSET + offset,
         len);
       offset += len;
@@ -915,7 +934,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (inputs[i] != null) {
         int len = inputs[i].numBytes;
         MemoryBlock.copyMemory(
-          inputs[i].base, inputs[i].offset,
+          inputs[i].base, inputs[i].getBaseOffset(),
           result, BYTE_ARRAY_OFFSET + offset,
           len);
         offset += len;
@@ -924,7 +943,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         // Add separator if this is not the last input.
         if (j < numInputs) {
           MemoryBlock.copyMemory(
-            separator.base, separator.offset,
+            separator.base, separator.getBaseOffset(),
             result, BYTE_ARRAY_OFFSET + offset,
             separator.numBytes);
           offset += separator.numBytes;
@@ -1198,7 +1217,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   public UTF8String copy() {
     byte[] bytes = new byte[numBytes];
-    MemoryBlock.copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
+    MemoryBlock.copyMemory(base, getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, numBytes);
     return fromBytes(bytes);
   }
 
@@ -1206,7 +1225,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public int compareTo(@Nonnull final UTF8String other) {
     int len = Math.min(numBytes, other.numBytes);
     int wordMax = (len / 8) * 8;
-    long roffset = other.offset;
+    long offset = getBaseOffset();
+    long roffset = other.getBaseOffset();
     MemoryBlock rbase = other.base;
     for (int i = 0; i < wordMax; i += 8) {
       long left = base.getLong(offset + i);
@@ -1240,7 +1260,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (numBytes != o.numBytes) {
         return false;
       }
-      return ByteArrayMethods.arrayEqualsBlock(base, offset, o.base, o.offset, numBytes);
+      return ByteArrayMethods.arrayEqualsBlock(base, getBaseOffset(), o.base, o.getBaseOffset(), numBytes);
     } else {
       return false;
     }
@@ -1287,6 +1307,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       p[i] = i;
     }
 
+    long sOffset = s.getBaseOffset();
+    long tOffset = t.getBaseOffset();
     for (j = 0, j_bytes = 0; j < m; j_bytes += num_bytes_j, j++) {
       num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
       d[0] = j + 1;
@@ -1296,8 +1318,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
               num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
           cost = 1;
         } else {
-          cost = (ByteArrayMethods.arrayEqualsBlock(t.base, t.offset + j_bytes, s.base,
-              s.offset + i_bytes, num_bytes_j)) ? 0 : 1;
+          cost = (ByteArrayMethods.arrayEqualsBlock(t.base, tOffset + j_bytes, s.base,
+              sOffset + i_bytes, num_bytes_j)) ? 0 : 1;
         }
         d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
       }
@@ -1312,7 +1334,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeBytesBlock(base, offset, numBytes, 42);
+    return Murmur3_x86_32.hashUnsafeBytesBlock(base, getBaseOffset(), numBytes, 42);
   }
 
   /**
@@ -1375,7 +1397,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-    offset = BYTE_ARRAY_OFFSET;
+    // offset = BYTE_ARRAY_OFFSET;
     numBytes = in.readInt();
     base = ByteArrayMemoryBlock.fromArray(new byte[numBytes]);
     in.readFully(((ByteArrayMemoryBlock)base).getByteArray());
@@ -1390,7 +1412,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public void read(Kryo kryo, Input in) {
-    this.offset = BYTE_ARRAY_OFFSET;
+    // this.offset = BYTE_ARRAY_OFFSET;
     this.numBytes = in.readInt();
     base = ByteArrayMemoryBlock.fromArray(new byte[numBytes]);
     in.read(((ByteArrayMemoryBlock)base).getByteArray());

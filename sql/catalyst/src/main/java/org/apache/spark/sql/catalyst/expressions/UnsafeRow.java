@@ -415,10 +415,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
-    MemoryBlock mb = (baseObject instanceof byte[]) ?
-      new ByteArrayMemoryBlock((byte[]) baseObject, baseOffset + offset, size) :
-      new LongArrayMemoryBlock((long[]) baseObject, baseOffset + offset, size);
-    return UTF8String.fromAddress(mb, mb.getBaseOffset(), (int)mb.size());
+    MemoryBlock mb = MemoryBlock.allocateFromObject(baseObject, baseOffset + offset, size);
+    return UTF8String.fromMemoryBlock(mb);
   }
 
   @Override

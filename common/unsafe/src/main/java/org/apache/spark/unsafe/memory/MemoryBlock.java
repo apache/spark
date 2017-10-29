@@ -17,9 +17,9 @@
 
 package org.apache.spark.unsafe.memory;
 
-import org.apache.spark.unsafe.Platform;
-
 import javax.annotation.Nullable;
+
+import org.apache.spark.unsafe.Platform;
 
 /**
  * A declaration of interfaces of MemoryBlock classes .
@@ -101,6 +101,29 @@ public abstract class MemoryBlock {
    */
   public final void fill(byte value) {
     Platform.setMemory(obj, offset, length, value);
+  }
+
+  /**
+   * Instantiate MemoryBlock for given object type with new offset
+   */
+  public final static MemoryBlock allocateFromObject(Object obj, long offset, long length) {
+    MemoryBlock mb = null;
+    if (obj instanceof byte[]) {
+      byte[] array = (byte[])obj;
+      mb = new ByteArrayMemoryBlock(array, offset, length);
+    } else if (obj instanceof int[]) {
+      int[] array = (int[])obj;
+      mb = new IntArrayMemoryBlock(array, offset, length);
+    } else if (obj instanceof long[]) {
+      long[] array = (long[])obj;
+      mb = new LongArrayMemoryBlock(array, offset, length);
+    } else if (obj == null) {
+      // we assume that to pass null pointer means off-heap
+      mb = new OffHeapMemoryBlock(offset, length);
+    } else {
+      throw new UnsupportedOperationException(obj.getClass() + " is not supported now");
+    }
+    return mb;
   }
 
   /**

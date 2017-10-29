@@ -20,20 +20,15 @@ package org.apache.spark.unsafe.memory;
 import org.apache.spark.unsafe.Platform;
 
 public class OffHeapMemoryBlock extends MemoryBlock {
-  private Object directBuffer;
-  private final long address;
+  static public final OffHeapMemoryBlock NULL = new OffHeapMemoryBlock(0, 0);
 
-  static public final OffHeapMemoryBlock NULL = new OffHeapMemoryBlock(null, 0, 0);
-
-  public OffHeapMemoryBlock(Object directBuffer, long address, long size) {
+  public OffHeapMemoryBlock(long address, long size) {
     super(null, address, size);
-    this.address = address;
-    this.directBuffer = directBuffer;
   }
 
   @Override
   public MemoryBlock allocate(long offset, long size) {
-    return new OffHeapMemoryBlock(directBuffer, offset, size);
+    return new OffHeapMemoryBlock(offset, size);
   }
 
   public final int getInt(long offset) {

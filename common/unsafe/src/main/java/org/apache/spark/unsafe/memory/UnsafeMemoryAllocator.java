@@ -32,16 +32,15 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
 
   @Override
   public OffHeapMemoryBlock allocate(long size) throws OutOfMemoryError {
-    Object buffer = ByteBuffer.allocateDirect((int)size);
-    if (buffer instanceof DirectBuffer) {
-      long addr = ((DirectBuffer) buffer).address();
-      OffHeapMemoryBlock memory = new OffHeapMemoryBlock(buffer, addr, size);
-      if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
-        memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
-      }
-      return memory;
+    // No usage of DirectByteBuffer.allocateDirect is current design
+    // Platform.allocateMemory is used here.
+    // http://downloads.typesafe.com/website/presentations/ScalaDaysSF2015/T4_Xin_Performance_Optimization.pdf#page=26
+    long address = Platform.allocateMemory(size);
+    OffHeapMemoryBlock memory = new OffHeapMemoryBlock(address, size);
+    if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
+      memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
     }
-    throw new UnsupportedOperationException("A ByteBuffer does not have an address in off-heap");
+    return memory;
   }
 
   @Override
@@ -60,21 +59,20 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
       memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_FREED_VALUE);
     }
 
+    Platform.freeMemory(memory.offset);
+
     // As an additional layer of defense against use-after-free bugs, we mutate the
     // MemoryBlock to reset its pointer.
     memory.resetObjAndOffset();
     // Mark the page as freed (so we can detect double-frees).
     memory.setPageNumber(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER);
-
-    // DirectByteBuffers are deallocated automatically by JVM when they become
-    // unreachable much like normal Objects in heap
   }
 
   public OffHeapMemoryBlock reallocate(OffHeapMemoryBlock block, long oldSize, long newSize) {
     OffHeapMemoryBlock mb = this.allocate(newSize);
     if (block.getBaseOffset() != 0)
       MemoryBlock.copyMemory(block, block.getBaseOffset(), mb, mb.getBaseOffset(), oldSize);
-
+    free(block);
     return mb;
   }
 }
