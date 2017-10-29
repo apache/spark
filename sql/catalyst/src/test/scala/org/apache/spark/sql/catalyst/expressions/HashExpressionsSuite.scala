@@ -647,18 +647,14 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val seed = 42
 
     val wideRow1 = new GenericInternalRow(Seq.tabulate(O)(j =>
-        new GenericInternalRow(Seq.tabulate(L)(i =>
-          new GenericInternalRow(Array[Any](
-            UTF8String.fromString((j * L + i).toString))))
-          .toArray[Any])).toArray[Any])
-    var inner1 = new StructType()
-    for (_ <- 0 until L) {
-      inner1 = inner1.add("structOfString", structOfString)
-    }
-    var schema1 = new StructType()
-    for (_ <- 0 until O) {
-      schema1 = schema1.add("structOfStructOfStrings", inner1)
-    }
+      new GenericInternalRow(Seq.tabulate(L)(i =>
+        new GenericInternalRow(Array[Any](
+          UTF8String.fromString((j * L + i).toString))))
+        .toArray[Any])).toArray[Any])
+    val inner1 = new StructType(
+      (0 until L).map(_ => StructField("structOfString", structOfString)).toArray)
+    val schema1 = new StructType(
+      (0 until O).map(_ => StructField("structOfStructOfStrings", inner1)).toArray)
     val exprs1 = schema1.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
     }
@@ -669,23 +665,17 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(murmur3HashPlan1(wideRow1).getInt(0) == murmursHashEval1)
 
     val wideRow2 = new GenericInternalRow(Seq.tabulate(O)(k =>
-        new GenericInternalRow(Seq.tabulate(M)(j =>
-          new GenericInternalRow(Seq.tabulate(N)(i =>
-            new GenericInternalRow(Array[Any](
-              UTF8String.fromString((k * L + j * N + i).toString))))
-            .toArray[Any])).toArray[Any])).toArray[Any])
-    var outer2 = new StructType()
-    for (_ <- 0 until M) {
-      var inner2 = new StructType()
-      for (_ <- 0 until N) {
-        inner2 = inner2.add("structOfString", structOfString)
-      }
-      outer2 = outer2.add("structOfStructOfString", inner2)
-    }
-    var schema2 = new StructType()
-    for (_ <- 0 until O) {
-      schema2 = schema2.add("structOfStructOfStructOfStrings", outer2)
-    }
+      new GenericInternalRow(Seq.tabulate(M)(j =>
+        new GenericInternalRow(Seq.tabulate(N)(i =>
+          new GenericInternalRow(Array[Any](
+            UTF8String.fromString((k * L + j * N + i).toString))))
+          .toArray[Any])).toArray[Any])).toArray[Any])
+    val inner2 = new StructType(
+      (0 until N).map(_ => StructField("structOfString", structOfString)).toArray)
+    val outer2 = new StructType(
+      (0 until M).map(_ => StructField("structOfStructOfString", inner2)).toArray)
+    val schema2 = new StructType(
+      (0 until O).map(_ => StructField("structOfStructOfStructOfString", outer2)).toArray)
     val exprs2 = schema2.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
     }

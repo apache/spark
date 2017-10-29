@@ -392,7 +392,7 @@ abstract class HashExpression[E] extends Expression {
     val hashes = fields.zipWithIndex.map { case (field, index) =>
       nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
     }
-    ctx.splitExpressions(hashes, "apply", ("InternalRow", input) :: Nil)
+    ctx.splitExpressions(input, hashes)
   }
 
   @tailrec
