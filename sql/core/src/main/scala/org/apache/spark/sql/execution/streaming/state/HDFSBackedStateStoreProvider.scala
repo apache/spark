@@ -305,7 +305,6 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       return currentVersionMap.get
     }
 
-
     // Find the most recent map before this version that we can.
     // [SPARK-22305] This must be done iteratively to avoid stack overflow.
     var lastAvailableVersion = version
