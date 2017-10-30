@@ -156,7 +156,7 @@ private[spark] class KafkaRDD[K, V](
     val prefExecs = if (null == prefHost) allExecs else allExecs.filter(_.host == prefHost)
     val execs = if (prefExecs.isEmpty) allExecs else prefExecs
     if (execs.isEmpty) {
-      Seq()
+      Seq.empty
     } else {
       // execs is sorted, tp.hashCode depends only on topic and partition, so consistent index
       val index = Math.floorMod(tp.hashCode, execs.length)

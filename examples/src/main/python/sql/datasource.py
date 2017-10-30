@@ -35,14 +35,39 @@ def basic_datasource_example(spark):
     df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
     # $example off:generic_load_save_functions$
 
+    # $example on:write_partitioning$
+    df.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
+    # $example off:write_partitioning$
+
+    # $example on:write_partition_and_bucket$
+    df = spark.read.parquet("examples/src/main/resources/users.parquet")
+    (df
+        .write
+        .partitionBy("favorite_color")
+        .bucketBy(42, "name")
+        .saveAsTable("people_partitioned_bucketed"))
+    # $example off:write_partition_and_bucket$
+
     # $example on:manual_load_options$
     df = spark.read.load("examples/src/main/resources/people.json", format="json")
     df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
     # $example off:manual_load_options$
 
+    # $example on:manual_load_options_csv$
+    df = spark.read.load("examples/src/main/resources/people.csv",
+                         format="csv", sep=":", inferSchema="true", header="true")
+    # $example off:manual_load_options_csv$
+
+    # $example on:write_sorting_and_bucketing$
+    df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
+    # $example off:write_sorting_and_bucketing$
+
     # $example on:direct_sql$
     df = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
     # $example off:direct_sql$
+
+    spark.sql("DROP TABLE IF EXISTS people_bucketed")
+    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
 
 
 def parquet_example(spark):
@@ -156,6 +181,16 @@ def jdbc_dataset_example(spark):
     jdbcDF2 = spark.read \
         .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
               properties={"user": "username", "password": "password"})
+
+    # Specifying dataframe column data types on read
+    jdbcDF3 = spark.read \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql:dbserver") \
+        .option("dbtable", "schema.tablename") \
+        .option("user", "username") \
+        .option("password", "password") \
+        .option("customSchema", "id DECIMAL(38, 0), name STRING") \
+        .load()
 
     # Saving data to a JDBC source
     jdbcDF.write \

@@ -549,7 +549,7 @@ setMethod("registerTempTable",
 #' sparkR.session()
 #' df <- read.df(path, "parquet")
 #' df2 <- read.df(path2, "parquet")
-#' createOrReplaceTempView(df, "table1")
+#' saveAsTable(df, "table1")
 #' insertInto(df2, "table1", overwrite = TRUE)
 #'}
 #' @note insertInto since 1.4.0
@@ -593,7 +593,7 @@ setMethod("cache",
 #'
 #' Persist this SparkDataFrame with the specified storage level. For details of the
 #' supported storage levels, refer to
-#' \url{http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence}.
+#' \url{http://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
 #'
 #' @param x the SparkDataFrame to persist.
 #' @param newLevel storage level chosen for the persistance. See available options in
@@ -986,10 +986,10 @@ setMethod("unique",
 #' @param x A SparkDataFrame
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
-#' @param seed Randomness seed value
+#' @param seed Randomness seed value. Default is a random seed.
 #'
 #' @family SparkDataFrame functions
-#' @aliases sample,SparkDataFrame,logical,numeric-method
+#' @aliases sample,SparkDataFrame-method
 #' @rdname sample
 #' @name sample
 #' @export
@@ -998,33 +998,47 @@ setMethod("unique",
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
+#' collect(sample(df, fraction = 0.5))
 #' collect(sample(df, FALSE, 0.5))
-#' collect(sample(df, TRUE, 0.5))
+#' collect(sample(df, TRUE, 0.5, seed = 3))
 #'}
 #' @note sample since 1.4.0
 setMethod("sample",
-          signature(x = "SparkDataFrame", withReplacement = "logical",
-                    fraction = "numeric"),
-          function(x, withReplacement, fraction, seed) {
-            if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
+          signature(x = "SparkDataFrame"),
+          function(x, withReplacement = FALSE, fraction, seed) {
+            if (!is.numeric(fraction)) {
+              stop(paste("fraction must be numeric; however, got", class(fraction)))
+            }
+            if (!is.logical(withReplacement)) {
+              stop(paste("withReplacement must be logical; however, got", class(withReplacement)))
+            }
+
             if (!missing(seed)) {
+              if (is.null(seed)) {
+                stop("seed must not be NULL or NA; however, got NULL")
+              }
+              if (is.na(seed)) {
+                stop("seed must not be NULL or NA; however, got NA")
+              }
+
               # TODO : Figure out how to send integer as java.lang.Long to JVM so
               # we can send seed as an argument through callJMethod
-              sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction, as.integer(seed))
+              sdf <- handledCallJMethod(x@sdf, "sample", as.logical(withReplacement),
+                                        as.numeric(fraction), as.integer(seed))
             } else {
-              sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
+              sdf <- handledCallJMethod(x@sdf, "sample",
+                                        as.logical(withReplacement), as.numeric(fraction))
             }
             dataFrame(sdf)
           })
 
 #' @rdname sample
-#' @aliases sample_frac,SparkDataFrame,logical,numeric-method
+#' @aliases sample_frac,SparkDataFrame-method
 #' @name sample_frac
 #' @note sample_frac since 1.4.0
 setMethod("sample_frac",
-          signature(x = "SparkDataFrame", withReplacement = "logical",
-                    fraction = "numeric"),
-          function(x, withReplacement, fraction, seed) {
+          signature(x = "SparkDataFrame"),
+          function(x, withReplacement = FALSE, fraction, seed) {
             sample(x, withReplacement, fraction, seed)
           })
 
@@ -1125,7 +1139,8 @@ setMethod("dim",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' collected <- collect(df)
-#' firstName <- collected[[1]]$name
+#' class(collected)
+#' firstName <- names(collected)[1]
 #' }
 #' @note collect since 1.4.0
 setMethod("collect",
@@ -1176,6 +1191,9 @@ setMethod("collect",
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
                     class(vec) <- PRIMITIVE_TYPES[[colType]]
+                    if (is.character(vec) && stringsAsFactors) {
+                      vec <- as.factor(vec)
+                    }
                     df[[colIndex]] <- vec
                   } else {
                     df[[colIndex]] <- col
@@ -1390,6 +1408,10 @@ setMethod("summarize",
           })
 
 dapplyInternal <- function(x, func, schema) {
+  if (is.character(schema)) {
+    schema <- structType(schema)
+  }
+
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                                connection = NULL)
 
@@ -1407,6 +1429,8 @@ dapplyInternal <- function(x, func, schema) {
   dataFrame(sdf)
 }
 
+setClassUnion("characterOrstructType", c("character", "structType"))
+
 #' dapply
 #'
 #' Apply a function to each partition of a SparkDataFrame.
@@ -1417,10 +1441,11 @@ dapplyInternal <- function(x, func, schema) {
 #'             to each partition will be passed.
 #'             The output of func should be a R data.frame.
 #' @param schema The schema of the resulting SparkDataFrame after the function is applied.
-#'               It must match the output of func.
+#'               It must match the output of func. Since Spark 2.3, the DDL-formatted string
+#'               is also supported for the schema.
 #' @family SparkDataFrame functions
 #' @rdname dapply
-#' @aliases dapply,SparkDataFrame,function,structType-method
+#' @aliases dapply,SparkDataFrame,function,characterOrstructType-method
 #' @name dapply
 #' @seealso \link{dapplyCollect}
 #' @export
@@ -1443,6 +1468,17 @@ dapplyInternal <- function(x, func, schema) {
 #'              y <- cbind(y, y[1] + 1L)
 #'            },
 #'            schema)
+#'
+#'   # The schema also can be specified in a DDL-formatted string.
+#'   schema <- "a INT, d DOUBLE, c STRING, d INT"
+#'   df1 <- dapply(
+#'            df,
+#'            function(x) {
+#'              y <- x[x[1] > 1, ]
+#'              y <- cbind(y, y[1] + 1L)
+#'            },
+#'            schema)
+#'
 #'   collect(df1)
 #'   # the result
 #'   #       a b c d
@@ -1451,7 +1487,7 @@ dapplyInternal <- function(x, func, schema) {
 #' }
 #' @note dapply since 2.0.0
 setMethod("dapply",
-          signature(x = "SparkDataFrame", func = "function", schema = "structType"),
+          signature(x = "SparkDataFrame", func = "function", schema = "characterOrstructType"),
           function(x, func, schema) {
             dapplyInternal(x, func, schema)
           })
@@ -1521,6 +1557,7 @@ setMethod("dapplyCollect",
 #' @param schema the schema of the resulting SparkDataFrame after the function is applied.
 #'               The schema must match to output of \code{func}. It has to be defined for each
 #'               output column with preferred output column name and corresponding data type.
+#'               Since Spark 2.3, the DDL-formatted string is also supported for the schema.
 #' @return A SparkDataFrame.
 #' @family SparkDataFrame functions
 #' @aliases gapply,SparkDataFrame-method
@@ -1540,8 +1577,17 @@ setMethod("dapplyCollect",
 #'
 #' Here our output contains three columns, the key which is a combination of two
 #' columns with data types integer and string and the mean which is a double.
-#' schema <-  structType(structField("a", "integer"), structField("c", "string"),
+#' schema <- structType(structField("a", "integer"), structField("c", "string"),
 #'   structField("avg", "double"))
+#' result <- gapply(
+#'   df,
+#'   c("a", "c"),
+#'   function(key, x) {
+#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+#' }, schema)
+#'
+#' The schema also can be specified in a DDL-formatted string.
+#' schema <- "a INT, c STRING, avg DOUBLE"
 #' result <- gapply(
 #'   df,
 #'   c("a", "c"),
@@ -1880,13 +1926,15 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @param i,subset (Optional) a logical expression to filter on rows.
 #'                 For extract operator [[ and replacement operator [[<-, the indexing parameter for
 #'                 a single Column.
-#' @param j,select expression for the single Column or a list of columns to select from the SparkDataFrame.
+#' @param j,select expression for the single Column or a list of columns to select from the
+#'                 SparkDataFrame.
 #' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
 #'             Otherwise, a SparkDataFrame will always be returned.
 #' @param value a Column or an atomic vector in the length of 1 as literal value, or \code{NULL}.
 #'              If \code{NULL}, the specified Column is dropped.
 #' @param ... currently not used.
-#' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns.
+#' @return A new SparkDataFrame containing only the rows that meet the condition with selected
+#'         columns.
 #' @export
 #' @family SparkDataFrame functions
 #' @aliases subset,SparkDataFrame-method
@@ -2565,12 +2613,12 @@ setMethod("merge",
             } else {
               # if by or both by.x and by.y have length 0, use Cartesian Product
               joinRes <- crossJoin(x, y)
-              return (joinRes)
+              return(joinRes)
             }
 
             # sets alias for making colnames unique in dataframes 'x' and 'y'
-            colsX <- generateAliasesForIntersectedCols(x, by, suffixes[1])
-            colsY <- generateAliasesForIntersectedCols(y, by, suffixes[2])
+            colsX <- genAliasesForIntersectedCols(x, by, suffixes[1])
+            colsY <- genAliasesForIntersectedCols(y, by, suffixes[2])
 
             # selects columns with their aliases from dataframes
             # in case same column names are present in both data frames
@@ -2618,9 +2666,8 @@ setMethod("merge",
 #' @param intersectedColNames a list of intersected column names of the SparkDataFrame
 #' @param suffix a suffix for the column name
 #' @return list of columns
-#'
-#' @note generateAliasesForIntersectedCols since 1.6.0
-generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
+#' @noRd
+genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
   allColNames <- names(x)
   # sets alias for making colnames unique in dataframe 'x'
   cols <- lapply(allColNames, function(colName) {
@@ -2628,7 +2675,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
     if (colName %in% intersectedColNames) {
       newJoin <- paste(colName, suffix, sep = "")
       if (newJoin %in% allColNames){
-        stop ("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
+        stop("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
           "Please use different suffixes for the intersected columns.")
       }
       col <- alias(col, newJoin)
@@ -2645,6 +2692,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' Input SparkDataFrames can have different schemas (names and data types).
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
+#' Also as standard in SQL, this function resolves columns by position (not by name).
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
@@ -2653,7 +2701,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' @rdname union
 #' @name union
 #' @aliases union,SparkDataFrame,SparkDataFrame-method
-#' @seealso \link{rbind}
+#' @seealso \link{rbind} \link{unionByName}
 #' @export
 #' @examples
 #'\dontrun{
@@ -2684,6 +2732,40 @@ setMethod("unionAll",
             union(x, y)
           })
 
+#' Return a new SparkDataFrame containing the union of rows, matched by column names
+#'
+#' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
+#' and another SparkDataFrame. This is different from \code{union} function, and both
+#' \code{UNION ALL} and \code{UNION DISTINCT} in SQL as column positions are not taken
+#' into account. Input SparkDataFrames can have different data types in the schema.
+#'
+#' Note: This does not remove duplicate rows across the two SparkDataFrames.
+#' This function resolves columns by name (not by position).
+#'
+#' @param x A SparkDataFrame
+#' @param y A SparkDataFrame
+#' @return A SparkDataFrame containing the result of the union.
+#' @family SparkDataFrame functions
+#' @rdname unionByName
+#' @name unionByName
+#' @aliases unionByName,SparkDataFrame,SparkDataFrame-method
+#' @seealso \link{rbind} \link{union}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- select(createDataFrame(mtcars), "carb", "am", "gear")
+#' df2 <- select(createDataFrame(mtcars), "am", "gear", "carb")
+#' head(unionByName(df1, df2))
+#' }
+#' @note unionByName since 2.3.0
+setMethod("unionByName",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            unioned <- callJMethod(x@sdf, "unionByName", y@sdf)
+            dataFrame(unioned)
+          })
+
 #' Union two or more SparkDataFrames
 #'
 #' Union two or more SparkDataFrames by row. As in R's \code{rbind}, this method
@@ -2700,7 +2782,7 @@ setMethod("unionAll",
 #' @aliases rbind,SparkDataFrame-method
 #' @rdname rbind
 #' @name rbind
-#' @seealso \link{union}
+#' @seealso \link{union} \link{unionByName}
 #' @export
 #' @examples
 #'\dontrun{
@@ -2814,7 +2896,7 @@ setMethod("except",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' write.df(df, "myfile", "parquet", "overwrite")
-#' saveDF(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
+#' saveDF(df, parquetPath2, "parquet", mode = "append", mergeSchema = TRUE)
 #' }
 #' @note write.df since 1.4.0
 setMethod("write.df",
@@ -2900,7 +2982,7 @@ setMethod("saveAsTable",
             invisible(callJMethod(write, "saveAsTable", tableName))
           })
 
-#' summary
+#' describe
 #'
 #' Computes statistics for numeric and string columns.
 #' If no columns are given, this function computes statistics for all numerical or string columns.
@@ -2911,7 +2993,7 @@ setMethod("saveAsTable",
 #' @return A SparkDataFrame.
 #' @family SparkDataFrame functions
 #' @aliases describe,SparkDataFrame,character-method describe,SparkDataFrame,ANY-method
-#' @rdname summary
+#' @rdname describe
 #' @name describe
 #' @export
 #' @examples
@@ -2923,6 +3005,7 @@ setMethod("saveAsTable",
 #' describe(df, "col1")
 #' describe(df, "col1", "col2")
 #' }
+#' @seealso See \link{summary} for expanded statistics and control over which statistics to compute.
 #' @note describe(SparkDataFrame, character) since 1.4.0
 setMethod("describe",
           signature(x = "SparkDataFrame", col = "character"),
@@ -2932,7 +3015,7 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
-#' @rdname summary
+#' @rdname describe
 #' @name describe
 #' @aliases describe,SparkDataFrame-method
 #' @note describe(SparkDataFrame) since 1.4.0
@@ -2943,15 +3026,51 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
+#' summary
+#'
+#' Computes specified statistics for numeric and string columns. Available statistics are:
+#' \itemize{
+#' \item count
+#' \item mean
+#' \item stddev
+#' \item min
+#' \item max
+#' \item arbitrary approximate percentiles specified as a percentage (eg, "75%")
+#' }
+#' If no statistics are given, this function computes count, mean, stddev, min,
+#' approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
+#' This function is meant for exploratory data analysis, as we make no guarantee about the
+#' backward compatibility of the schema of the resulting Dataset. If you want to
+#' programmatically compute summary statistics, use the \code{agg} function instead.
+#'
+#'
 #' @param object a SparkDataFrame to be summarized.
+#' @param ... (optional) statistics to be computed for all columns.
+#' @return A SparkDataFrame.
+#' @family SparkDataFrame functions
 #' @rdname summary
 #' @name summary
 #' @aliases summary,SparkDataFrame-method
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' summary(df)
+#' summary(df, "min", "25%", "75%", "max")
+#' summary(select(df, "age", "height"))
+#' }
 #' @note summary(SparkDataFrame) since 1.5.0
+#' @note The statistics provided by \code{summary} were change in 2.3.0 use \link{describe} for
+#'       previous defaults.
+#' @seealso \link{describe}
 setMethod("summary",
           signature(object = "SparkDataFrame"),
           function(object, ...) {
-            describe(object)
+            statisticsList <- list(...)
+            sdf <- callJMethod(object@sdf, "summary", statisticsList)
+            dataFrame(sdf)
           })
 
 
@@ -3097,8 +3216,8 @@ setMethod("fillna",
 #' @family SparkDataFrame functions
 #' @aliases as.data.frame,SparkDataFrame-method
 #' @rdname as.data.frame
-#' @examples \dontrun{
-#'
+#' @examples
+#' \dontrun{
 #' irisDF <- createDataFrame(iris)
 #' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
 #' }
@@ -3175,7 +3294,8 @@ setMethod("with",
 #' @aliases str,SparkDataFrame-method
 #' @family SparkDataFrame functions
 #' @param object a SparkDataFrame
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' # Create a SparkDataFrame from the Iris dataset
 #' irisDF <- createDataFrame(iris)
 #'
@@ -3650,8 +3770,8 @@ setMethod("checkpoint",
 #'
 #' Create a multi-dimensional cube for the SparkDataFrame using the specified columns.
 #'
-#' If grouping expression is missing \code{cube} creates a single global aggregate and is equivalent to
-#' direct application of \link{agg}.
+#' If grouping expression is missing \code{cube} creates a single global aggregate and is
+#' equivalent to direct application of \link{agg}.
 #'
 #' @param x a SparkDataFrame.
 #' @param ... character name(s) or Column(s) to group on.
@@ -3667,8 +3787,8 @@ setMethod("checkpoint",
 #' mean(cube(df, "cyl", "gear", "am"), "mpg")
 #'
 #' # Following calls are equivalent
-#' agg(cube(carsDF), mean(carsDF$mpg))
-#' agg(carsDF, mean(carsDF$mpg))
+#' agg(cube(df), mean(df$mpg))
+#' agg(df, mean(df$mpg))
 #' }
 #' @note cube since 2.3.0
 #' @seealso \link{agg}, \link{groupBy}, \link{rollup}
@@ -3685,8 +3805,8 @@ setMethod("cube",
 #'
 #' Create a multi-dimensional rollup for the SparkDataFrame using the specified columns.
 #'
-#' If grouping expression is missing \code{rollup} creates a single global aggregate and is equivalent to
-#' direct application of \link{agg}.
+#' If grouping expression is missing \code{rollup} creates a single global aggregate and is
+#' equivalent to direct application of \link{agg}.
 #'
 #' @param x a SparkDataFrame.
 #' @param ... character name(s) or Column(s) to group on.
@@ -3702,8 +3822,8 @@ setMethod("cube",
 #' mean(rollup(df, "cyl", "gear", "am"), "mpg")
 #'
 #' # Following calls are equivalent
-#' agg(rollup(carsDF), mean(carsDF$mpg))
-#' agg(carsDF, mean(carsDF$mpg))
+#' agg(rollup(df), mean(df$mpg))
+#' agg(df, mean(df$mpg))
 #' }
 #' @note rollup since 2.3.0
 #' @seealso \link{agg}, \link{cube}, \link{groupBy}
@@ -3714,4 +3834,87 @@ setMethod("rollup",
             jcol <- lapply(cols, function(x) if (class(x) == "Column") x@jc else column(x)@jc)
             sgd <- callJMethod(x@sdf, "rollup", jcol)
             groupedData(sgd)
+          })
+
+#' hint
+#'
+#' Specifies execution plan hint and return a new SparkDataFrame.
+#'
+#' @param x a SparkDataFrame.
+#' @param name a name of the hint.
+#' @param ... optional parameters for the hint.
+#' @return A SparkDataFrame.
+#' @family SparkDataFrame functions
+#' @aliases hint,SparkDataFrame,character-method
+#' @rdname hint
+#' @name hint
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(mtcars)
+#' avg_mpg <- mean(groupBy(createDataFrame(mtcars), "cyl"), "mpg")
+#'
+#' head(join(df, hint(avg_mpg, "broadcast"), df$cyl == avg_mpg$cyl))
+#' }
+#' @note hint since 2.2.0
+setMethod("hint",
+          signature(x = "SparkDataFrame", name = "character"),
+          function(x, name, ...) {
+            parameters <- list(...)
+            stopifnot(all(sapply(parameters, is.character)))
+            jdf <- callJMethod(x@sdf, "hint", name, parameters)
+            dataFrame(jdf)
+          })
+
+#' alias
+#'
+#' @aliases alias,SparkDataFrame-method
+#' @family SparkDataFrame functions
+#' @rdname alias
+#' @name alias
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- alias(createDataFrame(mtcars), "mtcars")
+#' avg_mpg <- alias(agg(groupBy(df, df$cyl), avg(df$mpg)), "avg_mpg")
+#'
+#' head(select(df, column("mtcars.mpg")))
+#' head(join(df, avg_mpg, column("mtcars.cyl") == column("avg_mpg.cyl")))
+#' }
+#' @note alias(SparkDataFrame) since 2.3.0
+setMethod("alias",
+          signature(object = "SparkDataFrame"),
+          function(object, data) {
+            stopifnot(is.character(data))
+            sdf <- callJMethod(object@sdf, "alias", data)
+            dataFrame(sdf)
+          })
+
+#' broadcast
+#'
+#' Return a new SparkDataFrame marked as small enough for use in broadcast joins.
+#'
+#' Equivalent to \code{hint(x, "broadcast")}.
+#'
+#' @param x a SparkDataFrame.
+#' @return a SparkDataFrame.
+#'
+#' @aliases broadcast,SparkDataFrame-method
+#' @family SparkDataFrame functions
+#' @rdname broadcast
+#' @name broadcast
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(mtcars)
+#' avg_mpg <- mean(groupBy(createDataFrame(mtcars), "cyl"), "mpg")
+#'
+#' head(join(df, broadcast(avg_mpg), df$cyl == avg_mpg$cyl))
+#' }
+#' @note broadcast since 2.3.0
+setMethod("broadcast",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            sdf <- callJStatic("org.apache.spark.sql.functions", "broadcast", x@sdf)
+            dataFrame(sdf)
           })

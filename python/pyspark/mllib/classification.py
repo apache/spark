@@ -171,7 +171,7 @@ class LogisticRegressionModel(LinearClassificationModel):
             self._dataWithBiasSize = None
             self._weightsMatrix = None
         else:
-            self._dataWithBiasSize = self._coeff.size / (self._numClasses - 1)
+            self._dataWithBiasSize = self._coeff.size // (self._numClasses - 1)
             self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
                                                                 self._dataWithBiasSize)
 
@@ -311,7 +311,7 @@ class LogisticRegressionWithSGD(object):
         """
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.classification.LogisticRegression or "
-            "LogisticRegressionWithLBFGS.")
+            "LogisticRegressionWithLBFGS.", DeprecationWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),

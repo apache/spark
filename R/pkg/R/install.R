@@ -267,10 +267,14 @@ hadoopVersionName <- function(hadoopVersion) {
 # The implementation refers to appdirs package: https://pypi.python.org/pypi/appdirs and
 # adapt to Spark context
 sparkCachePath <- function() {
-  if (.Platform$OS.type == "windows") {
+  if (is_windows()) {
     winAppPath <- Sys.getenv("LOCALAPPDATA", unset = NA)
     if (is.na(winAppPath)) {
-      stop(paste("%LOCALAPPDATA% not found.",
+      message("%LOCALAPPDATA% not found. Falling back to %USERPROFILE%.")
+      winAppPath <- Sys.getenv("USERPROFILE", unset = NA)
+    }
+    if (is.na(winAppPath)) {
+      stop(paste("%LOCALAPPDATA% and %USERPROFILE% not found.",
                    "Please define the environment variable",
                    "or restart and enter an installation path in localDir."))
     } else {

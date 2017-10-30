@@ -26,15 +26,12 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
 or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 8+, Python 2.6+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
+Spark runs on Java 8+, Python 2.7+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).
 
-Note that support for Java 7 was removed as of Spark 2.2.0.
-
-Note that support for Python 2.6 is deprecated as of Spark 2.0.0, and support for 
-Scala 2.10 and versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0, and may be 
-removed in Spark 2.2.0.
+Note that support for Java 7, Python 2.6 and old Hadoop versions before 2.6.5 were removed as of Spark 2.2.0.
+Support for Scala 2.10 was removed as of 2.3.0.
 
 # Running the Examples and Shell
 
@@ -90,13 +87,12 @@ options for deployment:
 **Programming Guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [Spark Programming Guide](programming-guide.html): detailed overview of Spark
-  in all supported languages (Scala, Java, Python, R)
-* Modules built on Spark:
-  * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
-  * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): support for structured data and relational queries
-  * [MLlib](ml-guide.html): built-in machine learning library
-  * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
+* [RDD Programming Guide](rdd-programming-guide.html): overview of Spark basics - RDDs (core but old API), accumulators, and broadcast variables  
+* [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): processing structured data with relational queries (newer API than RDDs)
+* [Structured Streaming](structured-streaming-programming-guide.html): processing structured data streams with relation queries (using Datasets and DataFrames, newer API than DStreams)
+* [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)
+* [MLlib](ml-guide.html): applying machine learning algorithms
+* [GraphX](graphx-programming-guide.html): processing graphs 
 
 **API Docs:**
 
@@ -104,6 +100,7 @@ options for deployment:
 * [Spark Java API (Javadoc)](api/java/index.html)
 * [Spark Python API (Sphinx)](api/python/index.html)
 * [Spark R API (Roxygen2)](api/R/index.html)
+* [Spark SQL, Built-in Functions (MkDocs)](api/sql/index.html)
 
 **Deployment Guides:**
 
@@ -126,6 +123,7 @@ options for deployment:
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
 * Integration with other storage systems:
+  * [Cloud Infrastructures](cloud-integration.html)
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system
 * [Contributing to Spark](http://spark.apache.org/contributing.html)

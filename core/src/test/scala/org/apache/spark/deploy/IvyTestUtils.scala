@@ -243,16 +243,22 @@ private[deploy] object IvyTestUtils {
       withManifest: Option[Manifest] = None): File = {
     val jarFile = new File(dir, artifactName(artifact, useIvyLayout))
     val jarFileStream = new FileOutputStream(jarFile)
-    val manifest = withManifest.getOrElse {
-      val mani = new Manifest()
+    val manifest: Manifest = withManifest.getOrElse {
       if (withR) {
+        val mani = new Manifest()
         val attr = mani.getMainAttributes
         attr.put(Name.MANIFEST_VERSION, "1.0")
         attr.put(new Name("Spark-HasRPackage"), "true")
+        mani
+      } else {
+        null
       }
-      mani
     }
-    val jarStream = new JarOutputStream(jarFileStream, manifest)
+    val jarStream = if (manifest != null) {
+      new JarOutputStream(jarFileStream, manifest)
+    } else {
+      new JarOutputStream(jarFileStream)
+    }
 
     for (file <- files) {
       val jarEntry = new JarEntry(file._1)

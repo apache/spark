@@ -57,7 +57,7 @@ abstract class BaseSessionStateBuilder(
   type NewBuilder = (SparkSession, Option[SessionState]) => BaseSessionStateBuilder
 
   /**
-   * Function that produces a new instance of the SessionStateBuilder. This is used by the
+   * Function that produces a new instance of the `BaseSessionStateBuilder`. This is used by the
    * [[SessionState]]'s clone functionality. Make sure to override this when implementing your own
    * [[SessionStateBuilder]].
    */
@@ -168,6 +168,7 @@ abstract class BaseSessionStateBuilder(
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
+        PreReadCheck +:
         HiveOnlyCheck +:
         customCheckRules
   }
@@ -208,7 +209,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf`, `catalog` and `experimentalMethods` fields.
    */
   protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalog, conf, experimentalMethods) {
+    new SparkOptimizer(catalog, experimentalMethods) {
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
@@ -265,7 +266,8 @@ abstract class BaseSessionStateBuilder(
    * This gets cloned from parent if available, otherwise is a new instance is created.
    */
   protected def listenerManager: ExecutionListenerManager = {
-    parentState.map(_.listenerManager.clone()).getOrElse(new ExecutionListenerManager)
+    parentState.map(_.listenerManager.clone()).getOrElse(
+      new ExecutionListenerManager(session.sparkContext.conf))
   }
 
   /**
@@ -286,14 +288,14 @@ abstract class BaseSessionStateBuilder(
       experimentalMethods,
       functionRegistry,
       udfRegistration,
-      catalog,
+      () => catalog,
       sqlParser,
-      analyzer,
-      optimizer,
+      () => analyzer,
+      () => optimizer,
       planner,
       streamingQueryManager,
       listenerManager,
-      resourceLoader,
+      () => resourceLoader,
       createQueryExecution,
       createClone)
   }

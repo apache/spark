@@ -216,8 +216,8 @@ class InMemoryCatalog(
       } else {
         tableDefinition
       }
-
-      catalog(db).tables.put(table, new TableDesc(tableWithLocation))
+      val tableProp = tableWithLocation.properties.filter(_._1 != "comment")
+      catalog(db).tables.put(table, new TableDesc(tableWithLocation.copy(properties = tableProp)))
     }
   }
 
@@ -298,7 +298,9 @@ class InMemoryCatalog(
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
-    catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
+    val updatedProperties = tableDefinition.properties.filter(kv => kv._1 != "comment")
+    val newTableDefinition = tableDefinition.copy(properties = updatedProperties)
+    catalog(db).tables(tableDefinition.identifier.table).table = newTableDefinition
   }
 
   override def alterTableSchema(
@@ -310,13 +312,18 @@ class InMemoryCatalog(
     catalog(db).tables(table).table = origTable.copy(schema = schema)
   }
 
+  override def alterTableStats(
+      db: String,
+      table: String,
+      stats: Option[CatalogStatistics]): Unit = synchronized {
+    requireTableExists(db, table)
+    val origTable = catalog(db).tables(table).table
+    catalog(db).tables(table).table = origTable.copy(stats = stats)
+  }
+
   override def getTable(db: String, table: String): CatalogTable = synchronized {
     requireTableExists(db, table)
     catalog(db).tables(table).table
-  }
-
-  override def getTableOption(db: String, table: String): Option[CatalogTable] = synchronized {
-    if (!tableExists(db, table)) None else Option(catalog(db).tables(table).table)
   }
 
   override def tableExists(db: String, table: String): Boolean = synchronized {
@@ -542,18 +549,6 @@ class InMemoryCatalog(
     }
   }
 
-  /**
-   * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
-   * partial partition spec w.r.t. PARTITION (a=1,b=2).
-   */
-  private def isPartialPartitionSpec(
-      spec1: TablePartitionSpec,
-      spec2: TablePartitionSpec): Boolean = {
-    spec1.forall {
-      case (partitionColumn, value) => spec2(partitionColumn) == value
-    }
-  }
-
   override def listPartitionsByFilter(
       db: String,
       table: String,
@@ -577,6 +572,12 @@ class InMemoryCatalog(
   override protected def doDropFunction(db: String, funcName: String): Unit = synchronized {
     requireFunctionExists(db, funcName)
     catalog(db).functions.remove(funcName)
+  }
+
+  override protected def doAlterFunction(db: String, func: CatalogFunction): Unit = synchronized {
+    requireDbExists(db)
+    requireFunctionExists(db, func.identifier.funcName)
+    catalog(db).functions.put(func.identifier.funcName, func)
   }
 
   override protected def doRenameFunction(

@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
 
@@ -105,7 +105,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
-      builtinFunctions.get(u.functionName.toLowerCase(Locale.ROOT)) match {
+      val resolvedFunc = builtinFunctions.get(u.functionName.toLowerCase(Locale.ROOT)) match {
         case Some(tvf) =>
           val resolved = tvf.flatMap { case (argList, resolver) =>
             argList.implicitCast(u.functionArgs) match {
@@ -124,6 +124,23 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
           }
         case _ =>
           u.failAnalysis(s"could not resolve `${u.functionName}` to a table-valued function")
+      }
+
+      // If alias names assigned, add `Project` with the aliases
+      if (u.outputNames.nonEmpty) {
+        val outputAttrs = resolvedFunc.output
+        // Checks if the number of the aliases is equal to expected one
+        if (u.outputNames.size != outputAttrs.size) {
+          u.failAnalysis(s"Number of given aliases does not match number of output columns. " +
+            s"Function name: ${u.functionName}; number of aliases: " +
+            s"${u.outputNames.size}; number of output columns: ${outputAttrs.size}.")
+        }
+        val aliases = outputAttrs.zip(u.outputNames).map {
+          case (attr, name) => Alias(attr, name)()
+        }
+        Project(aliases, resolvedFunc)
+      } else {
+        resolvedFunc
       }
   }
 }

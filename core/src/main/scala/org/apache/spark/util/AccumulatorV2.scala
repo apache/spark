@@ -23,11 +23,8 @@ import java.util.{ArrayList, Collections}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
-
 
 private[spark] case class AccumulatorMetadata(
     id: Long,
@@ -68,7 +65,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
 
   private def assertMetadataNotNull(): Unit = {
     if (metadata == null) {
-      throw new IllegalAccessError("The metadata of this accumulator has not been assigned yet.")
+      throw new IllegalStateException("The metadata of this accumulator has not been assigned yet.")
     }
   }
 
@@ -84,10 +81,11 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * Returns the name of this accumulator, can only be called after registration.
    */
   final def name: Option[String] = {
+    assertMetadataNotNull()
+
     if (atDriverSide) {
-      AccumulatorContext.get(id).flatMap(_.metadata.name)
+      metadata.name.orElse(AccumulatorContext.get(id).flatMap(_.metadata.name))
     } else {
-      assertMetadataNotNull()
       metadata.name
     }
   }
@@ -165,13 +163,15 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
       }
       val copyAcc = copyAndReset()
       assert(copyAcc.isZero, "copyAndReset must return a zero value copy")
-      val isInternalAcc =
-        (name.isDefined && name.get.startsWith(InternalAccumulator.METRICS_PREFIX)) ||
-          getClass.getSimpleName == "SQLMetric"
+      val isInternalAcc = name.isDefined && name.get.startsWith(InternalAccumulator.METRICS_PREFIX)
       if (isInternalAcc) {
         // Do not serialize the name of internal accumulator and send it to executor.
         copyAcc.metadata = metadata.copy(name = None)
       } else {
+        // For non-internal accumulators, we still need to send the name because users may need to
+        // access the accumulator name at executor side, or they may keep the accumulators sent from
+        // executors and access the name when the registered accumulator is already garbage
+        // collected(e.g. SQLMetrics).
         copyAcc.metadata = metadata
       }
       copyAcc
@@ -262,7 +262,7 @@ private[spark] object AccumulatorContext {
       // Since we are storing weak references, we must check whether the underlying data is valid.
       val acc = ref.get
       if (acc eq null) {
-        throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
+        throw new IllegalStateException(s"Attempted to access garbage collected accumulator $id")
       }
       acc
     }

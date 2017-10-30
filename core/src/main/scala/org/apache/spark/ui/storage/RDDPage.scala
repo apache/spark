@@ -31,14 +31,15 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val parameterId = request.getParameter("id")
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val parameterBlockPage = request.getParameter("block.page")
-    val parameterBlockSortColumn = request.getParameter("block.sort")
-    val parameterBlockSortDesc = request.getParameter("block.desc")
-    val parameterBlockPageSize = request.getParameter("block.pageSize")
-    val parameterBlockPrevPageSize = request.getParameter("block.prevPageSize")
+    val parameterBlockPage = UIUtils.stripXSS(request.getParameter("block.page"))
+    val parameterBlockSortColumn = UIUtils.stripXSS(request.getParameter("block.sort"))
+    val parameterBlockSortDesc = UIUtils.stripXSS(request.getParameter("block.desc"))
+    val parameterBlockPageSize = UIUtils.stripXSS(request.getParameter("block.pageSize"))
+    val parameterBlockPrevPageSize = UIUtils.stripXSS(request.getParameter("block.prevPageSize"))
 
     val blockPage = Option(parameterBlockPage).map(_.toInt).getOrElse(1)
     val blockSortColumn = Option(parameterBlockSortColumn).getOrElse("Block Name")
@@ -50,7 +51,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val rddStorageInfo = AllRDDResource.getRDDStorageInfo(rddId, listener, includeDetails = true)
       .getOrElse {
         // Rather than crashing, render an "RDD Not Found" page
-        return UIUtils.headerSparkPage("RDD Not Found", Seq[Node](), parent)
+        return UIUtils.headerSparkPage("RDD Not Found", Seq.empty[Node], parent)
       }
 
     // Worker table

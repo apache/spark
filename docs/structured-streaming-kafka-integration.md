@@ -15,6 +15,8 @@ For Scala/Java applications using SBT/Maven project definitions, link your appli
 For Python applications, you need to add this above library and its dependencies when deploying your
 application. See the [Deploying](#deploying) subsection below.
 
+For experimenting on `spark-shell`, you need to add this above library and its dependencies too when invoking `spark-shell`. Also see the [Deploying](#deploying) subsection below.
+
 ## Reading Data from Kafka
 
 ### Creating a Kafka Source for Streaming Queries
@@ -606,6 +608,10 @@ As with any Spark applications, `spark-submit` is used to launch your applicatio
 and its dependencies can be directly added to `spark-submit` using `--packages`, such as,
 
     ./bin/spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} ...
+
+For experimenting on `spark-shell`, you can also use `--packages` to add `spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}` and its dependencies directly,
+
+    ./bin/spark-shell --packages org.apache.spark:spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} ...
 
 See [Application Submission Guide](submitting-applications.html) for more details about submitting
 applications with external dependencies.

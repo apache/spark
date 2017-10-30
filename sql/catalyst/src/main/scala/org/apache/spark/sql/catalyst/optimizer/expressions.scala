@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -53,6 +54,62 @@ object ConstantFolding extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Substitutes [[Attribute Attributes]] which can be statically evaluated with their corresponding
+ * value in conjunctive [[Expression Expressions]]
+ * eg.
+ * {{{
+ *   SELECT * FROM table WHERE i = 5 AND j = i + 3
+ *   ==>  SELECT * FROM table WHERE i = 5 AND j = 8
+ * }}}
+ *
+ * Approach used:
+ * - Start from AND operator as the root
+ * - Get all the children conjunctive predicates which are EqualTo / EqualNullSafe such that they
+ *   don't have a `NOT` or `OR` operator in them
+ * - Populate a mapping of attribute => constant value by looking at all the equals predicates
+ * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
+ *   in the AND node.
+ */
+object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
+  private def containsNonConjunctionPredicates(expression: Expression): Boolean = expression.find {
+    case _: Not | _: Or => true
+    case _ => false
+  }.isDefined
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f: Filter => f transformExpressionsUp {
+      case and: And =>
+        val conjunctivePredicates =
+          splitConjunctivePredicates(and)
+            .filter(expr => expr.isInstanceOf[EqualTo] || expr.isInstanceOf[EqualNullSafe])
+            .filterNot(expr => containsNonConjunctionPredicates(expr))
+
+        val equalityPredicates = conjunctivePredicates.collect {
+          case e @ EqualTo(left: AttributeReference, right: Literal) => ((left, right), e)
+          case e @ EqualTo(left: Literal, right: AttributeReference) => ((right, left), e)
+          case e @ EqualNullSafe(left: AttributeReference, right: Literal) => ((left, right), e)
+          case e @ EqualNullSafe(left: Literal, right: AttributeReference) => ((right, left), e)
+        }
+
+        val constantsMap = AttributeMap(equalityPredicates.map(_._1))
+        val predicates = equalityPredicates.map(_._2).toSet
+
+        def replaceConstants(expression: Expression) = expression transform {
+          case a: AttributeReference =>
+            constantsMap.get(a) match {
+              case Some(literal) => literal
+              case None => a
+            }
+        }
+
+        and transform {
+          case e @ EqualTo(_, _) if !predicates.contains(e) => replaceConstants(e)
+          case e @ EqualNullSafe(_, _) if !predicates.contains(e) => replaceConstants(e)
+        }
+    }
+  }
+}
 
 /**
  * Reorder associative integral-type operators and fold all constants into one.
@@ -77,7 +134,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def collectGroupingExpressions(plan: LogicalPlan): ExpressionSet = plan match {
     case Aggregate(groupingExpressions, aggregateExpressions, child) =>
       ExpressionSet.apply(groupingExpressions)
-    case _ => ExpressionSet(Seq())
+    case _ => ExpressionSet(Seq.empty)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -112,16 +169,19 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 
 /**
  * Optimize IN predicates:
- * 1. Removes literal repetitions.
- * 2. Replaces [[In (value, seq[Literal])]] with optimized version
+ * 1. Converts the predicate to false when the list is empty and
+ *    the value is not nullable.
+ * 2. Removes literal repetitions.
+ * 3. Replaces [[In (value, seq[Literal])]] with optimized version
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
-case class OptimizeIn(conf: SQLConf) extends Rule[LogicalPlan] {
+object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
+      case In(v, list) if list.isEmpty && !v.nullable => FalseLiteral
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
-        if (newList.size > conf.optimizerInSetConversionThreshold) {
+        if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
         } else if (newList.size < list.size) {
@@ -326,22 +386,27 @@ object LikeSimplification extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(input, Literal(pattern, StringType)) =>
-      pattern.toString match {
-        case startsWith(prefix) if !prefix.endsWith("\\") =>
-          StartsWith(input, Literal(prefix))
-        case endsWith(postfix) =>
-          EndsWith(input, Literal(postfix))
-        // 'a%a' pattern is basically same with 'a%' && '%a'.
-        // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-        case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
-          And(GreaterThanOrEqual(Length(input), Literal(prefix.size + postfix.size)),
-            And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
-        case contains(infix) if !infix.endsWith("\\") =>
-          Contains(input, Literal(infix))
-        case equalTo(str) =>
-          EqualTo(input, Literal(str))
-        case _ =>
-          Like(input, Literal.create(pattern, StringType))
+      if (pattern == null) {
+        // If pattern is null, return null value directly, since "col like null" == null.
+        Literal(null, BooleanType)
+      } else {
+        pattern.toString match {
+          case startsWith(prefix) if !prefix.endsWith("\\") =>
+            StartsWith(input, Literal(prefix))
+          case endsWith(postfix) =>
+            EndsWith(input, Literal(postfix))
+          // 'a%a' pattern is basically same with 'a%' && '%a'.
+          // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
+          case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
+            And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
+              And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
+          case contains(infix) if !infix.endsWith("\\") =>
+            Contains(input, Literal(infix))
+          case equalTo(str) =>
+            EqualTo(input, Literal(str))
+          case _ =>
+            Like(input, Literal.create(pattern, StringType))
+        }
       }
   }
 }
@@ -352,7 +417,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
  * equivalent [[Literal]] values. This rule is more specific with
  * Null value propagation from bottom to top of the expression tree.
  */
-case class NullPropagation(conf: SQLConf) extends Rule[LogicalPlan] {
+object NullPropagation extends Rule[LogicalPlan] {
   private def isNullLiteral(e: Expression): Boolean = e match {
     case Literal(null, _) => true
     case _ => false
@@ -361,9 +426,9 @@ case class NullPropagation(conf: SQLConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
-        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
       case e @ AggregateExpression(Count(exprs), _, _, _) if exprs.forall(isNullLiteral) =>
-        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
       case ae @ AggregateExpression(Count(exprs), _, false, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))
@@ -477,7 +542,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     case _: Distinct => true
     case _: AppendColumns => true
     case _: AppendColumnsWithObject => true
-    case _: BroadcastHint => true
+    case _: ResolvedHint => true
     case _: RepartitionByExpression => true
     case _: Repartition => true
     case _: Sort => true
@@ -490,14 +555,14 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 /**
  * Optimizes expressions by replacing according to CodeGen configuration.
  */
-case class OptimizeCodegen(conf: SQLConf) extends Rule[LogicalPlan] {
+object OptimizeCodegen extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case e: CaseWhen if canCodegen(e) => e.toCodegen()
   }
 
   private def canCodegen(e: CaseWhen): Boolean = {
     val numBranches = e.branches.size + e.elseValue.size
-    numBranches <= conf.maxCaseBranchesForCodegen
+    numBranches <= SQLConf.get.maxCaseBranchesForCodegen
   }
 }
 
@@ -541,5 +606,30 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
       case Lower(Upper(child)) => Lower(child)
       case Lower(Lower(child)) => Lower(child)
     }
+  }
+}
+
+/**
+ * Combine nested [[Concat]] expressions.
+ */
+object CombineConcats extends Rule[LogicalPlan] {
+
+  private def flattenConcats(concat: Concat): Concat = {
+    val stack = Stack[Expression](concat)
+    val flattened = ArrayBuffer.empty[Expression]
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case Concat(children) =>
+          stack.pushAll(children.reverse)
+        case child =>
+          flattened += child
+      }
+    }
+    Concat(flattened)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
+    case concat: Concat if concat.children.exists(_.isInstanceOf[Concat]) =>
+      flattenConcats(concat)
   }
 }

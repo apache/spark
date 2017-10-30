@@ -19,12 +19,12 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model, Pipeline}
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, OneVsRest}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
-import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
+import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, MulticlassClassificationEvaluator, RegressionEvaluator}
 import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
-import org.apache.spark.ml.param.{ParamMap, ParamPair}
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -120,6 +120,33 @@ class CrossValidatorSuite
     }
   }
 
+  test("cross validation with parallel evaluation") {
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 3))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(2)
+      .setParallelism(1)
+    val cvSerialModel = cv.fit(dataset)
+    cv.setParallelism(2)
+    val cvParallelModel = cv.fit(dataset)
+
+    val serialMetrics = cvSerialModel.avgMetrics
+    val parallelMetrics = cvParallelModel.avgMetrics
+    assert(serialMetrics === parallelMetrics)
+
+    val parentSerial = cvSerialModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    val parentParallel = cvParallelModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(parentSerial.getRegParam === parentParallel.getRegParam)
+    assert(parentSerial.getMaxIter === parentParallel.getMaxIter)
+  }
+
   test("read/write: CrossValidator with simple estimator") {
     val lr = new LogisticRegression().setMaxIter(3)
     val evaluator = new BinaryClassificationEvaluator()
@@ -132,12 +159,15 @@ class CrossValidatorSuite
       .setEvaluator(evaluator)
       .setNumFolds(20)
       .setEstimatorParamMaps(paramMaps)
+      .setSeed(42L)
+      .setParallelism(2)
 
     val cv2 = testDefaultReadWrite(cv, testParams = false)
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
     assert(cv.getSeed === cv2.getSeed)
+    assert(cv.getParallelism === cv2.getParallelism)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]
@@ -153,7 +183,75 @@ class CrossValidatorSuite
           s" LogisticRegression but found ${other.getClass.getName}")
     }
 
-    CrossValidatorSuite.compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+    ValidatorParamsSuiteHelpers
+      .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+  }
+
+  test("read/write: CrossValidator with nested estimator") {
+    val ova = new OneVsRest().setClassifier(new LogisticRegression)
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+    val classifier1 = new LogisticRegression().setRegParam(2.0)
+    val classifier2 = new LogisticRegression().setRegParam(3.0)
+    // params that are not JSON serializable must inherit from Params
+    val paramMaps = new ParamGridBuilder()
+      .addGrid(ova.classifier, Array(classifier1, classifier2))
+      .build()
+    val cv = new CrossValidator()
+      .setEstimator(ova)
+      .setEvaluator(evaluator)
+      .setNumFolds(20)
+      .setEstimatorParamMaps(paramMaps)
+
+    val cv2 = testDefaultReadWrite(cv, testParams = false)
+
+    assert(cv.uid === cv2.uid)
+    assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
+
+    assert(cv2.getEvaluator.isInstanceOf[MulticlassClassificationEvaluator])
+    val evaluator2 = cv2.getEvaluator.asInstanceOf[MulticlassClassificationEvaluator]
+    assert(evaluator.uid === evaluator2.uid)
+    assert(evaluator.getMetricName === evaluator2.getMetricName)
+
+    cv2.getEstimator match {
+      case ova2: OneVsRest =>
+        assert(ova.uid === ova2.uid)
+        ova2.getClassifier match {
+          case lr: LogisticRegression =>
+            assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
+              === lr.getMaxIter)
+          case other =>
+            throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
+              s" LogisticRegression but found ${other.getClass.getName}")
+        }
+
+      case other =>
+        throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
+          s" OneVsRest but found ${other.getClass.getName}")
+    }
+
+    ValidatorParamsSuiteHelpers
+      .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+  }
+
+  test("read/write: Persistence of nested estimator works if parent directory changes") {
+    val ova = new OneVsRest().setClassifier(new LogisticRegression)
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+    val classifier1 = new LogisticRegression().setRegParam(2.0)
+    val classifier2 = new LogisticRegression().setRegParam(3.0)
+    // params that are not JSON serializable must inherit from Params
+    val paramMaps = new ParamGridBuilder()
+      .addGrid(ova.classifier, Array(classifier1, classifier2))
+      .build()
+    val cv = new CrossValidator()
+      .setEstimator(ova)
+      .setEvaluator(evaluator)
+      .setNumFolds(20)
+      .setEstimatorParamMaps(paramMaps)
+
+    ValidatorParamsSuiteHelpers.testFileMove(cv, tempDir)
   }
 
   test("read/write: CrossValidator with complex estimator") {
@@ -193,7 +291,8 @@ class CrossValidatorSuite
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     assert(cv.getEvaluator.uid === cv2.getEvaluator.uid)
 
-    CrossValidatorSuite.compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+    ValidatorParamsSuiteHelpers
+      .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
 
     cv2.getEstimator match {
       case pipeline2: Pipeline =>
@@ -212,7 +311,8 @@ class CrossValidatorSuite
             assert(lrcv.uid === lrcv2.uid)
             assert(lrcv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
             assert(lrEvaluator.uid === lrcv2.getEvaluator.uid)
-            CrossValidatorSuite.compareParamMaps(lrParamMaps, lrcv2.getEstimatorParamMaps)
+            ValidatorParamsSuiteHelpers
+              .compareParamMaps(lrParamMaps, lrcv2.getEstimatorParamMaps)
           case other =>
             throw new AssertionError("Loaded Pipeline expected stages (HashingTF, CrossValidator)" +
               " but found: " + other.map(_.getClass.getName).mkString(", "))
@@ -278,7 +378,8 @@ class CrossValidatorSuite
           s" LogisticRegression but found ${other.getClass.getName}")
     }
 
-    CrossValidatorSuite.compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+   ValidatorParamsSuiteHelpers
+     .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
 
     cv2.bestModel match {
       case lrModel2: LogisticRegressionModel =>
@@ -295,21 +396,6 @@ class CrossValidatorSuite
 }
 
 object CrossValidatorSuite extends SparkFunSuite {
-
-  /**
-   * Assert sequences of estimatorParamMaps are identical.
-   * Params must be simple types comparable with `===`.
-   */
-  def compareParamMaps(pMaps: Array[ParamMap], pMaps2: Array[ParamMap]): Unit = {
-    assert(pMaps.length === pMaps2.length)
-    pMaps.zip(pMaps2).foreach { case (pMap, pMap2) =>
-      assert(pMap.size === pMap2.size)
-      pMap.toSeq.foreach { case ParamPair(p, v) =>
-        assert(pMap2.contains(p))
-        assert(pMap2(p) === v)
-      }
-    }
-  }
 
   abstract class MyModel extends Model[MyModel]
 

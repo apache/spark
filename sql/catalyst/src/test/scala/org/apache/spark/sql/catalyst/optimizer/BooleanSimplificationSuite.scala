@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -26,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.Row
 
 class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
@@ -35,13 +35,14 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
       Batch("Constant Folding", FixedPoint(50),
-        NullPropagation(conf),
+        NullPropagation,
         ConstantFolding,
         BooleanSimplification,
-        PruneFilters(conf)) :: Nil
+        PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
+  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string,
+    'e.boolean, 'f.boolean, 'g.boolean, 'h.boolean)
 
   val testRelationWithData = LocalRelation.fromExternalRows(
     testRelation.output, Seq(Row(1, 2, 3, "abc"))
@@ -101,52 +102,52 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       'a === 'b || 'b > 3 && 'a > 3 && 'a < 5)
   }
 
-  test("a && (!a || b)") {
-    checkCondition('a && (!'a || 'b ), 'a && 'b)
+  test("e && (!e || f)") {
+    checkCondition('e && (!'e || 'f ), 'e && 'f)
 
-    checkCondition('a && ('b || !'a ), 'a && 'b)
+    checkCondition('e && ('f || !'e ), 'e && 'f)
 
-    checkCondition((!'a || 'b ) && 'a, 'b && 'a)
+    checkCondition((!'e || 'f ) && 'e, 'f && 'e)
 
-    checkCondition(('b || !'a ) && 'a, 'b && 'a)
+    checkCondition(('f || !'e ) && 'e, 'f && 'e)
   }
 
-  test("a < 1 && (!(a < 1) || b)") {
-    checkCondition('a < 1 && (!('a < 1) || 'b), ('a < 1) && 'b)
-    checkCondition('a < 1 && ('b || !('a < 1)), ('a < 1) && 'b)
+  test("a < 1 && (!(a < 1) || f)") {
+    checkCondition('a < 1 && (!('a < 1) || 'f), ('a < 1) && 'f)
+    checkCondition('a < 1 && ('f || !('a < 1)), ('a < 1) && 'f)
 
-    checkCondition('a <= 1 && (!('a <= 1) || 'b), ('a <= 1) && 'b)
-    checkCondition('a <= 1 && ('b || !('a <= 1)), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && (!('a <= 1) || 'f), ('a <= 1) && 'f)
+    checkCondition('a <= 1 && ('f || !('a <= 1)), ('a <= 1) && 'f)
 
-    checkCondition('a > 1 && (!('a > 1) || 'b), ('a > 1) && 'b)
-    checkCondition('a > 1 && ('b || !('a > 1)), ('a > 1) && 'b)
+    checkCondition('a > 1 && (!('a > 1) || 'f), ('a > 1) && 'f)
+    checkCondition('a > 1 && ('f || !('a > 1)), ('a > 1) && 'f)
 
-    checkCondition('a >= 1 && (!('a >= 1) || 'b), ('a >= 1) && 'b)
-    checkCondition('a >= 1 && ('b || !('a >= 1)), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && (!('a >= 1) || 'f), ('a >= 1) && 'f)
+    checkCondition('a >= 1 && ('f || !('a >= 1)), ('a >= 1) && 'f)
   }
 
-  test("a < 1 && ((a >= 1) || b)") {
-    checkCondition('a < 1 && ('a >= 1 || 'b ), ('a < 1) && 'b)
-    checkCondition('a < 1 && ('b || 'a >= 1), ('a < 1) && 'b)
+  test("a < 1 && ((a >= 1) || f)") {
+    checkCondition('a < 1 && ('a >= 1 || 'f ), ('a < 1) && 'f)
+    checkCondition('a < 1 && ('f || 'a >= 1), ('a < 1) && 'f)
 
-    checkCondition('a <= 1 && ('a > 1 || 'b ), ('a <= 1) && 'b)
-    checkCondition('a <= 1 && ('b || 'a > 1), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && ('a > 1 || 'f ), ('a <= 1) && 'f)
+    checkCondition('a <= 1 && ('f || 'a > 1), ('a <= 1) && 'f)
 
-    checkCondition('a > 1 && (('a <= 1) || 'b), ('a > 1) && 'b)
-    checkCondition('a > 1 && ('b || ('a <= 1)), ('a > 1) && 'b)
+    checkCondition('a > 1 && (('a <= 1) || 'f), ('a > 1) && 'f)
+    checkCondition('a > 1 && ('f || ('a <= 1)), ('a > 1) && 'f)
 
-    checkCondition('a >= 1 && (('a < 1) || 'b), ('a >= 1) && 'b)
-    checkCondition('a >= 1 && ('b || ('a < 1)), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && (('a < 1) || 'f), ('a >= 1) && 'f)
+    checkCondition('a >= 1 && ('f || ('a < 1)), ('a >= 1) && 'f)
   }
 
   test("DeMorgan's law") {
-    checkCondition(!('a && 'b), !'a || !'b)
+    checkCondition(!('e && 'f), !'e || !'f)
 
-    checkCondition(!('a || 'b), !'a && !'b)
+    checkCondition(!('e || 'f), !'e && !'f)
 
-    checkCondition(!(('a && 'b) || ('c && 'd)), (!'a || !'b) && (!'c || !'d))
+    checkCondition(!(('e && 'f) || ('g && 'h)), (!'e || !'f) && (!'g || !'h))
 
-    checkCondition(!(('a || 'b) && ('c || 'd)), (!'a && !'b) || (!'c && !'d))
+    checkCondition(!(('e || 'f) && ('g || 'h)), (!'e && !'f) || (!'g && !'h))
   }
 
   private val caseInsensitiveConf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> false)

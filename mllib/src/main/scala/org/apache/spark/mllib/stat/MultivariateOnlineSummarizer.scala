@@ -213,8 +213,9 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       var i = 0
       val len = currM2n.length
       while (i < len) {
-        realVariance(i) = (currM2n(i) + deltaMean(i) * deltaMean(i) * weightSum(i) *
-          (totalWeightSum - weightSum(i)) / totalWeightSum) / denominator
+        // We prevent variance from negative value caused by numerical error.
+        realVariance(i) = math.max((currM2n(i) + deltaMean(i) * deltaMean(i) * weightSum(i) *
+          (totalWeightSum - weightSum(i)) / totalWeightSum) / denominator, 0.0)
         i += 1
       }
     }
