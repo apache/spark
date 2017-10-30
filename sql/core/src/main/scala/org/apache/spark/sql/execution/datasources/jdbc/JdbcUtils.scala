@@ -119,7 +119,8 @@ object JdbcUtils extends Logging {
       isCaseSensitive: Boolean,
       dialect: JdbcDialect): String = {
     val columns = if (tableSchema.isEmpty) {
-      rddSchema.fields.map(x => dialect.quoteIdentifier(x.name.replace("\"", ""))).mkString(",")
+      rddSchema.fields.map(
+        x => dialect.quoteIdentifier(x.name.stripPrefix("\"").stripSuffix("\""))).mkString(",")
     } else {
       val columnNameEquality = if (isCaseSensitive) {
         org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
@@ -135,7 +136,7 @@ object JdbcUtils extends Logging {
         val normalizedName = tableColumnNames.find(f => columnNameEquality(f, col.name)).getOrElse {
           throw new AnalysisException(s"""Column "${col.name}" not found in schema $tableSchema""")
         }
-        dialect.quoteIdentifier(normalizedName.replace("\"", ""))
+        dialect.quoteIdentifier(normalizedName.stripPrefix("\"").stripSuffix("\""))
       }.mkString(",")
     }
     val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
@@ -701,7 +702,7 @@ object JdbcUtils extends Logging {
       .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
       .getOrElse(Map.empty[String, String])
     df.schema.fields.foreach { field =>
-      val name = dialect.quoteIdentifier(field.name.replace("\"", ""))
+      val name = dialect.quoteIdentifier(field.name.stripPrefix("\"").stripSuffix("\""))
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
       val nullable = if (field.nullable) "" else "NOT NULL"
