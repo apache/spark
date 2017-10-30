@@ -329,7 +329,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       updateFromDeltaFile(deltaVersion, resultMap)
     }
 
-    loadedMaps.put(version, resultMap)
+    synchronized { loadedMaps.put(version, resultMap) }
     resultMap
   }
 
