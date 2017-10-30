@@ -29,8 +29,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 
 /**
- * Test-only class for fitting a decision tree regressor on a dataset small
- * enough to fit on a single machine.
+ * Test-only class for fitting a decision tree regressor on a dataset small enough to fit on a
+ * single machine.
  */
 private[impl] final class LocalDecisionTreeRegressor(override val uid: String)
   extends Predictor[Vector, LocalDecisionTreeRegressor, DecisionTreeRegressionModel]
@@ -49,10 +49,6 @@ private[impl] final class LocalDecisionTreeRegressor(override val uid: String)
   override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
-
-  override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
-
-  override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 

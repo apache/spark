@@ -18,7 +18,6 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.ml.tree._
-import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 
 /** Object exposing methods for local training of decision trees */

@@ -133,11 +133,11 @@ private[impl] object TrainingInfo {
    *          bitset(i) = true if ith example for current node splits right, false otherwise.
    */
   private[impl] def bitSetFromSplit(
-                                     col: FeatureColumn,
-                                     from: Int,
-                                     to: Int,
-                                     split: Split,
-                                     featureSplits: Array[Split]): BitSet = {
+      col: FeatureColumn,
+      from: Int,
+      to: Int,
+      split: Split,
+      featureSplits: Array[Split]): BitSet = {
     val bitset = new BitSet(to - from)
     from.until(to).foreach { i =>
       if (!split.shouldGoLeft(col.values(i), featureSplits)) {

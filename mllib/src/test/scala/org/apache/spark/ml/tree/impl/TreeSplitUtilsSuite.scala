@@ -33,12 +33,12 @@ class TreeSplitUtilsSuite
    * with the data from the specified training points.
    */
   private def getAggregator(
-                             metadata: DecisionTreeMetadata,
-                             col: FeatureColumn,
-                             from: Int,
-                             to: Int,
-                             labels: Array[Double],
-                             featureSplits: Array[Split]): DTStatsAggregator = {
+      metadata: DecisionTreeMetadata,
+      col: FeatureColumn,
+      from: Int,
+      to: Int,
+      labels: Array[Double],
+      featureSplits: Array[Split]): DTStatsAggregator = {
 
     val statsAggregator = new DTStatsAggregator(metadata, featureSubset = None)
     val instanceWeights = Array.fill[Double](col.values.length)(1.0)
@@ -215,9 +215,8 @@ class TreeSplitUtilsSuite
     val splits = RandomForest.findUnorderedSplits(metadata, featureIndex)
     val statsAggregator = getAggregator(metadata, col, from = 0, to = values.length, labels, splits)
     // Choose split, verify that it's invalid
-    val (_, stats) =
-      SplitUtils.chooseUnorderedCategoricalSplit(statsAggregator,
-        featureIndex, featureIndex, splits)
+    val (_, stats) = SplitUtils.chooseUnorderedCategoricalSplit(statsAggregator, featureIndex,
+      featureIndex, splits)
     assert(!stats.valid)
   }
 
