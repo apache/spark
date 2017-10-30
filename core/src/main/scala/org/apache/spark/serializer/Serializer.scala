@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 import javax.annotation.concurrent.NotThreadSafe
 
-import scala.reflect.ClassTag
+import scala.reflect._
 
 import org.apache.spark.annotation.{DeveloperApi, Private}
 import org.apache.spark.util.NextIterator
@@ -117,7 +117,17 @@ abstract class SerializerInstance {
 
   def serializeStream(s: OutputStream): SerializationStream
 
+  def serializeStreamForClass[T: ClassTag](s: OutputStream): ClassSpecificSerializationStream[T]
+
+  def serializeStreamForKVClass[K: ClassTag, V: ClassTag](
+      s: OutputStream): KVClassSpecificSerializationStream[K, V]
+
   def deserializeStream(s: InputStream): DeserializationStream
+
+  def deserializeStreamForClass[T: ClassTag](s: InputStream): ClassSpecificDeserializationStream[T]
+
+  def deserializeStreamForKVClass[K: ClassTag, V: ClassTag](
+      s: InputStream): KVClassSpecificDeserializationStream[K, V]
 }
 
 /**
@@ -197,4 +207,163 @@ abstract class DeserializationStream extends Closeable {
       DeserializationStream.this.close()
     }
   }
+}
+
+abstract class ClassSpecificSerializationStream[T: ClassTag] extends Closeable{
+  /** Indicates whether the class has been wrote. */
+  protected def classWrote: Boolean
+  /** Writes the class. */
+  protected def writeClass(clazz: Class[T]): ClassSpecificSerializationStream[T]
+  /** Writes the object without class. */
+  protected def writeObjectWithoutClass(t: T): ClassSpecificSerializationStream[T]
+  /** The most general-purpose method to write an object. */
+  def writeObject(t: T): ClassSpecificSerializationStream[T] = {
+    if (!classWrote) {
+      writeClass(classTag[T].runtimeClass.asInstanceOf[Class[T]])
+    }
+
+    writeObjectWithoutClass(t)
+    this
+  }
+
+  def writeAll(iter: Iterator[T]): ClassSpecificSerializationStream[T] = {
+    while (iter.hasNext) {
+      writeObject(iter.next())
+    }
+    this
+  }
+
+  def flush(): Unit
+
+  override def close(): Unit
+}
+
+abstract class ClassSpecificDeserializationStream[T: ClassTag] extends Closeable {
+  /** Indicates whether the class has read. */
+  protected def classRead: Boolean
+  /** The read classes. */
+  protected def classInfo: Class[T]
+  /** Reads the object class. */
+  protected def readClass(): Class[T]
+  /** Reads the object without class. */
+  protected def readObjectWithoutClass(clazz: Class[T]): T
+  /** The most general-purpose method to read an object. */
+  def readObject(): T = {
+    if (!classRead) {
+      readClass()
+      assert(classInfo != null)
+    }
+
+    readObjectWithoutClass(classInfo)
+  }
+
+  /**
+    * Read the elements of this stream through an iterator. This can only be called once, as
+    * reading each element will consume data from the input source.
+    */
+  def asIterator: Iterator[Any] = new NextIterator[Any] {
+    override protected def getNext() = {
+      try {
+        readObject()
+      } catch {
+        case eof: EOFException =>
+          finished = true
+          null
+      }
+    }
+
+    override protected def close() {
+      ClassSpecificDeserializationStream.this.close()
+    }
+  }
+
+  override def close(): Unit
+}
+
+abstract class KVClassSpecificSerializationStream[K: ClassTag, V: ClassTag] extends Closeable {
+  /** Indicates whether the key class has been wrote. */
+  protected def keyClassWrote: Boolean
+  /** Indicates whether the value class has been wrote. */
+  protected def valueClassWrote: Boolean
+  /** Writes the class. */
+  protected def writeClass[T](clazz: Class[T]): KVClassSpecificSerializationStream[K, V]
+  /** Writes the object without class. */
+  protected def writeObjectWithoutClass[T](t: T): KVClassSpecificSerializationStream[K, V]
+  /** Writes the key object, and only writes the key class once. */
+  def writeKey(t: K): KVClassSpecificSerializationStream[K, V] = {
+    if (!keyClassWrote) {
+      writeClass[K](classTag[K].runtimeClass.asInstanceOf[Class[K]])
+    }
+
+    writeObjectWithoutClass[K](t)
+    this
+  }
+  /** Writes the value object, and only writes the value class once. */
+  def writeValue(t: V): KVClassSpecificSerializationStream[K, V] = {
+    if (!valueClassWrote) {
+      writeClass[V](classTag[V].runtimeClass.asInstanceOf[Class[V]])
+    }
+
+    writeObjectWithoutClass[V](t)
+    this
+  }
+
+  def flush(): Unit
+
+  override def close(): Unit
+}
+
+abstract class KVClassSpecificDeserializationStream[K: ClassTag, V: ClassTag] extends Closeable {
+  /** Indicate whether the key class has read. */
+  protected def keyClassRead: Boolean
+  /** Indicate whether the value class has read. */
+  protected def valueClassRead: Boolean
+  /** The read key class. */
+  protected def keyClassInfo: Class[K]
+  /** The read value class. */
+  protected def valueClassInfo: Class[V]
+  /** Reads the object class. */
+  protected def readClass[T](): Class[T]
+  /** Reads the object without class. */
+  protected def readObjectWithoutClass[T](clazz: Class[T]): T
+  /** Reads the key object, and only reads the key class once. */
+  def readKey(): K = {
+    if (!keyClassRead) {
+      readClass[K]()
+      assert(keyClassInfo != null)
+    }
+
+    readObjectWithoutClass[K](keyClassInfo)
+  }
+  /** Reads the value object, and only reads the value class once. */
+  def readValue(): V = {
+    if (!valueClassRead) {
+      readClass[V]()
+      assert(valueClassInfo != null)
+    }
+
+    readObjectWithoutClass[V](valueClassInfo)
+  }
+
+  /**
+    * Read the elements of this stream through an iterator over key-value pairs. This can only be
+    * called once, as reading each element will consume data from the input source.
+    */
+  def asKeyValueIterator: Iterator[(Any, Any)] = new NextIterator[(Any, Any)] {
+    override protected def getNext() = {
+      try {
+        (readKey(), readValue())
+      } catch {
+        case eof: EOFException =>
+          finished = true
+          null
+      }
+    }
+
+    override protected def close() {
+      KVClassSpecificDeserializationStream.this.close()
+    }
+  }
+
+  override def close(): Unit
 }

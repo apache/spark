@@ -89,4 +89,28 @@ public final class DummySerializerInstance extends SerializerInstance {
   public <T> T deserialize(ByteBuffer bytes, ClassTag<T> ev1) {
     throw new UnsupportedOperationException();
   }
+
+  @Override
+  public <T> ClassSpecificSerializationStream<T> serializeStreamForClass(
+    OutputStream s, ClassTag<T> ev$1) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public <K, V> KVClassSpecificSerializationStream<K, V> serializeStreamForKVClass(
+    OutputStream s, ClassTag<K> ev$1, ClassTag<V> ev$2) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public <T> ClassSpecificDeserializationStream<T> deserializeStreamForClass(
+    InputStream s, ClassTag<T> ev$1) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public <K, V> KVClassSpecificDeserializationStream<K, V> deserializeStreamForKVClass(
+    InputStream s, ClassTag<K> ev$1, ClassTag<V> ev$2) {
+    throw new UnsupportedOperationException();
+  }
 }

@@ -31,7 +31,7 @@ import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
-import org.apache.spark.serializer.{KryoSerializationStream, SerializationStream, SerializerManager}
+import org.apache.spark.serializer._
 import org.apache.spark.storage._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{SizeEstimator, Utils}
@@ -348,16 +348,11 @@ private[spark] class MemoryStore(
     }
     val bbos = new ChunkedByteBufferOutputStream(chunkSize, allocator)
     redirectableStream.setOutputStream(bbos)
-    val serializationStream: SerializationStream = {
+    val serializationStream: ClassSpecificSerializationStream[T] = {
       val autoPick = !blockId.isInstanceOf[StreamBlockId]
       val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
-      ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
-    }
-
-    // Whether we use Kryo serialization
-    var kryoSerializationStream: KryoSerializationStream = null
-    if (serializationStream.isInstanceOf[KryoSerializationStream]) {
-      kryoSerializationStream = serializationStream.asInstanceOf[KryoSerializationStream]
+      ser.serializeStreamForClass[T](
+        serializerManager.wrapForCompression(blockId, redirectableStream))(classTag)
     }
 
     // Request enough memory to begin unrolling
@@ -382,17 +377,7 @@ private[spark] class MemoryStore(
 
     // Unroll this block safely, checking whether we have exceeded our threshold
     while (values.hasNext && keepUnrolling) {
-      val value = values.next()
-      if (kryoSerializationStream != null) {
-        if (!kryoSerializationStream.classWrote) {
-          kryoSerializationStream.writeClass(value.getClass)
-        }
-
-        kryoSerializationStream.writeObjectWithoutClass(value)(classTag)
-      } else {
-        serializationStream.writeObject(value)(classTag)
-      }
-
+      serializationStream.writeObject(values.next())
       elementsUnrolled += 1
       if (elementsUnrolled % memoryCheckPeriod == 0) {
         reserveAdditionalMemoryIfNecessary()
@@ -805,7 +790,7 @@ private[storage] class PartiallySerializedBlock[T](
     memoryStore: MemoryStore,
     serializerManager: SerializerManager,
     blockId: BlockId,
-    private val serializationStream: SerializationStream,
+    private val serializationStream: ClassSpecificSerializationStream[T],
     private val redirectableOutputStream: RedirectableOutputStream,
     val unrollMemory: Long,
     memoryMode: MemoryMode,
@@ -877,23 +862,8 @@ private[storage] class PartiallySerializedBlock[T](
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     redirectableOutputStream.setOutputStream(os)
 
-    // Whether we use Kryo serialization
-    var kryoSerializationStream: KryoSerializationStream = null
-    if (serializationStream.isInstanceOf[KryoSerializationStream]) {
-      kryoSerializationStream = serializationStream.asInstanceOf[KryoSerializationStream]
-    }
-
     while (rest.hasNext) {
-      val value = rest.next()
-      if (kryoSerializationStream != null) {
-        if (!kryoSerializationStream.classWrote) {
-          kryoSerializationStream.writeClass(value.getClass)
-        }
-
-        kryoSerializationStream.writeObjectWithoutClass(value)(classTag)
-      } else {
-        serializationStream.writeObject(value)(classTag)
-      }
+      serializationStream.writeObject(rest.next())
     }
 
     serializationStream.close()
