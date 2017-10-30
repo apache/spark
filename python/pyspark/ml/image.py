@@ -135,5 +135,5 @@ def readImages(path, spark=None, recursive=False, numPartitions=0,
     sql_ctx = SQLContext(ctx)
     jsession = spark._jsparkSession
     jresult = image_schema.readImages(path, jsession, recursive, numPartitions,
-                                dropImageFailures, float(sampleRatio))
+                                      dropImageFailures, float(sampleRatio))
     return DataFrame(jresult, sql_ctx)
