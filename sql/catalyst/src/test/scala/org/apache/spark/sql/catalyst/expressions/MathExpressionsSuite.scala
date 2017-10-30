@@ -403,13 +403,11 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("sqrt") {
     testUnary(Sqrt, math.sqrt, (0 to 20).map(_ * 0.1))
-    testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNull = true)
+    testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNaN = true)
 
     checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
-    checkEvaluation(Sqrt(Literal.create( -1.0, DoubleType)), null, create_row(null))
-    checkEvaluation(Sqrt(Literal.create(-1.5, DoubleType)), null, create_row(null))
-    checkEvaluation(Sqrt(Literal.create(-10.0, DoubleType)), null, create_row(null))
-
+    checkNaN(Sqrt(Literal(-1.0)), EmptyRow)
+    checkNaN(Sqrt(Literal(-1.5)), EmptyRow)
     checkConsistencyBetweenInterpretedAndCodegen(Sqrt, DoubleType)
   }
 

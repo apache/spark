@@ -1957,6 +1957,14 @@ Not all the APIs of the Hive UDF/UDTF/UDAF are supported by Spark SQL. Below are
   Spark SQL currently does not support the reuse of aggregation.
 * `getWindowingEvaluator` (`GenericUDAFEvaluator`) is a function to optimize aggregation by evaluating
   an aggregate over a fixed window.
+  
+### Incompatible Hive UDF
+
+Below is a list of Hive UDFs that we don't incompatible yet.
+
+* `SQRT(n)` If n < 0, Hive returns null, Spark SQL returns NaN.
+* `ACOS(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
+* `ASIN(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
 
 # Reference
 

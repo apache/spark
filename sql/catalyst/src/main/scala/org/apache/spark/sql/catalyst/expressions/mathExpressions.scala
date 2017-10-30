@@ -535,30 +535,8 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
     Examples:
       > SELECT _FUNC_(4);
        2.0
-      > SELECT _FUNC_(-4);
-       NULL
   """)
-case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT") {
-
-  private final val zero: Double = 0.0
-
-  override def nullSafeEval(input: Any): Any = {
-    val d = input.asInstanceOf[Double]
-    if (d < zero) null else f(d)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c =>
-      s"""
-        if ($c < $zero) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = java.lang.Math.${funcName}($c);
-        }
-      """
-    )
-  }
-}
+case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the tangent of `expr`.",
