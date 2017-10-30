@@ -153,23 +153,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(tempFiles.isEmpty)
   }
 
-  test("SPARK-22305: large number of deltas") {
-    val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
-    for (i <- 1 to 10000) {
-      val store = provider.getStore(i - 1)
-      put(store, "a", i)
-      store.commit()
-    }
-
-    // What we're trying to check is the case where we need to load partitions from N all the way
-    // down to 1, since in previous code that would cause a stack overflow. doMaintenance will
-    // generate a snapshot at the current version of 10000, but also evict most of the old versions
-    // from the state store cache. So if we try to get the store a few versions back, we'll dodge
-    // the snapshot and all cached versions.
-    provider.doMaintenance()
-    provider.getStore(9500)
-  }
-
   test("corrupted file handling") {
     val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
     for (i <- 1 to 6) {
