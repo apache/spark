@@ -81,7 +81,6 @@ def toImage(array, origin="", spark=None):
 
     :param array (array): The array to convert to image
     :param origin (str): Path to the image
-    :param mode (str): OpenCV compatible type
     :param spark (SparkSession): The current spark session
     :rtype object: Two dimensional image
 
@@ -108,17 +107,17 @@ def toImage(array, origin="", spark=None):
                        [origin, height, width, nChannels, mode, data])
 
 
-def readImages(path, recursive=False, numPartitions=0,
-               dropImageFailures=False, sampleRatio=1.0, spark=None):
+def readImages(path, spark=None, recursive=False, numPartitions=0,
+               dropImageFailures=False, sampleRatio=1.0):
     """
     Reads the directory of images from the local or remote source.
 
     :param path (str): Path to the image directory
+    :param spark (SparkSession): The current spark session
     :param recursive (bool): Recursive search flag
     :param numPartitions (int): Number of DataFrame partitions
     :param dropImageFailures (bool): Drop the files that are not valid images
     :param sampleRatio (double): Fraction of the images loaded
-    :param spark (SparkSession): The current spark session
     :rtype DataFrame: DataFrame with a single column of "images",
            see ImageSchema for details
 
@@ -132,9 +131,9 @@ def readImages(path, recursive=False, numPartitions=0,
     """
     spark = spark or SparkSession.builder.getOrCreate()
     ctx = spark.sparkContext
-    schema = ctx._jvm.org.apache.spark.ml.image.ImageSchema
+    image_schema = ctx._jvm.org.apache.spark.ml.image.ImageSchema
     sql_ctx = SQLContext(ctx)
     jsession = spark._jsparkSession
-    jresult = schema.readImages(path, jsession, recursive, numPartitions,
+    jresult = image_schema.readImages(path, jsession, recursive, numPartitions,
                                 dropImageFailures, float(sampleRatio))
     return DataFrame(jresult, sql_ctx)

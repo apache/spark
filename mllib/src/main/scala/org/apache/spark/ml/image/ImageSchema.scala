@@ -33,9 +33,9 @@ object ImageSchema {
 
   val undefinedImageType = "Undefined"
 
-  val imageFields = Array("origin", "height", "width", "nChannels", "mode", "data")
+  val imageFields: Array[String] = Array("origin", "height", "width", "nChannels", "mode", "data")
 
-  val ocvTypes = Map(
+  val ocvTypes: Map[String, Int] = Map(
     undefinedImageType -> -1,
     "CV_8U" -> 0, "CV_8UC1" -> 0, "CV_8UC3" -> 16, "CV_8UC4" -> 24
   )
@@ -105,17 +105,6 @@ object ImageSchema {
    * @return The image data
    */
   def getData(row: Row): Array[Byte] = row.getAs[Array[Byte]](5)
-
-  /**
-   * :: Experimental ::
-   * Check if the DataFrame column contains images (i.e. has ImageSchema)
-   *
-   * @param df DataFrame
-   * @param column Column name
-   * @return True if the given column matches the image schema
-   */
-  def isImageColumn(df: DataFrame, column: String): Boolean =
-    df.schema(column).dataType == columnSchema
 
   /**
    * Default values for the invalid image
@@ -195,9 +184,10 @@ object ImageSchema {
    * Read the directory of images from the local or remote source
    *
    * @param path Path to the image directory
-   * @param sparkSession Spark Session
+   * @param sparkSession Spark Session, if omitted gets or creates the session
    * @param recursive Recursive path search flag
-   * @param numPartitions Number of the DataFrame partitions
+   * @param numPartitions Number of the DataFrame partitions,
+   *                      if omitted uses defaultParallelism instead
    * @param dropImageFailures Drop the files that are not valid images from the result
    * @param sampleRatio Fraction of the files loaded
    * @return DataFrame with a single column "image" of images;
@@ -230,15 +220,13 @@ object ImageSchema {
       }
 
     try {
-      val streams = session.sparkContext.binaryFiles(path, partitions)
-        .repartition(partitions)
-
-      val convert = (stream: (String, PortableDataStream)) =>
-        decode(stream._1, stream._2.toArray())
+      val streams = session.sparkContext.binaryFiles(path, partitions).repartition(partitions)
+      val convert = (origin: String, bytes: PortableDataStream) =>
+        decode(origin, bytes.toArray())
       val images = if (dropImageFailures) {
-        streams.flatMap { convert(_) }
+        streams.flatMap { case (origin, bytes) => convert(origin, bytes) }
       } else {
-        streams.map { stream => convert(stream).getOrElse(invalidImageRow(stream._1)) }
+        streams.map { case (origin, bytes) => convert(origin, bytes).getOrElse(invalidImageRow(origin)) }
       }
       session.createDataFrame(images, imageSchema)
     } finally {

@@ -46,7 +46,7 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
     val df = spark.createDataFrame(rdd, ImageSchema.imageSchema)
 
     assert(df.count === 2, "incorrect image count")
-    assert(ImageSchema.isImageColumn(df, "image"), "data do not fit ImageSchema")
+    assert(df.schema("image").dataType == columnSchema, "data do not fit ImageSchema")
   }
 
   test("readImages count test") {
@@ -57,13 +57,13 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(df.count === 9)
 
     df = readImages(imagePath, recursive = true, dropImageFailures = true)
-    val count100 = df.count
-    assert(count100 === 7)
+    val countTotal = df.count
+    assert(countTotal === 7)
 
     df = readImages(imagePath, recursive = true, sampleRatio = 0.5, dropImageFailures = true)
     // Random number about half of the size of the original dataset
     val count50 = df.count
-    assert(count50 > 0.2 * count100 && count50 < 0.8 * count100)
+    assert(count50 > 0 && count50 < countTotal)
   }
 
   test("readImages partition test") {

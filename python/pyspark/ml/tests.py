@@ -1823,7 +1823,7 @@ class ImageReaderTest(SparkSessionTestCase):
 
     def test_read_images(self):
         data_path = 'python/test_support/image/kittens'
-        df = readImages(data_path, recursive=True, spark=self.spark)
+        df = readImages(data_path, spark=self.spark, recursive=True)
         self.assertEqual(df.count(), 4)
         self.assertEqual(len(toNDArray(df.take(1)[0][0])), df.take(1)[0][0][1])
 
