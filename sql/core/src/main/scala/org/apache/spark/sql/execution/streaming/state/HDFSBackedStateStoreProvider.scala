@@ -301,7 +301,9 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     // Shortcut if the map for this version is already there to avoid a redundant put.
     val currentVersionMap =
       synchronized { loadedMaps.get(version) }.orElse(readSnapshotFile(version))
-    if (currentVersionMap.isDefined) return currentVersionMap.get
+    if (currentVersionMap.isDefined) {
+      return currentVersionMap.get
+    }
 
 
     // Find the most recent map before this version that we can.
@@ -309,7 +311,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     var lastAvailableVersion = version
     var lastAvailableMap: Option[MapType] = None
     while (lastAvailableMap.isEmpty) {
-      lastAvailableVersion = lastAvailableVersion - 1
+      lastAvailableVersion -= 1
 
       if (lastAvailableVersion <= 0) {
         // Use an empty map for versions 0 or less.
@@ -323,13 +325,13 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
     // Load all the deltas from the version after the last available one up to the target version.
     // The last available version is the one with a full snapshot, so it doesn't need deltas.
-    var resultMap = lastAvailableMap.get
+    val resultMap = lastAvailableMap.get
     for (deltaVersion <- lastAvailableVersion + 1 to version) {
       updateFromDeltaFile(deltaVersion, resultMap)
     }
 
     loadedMaps.put(version, resultMap)
-    return resultMap
+    resultMap
   }
 
   private def writeUpdateToDeltaFile(
