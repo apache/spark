@@ -45,5 +45,5 @@ public interface ReadTask<T> extends Serializable {
   /**
    * Returns a data reader to do the actual reading work for this read task.
    */
-  DataReader<T> createReader();
+  DataReader<T> createDataReader();
 }

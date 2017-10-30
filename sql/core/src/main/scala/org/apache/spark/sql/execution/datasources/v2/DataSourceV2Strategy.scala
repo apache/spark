@@ -18,19 +18,16 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.execution.SparkPlan
 
 object DataSourceV2Strategy extends Strategy {
-  // TODO: write path
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case DataSourceV2Relation(output, reader) =>
       DataSourceV2ScanExec(output, reader) :: Nil
+
+    case WriteToDataSourceV2(writer, query) =>
+      WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
 
     case _ => Nil
   }

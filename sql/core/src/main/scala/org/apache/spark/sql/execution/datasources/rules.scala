@@ -404,6 +404,9 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
     plan.foreach {
       case CreateTable(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
         throw new AnalysisException("Hive support is required to CREATE Hive TABLE (AS SELECT)")
+      case i: InsertIntoDir if DDLUtils.isHiveTable(i.provider) =>
+        throw new AnalysisException(
+          "Hive support is required to INSERT OVERWRITE DIRECTORY with the Hive format")
       case _ => // OK
     }
   }
