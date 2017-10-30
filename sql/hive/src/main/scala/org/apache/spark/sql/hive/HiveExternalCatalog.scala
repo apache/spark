@@ -89,10 +89,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Run some code involving `client` in a [[synchronized]] block and wrap certain
-   * exceptions thrown in the process in [[AnalysisException]].
+   * Run some code involving `client` and wrap certain exceptions thrown in the process in
+   * [[AnalysisException]]. Thread-safety is guaranteed here because methods in the `client`
+   * ([[org.apache.spark.sql.hive.client.HiveClientImpl]]) are already synchronized through
+   * `clientLoader` in the `retryLocked` method.
    */
-  private def withClient[T](body: => T): T = synchronized {
+  private def withClient[T](body: => T): T = {
     try {
       body
     } catch {
