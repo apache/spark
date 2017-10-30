@@ -28,26 +28,25 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.spark.sql.SparkSession
 
 private object RecursiveFlag {
-
   /**
-   * Sets a value of spark recursive flag.
-   * If value is a None, it unsets the flag.
+   * Sets the spark recursive flag and then restores it.
    *
-   * @param value value to set
-   * @param spark existing spark session
-   * @return previous value of this flag
+   * @param value Value to set
+   * @param spark Existing spark session
+   * @param f The function to evaluate after setting the flag
+   * @return Returns the evaluation result T of the function
    */
-  def setRecursiveFlag(value: Option[String], spark: SparkSession): Option[String] = {
+  def withRecursiveFlag[T](value: Boolean, spark: SparkSession)(f: => T): T = {
     val flagName = FileInputFormat.INPUT_DIR_RECURSIVE
     val hadoopConf = spark.sparkContext.hadoopConfiguration
     val old = Option(hadoopConf.get(flagName))
-
-    value match {
-      case Some(v) => hadoopConf.set(flagName, v)
-      case None => hadoopConf.unset(flagName)
+    hadoopConf.set(flagName, value.toString)
+    try f finally {
+      old match {
+        case Some(v) => hadoopConf.set(flagName, v)
+        case None => hadoopConf.unset(flagName)
+      }
     }
-
-    old
   }
 }
 
@@ -78,43 +77,33 @@ private object SamplePathFilter {
   def isFile(path: Path): Boolean = FilenameUtils.getExtension(path.toString) != ""
 
   /**
-   * Sets HDFS PathFilter
+   * Sets the HDFS PathFilter flag and then restores it.
+   * Only applies the filter if sampleRatio is less than 1.
    *
-   * @param value Filter class that is passed to HDFS
    * @param sampleRatio Fraction of the files that the filter picks
    * @param spark Existing Spark session
-   * @return Returns the previous HDFS path filter
+   * @param f The function to evaluate after setting the flag
+   * @return Returns the evaluation result T of the function
    */
-  def setPathFilter(
-      value: Option[Class[_]],
+  def withPathFilter[T](
       sampleRatio: Double,
-      spark: SparkSession): Option[Class[_]] = {
-    val flagName = FileInputFormat.PATHFILTER_CLASS
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val old = Option(hadoopConf.getClass(flagName, null))
-    hadoopConf.setDouble(SamplePathFilter.ratioParam, sampleRatio)
-
-    value match {
-      case Some(v) => hadoopConf.setClass(flagName, v, classOf[PathFilter])
-      case None => hadoopConf.unset(flagName)
-    }
-    old
-  }
-
-  /**
-   * Unsets HDFS PathFilter
-   *
-   * @param value Filter class to restore to HDFS
-   * @param spark Existing Spark session
-   */
-  def unsetPathFilter(value: Option[Class[_]], spark: SparkSession): Unit = {
-    val flagName = FileInputFormat.PATHFILTER_CLASS
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
-    hadoopConf.unset(SamplePathFilter.ratioParam)
-
-    value match {
-      case Some(v) => hadoopConf.setClass(flagName, v, classOf[PathFilter])
-      case None => hadoopConf.unset(flagName)
+      spark: SparkSession)(f: => T): T = {
+    val sampleImages = sampleRatio < 1
+    if (sampleImages) {
+      val flagName = FileInputFormat.PATHFILTER_CLASS
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val old = Option(hadoopConf.getClass(flagName, null))
+      hadoopConf.setDouble(SamplePathFilter.ratioParam, sampleRatio)
+      hadoopConf.setClass(flagName, classOf[SamplePathFilter], classOf[PathFilter])
+      try f finally {
+        hadoopConf.unset(SamplePathFilter.ratioParam)
+        old match {
+          case Some(v) => hadoopConf.setClass(flagName, v, classOf[PathFilter])
+          case None => hadoopConf.unset(flagName)
+        }
+      }
+    } else {
+      f
     }
   }
 }

@@ -210,32 +210,20 @@ object ImageSchema {
         session.sparkContext.defaultParallelism
       }
 
-    val oldRecursiveFlag = RecursiveFlag.setRecursiveFlag(Some(recursive.toString), session)
-    val sampleImages = sampleRatio < 1
-    val oldPathFilter: Option[Class[_]] =
-      if (sampleImages) {
-        SamplePathFilter.setPathFilter(Some(classOf[SamplePathFilter]), sampleRatio, session)
-      } else {
-        None
-      }
-
-    try {
-      val streams = session.sparkContext.binaryFiles(path, partitions).repartition(partitions)
-      val convert = (origin: String, bytes: PortableDataStream) =>
-        decode(origin, bytes.toArray())
-      val images = if (dropImageFailures) {
-        streams.flatMap { case (origin, bytes) => convert(origin, bytes) }
-      } else {
-        streams.map { case (origin, bytes) =>
-          convert(origin, bytes).getOrElse(invalidImageRow(origin)) }
-      }
-      session.createDataFrame(images, imageSchema)
-    } finally {
-      // return Hadoop flags to the original values
-      RecursiveFlag.setRecursiveFlag(oldRecursiveFlag, session)
-      if (sampleImages) {
-        SamplePathFilter.unsetPathFilter(oldPathFilter, session)
-      }
-    }
+    RecursiveFlag.withRecursiveFlag(recursive, session)(
+      SamplePathFilter.withPathFilter(sampleRatio, session)({
+        val streams = session.sparkContext.binaryFiles(path, partitions).repartition(partitions)
+        val convert = (origin: String, bytes: PortableDataStream) =>
+          decode(origin, bytes.toArray())
+        val images = if (dropImageFailures) {
+          streams.flatMap { case (origin, bytes) => convert(origin, bytes) }
+        } else {
+          streams.map { case (origin, bytes) =>
+            convert(origin, bytes).getOrElse(invalidImageRow(origin))
+          }
+        }
+        session.createDataFrame(images, imageSchema)
+      })
+    )
   }
 }
