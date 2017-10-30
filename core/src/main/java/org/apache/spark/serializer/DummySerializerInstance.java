@@ -91,26 +91,70 @@ public final class DummySerializerInstance extends SerializerInstance {
   }
 
   @Override
-  public <T> ClassSpecificSerializationStream<T> serializeStreamForClass(
-    OutputStream s, ClassTag<T> ev$1) {
+  public <T> ClassSpecificSerializationStream<T> serializeStreamForClass(OutputStream s) {
     throw new UnsupportedOperationException();
   }
 
   @Override
   public <K, V> KVClassSpecificSerializationStream<K, V> serializeStreamForKVClass(
-    OutputStream s, ClassTag<K> ev$1, ClassTag<V> ev$2) {
-    throw new UnsupportedOperationException();
+      OutputStream s) {
+    return new KVClassSpecificSerializationStream<K, V>() {
+      @Override
+      public KVClassSpecificSerializationStream<K, V> writeKeyClass(Class<?> clazz) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public KVClassSpecificSerializationStream<K, V> writeValueClass(Class<?> clazz) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public boolean keyClassWrote() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public boolean valueClassWrote() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public <T> KVClassSpecificSerializationStream<K, V> writeObjectWithoutClass(T t) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public void flush() {
+        // Need to implement this because DiskObjectWriter uses it to flush the compression stream
+        try {
+          s.flush();
+        } catch (IOException e) {
+          Platform.throwException(e);
+        }
+      }
+
+      @Override
+      public void close() {
+        // Need to implement this because DiskObjectWriter uses it to close the compression stream
+        try {
+          s.close();
+        } catch (IOException e) {
+          Platform.throwException(e);
+        }
+      }
+    };
   }
 
   @Override
   public <T> ClassSpecificDeserializationStream<T> deserializeStreamForClass(
-    InputStream s, ClassTag<T> ev$1) {
+      InputStream s) {
     throw new UnsupportedOperationException();
   }
 
   @Override
   public <K, V> KVClassSpecificDeserializationStream<K, V> deserializeStreamForKVClass(
-    InputStream s, ClassTag<K> ev$1, ClassTag<V> ev$2) {
+      InputStream s) {
     throw new UnsupportedOperationException();
   }
 }

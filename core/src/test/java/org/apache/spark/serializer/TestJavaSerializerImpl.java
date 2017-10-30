@@ -62,25 +62,25 @@ class TestJavaSerializerImpl extends Serializer {
 
     @Override
     public <T> ClassSpecificSerializationStream<T> serializeStreamForClass(
-      OutputStream s, ClassTag<T> ev$1) {
+        OutputStream s) {
       return null;
     }
 
     @Override
     public <K, V> KVClassSpecificSerializationStream<K, V> serializeStreamForKVClass(
-      OutputStream s, ClassTag<K> ev$1, ClassTag<V> ev$2) {
+        OutputStream s) {
       return null;
     }
 
     @Override
     public <T> ClassSpecificDeserializationStream<T> deserializeStreamForClass(
-      InputStream s, ClassTag<T> ev$1) {
+        InputStream s) {
       return null;
     }
 
     @Override
     public <K, V> KVClassSpecificDeserializationStream<K, V> deserializeStreamForKVClass(
-      InputStream s, ClassTag<K> ev$1, ClassTag<V> ev$2) {
+        InputStream s) {
       return null;
     }
   }

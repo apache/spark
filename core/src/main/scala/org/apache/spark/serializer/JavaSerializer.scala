@@ -90,7 +90,7 @@ private[spark] object JavaDeserializationStream {
   )
 }
 
-private[spark] class JavaClassSpecificSerializationStream[T: ClassTag](
+private[spark] class JavaClassSpecificSerializationStream[T](
     out: OutputStream, counterReset: Int, extraDebugInfo: Boolean
   ) extends ClassSpecificSerializationStream[T] {
 
@@ -117,7 +117,7 @@ private[spark] class JavaClassSpecificSerializationStream[T: ClassTag](
   override def close(): Unit = {objOut.close()}
 
   override protected def classWrote: Boolean = throw new UnsupportedOperationException
-  override protected def writeClass(clazz: Class[T]): ClassSpecificSerializationStream[T] = {
+  override protected def writeClass(clazz: Class[_]): ClassSpecificSerializationStream[T] = {
     throw new UnsupportedOperationException
   }
   override protected def writeObjectWithoutClass(t: T): ClassSpecificSerializationStream[T] = {
@@ -125,7 +125,7 @@ private[spark] class JavaClassSpecificSerializationStream[T: ClassTag](
   }
 }
 
-private[spark] class JavaClassSpecificDeserializationStream[T: ClassTag](
+private[spark] class JavaClassSpecificDeserializationStream[T](
     in: InputStream, loader: ClassLoader)
   extends ClassSpecificDeserializationStream[T] {
 
@@ -152,7 +152,7 @@ private[spark] class JavaClassSpecificDeserializationStream[T: ClassTag](
   }
 }
 
-private[spark] class JavaKVClassSpecificSerializationStream[K: ClassTag, V: ClassTag](
+private[spark] class JavaKVClassSpecificSerializationStream[K, V](
     out: OutputStream, counterReset: Int, extraDebugInfo: Boolean
     ) extends KVClassSpecificSerializationStream[K, V] {
 
@@ -160,14 +160,14 @@ private[spark] class JavaKVClassSpecificSerializationStream[K: ClassTag, V: Clas
   private var counter = 0
 
   override def writeKey(t: K): KVClassSpecificSerializationStream[K, V] = {
-    writeObject(t)
+    writeObject[K](t)
   }
 
   override def writeValue(t: V): KVClassSpecificSerializationStream[K, V] = {
-    writeObject(t)
+    writeObject[V](t)
   }
 
-  private[this] def writeObject[T: ClassTag](t: T): KVClassSpecificSerializationStream[K, V] = {
+  private[this] def writeObject[T](t: T): KVClassSpecificSerializationStream[K, V] = {
     try {
       objOut.writeObject(t)
     } catch {
@@ -188,8 +188,12 @@ private[spark] class JavaKVClassSpecificSerializationStream[K: ClassTag, V: Clas
 
   override protected def keyClassWrote: Boolean = throw new UnsupportedOperationException
   override protected def valueClassWrote: Boolean = throw new UnsupportedOperationException
-  override protected def writeClass[T](
-      clazz: Class[T]): KVClassSpecificSerializationStream[K, V] = {
+  override protected def writeKeyClass(
+      clazz: Class[_]): KVClassSpecificSerializationStream[K, V] = {
+    throw new UnsupportedOperationException
+  }
+  override protected def writeValueClass(
+      clazz: Class[_]): KVClassSpecificSerializationStream[K, V] = {
     throw new UnsupportedOperationException
   }
   override protected def writeObjectWithoutClass[T](
@@ -198,7 +202,7 @@ private[spark] class JavaKVClassSpecificSerializationStream[K: ClassTag, V: Clas
   }
 }
 
-private[spark] class JavaKVClassSpecificDeserializationStream[K: ClassTag, V: ClassTag](
+private[spark] class JavaKVClassSpecificDeserializationStream[K, V](
     in: InputStream, loader: ClassLoader) extends KVClassSpecificDeserializationStream[K, V] {
 
   private val objIn = new ObjectInputStream(in) {
@@ -224,7 +228,9 @@ private[spark] class JavaKVClassSpecificDeserializationStream[K: ClassTag, V: Cl
   override protected def valueClassRead: Boolean = throw new UnsupportedOperationException
   override protected def keyClassInfo: Class[K] = throw new UnsupportedOperationException
   override protected def valueClassInfo: Class[V] = throw new UnsupportedOperationException
-  override protected def readClass[T](): Class[T] = throw new UnsupportedOperationException
+  override protected def readKeyClass(): Class[K] = throw new UnsupportedOperationException
+  override protected def readValueClass(): Class[V] = throw new UnsupportedOperationException
+
   override protected def readObjectWithoutClass[T](clazz: Class[T]): T = {
     throw new UnsupportedOperationException
   }
@@ -267,22 +273,22 @@ private[spark] class JavaSerializerInstance(
     new JavaDeserializationStream(s, loader)
   }
 
-  override def serializeStreamForClass[T: ClassTag](
+  override def serializeStreamForClass[T](
       s: OutputStream): ClassSpecificSerializationStream[T] = {
     new JavaClassSpecificSerializationStream[T](s, counterReset, extraDebugInfo)
   }
 
-  override def serializeStreamForKVClass[K: ClassTag, V: ClassTag](
+  override def serializeStreamForKVClass[K, V](
       s: OutputStream): KVClassSpecificSerializationStream[K, V] = {
     new JavaKVClassSpecificSerializationStream[K, V](s, counterReset, extraDebugInfo)
   }
 
-  override def deserializeStreamForClass[T: ClassTag](
+  override def deserializeStreamForClass[T](
       s: InputStream): ClassSpecificDeserializationStream[T] = {
     new JavaClassSpecificDeserializationStream[T](s, defaultClassLoader)
   }
 
-  override def deserializeStreamForKVClass[K: ClassTag, V: ClassTag](
+  override def deserializeStreamForKVClass[K, V](
       s: InputStream): KVClassSpecificDeserializationStream[K, V] = {
     new JavaKVClassSpecificDeserializationStream[K, V](s, defaultClassLoader)
   }

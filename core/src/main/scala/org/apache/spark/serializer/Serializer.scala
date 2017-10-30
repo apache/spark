@@ -117,16 +117,16 @@ abstract class SerializerInstance {
 
   def serializeStream(s: OutputStream): SerializationStream
 
-  def serializeStreamForClass[T: ClassTag](s: OutputStream): ClassSpecificSerializationStream[T]
+  def serializeStreamForClass[T](s: OutputStream): ClassSpecificSerializationStream[T]
 
-  def serializeStreamForKVClass[K: ClassTag, V: ClassTag](
+  def serializeStreamForKVClass[K, V](
       s: OutputStream): KVClassSpecificSerializationStream[K, V]
 
   def deserializeStream(s: InputStream): DeserializationStream
 
-  def deserializeStreamForClass[T: ClassTag](s: InputStream): ClassSpecificDeserializationStream[T]
+  def deserializeStreamForClass[T](s: InputStream): ClassSpecificDeserializationStream[T]
 
-  def deserializeStreamForKVClass[K: ClassTag, V: ClassTag](
+  def deserializeStreamForKVClass[K, V](
       s: InputStream): KVClassSpecificDeserializationStream[K, V]
 }
 
@@ -209,17 +209,22 @@ abstract class DeserializationStream extends Closeable {
   }
 }
 
-abstract class ClassSpecificSerializationStream[T: ClassTag] extends Closeable{
+/**
+ * :: DeveloperApi ::
+ * A stream for writing serialized objects with same class.
+ */
+@DeveloperApi
+abstract class ClassSpecificSerializationStream[T] extends Closeable{
   /** Indicates whether the class has been wrote. */
   protected def classWrote: Boolean
   /** Writes the class. */
-  protected def writeClass(clazz: Class[T]): ClassSpecificSerializationStream[T]
+  protected def writeClass(clazz: Class[_]): ClassSpecificSerializationStream[T]
   /** Writes the object without class. */
   protected def writeObjectWithoutClass(t: T): ClassSpecificSerializationStream[T]
   /** The most general-purpose method to write an object. */
   def writeObject(t: T): ClassSpecificSerializationStream[T] = {
     if (!classWrote) {
-      writeClass(classTag[T].runtimeClass.asInstanceOf[Class[T]])
+      writeClass(t.getClass)
     }
 
     writeObjectWithoutClass(t)
@@ -238,7 +243,12 @@ abstract class ClassSpecificSerializationStream[T: ClassTag] extends Closeable{
   override def close(): Unit
 }
 
-abstract class ClassSpecificDeserializationStream[T: ClassTag] extends Closeable {
+/**
+ * :: DeveloperApi ::
+ * A stream for reading serialized objects with same class.
+ */
+@DeveloperApi
+abstract class ClassSpecificDeserializationStream[T] extends Closeable {
   /** Indicates whether the class has read. */
   protected def classRead: Boolean
   /** The read classes. */
@@ -266,7 +276,7 @@ abstract class ClassSpecificDeserializationStream[T: ClassTag] extends Closeable
       try {
         readObject()
       } catch {
-        case eof: EOFException =>
+        case _: EOFException =>
           finished = true
           null
       }
@@ -280,19 +290,27 @@ abstract class ClassSpecificDeserializationStream[T: ClassTag] extends Closeable
   override def close(): Unit
 }
 
-abstract class KVClassSpecificSerializationStream[K: ClassTag, V: ClassTag] extends Closeable {
+/**
+ * :: DeveloperApi ::
+ * A stream for writing serialized key-value objects where the keys with same class and
+ * values with same class too.
+ */
+@DeveloperApi
+abstract class KVClassSpecificSerializationStream[K, V] extends Closeable {
   /** Indicates whether the key class has been wrote. */
   protected def keyClassWrote: Boolean
   /** Indicates whether the value class has been wrote. */
   protected def valueClassWrote: Boolean
-  /** Writes the class. */
-  protected def writeClass[T](clazz: Class[T]): KVClassSpecificSerializationStream[K, V]
+  /** Writes the key class. */
+  protected def writeKeyClass(clazz: Class[_]): KVClassSpecificSerializationStream[K, V]
+  /** Writes the value class. */
+  protected def writeValueClass(clazz: Class[_]): KVClassSpecificSerializationStream[K, V]
   /** Writes the object without class. */
   protected def writeObjectWithoutClass[T](t: T): KVClassSpecificSerializationStream[K, V]
   /** Writes the key object, and only writes the key class once. */
   def writeKey(t: K): KVClassSpecificSerializationStream[K, V] = {
     if (!keyClassWrote) {
-      writeClass[K](classTag[K].runtimeClass.asInstanceOf[Class[K]])
+      writeKeyClass(t.getClass)
     }
 
     writeObjectWithoutClass[K](t)
@@ -301,7 +319,7 @@ abstract class KVClassSpecificSerializationStream[K: ClassTag, V: ClassTag] exte
   /** Writes the value object, and only writes the value class once. */
   def writeValue(t: V): KVClassSpecificSerializationStream[K, V] = {
     if (!valueClassWrote) {
-      writeClass[V](classTag[V].runtimeClass.asInstanceOf[Class[V]])
+      writeValueClass(t.getClass)
     }
 
     writeObjectWithoutClass[V](t)
@@ -313,7 +331,13 @@ abstract class KVClassSpecificSerializationStream[K: ClassTag, V: ClassTag] exte
   override def close(): Unit
 }
 
-abstract class KVClassSpecificDeserializationStream[K: ClassTag, V: ClassTag] extends Closeable {
+/**
+ * :: DeveloperApi ::
+ * A stream for reading serialized key-value objecs where the keys with same class and
+ * values with same class too.
+ */
+@DeveloperApi
+abstract class KVClassSpecificDeserializationStream[K, V] extends Closeable {
   /** Indicate whether the key class has read. */
   protected def keyClassRead: Boolean
   /** Indicate whether the value class has read. */
@@ -322,14 +346,16 @@ abstract class KVClassSpecificDeserializationStream[K: ClassTag, V: ClassTag] ex
   protected def keyClassInfo: Class[K]
   /** The read value class. */
   protected def valueClassInfo: Class[V]
-  /** Reads the object class. */
-  protected def readClass[T](): Class[T]
+  /** Reads the key class. */
+  protected def readKeyClass(): Class[K]
+  /** Reads the value class. */
+  protected def readValueClass(): Class[V]
   /** Reads the object without class. */
   protected def readObjectWithoutClass[T](clazz: Class[T]): T
   /** Reads the key object, and only reads the key class once. */
   def readKey(): K = {
     if (!keyClassRead) {
-      readClass[K]()
+      readKeyClass()
       assert(keyClassInfo != null)
     }
 
@@ -338,7 +364,7 @@ abstract class KVClassSpecificDeserializationStream[K: ClassTag, V: ClassTag] ex
   /** Reads the value object, and only reads the value class once. */
   def readValue(): V = {
     if (!valueClassRead) {
-      readClass[V]()
+      readValueClass()
       assert(valueClassInfo != null)
     }
 
@@ -354,7 +380,7 @@ abstract class KVClassSpecificDeserializationStream[K: ClassTag, V: ClassTag] ex
       try {
         (readKey(), readValue())
       } catch {
-        case eof: EOFException =>
+        case _: EOFException =>
           finished = true
           null
       }

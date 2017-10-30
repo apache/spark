@@ -267,7 +267,7 @@ class KryoDeserializationStream(
 }
 
 private[spark]
-class KryoClassSpecificSerializationStream[T: ClassTag](
+class KryoClassSpecificSerializationStream[T](
     serInstance: KryoSerializerInstance,
     outStream: OutputStream,
     useUnsafe: Boolean) extends ClassSpecificSerializationStream[T] {
@@ -277,17 +277,16 @@ class KryoClassSpecificSerializationStream[T: ClassTag](
 
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
-  private[this] var clazz = classTag[T].runtimeClass.asInstanceOf[Class[T]]
-
   protected var classWrote: Boolean = false
 
-  override protected def writeClass(clazz: Class[T]): ClassSpecificSerializationStream[T] = {
-    kryo.writeClass(output, clazz)
+  override protected def writeClass(c: Class[_]): ClassSpecificSerializationStream[T] = {
+    kryo.writeClass(output, c)
+    classWrote = true
     this
   }
 
   override protected def writeObjectWithoutClass(t: T): ClassSpecificSerializationStream[T] = {
-    kryo.writeObjectOrNull(output, t, clazz)
+    kryo.writeObjectOrNull(output, t, t.getClass)
     this
   }
 
@@ -306,7 +305,6 @@ class KryoClassSpecificSerializationStream[T: ClassTag](
         serInstance.releaseKryo(kryo)
         kryo = null
         output = null
-        clazz = null
         classWrote = false
       }
     }
@@ -314,7 +312,7 @@ class KryoClassSpecificSerializationStream[T: ClassTag](
 }
 
 private[spark]
-class KryoClassSpecificDeserializationStream[T: ClassTag](
+class KryoClassSpecificDeserializationStream[T](
     serInstance: KryoSerializerInstance,
     inStream: InputStream,
     useUnsafe: Boolean) extends ClassSpecificDeserializationStream[T] {
@@ -331,6 +329,7 @@ class KryoClassSpecificDeserializationStream[T: ClassTag](
   override protected def readClass(): Class[T] = {
     safeCall {
       classInfo = kryo.readClass(input).getType.asInstanceOf[Class[T]]
+      classRead = true
       classInfo
     }
   }
@@ -369,7 +368,7 @@ class KryoClassSpecificDeserializationStream[T: ClassTag](
 }
 
 private[spark]
-class KryoKVClassSpecificSerializationStream[K: ClassTag, V: ClassTag](
+class KryoKVClassSpecificSerializationStream[K, V](
     serInstance: KryoSerializerInstance,
     outStream: OutputStream,
     useUnsafe: Boolean) extends KVClassSpecificSerializationStream[K, V] {
@@ -379,26 +378,27 @@ class KryoKVClassSpecificSerializationStream[K: ClassTag, V: ClassTag](
 
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
-  private[this] var keyClazz = classTag[K].runtimeClass.asInstanceOf[Class[K]]
-  private[this] var valueClazz = classTag[V].runtimeClass.asInstanceOf[Class[V]]
-
   protected var keyClassWrote: Boolean = false
 
   protected var valueClassWrote: Boolean = false
 
-  override protected def writeClass[T](
-      clazz: Class[T]): KVClassSpecificSerializationStream[K, V] = {
+  override protected def writeKeyClass(
+      clazz: Class[_]): KVClassSpecificSerializationStream[K, V] = {
     kryo.writeClass(output, clazz)
+    keyClassWrote = true
+    this
+  }
+
+  override protected def writeValueClass(
+      clazz: Class[_]): KVClassSpecificSerializationStream[K, V] = {
+    kryo.writeClass(output, clazz)
+    valueClassWrote = true
     this
   }
 
   override protected def writeObjectWithoutClass[T](
       t: T): KVClassSpecificSerializationStream[K, V] = {
-    if (t.isInstanceOf[K]) {
-      kryo.writeObjectOrNull(output, t, keyClazz)
-    } else if (t.isInstanceOf[V]) {
-      kryo.writeObjectOrNull(output, t, valueClazz)
-    }
+    kryo.writeObjectOrNull(output, t, t.getClass)
     this
   }
 
@@ -417,8 +417,6 @@ class KryoKVClassSpecificSerializationStream[K: ClassTag, V: ClassTag](
         serInstance.releaseKryo(kryo)
         kryo = null
         output = null
-        keyClazz = null
-        valueClazz = null
         keyClassWrote = false
         valueClassWrote = false
       }
@@ -427,7 +425,7 @@ class KryoKVClassSpecificSerializationStream[K: ClassTag, V: ClassTag](
 }
 
 private[spark]
-class KryoKVClassSpecificDeserializationStream[K: ClassTag, V: ClassTag](
+class KryoKVClassSpecificDeserializationStream[K, V](
     serInstance: KryoSerializerInstance,
     inStream: InputStream,
     useUnsafe: Boolean) extends KVClassSpecificDeserializationStream[K, V] {
@@ -445,14 +443,19 @@ class KryoKVClassSpecificDeserializationStream[K: ClassTag, V: ClassTag](
 
   protected var valueClassInfo: Class[V] = null
 
-  override protected def readClass[T](): Class[T] = {
+  override protected def readKeyClass(): Class[K] = {
     safeCall {
-      val clazz = kryo.readClass(input).getType.asInstanceOf[Class[T]]
-      clazz match {
-        case kc: Class[K] => keyClassInfo = kc
-        case vc: Class[V] => valueClassInfo = vc
-      }
-      clazz
+      keyClassInfo = kryo.readClass(input).getType.asInstanceOf[Class[K]]
+      keyClassRead = true
+      keyClassInfo
+    }
+  }
+
+  override protected def readValueClass(): Class[V] = {
+    safeCall {
+      valueClassInfo = kryo.readClass(input).getType.asInstanceOf[Class[V]]
+      valueClassRead = true
+      valueClassInfo
     }
   }
 
@@ -579,22 +582,22 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boole
     new KryoDeserializationStream(this, s, useUnsafe)
   }
 
-  override def serializeStreamForClass[T: ClassTag](
+  override def serializeStreamForClass[T](
       s: OutputStream): ClassSpecificSerializationStream[T] = {
     new KryoClassSpecificSerializationStream[T](this, s, useUnsafe)
   }
 
-  override def deserializeStreamForClass[T: ClassTag](
+  override def deserializeStreamForClass[T](
       s: InputStream): ClassSpecificDeserializationStream[T] = {
     new KryoClassSpecificDeserializationStream[T](this, s, useUnsafe)
   }
 
-  override def serializeStreamForKVClass[K: ClassTag, V: ClassTag](
+  override def serializeStreamForKVClass[K, V](
       s: OutputStream): KVClassSpecificSerializationStream[K, V] = {
     new KryoKVClassSpecificSerializationStream[K, V](this, s, useUnsafe)
   }
 
-  override def deserializeStreamForKVClass[K: ClassTag, V: ClassTag](
+  override def deserializeStreamForKVClass[K, V](
       s: InputStream): KVClassSpecificDeserializationStream[K, V] = {
     new KryoKVClassSpecificDeserializationStream[K, V](this, s, useUnsafe)
   }

@@ -32,7 +32,7 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
+import org.apache.spark.serializer.{KVClassSpecificDeserializationStream, Serializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
@@ -472,7 +472,7 @@ class ExternalAppendOnlyMap[K, V, C](
     /**
      * Construct a stream that reads only from the next batch.
      */
-    private def nextBatchStream(): DeserializationStream = {
+    private def nextBatchStream(): KVClassSpecificDeserializationStream[K, C] = {
       // Note that batchOffsets.length = numBatches + 1 since we did a scan above; check whether
       // we're still in a valid batch.
       if (batchIndex < batchOffsets.length - 1) {
@@ -496,7 +496,7 @@ class ExternalAppendOnlyMap[K, V, C](
         val bufferedStream = new BufferedInputStream(
           ByteStreams.limit(Channels.newInputStream(fileChannel), end - start))
         val wrappedStream = serializerManager.wrapStream(blockId, bufferedStream)
-        ser.deserializeStream(wrappedStream)
+        ser.deserializeStreamForKVClass[K, C](wrappedStream)
       } else {
         // No more batches left
         cleanup()
@@ -512,8 +512,8 @@ class ExternalAppendOnlyMap[K, V, C](
      */
     private def readNextItem(): (K, C) = {
       try {
-        val k = deserializeStream.readKey().asInstanceOf[K]
-        val c = deserializeStream.readValue().asInstanceOf[C]
+        val k = deserializeStream.readKey()
+        val c = deserializeStream.readValue()
         val item = (k, c)
         objectsRead += 1
         if (objectsRead == serializerBatchSize) {

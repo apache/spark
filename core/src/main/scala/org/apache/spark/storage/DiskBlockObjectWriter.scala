@@ -22,7 +22,7 @@ import java.nio.channels.FileChannel
 
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
+import org.apache.spark.serializer._
 import org.apache.spark.util.Utils
 
 /**
@@ -70,7 +70,7 @@ private[spark] class DiskBlockObjectWriter(
   private var bs: OutputStream = null
   private var fos: FileOutputStream = null
   private var ts: TimeTrackingOutputStream = null
-  private var objOut: SerializationStream = null
+  private var objOut: KVClassSpecificSerializationStream[Any, Any] = null
   private var initialized = false
   private var streamOpen = false
   private var hasBeenClosed = false
@@ -118,7 +118,7 @@ private[spark] class DiskBlockObjectWriter(
     }
 
     bs = serializerManager.wrapStream(blockId, mcs)
-    objOut = serializerInstance.serializeStream(bs)
+    objOut = serializerInstance.serializeStreamForKVClass[Any, Any](bs)
     streamOpen = true
     this
   }

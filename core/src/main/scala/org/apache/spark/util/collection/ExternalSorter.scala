@@ -501,7 +501,7 @@ private[spark] class ExternalSorter[K, V, C](
     var finished = false
 
     /** Construct a stream that only reads from the next batch */
-    def nextBatchStream(): DeserializationStream = {
+    def nextBatchStream(): KVClassSpecificDeserializationStream[K, C] = {
       // Note that batchOffsets.length = numBatches + 1 since we did a scan above; check whether
       // we're still in a valid batch.
       if (batchId < batchOffsets.length - 1) {
@@ -526,7 +526,7 @@ private[spark] class ExternalSorter[K, V, C](
           ByteStreams.limit(Channels.newInputStream(fileChannel), end - start))
 
         val wrappedStream = serializerManager.wrapStream(spill.blockId, bufferedStream)
-        serInstance.deserializeStream(wrappedStream)
+        serInstance.deserializeStreamForKVClass[K, C](wrappedStream)
       } else {
         // No more batches left
         cleanup()
@@ -557,8 +557,8 @@ private[spark] class ExternalSorter[K, V, C](
       if (finished || deserializeStream == null) {
         return null
       }
-      val k = deserializeStream.readKey().asInstanceOf[K]
-      val c = deserializeStream.readValue().asInstanceOf[C]
+      val k = deserializeStream.readKey()
+      val c = deserializeStream.readValue()
       lastPartitionId = partitionId
       // Start reading the next batch if we're done with this one
       indexInBatch += 1
