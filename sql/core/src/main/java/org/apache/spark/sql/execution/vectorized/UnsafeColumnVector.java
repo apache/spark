@@ -520,7 +520,6 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    assert(this.resultArray != null);
     byte[] newNulls = new byte[newCapacity];
     if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, capacity);
     nulls = newNulls;
