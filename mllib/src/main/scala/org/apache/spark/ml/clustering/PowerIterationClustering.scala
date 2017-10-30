@@ -181,7 +181,7 @@ class PowerIterationClustering private[clustering] (
         require(nbr.size == weight.size,
           "The length of neighbor list must be equal to the the length of the weight list.")
         nbr.toArray.toIterator.zip(weight.toArray.toIterator)
-          .map(x => (id, x._1.toLong, x._2.toLong))}
+          .map(x => (id, x._1.toLong, x._2))}
     val algorithm = new MLlibPowerIterationClustering()
       .setK($(k))
       .setInitializationMode($(initMode))
