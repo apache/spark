@@ -85,6 +85,36 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chil
       schema: StructType,
       context: TaskContext): Iterator[InternalRow]
 
+  private def preparePyFuncsAndArgOffsets(
+      allInputs: ArrayBuffer[Expression],
+      dataTypes: ArrayBuffer[DataType]): (Seq[ChainedPythonFunctions], Array[Array[Int]]) = {
+    val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
+    val argOffsets = computeArgOffsets(inputs, allInputs, dataTypes)
+    (pyFuncs, argOffsets)
+  }
+
+  protected def mapExpressionIntoFuncInputs(
+      expr: Expression,
+      allInputs: ArrayBuffer[Expression],
+      dataTypes: ArrayBuffer[DataType]): Int = {
+    if (allInputs.exists(_.semanticEquals(expr))) {
+      allInputs.indexWhere(_.semanticEquals(expr))
+    } else {
+      allInputs += expr
+      dataTypes += expr.dataType
+      allInputs.length - 1
+    }
+  }
+
+  protected def computeArgOffsets(
+      inputs: Seq[Seq[Expression]],
+      allInputs: ArrayBuffer[Expression],
+      dataTypes: ArrayBuffer[DataType]): Array[Array[Int]] = {
+    inputs.map { input =>
+      input.map(mapExpressionIntoFuncInputs(_, allInputs, dataTypes)).toArray
+    }.toArray
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
@@ -101,22 +131,10 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chil
         queue.close()
       }
 
-      val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
-
-      // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
       val dataTypes = new ArrayBuffer[DataType]
-      val argOffsets = inputs.map { input =>
-        input.map { e =>
-          if (allInputs.exists(_.semanticEquals(e))) {
-            allInputs.indexWhere(_.semanticEquals(e))
-          } else {
-            allInputs += e
-            dataTypes += e.dataType
-            allInputs.length - 1
-          }
-        }.toArray
-      }.toArray
+      val (pyFuncs, argOffsets) = preparePyFuncsAndArgOffsets(allInputs, dataTypes)
+
       val projection = newMutableProjection(allInputs, child.output)
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)

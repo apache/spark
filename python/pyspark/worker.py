@@ -105,8 +105,14 @@ def read_single_udf(pickleSer, infile, eval_type):
     elif eval_type == PythonEvalType.SQL_PANDAS_GROUPED_UDF:
         # a groupby apply udf has already been wrapped under apply()
         return arg_offsets, row_func
-    else:
+    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return arg_offsets, wrap_udf(row_func, return_type)
+    elif eval_type == PythonEvalType.SQL_BATCHED_OPT_UDF:
+        udf = wrap_udf(row_func, return_type)
+        opt_udf = lambda *a: udf(*a[:-1]) if a[-1] is True else None
+        return arg_offsets, opt_udf
+    else:
+        raise Exception(("Unknown python evaluation type: %d") % (eval_type))
 
 
 def read_udfs(pickleSer, infile, eval_type):

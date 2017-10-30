@@ -116,6 +116,77 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
     case plan: SparkPlan => extract(plan)
   }
 
+  private def pickUDFIntoMap(
+      expr: Expression,
+      condition: Expression,
+      exprMap: mutable.HashMap[PythonUDF, Seq[Expression]]): Unit = {
+    expr.foreachUp {
+      case udf: PythonUDF => exprMap.update(udf, exprMap.getOrElse(udf, Seq()) :+ condition)
+      case _ =>
+    }
+  }
+
+  private def updateConditionForUDFInBranch(
+      branches: Seq[(Expression, Expression)],
+      exprMap: mutable.HashMap[PythonUDF, Seq[Expression]]): Unit = {
+    branches.foreach(branch => pickUDFIntoMap(branch._2, branch._1, exprMap))
+  }
+
+  private def updateConditionForUDFInElse(
+      branches: Seq[(Expression, Expression)],
+      elseValue: Expression,
+      exprMap: mutable.HashMap[PythonUDF, Seq[Expression]]): Unit = {
+    assert(branches.length > 0)
+
+    val elseCond = branches.map(_._1).reduce(Or)
+    pickUDFIntoMap(elseValue, Not(elseCond), exprMap)
+  }
+
+  private def updateConditionForUDFInCaseWhen(
+      branches: Seq[(Expression, Expression)],
+      elseValue: Option[Expression],
+      exprMap: mutable.HashMap[PythonUDF, Seq[Expression]]): Unit = {
+    updateConditionForUDFInBranch(branches, exprMap)
+    elseValue.foreach { elseExpr =>
+      updateConditionForUDFInElse(branches, elseExpr, exprMap)
+    }
+  }
+
+  /**
+   * Extracts the conditions associated with PythonUDFs.
+   * Not all PythonUDFs need to be evaluated. For example, for a case when expression like
+   * `when(x > 1, pyUDF(x)).when(x > 2, pyUDF2(x))`, we don't need to evaluate two PythonUDFs
+   * for every row. Besides performance effect, under some cases, early evaluation of all
+   * PythonUDFs can cause failure, e.g., a PythonUDF that should divide by an expression when
+   * the value of expression is more than zero.
+   *
+   * Returns a map in which the value of a PythonUDF key is the sequence of boolean expressions
+   * that are the requirement to run the PythonUDF.
+   */
+  private def extractConditionForUDF(
+      expressions: Seq[Expression],
+      udfs: Seq[PythonUDF]): mutable.HashMap[PythonUDF, Seq[Expression]] = {
+    val conditionMap = mutable.HashMap[PythonUDF, Seq[Expression]]()
+    expressions.map { expr =>
+      expr.foreachUp {
+        case e @ CaseWhenCodegen(branches, elseValue)
+            if branches.exists(x => hasPythonUDF(x._2)) ||
+              elseValue.map(hasPythonUDF).getOrElse(false) =>
+          updateConditionForUDFInCaseWhen(branches, elseValue, conditionMap)
+        case e @ CaseWhen(branches, elseValue)
+            if branches.exists(x => hasPythonUDF(x._2)) ||
+              elseValue.map(hasPythonUDF).getOrElse(false) =>
+          updateConditionForUDFInCaseWhen(branches, elseValue, conditionMap)
+        case If(predicate, trueValue, falseValue)
+            if hasPythonUDF(trueValue) || hasPythonUDF(falseValue) =>
+          pickUDFIntoMap(trueValue, predicate, conditionMap)
+          pickUDFIntoMap(falseValue, Not(predicate), conditionMap)
+        case _ =>
+      }
+    }
+    conditionMap
+  }
+
   /**
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
@@ -127,6 +198,8 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       // If there aren't any, we are done.
       plan
     } else {
+      val udfConditionMap = extractConditionForUDF(plan.expressions, udfs)
+
       val attributeMap = mutable.HashMap[PythonUDF, Expression]()
       val splitFilter = trySplitFilter(plan)
       // Rewrite the child that has the input required for the UDF
@@ -136,6 +209,9 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           // Check to make sure that the UDF can be evaluated with only the input of this child.
           udf.references.subsetOf(child.outputSet)
         }
+        // If any UDFs to evaluate are used with conditional expressions.
+        val foundConditionalUdfs = validUdfs.exists(udfConditionMap.contains(_))
+
         if (validUdfs.nonEmpty) {
           if (validUdfs.exists(_.pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF)) {
             throw new IllegalArgumentException("Can not use grouped vectorized UDFs")
@@ -148,8 +224,11 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           val evaluation = validUdfs.partition(_.pythonUdfType == PythonUdfType.PANDAS_UDF) match {
             case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
               ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
-            case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
+            case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty && !foundConditionalUdfs =>
               BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
+            case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
+              BatchOptEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child,
+                udfConditionMap.toMap)
             case _ =>
               throw new IllegalArgumentException("Can not mix vectorized and non-vectorized UDFs")
           }
