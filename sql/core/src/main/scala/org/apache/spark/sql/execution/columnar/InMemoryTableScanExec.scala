@@ -22,11 +22,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -194,52 +194,53 @@ case class InMemoryTableScanExec(
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
+  private def filterCachedBatchesInternal(
+      cachedBatchIterator: Iterator[CachedBatch],
+      partitionStatsSchema: Seq[AttributeReference],
+      partitionFilter: GenPredicate): Iterator[CachedBatch] = {
+    val schemaIndex = partitionStatsSchema.zipWithIndex
+    cachedBatchIterator.filter { cachedBatch =>
+      if (!partitionFilter.eval(cachedBatch.stats.get)) {
+        logDebug {
+          val statsString = schemaIndex.map { case (a, i) =>
+            val value = cachedBatch.stats.get.get(i, a.dataType)
+            s"${a.name}: $value"
+          }.mkString(", ")
+          s"Skipping partition based on stats $statsString"
+        }
+        false
+      } else {
+        true
+      }
+    }
+  }
+
   private def filteredCachedBatches(): RDD[CachedBatch] = {
     // Using these variables here to avoid serialization of entire objects (if referenced directly)
     // within the map Partitions closure.
     val schema = relation.partitionStatistics.schema
-    val schemaIndex = schema.zipWithIndex
     val buffers = relation.cachedColumnBuffers
 
-    if (sqlContext.conf.inMemoryPartitionMetadata) {
-      val cachedColumnarRDD = buffers.asInstanceOf[CachedColumnarRDD]
-      val partitions = cachedColumnarRDD.partitions.map(_.asInstanceOf[CachedColumnarRDDPartition])
-      buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
-        val partitionFilter = newPredicate(
-          partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-          schema)
-        partitionFilter.initialize(index)
-        if (!partitionFilter.eval(partitions(index).columnStats)) {
-          Iterator()
-        } else {
-          cachedBatchIterator
-        }
-      }
-    } else {
-      buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
-        val partitionFilter = newPredicate(
-          partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-          schema)
-        partitionFilter.initialize(index)
+    buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
 
-        // Do partition batch pruning if enabled
-        if (inMemoryPartitionPruningEnabled) {
-          cachedBatchIterator.filter { cachedBatch =>
-            if (!partitionFilter.eval(cachedBatch.stats.get)) {
-              logDebug {
-                val statsString = schemaIndex.map { case (a, i) =>
-                  val value = cachedBatch.stats.get.get(i, a.dataType)
-                  s"${a.name}: $value"
-                }.mkString(", ")
-                s"Skipping partition based on stats $statsString"
-              }
-              false
+      val partitionFilter = newPredicate(
+        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+        schema)
+      partitionFilter.initialize(index)
+      val (iterForPartitionCase, iterForDefault) = cachedBatchIterator.duplicate
+      if (!iterForDefault.hasNext) {
+        Iterator[CachedBatch]()
+      } else {
+        iterForPartitionCase.next() match {
+          case partitionStats: InternalRow =>
+            if (!partitionFilter.eval(partitionStats)) {
+              Iterator[CachedBatch]()
             } else {
-              true
+              filterCachedBatchesInternal(iterForPartitionCase.map(_.asInstanceOf[CachedBatch]),
+                schema, partitionFilter)
             }
-          }
-        } else {
-          cachedBatchIterator
+          case _: CachedBatch =>
+            iterForDefault.map(_.asInstanceOf[CachedBatch])
         }
       }
     }

@@ -144,6 +144,8 @@ object SQLConf {
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
       .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .booleanConf
+      .createWithDefault(false)
 
   val IN_MEMORY_PARTITION_METADATA =
     buildConf("spark.sql.inMemoryColumnarStorage.partitionMetadata")
@@ -1224,6 +1226,8 @@ class SQLConf extends Serializable with Logging {
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
   def offHeapColumnVectorEnabled: Boolean = getConf(COLUMN_VECTOR_OFFHEAP_ENABLED)
+
+  def inMemoryPartitionMetadata: Boolean = getConf(IN_MEMORY_PARTITION_METADATA)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 

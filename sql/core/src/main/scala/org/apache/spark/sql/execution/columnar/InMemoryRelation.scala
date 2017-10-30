@@ -57,9 +57,13 @@ private[columnar] class CachedPartitionIterator(
     output: Seq[Attribute],
     batchSize: Int,
     useCompression: Boolean,
-    batchStats: LongAccumulator) extends Iterator[(CachedBatch, InternalRow)] {
+    batchStats: LongAccumulator) extends Iterator[AnyRef] {
 
-  def next(): (CachedBatch, InternalRow) = {
+  private var partitionStats: InternalRow = _
+
+  private var fetchingFirstElement = true
+
+  private def buildCachedBatch(): Option[CachedBatch] = {
     val columnBuilders = output.map { attribute =>
       ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
     }.toArray
@@ -88,45 +92,24 @@ private[columnar] class CachedPartitionIterator(
       }
       rowCount += 1
     }
-
+    partitionStats = InternalRow.fromSeq(columnBuilders.flatMap(_.columnStats.collectedStatistics))
     batchStats.add(totalSize)
-    val stats = InternalRow.fromSeq(columnBuilders.flatMap(_.columnStats.collectedStatistics))
-    (CachedBatch(rowCount, columnBuilders.map { builder =>
+    Some(CachedBatch(rowCount, columnBuilders.map { builder =>
       JavaUtils.bufferToArray(builder.build())
-    }, None), stats)
-    /*
-    while (rowIterator.hasNext && rowCount < batchSize
-      && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
-      val row = rowIterator.next()
+    }, Some(partitionStats)))
+  }
 
-      // Added for SPARK-6082. This assertion can be useful for scenarios when something
-      // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
-      // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
-      // hard to decipher.
-      assert(
-        row.numFields == columnBuilders.length,
-        s"Row column number mismatch, expected ${output.size} columns, " +
-          s"but got ${row.numFields}." +
-          s"\nRow content: $row")
-
-      var i = 0
-      totalSize = 0
-      while (i < row.numFields) {
-        columnBuilders(i).appendFrom(row, i)
-        totalSize += columnBuilders(i).columnStats.sizeInBytes
-        i += 1
+  def next(): AnyRef = {
+    if (partitionStats == null) {
+      buildCachedBatch().get
+    } else {
+      if (fetchingFirstElement) {
+        fetchingFirstElement = false
+        partitionStats
+      } else {
+        buildCachedBatch()
       }
-      rowCount += 1
     }
-
-    batchStats.add(totalSize)
-
-    val stats = InternalRow.fromSeq(
-      columnBuilders.flatMap(_.columnStats.collectedStatistics))
-    CachedBatch(rowCount, columnBuilders.map { builder =>
-      JavaUtils.bufferToArray(builder.build())
-    }, stats)
-    */
   }
 
   def hasNext: Boolean = rowIterator.hasNext
@@ -175,6 +158,7 @@ private[columnar] class CachedBatchIterator(
 
       val stats = InternalRow.fromSeq(
         columnBuilders.flatMap(_.columnStats.collectedStatistics))
+
       CachedBatch(rowCount, columnBuilders.map { builder =>
         JavaUtils.bufferToArray(builder.build())
       }, Some(stats))
@@ -190,7 +174,7 @@ case class InMemoryRelation(
     storageLevel: StorageLevel,
     @transient child: SparkPlan,
     tableName: Option[String])(
-    @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
+    @transient var _cachedColumnBuffers: RDD[AnyRef] = null,
     val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator)
   extends logical.LeafNode with MultiInstanceRelation {
 
@@ -230,19 +214,12 @@ case class InMemoryRelation(
       }
     }
 
-    val cached = if (!usePartitionLevelMetadata) {
-      batchedRDD.persist(storageLevel)
-    } else {
-      val r = batchedRDD.map(_.asInstanceOf[(CachedBatch, InternalRow)])
-      val partitionLevelStats = r.map(_._2).collect()
-      new CachedColumnarRDD(batchedRDD.sparkContext, batchedRDD.dependencies, r.map(_._1),
-        partitionLevelStats)
-    }
+    val cached = batchedRDD.persist(storageLevel)
 
     cached.setName(
       tableName.map(n => s"In-memory table $n")
         .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
-    _cachedColumnBuffers = cached.asInstanceOf[RDD[CachedBatch]]
+    _cachedColumnBuffers = cached
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
@@ -263,7 +240,7 @@ case class InMemoryRelation(
         batchStats).asInstanceOf[this.type]
   }
 
-  def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
+  def cachedColumnBuffers: RDD[AnyRef] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
     Seq(_cachedColumnBuffers, batchStats)
