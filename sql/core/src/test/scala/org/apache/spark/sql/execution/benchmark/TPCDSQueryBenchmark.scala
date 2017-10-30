@@ -17,23 +17,21 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.io.File
-
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
+import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark to measure TPCDS query performance.
  * To run this:
- *  spark-submit --class <this class> --jars <spark sql test jar>
+ *  spark-submit --class <this class> <spark sql test jar> --data-location <TPCDS data location>
  */
-object TPCDSQueryBenchmark {
+object TPCDSQueryBenchmark extends Logging {
   val conf =
     new SparkConf()
       .setMaster("local[1]")
@@ -61,32 +59,21 @@ object TPCDSQueryBenchmark {
   }
 
   def tpcdsAll(dataLocation: String, queries: Seq[String]): Unit = {
-    require(dataLocation.nonEmpty,
-      "please modify the value of dataLocation to point to your local TPCDS data")
     val tableSizes = setupTables(dataLocation)
     queries.foreach { name =>
-      val queryString = fileToString(new File(Thread.currentThread().getContextClassLoader
-        .getResource(s"tpcds/$name.sql").getFile))
+      val queryString = resourceToString(s"tpcds/$name.sql",
+        classLoader = Thread.currentThread().getContextClassLoader)
 
       // This is an indirect hack to estimate the size of each query's input by traversing the
-      // logical plan and adding up the sizes of all tables that appear in the plan. Note that this
-      // currently doesn't take WITH subqueries into account which might lead to fairly inaccurate
-      // per-row processing time for those cases.
+      // logical plan and adding up the sizes of all tables that appear in the plan.
       val queryRelations = scala.collection.mutable.HashSet[String]()
-      spark.sql(queryString).queryExecution.logical.map {
-        case UnresolvedRelation(t: TableIdentifier, _) =>
-          queryRelations.add(t.table)
-        case lp: LogicalPlan =>
-          lp.expressions.foreach { _ foreach {
-            case subquery: SubqueryExpression =>
-              subquery.plan.foreach {
-                case UnresolvedRelation(t: TableIdentifier, _) =>
-                  queryRelations.add(t.table)
-                case _ =>
-              }
-            case _ =>
-          }
-        }
+      spark.sql(queryString).queryExecution.analyzed.foreach {
+        case SubqueryAlias(alias, _: LogicalRelation) =>
+          queryRelations.add(alias)
+        case LogicalRelation(_, _, Some(catalogTable), _) =>
+          queryRelations.add(catalogTable.identifier.table)
+        case HiveTableRelation(tableMeta, _, _) =>
+          queryRelations.add(tableMeta.identifier.table)
         case _ =>
       }
       val numRows = queryRelations.map(tableSizes.getOrElse(_, 0L)).sum
@@ -94,11 +81,14 @@ object TPCDSQueryBenchmark {
       benchmark.addCase(name) { i =>
         spark.sql(queryString).collect()
       }
+      logInfo(s"\n\n===== TPCDS QUERY BENCHMARK OUTPUT FOR $name =====\n")
       benchmark.run()
+      logInfo(s"\n\n===== FINISHED $name =====\n")
     }
   }
 
   def main(args: Array[String]): Unit = {
+    val benchmarkArgs = new TPCDSQueryBenchmarkArguments(args)
 
     // List of all TPC-DS queries
     val tpcdsQueries = Seq(
@@ -113,12 +103,20 @@ object TPCDSQueryBenchmark {
       "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
       "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
-    // In order to run this benchmark, please follow the instructions at
-    // https://github.com/databricks/spark-sql-perf/blob/master/README.md to generate the TPCDS data
-    // locally (preferably with a scale factor of 5 for benchmarking). Thereafter, the value of
-    // dataLocation below needs to be set to the location where the generated data is stored.
-    val dataLocation = ""
+    // If `--query-filter` defined, filters the queries that this option selects
+    val queriesToRun = if (benchmarkArgs.queryFilter.nonEmpty) {
+      val queries = tpcdsQueries.filter { case queryName =>
+        benchmarkArgs.queryFilter.contains(queryName)
+      }
+      if (queries.isEmpty) {
+        throw new RuntimeException(
+          s"Empty queries to run. Bad query name filter: ${benchmarkArgs.queryFilter}")
+      }
+      queries
+    } else {
+      tpcdsQueries
+    }
 
-    tpcdsAll(dataLocation, queries = tpcdsQueries)
+    tpcdsAll(benchmarkArgs.dataLocation, queries = queriesToRun)
   }
 }

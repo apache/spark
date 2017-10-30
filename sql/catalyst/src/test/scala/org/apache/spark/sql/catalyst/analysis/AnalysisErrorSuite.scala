@@ -408,16 +408,25 @@ class AnalysisErrorSuite extends AnalysisTest {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept
     // LongType, DoubleType, and DecimalType. We use LongType as the type of a.
-    val plan =
-      Aggregate(
-        Nil,
-        Alias(sum(AttributeReference("a", LongType)(exprId = ExprId(1))), "b")() :: Nil,
-        LocalRelation(
-          AttributeReference("a", LongType)(exprId = ExprId(2))))
+    val attrA = AttributeReference("a", LongType)(exprId = ExprId(1))
+    val otherA = AttributeReference("a", LongType)(exprId = ExprId(2))
+    val attrC = AttributeReference("c", LongType)(exprId = ExprId(3))
+    val aliases = Alias(sum(attrA), "b")() :: Alias(sum(attrC), "d")() :: Nil
+    val plan = Aggregate(
+      Nil,
+      aliases,
+      LocalRelation(otherA))
 
     assert(plan.resolved)
 
-    assertAnalysisError(plan, "resolved attribute(s) a#1L missing from a#2L" :: Nil)
+    val resolved = s"${attrA.toString},${attrC.toString}"
+
+    val errorMsg = s"Resolved attribute(s) $resolved missing from ${otherA.toString} " +
+                     s"in operator !Aggregate [${aliases.mkString(", ")}]. " +
+                     s"Attribute(s) with the same name appear in the operation: a. " +
+                     "Please check if the right attribute(s) are used."
+
+    assertAnalysisError(plan, errorMsg :: Nil)
   }
 
   test("error test for self-join") {
@@ -505,7 +514,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       right,
       joinType = Cross,
       condition = Some('b === 'd))
-    assertAnalysisError(plan2, "Cannot use map type in EqualTo" :: Nil)
+    assertAnalysisError(plan2, "EqualTo does not support ordering on type MapType" :: Nil)
   }
 
   test("PredicateSubQuery is used outside of a filter") {

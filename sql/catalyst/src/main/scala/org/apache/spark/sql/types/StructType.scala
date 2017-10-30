@@ -18,8 +18,8 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.json4s.JsonDSL._
 

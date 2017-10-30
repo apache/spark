@@ -24,6 +24,8 @@ import java.nio.channels.WritableByteChannel
 import com.google.common.primitives.UnsignedBytes
 import io.netty.buffer.{ByteBuf, Unpooled}
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.config
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.storage.StorageUtils
 
@@ -39,6 +41,11 @@ import org.apache.spark.storage.StorageUtils
 private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks != null, "chunks must not be null")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
+
+  // Chunk size in bytes
+  private val bufferWriteChunkSize =
+    Option(SparkEnv.get).map(_.conf.get(config.BUFFER_WRITE_CHUNK_SIZE))
+      .getOrElse(config.BUFFER_WRITE_CHUNK_SIZE.defaultValue.get).toInt
 
   private[this] var disposed: Boolean = false
 
@@ -56,7 +63,9 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    */
   def writeFully(channel: WritableByteChannel): Unit = {
     for (bytes <- getChunks()) {
-      while (bytes.remaining > 0) {
+      while (bytes.remaining() > 0) {
+        val ioSize = Math.min(bytes.remaining(), bufferWriteChunkSize)
+        bytes.limit(bytes.position + ioSize)
         channel.write(bytes)
       }
     }

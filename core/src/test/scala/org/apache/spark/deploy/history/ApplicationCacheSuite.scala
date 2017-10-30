@@ -33,7 +33,7 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.Matchers
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -78,7 +78,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       logDebug(s"getAppUI($appId, $attemptId)")
       getAppUICount += 1
       instances.get(CacheKey(appId, attemptId)).map( e =>
-        LoadedAppUI(e.ui, updateProbe(appId, attemptId, e.probeTime)))
+        LoadedAppUI(e.ui, () => updateProbe(appId, attemptId, e.probeTime)))
     }
 
     override def attachSparkUI(
@@ -122,7 +122,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
         completed: Boolean,
         timestamp: Long): Unit = {
       instances += (CacheKey(appId, attemptId) ->
-          new CacheEntry(ui, completed, updateProbe(appId, attemptId, timestamp), timestamp))
+          new CacheEntry(ui, completed, () => updateProbe(appId, attemptId, timestamp), timestamp))
     }
 
     /**

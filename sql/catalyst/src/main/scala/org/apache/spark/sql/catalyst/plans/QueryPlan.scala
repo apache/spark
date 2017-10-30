@@ -178,7 +178,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     })
   }
 
-  override def innerChildren: Seq[QueryPlan[_]] = subqueries
+  override protected def innerChildren: Seq[QueryPlan[_]] = subqueries
+
+  /**
+   * A private mutable variable to indicate whether this plan is the result of canonicalization.
+   * This is used solely for making sure we wouldn't execute a canonicalized plan.
+   * See [[canonicalized]] on how this is set.
+   */
+  @transient private var _isCanonicalizedPlan: Boolean = false
+
+  protected def isCanonicalizedPlan: Boolean = _isCanonicalizedPlan
 
   /**
    * Returns a plan where a best effort attempt has been made to transform `this` in a way
@@ -188,10 +197,24 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * Plans where `this.canonicalized == other.canonicalized` will always evaluate to the same
    * result.
    *
-   * Some nodes should overwrite this to provide proper canonicalize logic, but they should remove
-   * expressions cosmetic variations themselves.
+   * Plan nodes that require special canonicalization should override [[doCanonicalize()]].
+   * They should remove expressions cosmetic variations themselves.
    */
-  lazy val canonicalized: PlanType = {
+  @transient final lazy val canonicalized: PlanType = {
+    var plan = doCanonicalize()
+    // If the plan has not been changed due to canonicalization, make a copy of it so we don't
+    // mutate the original plan's _isCanonicalizedPlan flag.
+    if (plan eq this) {
+      plan = plan.makeCopy(plan.mapProductIterator(x => x.asInstanceOf[AnyRef]))
+    }
+    plan._isCanonicalizedPlan = true
+    plan
+  }
+
+  /**
+   * Defines how the canonicalization should work for the current plan.
+   */
+  protected def doCanonicalize(): PlanType = {
     val canonicalizedChildren = children.map(_.canonicalized)
     var id = -1
     mapExpressions {
@@ -212,7 +235,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case other => QueryPlan.normalizeExprId(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
   }
-
 
   /**
    * Returns true when the given query plan will return the same results as this query plan.

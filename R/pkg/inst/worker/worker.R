@@ -68,7 +68,7 @@ compute <- function(mode, partition, serializer, deserializer, key,
   } else {
     output <- computeFunc(partition, inputData)
   }
-  return (output)
+  return(output)
 }
 
 outputResult <- function(serializer, output, outputCon) {

@@ -23,21 +23,66 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.UserDefinedType
+import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.vectorized._
+import org.apache.spark.sql.types._
 
 
 case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
-  extends LeafExecNode {
+  extends LeafExecNode with ColumnarBatchScan {
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  override def vectorTypes: Option[Seq[String]] =
+    Option(Seq.fill(attributes.length)(classOf[OnHeapColumnVector].getName))
+
+  /**
+   * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
+   * If false, get data from UnsafeRow build from ColumnVector
+   */
+  override val supportCodegen: Boolean = {
+    // In the initial implementation, for ease of review
+    // support only primitive data types and # of fields is less than wholeStageMaxNumFields
+    relation.schema.fields.forall(f => f.dataType match {
+      case BooleanType | ByteType | ShortType | IntegerType | LongType |
+           FloatType | DoubleType => true
+      case _ => false
+    }) && !WholeStageCodegenExec.isTooManyFields(conf, relation.schema)
+  }
+
+  private val columnIndices =
+    attributes.map(a => relation.output.map(o => o.exprId).indexOf(a.exprId)).toArray
+
+  private val relationSchema = relation.schema.toArray
+
+  private lazy val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
+
+  private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
+    val rowCount = cachedColumnarBatch.numRows
+    val columnVectors = OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
+    val columnarBatch = new ColumnarBatch(
+      columnarBatchSchema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
+    columnarBatch.setNumRows(rowCount)
+
+    for (i <- 0 until attributes.length) {
+      ColumnAccessor.decompress(
+        cachedColumnarBatch.buffers(columnIndices(i)),
+        columnarBatch.column(i).asInstanceOf[WritableColumnVector],
+        columnarBatchSchema.fields(i).dataType, rowCount)
+    }
+    columnarBatch
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    assert(supportCodegen)
+    val buffers = filteredCachedBatches()
+    // HACK ALERT: This is actually an RDD[ColumnarBatch].
+    // We're taking advantage of Scala's type erasure here to pass these batches along.
+    Seq(buffers.map(createAndDecompressColumn(_)).asInstanceOf[RDD[InternalRow]])
+  }
 
   override def output: Seq[Attribute] = attributes
 
@@ -102,7 +147,8 @@ case class InMemoryTableScanExec(
     case IsNull(a: Attribute) => statsFor(a).nullCount > 0
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
 
-    case In(a: AttributeReference, list: Seq[Expression]) if list.forall(_.isInstanceOf[Literal]) =>
+    case In(a: AttributeReference, list: Seq[Expression])
+      if list.forall(_.isInstanceOf[Literal]) && list.nonEmpty =>
       list.map(l => statsFor(a).lowerBound <= l.asInstanceOf[Literal] &&
         l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
   }
@@ -134,6 +180,41 @@ case class InMemoryTableScanExec(
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
+  private def filteredCachedBatches(): RDD[CachedBatch] = {
+    // Using these variables here to avoid serialization of entire objects (if referenced directly)
+    // within the map Partitions closure.
+    val schema = relation.partitionStatistics.schema
+    val schemaIndex = schema.zipWithIndex
+    val buffers = relation.cachedColumnBuffers
+
+    buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
+      val partitionFilter = newPredicate(
+        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+        schema)
+      partitionFilter.initialize(index)
+
+      // Do partition batch pruning if enabled
+      if (inMemoryPartitionPruningEnabled) {
+        cachedBatchIterator.filter { cachedBatch =>
+          if (!partitionFilter.eval(cachedBatch.stats)) {
+            logDebug {
+              val statsString = schemaIndex.map { case (a, i) =>
+                val value = cachedBatch.stats.get(i, a.dataType)
+                s"${a.name}: $value"
+              }.mkString(", ")
+              s"Skipping partition based on stats $statsString"
+            }
+            false
+          } else {
+            true
+          }
+        }
+      } else {
+        cachedBatchIterator
+      }
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -144,45 +225,17 @@ case class InMemoryTableScanExec(
 
     // Using these variables here to avoid serialization of entire objects (if referenced directly)
     // within the map Partitions closure.
-    val schema = relation.partitionStatistics.schema
-    val schemaIndex = schema.zipWithIndex
     val relOutput: AttributeSeq = relation.output
-    val buffers = relation.cachedColumnBuffers
 
-    buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
-      val partitionFilter = newPredicate(
-        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-        schema)
-      partitionFilter.initialize(index)
-
+    filteredCachedBatches().mapPartitionsInternal { cachedBatchIterator =>
       // Find the ordinals and data types of the requested columns.
       val (requestedColumnIndices, requestedColumnDataTypes) =
         attributes.map { a =>
           relOutput.indexOf(a.exprId) -> a.dataType
         }.unzip
 
-      // Do partition batch pruning if enabled
-      val cachedBatchesToScan =
-        if (inMemoryPartitionPruningEnabled) {
-          cachedBatchIterator.filter { cachedBatch =>
-            if (!partitionFilter.eval(cachedBatch.stats)) {
-              def statsString: String = schemaIndex.map {
-                case (a, i) =>
-                  val value = cachedBatch.stats.get(i, a.dataType)
-                  s"${a.name}: $value"
-              }.mkString(", ")
-              logInfo(s"Skipping partition based on stats $statsString")
-              false
-            } else {
-              true
-            }
-          }
-        } else {
-          cachedBatchIterator
-        }
-
       // update SQL metrics
-      val withMetrics = cachedBatchesToScan.map { batch =>
+      val withMetrics = cachedBatchIterator.map { batch =>
         if (enableAccumulators) {
           readBatches.add(1)
         }
