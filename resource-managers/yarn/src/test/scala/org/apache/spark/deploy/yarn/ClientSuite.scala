@@ -185,7 +185,6 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("configuration and args propagate through createApplicationSubmissionContext") {
-    val conf = new Configuration()
     // When parsing tags, duplicates and leading/trailing whitespace should be removed.
     // Spaces between non-comma strings should be preserved as single tags. Empty strings may or
     // may not be removed depending on the version of Hadoop being used.
@@ -200,7 +199,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
     val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
 
-    val client = new Client(args, conf, sparkConf)
+    val client = new Client(args, sparkConf)
     client.createApplicationSubmissionContext(
       new YarnClientApplication(getNewApplicationResponse, appContext),
       containerLaunchContext)
@@ -407,15 +406,14 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   private def createClient(
       sparkConf: SparkConf,
-      conf: Configuration = new Configuration(),
       args: Array[String] = Array()): Client = {
     val clientArgs = new ClientArguments(args)
-    spy(new Client(clientArgs, conf, sparkConf))
+    spy(new Client(clientArgs, sparkConf))
   }
 
   private def classpath(client: Client): Array[String] = {
     val env = new MutableHashMap[String, String]()
-    populateClasspath(null, client.hadoopConf, client.sparkConf, env)
+    populateClasspath(null, new Configuration(), client.sparkConf, env)
     classpath(env)
   }
 

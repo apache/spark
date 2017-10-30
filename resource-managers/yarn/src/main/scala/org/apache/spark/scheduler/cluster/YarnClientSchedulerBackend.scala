@@ -66,7 +66,7 @@ private[spark] class YarnClientSchedulerBackend(
     // reads the credentials from HDFS, just like the executors and updates its own credentials
     // cache.
     if (conf.contains("spark.yarn.credentials.file")) {
-      YarnSparkHadoopUtil.get.startCredentialUpdater(conf)
+      YarnSparkHadoopUtil.startCredentialUpdater(conf)
     }
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
@@ -153,7 +153,7 @@ private[spark] class YarnClientSchedulerBackend(
     client.reportLauncherState(SparkAppHandle.State.FINISHED)
 
     super.stop()
-    YarnSparkHadoopUtil.get.stopCredentialUpdater()
+    YarnSparkHadoopUtil.stopCredentialUpdater()
     client.stop()
     logInfo("Stopped")
   }

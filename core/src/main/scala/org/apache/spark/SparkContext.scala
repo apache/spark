@@ -412,8 +412,6 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     }
 
-    if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
-
     _listenerBus = new LiveListenerBus(_conf)
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
@@ -1943,7 +1941,6 @@ class SparkContext(config: SparkConf) extends Logging {
     // `SparkContext` is stopped.
     localProperties.remove()
     // Unset YARN mode system env variable, to allow switching between cluster types.
-    System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
   }

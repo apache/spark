@@ -245,6 +245,10 @@ private[yarn] class ExecutorRunnable(
       }
     }
 
+    if (securityMgr.getSecretKey() != null) {
+      env(SecurityManager.ENV_AUTH_SECRET) = securityMgr.getSecretKey()
+    }
+
     System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
       .foreach { case (k, v) => env(k) = v }
     env

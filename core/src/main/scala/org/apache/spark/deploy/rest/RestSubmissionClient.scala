@@ -32,6 +32,7 @@ import scala.util.control.NonFatal
 import com.fasterxml.jackson.core.JsonProcessingException
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
+import org.apache.spark.deploy.SparkApplication
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -398,9 +399,20 @@ private[spark] object RestSubmissionClient {
   val PROTOCOL_VERSION = "v1"
 
   /**
-   * Submit an application, assuming Spark parameters are specified through the given config.
-   * This is abstracted to its own method for testing purposes.
+   * Filter non-spark environment variables from any environment.
    */
+  private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
+    env.filterKeys { k =>
+      // SPARK_HOME is filtered out because it is usually wrong on the remote machine (SPARK-12345)
+      (k.startsWith("SPARK_") && k != "SPARK_ENV_LOADED" && k != "SPARK_HOME") ||
+        k.startsWith("MESOS_")
+    }
+  }
+}
+
+private[spark] class RestSubmissionClientApp extends SparkApplication {
+
+  /** Submits a request to run the application and return the response. Visible for testing. */
   def run(
       appResource: String,
       mainClass: String,
@@ -417,7 +429,7 @@ private[spark] object RestSubmissionClient {
     client.createSubmission(submitRequest)
   }
 
-  def main(args: Array[String]): Unit = {
+  override def start(args: Array[String], conf: SparkConf): Unit = {
     if (args.length < 2) {
       sys.error("Usage: RestSubmissionClient [app resource] [main class] [app args*]")
       sys.exit(1)
@@ -425,19 +437,8 @@ private[spark] object RestSubmissionClient {
     val appResource = args(0)
     val mainClass = args(1)
     val appArgs = args.slice(2, args.length)
-    val conf = new SparkConf
-    val env = filterSystemEnvironment(sys.env)
+    val env = RestSubmissionClient.filterSystemEnvironment(sys.env)
     run(appResource, mainClass, appArgs, conf, env)
   }
 
-  /**
-   * Filter non-spark environment variables from any environment.
-   */
-  private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
-    env.filterKeys { k =>
-      // SPARK_HOME is filtered out because it is usually wrong on the remote machine (SPARK-12345)
-      (k.startsWith("SPARK_") && k != "SPARK_ENV_LOADED" && k != "SPARK_HOME") ||
-        k.startsWith("MESOS_")
-    }
-  }
 }

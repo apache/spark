@@ -41,7 +41,7 @@ private[spark] class YarnClusterSchedulerBackend(
     var driverLogs: Option[Map[String, String]] = None
     try {
       val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
-      val containerId = YarnSparkHadoopUtil.get.getContainerId
+      val containerId = YarnSparkHadoopUtil.getContainerId
 
       val httpAddress = System.getenv(Environment.NM_HOST.name()) +
         ":" + System.getenv(Environment.NM_HTTP_PORT.name())

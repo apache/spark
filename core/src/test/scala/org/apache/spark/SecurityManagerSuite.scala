@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.io.File
 
+import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
 
@@ -411,8 +413,12 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("missing secret authentication key") {
     val conf = new SparkConf().set("spark.authenticate", "true")
+    val mgr = new SecurityManager(conf)
     intercept[IllegalArgumentException] {
-      new SecurityManager(conf)
+      mgr.getSecretKey()
+    }
+    intercept[IllegalArgumentException] {
+      mgr.initializeAuth()
     }
   }
 
@@ -428,6 +434,19 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
       .set(SecurityManager.SPARK_AUTH_CONF, "true")
       .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
     assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
+  }
+
+  test("secret key generation in yarn mode") {
+    val conf = new SparkConf()
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(SparkLauncher.SPARK_MASTER, "yarn")
+    val mgr = new SecurityManager(conf)
+    mgr.initializeAuth()
+    assert(mgr.getSecretKey() != null)
+
+    val confVal = conf.get(SecurityManager.SPARK_AUTH_SECRET_CONF)
+    val envVal = conf.get("spark.executorEnv." + SecurityManager.ENV_AUTH_SECRET)
+    assert(confVal === envVal)
   }
 
 }
