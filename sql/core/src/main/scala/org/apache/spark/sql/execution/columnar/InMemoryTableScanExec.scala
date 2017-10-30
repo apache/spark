@@ -67,7 +67,7 @@ case class InMemoryTableScanExec(
 
   private val relationSchema = relation.schema.toArray
 
-  private val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
+  private lazy val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
 
   override def vectorTypes: Option[Seq[String]] = {
     val fields = columnarBatchSchema.fields
