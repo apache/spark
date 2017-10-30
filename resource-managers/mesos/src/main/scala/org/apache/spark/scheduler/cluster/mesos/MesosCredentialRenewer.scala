@@ -18,17 +18,16 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.security.PrivilegedExceptionAction
-import java.util.concurrent.{Executors, TimeUnit}
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.Logging
+import org.apache.spark.deploy.security.{HadoopCredentialRenewer, HadoopDelegationTokenManager, RenewableDelegationTokens}
 import org.apache.spark.internal.config
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
@@ -48,11 +47,11 @@ class MesosCredentialRenewer(
     conf: SparkConf,
     tokenManager: HadoopDelegationTokenManager,
     nextRenewal: Long,
-    driverEndpoint: RpcEndpointRef) extends Logging {
-  private val credentialRenewerThread =
+    driverEndpoint: RpcEndpointRef) extends HadoopCredentialRenewer {
+  override val credentialRenewerThread: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
 
-  @volatile private var timeOfNextRenewal = nextRenewal
+  @volatile override protected var timeOfNextRenewal: Long = nextRenewal
 
   private val principal = conf.get(config.PRINCIPAL).orNull
 
@@ -64,36 +63,26 @@ class MesosCredentialRenewer(
     require(keytab != null || tgt != null, "A keytab or TGT required.")
     // if both Keytab and TGT are detected we use the Keytab.
     val (secretFile, mode) = if (keytab != null && tgt != null) {
-      logWarning(s"Keytab and TGT were detected, using keytab, unset $keytab to use TGT")
+      logWarning(s"Keytab and TGT were detected, using keytab, " +
+        s"unset ${config.KEYTAB.key} to use TGT")
       (keytab, "keytab")
     } else {
       val m = if (keytab != null) "keytab" else "tgt"
       val sf = if (keytab != null) keytab else tgt
       (sf, m)
     }
-    logInfo(s"Logging in as $principal with mode $mode to retrieve Hadoop delegation tokens")
+    logInfo(s"Usung $principal with mode $mode to retrieve Hadoop delegation tokens")
     logDebug(s"secretFile is $secretFile")
     (secretFile, mode)
   }
 
-  def scheduleTokenRenewal(): Unit = {
-    def scheduleRenewal(runnable: Runnable): Unit = {
-      val remainingTime = timeOfNextRenewal - System.currentTimeMillis()
-      if (remainingTime <= 0) {
-        logInfo("Credentials have expired, creating new ones now.")
-        runnable.run()
-      } else {
-        logInfo(s"Scheduling login from keytab in $remainingTime millis.")
-        credentialRenewerThread.schedule(runnable, remainingTime, TimeUnit.MILLISECONDS)
-      }
-    }
-
+  override def scheduleTokenRenewal(): Unit = {
     val credentialRenewerRunnable =
       new Runnable {
         override def run(): Unit = {
           try {
-            val creds = getRenewedDelegationTokens(conf)
-            broadcastDelegationTokens(creds)
+            val tokensBytes = getNewDelegationTokens
+            broadcastDelegationTokens(tokensBytes)
           } catch {
             case e: Exception =>
               // Log the error and try to write new tokens back in an hour
@@ -107,8 +96,8 @@ class MesosCredentialRenewer(
     scheduleRenewal(credentialRenewerRunnable)
   }
 
-  private def getRenewedDelegationTokens(conf: SparkConf): Array[Byte] = {
-    logInfo(s"Attempting to login with ${conf.get(config.PRINCIPAL).orNull}")
+  private def getNewDelegationTokens: RenewableDelegationTokens = {
+    logInfo(s"Attempting to login to KDC with ${conf.get(config.PRINCIPAL).orNull}")
     // Get new delegation tokens by logging in with a new UGI
     // inspired by AMCredentialRenewer.scala:L174
     val ugi = if (mode == "keytab") {
@@ -116,6 +105,8 @@ class MesosCredentialRenewer(
     } else {
       UserGroupInformation.getUGIFromTicketCache(secretFile, principal)
     }
+    logInfo("Successfully logged into KDC")
+
     val tempCreds = ugi.getCredentials
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     var nextRenewalTime = Long.MaxValue
@@ -133,37 +124,22 @@ class MesosCredentialRenewer(
         "related configurations in the target services.")
       currTime
     } else {
-      MesosCredentialRenewer.getNextRenewalTime(nextRenewalTime)
+      getTimeOfNextUpdate(nextRenewalTime, 0.75)
     }
     logInfo(s"Time of next renewal is $timeOfNextRenewal")
 
     // Add the temp credentials back to the original ones.
-    UserGroupInformation.getCurrentUser.addCredentials(tempCreds)
-    SparkHadoopUtil.get.serialize(tempCreds)
-  }
-
-  private def broadcastDelegationTokens(tokens: Array[Byte]): Unit = {
-    // send token to existing executors
-    logInfo("Sending new tokens to all executors")
-    driverEndpoint.send(UpdateDelegationTokens(tokens))
-  }
-}
-
-object MesosCredentialRenewer extends Logging {
-  def getTokenRenewalTime(bytes: Array[Byte], conf: SparkConf): Long = {
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    val creds = SparkHadoopUtil.get.deserialize(bytes)
-    val renewalTimes = creds.getAllTokens.asScala.flatMap { t =>
-      Try {
-        t.renew(hadoopConf)
-      }.toOption
+    for (t <- tempCreds.getAllTokens.asScala) {
+      val s = DelegationTokenIdentifier.stringifyToken(t)
+      logDebug(s"Got updated tokens: $s")
     }
-    if (renewalTimes.isEmpty) Long.MaxValue else renewalTimes.min
+    UserGroupInformation.getCurrentUser.addCredentials(tempCreds)
+    new RenewableDelegationTokens(SparkHadoopUtil.get.serialize(tempCreds), timeOfNextRenewal)
   }
 
-  def getNextRenewalTime(t: Long): Long = {
-    val ct = System.currentTimeMillis()
-    (ct + (0.75 * (t - ct))).toLong
+  private def broadcastDelegationTokens(renewableDelegationTokens: RenewableDelegationTokens) = {
+    logInfo("Sending new tokens to all executors")
+    driverEndpoint.send(UpdateDelegationTokens(renewableDelegationTokens))
   }
 }
 

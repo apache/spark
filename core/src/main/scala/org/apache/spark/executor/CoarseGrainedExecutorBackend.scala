@@ -124,8 +124,8 @@ private[spark] class CoarseGrainedExecutorBackend(
         }
       }.start()
 
-    case UpdateDelegationTokens(tokens) =>
-      SparkHadoopUtil.get.addDelegationTokens(tokens, env.conf)
+    case UpdateDelegationTokens(renewedDelegationTokens) =>
+      SparkHadoopUtil.get.addDelegationTokens(renewedDelegationTokens.credentials, env.conf)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

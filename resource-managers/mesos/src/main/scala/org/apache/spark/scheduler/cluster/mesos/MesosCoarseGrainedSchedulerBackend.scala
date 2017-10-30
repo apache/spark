@@ -31,7 +31,7 @@ import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.deploy.security.{HadoopCredentialRenewer, HadoopDelegationTokenManager}
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
@@ -61,6 +61,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   override def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] =
     Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
+
+  override def hadoopCredentialRenewer: Option[HadoopCredentialRenewer] =
+    Some(new MesosCredentialRenewer(
+      conf,
+      hadoopDelegationTokenManager.get,
+      renewableDelegationTokens.get.nextRenewalTime,
+      driverEndpoint))
 
   private val principal = conf.get(config.PRINCIPAL).orNull
 
@@ -218,20 +225,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
     // check that the credentials are defined, even though it's likely that auth would have failed
     // already if you've made it this far
-    if (principal != null && currentHadoopDelegationTokens.isDefined) {
+    if (principal != null) {
       logDebug(s"Principal found ($principal) starting token renewer")
-      // The renewal time is ignored when getting the initial delegation tokens
-      // (CoarseGrainedSchedulerBackend.scala:getHadoopDelegationCreds), so we get the renewal
-      // time here and schedule a thread to renew them.
-      val renewalTime =
-        MesosCredentialRenewer.getTokenRenewalTime(currentHadoopDelegationTokens.get, conf)
-      val credentialRenewer =
-        new MesosCredentialRenewer(
-          conf,
-          hadoopDelegationTokenManager.get,
-          MesosCredentialRenewer.getNextRenewalTime(renewalTime),
-          driverEndpoint)
-      credentialRenewer.scheduleTokenRenewal()
+      hadoopCredentialRenewer.get.scheduleTokenRenewal
     }
 
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)

@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.deploy.security.RenewableDelegationTokens
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.ExecutorLossReason
 import org.apache.spark.util.SerializableBuffer
@@ -54,7 +55,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
     with RegisterExecutorResponse
 
-  case class UpdateDelegationTokens(tokens: Array[Byte]) extends CoarseGrainedClusterMessage
+  case class UpdateDelegationTokens(renewableDelegationTokens: RenewableDelegationTokens)
+    extends CoarseGrainedClusterMessage
 
   // Executors to driver
   case class RegisterExecutor(

@@ -24,11 +24,8 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 
-import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.deploy.security.{HadoopCredentialRenewer, HadoopDelegationTokenManager, RenewableDelegationTokens}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -102,8 +99,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // hadoop token manager used by some sub-classes (e.g. Mesos)
   def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
+  def hadoopCredentialRenewer: Option[HadoopCredentialRenewer] = None
+
   // Hadoop delegation tokens to be sent to the executors, can be updated as necessary.
-  var currentHadoopDelegationTokens: Option[Array[Byte]] = getHadoopDelegationCreds()
+  var renewableDelegationTokens: Option[RenewableDelegationTokens] =
+    if (hadoopDelegationTokenManager.isDefined) {
+      hadoopDelegationTokenManager.get.getRenewableDelegationTokens()
+    } else {
+      None
+    }
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -160,11 +164,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           killExecutors(exec.toSeq, replace = true, force = true)
         }
 
-      case UpdateDelegationTokens(tokens) =>
+      case UpdateDelegationTokens(newDelegationTokens) =>
         // Update the driver's delegation tokens in case new executors are added later.
-        currentHadoopDelegationTokens = Some(tokens)
-        executorDataMap.values.foreach { ed =>
-          ed.executorEndpoint.send(UpdateDelegationTokens(tokens)) }
+        if (renewableDelegationTokens.isDefined) {
+          renewableDelegationTokens = Some(newDelegationTokens)
+          executorDataMap.values.foreach { ed =>
+            ed.executorEndpoint.send(UpdateDelegationTokens(newDelegationTokens))
+          }
+        } else {
+          logWarning("Attempted to broadcast credentials when the credential manager " +
+            "was not defined")
+        }
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -239,10 +249,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         context.reply(true)
 
       case RetrieveSparkAppConfig =>
+        val tokens = if (renewableDelegationTokens.isDefined) {
+          Some(renewableDelegationTokens.get.credentials)
+        } else {
+          None
+        }
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
-          currentHadoopDelegationTokens)
+          tokens)
         context.reply(reply)
     }
 
@@ -692,6 +707,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     true
   }
 
+  /*
   protected def getHadoopDelegationCreds(): Option[Array[Byte]] = {
     if (UserGroupInformation.isSecurityEnabled && hadoopDelegationTokenManager.isDefined) {
       hadoopDelegationTokenManager.map { manager =>
@@ -704,6 +720,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       None
     }
   }
+  */
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
