@@ -299,10 +299,14 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   private def loadMap(version: Long): MapType = {
 
     // Shortcut if the map for this version is already there to avoid a redundant put.
-    val currentVersionMap =
-      synchronized { loadedMaps.get(version) }.orElse(readSnapshotFile(version))
-    if (currentVersionMap.isDefined) {
-      return currentVersionMap.get
+    val loadedCurrentVersionMap = synchronized { loadedMaps.get(version) }
+    if (loadedCurrentVersionMap.isDefined) {
+      return loadedCurrentVersionMap.get
+    }
+    val snapshotCurrentVersionMap = readSnapshotFile(version)
+    if (snapshotCurrentVersionMap.isDefined) {
+      synchronized { loadedMaps.put(version, snapshotCurrentVersionMap.get) }
+      return snapshotCurrentVersionMap.get
     }
 
     // Find the most recent map before this version that we can.
