@@ -521,10 +521,9 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     case p if !supportCodegen(p) =>
       // collapse them recursively
       InputAdapter(insertWholeStageCodegen(p))
-    case j @ SortMergeJoinExec(_, _, _, _, left, right) =>
+    case j: SortMergeJoinExec =>
       // The children of SortMergeJoin should do codegen separately.
-      j.copy(left = InputAdapter(insertWholeStageCodegen(left)),
-        right = InputAdapter(insertWholeStageCodegen(right)))
+      j.withNewChildren(j.children.map(child => InputAdapter(insertWholeStageCodegen(child))))
     case p =>
       p.withNewChildren(p.children.map(insertInputAdapter))
   }

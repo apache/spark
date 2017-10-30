@@ -28,7 +28,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
@@ -244,6 +244,17 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         .setValue(value)
         .build())
     }
+
+    MesosSchedulerBackendUtil.getSecretEnvVar(conf, executorSecretConfig).foreach { variable =>
+      if (variable.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName} " +
+          s"on file ${variable.getName}")
+      } else {
+        logInfo(s"Setting secret on environment variable name=${variable.getName}")
+      }
+      environment.addVariables(variable)
+    }
+
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
 
@@ -424,6 +435,22 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
+  private def getContainerInfo(conf: SparkConf): ContainerInfo.Builder = {
+    val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(conf)
+
+    MesosSchedulerBackendUtil.getSecretVolume(conf, executorSecretConfig).foreach { volume =>
+      if (volume.getSource.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName} " +
+          s"on file ${volume.getContainerPath}")
+      } else {
+        logInfo(s"Setting secret on file name=${volume.getContainerPath}")
+      }
+      containerInfo.addVolumes(volume)
+    }
+
+    containerInfo
+  }
+
   /**
    * Returns a map from OfferIDs to the tasks to launch on those offers.  In order to maximize
    * per-task memory and IO, tasks are round-robin assigned to offers.
@@ -475,7 +502,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .setName(s"${sc.appName} $taskId")
             .setLabels(MesosProtoUtils.mesosLabels(taskLabels))
             .addAllResources(resourcesToUse.asJava)
-            .setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
+            .setContainer(getContainerInfo(sc.conf))
 
           tasks(offer.getId) ::= taskBuilder.build()
           remainingResources(offerId) = resourcesLeft.asJava
