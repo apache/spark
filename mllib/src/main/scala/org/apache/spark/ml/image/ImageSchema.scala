@@ -226,7 +226,8 @@ object ImageSchema {
       val images = if (dropImageFailures) {
         streams.flatMap { case (origin, bytes) => convert(origin, bytes) }
       } else {
-        streams.map { case (origin, bytes) => convert(origin, bytes).getOrElse(invalidImageRow(origin)) }
+        streams.map { case (origin, bytes) =>
+          convert(origin, bytes).getOrElse(invalidImageRow(origin)) }
       }
       session.createDataFrame(images, imageSchema)
     } finally {
