@@ -483,7 +483,9 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
+        self._needConversion = [f.needConversion() for f in self]
+        self._needSerializeAnyField = any(self._needConversion)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -528,7 +530,9 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
+        self._needConversion = [f.needConversion() for f in self]
+        self._needSerializeAnyField = any(self._needConversion)
         return self
 
     def __iter__(self):
@@ -590,13 +594,17 @@ class StructType(DataType):
             return
 
         if self._needSerializeAnyField:
+            # Only calling toInternal function for fields that need conversion
             if isinstance(obj, dict):
-                return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(obj.get(n)) if c else obj.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             elif isinstance(obj, (tuple, list)):
-                return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
+                return tuple(f.toInternal(v) if c else v
+                             for f, v, c in zip(self.fields, obj, self._needConversion))
             elif hasattr(obj, "__dict__"):
                 d = obj.__dict__
-                return tuple(f.toInternal(d.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(d.get(n)) if c else d.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
@@ -619,7 +627,9 @@ class StructType(DataType):
             # it's already converted by pickler
             return obj
         if self._needSerializeAnyField:
-            values = [f.fromInternal(v) for f, v in zip(self.fields, obj)]
+            # Only calling fromInternal function for fields that need conversion
+            values = [f.fromInternal(v) if c else v
+                      for f, v, c in zip(self.fields, obj, self._needConversion)]
         else:
             values = obj
         return _create_row(self.names, values)
@@ -1585,6 +1595,69 @@ class DatetimeConverter(object):
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
+
+
+def to_arrow_type(dt):
+    """ Convert Spark data type to pyarrow type
+    """
+    import pyarrow as pa
+    if type(dt) == BooleanType:
+        arrow_type = pa.bool_()
+    elif type(dt) == ByteType:
+        arrow_type = pa.int8()
+    elif type(dt) == ShortType:
+        arrow_type = pa.int16()
+    elif type(dt) == IntegerType:
+        arrow_type = pa.int32()
+    elif type(dt) == LongType:
+        arrow_type = pa.int64()
+    elif type(dt) == FloatType:
+        arrow_type = pa.float32()
+    elif type(dt) == DoubleType:
+        arrow_type = pa.float64()
+    elif type(dt) == DecimalType:
+        arrow_type = pa.decimal(dt.precision, dt.scale)
+    elif type(dt) == StringType:
+        arrow_type = pa.string()
+    elif type(dt) == DateType:
+        arrow_type = pa.date32()
+    elif type(dt) == TimestampType:
+        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
+        arrow_type = pa.timestamp('us', tz='UTC')
+    else:
+        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+    return arrow_type
+
+
+def _check_dataframe_localize_timestamps(pdf):
+    """
+    Convert timezone aware timestamps to timezone-naive in local time
+
+    :param pdf: pandas.DataFrame
+    :return pandas.DataFrame where any timezone aware columns have be converted to tz-naive
+    """
+    from pandas.api.types import is_datetime64tz_dtype
+    for column, series in pdf.iteritems():
+        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+        if is_datetime64tz_dtype(series.dtype):
+            pdf[column] = series.dt.tz_convert('tzlocal()').dt.tz_localize(None)
+    return pdf
+
+
+def _check_series_convert_timestamps_internal(s):
+    """
+    Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
+    :param s: a pandas.Series
+    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
+    """
+    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64_dtype(s.dtype):
+        return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC')
+    elif is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert('UTC')
+    else:
+        return s
 
 
 def _test():

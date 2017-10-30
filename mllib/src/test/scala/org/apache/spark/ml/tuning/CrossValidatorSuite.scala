@@ -137,8 +137,8 @@ class CrossValidatorSuite
     cv.setParallelism(2)
     val cvParallelModel = cv.fit(dataset)
 
-    val serialMetrics = cvSerialModel.avgMetrics.sorted
-    val parallelMetrics = cvParallelModel.avgMetrics.sorted
+    val serialMetrics = cvSerialModel.avgMetrics
+    val parallelMetrics = cvParallelModel.avgMetrics
     assert(serialMetrics === parallelMetrics)
 
     val parentSerial = cvSerialModel.bestModel.parent.asInstanceOf[LogisticRegression]
@@ -159,12 +159,15 @@ class CrossValidatorSuite
       .setEvaluator(evaluator)
       .setNumFolds(20)
       .setEstimatorParamMaps(paramMaps)
+      .setSeed(42L)
+      .setParallelism(2)
 
     val cv2 = testDefaultReadWrite(cv, testParams = false)
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
     assert(cv.getSeed === cv2.getSeed)
+    assert(cv.getParallelism === cv2.getParallelism)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]

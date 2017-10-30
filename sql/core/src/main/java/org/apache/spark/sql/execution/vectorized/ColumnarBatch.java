@@ -463,6 +463,11 @@ public final class ColumnarBatch {
   }
 
   /**
+   * Returns the schema that makes up this batch.
+   */
+  public StructType schema() { return schema; }
+
+  /**
    * Returns the max capacity (in number of rows) for this batch.
    */
   public int capacity() { return capacity; }

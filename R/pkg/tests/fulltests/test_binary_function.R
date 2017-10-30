@@ -73,7 +73,7 @@ test_that("zipPartitions() on RDDs", {
   rdd2 <- parallelize(sc, 1:4, 2L)  # 1:2, 3:4
   rdd3 <- parallelize(sc, 1:6, 2L)  # 1:3, 4:6
   actual <- collectRDD(zipPartitions(rdd1, rdd2, rdd3,
-                                  func = function(x, y, z) { list(list(x, y, z))} ))
+                                  func = function(x, y, z) { list(list(x, y, z))}))
   expect_equal(actual,
                list(list(1, c(1, 2), c(1, 2, 3)), list(2, c(3, 4), c(4, 5, 6))))
 

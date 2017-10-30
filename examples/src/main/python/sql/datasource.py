@@ -53,6 +53,11 @@ def basic_datasource_example(spark):
     df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
     # $example off:manual_load_options$
 
+    # $example on:manual_load_options_csv$
+    df = spark.read.load("examples/src/main/resources/people.csv",
+                         format="csv", sep=":", inferSchema="true", header="true")
+    # $example off:manual_load_options_csv$
+
     # $example on:write_sorting_and_bucketing$
     df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
     # $example off:write_sorting_and_bucketing$
@@ -176,6 +181,16 @@ def jdbc_dataset_example(spark):
     jdbcDF2 = spark.read \
         .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
               properties={"user": "username", "password": "password"})
+
+    # Specifying dataframe column data types on read
+    jdbcDF3 = spark.read \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql:dbserver") \
+        .option("dbtable", "schema.tablename") \
+        .option("user", "username") \
+        .option("password", "password") \
+        .option("customSchema", "id DECIMAL(38, 0), name STRING") \
+        .load()
 
     # Saving data to a JDBC source
     jdbcDF.write \
