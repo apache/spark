@@ -52,6 +52,13 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
+  private def withColumnArrayVectors(
+      size: Int,
+      dt: DataType)(
+      block: WritableColumnVector => Unit): Unit = {
+    withVector(new UnsafeColumnVector(size, dt))(block)
+  }
+
   testVectors("boolean", 10, BooleanType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendBoolean(i % 2 == 0)
@@ -415,7 +422,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       columnBuilder.appendFrom(row, 0)
     }
 
-    withVectors(N, dataType) { testVector =>
+    withColumnArrayVectors(N, dataType) { testVector =>
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
@@ -425,6 +432,9 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
         } else {
           assert(testVector.isNullAt(i) == false)
           assert(testVector.getArray(i).toBooleanArray() === data(i))
+          for (j <- 0 until data(i).length) {
+            assert(testVector.getArray(i).getBoolean(j) == data(i)(j))
+          }
         }
       }
       for (i <- 0 to N / 3) {
@@ -464,7 +474,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       columnBuilder.appendFrom(row, 0)
     }
 
-    withVectors(N, dataType) { testVector =>
+    withColumnArrayVectors(N, dataType) { testVector =>
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
@@ -474,6 +484,9 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
         } else {
           assert(testVector.isNullAt(i) == false)
           assert(testVector.getArray(i).toByteArray() === data(i))
+          for (j <- 0 until data(i).length) {
+            assert(testVector.getArray(i).getByte(j) == data(i)(j))
+          }
         }
       }
       for (i <- 0 to N / 3) {
@@ -513,7 +526,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       columnBuilder.appendFrom(row, 0)
     }
 
-    withVectors(N, dataType) { testVector =>
+    withColumnArrayVectors(N, dataType) { testVector =>
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
@@ -523,6 +536,9 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
         } else {
           assert(testVector.isNullAt(i) == false)
           assert(testVector.getArray(i).toShortArray() === data(i))
+          for (j <- 0 until data(i).length) {
+            assert(testVector.getArray(i).getShort(j) == data(i)(j))
+          }
         }
       }
       for (i <- 0 to N / 3) {
@@ -562,7 +578,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       columnBuilder.appendFrom(row, 0)
     }
 
-    withVectors(N, dataType) { testVector =>
+    withColumnArrayVectors(N, dataType) { testVector =>
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
@@ -580,6 +596,9 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
         } else {
           assert(testVector.isNullAt(i * 3) == false)
           assert(testVector.getArray(i * 3).toIntArray() === data(i * 3))
+          for (j <- 0 until data(i).length) {
+            assert(testVector.getArray(i).getInt(j) == data(i)(j))
+          }
         }
       }
       for (i <- 1 to N / 3) {
@@ -611,7 +630,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       columnBuilder.appendFrom(row, 0)
     }
 
-    withVectors(N, dataType) { testVector =>
+    withColumnArrayVectors(N, dataType) { testVector =>
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
@@ -621,6 +640,9 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
         } else {
           assert(testVector.isNullAt(i) == false)
           assert(testVector.getArray(i).toLongArray() === data(i))
+          for (j <- 0 until data(i).length) {
+            assert(testVector.getArray(i).getLong(j) == data(i)(j))
+          }
         }
       }
       for (i <- 0 to N / 3) {
@@ -660,7 +682,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       columnBuilder.appendFrom(row, 0)
     }
 
-    withVectors(N, dataType) { testVector =>
+    withColumnArrayVectors(N, dataType) { testVector =>
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
@@ -670,6 +692,9 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
         } else {
           assert(testVector.isNullAt(i) == false)
           assert(testVector.getArray(i).toFloatArray() === data(i))
+          for (j <- 0 until data(i).length) {
+            assert(testVector.getArray(i).getFloat(j) == data(i)(j))
+          }
         }
       }
       for (i <- 0 to N / 3) {
@@ -709,7 +734,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       columnBuilder.appendFrom(row, 0)
     }
 
-    withVectors(N, dataType) { testVector =>
+    withColumnArrayVectors(N, dataType) { testVector =>
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
@@ -719,6 +744,9 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
         } else {
           assert(testVector.isNullAt(i) == false)
           assert(testVector.getArray(i).toDoubleArray() === data(i))
+          for (j <- 0 until data(i).length) {
+            assert(testVector.getArray(i).getDouble(j) == data(i)(j))
+          }
         }
       }
       for (i <- 0 to N / 3) {

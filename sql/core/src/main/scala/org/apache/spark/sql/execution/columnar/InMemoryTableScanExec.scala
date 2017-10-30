@@ -67,16 +67,38 @@ case class InMemoryTableScanExec(
 
   private val relationSchema = relation.schema.toArray
 
-  private lazy val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
+  private val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
+
+  override def vectorTypes: Option[Seq[String]] = {
+    val fields = columnarBatchSchema.fields
+    Option((0 until fields.length).map { i =>
+      if (fields(i).dataType.isInstanceOf[ArrayType]) {
+        classOf[UnsafeColumnVector].getName
+      } else {
+        classOf[OnHeapColumnVector].getName
+      }
+    })
+  }
 
   private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
     val rowCount = cachedColumnarBatch.numRows
+<<<<<<< HEAD
     val taskContext = Option(TaskContext.get())
     val columnVectors = if (!conf.offHeapColumnVectorEnabled || taskContext.isEmpty) {
       OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
     } else {
       OffHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
     }
+=======
+    val fields = columnarBatchSchema.fields
+    val columnVectors = (0 until fields.length).map { i =>
+      if (fields(i).dataType.isInstanceOf[ArrayType]) {
+        new UnsafeColumnVector(rowCount, fields(i).dataType)
+      } else {
+        new OnHeapColumnVector(rowCount, fields(i).dataType)
+      }
+    }.toArray
+>>>>>>> add UnsafeColumnVector to support array for table cache
     val columnarBatch = new ColumnarBatch(
       columnarBatchSchema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
     columnarBatch.setNumRows(rowCount)

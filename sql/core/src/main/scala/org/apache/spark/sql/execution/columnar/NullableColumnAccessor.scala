@@ -66,6 +66,6 @@ private[columnar] trait NullableColumnAccessor extends ColumnAccessor {
         columnVector.putNull(ordinal)
       }
     }
-    columnVector.putUnsafeArrayData(underlyingBuffer)
+    columnVector.putUnsafeData(underlyingBuffer)
   }
 }

@@ -74,8 +74,6 @@ class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
     assert(df.select("b").first() === Row(outerStruct))
   }
 
-  //     checkAnswer(sparkContext.parallelize(Seq[java.lang.Integer](0, null, 2), 1).toDF,
-
   test("primitive data type accesses in persist data") {
     val data = Seq(true, 1.toByte, 3.toShort, 7, 15.toLong,
       31.25.toFloat, 63.75, null, Array(1.2, 2.3), Array[java.lang.Double](1.2, null))
@@ -110,5 +108,12 @@ class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
     df.cache
     df.count
     assert(df.filter("d < 3").count == 1)
+  }
+
+  test("primitive array for Dataset") {
+    val ds = sparkContext.parallelize(Seq(Array(6, 7), Array(8, 9, 10)), 1).toDS.cache
+    ds.count
+    val ds1 = ds.map(p => p).collect
+    assert(ds1(0) === Array(6, 7) && ds1(1) === Array(8, 9, 10))
   }
 }

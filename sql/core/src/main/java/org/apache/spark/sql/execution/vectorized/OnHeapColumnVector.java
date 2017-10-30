@@ -94,6 +94,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     arrayOffsets = null;
   }
 
+  @Override
+  public void putUnsafeData(ByteBuffer array) {
+    throw new RuntimeException("Cannot put UnsafeData for on-heap column");
+  }
+
   //
   // APIs dealing with nulls
   //

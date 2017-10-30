@@ -93,28 +93,6 @@ public class ColumnVectorUtils {
     }
   }
 
-  /**
-   * Returns the array data as the java primitive array.
-   * For example, an array of IntegerType will return an int[].
-   * Throws exceptions for unhandled schemas.
-   */
-  public static Object toPrimitiveJavaArray(ColumnarArray array) {
-    DataType dt = array.data.dataType();
-    if (dt instanceof IntegerType) {
-      int[] result = new int[array.length];
-      ColumnVector data = array.data;
-      for (int i = 0; i < result.length; i++) {
-        if (data.isNullAt(array.offset + i)) {
-          throw new RuntimeException("Cannot handle NULL values.");
-        }
-        result[i] = data.getInt(array.offset + i);
-      }
-      return result;
-    } else {
-      throw new UnsupportedOperationException();
-    }
-  }
-
   private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
     if (o == null) {
       if (t instanceof CalendarIntervalType) {
