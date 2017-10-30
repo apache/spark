@@ -324,7 +324,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
     // Load all the deltas from the version after the last available one up to the target version.
     // The last available version is the one with a full snapshot, so it doesn't need deltas.
-    val resultMap = lastAvailableMap.get
+    val resultMap = new MapType(lastAvailableMap.get)
     for (deltaVersion <- lastAvailableVersion + 1 to version) {
       updateFromDeltaFile(deltaVersion, resultMap)
     }
