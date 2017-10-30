@@ -422,36 +422,38 @@ class SparkSession(object):
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
         from pyspark.serializers import ArrowSerializer, _create_batch
-        from pyspark.sql.types import from_arrow_schema, to_arrow_type
+        from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
+        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
         import pyarrow as pa
 
-        # Slice the DataFrame into batches
+        # Determine arrow types to coerce data when creating batches
+        if isinstance(schema, StructType):
+            arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+        elif isinstance(schema, DataType):
+            raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
+        else:
+            # Any timestamps must be coerced to be compatible with Spark
+            arrow_types = [to_arrow_type(TimestampType())
+                           if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
+                           for t in pdf.dtypes]
+
+        # Slice the DataFrame to be batched
         step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
         pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
 
+        # Create Arrow record batches
+        batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)])
+                   for pdf_slice in pdf_slices]
+
+        # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)
         if schema is None or isinstance(schema, list):
-            batches = [pa.RecordBatch.from_pandas(pdf_slice, preserve_index=False)
-                       for pdf_slice in pdf_slices]
-
-            # There will be at least 1 batch after slicing the pandas.DataFrame
             schema_from_arrow = from_arrow_schema(batches[0].schema)
-
-            # If passed schema as a list of names then rename fields
-            if isinstance(schema, list):
-                fields = []
-                for i, field in enumerate(schema_from_arrow):
-                    field.name = schema[i]
-                    fields.append(field)
-                schema = StructType(fields)
-            else:
-                schema = schema_from_arrow
-        elif not isinstance(schema, StructType) and isinstance(schema, DataType):
-            raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
-        else:
-            arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
-            batches = [_create_batch([(c, t)
-                                      for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)])
-                       for pdf_slice in pdf_slices]
+            names = pdf.columns if schema is None else schema
+            fields = []
+            for i, field in enumerate(schema_from_arrow):
+                field.name = names[i]
+                fields.append(field)
+            schema = StructType(fields)
 
         # Create the Spark DataFrame directly from the Arrow data and schema
         jrdd = self._sc._serialize_to_jvm(batches, len(batches), ArrowSerializer())
