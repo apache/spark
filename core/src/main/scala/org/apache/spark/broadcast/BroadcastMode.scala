@@ -25,5 +25,6 @@ package org.apache.spark.broadcast
  */
 trait BroadcastMode[T] extends Serializable {
   def transform(rows: Array[T]): Any
+  def transform(rows: Iterator[T], sizeHint: Option[Long]): Any
   def canonicalized: BroadcastMode[T] = this
 }

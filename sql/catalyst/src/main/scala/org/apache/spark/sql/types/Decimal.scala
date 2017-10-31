@@ -234,22 +234,17 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     changePrecision(precision, scale, ROUND_HALF_UP)
   }
 
-  def changePrecision(precision: Int, scale: Int, mode: Int): Boolean = mode match {
-    case java.math.BigDecimal.ROUND_HALF_UP => changePrecision(precision, scale, ROUND_HALF_UP)
-    case java.math.BigDecimal.ROUND_HALF_EVEN => changePrecision(precision, scale, ROUND_HALF_EVEN)
-  }
-
   /**
    * Create new `Decimal` with given precision and scale.
    *
-   * @return `Some(decimal)` if successful or `None` if overflow would occur
+   * @return a non-null `Decimal` value if successful or `null` if overflow would occur.
    */
   private[sql] def toPrecision(
       precision: Int,
       scale: Int,
-      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP): Option[Decimal] = {
+      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP): Decimal = {
     val copy = clone()
-    if (copy.changePrecision(precision, scale, roundMode)) Some(copy) else None
+    if (copy.changePrecision(precision, scale, roundMode)) copy else null
   }
 
   /**
@@ -257,8 +252,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    *
    * @return true if successful, false if overflow would occur
    */
-  private[sql] def changePrecision(precision: Int, scale: Int,
-                      roundMode: BigDecimal.RoundingMode.Value): Boolean = {
+  private[sql] def changePrecision(
+      precision: Int,
+      scale: Int,
+      roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     // fast path for UnsafeProjection
     if (precision == this.precision && scale == this.scale) {
       return true
@@ -393,14 +390,20 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def floor: Decimal = if (scale == 0) this else {
     val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision
-    toPrecision(newPrecision, 0, ROUND_FLOOR).getOrElse(
-      throw new AnalysisException(s"Overflow when setting precision to $newPrecision"))
+    val res = toPrecision(newPrecision, 0, ROUND_FLOOR)
+    if (res == null) {
+      throw new AnalysisException(s"Overflow when setting precision to $newPrecision")
+    }
+    res
   }
 
   def ceil: Decimal = if (scale == 0) this else {
     val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision
-    toPrecision(newPrecision, 0, ROUND_CEILING).getOrElse(
-      throw new AnalysisException(s"Overflow when setting precision to $newPrecision"))
+    val res = toPrecision(newPrecision, 0, ROUND_CEILING)
+    if (res == null) {
+      throw new AnalysisException(s"Overflow when setting precision to $newPrecision")
+    }
+    res
   }
 }
 

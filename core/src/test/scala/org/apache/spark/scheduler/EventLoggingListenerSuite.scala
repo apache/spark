@@ -164,9 +164,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
     eventLogger.start()
     listenerBus.start(Mockito.mock(classOf[SparkContext]), Mockito.mock(classOf[MetricsSystem]))
-    listenerBus.addListener(eventLogger)
-    listenerBus.postToAll(applicationStart)
-    listenerBus.postToAll(applicationEnd)
+    listenerBus.addToEventLogQueue(eventLogger)
+    listenerBus.post(applicationStart)
+    listenerBus.post(applicationEnd)
     listenerBus.stop()
     eventLogger.stop()
 
@@ -228,6 +228,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       SparkListenerStageCompleted,
       SparkListenerTaskStart,
       SparkListenerTaskEnd,
+      SparkListenerBlockUpdated,
       SparkListenerApplicationEnd).map(Utils.getFormattedClassName)
     Utils.tryWithSafeFinally {
       val logStart = SparkListenerLogStart(SPARK_VERSION)
@@ -291,6 +292,7 @@ object EventLoggingListenerSuite {
   def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None): SparkConf = {
     val conf = new SparkConf
     conf.set("spark.eventLog.enabled", "true")
+    conf.set("spark.eventLog.logBlockUpdates.enabled", "true")
     conf.set("spark.eventLog.testing", "true")
     conf.set("spark.eventLog.dir", logDir.toString)
     compressionCodec.foreach { codec =>

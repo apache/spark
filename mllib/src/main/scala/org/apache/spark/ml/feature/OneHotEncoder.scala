@@ -142,7 +142,7 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
     if (outputAttrGroup.size < 0) {
       // If the number of attributes is unknown, we check the values from the input column.
       val numAttrs = dataset.select(col(inputColName).cast(DoubleType)).rdd.map(_.getDouble(0))
-        .aggregate(0.0)(
+        .treeAggregate(0.0)(
           (m, x) => {
             assert(x <= Int.MaxValue,
               s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got $x")

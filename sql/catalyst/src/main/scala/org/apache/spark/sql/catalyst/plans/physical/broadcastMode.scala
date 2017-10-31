@@ -34,4 +34,8 @@ abstract class RowBroadcastMode extends BroadcastMode[InternalRow] {
 case object IdentityBroadcastMode extends RowBroadcastMode {
   // TODO: pack the UnsafeRows into single bytes array.
   override def transform(rows: Array[InternalRow]): Array[InternalRow] = rows
+
+  override def transform(
+      rows: Iterator[InternalRow],
+      sizeHint: Option[Long]): Array[InternalRow] = rows.toArray
 }

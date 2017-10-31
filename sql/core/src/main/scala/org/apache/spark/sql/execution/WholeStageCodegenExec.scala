@@ -197,11 +197,14 @@ trait CodegenSupport extends SparkPlan {
    *
    * This should be override by subclass to support codegen.
    *
-   * For example, Filter will generate the code like this:
+   * Note: The operator should not assume the existence of an outer processing loop,
+   *       which it can jump from with "continue;"!
    *
+   * For example, filter could generate this:
    *   # code to evaluate the predicate expression, result is isNull1 and value2
-   *   if (isNull1 || !value2) continue;
-   *   # call consume(), which will call parent.doConsume()
+   *   if (!isNull1 && value2) {
+   *     # call consume(), which will call parent.doConsume()
+   *   }
    *
    * Note: A plan can either consume the rows as UnsafeRow (row), or a list of variables (input).
    */
@@ -279,6 +282,18 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
 
 object WholeStageCodegenExec {
   val PIPELINE_DURATION_METRIC = "duration"
+
+  private def numOfNestedFields(dataType: DataType): Int = dataType match {
+    case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
+    case m: MapType => numOfNestedFields(m.keyType) + numOfNestedFields(m.valueType)
+    case a: ArrayType => numOfNestedFields(a.elementType)
+    case u: UserDefinedType[_] => numOfNestedFields(u.sqlType)
+    case _ => 1
+  }
+
+  def isTooManyFields(conf: SQLConf, dataType: DataType): Boolean = {
+    numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
+  }
 }
 
 /**
@@ -329,6 +344,15 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+
+    // main next function.
+    ctx.addNewFunction("processNext",
+      s"""
+        protected void processNext() throws java.io.IOException {
+          ${code.trim}
+        }
+       """, inlineToOuterClass = true)
+
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
@@ -352,9 +376,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
           ${ctx.initPartition()}
         }
 
-        protected void processNext() throws java.io.IOException {
-          ${code.trim}
-        }
+        ${ctx.emitExtraCode()}
 
         ${ctx.declareAddedFunctions()}
       }
@@ -370,16 +392,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
   override def doExecute(): RDD[InternalRow] = {
     val (ctx, cleanedSource) = doCodeGen()
-    if (ctx.isTooLongGeneratedFunction) {
-      logWarning("Found too long generated codes and JIT optimization might not work, " +
-        "Whole-stage codegen disabled for this plan, " +
-        "You can change the config spark.sql.codegen.MaxFunctionLength " +
-        "to adjust the function length limit:\n "
-        + s"$treeString")
-      return child.execute()
-    }
     // try to compile and fallback if it failed
-    try {
+    val (_, maxCodeSize) = try {
       CodeGenerator.compile(cleanedSource)
     } catch {
       case _: Exception if !Utils.isTesting && sqlContext.conf.codegenFallback =>
@@ -387,6 +401,21 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         logWarning(s"Whole-stage codegen disabled for this plan:\n $treeString")
         return child.execute()
     }
+
+    // Check if compiled code has a too large function
+    if (maxCodeSize > sqlContext.conf.hugeMethodLimit) {
+      logInfo(s"Found too long generated codes and JIT optimization might not work: " +
+        s"the bytecode size ($maxCodeSize) is above the limit " +
+        s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
+        s"for this plan. To avoid this, you can raise the limit " +
+        s"`${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}`:\n$treeString")
+      child match {
+        // The fallback solution of batch file source scan still uses WholeStageCodegenExec
+        case f: FileSourceScanExec if f.supportsBatch => // do nothing
+        case _ => return child.execute()
+      }
+    }
+
     val references = ctx.references.toArray
 
     val durationMs = longMetric("pipelineTime")
@@ -395,7 +424,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
     if (rdds.length == 1) {
       rdds.head.mapPartitionsWithIndex { (index, iter) =>
-        val clazz = CodeGenerator.compile(cleanedSource)
+        val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(index, Array(iter))
         new Iterator[InternalRow] {
@@ -414,7 +443,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         // a small hack to obtain the correct partition index
       }.mapPartitionsWithIndex { (index, zippedIter) =>
         val (leftIter, rightIter) = zippedIter.next()
-        val clazz = CodeGenerator.compile(cleanedSource)
+        val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(index, Array(leftIter, rightIter))
         new Iterator[InternalRow] {
@@ -473,22 +502,14 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     case _ => true
   }
 
-  private def numOfNestedFields(dataType: DataType): Int = dataType match {
-    case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
-    case m: MapType => numOfNestedFields(m.keyType) + numOfNestedFields(m.valueType)
-    case a: ArrayType => numOfNestedFields(a.elementType)
-    case u: UserDefinedType[_] => numOfNestedFields(u.sqlType)
-    case _ => 1
-  }
-
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
       val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
       // the generated code will be huge if there are too many columns
       val hasTooManyOutputFields =
-        numOfNestedFields(plan.schema) > conf.wholeStageMaxNumFields
+        WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
       val hasTooManyInputFields =
-        plan.children.map(p => numOfNestedFields(p.schema)).exists(_ > conf.wholeStageMaxNumFields)
+        plan.children.exists(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema))
       !willFallback && !hasTooManyOutputFields && !hasTooManyInputFields
     case _ => false
   }
@@ -500,10 +521,9 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     case p if !supportCodegen(p) =>
       // collapse them recursively
       InputAdapter(insertWholeStageCodegen(p))
-    case j @ SortMergeJoinExec(_, _, _, _, left, right) =>
+    case j: SortMergeJoinExec =>
       // The children of SortMergeJoin should do codegen separately.
-      j.copy(left = InputAdapter(insertWholeStageCodegen(left)),
-        right = InputAdapter(insertWholeStageCodegen(right)))
+      j.withNewChildren(j.children.map(child => InputAdapter(insertWholeStageCodegen(child))))
     case p =>
       p.withNewChildren(p.children.map(insertInputAdapter))
   }

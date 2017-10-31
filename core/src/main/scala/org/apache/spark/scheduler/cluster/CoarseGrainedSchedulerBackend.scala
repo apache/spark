@@ -471,15 +471,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   protected def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     // Only log the failure since we don't care about the result.
-    driverEndpoint.ask[Boolean](RemoveExecutor(executorId, reason)).onFailure {
-      case t => logError(t.getMessage, t)
-    }(ThreadUtils.sameThread)
+    driverEndpoint.ask[Boolean](RemoveExecutor(executorId, reason)).failed.foreach(t =>
+      logError(t.getMessage, t))(ThreadUtils.sameThread)
   }
 
   protected def removeWorker(workerId: String, host: String, message: String): Unit = {
-    driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).onFailure {
-      case t => logError(t.getMessage, t)
-    }(ThreadUtils.sameThread)
+    driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).failed.foreach(t =>
+      logError(t.getMessage, t))(ThreadUtils.sameThread)
   }
 
   def sufficientResourcesRegistered(): Boolean = true

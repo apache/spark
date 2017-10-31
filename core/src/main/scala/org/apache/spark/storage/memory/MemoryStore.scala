@@ -29,9 +29,10 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
-import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel, StreamBlockId}
+import org.apache.spark.storage._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
@@ -190,11 +191,11 @@ private[spark] class MemoryStore(
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
     // How often to check whether we need to request more memory
-    val memoryCheckPeriod = 16
+    val memoryCheckPeriod = conf.get(UNROLL_MEMORY_CHECK_PERIOD)
     // Memory currently reserved by this task for this particular unrolling operation
     var memoryThreshold = initialMemoryThreshold
     // Memory to request as a multiple of current vector size
-    val memoryGrowthFactor = 1.5
+    val memoryGrowthFactor = conf.get(UNROLL_MEMORY_GROWTH_FACTOR)
     // Keep track of unroll memory used by this particular block / putIterator() operation
     var unrollMemoryUsedByThisBlock = 0L
     // Underlying vector for unrolling the block
@@ -325,6 +326,12 @@ private[spark] class MemoryStore(
 
     // Whether there is still enough memory for us to continue unrolling this block
     var keepUnrolling = true
+    // Number of elements unrolled so far
+    var elementsUnrolled = 0L
+    // How often to check whether we need to request more memory
+    val memoryCheckPeriod = conf.get(UNROLL_MEMORY_CHECK_PERIOD)
+    // Memory to request as a multiple of current bbos size
+    val memoryGrowthFactor = conf.get(UNROLL_MEMORY_GROWTH_FACTOR)
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
     // Keep track of unroll memory used by this particular block / putIterator() operation
@@ -359,7 +366,7 @@ private[spark] class MemoryStore(
 
     def reserveAdditionalMemoryIfNecessary(): Unit = {
       if (bbos.size > unrollMemoryUsedByThisBlock) {
-        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock
+        val amountToRequest = (bbos.size * memoryGrowthFactor - unrollMemoryUsedByThisBlock).toLong
         keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
@@ -370,7 +377,10 @@ private[spark] class MemoryStore(
     // Unroll this block safely, checking whether we have exceeded our threshold
     while (values.hasNext && keepUnrolling) {
       serializationStream.writeObject(values.next())(classTag)
-      reserveAdditionalMemoryIfNecessary()
+      elementsUnrolled += 1
+      if (elementsUnrolled % memoryCheckPeriod == 0) {
+        reserveAdditionalMemoryIfNecessary()
+      }
     }
 
     // Make sure that we have enough memory to store the block. By this point, it is possible that
@@ -378,7 +388,13 @@ private[spark] class MemoryStore(
     // perform one final call to attempt to allocate additional memory if necessary.
     if (keepUnrolling) {
       serializationStream.close()
-      reserveAdditionalMemoryIfNecessary()
+      if (bbos.size > unrollMemoryUsedByThisBlock) {
+        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock
+        keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
+        if (keepUnrolling) {
+          unrollMemoryUsedByThisBlock += amountToRequest
+        }
+      }
     }
 
     if (keepUnrolling) {
@@ -534,20 +550,38 @@ private[spark] class MemoryStore(
       }
 
       if (freedMemory >= space) {
-        logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
-          s"(${Utils.bytesToString(freedMemory)} bytes)")
-        for (blockId <- selectedBlocks) {
-          val entry = entries.synchronized { entries.get(blockId) }
-          // This should never be null as only one task should be dropping
-          // blocks and removing entries. However the check is still here for
-          // future safety.
-          if (entry != null) {
-            dropBlock(blockId, entry)
+        var lastSuccessfulBlock = -1
+        try {
+          logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
+            s"(${Utils.bytesToString(freedMemory)} bytes)")
+          (0 until selectedBlocks.size).foreach { idx =>
+            val blockId = selectedBlocks(idx)
+            val entry = entries.synchronized {
+              entries.get(blockId)
+            }
+            // This should never be null as only one task should be dropping
+            // blocks and removing entries. However the check is still here for
+            // future safety.
+            if (entry != null) {
+              dropBlock(blockId, entry)
+              afterDropAction(blockId)
+            }
+            lastSuccessfulBlock = idx
+          }
+          logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
+            s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
+          freedMemory
+        } finally {
+          // like BlockManager.doPut, we use a finally rather than a catch to avoid having to deal
+          // with InterruptedException
+          if (lastSuccessfulBlock != selectedBlocks.size - 1) {
+            // the blocks we didn't process successfully are still locked, so we have to unlock them
+            (lastSuccessfulBlock + 1 until selectedBlocks.size).foreach { idx =>
+              val blockId = selectedBlocks(idx)
+              blockInfoManager.unlock(blockId)
+            }
           }
         }
-        logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
-          s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
-        freedMemory
       } else {
         blockId.foreach { id =>
           logInfo(s"Will not store $id")
@@ -559,6 +593,9 @@ private[spark] class MemoryStore(
       }
     }
   }
+
+  // hook for testing, so we can simulate a race
+  protected def afterDropAction(blockId: BlockId): Unit = {}
 
   def contains(blockId: BlockId): Boolean = {
     entries.synchronized { entries.containsKey(blockId) }

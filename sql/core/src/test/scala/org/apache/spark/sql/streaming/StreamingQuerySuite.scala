@@ -640,6 +640,31 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("processAllAvailable should not block forever when a query is stopped") {
+    val input = MemoryStream[Int]
+    input.addData(1)
+    val query = input.toDF().writeStream
+      .trigger(Trigger.Once())
+      .format("console")
+      .start()
+    failAfter(streamingTimeout) {
+      query.processAllAvailable()
+    }
+  }
+
+  test("SPARK-22238: don't check for RDD partitions during streaming aggregation preparation") {
+    val stream = MemoryStream[(Int, Int)]
+    val baseDf = Seq((1, "A"), (2, "b")).toDF("num", "char").where("char = 'A'")
+    val otherDf = stream.toDF().toDF("num", "numSq")
+      .join(broadcast(baseDf), "num")
+      .groupBy('char)
+      .agg(sum('numSq))
+
+    testStream(otherDf, OutputMode.Complete())(
+      AddData(stream, (1, 1), (2, 4)),
+      CheckLastBatch(("A", 1)))
+  }
+
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */
   private def createSingleTriggerStreamingDF(triggerDF: DataFrame): DataFrame = {
     require(!triggerDF.isStreaming)
@@ -653,7 +678,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
       override def stop(): Unit = {}
     }
-    StreamingExecutionRelation(source)
+    StreamingExecutionRelation(source, spark)
   }
 
   /** Returns the query progress at the end of the first trigger of streaming DF */
@@ -719,7 +744,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           assert(returnedValue === expectedReturnValue, "Returned value does not match expected")
         }
       }
-      AwaitTerminationTester.test(expectedBehavior, awaitTermFunc)
+      AwaitTerminationTester.test(expectedBehavior, () => awaitTermFunc())
       true // If the control reached here, then everything worked as expected
     }
   }

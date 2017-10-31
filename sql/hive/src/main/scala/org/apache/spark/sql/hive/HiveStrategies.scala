@@ -160,8 +160,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
       CreateHiveTableAsSelectCommand(tableDesc, query, mode)
 
     case InsertIntoDir(isLocal, storage, provider, child, overwrite)
-      if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER =>
-
+        if DDLUtils.isHiveTable(provider) =>
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
 
@@ -190,12 +189,12 @@ case class RelationConversions(
   private def convert(relation: HiveTableRelation): LogicalRelation = {
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
     if (serde.contains("parquet")) {
-      val options = Map(ParquetOptions.MERGE_SCHEMA ->
+      val options = relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
       sessionCatalog.metastoreCatalog
         .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
     } else {
-      val options = Map[String, String]()
+      val options = relation.tableMeta.storage.properties
       sessionCatalog.metastoreCatalog
         .convertToLogicalRelation(relation, options, classOf[OrcFileFormat], "orc")
     }
