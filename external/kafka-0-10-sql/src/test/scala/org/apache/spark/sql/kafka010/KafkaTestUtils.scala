@@ -173,7 +173,10 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
         AdminUtils.createTopic(zkUtils, topic, partitions, 1)
         created = true
       } catch {
-        case e: kafka.common.TopicExistsException if overwrite => deleteTopic(topic)
+        // Workaround fact that TopicExistsException is in kafka.common in 0.10.0 and
+        // org.apache.kafka.common.errors in 0.10.1 (!)
+        case e: Exception if (e.getClass.getSimpleName == "TopicExistsException") && overwrite =>
+          deleteTopic(topic)
       }
     }
     // wait until metadata is propagated

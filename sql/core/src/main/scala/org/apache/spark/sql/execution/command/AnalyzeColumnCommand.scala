@@ -56,9 +56,6 @@ case class AnalyzeColumnCommand(
 
     sessionState.catalog.alterTableStats(tableIdentWithDB, Some(statistics))
 
-    // Refresh the cached data source table in the catalog.
-    sessionState.catalog.refreshTable(tableIdentWithDB)
-
     Seq.empty[Row]
   }
 

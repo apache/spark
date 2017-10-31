@@ -176,9 +176,9 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /**
-   * Configurations needed to create a [[HiveClient]].
+   * Change time configurations needed to create a [[HiveClient]] into unified [[Long]] format.
    */
-  private[hive] def hiveClientConfigurations(hadoopConf: Configuration): Map[String, String] = {
+  private[hive] def formatTimeVarsForHiveClient(hadoopConf: Configuration): Map[String, String] = {
     // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
     // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
     // compatibility when users are trying to connecting to a Hive metastore of lower version,
@@ -280,7 +280,7 @@ private[spark] object HiveUtils extends Logging {
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
       hadoopConf: Configuration): HiveClient = {
-    val configurations = hiveClientConfigurations(hadoopConf)
+    val configurations = formatTimeVarsForHiveClient(hadoopConf)
     newClientForMetadata(conf, hadoopConf, configurations)
   }
 

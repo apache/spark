@@ -340,8 +340,9 @@ private[spark] class Client(
 
   /**
    * Copy the given file to a remote file system (e.g. HDFS) if needed.
-   * The file is only copied if the source and destination file systems are different. This is used
-   * for preparing resources for launching the ApplicationMaster container. Exposed for testing.
+   * The file is only copied if the source and destination file systems are different or the source
+   * scheme is "file". This is used for preparing resources for launching the ApplicationMaster
+   * container. Exposed for testing.
    */
   private[yarn] def copyFileToRemote(
       destDir: Path,
@@ -353,7 +354,7 @@ private[spark] class Client(
     val destFs = destDir.getFileSystem(hadoopConf)
     val srcFs = srcPath.getFileSystem(hadoopConf)
     var destPath = srcPath
-    if (force || !compareFs(srcFs, destFs)) {
+    if (force || !compareFs(srcFs, destFs) || "file".equals(srcFs.getScheme)) {
       destPath = new Path(destDir, destName.getOrElse(srcPath.getName()))
       logInfo(s"Uploading resource $srcPath -> $destPath")
       FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
@@ -393,7 +394,10 @@ private[spark] class Client(
     if (credentials != null) {
       // Add credentials to current user's UGI, so that following operations don't need to use the
       // Kerberos tgt to get delegations again in the client side.
-      UserGroupInformation.getCurrentUser.addCredentials(credentials)
+      val currentUser = UserGroupInformation.getCurrentUser()
+      if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
+        currentUser.addCredentials(credentials)
+      }
       logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
     }
 

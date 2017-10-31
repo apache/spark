@@ -350,14 +350,13 @@ public class VectorizedColumnReader {
    * is guaranteed that num is smaller than the number of values left in the current page.
    */
 
-  private void readBooleanBatch(int rowId, int num, WritableColumnVector column)
-      throws IOException {
+  private void readBooleanBatch(int rowId, int num, WritableColumnVector column) {
     assert(column.dataType() == DataTypes.BooleanType);
     defColumn.readBooleans(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
   }
 
-  private void readIntBatch(int rowId, int num, WritableColumnVector column) throws IOException {
+  private void readIntBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.IntegerType || column.dataType() == DataTypes.DateType ||
@@ -375,7 +374,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readLongBatch(int rowId, int num, WritableColumnVector column) throws IOException {
+  private void readLongBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     if (column.dataType() == DataTypes.LongType ||
         DecimalType.is64BitDecimalType(column.dataType())) {
@@ -394,7 +393,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readFloatBatch(int rowId, int num, WritableColumnVector column) throws IOException {
+  private void readFloatBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     // TODO: support implicit cast to double?
     if (column.dataType() == DataTypes.FloatType) {
@@ -405,7 +404,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readDoubleBatch(int rowId, int num, WritableColumnVector column) throws IOException {
+  private void readDoubleBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.DoubleType) {
@@ -416,7 +415,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readBinaryBatch(int rowId, int num, WritableColumnVector column) throws IOException {
+  private void readBinaryBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
@@ -441,7 +440,7 @@ public class VectorizedColumnReader {
       int rowId,
       int num,
       WritableColumnVector column,
-      int arrayLen) throws IOException {
+      int arrayLen) {
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
@@ -476,7 +475,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readPage() throws IOException {
+  private void readPage() {
     DataPage page = pageReader.readPage();
     // TODO: Why is this a visitor?
     page.accept(new DataPage.Visitor<Void>() {
