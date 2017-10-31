@@ -21,6 +21,12 @@ import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import org.apache.spark.internal.Logging
 
+/**
+ * Abstract class for credential renewers used my YARN and Mesos. To renew delegation tokens
+ * the scheduler backend calls [[scheduleTokenRenewal]]. The implementation of this method
+ * (and the dispersal of tokens) is resource-manager-specific, see implementations of this
+ * class for details.
+ */
 abstract class HadoopCredentialRenewer extends Logging {
 
   protected val credentialRenewerThread: ScheduledExecutorService
