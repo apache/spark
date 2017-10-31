@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -81,7 +82,7 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
  * Represents data where tuples are broadcasted to every node. It is quite common that the
  * entire set of tuples is transformed into different data structure.
  */
-case class BroadcastDistribution(mode: BroadcastMode) extends Distribution
+case class BroadcastDistribution(mode: RowBroadcastMode) extends Distribution
 
 /**
  * Describes how an operator's output is split across partitions. The `compatibleWith`,
@@ -370,7 +371,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
  * Represents a partitioning where rows are collected, transformed and broadcasted to each
  * node in the cluster.
  */
-case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
+case class BroadcastPartitioning(mode: RowBroadcastMode) extends Partitioning {
   override val numPartitions: Int = 1
 
   override def satisfies(required: Distribution): Boolean = required match {

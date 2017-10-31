@@ -42,7 +42,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.broadcast.{Broadcast, BroadcastMode}
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
@@ -1481,6 +1481,27 @@ class SparkContext(config: SparkConf) extends Logging {
     require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    val callSite = getCallSite
+    logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
+    cleaner.foreach(_.registerBroadcastForCleanup(bc))
+    bc
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Broadcast a read-only variable to the cluster, returning a
+   * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
+   * The variable will be sent to each cluster only once.
+   *
+   * Notice that the RDD to be broadcasted should be cached and materilized first so we can
+   * access its data on the executors.
+   */
+  @DeveloperApi
+  def broadcastRDDOnExecutor[T: ClassTag, U: ClassTag](
+      rdd: RDD[T], mode: BroadcastMode[T]): Broadcast[U] = {
+    assertNotStopped()
+    val bc = env.broadcastManager.newBroadcastOnExecutor[T, U](rdd, mode, isLocal)
+    rdd.broadcast(bc)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))

@@ -225,10 +225,13 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
     val df = df1.join(broadcast(df2), "key")
-    testSparkPlanMetrics(df, 2, Map(
-      1L -> (("BroadcastHashJoin", Map(
-        "number of output rows" -> 2L))))
-    )
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      testSparkPlanMetrics(df, 2, Map(
+        1L -> (("BroadcastHashJoin", Map(
+          "number of output rows" -> 2L,
+          "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))))
+      )
+    }
   }
 
   test("BroadcastHashJoin metrics: track avg probe") {
@@ -256,20 +259,22 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     //       Project(nodeId = 3)
     //         Filter(nodeId = 4)
     //           ...(ignored)
-    Seq(true, false).foreach { enableWholeStage =>
-      val df1 = generateRandomBytesDF()
-      val df2 = generateRandomBytesDF()
-      val df = df1.join(broadcast(df2), "a")
-      val nodeIds = if (enableWholeStage) {
-        Set(2L)
-      } else {
-        Set(1L)
-      }
-      val metrics = getSparkPlanMetrics(df, 2, nodeIds, enableWholeStage).get
-      nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
-        probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toDouble > 1.0)
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      Seq(true, false).foreach { enableWholeStage =>
+        val df1 = generateRandomBytesDF()
+        val df2 = generateRandomBytesDF()
+        val df = df1.join(broadcast(df2), "a")
+        val nodeIds = if (enableWholeStage) {
+          Set(2L)
+        } else {
+          Set(1L)
+        }
+        val metrics = getSparkPlanMetrics(df, 2, nodeIds, enableWholeStage).get
+        nodeIds.foreach { nodeId =>
+          val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
+          probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
+            assert(probe.toDouble > 1.0)
+          }
         }
       }
     }
@@ -346,32 +351,36 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
-    testSparkPlanMetrics(df, 2, Map(
-      0L -> (("BroadcastHashJoin", Map(
-        "number of output rows" -> 5L))))
-    )
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      testSparkPlanMetrics(df, 2, Map(
+        0L -> (("BroadcastHashJoin", Map(
+          "number of output rows" -> 5L))))
+      )
 
-    val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
-    testSparkPlanMetrics(df3, 2, Map(
-      0L -> (("BroadcastHashJoin", Map(
-        "number of output rows" -> 6L))))
-    )
+      val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
+      testSparkPlanMetrics(df3, 2, Map(
+        0L -> (("BroadcastHashJoin", Map(
+          "number of output rows" -> 6L))))
+      )
+    }
   }
 
   test("BroadcastNestedLoopJoin metrics") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      withTempView("testDataForJoin") {
-        // Assume the execution plan is
-        // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-        val df = spark.sql(
-          "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
-            "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
-        testSparkPlanMetrics(df, 3, Map(
-          1L -> (("BroadcastNestedLoopJoin", Map(
-            "number of output rows" -> 12L))))
-        )
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        withTempView("testDataForJoin") {
+          // Assume the execution plan is
+          // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+          val df = spark.sql(
+            "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+              "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
+          testSparkPlanMetrics(df, 3, Map(
+            1L -> (("BroadcastNestedLoopJoin", Map(
+              "number of output rows" -> 12L))))
+          )
+        }
       }
     }
   }
@@ -382,10 +391,12 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
-    testSparkPlanMetrics(df, 2, Map(
-      0L -> (("BroadcastHashJoin", Map(
-        "number of output rows" -> 2L))))
-    )
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      testSparkPlanMetrics(df, 2, Map(
+        0L -> (("BroadcastHashJoin", Map(
+          "number of output rows" -> 2L))))
+      )
+    }
   }
 
   test("CartesianProduct metrics") {
@@ -474,21 +485,33 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     )
     assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
 
-    withTempDir { tempDir =>
-      val dir = new File(tempDir, "pqS").getCanonicalPath
+    Seq(true, false).foreach { executorBroadcast =>
+      withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> executorBroadcast.toString) {
+        withTempDir { tempDir =>
+          val dir = new File(tempDir, "pqS").getCanonicalPath
 
-      spark.range(10).write.parquet(dir)
-      spark.read.parquet(dir).createOrReplaceTempView("pqS")
+          spark.range(10).write.parquet(dir)
+          spark.read.parquet(dir).createOrReplaceTempView("pqS")
 
-      val res3 = InputOutputMetricsHelper.run(
-        spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
-      )
-      // The query above is executed in the following stages:
-      //   1. sql("select * from pqS")    => (10, 0, 10)
-      //   2. range(30)                   => (30, 0, 30)
-      //   3. crossJoin(...) of 1. and 2. => (0, 30, 300)
-      //   4. shuffle & return results    => (0, 300, 0)
-      assert(res3 === (10L, 0L, 10L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) :: (0L, 300L, 0L) :: Nil)
+          val res3 = InputOutputMetricsHelper.run(
+            spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
+          )
+          // The query above is executed in the following stages:
+          //   1a. sql("select * from pqS")   => (10, 0, 10)
+          //   1b. (only when `SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED` is enabled)
+          //       executor-size-broadcast    => (0, 0, 0)
+          //   2. range(30)                   => (30, 0, 30)
+          //   3. crossJoin(...) of 1. and 2. => (0, 30, 300)
+          //   4. shuffle & return results    => (0, 300, 0)
+          val expected = if (executorBroadcast) {
+            (10L, 0L, 10L) :: (0L, 0L, 0L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) ::
+              (0L, 300L, 0L) :: Nil
+          } else {
+            (10L, 0L, 10L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) :: (0L, 300L, 0L) :: Nil
+          }
+          assert(res3 === expected)
+        }
+      }
     }
   }
 

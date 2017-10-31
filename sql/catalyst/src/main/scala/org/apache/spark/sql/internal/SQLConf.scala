@@ -409,6 +409,16 @@ object SQLConf {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefault(5 * 60)
 
+  val EXECUTOR_SIDE_BROADCAST_ENABLED = buildConf("spark.sql.executorSideBroadcast.enabled")
+    .doc("When true, we will use executor side broadcast for Broadcast-based join in sql. " +
+         "Notice that broadcasted pieces of data in executor-side broadcast are not persisted " +
+         "in the driver, but fetched from RDD pieces persisted in other executors. " +
+         "If one executor is lost before its piece is fetched by other executors, " +
+         "we can't recover it back and broadcasting will be failed. Thus it is not " +
+         "guaranteed completely safe when using with dynamic allocation.")
+    .booleanConf
+    .createWithDefault(true)
+
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = buildConf("spark.sql.thriftserver.scheduler.pool")
     .doc("Set a Fair Scheduler pool for a JDBC client session.")
@@ -1150,6 +1160,8 @@ class SQLConf extends Serializable with Logging {
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
   def broadcastTimeout: Long = getConf(BROADCAST_TIMEOUT)
+
+  def executorSideBroadcastEnabled: Boolean = getConf(EXECUTOR_SIDE_BROADCAST_ENABLED)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 

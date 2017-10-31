@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean,
@@ -54,6 +55,14 @@ private[spark] class BroadcastManager(
 
   def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
     broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
+  }
+
+  def newBroadcastOnExecutor[T: ClassTag, U: ClassTag](
+      rdd_ : RDD[T],
+      mode: BroadcastMode[T],
+      isLocal: Boolean): Broadcast[U] = {
+    broadcastFactory.newBroadcastOnExecutor[T, U](rdd_, mode, isLocal,
+      nextBroadcastId.getAndIncrement())
   }
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
