@@ -63,7 +63,7 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
   @Since("2.3.0")
   def getDropLast: Boolean = $(dropLast)
 
-  protected def checkParamsValidity(schema: StructType): Unit = {
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColNames = $(outputCols)
     val existingFields = schema.fields
@@ -78,12 +78,9 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
       require(!existingFields.exists(_.name == outputColName),
         s"Output column $outputColName already exists.")
     }
-  }
 
-  /** Prepares output columns with proper attributes by examining input columns. */
-  protected def prepareSchemaWithOutputField(schema: StructType): StructType = {
+    // Prepares output columns with proper attributes by examining input columns.
     val inputFields = $(inputCols).map(schema(_))
-    val outputColNames = $(outputCols)
 
     val outputFields = inputFields.zip(outputColNames).map { case (inputField, outputColName) =>
       OneHotEncoderCommon.transformOutputColumnSchema(
@@ -132,8 +129,7 @@ class OneHotEncoderEstimator @Since("2.3.0") (@Since("2.3.0") override val uid: 
 
   @Since("2.3.0")
   override def transformSchema(schema: StructType): StructType = {
-    checkParamsValidity(schema)
-    prepareSchemaWithOutputField(schema)
+    validateAndTransformSchema(schema)
   }
 
   @Since("2.3.0")
@@ -235,13 +231,11 @@ class OneHotEncoderModel private[ml] (
     val inputColNames = $(inputCols)
     val outputColNames = $(outputCols)
 
-    checkParamsValidity(schema)
-
     require(inputColNames.length == categorySizes.length,
       s"The number of input columns ${inputColNames.length} must be the same as the number of " +
         s"features ${categorySizes.length} during fitting.")
 
-    val transformedSchema = prepareSchemaWithOutputField(schema)
+    val transformedSchema = validateAndTransformSchema(schema)
     verifyNumOfValues(transformedSchema)
   }
 

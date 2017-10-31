@@ -41,8 +41,12 @@ import org.apache.spark.sql.types.{DoubleType, NumericType, StructType}
  * The output vectors are sparse.
  *
  * @see `StringIndexer` for converting categorical values into category indices
+ * @deprecated `OneHotEncoderEstimator` will be renamed `OneHotEncoder` and this `OneHotEncoder`
+ * will be removed in 3.0.0.
  */
 @Since("1.4.0")
+@deprecated("`OneHotEncoderEstimator` will be renamed `OneHotEncoder` and this `OneHotEncoder`" +
+  " will be removed in 3.0.0.", "2.3.0")
 class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Transformer
   with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
