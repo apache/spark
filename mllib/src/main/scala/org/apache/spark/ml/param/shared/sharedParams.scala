@@ -231,6 +231,21 @@ private[ml] trait HasOutputCol extends Params {
 }
 
 /**
+ * Trait for shared param outputCols.
+ */
+private[ml] trait HasOutputCols extends Params {
+
+  /**
+   * Param for output column names.
+   * @group param
+   */
+  final val outputCols: StringArrayParam = new StringArrayParam(this, "outputCols", "output column names")
+
+  /** @group getParam */
+  final def getOutputCols: Array[String] = $(outputCols)
+}
+
+/**
  * Trait for shared param checkpointInterval.
  */
 private[ml] trait HasCheckpointInterval extends Params {

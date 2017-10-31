@@ -33,7 +33,7 @@ class StringIndexerSuite
 
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
-    val model = new StringIndexerModel("indexer", Array("a", "b"))
+    val model = new StringIndexerModel("indexer", Array(Array("a", "b")))
     val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
     ParamsSuite.checkParams(model)
     ParamsSuite.checkParams(modelWithoutUid)
@@ -167,7 +167,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexerModel should keep silent if the input column does not exist.") {
-    val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
+    val indexerModel = new StringIndexerModel("indexer", Array(Array("a", "b", "c")))
       .setInputCol("label")
       .setOutputCol("labelIndex")
     val df = spark.range(0L, 10L).toDF()
@@ -202,7 +202,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexerModel read/write") {
-    val instance = new StringIndexerModel("myStringIndexerModel", Array("a", "b", "c"))
+    val instance = new StringIndexerModel("myStringIndexerModel", Array(Array("a", "b", "c")))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setHandleInvalid("skip")
