@@ -34,11 +34,17 @@ public interface DataReader<T> extends Closeable {
 
   /**
    * Proceed to next record, returns false if there is no more records.
+   *
+   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
+   * get retried until hitting the maximum retry times.
    */
   boolean next();
 
   /**
    * Return the current record. This method should return same value until `next` is called.
+   *
+   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
+   * get retried until hitting the maximum retry times.
    */
   T get();
 }

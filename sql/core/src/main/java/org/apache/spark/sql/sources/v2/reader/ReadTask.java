@@ -37,6 +37,9 @@ public interface ReadTask<T> extends Serializable {
    * The preferred locations where this read task can run faster, but Spark does not guarantee that
    * this task will always run on these locations. The implementations should make sure that it can
    * be run on any location. The location is a string representing the host name of an executor.
+   *
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * submitted.
    */
   default String[] preferredLocations() {
     return new String[0];
@@ -44,6 +47,9 @@ public interface ReadTask<T> extends Serializable {
 
   /**
    * Returns a data reader to do the actual reading work for this read task.
+   *
+   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
+   * get retried until hitting the maximum retry times.
    */
   DataReader<T> createDataReader();
 }
