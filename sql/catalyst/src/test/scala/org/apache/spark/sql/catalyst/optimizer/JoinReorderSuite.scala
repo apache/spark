@@ -63,23 +63,24 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   /** Set up tables and columns for testing */
+  // TODO: histogram should be revised later.
   private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
     attr("t1.k-1-2") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("t1.v-1-10") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("t2.k-1-5") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("t3.v-1-100") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("t4.k-1-2") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("t4.v-1-10") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("t5.k-1-5") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("t5.v-1-5") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4)
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None)
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)

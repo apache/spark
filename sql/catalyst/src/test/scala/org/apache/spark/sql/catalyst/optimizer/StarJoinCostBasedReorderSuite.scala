@@ -68,88 +68,89 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
 
   private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
     // F1 (fact table)
+    // TODO: histogram should be revised later.
     attr("f1_fk1") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("f1_fk2") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("f1_fk3") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("f1_c1") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("f1_c2") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
 
     // D1 (dimension)
     attr("d1_pk") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("d1_c2") -> ColumnStat(distinctCount = 50, min = Some(1), max = Some(50),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("d1_c3") -> ColumnStat(distinctCount = 50, min = Some(1), max = Some(50),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
 
     // D2 (dimension)
     attr("d2_pk") -> ColumnStat(distinctCount = 20, min = Some(1), max = Some(20),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("d2_c2") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("d2_c3") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
 
     // D3 (dimension)
     attr("d3_pk") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("d3_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
     attr("d3_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
 
     // T1 (regular table i.e. outside star)
     attr("t1_c1") -> ColumnStat(distinctCount = 20, min = Some(1), max = Some(20),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t1_c2") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t1_c3") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
 
     // T2 (regular table)
     attr("t2_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t2_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t2_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
 
     // T3 (regular table)
     attr("t3_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t3_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t3_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
 
     // T4 (regular table)
     attr("t4_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t4_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t4_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
 
     // T5 (regular table)
     attr("t5_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t5_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t5_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
 
     // T6 (regular table)
     attr("t6_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t6_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None),
     attr("t6_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4)
+      nullCount = 1, avgLen = 4, maxLen = 4, histogram = None)
 
   ))
 

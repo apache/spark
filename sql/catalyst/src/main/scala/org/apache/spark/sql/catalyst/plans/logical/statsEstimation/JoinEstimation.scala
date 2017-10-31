@@ -251,10 +251,12 @@ case class InnerOuterEstimation(join: Join) extends Logging {
       val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
       val newMaxLen = math.min(leftKeyStats.maxLen, rightKeyStats.maxLen)
       val newAvgLen = (leftKeyStats.avgLen + rightKeyStats.avgLen) / 2
-      val newStats = ColumnStat(newNdv, newMin, newMax, 0, newAvgLen, newMaxLen)
+      val newLeftStats = ColumnStat(newNdv, newMin, newMax, 0, newAvgLen, newMaxLen,
+        leftKeyStats.histogram)
+      val newRightStats = newLeftStats.copy(histogram = rightKeyStats.histogram)
 
-      intersectedStats.put(leftKey, newStats)
-      intersectedStats.put(rightKey, newStats)
+      intersectedStats.put(leftKey, newLeftStats)
+      intersectedStats.put(rightKey, newRightStats)
     }
     AttributeMap(intersectedStats.toSeq)
   }

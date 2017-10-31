@@ -34,15 +34,15 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
   /** Set up tables and its columns for testing */
   private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
     attr("key-1-5") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = None),
     attr("key-5-9") -> ColumnStat(distinctCount = 5, min = Some(5), max = Some(9), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = None),
     attr("key-1-2") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = None),
     attr("key-2-4") -> ColumnStat(distinctCount = 3, min = Some(2), max = Some(4), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = None),
     attr("key-2-3") -> ColumnStat(distinctCount = 2, min = Some(2), max = Some(3), nullCount = 0,
-      avgLen = 4, maxLen = 4)
+      avgLen = 4, maxLen = 4, histogram = None)
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
@@ -150,7 +150,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       Some(EqualTo(nameToAttr("key-1-5"), nameToAttr("key-1-2"))))
     // Update column stats for equi-join keys (key-1-5 and key-1-2).
     val joinedColStat = ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
-      avgLen = 4, maxLen = 4)
+      avgLen = 4, maxLen = 4, histogram = None)
     // Update column stat for other column if #outputRow / #sideRow < 1 (key-5-9), or keep it
     // unchanged (key-2-4).
     val colStatForkey59 = nameToColInfo("key-5-9")._2.copy(distinctCount = 5 * 3 / 5)
@@ -173,9 +173,9 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
 
     // Update column stats for join keys.
     val joinedColStat1 = ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
-        avgLen = 4, maxLen = 4)
+        avgLen = 4, maxLen = 4, histogram = None)
     val joinedColStat2 = ColumnStat(distinctCount = 2, min = Some(2), max = Some(3), nullCount = 0,
-      avgLen = 4, maxLen = 4)
+      avgLen = 4, maxLen = 4, histogram = None)
 
     val expectedStats = Statistics(
       sizeInBytes = 2 * (8 + 4 * 4),
@@ -192,7 +192,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     val join = Join(table3, table2, LeftOuter,
       Some(EqualTo(nameToAttr("key-2-3"), nameToAttr("key-2-4"))))
     val joinedColStat = ColumnStat(distinctCount = 2, min = Some(2), max = Some(3), nullCount = 0,
-      avgLen = 4, maxLen = 4)
+      avgLen = 4, maxLen = 4, histogram = None)
 
     val expectedStats = Statistics(
       sizeInBytes = 2 * (8 + 4 * 4),
@@ -210,7 +210,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     val join = Join(table2, table3, RightOuter,
       Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))))
     val joinedColStat = ColumnStat(distinctCount = 2, min = Some(2), max = Some(3), nullCount = 0,
-      avgLen = 4, maxLen = 4)
+      avgLen = 4, maxLen = 4, histogram = None)
 
     val expectedStats = Statistics(
       sizeInBytes = 2 * (8 + 4 * 4),
@@ -260,29 +260,37 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       val timestamp = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-08 00:00:01"))
       mutable.LinkedHashMap[Attribute, ColumnStat](
         AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 1,
-          min = Some(false), max = Some(false), nullCount = 0, avgLen = 1, maxLen = 1),
+          min = Some(false), max = Some(false), nullCount = 0, avgLen = 1, maxLen = 1,
+          histogram = None),
         AttributeReference("cbyte", ByteType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1.toByte), max = Some(1.toByte), nullCount = 0, avgLen = 1, maxLen = 1),
+          min = Some(1.toByte), max = Some(1.toByte), nullCount = 0, avgLen = 1, maxLen = 1,
+          histogram = None),
         AttributeReference("cshort", ShortType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1.toShort), max = Some(1.toShort), nullCount = 0, avgLen = 2, maxLen = 2),
+          min = Some(1.toShort), max = Some(1.toShort), nullCount = 0, avgLen = 2, maxLen = 2,
+          histogram = None),
         AttributeReference("cint", IntegerType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1), max = Some(1), nullCount = 0, avgLen = 4, maxLen = 4),
+          min = Some(1), max = Some(1), nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
         AttributeReference("clong", LongType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 8, maxLen = 8),
+          min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 8, maxLen = 8, histogram = None),
         AttributeReference("cdouble", DoubleType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1.0), max = Some(1.0), nullCount = 0, avgLen = 8, maxLen = 8),
+          min = Some(1.0), max = Some(1.0), nullCount = 0, avgLen = 8, maxLen = 8,
+          histogram = None),
         AttributeReference("cfloat", FloatType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1.0f), max = Some(1.0f), nullCount = 0, avgLen = 4, maxLen = 4),
+          min = Some(1.0f), max = Some(1.0f), nullCount = 0, avgLen = 4, maxLen = 4,
+          histogram = None),
         AttributeReference("cdec", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(distinctCount = 1,
-          min = Some(dec), max = Some(dec), nullCount = 0, avgLen = 16, maxLen = 16),
+          min = Some(dec), max = Some(dec), nullCount = 0, avgLen = 16, maxLen = 16,
+          histogram = None),
         AttributeReference("cstring", StringType)() -> ColumnStat(distinctCount = 1,
-          min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3),
+          min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3, histogram = None),
         AttributeReference("cbinary", BinaryType)() -> ColumnStat(distinctCount = 1,
-          min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3),
+          min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3, histogram = None),
         AttributeReference("cdate", DateType)() -> ColumnStat(distinctCount = 1,
-          min = Some(date), max = Some(date), nullCount = 0, avgLen = 4, maxLen = 4),
+          min = Some(date), max = Some(date), nullCount = 0, avgLen = 4, maxLen = 4,
+          histogram = None),
         AttributeReference("ctimestamp", TimestampType)() -> ColumnStat(distinctCount = 1,
-          min = Some(timestamp), max = Some(timestamp), nullCount = 0, avgLen = 8, maxLen = 8)
+          min = Some(timestamp), max = Some(timestamp), nullCount = 0, avgLen = 8, maxLen = 8,
+          histogram = None)
       )
     }
 
@@ -313,7 +321,8 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
 
   test("join with null column") {
     val (nullColumn, nullColStat) = (attr("cnull"),
-      ColumnStat(distinctCount = 0, min = None, max = None, nullCount = 1, avgLen = 4, maxLen = 4))
+      ColumnStat(distinctCount = 0, min = None, max = None, nullCount = 1, avgLen = 4, maxLen = 4,
+        histogram = None))
     val nullTable = StatsTestPlan(
       outputList = Seq(nullColumn),
       rowCount = 1,

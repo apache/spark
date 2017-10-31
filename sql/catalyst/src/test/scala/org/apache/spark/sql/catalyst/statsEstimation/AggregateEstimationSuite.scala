@@ -28,17 +28,31 @@ import org.apache.spark.sql.internal.SQLConf
 class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
 
   /** Columns for testing */
+  // Suppose table1 (key11 int, key12 int) has 4 records: (1, 10), (1, 20), (2, 30), (2, 40)
+  val hgmkey11 = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+    EquiHeightBucket(1.0, 1.0, 1), EquiHeightBucket(2.0, 2.0, 1),
+    EquiHeightBucket(2.0, 2.0, 1)))
+  val hgmkey12 = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(10.0, 10.0, 1),
+    EquiHeightBucket(20.0, 20.0, 1), EquiHeightBucket(30.0, 30.0, 1),
+    EquiHeightBucket(40.0, 40.0, 1)))
+  // Suppose table2 (key21 int, key22 int) has 6 records:
+  // (1, 10), (1, 10), (1, 20), (2, 20), (2, 10), (2, 10)
+  val hgmkey21 = EquiHeightHistogram(3.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+    EquiHeightBucket(2.0, 2.0, 1)))
+  val hgmkey22 = EquiHeightHistogram(3.0, Seq(EquiHeightBucket(10.0, 10.0, 1),
+    EquiHeightBucket(10.0, 20.0, 2)))
+
   private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
     attr("key11") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = Some(hgmkey11)),
     attr("key12") -> ColumnStat(distinctCount = 4, min = Some(10), max = Some(40), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = Some(hgmkey12)),
     attr("key21") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = Some(hgmkey21)),
     attr("key22") -> ColumnStat(distinctCount = 2, min = Some(10), max = Some(20), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = Some(hgmkey22)),
     attr("key31") -> ColumnStat(distinctCount = 0, min = None, max = None, nullCount = 0,
-      avgLen = 4, maxLen = 4)
+      avgLen = 4, maxLen = 4, histogram = None)
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
