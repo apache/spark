@@ -22,6 +22,8 @@ import java.awt.color.ColorSpace
 import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
@@ -39,6 +41,11 @@ object ImageSchema {
     undefinedImageType -> -1,
     "CV_8U" -> 0, "CV_8UC1" -> 0, "CV_8UC3" -> 16, "CV_8UC4" -> 24
   )
+
+  /**
+   * Used for conversion to python
+   */
+  val _ocvTypes: java.util.Map[String, Int] = ocvTypes.asJava
 
   /**
    * Schema for the image column: Row(String, Int, Int, Int, Int, Array[Byte])
@@ -210,8 +217,8 @@ object ImageSchema {
         session.sparkContext.defaultParallelism
       }
 
-    RecursiveFlag.withRecursiveFlag(recursive, session)(
-      SamplePathFilter.withPathFilter(sampleRatio, session)({
+    RecursiveFlag.withRecursiveFlag(recursive, session) {
+      SamplePathFilter.withPathFilter(sampleRatio, session) {
         val streams = session.sparkContext.binaryFiles(path, partitions).repartition(partitions)
         val convert = (origin: String, bytes: PortableDataStream) =>
           decode(origin, bytes.toArray())
@@ -223,7 +230,7 @@ object ImageSchema {
           }
         }
         session.createDataFrame(images, imageSchema)
-      })
-    )
+      }
+    }
   }
 }

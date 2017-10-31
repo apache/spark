@@ -15,45 +15,43 @@
 # limitations under the License.
 #
 
-from pyspark.ml.util import *
-from pyspark.ml.param.shared import *
-from pyspark.sql.types import *
-from pyspark.sql.types import Row, _create_row
-from pyspark.sql import DataFrame, SparkSession, SQLContext
+from pyspark import SparkContext
+from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
+from pyspark.sql import DataFrame, SparkSession
 import numpy as np
 
 undefinedImageType = "Undefined"
 
 imageFields = ["origin", "height", "width", "nChannels", "mode", "data"]
 
+class _ImageSchema(object):
+    """
+    Returns the image schema.
 
-def getOcvTypes(spark=None):
+    :rtype StructType: a DataFrame with a single column of images named "image" (nullable)
+
+    .. versionadded:: 2.3.0
+    """
+    @property
+    def imageSchema(self):
+        ctx = SparkContext._active_spark_context
+        jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageSchema()
+        return _parse_datatype_json_string(jschema.json())
+
+
     """
     Returns the OpenCV type mapping supported
 
-    :param sparkSession (SparkSession): The current spark session
     :rtype dict: The OpenCV type mapping supported
 
     .. versionadded:: 2.3.0
     """
-    spark = spark or SparkSession.builder.getOrCreate()
-    ctx = spark.sparkContext
-    return ctx._jvm.org.apache.spark.ml.image.ImageSchema.ocvTypes
+    @property
+    def ocvTypes(self):
+        ctx = SparkContext._active_spark_context
+        return ctx._jvm.org.apache.spark.ml.image.ImageSchema._ocvTypes()
 
-
-# DataFrame with a single column of images named "image" (nullable)
-def getImageSchema(spark=None):
-    """
-    Returns the image schema
-
-    :param spark (SparkSession): The current spark session
-    :rtype StructType: The image schema
-
-    .. versionadded:: 2.3.0
-    """
-    spark = spark or SparkSession.builder.getOrCreate()
-    ctx = spark.sparkContext
-    return ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageSchema
+ImageSchema = _ImageSchema()
 
 
 def toNDArray(image):
@@ -75,22 +73,20 @@ def toNDArray(image):
         strides=(width * nChannels, nChannels, 1))
 
 
-def toImage(array, origin="", spark=None):
+def toImage(array, origin=""):
     """
     Converts a one-dimensional array to a two-dimensional image.
 
     :param array (array): The array to convert to image
     :param origin (str): Path to the image
-    :param spark (SparkSession): The current spark session
     :rtype object: Two dimensional image
 
     .. versionadded:: 2.3.0
     """
-    spark = spark or SparkSession.builder.getOrCreate()
     if array.ndim != 3:
-        raise
+        raise ValueError("Invalid array shape")
     height, width, nChannels = array.shape
-    ocvTypes = getOcvTypes(spark)
+    ocvTypes = ImageSchema.ocvTypes
     if nChannels == 1:
         mode = ocvTypes["CV_8UC1"]
     elif nChannels == 3:
@@ -98,7 +94,7 @@ def toImage(array, origin="", spark=None):
     elif nChannels == 4:
         mode = ocvTypes["CV_8UC4"]
     else:
-        raise
+        raise ValueError("Invalid number of channels")
     data = bytearray(array.astype(dtype=np.uint8).ravel())
     # Creating new Row with _create_row(), because Row(name = value, ... )
     # orders fields by name, which conflicts with expected schema order
@@ -107,7 +103,7 @@ def toImage(array, origin="", spark=None):
                        [origin, height, width, nChannels, mode, data])
 
 
-def readImages(path, spark=None, recursive=False, numPartitions=0,
+def readImages(path, recursive=False, numPartitions=0,
                dropImageFailures=False, sampleRatio=1.0):
     """
     Reads the directory of images from the local or remote source.
@@ -129,11 +125,10 @@ def readImages(path, spark=None, recursive=False, numPartitions=0,
 
     .. versionadded:: 2.3.0
     """
-    spark = spark or SparkSession.builder.getOrCreate()
-    ctx = spark.sparkContext
+    ctx = SparkContext._active_spark_context
+    spark = SparkSession(ctx)
     image_schema = ctx._jvm.org.apache.spark.ml.image.ImageSchema
-    sql_ctx = SQLContext(ctx)
     jsession = spark._jsparkSession
     jresult = image_schema.readImages(path, jsession, recursive, numPartitions,
                                       dropImageFailures, float(sampleRatio))
-    return DataFrame(jresult, sql_ctx)
+    return DataFrame(jresult, spark._wrapped)

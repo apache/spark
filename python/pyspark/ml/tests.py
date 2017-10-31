@@ -54,7 +54,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
     MulticlassClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
-from pyspark.ml.image import toImage, toNDArray, readImages
+from pyspark.ml.image import toImage, toNDArray, readImages, ImageSchema
 from pyspark.ml.linalg import DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT, \
     SparseMatrix, SparseVector, Vector, VectorUDT, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
@@ -1823,9 +1823,13 @@ class ImageReaderTest(SparkSessionTestCase):
 
     def test_read_images(self):
         data_path = 'python/test_support/image/kittens'
-        df = readImages(data_path, spark=self.spark, recursive=True)
+        df = readImages(data_path, recursive=True)
         self.assertEqual(df.count(), 4)
-        self.assertEqual(len(toNDArray(df.take(1)[0][0])), df.take(1)[0][0][1])
+        firstRow = df.take(1)[0][0]
+        array = toNDArray(firstRow)
+        self.assertEqual(len(array), firstRow[1])
+        self.assertEqual(toImage(array, origin=firstRow[0]), firstRow)
+        self.assertEqual(df.schema, ImageSchema.imageSchema)
 
 
 class ALSTest(SparkSessionTestCase):
