@@ -177,12 +177,12 @@ case class JoinEstimation(join: Join) extends Logging {
    */
   // scalastyle:on
   private def computeCardinalityAndStats(keyPairs: Seq[(AttributeReference, AttributeReference)])
-    : (BigInt, Map[Attribute, ColumnStat]) = {
+    : (BigInt, AttributeMap[ColumnStat]) = {
     // If there's no column stats available for join keys, estimate as cartesian product.
-    var cardJoin: BigInt = leftStats.rowCount.get * rightStats.rowCount.get
+    var joinCard: BigInt = leftStats.rowCount.get * rightStats.rowCount.get
     val keyStatsAfterJoin = new mutable.HashMap[Attribute, ColumnStat]()
     var i = 0
-    while(i < keyPairs.length && cardJoin != 0) {
+    while(i < keyPairs.length && joinCard != 0) {
       val (leftKey, rightKey) = keyPairs(i)
       // Check if the two sides are disjoint
       val leftKeyStat = leftStats.attributeStats(leftKey)
@@ -191,38 +191,38 @@ case class JoinEstimation(join: Join) extends Logging {
       val rInterval = ValueInterval(rightKeyStat.min, rightKeyStat.max, rightKey.dataType)
       if (ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
-        val (cardKeyPair, joinStatsKeyPair) = computeByNdv(leftKey, rightKey, newMin, newMax)
-        keyStatsAfterJoin ++= joinStatsKeyPair
+        val (card, joinStat) = computeByNdv(leftKey, rightKey, newMin, newMax)
+        keyStatsAfterJoin += (leftKey -> joinStat, rightKey -> joinStat)
         // Return cardinality estimated from the most selective join keys.
-        if (cardKeyPair < cardJoin) cardJoin = cardKeyPair
+        if (card < joinCard) joinCard = card
       } else {
         // One of the join key pairs is disjoint, thus the two sides of join is disjoint.
-        cardJoin = 0
+        joinCard = 0
       }
       i += 1
     }
-    (cardJoin, keyStatsAfterJoin.toMap)
+    (joinCard, AttributeMap(keyStatsAfterJoin.toSeq))
   }
 
-  /** Compute join cardinality using the basic formula, and update column stats for join keys. */
+  /** Returns join cardinality and the column stat for this pair of join keys. */
   private def computeByNdv(
       leftKey: AttributeReference,
       rightKey: AttributeReference,
       newMin: Option[Any],
-      newMax: Option[Any]): (BigInt, Map[Attribute, ColumnStat]) = {
+      newMax: Option[Any]): (BigInt, ColumnStat) = {
     val leftKeyStat = leftStats.attributeStats(leftKey)
     val rightKeyStat = rightStats.attributeStats(rightKey)
     val maxNdv = leftKeyStat.distinctCount.max(rightKeyStat.distinctCount)
     // Compute cardinality by the basic formula.
     val card = BigDecimal(leftStats.rowCount.get * rightStats.rowCount.get) / BigDecimal(maxNdv)
 
-    // Update intersected column stats.
+    // Get the intersected column stat.
     val newNdv = leftKeyStat.distinctCount.min(rightKeyStat.distinctCount)
     val newMaxLen = math.min(leftKeyStat.maxLen, rightKeyStat.maxLen)
     val newAvgLen = (leftKeyStat.avgLen + rightKeyStat.avgLen) / 2
     val newStats = ColumnStat(newNdv, newMin, newMax, 0, newAvgLen, newMaxLen)
 
-    (ceil(card), Map(leftKey -> newStats, rightKey -> newStats))
+    (ceil(card), newStats)
   }
 
   /**
@@ -232,7 +232,7 @@ case class JoinEstimation(join: Join) extends Logging {
       outputRows: BigInt,
       output: Seq[Attribute],
       oldAttrStats: AttributeMap[ColumnStat],
-      keyStatsAfterJoin: Map[Attribute, ColumnStat]): Seq[(Attribute, ColumnStat)] = {
+      keyStatsAfterJoin: AttributeMap[ColumnStat]): Seq[(Attribute, ColumnStat)] = {
     val outputAttrStats = new ArrayBuffer[(Attribute, ColumnStat)]()
     val leftRows = leftStats.rowCount.get
     val rightRows = rightStats.rowCount.get
