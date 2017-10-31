@@ -24,11 +24,13 @@ undefinedImageType = "Undefined"
 
 imageFields = ["origin", "height", "width", "nChannels", "mode", "data"]
 
+
 class _ImageSchema(object):
     """
     Returns the image schema.
 
-    :rtype StructType: a DataFrame with a single column of images named "image" (nullable)
+    :rtype StructType: a DataFrame with a single column of images
+           named "image" (nullable)
 
     .. versionadded:: 2.3.0
     """
@@ -37,7 +39,6 @@ class _ImageSchema(object):
         ctx = SparkContext._active_spark_context
         jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageSchema()
         return _parse_datatype_json_string(jschema.json())
-
 
     """
     Returns the OpenCV type mapping supported
