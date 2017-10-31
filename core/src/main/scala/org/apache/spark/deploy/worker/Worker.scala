@@ -199,7 +199,7 @@ private[deploy] class Worker(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    startExternalShuffleService
+    startExternalShuffleService()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
@@ -369,9 +369,11 @@ private[deploy] class Worker(
 
   private def startExternalShuffleService() {
     try {
-      shuffleService.startIfEnabled
+      shuffleService.startIfEnabled()
     } catch {
-      case NonFatal(e) => logError("Failed to start external shuffle service", e)
+      case e: Exception =>
+        logError("Failed to start external shuffle service", e)
+        System.exit(1)
     }
   }
 
