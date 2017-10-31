@@ -1943,7 +1943,10 @@ class SparkContext(config: SparkConf) extends Logging {
     // `SparkContext` is stopped.
     localProperties.remove()
     // Unset YARN mode system env variable, to allow switching between cluster types.
-    System.clearProperty("SPARK_YARN_MODE")
+    if (!(_conf.getBoolean("spark.yarn.un-managed-am", false) && master == "yarn" &&
+      deployMode == "client")) {
+      System.clearProperty("SPARK_YARN_MODE")
+    }
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
   }

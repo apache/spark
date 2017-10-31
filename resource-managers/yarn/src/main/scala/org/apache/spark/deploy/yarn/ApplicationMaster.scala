@@ -34,6 +34,7 @@ import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
+import org.apache.hadoop.yarn.server.webproxy.ProxyUriUtils
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark._
@@ -51,14 +52,12 @@ import org.apache.spark.util._
 /**
  * Common application master functionality for Spark on Yarn.
  */
-private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends Logging {
+private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkConf: SparkConf,
+                                       yarnConf: YarnConfiguration) extends Logging {
 
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
-  private val sparkConf = new SparkConf()
-  private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    .asInstanceOf[YarnConfiguration]
   private val isClusterMode = args.userClass != null
 
   private val ugi = {
@@ -607,7 +606,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       if (!preserveFiles) {
-        stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
+        stagingDirPath = new Path(System.getProperty("SPARK_YARN_STAGING_DIR",
+          System.getenv("SPARK_YARN_STAGING_DIR")))
         if (stagingDirPath == null) {
           logError("Staging directory is null")
           return
@@ -658,7 +658,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
   private def addAmIpFilter(driver: Option[RpcEndpointRef]) = {
-    val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
+    val proxyBase = getProxyBase
     val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
     driver match {
@@ -669,6 +669,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         System.setProperty("spark.ui.filters", amFilter)
         params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     }
+  }
+
+  private def getProxyBase: String = {
+    var proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
+    if (proxyBase == null) {
+      proxyBase = ProxyUriUtils.getPath(getAttemptId().getApplicationId)
+    }
+    proxyBase
   }
 
   /**
@@ -822,7 +830,10 @@ object ApplicationMaster extends Logging {
         sys.props(k) = v
       }
     }
-    master = new ApplicationMaster(amArgs)
+    val sparkConf = new SparkConf()
+    val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
+      .asInstanceOf[YarnConfiguration]
+    master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
     System.exit(master.run())
   }
 
