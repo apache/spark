@@ -115,7 +115,7 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
     val childRDD = child.execute()
     val partitioner = LocalPartitioning(child.outputPartitioning,
       childRDD.getNumPartitions)
-    val shuffleDependency = ShuffleExchange.prepareShuffleDependency(
+    val shuffleDependency = ShuffleExchangeExec.prepareShuffleDependency(
       childRDD, child.output, partitioner, serializer)
     val numberOfOutput: Seq[Long] = if (shuffleDependency.rdd.getNumPartitions != 0) {
       // submitMapStage does not accept RDD with 0 partition.
