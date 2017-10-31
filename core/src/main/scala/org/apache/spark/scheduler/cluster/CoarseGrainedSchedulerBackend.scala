@@ -165,14 +165,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       case UpdateDelegationTokens(newDelegationTokens) =>
-        // Update the driver's delegation tokens in case new executors are added later.
         if (renewableDelegationTokens.isDefined) {
+          // Update the driver's delegation tokens in case new executors are added later.
           renewableDelegationTokens = Some(newDelegationTokens)
           executorDataMap.values.foreach { ed =>
             ed.executorEndpoint.send(UpdateDelegationTokens(newDelegationTokens))
           }
         } else {
-          logWarning("Attempted to broadcast credentials when the credential manager " +
+          logWarning("Attempted to update and broadcast credentials when the credential manager " +
             "was not defined")
         }
     }
