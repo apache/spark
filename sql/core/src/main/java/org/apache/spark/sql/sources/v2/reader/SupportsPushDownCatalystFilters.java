@@ -31,8 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression;
  * {@link SupportsPushDownFilters}, Spark will ignore {@link SupportsPushDownFilters} and only
  * process this interface.
  */
-@InterfaceStability.Evolving
-@Experimental
 @InterfaceStability.Unstable
 public interface SupportsPushDownCatalystFilters {
 
