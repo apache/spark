@@ -25,7 +25,7 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.config._
-import org.apache.spark.deploy.k8s.constants
+import org.apache.spark.deploy.k8s.constants._
 
 class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterEach {
   private val driverPodName: String = "driver-pod"
@@ -64,6 +64,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     // The executor pod name and default labels.
     assert(executor.getMetadata.getName === s"$executorPrefix-exec-1")
     assert(executor.getMetadata.getLabels.size() === 3)
+    assert(executor.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) === "1")
 
     // There is exactly 1 container with no volume mounts and default memory limits.
     // Default memory limit is 1024M + 384M (minimum overhead constant).
@@ -120,14 +121,13 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
   // Check that the expected environment variables are present.
   private def checkEnv(executor: Pod, additionalEnvVars: Map[String, String]): Unit = {
     val defaultEnvs = Map(
-      constants.ENV_EXECUTOR_ID -> "1",
-      constants.ENV_DRIVER_URL -> "dummy",
-      constants.ENV_EXECUTOR_CORES -> "1",
-      constants.ENV_EXECUTOR_MEMORY -> "1g",
-      constants.ENV_APPLICATION_ID -> "dummy",
-      constants.ENV_MOUNTED_CLASSPATH -> "/var/spark-data/spark-jars/*",
-      constants.ENV_EXECUTOR_POD_IP -> null,
-      constants.ENV_EXECUTOR_PORT -> "10000") ++ additionalEnvVars
+      ENV_EXECUTOR_ID -> "1",
+      ENV_DRIVER_URL -> "dummy",
+      ENV_EXECUTOR_CORES -> "1",
+      ENV_EXECUTOR_MEMORY -> "1g",
+      ENV_APPLICATION_ID -> "dummy",
+      ENV_EXECUTOR_POD_IP -> null,
+      ENV_EXECUTOR_PORT -> "10000") ++ additionalEnvVars
 
     assert(executor.getSpec.getContainers.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getEnv().size() === defaultEnvs.size)

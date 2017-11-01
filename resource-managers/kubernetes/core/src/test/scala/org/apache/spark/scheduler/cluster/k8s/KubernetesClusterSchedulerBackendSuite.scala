@@ -198,12 +198,12 @@ class KubernetesClusterSchedulerBackendSuite
     val scheduler = newSchedulerBackend()
     scheduler.start()
     requestExecutorRunnable.getValue.run()
-    expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
-    expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
+    val firstResolvedPod = expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
+    val secondResolvedPod = expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
     when(podOperations.create(any(classOf[Pod]))).thenAnswer(AdditionalAnswers.returnsFirstArg())
     allocatorRunnable.getValue.run()
-    verify(podOperations).create(FIRST_EXECUTOR_POD)
-    verify(podOperations).create(SECOND_EXECUTOR_POD)
+    verify(podOperations).create(firstResolvedPod)
+    verify(podOperations).create(secondResolvedPod)
   }
 
   test("Killing executors deletes the executor pods") {
@@ -213,15 +213,15 @@ class KubernetesClusterSchedulerBackendSuite
     val scheduler = newSchedulerBackend()
     scheduler.start()
     requestExecutorRunnable.getValue.run()
-    expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
-    expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
+    val firstResolvedPod = expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
+    val secondResolvedPod = expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
     when(podOperations.create(any(classOf[Pod])))
       .thenAnswer(AdditionalAnswers.returnsFirstArg())
     allocatorRunnable.getValue.run()
     scheduler.doKillExecutors(Seq("2"))
     requestExecutorRunnable.getAllValues.asScala.last.run()
-    verify(podOperations).delete(SECOND_EXECUTOR_POD)
-    verify(podOperations, never()).delete(FIRST_EXECUTOR_POD)
+    verify(podOperations).delete(secondResolvedPod)
+    verify(podOperations, never()).delete(firstResolvedPod)
   }
 
   test("Executors should be requested in batches.") {
@@ -233,18 +233,18 @@ class KubernetesClusterSchedulerBackendSuite
     requestExecutorRunnable.getValue.run()
     when(podOperations.create(any(classOf[Pod])))
       .thenAnswer(AdditionalAnswers.returnsFirstArg())
-    expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
-    expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
+    val firstResolvedPod = expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
+    val secondResolvedPod = expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
     allocatorRunnable.getValue.run()
-    verify(podOperations).create(FIRST_EXECUTOR_POD)
-    verify(podOperations, never()).create(SECOND_EXECUTOR_POD)
+    verify(podOperations).create(firstResolvedPod)
+    verify(podOperations, never()).create(secondResolvedPod)
     val registerFirstExecutorMessage = RegisterExecutor(
       "1", mock[RpcEndpointRef], "localhost", 1, Map.empty[String, String])
     when(taskSchedulerImpl.resourceOffers(any())).thenReturn(Seq.empty)
     driverEndpoint.getValue.receiveAndReply(mock[RpcCallContext])
       .apply(registerFirstExecutorMessage)
     allocatorRunnable.getValue.run()
-    verify(podOperations).create(SECOND_EXECUTOR_POD)
+    verify(podOperations).create(secondResolvedPod)
   }
 
   test("Scaled down executors should be cleaned up") {
@@ -258,7 +258,7 @@ class KubernetesClusterSchedulerBackendSuite
     requestExecutorRunnable.getValue.run()
     when(podOperations.create(any(classOf[Pod])))
       .thenAnswer(AdditionalAnswers.returnsFirstArg())
-    expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
+    val resolvedPod = expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
     allocatorRunnable.getValue.run()
     val executorEndpointRef = mock[RpcEndpointRef]
     when(executorEndpointRef.address).thenReturn(RpcAddress("pod.example.com", 9000))
@@ -273,16 +273,16 @@ class KubernetesClusterSchedulerBackendSuite
     requestExecutorRunnable.getAllValues.asScala.last.run()
     scheduler.doKillExecutors(Seq("1"))
     requestExecutorRunnable.getAllValues.asScala.last.run()
-    verify(podOperations, times(1)).delete(FIRST_EXECUTOR_POD)
+    verify(podOperations, times(1)).delete(resolvedPod)
     driverEndpoint.getValue.onDisconnected(executorEndpointRef.address)
 
-    val exitedPod = exitPod(FIRST_EXECUTOR_POD, 0)
+    val exitedPod = exitPod(resolvedPod, 0)
     executorPodsWatcherArgument.getValue.eventReceived(Action.DELETED, exitedPod)
     allocatorRunnable.getValue.run()
 
     // No more deletion attempts of the executors.
     // This is graceful termination and should not be detected as a failure.
-    verify(podOperations, times(1)).delete(FIRST_EXECUTOR_POD)
+    verify(podOperations, times(1)).delete(resolvedPod)
     verify(driverEndpointRef, times(1)).ask[Boolean](
       RemoveExecutor("1", ExecutorExited(
         0,
@@ -298,7 +298,7 @@ class KubernetesClusterSchedulerBackendSuite
 
     val scheduler = newSchedulerBackend()
     scheduler.start()
-    expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
+    val firstResolvedPod = expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
     when(podOperations.create(any(classOf[Pod]))).thenAnswer(AdditionalAnswers.returnsFirstArg())
     requestExecutorRunnable.getValue.run()
     allocatorRunnable.getValue.run()
@@ -311,20 +311,20 @@ class KubernetesClusterSchedulerBackendSuite
       .apply(registerFirstExecutorMessage)
     driverEndpoint.getValue.onDisconnected(executorEndpointRef.address)
     executorPodsWatcherArgument.getValue.eventReceived(
-      Action.ERROR, exitPod(FIRST_EXECUTOR_POD, 1))
+      Action.ERROR, exitPod(firstResolvedPod, 1))
 
     // A replacement executor should be created but the error pod should persist.
-    expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
+    val replacementPod = expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
     scheduler.doRequestTotalExecutors(1)
     requestExecutorRunnable.getValue.run()
     allocatorRunnable.getAllValues.asScala.last.run()
+    verify(podOperations, never()).delete(firstResolvedPod)
     verify(driverEndpointRef).ask[Boolean](
       RemoveExecutor("1", ExecutorExited(
         1,
         exitCausedByApp = true,
         s"Pod ${FIRST_EXECUTOR_POD.getMetadata.getName}'s executor container exited with" +
           " exit status code 1.")))
-    verify(podOperations, never()).delete(FIRST_EXECUTOR_POD)
   }
 
   test("Executors disconnected due to unknown reasons are deleted and replaced.") {
@@ -334,7 +334,7 @@ class KubernetesClusterSchedulerBackendSuite
 
     val scheduler = newSchedulerBackend()
     scheduler.start()
-    expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
+    val firstResolvedPod = expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
     when(podOperations.create(any(classOf[Pod]))).thenAnswer(AdditionalAnswers.returnsFirstArg())
     requestExecutorRunnable.getValue.run()
     allocatorRunnable.getValue.run()
@@ -352,11 +352,46 @@ class KubernetesClusterSchedulerBackendSuite
       verify(podOperations, never()).delete(FIRST_EXECUTOR_POD)
     }
 
-    expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
+    val recreatedResolvedPod = expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
     allocatorRunnable.getValue.run()
-    verify(podOperations).delete(FIRST_EXECUTOR_POD)
+    verify(podOperations).delete(firstResolvedPod)
     verify(driverEndpointRef).ask[Boolean](
       RemoveExecutor("1", SlaveLost("Executor lost for unknown reasons.")))
+  }
+
+  test("Executors that fail to start on the Kubernetes API call rebuild in the next batch.") {
+    sparkConf
+      .set(KUBERNETES_ALLOCATION_BATCH_SIZE, 1)
+      .set(org.apache.spark.internal.config.EXECUTOR_INSTANCES, 1)
+    val scheduler = newSchedulerBackend()
+    scheduler.start()
+    val firstResolvedPod = expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
+    when(podOperations.create(firstResolvedPod))
+      .thenThrow(new RuntimeException("test"))
+    requestExecutorRunnable.getValue.run()
+    allocatorRunnable.getValue.run()
+    verify(podOperations, times(1)).create(firstResolvedPod)
+    val recreatedResolvedPod = expectPodCreationWithId(2, FIRST_EXECUTOR_POD)
+    allocatorRunnable.getValue.run()
+    verify(podOperations).create(recreatedResolvedPod)
+  }
+
+  test("Executors that are initially created but the watch notices them fail are rebuilt" +
+    " in the next batch.") {
+    sparkConf
+      .set(KUBERNETES_ALLOCATION_BATCH_SIZE, 1)
+      .set(org.apache.spark.internal.config.EXECUTOR_INSTANCES, 1)
+    val scheduler = newSchedulerBackend()
+    scheduler.start()
+    val firstResolvedPod = expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
+    when(podOperations.create(FIRST_EXECUTOR_POD)).thenAnswer(AdditionalAnswers.returnsFirstArg())
+    requestExecutorRunnable.getValue.run()
+    allocatorRunnable.getValue.run()
+    verify(podOperations, times(1)).create(firstResolvedPod)
+    executorPodsWatcherArgument.getValue.eventReceived(Action.ERROR, firstResolvedPod)
+    val recreatedResolvedPod = expectPodCreationWithId(2, FIRST_EXECUTOR_POD)
+    allocatorRunnable.getValue.run()
+    verify(podOperations).create(recreatedResolvedPod)
   }
 
   private def newSchedulerBackend(): KubernetesClusterSchedulerBackend = {
@@ -373,7 +408,7 @@ class KubernetesClusterSchedulerBackendSuite
   }
 
   private def exitPod(basePod: Pod, exitCode: Int): Pod = {
-    new PodBuilder(FIRST_EXECUTOR_POD)
+    new PodBuilder(basePod)
       .editStatus()
         .addNewContainerStatus()
           .withNewState()
@@ -386,13 +421,19 @@ class KubernetesClusterSchedulerBackendSuite
       .build()
   }
 
-  private def expectPodCreationWithId(executorId: Int, expectedPod: Pod): Unit = {
+  private def expectPodCreationWithId(executorId: Int, expectedPod: Pod): Pod = {
+    val resolvedPod = new PodBuilder(expectedPod)
+      .editMetadata()
+        .addToLabels(SPARK_EXECUTOR_ID_LABEL, executorId.toString)
+        .endMetadata()
+      .build()
     when(executorPodFactory.createExecutorPod(
       executorId.toString,
       APP_ID,
       DRIVER_URL,
       sparkConf.getExecutorEnv,
       driverPod,
-      Map.empty)).thenReturn(expectedPod)
+      Map.empty)).thenReturn(resolvedPod)
+    resolvedPod
   }
 }
