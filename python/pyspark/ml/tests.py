@@ -857,6 +857,29 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvParallelModel = cv.fit(dataset)
         self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
 
+    def test_expose_sub_models(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        numFolds = 3
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+                            numFolds=numFolds, collectSubModels=True)
+        cvModel = cv.fit(dataset)
+        subModels = cvModel.subModels
+        assert len(subModels) == numFolds
+        for i in range(numFolds):
+            assert len(subModels[i]) == 2
+
     def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
@@ -1024,6 +1047,25 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvs.setParallelism(2)
         tvsParallelModel = tvs.fit(dataset)
         self.assertEqual(tvsSerialModel.validationMetrics, tvsParallelModel.validationMetrics)
+
+    def test_expose_sub_models(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+                                   collectSubModels=True)
+        tvsModel = tvs.fit(dataset)
+        subModels = tvsModel.subModels
+        assert len(subModels) == 2
+
 
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.

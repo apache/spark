@@ -632,6 +632,30 @@ class HasParallelism(Params):
         return self.getOrDefault(self.parallelism)
 
 
+class HasCollectSubModels(Params):
+    """
+    Mixin for param collectSubModels: whether to collect a list of sub-models trained during tuning
+    """
+
+    collectSubModels = Param(Params._dummy(), "collectSubModels", "whether to collect a list of sub-models trained during tuning", typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self):
+        super(HasCollectSubModels, self).__init__()
+        self._setDefault(collectSubModels=False)
+
+    def setCollectSubModels(self, value):
+        """
+        Sets the value of :py:attr:`collectSubModels`.
+        """
+        return self._set(collectSubModels=value)
+
+    def getCollectSubModels(self):
+        """
+        Gets the value of collectSubModels or its default value.
+        """
+        return self.getOrDefault(self.collectSubModels)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.

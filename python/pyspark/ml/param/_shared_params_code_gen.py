@@ -154,7 +154,9 @@ if __name__ == "__main__":
         ("aggregationDepth", "suggested depth for treeAggregate (>= 2).", "2",
          "TypeConverters.toInt"),
         ("parallelism", "the number of threads to use when running parallel algorithms (>= 1).",
-         "1", "TypeConverters.toInt")]
+         "1", "TypeConverters.toInt"),
+        ("collectSubModels", "whether to collect a list of sub-models trained during tuning",
+         "False", "TypeConverters.toBoolean")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:

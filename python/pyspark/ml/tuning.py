@@ -22,7 +22,7 @@ from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java
 from pyspark.ml.param import Params, Param, TypeConverters
-from pyspark.ml.param.shared import HasParallelism, HasSeed
+from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
@@ -170,7 +170,7 @@ class ValidatorParams(HasSeed):
         return java_estimator, java_epms, java_evaluator
 
 
-class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLWritable):
+class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels, MLReadable, MLWritable):
     """
 
     K-fold cross validation performs model selection by splitting the dataset into a set of
@@ -209,10 +209,10 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                 seed=None, parallelism=1):
+                 seed=None, parallelism=1, collectSubModels=False):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                 seed=None, parallelism=1)
+                 seed=None, parallelism=1, collectSubModels=False)
         """
         super(CrossValidator, self).__init__()
         self._setDefault(numFolds=3, parallelism=1)
@@ -222,10 +222,10 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
     @keyword_only
     @since("1.4.0")
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                  seed=None, parallelism=1):
+                  seed=None, parallelism=1, collectSubModels=False):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                  seed=None, parallelism=1):
+                  seed=None, parallelism=1, collectSubModels=False):
         Sets params for cross validator.
         """
         kwargs = self._input_kwargs
@@ -258,6 +258,10 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
         metrics = [0.0] * numModels
 
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
+        subModels = None
+        collectSubModelsParam = self.getCollectSubModels()
+        if (collectSubModelsParam == True):
+            subModels = [[None for j in range(numModels)] for i in range(nFolds)]
 
         for i in range(nFolds):
             validateLB = i * h
@@ -266,13 +270,16 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
             validation = df.filter(condition).cache()
             train = df.filter(~condition).cache()
 
-            def singleTrain(paramMap):
+            def singleTrain(paramMapIndex):
+                paramMap = epm[paramMapIndex]
                 model = est.fit(train, paramMap)
+                if (collectSubModelsParam == True):
+                    subModels[i][paramMapIndex] = model
                 # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, paramMap))
                 return metric
 
-            currentFoldMetrics = pool.map(singleTrain, epm)
+            currentFoldMetrics = pool.map(singleTrain, range(numModels))
             for j in range(numModels):
                 metrics[j] += (currentFoldMetrics[j] / nFolds)
             validation.unpersist()
@@ -283,7 +290,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return self._copyValues(CrossValidatorModel(bestModel, metrics))
+        return self._copyValues(CrossValidatorModel(bestModel, metrics, subModels))
 
     @since("1.4.0")
     def copy(self, extra=None):
@@ -363,13 +370,15 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 1.4.0
     """
 
-    def __init__(self, bestModel, avgMetrics=[]):
+    def __init__(self, bestModel, avgMetrics=[], subModels=None):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
         #: Average cross-validation metrics for each paramMap in
         #: CrossValidator.estimatorParamMaps, in the corresponding order.
         self.avgMetrics = avgMetrics
+        #: sub model list from cross validation
+        self.subModels=subModels
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -389,7 +398,8 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
             extra = dict()
         bestModel = self.bestModel.copy(extra)
         avgMetrics = self.avgMetrics
-        return CrossValidatorModel(bestModel, avgMetrics)
+        subModels = self.subModels
+        return CrossValidatorModel(bestModel, avgMetrics, subModels)
 
     @since("2.3.0")
     def write(self):
@@ -439,7 +449,8 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         return _java_obj
 
 
-class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadable, MLWritable):
+class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels,
+                           MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -474,10 +485,10 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                 parallelism=1, seed=None):
+                 parallelism=1, collectSubModels=False, seed=None):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                 parallelism=1, seed=None)
+                 parallelism=1, collectSubModels=False, seed=None)
         """
         super(TrainValidationSplit, self).__init__()
         self._setDefault(trainRatio=0.75, parallelism=1)
@@ -487,10 +498,10 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
     @since("2.0.0")
     @keyword_only
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                  parallelism=1, seed=None):
+                  parallelism=1, collectSubModels=False, seed=None):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                  parallelism=1, seed=None):
+                  parallelism=1, collectSubModels=False, seed=None):
         Sets params for the train validation split.
         """
         kwargs = self._input_kwargs
@@ -523,13 +534,21 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         validation = df.filter(condition).cache()
         train = df.filter(~condition).cache()
 
-        def singleTrain(paramMap):
+        subModels = None
+        collectSubModelsParam = self.getCollectSubModels()
+        if (collectSubModelsParam == True):
+            subModels = [None for i in range(numModels)]
+
+        def singleTrain(paramMapIndex):
+            paramMap = epm[paramMapIndex]
             model = est.fit(train, paramMap)
+            if (collectSubModelsParam):
+                subModels[paramMapIndex] = model
             metric = eva.evaluate(model.transform(validation, paramMap))
             return metric
 
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        metrics = pool.map(singleTrain, epm)
+        metrics = pool.map(singleTrain, range(numModels))
         train.unpersist()
         validation.unpersist()
 
@@ -538,7 +557,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return self._copyValues(TrainValidationSplitModel(bestModel, metrics))
+        return self._copyValues(TrainValidationSplitModel(bestModel, metrics, subModels))
 
     @since("2.0.0")
     def copy(self, extra=None):
@@ -617,12 +636,14 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 2.0.0
     """
 
-    def __init__(self, bestModel, validationMetrics=[]):
+    def __init__(self, bestModel, validationMetrics=[], subModels=None):
         super(TrainValidationSplitModel, self).__init__()
-        #: best model from cross validation
+        #: best model from train validation split
         self.bestModel = bestModel
         #: evaluated validation metrics
         self.validationMetrics = validationMetrics
+        #: sub models from train validation split
+        self.subModels = subModels
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -643,7 +664,8 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
             extra = dict()
         bestModel = self.bestModel.copy(extra)
         validationMetrics = list(self.validationMetrics)
-        return TrainValidationSplitModel(bestModel, validationMetrics)
+        subModels = self.subModels
+        return TrainValidationSplitModel(bestModel, validationMetrics, subModels)
 
     @since("2.3.0")
     def write(self):
