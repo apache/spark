@@ -1699,14 +1699,14 @@ def _check_dataframe_localize_timestamps(pdf, schema, timezone):
                         .dt.tz_convert(tz).dt.tz_localize(None)
     except ImportError:
         import pandas as pd
-        from pandas.core.common import is_datetime64tz_dtype, is_datetime64_dtype
+        from pandas.core.common import is_datetime64_dtype
         from pandas.tslib import _dateutil_tzlocal
         tzlocal = _dateutil_tzlocal()
         tz = timezone or tzlocal
         for column, series in pdf.iteritems():
             if type(schema[str(column)].dataType) == TimestampType:
                 # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                if is_datetime64tz_dtype(series.dtype):
+                if not is_datetime64_dtype(series.dtype):
                     # `series.dt.tz_convert(tzlocal).dt.tz_localize(None)` doesn't work properly.
                     pdf[column] = pd.Series([ts.tz_convert(tz).tz_localize(None)
                                              if ts is not pd.NaT else pd.NaT for ts in series])
@@ -1726,19 +1726,23 @@ def _check_series_convert_timestamps_internal(s, timezone):
     """
     try:
         from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
-        tzlocal = 'tzlocal()'
+        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+        if is_datetime64_dtype(s.dtype):
+            tz = timezone or 'tzlocal()'
+            return s.dt.tz_localize(tz).dt.tz_convert('UTC')
+        elif is_datetime64tz_dtype(s.dtype):
+            return s.dt.tz_convert('UTC')
+        else:
+            return s
     except ImportError:
-        from pandas.core.common import is_datetime64tz_dtype, is_datetime64_dtype
+        from pandas.core.common import is_datetime64_dtype
         from pandas.tslib import _dateutil_tzlocal
-        tzlocal = _dateutil_tzlocal()
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64_dtype(s.dtype):
-        tz = timezone or tzlocal
-        return s.dt.tz_localize(tz).dt.tz_convert('UTC')
-    elif is_datetime64tz_dtype(s.dtype):
-        return s.dt.tz_convert('UTC')
-    else:
-        return s
+        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+        if is_datetime64_dtype(s.dtype):
+            tz = timezone or _dateutil_tzlocal()
+            return s.dt.tz_localize(tz).dt.tz_convert('UTC')
+        else:
+            return s.dt.tz_convert('UTC')
 
 
 def _test():
