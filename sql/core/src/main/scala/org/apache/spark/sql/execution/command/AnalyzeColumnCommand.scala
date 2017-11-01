@@ -137,11 +137,11 @@ case class AnalyzeColumnCommand(
     def fixedLenTypeStruct(castType: DataType, genHistogram: Boolean) = {
       val percentileExpr = if (genHistogram) {
         // To generate equi-height histogram, we need to:
-        // 1. get percentiles p(1/n), p(2/n) ... p((n-1)/n),
-        // 2. use min, max, and percentiles as range values of buckets, e.g. [min, p(1/n)],
-        // [p(1/n), p(2/n)] ... [p((n-1)/n), max], and then count ndv in each bucket.
+        // 1. get percentiles p(0), p(1/n) ... p((n-1)/n), p(1).
+        // 2. use the percentiles as range values of buckets, e.g. [p(0), p(1/n)],
+        // [p(1/n), p(2/n)] ... [p((n-1)/n), p(1)], and then count ndv in each bucket.
         // Step 2 will be performed in `rowToColumnStats`.
-        val percentiles = (1 until conf.histogramBucketsNum)
+        val percentiles = (0 to conf.histogramBucketsNum)
           .map(i => i.toDouble / conf.histogramBucketsNum)
           .toArray
         new ApproximatePercentile(col, Literal(percentiles), Literal(conf.percentileAccuracy))
@@ -203,8 +203,7 @@ case class AnalyzeColumnCommand(
         maxLen = row.getLong(5)
       )
       if (!row.isNullAt(6)) {
-        // Construct bucket endpoints by combining min/max and percentiles.
-        val endpoints = cs.min.get +: row.getArray(6).toArray(attr.dataType) :+ cs.max.get
+        val endpoints: Array[Any] = row.getArray(6).toArray(attr.dataType)
         intervalNdvExprs += ApproxCountDistinctForIntervals(attr,
           CreateArray(endpoints.map(Literal(_))), conf.ndvMaxError)
       }

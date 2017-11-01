@@ -1104,7 +1104,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
 
     val startTimestamp = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-08 00:00:01"))
-    val df = (1 to 1000)
+    val df = (1 to 5000)
       .map(i => (i, DateTimeUtils.toJavaTimestamp(startTimestamp + i)))
       .toDF("cint", "ctimestamp")
     val tableName = "long_histogram_test"
@@ -1112,7 +1112,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     withTable(tableName) {
       df.write.saveAsTable(tableName)
 
-      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true") {
+      withSQLConf(
+        SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_BUCKETS_NUM.key -> "1000") {
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS cint, ctimestamp")
         val table = hiveClient.getTable("default", tableName)
         // Based on the bucket number(`spark.sessionState.conf.histogramBucketsNum`), the

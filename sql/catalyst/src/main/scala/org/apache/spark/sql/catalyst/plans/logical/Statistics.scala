@@ -179,8 +179,10 @@ object ColumnStat extends Logging {
       Some(ColumnStat(
         distinctCount = BigInt(map(KEY_DISTINCT_COUNT).toLong),
         // Note that flatMap(Option.apply) turns Option(null) into None.
-        min = map.get(KEY_MIN_VALUE).map(fromString(_, field.name, field.dataType)),
-        max = map.get(KEY_MAX_VALUE).map(fromString(_, field.name, field.dataType)),
+        min = map.get(KEY_MIN_VALUE)
+          .map(fromString(_, field.name, field.dataType)).flatMap(Option.apply),
+        max = map.get(KEY_MAX_VALUE)
+          .map(fromString(_, field.name, field.dataType)).flatMap(Option.apply),
         nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
         avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
         maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong,
