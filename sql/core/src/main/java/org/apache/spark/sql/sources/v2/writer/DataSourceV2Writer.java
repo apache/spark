@@ -40,15 +40,10 @@ import org.apache.spark.sql.types.StructType;
  *      some writers are aborted, or the job failed with an unknown reason, call
  *      {@link #abort(WriterCommitMessage[])}.
  *
- * Spark won't retry failed writing jobs, users should do it manually in their Spark applications if
- * they want to retry.
+ * While Spark will retry failed writing tasks, Spark won't retry failed writing jobs. Users should
+ * do it manually in their Spark applications if they want to retry.
  *
- * Please refer to the document of commit/abort methods for detailed specifications.
- *
- * Note that, this interface provides a protocol between Spark and data sources for transactional
- * data writing, but the transaction here is Spark-level transaction, which may not be the
- * underlying storage transaction. For example, Spark successfully writes data to a Cassandra data
- * source, but Cassandra may need some more time to reach consistency at storage level.
+ * Please refer to the documentation of commit/abort methods for detailed specifications.
  */
 @InterfaceStability.Evolving
 public interface DataSourceV2Writer {

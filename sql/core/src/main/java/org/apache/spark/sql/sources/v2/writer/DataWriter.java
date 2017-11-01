@@ -57,8 +57,8 @@ public interface DataWriter<T> {
   /**
    * Writes one record.
    *
-   * If this method fails(throw exception), {@link #abort()} will be called and this data writer is
-   * considered to be failed.
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
    */
   void write(T record);
 
@@ -70,10 +70,10 @@ public interface DataWriter<T> {
    * The written data should only be visible to data source readers after
    * {@link DataSourceV2Writer#commit(WriterCommitMessage[])} succeeds, which means this method
    * should still "hide" the written data and ask the {@link DataSourceV2Writer} at driver side to
-   * do the final commitment via {@link WriterCommitMessage}.
+   * do the final commit via {@link WriterCommitMessage}.
    *
-   * If this method fails(throw exception), {@link #abort()} will be called and this data writer is
-   * considered to be failed.
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
    */
   WriterCommitMessage commit();
 
