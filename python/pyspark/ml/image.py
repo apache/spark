@@ -113,6 +113,7 @@ class _ImageSchema(object):
 
         .. versionadded:: 2.3.0
         """
+
         height = image.height
         width = image.width
         nChannels = image.nChannels
@@ -132,6 +133,7 @@ class _ImageSchema(object):
 
         .. versionadded:: 2.3.0
         """
+
         if array.ndim != 3:
             raise ValueError("Invalid array shape")
         height, width, nChannels = array.shape
@@ -171,6 +173,7 @@ class _ImageSchema(object):
 
         .. versionadded:: 2.3.0
         """
+
         ctx = SparkContext._active_spark_context
         spark = SparkSession(ctx)
         image_schema = ctx._jvm.org.apache.spark.ml.image.ImageSchema
