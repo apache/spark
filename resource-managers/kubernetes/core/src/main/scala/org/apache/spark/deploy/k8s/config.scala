@@ -103,14 +103,6 @@ package object config extends Logging {
       .longConf
       .createWithDefault(1)
 
-  private[spark] val INIT_CONTAINER_JARS_DOWNLOAD_LOCATION =
-    ConfigBuilder("spark.kubernetes.mountdependencies.jarsDownloadDir")
-      .doc("Location to download jars to in the driver and executors. When using" +
-        " spark-submit, this directory must be empty and will be mounted as an empty directory" +
-        " volume on the driver and executor pod.")
-      .stringConf
-      .createWithDefault("/var/spark-data/spark-jars")
-
   private[spark] val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
       .doc("Specify the hard cpu limit for a single executor pod")
@@ -118,20 +110,4 @@ package object config extends Logging {
       .createOptional
 
   private[spark] val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
-
-  private[spark] def resolveK8sMaster(rawMasterString: String): String = {
-    if (!rawMasterString.startsWith("k8s://")) {
-      throw new IllegalArgumentException("Master URL should start with k8s:// in Kubernetes mode.")
-    }
-    val masterWithoutK8sPrefix = rawMasterString.replaceFirst("k8s://", "")
-    if (masterWithoutK8sPrefix.startsWith("http://")
-      || masterWithoutK8sPrefix.startsWith("https://")) {
-      masterWithoutK8sPrefix
-    } else {
-      val resolvedURL = s"https://$masterWithoutK8sPrefix"
-      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved" +
-        s" URL is $resolvedURL")
-      resolvedURL
-    }
-  }
 }

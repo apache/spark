@@ -47,7 +47,6 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
 
   private val executorExtraClasspath = sparkConf.get(
     org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
-  private val executorJarsDownloadDir = sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
 
   private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
     sparkConf,
@@ -94,7 +93,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
 
-  private val executorCores = sparkConf.getDouble("spark.executor.cores", 1d)
+  private val executorCores = sparkConf.getDouble("spark.executor.cores", 1)
   private val executorLimitCores = sparkConf.getOption(KUBERNETES_EXECUTOR_LIMIT_CORES.key)
 
   override def createExecutorPod(
@@ -108,7 +107,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
 
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
-    // executorId and applicationId
+    // executorId
     val hostname = name.substring(Math.max(0, name.length - 63))
     val resolvedExecutorLabels = Map(
       SPARK_EXECUTOR_ID_LABEL -> executorId,
@@ -139,15 +138,14 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
             new EnvVarBuilder().withName(s"$ENV_JAVA_OPT_PREFIX$index").withValue(opt).build()
         }
       }.getOrElse(Seq.empty[EnvVar])
-    val executorEnv = (Seq(
+    val executorEnv = Seq(
       (ENV_EXECUTOR_PORT, executorPort.toString),
       (ENV_DRIVER_URL, driverUrl),
       // Executor backend expects integral value for executor cores, so round it up to an int.
       (ENV_EXECUTOR_CORES, math.ceil(executorCores).toInt.toString),
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId),
-      (ENV_EXECUTOR_ID, executorId),
-      (ENV_MOUNTED_CLASSPATH, s"$executorJarsDownloadDir/*")) ++ executorEnvs)
+      (ENV_EXECUTOR_ID, executorId))
       .map(env => new EnvVarBuilder()
         .withName(env._1)
         .withValue(env._2)
