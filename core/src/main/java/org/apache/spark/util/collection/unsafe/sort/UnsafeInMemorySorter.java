@@ -172,10 +172,11 @@ public final class UnsafeInMemorySorter {
   public void reset() {
     if (consumer != null) {
       consumer.freeArray(array);
-      // the call to consumer.allocateArray may trigger a spill
-      // which in turn access this instance and eventually re-enter this method and try to free the array again.
-      // by setting the array to null and its length to 0 we effectively make the spill code-path a no-op.
-      // setting the array to null also indicates that it has already been de-allocated which prevents a double de-allocation in free().
+      // the call to consumer.allocateArray may trigger a spill which in turn access this instance
+      // and eventually re-enter this method and try to free the array again.  by setting the array
+      // to null and its length to 0 we effectively make the spill code-path a no-op.  setting the
+      // array to null also indicates that it has already been de-allocated which prevents a double
+      // de-allocation in free().
       array = null;
       usableCapacity = 0;
       pos = 0;

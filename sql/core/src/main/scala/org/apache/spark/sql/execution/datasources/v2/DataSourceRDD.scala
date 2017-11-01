@@ -39,7 +39,7 @@ class DataSourceRDD(
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
-    val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createReader()
+    val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createDataReader()
     context.addTaskCompletionListener(_ => reader.close())
     val iter = new Iterator[UnsafeRow] {
       private[this] var valuePrepared = false

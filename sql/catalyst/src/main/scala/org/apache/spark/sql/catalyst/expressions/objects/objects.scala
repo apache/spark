@@ -591,18 +591,43 @@ case class MapObjects private(
       case _ => inputData.dataType
     }
 
-    val (getLength, getLoopVar) = inputDataType match {
+    // `MapObjects` generates a while loop to traverse the elements of the input collection. We
+    // need to take care of Seq and List because they may have O(n) complexity for indexed accessing
+    // like `list.get(1)`. Here we use Iterator to traverse Seq and List.
+    val (getLength, prepareLoop, getLoopVar) = inputDataType match {
       case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-        s"${genInputData.value}.size()" -> s"${genInputData.value}.apply($loopIndex)"
+        val it = ctx.freshName("it")
+        (
+          s"${genInputData.value}.size()",
+          s"scala.collection.Iterator $it = ${genInputData.value}.toIterator();",
+          s"$it.next()"
+        )
       case ObjectType(cls) if cls.isArray =>
-        s"${genInputData.value}.length" -> s"${genInputData.value}[$loopIndex]"
+        (
+          s"${genInputData.value}.length",
+          "",
+          s"${genInputData.value}[$loopIndex]"
+        )
       case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-        s"${genInputData.value}.size()" -> s"${genInputData.value}.get($loopIndex)"
+        val it = ctx.freshName("it")
+        (
+          s"${genInputData.value}.size()",
+          s"java.util.Iterator $it = ${genInputData.value}.iterator();",
+          s"$it.next()"
+        )
       case ArrayType(et, _) =>
-        s"${genInputData.value}.numElements()" -> ctx.getValue(genInputData.value, et, loopIndex)
+        (
+          s"${genInputData.value}.numElements()",
+          "",
+          ctx.getValue(genInputData.value, et, loopIndex)
+        )
       case ObjectType(cls) if cls == classOf[Object] =>
-        s"$seq == null ? $array.length : $seq.size()" ->
-          s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
+        val it = ctx.freshName("it")
+        (
+          s"$seq == null ? $array.length : $seq.size()",
+          s"scala.collection.Iterator $it = $seq == null ? null : $seq.toIterator();",
+          s"$it == null ? $array[$loopIndex] : $it.next()"
+        )
     }
 
     // Make a copy of the data if it's unsafe-backed
@@ -676,6 +701,7 @@ case class MapObjects private(
         $initCollection
 
         int $loopIndex = 0;
+        $prepareLoop
         while ($loopIndex < $dataLength) {
           $loopValue = ($elementJavaType) ($getLoopVar);
           $loopNullCheck
