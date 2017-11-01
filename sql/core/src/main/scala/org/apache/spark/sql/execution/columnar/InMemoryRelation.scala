@@ -50,20 +50,16 @@ object InMemoryRelation {
  * @param stats The stat of columns
  */
 private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: Option[InternalRow])
+case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
 private[columnar] class CachedPartitionIterator(
     rowIterator: Iterator[InternalRow],
     output: Seq[Attribute],
     batchSize: Int,
     useCompression: Boolean,
-    batchStats: LongAccumulator) extends Iterator[AnyRef] {
+    batchStats: LongAccumulator) extends Iterator[CachedBatch] {
 
-  private var partitionStats: InternalRow = _
-
-  private var fetchingFirstElement = true
-
-  private def buildCachedBatch(): Option[CachedBatch] = {
+  private def buildCachedBatch(): CachedBatch = {
     val columnBuilders = output.map { attribute =>
       ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
     }.toArray
@@ -92,24 +88,17 @@ private[columnar] class CachedPartitionIterator(
       }
       rowCount += 1
     }
-    partitionStats = InternalRow.fromSeq(columnBuilders.flatMap(_.columnStats.collectedStatistics))
     batchStats.add(totalSize)
-    Some(CachedBatch(rowCount, columnBuilders.map { builder =>
-      JavaUtils.bufferToArray(builder.build())
-    }, Some(partitionStats)))
+
+    val stats = InternalRow.fromSeq(
+      columnBuilders.flatMap(_.columnStats.collectedStatistics))
+
+    CachedBatch(rowCount, columnBuilders.map { builder =>
+      JavaUtils.bufferToArray(builder.build())}, stats)
   }
 
-  def next(): AnyRef = {
-    if (partitionStats == null) {
-      buildCachedBatch().get
-    } else {
-      if (fetchingFirstElement) {
-        fetchingFirstElement = false
-        partitionStats
-      } else {
-        buildCachedBatch()
-      }
-    }
+  def next(): CachedBatch = {
+    buildCachedBatch()
   }
 
   def hasNext: Boolean = rowIterator.hasNext
@@ -161,7 +150,7 @@ private[columnar] class CachedBatchIterator(
 
       CachedBatch(rowCount, columnBuilders.map { builder =>
         JavaUtils.bufferToArray(builder.build())
-      }, Some(stats))
+      }, stats)
     }
 
     def hasNext: Boolean = rowIterator.hasNext
@@ -214,7 +203,7 @@ case class InMemoryRelation(
       }
     }
 
-    val cached = batchedRDD.persist(storageLevel)
+    val cached = new CachedColumnarRDD(batchedRDD.sparkContext, batchedRDD).persist(storageLevel)
 
     cached.setName(
       tableName.map(n => s"In-memory table $n")

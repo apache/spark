@@ -200,10 +200,10 @@ case class InMemoryTableScanExec(
       partitionFilter: GenPredicate): Iterator[CachedBatch] = {
     val schemaIndex = partitionStatsSchema.zipWithIndex
     cachedBatchIterator.filter { cachedBatch =>
-      if (!partitionFilter.eval(cachedBatch.stats.get)) {
+      if (!partitionFilter.eval(cachedBatch.stats)) {
         logDebug {
           val statsString = schemaIndex.map { case (a, i) =>
-            val value = cachedBatch.stats.get.get(i, a.dataType)
+            val value = cachedBatch.stats.get(i, a.dataType)
             s"${a.name}: $value"
           }.mkString(", ")
           s"Skipping partition based on stats $statsString"
