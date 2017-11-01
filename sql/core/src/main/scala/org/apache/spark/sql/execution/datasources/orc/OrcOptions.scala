@@ -59,7 +59,7 @@ private[sql] class OrcOptions(
   }
 }
 
-private[orc] object OrcOptions {
+private[sql] object OrcOptions {
   // The ORC compression short names
   private val shortOrcCompressionCodecNames = Map(
     "none" -> "NONE",
