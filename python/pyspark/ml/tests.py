@@ -54,7 +54,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
     MulticlassClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
-from pyspark.ml.image import toImage, toNDArray, readImages, ImageSchema
+from pyspark.ml.image import ImageSchema
 from pyspark.ml.linalg import DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT, \
     SparseMatrix, SparseVector, Vector, VectorUDT, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
@@ -1823,13 +1823,18 @@ class ImageReaderTest(SparkSessionTestCase):
 
     def test_read_images(self):
         data_path = 'python/test_support/image/kittens'
-        df = readImages(data_path, recursive=True)
+        df = ImageSchema.readImages(data_path, recursive=True)
         self.assertEqual(df.count(), 4)
-        firstRow = df.take(1)[0][0]
-        array = toNDArray(firstRow)
-        self.assertEqual(len(array), firstRow[1])
-        self.assertEqual(toImage(array, origin=firstRow[0]), firstRow)
+        first_row = df.take(1)[0][0]
+        array = ImageSchema.toNDArray(first_row)
+        self.assertEqual(len(array), first_row[1])
+        self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
         self.assertEqual(df.schema, ImageSchema.imageSchema)
+        expected = {'CV_8UC3': 16, 'Undefined': -1, 'CV_8U': 0, 'CV_8UC1': 0, 'CV_8UC4': 24}
+        self.assertEqual(ImageSchema.ocvTypes, expected)
+        expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
+        self.assertEqual(ImageSchema.imageFields, expected)
+        self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
 
 
 class ALSTest(SparkSessionTestCase):
