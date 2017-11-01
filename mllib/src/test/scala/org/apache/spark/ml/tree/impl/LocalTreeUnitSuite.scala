@@ -77,33 +77,13 @@ class LocalTreeUnitSuite
 
   test("Fit deep local trees") {
 
-    /** Helper method: get depth of subtree rooted at passed-in node. */
-    def getTreeDepth(node: Node): Int = {
-      node match {
-        case internal: InternalNode =>
-          1 + math.max(getTreeDepth(internal.leftChild), getTreeDepth(internal.rightChild))
-        case _: LeafNode =>
-          0
-        case other => throw new UnsupportedOperationException("Decision tree node must be " +
-          s"LeafNode or InternalNode, got ${other.getClass}")
-      }
-    }
-
     /**
      * Deep tree test. Tries to fit tree on synthetic data designed to force tree
      * to split to specified depth.
      */
     def deepTreeTest(depth: Int): Unit = {
-      val data = sc.parallelize(Range(0, depth + 1).map { idx =>
-        val features = Array.fill[Double](depth)(1)
-        if (idx == depth) {
-          LabeledPoint(1.0, Vectors.dense(features))
-        } else {
-          features(idx) = 0.0
-          LabeledPoint(0.0, Vectors.dense(features))
-        }
-      })
-      val df = spark.createDataFrame(data)
+      val deepTreeData = TreeTests.deepTreeData(sc, depth)
+      val df = spark.createDataFrame(deepTreeData)
       // Construct estimators; single-tree random forest & decision tree regressor.
       val localTree = new LocalDecisionTreeRegressor()
         .setFeaturesCol("features") // indexedFeatures
@@ -113,7 +93,7 @@ class LocalTreeUnitSuite
 
       // Fit model, check depth...
       val localModel = localTree.fit(df)
-      assert(getTreeDepth(localModel.rootNode) == depth)
+      assert(localModel.rootNode.subtreeDepth == depth)
     }
 
     // Test small depth tree
