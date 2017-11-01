@@ -415,9 +415,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
       docs: RDD[(Long, Vector)],
       lda: LDA): OnlineLDAOptimizer = {
     this.k = lda.getK
-    this.docs = docs.filter(_._2.numNonzeros > 0) // filter out empty documents
+    this.docs = docs
     this.corpusSize = this.docs.count()
-    this.vocabSize = docs.first()._2.size
+    this.vocabSize = this.docs.first()._2.size
     this.alpha = if (lda.getAsymmetricDocConcentration.size == 1) {
       if (lda.getAsymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
       else {
@@ -445,7 +445,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
   override private[clustering] def next(): OnlineLDAOptimizer = {
     val batch = docs.sample(withReplacement = sampleWithReplacement, miniBatchFraction,
       randomGenerator.nextLong())
-    submitMiniBatch(batch)
+    val batchNoEmptyDocs = batch.filter(_._2.numNonzeros > 0)
+    submitMiniBatch(batchNoEmptyDocs)
   }
 
   /**
