@@ -2560,12 +2560,16 @@ class SQLTests(ReusedSQLTestCase):
 
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas(self):
+        from datetime import datetime, date
         import numpy as np
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
-                             .add("c", BooleanType()).add("d", FloatType())
+                             .add("c", BooleanType()).add("d", FloatType())\
+                             .add("dt", DateType()).add("ts", TimestampType())
         data = [
-            (1, "foo", True, 3.0), (2, "foo", True, 5.0),
-            (3, "bar", False, -1.0), (4, "bar", False, 6.0),
+            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+            (2, "foo", True, 5.0, None, None),
+            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3)),
+            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4)),
         ]
         df = self.spark.createDataFrame(data, schema)
         types = df.toPandas().dtypes
@@ -2573,6 +2577,8 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEquals(types[1], np.object)
         self.assertEquals(types[2], np.bool)
         self.assertEquals(types[3], np.float32)
+        self.assertEquals(types[4], 'datetime64[ns]')
+        self.assertEquals(types[5], 'datetime64[ns]')
 
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas_avoid_astype(self):
@@ -3544,6 +3550,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
                 (3, datetime(2100, 3, 3, 3, 3, 3))]
         df = self.spark.createDataFrame(data, schema=schema)
 
+        f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType())
         internal_value = pandas_udf(lambda ts: ts.apply(lambda ts: ts.value), LongType())
 
         orig_tz = self.spark.conf.get("spark.sql.session.timeZone")
@@ -3552,16 +3559,18 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             self.spark.conf.set("spark.sql.session.timeZone", timezone)
             self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "false")
             try:
-                df_la = df.withColumn("internal_value", internal_value(col("timestamp")))
+                df_la = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
+                    .withColumn("internal_value", internal_value(col("timestamp")))
                 result_la = df_la.select(col("idx"), col("internal_value")).collect()
                 diff = 3 * 60 * 60 * 1000 * 1000 * 1000
                 result_la_corrected = \
-                    df_la.select(col("idx"), col("internal_value") + diff).collect()
+                    df_la.select(col("idx"), col("tscopy"), col("internal_value") + diff).collect()
             finally:
                 self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
 
-            df_ny = df.withColumn("internal_value", internal_value(col("timestamp")))
-            result_ny = df_ny.select(col("idx"), col("internal_value")).collect()
+            df_ny = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
+                .withColumn("internal_value", internal_value(col("timestamp")))
+            result_ny = df_ny.select(col("idx"), col("tscopy"), col("internal_value")).collect()
 
             self.assertNotEqual(result_ny, result_la)
             self.assertEqual(result_ny, result_la_corrected)

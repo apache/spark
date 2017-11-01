@@ -1685,17 +1685,36 @@ def _check_dataframe_localize_timestamps(pdf, schema, timezone):
     :param pdf: pandas.DataFrame
     :return pandas.DataFrame where any timezone aware columns have be converted to tz-naive
     """
-    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
-    tz = timezone or 'tzlocal()'
-    for column, series in pdf.iteritems():
-        if type(schema[str(column)].dataType) == TimestampType:
-            # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-            if is_datetime64tz_dtype(series.dtype):
-                pdf[column] = series.dt.tz_convert(tz).dt.tz_localize(None)
-            elif is_datetime64_dtype(series.dtype) and timezone is not None:
-                # `series.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-                pdf[column] = series.apply(lambda ts: ts.tz_localize('tzlocal()')) \
-                    .dt.tz_convert(tz).dt.tz_localize(None)
+    try:
+        from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
+        tz = timezone or 'tzlocal()'
+        for column, series in pdf.iteritems():
+            if type(schema[str(column)].dataType) == TimestampType:
+                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+                if is_datetime64tz_dtype(series.dtype):
+                    pdf[column] = series.dt.tz_convert(tz).dt.tz_localize(None)
+                elif is_datetime64_dtype(series.dtype) and timezone is not None:
+                    # `series.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
+                    pdf[column] = series.apply(lambda ts: ts.tz_localize('tzlocal()')) \
+                        .dt.tz_convert(tz).dt.tz_localize(None)
+    except ImportError:
+        import pandas as pd
+        from pandas.core.common import is_datetime64tz_dtype, is_datetime64_dtype
+        from pandas.tslib import _dateutil_tzlocal
+        tzlocal = _dateutil_tzlocal()
+        tz = timezone or tzlocal
+        for column, series in pdf.iteritems():
+            if type(schema[str(column)].dataType) == TimestampType:
+                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+                if is_datetime64tz_dtype(series.dtype):
+                    # `series.dt.tz_convert(tzlocal).dt.tz_localize(None)` doesn't work properly.
+                    pdf[column] = pd.Series([ts.tz_convert(tz).tz_localize(None)
+                                             if ts is not pd.NaT else pd.NaT for ts in series])
+                elif is_datetime64_dtype(series.dtype) and timezone is not None:
+                    # `series.dt.tz_localize(tzlocal)` doesn't work properly.
+                    pdf[column] = pd.Series(
+                        [ts.tz_localize(tzlocal).tz_convert(tz).tz_localize(None)
+                         if ts is not pd.NaT else pd.NaT for ts in series])
     return pdf
 
 
@@ -1705,10 +1724,16 @@ def _check_series_convert_timestamps_internal(s, timezone):
     :param s: a pandas.Series
     :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
     """
-    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+    try:
+        from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
+        tzlocal = 'tzlocal()'
+    except ImportError:
+        from pandas.core.common import is_datetime64tz_dtype, is_datetime64_dtype
+        from pandas.tslib import _dateutil_tzlocal
+        tzlocal = _dateutil_tzlocal()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
-        tz = timezone or 'tzlocal()'
+        tz = timezone or tzlocal
         return s.dt.tz_localize(tz).dt.tz_convert('UTC')
     elif is_datetime64tz_dtype(s.dtype):
         return s.dt.tz_convert('UTC')
