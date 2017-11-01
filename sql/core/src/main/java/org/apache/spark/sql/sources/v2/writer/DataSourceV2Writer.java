@@ -63,14 +63,14 @@ public interface DataSourceV2Writer {
    * Commits this writing job with a list of commit messages. The commit messages are collected from
    * successful data writers and are produced by {@link DataWriter#commit()}.
    *
-   * If this method fails (by throwing an exception), this writing job is considered to be failed,
-   * and {@link #abort(WriterCommitMessage[])} would be called. The written data should only be
-   * visible to data source readers if this method succeeds.
+   * If this method fails (by throwing an exception), this writing job is considered to to have been
+   * failed, and {@link #abort(WriterCommitMessage[])} would be called. The state of the destination
+   * is undefined and @{@link #abort(WriterCommitMessage[])} may not be able to deal with it.
    *
    * Note that, one partition may have multiple committed data writers because of speculative tasks.
    * Spark will pick the first successful one and get its commit message. Implementations should be
-   * aware of this and handle it correctly, e.g., have a mechanism to make sure only one data writer
-   * can commit successfully, or have a way to clean up the data of already-committed writers.
+   * aware of this and handle it correctly, e.g., have a coordinator to make sure only one data
+   * writer can commit, or have a way to clean up the data of already-committed writers.
    */
   void commit(WriterCommitMessage[] messages);
 
@@ -79,8 +79,8 @@ public interface DataSourceV2Writer {
    * or the Spark job fails with some unknown reasons, or {@link #commit(WriterCommitMessage[])}
    * fails.
    *
-   * If this method fails (by throwing an exception), the state of the destination would be
-   * undefined and users may need to clean it up manually.
+   * If this method fails (by throwing an exception), the underlying data source may have garbage
+   * that need to be cleaned manually.
    *
    * Unless the abort is triggered by the failure of commit, the given messages should have some
    * null slots as there maybe only a few data writers that are committed before the abort
