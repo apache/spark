@@ -180,9 +180,9 @@ object ColumnStat extends Logging {
         distinctCount = BigInt(map(KEY_DISTINCT_COUNT).toLong),
         // Note that flatMap(Option.apply) turns Option(null) into None.
         min = map.get(KEY_MIN_VALUE)
-          .map(fromString(_, field.name, field.dataType)).flatMap(Option.apply),
+          .map(fromExternalString(_, field.name, field.dataType)).flatMap(Option.apply),
         max = map.get(KEY_MAX_VALUE)
-          .map(fromString(_, field.name, field.dataType)).flatMap(Option.apply),
+          .map(fromExternalString(_, field.name, field.dataType)).flatMap(Option.apply),
         nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
         avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
         maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong,
@@ -199,7 +199,7 @@ object ColumnStat extends Logging {
    * Converts from string representation of external data type to the corresponding Catalyst data
    * type.
    */
-  private def fromString(s: String, name: String, dataType: DataType): Any = {
+  private def fromExternalString(s: String, name: String, dataType: DataType): Any = {
     dataType match {
       case BooleanType => s.toBoolean
       case DateType => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
