@@ -1685,6 +1685,7 @@ def _check_dataframe_localize_timestamps(pdf, schema, timezone):
     :param pdf: pandas.DataFrame
     :return pandas.DataFrame where any timezone aware columns have be converted to tz-naive
     """
+    import pandas as pd
     try:
         from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
         tz = timezone or 'tzlocal()'
@@ -1695,10 +1696,10 @@ def _check_dataframe_localize_timestamps(pdf, schema, timezone):
                     pdf[column] = series.dt.tz_convert(tz).dt.tz_localize(None)
                 elif is_datetime64_dtype(series.dtype) and timezone is not None:
                     # `series.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-                    pdf[column] = series.apply(lambda ts: ts.tz_localize('tzlocal()')) \
-                        .dt.tz_convert(tz).dt.tz_localize(None)
+                    pdf[column] = series.apply(
+                        lambda ts: ts.tz_localize('tzlocal()').tz_convert(tz).tz_localize(None)
+                        if ts is not pd.NaT else pd.NaT)
     except ImportError:
-        import pandas as pd
         from pandas.core.common import is_datetime64_dtype
         from pandas.tslib import _dateutil_tzlocal
         tzlocal = _dateutil_tzlocal()
