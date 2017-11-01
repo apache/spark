@@ -16,10 +16,10 @@
 #
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
+from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import PythonUdfType, UserDefinedFunction
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -214,11 +214,11 @@ class GroupedData(object):
 
         :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
 
-        >>> from pyspark.sql.functions import pandas_udf
+        >>> from pyspark.sql.functions import pandas_udf, PandasUdfType
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
-        >>> @pandas_udf(returnType=df.schema)
+        >>> @pandas_udf(returnType=df.schema, functionType=PandasUdfType.GROUP_FLATMAP)
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
@@ -236,15 +236,14 @@ class GroupedData(object):
         .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """
-        import inspect
 
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
-           or udf.pythonUdfType != PythonUdfType.PANDAS_UDF \
-           or len(inspect.getargspec(udf.func).args) != 1:
-            raise ValueError("The argument to apply must be a 1-arg pandas_udf")
+           or udf.udfType != PythonEvalType.PANDAS_GROUP_FLATMAP_UDF:
+            raise ValueError('Invalid udf: the udf argument must be a pandas_udf of type '
+                             '`GROUP_FLATMAP`.')
         if not isinstance(udf.returnType, StructType):
-            raise ValueError("The returnType of the pandas_udf must be a StructType")
+            raise ValueError('Invalid returnType: The returnType of the udf must be a StructType')
 
         df = self._df
         func = udf.func
@@ -260,19 +259,19 @@ class GroupedData(object):
             import pandas as pd
             result = func(pd.concat(cols, axis=1, keys=columns))
             if not isinstance(result, pd.DataFrame):
-                raise TypeError("Return type of the user-defined function should be "
-                                "Pandas.DataFrame, but is {}".format(type(result)))
+                raise TypeError('Return type of the user-defined function should be '
+                                'Pandas.DataFrame, but is {}'.format(type(result)))
             if not len(result.columns) == len(returnType):
                 raise RuntimeError(
-                    "Number of columns of the returned Pandas.DataFrame "
-                    "doesn't match specified schema. "
-                    "Expected: {} Actual: {}".format(len(returnType), len(result.columns)))
+                    'Number of columns of the returned Pandas.DataFrame '
+                    'doesn\'t match specified schema. '
+                    'Expected: {} Actual: {}'.format(len(returnType), len(result.columns)))
             arrow_return_types = (to_arrow_type(field.dataType) for field in returnType)
             return [(result[result.columns[i]], arrow_type)
                     for i, arrow_type in enumerate(arrow_return_types)]
 
         udf_obj = UserDefinedFunction(
-            wrapped, returnType, name=udf.__name__, pythonUdfType=PythonUdfType.PANDAS_GROUPED_UDF)
+            wrapped, returnType=returnType, name=udf.__name__, udfType=udf.udfType)
         udf_column = udf_obj(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
@@ -284,8 +283,8 @@ def _test():
     import pyspark.sql.group
     globs = pyspark.sql.group.__dict__.copy()
     spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.group tests")\
+        .master('local[4]')\
+        .appName('sql.group tests')\
         .getOrCreate()
     sc = spark.sparkContext
     globs['sc'] = sc

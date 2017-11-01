@@ -29,8 +29,9 @@ from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.taskcontext import TaskContext
 from pyspark.files import SparkFiles
+from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, \
-    write_long, read_int, SpecialLengths, PythonEvalType, UTF8Deserializer, PickleSerializer, \
+    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type
 from pyspark import shuffle
@@ -99,10 +100,11 @@ def read_single_udf(pickleSer, infile, eval_type):
             row_func = f
         else:
             row_func = chain(row_func, f)
+
     # the last returnType will be the return type of UDF
-    if eval_type == PythonEvalType.SQL_PANDAS_UDF:
+    if eval_type == PythonEvalType.PANDAS_SCALAR_UDF:
         return arg_offsets, wrap_pandas_udf(row_func, return_type)
-    elif eval_type == PythonEvalType.SQL_PANDAS_GROUPED_UDF:
+    elif eval_type == PythonEvalType.PANDAS_GROUP_FLATMAP_UDF:
         # a groupby apply udf has already been wrapped under apply()
         return arg_offsets, row_func
     else:
@@ -127,8 +129,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
     func = lambda _, it: map(mapper, it)
 
-    if eval_type == PythonEvalType.SQL_PANDAS_UDF \
-       or eval_type == PythonEvalType.SQL_PANDAS_GROUPED_UDF:
+    if eval_type == PythonEvalType.PANDAS_SCALAR_UDF \
+       or eval_type == PythonEvalType.PANDAS_GROUP_FLATMAP_UDF:
         ser = ArrowStreamPandasSerializer()
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)

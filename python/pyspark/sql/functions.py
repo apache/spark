@@ -27,12 +27,12 @@ if sys.version < "3":
     from itertools import imap as map
 
 from pyspark import since, SparkContext
-from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
+from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql.types import StringType, DataType, _parse_datatype_string
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
-
+from pyspark.sql.types import StringType, DataType
+from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
 def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
@@ -2049,133 +2049,18 @@ def map_values(col):
 
 # ---------------------------- User Defined Function ----------------------------------
 
-def _wrap_function(sc, func, returnType):
-    command = (func, returnType)
-    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
-    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
-                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
-
-
-class PythonUdfType(object):
-    # row-at-a-time UDFs
-    NORMAL_UDF = 0
-    # scalar vectorized UDFs
-    PANDAS_UDF = 1
-    # grouped vectorized UDFs
-    PANDAS_GROUPED_UDF = 2
-
-
-class UserDefinedFunction(object):
+class PandasUdfType(object):
     """
-    User defined function in Python
-
-    .. versionadded:: 1.3
+    TODO: Add docs
     """
-    def __init__(self, func, returnType, name=None, pythonUdfType=PythonUdfType.NORMAL_UDF):
-        if not callable(func):
-            raise TypeError(
-                "Not a function or callable (__call__ is not defined): "
-                "{0}".format(type(func)))
 
-        self.func = func
-        self._returnType = returnType
-        # Stores UserDefinedPythonFunctions jobj, once initialized
-        self._returnType_placeholder = None
-        self._judf_placeholder = None
-        self._name = name or (
-            func.__name__ if hasattr(func, '__name__')
-            else func.__class__.__name__)
-        self.pythonUdfType = pythonUdfType
+    SCALAR = PythonEvalType.PANDAS_SCALAR_UDF
 
-    @property
-    def returnType(self):
-        # This makes sure this is called after SparkContext is initialized.
-        # ``_parse_datatype_string`` accesses to JVM for parsing a DDL formatted string.
-        if self._returnType_placeholder is None:
-            if isinstance(self._returnType, DataType):
-                self._returnType_placeholder = self._returnType
-            else:
-                self._returnType_placeholder = _parse_datatype_string(self._returnType)
-        return self._returnType_placeholder
+    GROUP_MAP = PythonEvalType.PANDAS_GROUP_MAP_UDF
 
-    @property
-    def _judf(self):
-        # It is possible that concurrent access, to newly created UDF,
-        # will initialize multiple UserDefinedPythonFunctions.
-        # This is unlikely, doesn't affect correctness,
-        # and should have a minimal performance impact.
-        if self._judf_placeholder is None:
-            self._judf_placeholder = self._create_judf()
-        return self._judf_placeholder
+    GROUP_AGG = PythonEvalType.PANDAS_GROUP_AGGREGATE_UDF
 
-    def _create_judf(self):
-        from pyspark.sql import SparkSession
-
-        spark = SparkSession.builder.getOrCreate()
-        sc = spark.sparkContext
-
-        wrapped_func = _wrap_function(sc, self.func, self.returnType)
-        jdt = spark._jsparkSession.parseDataType(self.returnType.json())
-        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.pythonUdfType)
-        return judf
-
-    def __call__(self, *cols):
-        judf = self._judf
-        sc = SparkContext._active_spark_context
-        return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
-
-    def _wrapped(self):
-        """
-        Wrap this udf with a function and attach docstring from func
-        """
-
-        # It is possible for a callable instance without __name__ attribute or/and
-        # __module__ attribute to be wrapped here. For example, functools.partial. In this case,
-        # we should avoid wrapping the attributes from the wrapped function to the wrapper
-        # function. So, we take out these attribute names from the default names to set and
-        # then manually assign it after being wrapped.
-        assignments = tuple(
-            a for a in functools.WRAPPER_ASSIGNMENTS if a != '__name__' and a != '__module__')
-
-        @functools.wraps(self.func, assigned=assignments)
-        def wrapper(*args):
-            return self(*args)
-
-        wrapper.__name__ = self._name
-        wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
-                              else self.func.__class__.__module__)
-
-        wrapper.func = self.func
-        wrapper.returnType = self.returnType
-        wrapper.pythonUdfType = self.pythonUdfType
-
-        return wrapper
-
-
-def _create_udf(f, returnType, pythonUdfType):
-
-    def _udf(f, returnType=StringType(), pythonUdfType=pythonUdfType):
-        if pythonUdfType == PythonUdfType.PANDAS_UDF:
-            import inspect
-            argspec = inspect.getargspec(f)
-            if len(argspec.args) == 0 and argspec.varargs is None:
-                raise ValueError(
-                    "0-arg pandas_udfs are not supported. "
-                    "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
-                )
-        udf_obj = UserDefinedFunction(f, returnType, pythonUdfType=pythonUdfType)
-        return udf_obj._wrapped()
-
-    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf
-    if f is None or isinstance(f, (str, DataType)):
-        # If DataType has been passed as a positional argument
-        # for decorator use it as a returnType
-        return_type = f or returnType
-        return functools.partial(_udf, returnType=return_type, pythonUdfType=pythonUdfType)
-    else:
-        return _udf(f=f, returnType=returnType, pythonUdfType=pythonUdfType)
-
+    GROUP_FLATMAP = PythonEvalType.PANDAS_GROUP_FLATMAP_UDF
 
 @since(1.3)
 def udf(f=None, returnType=StringType()):
@@ -2208,16 +2093,26 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.NORMAL_UDF)
+    # decorator @udf, @udf(), @udf(dataType())
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(_create_udf, returnType=return_type,
+                                 udfType=PythonEvalType.SQL_BATCHED_UDF)
+    else:
+        return _create_udf(f=f, returnType=returnType,
+                           udfType=PythonEvalType.SQL_BATCHED_UDF)
 
 
 @since(2.3)
-def pandas_udf(f=None, returnType=StringType()):
+def pandas_udf(f=None, returnType=None, functionType=None):
     """
     Creates a vectorized user defined function (UDF).
 
     :param f: user-defined function. A python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
+    :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUdfType`
 
     The user-defined function can define one of the following transformations:
 
@@ -2279,7 +2174,36 @@ def pandas_udf(f=None, returnType=StringType()):
 
     .. note:: The user-defined function must be deterministic.
     """
-    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.PANDAS_UDF)
+    # decorator @pandas_udf(dataType(), functionType)
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+
+        return_type = f or returnType
+
+        if return_type is None:
+            raise ValueError("Must specify return type.")
+
+        if functionType is not None:
+            # @pandas_udf(dataType, functionType=functionType)
+            # @pandas_udf(returnType=dataType, functionType=functionType)
+            udf_type = functionType
+        elif returnType is not None and isinstance(returnType, int):
+            # @pandas_udf(dataType, functionType)
+            udf_type = returnType
+        else:
+            # @pandas_udf(dataType) or @pandas_udf(returnType=dataType)
+            udf_type = PythonEvalType.PANDAS_SCALAR_UDF
+
+        return functools.partial(_create_udf, returnType=return_type, udfType=udf_type)
+    else:
+
+        if returnType is None:
+            raise ValueError("Must specify return type.")
+
+        udf_type = functionType or PythonEvalType.PANDAS_SCALAR_UDF
+
+        return _create_udf(f=f, returnType=returnType, udfType=udf_type)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
