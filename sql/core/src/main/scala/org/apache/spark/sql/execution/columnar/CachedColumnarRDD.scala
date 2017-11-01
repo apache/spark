@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.storage.{RDDBlockId, RDDPartitionMetadataBlockId}
 
 class CachedColumnarRDD(
     @transient private var _sc: SparkContext,
@@ -26,15 +28,73 @@ class CachedColumnarRDD(
   extends RDD[AnyRef](_sc, Seq(new OneToOneDependency(dataRDD))) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[AnyRef] = {
-    null
+    val cachedBatch = dataRDD.iterator(split, context).next()
+    // put metadata to blockmanager
+    SparkEnv.get.blockManager.putSingle(RDDPartitionMetadataBlockId(id, split.index),
+      cachedBatch.stats.get, dataRDD.getStorageLevel)
+    Iterator(cachedBatch)
   }
 
-  override protected def getPartitions = {
-    null
+  override protected def getPartitions: Array[Partition] = dataRDD.partitions
+
+  private def fetchOrComputeCachedBatch(partition: Partition, context: TaskContext):
+      Iterator[CachedBatch] = {
+    // metadata block can be evicted by BlockManagers but we may still keep CachedBatch in memory
+    // so that we still need to try to fetch it from Cache
+    val blockId = RDDBlockId(id, partition.index)
+    SparkEnv.get.blockManager.getOrElseUpdate(blockId, getStorageLevel, elementClassTag, () => {
+      computeOrReadCheckpoint(partition, context)
+    }) match {
+      case Left(blockResult) =>
+        val existingMetrics = context.taskMetrics().inputMetrics
+        existingMetrics.incBytesRead(blockResult.bytes)
+        new InterruptibleIterator[CachedBatch](context,
+          blockResult.data.asInstanceOf[Iterator[CachedBatch]]) {
+          override def next(): CachedBatch = {
+            existingMetrics.incRecordsRead(1)
+            delegate.next()
+          }
+        }
+      case Right(iter) =>
+        new InterruptibleIterator(context, iter.asInstanceOf[Iterator[CachedBatch]])
+    }
   }
 
-  override private[spark] def getOrCompute(partition: Partition, context: TaskContext):
+  override private[spark] def getOrCompute(split: Partition, context: TaskContext):
       Iterator[AnyRef] = {
-    null
+    val metadataBlockId = RDDPartitionMetadataBlockId(id, split.index)
+    // if metadata block is not contained
+    val metadataBlockOpt = SparkEnv.get.blockManager.get[InternalRow](metadataBlockId)
+    if (metadataBlockOpt.isDefined) {
+      val metadataBlock = metadataBlockOpt.get
+      new InterruptibleIterator[AnyRef](context, new Iterator[AnyRef] {
+
+        var fetchingFirstElement = true
+
+        var delegate: Iterator[CachedBatch] = _
+
+        override def hasNext: Boolean = {
+          if (fetchingFirstElement) {
+            true
+          } else {
+            delegate = fetchOrComputeCachedBatch(split, context)
+            delegate.hasNext
+          }
+        }
+
+        override def next(): AnyRef = {
+          if (fetchingFirstElement) {
+            fetchingFirstElement = false
+            val mb = metadataBlock.data.next()
+            mb.asInstanceOf[InternalRow]
+          } else {
+            delegate.next()
+          }
+        }
+      })
+    } else {
+      fetchOrComputeCachedBatch(split, context)
+    }
+
   }
 }

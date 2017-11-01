@@ -31,7 +31,7 @@ import org.apache.spark.annotation.DeveloperApi
  * If your BlockId should be serializable, be sure to add it to the BlockId.apply() method.
  */
 @DeveloperApi
-sealed abstract class BlockId {
+abstract class BlockId {
   /** A globally unique identifier for this Block. Can be used for ser/de. */
   def name: String
 
@@ -47,6 +47,11 @@ sealed abstract class BlockId {
 @DeveloperApi
 case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
   override def name: String = "rdd_" + rddId + "_" + splitIndex
+}
+
+@DeveloperApi
+case class RDDPartitionMetadataBlockId(rddId: Int, splitIndex: Int) extends BlockId {
+  override def name: String = "rdd_" + rddId + "_" + splitIndex + ".metadata"
 }
 
 // Format of the shuffle block ids (including data and index) should be kept in sync with
@@ -103,6 +108,7 @@ class UnrecognizedBlockId(name: String)
 @DeveloperApi
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
+  val PARTITION_METADATA = "rdd_([0-9]+)_([0-9]+).metadata".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
@@ -116,6 +122,8 @@ object BlockId {
   def apply(name: String): BlockId = name match {
     case RDD(rddId, splitIndex) =>
       RDDBlockId(rddId.toInt, splitIndex.toInt)
+    case PARTITION_METADATA(rddId, splitIndex) =>
+      RDDPartitionMetadataBlockId(rddId.toInt, splitIndex.toInt)
     case SHUFFLE(shuffleId, mapId, reduceId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
     case SHUFFLE_DATA(shuffleId, mapId, reduceId) =>
