@@ -231,12 +231,12 @@ private final class SnappyOutputStreamWrapper(os: SnappyOutputStream) extends Ou
 @DeveloperApi
 class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
-  val bufferSize = conf.getSizeAsBytes("spark.io.compression.zstd.bufferSize", "32k").toInt
+  private val bufferSize = conf.getSizeAsBytes("spark.io.compression.zstd.bufferSize", "32k").toInt
+  // Default compression level for zstd compression to 1 because it is
+  // fastest of all with reasonably high compression ratio.
+  private val level = conf.getInt("spark.io.compression.zstd.level", 1)
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    // Default compression level for zstd compression to 1 because it is
-    // fastest of all with reasonably high compression ratio.
-    val level = conf.getInt("spark.io.compression.zstd.level", 1)
     // Wrap the zstd output stream in a buffered output stream, so that we can
     // avoid overhead excessive of JNI call while trying to compress small amount of data.
     new BufferedOutputStream(new ZstdOutputStream(s, level), bufferSize)
