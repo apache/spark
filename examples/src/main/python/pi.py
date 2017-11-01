@@ -27,12 +27,16 @@ from pyspark.sql import SparkSession
 if __name__ == "__main__":
     """
         Usage: pi [partitions]
+        
+        Monte Carlo method is used to estimate Pi in the below example.
     """
     spark = SparkSession\
         .builder\
         .appName("PythonPi")\
         .getOrCreate()
-
+    
+    # If no arguments are passed(i.e. `len(sys.argv) < = 1` ) 
+    # while calling this script, the default value assigned is 2
     partitions = int(sys.argv[1]) if len(sys.argv) > 1 else 2
     n = 100000 * partitions
 
