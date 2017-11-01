@@ -72,7 +72,7 @@ class _ImageSchema(object):
 
         if self._ocvTypes is None:
             ctx = SparkContext._active_spark_context
-            self._ocvTypes = ctx._jvm.org.apache.spark.ml.image.ImageSchema._ocvTypes()
+            self._ocvTypes = dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema._ocvTypes())
         return self._ocvTypes
 
     @property
@@ -108,7 +108,7 @@ class _ImageSchema(object):
         """
         Converts an image to a one-dimensional array.
 
-        :param image (object): The image to be converted
+        :param image: The image to be converted
         :rtype array: The image as a one-dimensional array
 
         .. versionadded:: 2.3.0
@@ -126,8 +126,8 @@ class _ImageSchema(object):
         """
         Converts a one-dimensional array to a two-dimensional image.
 
-        :param array (array): The array to convert to image
-        :param origin (str): Path to the image
+        :param array array: The array to convert to image
+        :param str origin: Path to the image
         :rtype object: Two dimensional image
 
         .. versionadded:: 2.3.0
@@ -148,7 +148,7 @@ class _ImageSchema(object):
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order
         # when the new DataFrame is created by UDF
-        return _create_row(imageFields,
+        return _create_row(self.imageFields,
                            [origin, height, width, nChannels, mode, data])
 
     def readImages(self, path, recursive=False, numPartitions=0,
@@ -156,12 +156,12 @@ class _ImageSchema(object):
         """
         Reads the directory of images from the local or remote source.
 
-        :param path (str): Path to the image directory
-        :param spark (SparkSession): The current spark session
-        :param recursive (bool): Recursive search flag
-        :param numPartitions (int): Number of DataFrame partitions
-        :param dropImageFailures (bool): Drop the files that are not valid images
-        :param sampleRatio (double): Fraction of the images loaded
+        :param str path: Path to the image directory
+        :param SparkSession spark: The current spark session
+        :param bool recursive: Recursive search flag
+        :param int numPartitions: Number of DataFrame partitions
+        :param bool dropImageFailures: Drop the files that are not valid images
+        :param float sampleRatio: Fraction of the images loaded
         :rtype DataFrame: DataFrame with a single column of "images",
                see ImageSchema for details
 
