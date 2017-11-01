@@ -31,7 +31,7 @@ class CachedColumnarRDD(
     val cachedBatch = dataRDD.iterator(split, context).next()
     // put metadata to blockmanager
     SparkEnv.get.blockManager.putSingle(RDDPartitionMetadataBlockId(id, split.index),
-      cachedBatch.stats.get, dataRDD.getStorageLevel)
+      cachedBatch.stats, dataRDD.getStorageLevel)
     Iterator(cachedBatch)
   }
 
