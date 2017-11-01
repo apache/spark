@@ -2126,4 +2126,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val mean = result.select("DecimalCol").where($"summary" === "mean")
     assert(mean.collect().toSet === Set(Row("0.0345678900000000000000000000000000000")))
   }
+
+  test("SPARK-22398: type coercion for IN predicates should be coherent") {
+    val df = spark.range(2)
+    val inWithLiterals = df.where("id in ('01')")
+    val inWithSubquery = df.where("id in (select '01' from (select 1))")
+    assert(inWithLiterals.count() == inWithSubquery.count(),
+      "IN behavior is not the same with list of Literals and with a subquery")
+  }
 }
