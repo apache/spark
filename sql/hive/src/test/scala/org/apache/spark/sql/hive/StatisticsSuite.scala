@@ -1054,23 +1054,23 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     )
 
     val expectedSerializedHistograms = Map(
-      "spark.sql.statistics.colStats.cbyte.histogram-0" ->
+      "spark.sql.statistics.colStats.cbyte.histogram" ->
         "1.0, Bucket(1.0, 1.0, 1), Bucket(1.0, 2.0, 1)",
-      "spark.sql.statistics.colStats.cshort.histogram-0" ->
+      "spark.sql.statistics.colStats.cshort.histogram" ->
         "1.0, Bucket(1.0, 1.0, 1), Bucket(1.0, 3.0, 1)",
-      "spark.sql.statistics.colStats.cint.histogram-0" ->
+      "spark.sql.statistics.colStats.cint.histogram" ->
         "1.0, Bucket(1.0, 1.0, 1), Bucket(1.0, 4.0, 1)",
-      "spark.sql.statistics.colStats.clong.histogram-0" ->
+      "spark.sql.statistics.colStats.clong.histogram" ->
         "1.0, Bucket(1.0, 1.0, 1), Bucket(1.0, 5.0, 1)",
-      "spark.sql.statistics.colStats.cdouble.histogram-0" ->
+      "spark.sql.statistics.colStats.cdouble.histogram" ->
         "1.0, Bucket(1.0, 1.0, 1), Bucket(1.0, 6.0, 1)",
-      "spark.sql.statistics.colStats.cfloat.histogram-0" ->
+      "spark.sql.statistics.colStats.cfloat.histogram" ->
         "1.0, Bucket(1.0, 1.0, 1), Bucket(1.0, 7.0, 1)",
-      "spark.sql.statistics.colStats.cdecimal.histogram-0" ->
+      "spark.sql.statistics.colStats.cdecimal.histogram" ->
         "1.0, Bucket(1.0, 1.0, 1), Bucket(1.0, 8.0, 1)",
-      "spark.sql.statistics.colStats.cdate.histogram-0" ->
+      "spark.sql.statistics.colStats.cdate.histogram" ->
         "1.0, Bucket(16929.0, 16929.0, 1), Bucket(16929.0, 16930.0, 1)",
-      "spark.sql.statistics.colStats.ctimestamp.histogram-0" ->
+      "spark.sql.statistics.colStats.ctimestamp.histogram" ->
         "1.0, Bucket(1.462690801E15, 1.462690801E15, 1), Bucket(1.462690801E15, 1.462777202E15, 1)"
     )
 

@@ -1028,20 +1028,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
     }
 
+    // In Hive metastore, the length of value in table properties cannot be larger than 4000.
+    // We need to split the key-value pair into multiple key-value properties if the length of
+    // value exceeds this threshold.
+    val threshold = conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
+
     val colNameTypeMap: Map[String, DataType] =
       schema.fields.map(f => (f.name, f.dataType)).toMap
     stats.colStats.foreach { case (colName, colStat) =>
       colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
-        if (k == ColumnStat.KEY_HISTOGRAM) {
-          // In Hive metastore, the length of value in table properties cannot be larger than 4000,
-          // so we need to split histogram into multiple key-value properties if it's too long.
-          val maxValueLen = 4000
+        if (v.length > threshold) {
           val baseName = columnStatKeyPropName(colName, k)
           var i = 0
-          for (begin <- 0 until v.length by maxValueLen) {
-            val end = math.min(v.length, begin + maxValueLen)
-            statsProperties +=
-              (baseName + ColumnStat.KEY_HISTOGRAM_SEPARATOR + i -> v.substring(begin, end))
+          for (begin <- 0 until v.length by threshold) {
+            val end = math.min(v.length, begin + threshold)
+            statsProperties += (baseName + KEY_INDEX_SEPARATOR + i -> v.substring(begin, end))
             i += 1
           }
         } else {
@@ -1064,10 +1065,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     } else {
 
       val colStats = new mutable.HashMap[String, ColumnStat]
+      // Sort column stats properties.
       val sortedStatsProps = statsProps.toSeq.sortBy { case (k, v) =>
-        val items = k.split(ColumnStat.KEY_HISTOGRAM_SEPARATOR)
+        val items = k.split(KEY_INDEX_SEPARATOR)
         if (items.length == 2) {
-          // Histogram may have multiple properties, so they need to be sorted by name and number.
+          // This key have multiple properties, they need to be sorted by name and index.
           (items(0), items(1).toInt)
         } else {
           // For other stats properties, only sort by name.
@@ -1084,18 +1086,29 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           // If "version" field is defined, then the column stat is defined.
           val keyPrefix = columnStatKeyPropName(field.name, "")
           val colStatMap = new mutable.HashMap[String, String]
-          val histogramKeyPrefix = keyPrefix + ColumnStat.KEY_HISTOGRAM
-          var histogramValue = ""
+          var valueToComplete = ""
+          var previousKey = ""
           sortedStatsProps.foreach { case (k, v) =>
-            if (k.startsWith(histogramKeyPrefix)) {
-              // Need to concatenate histogram string if it has multiple entries.
-              histogramValue += v
-            } else if (k.startsWith(keyPrefix)) {
-              colStatMap += (k.drop(keyPrefix.length) -> v)
+            if (k.startsWith(keyPrefix)) {
+              if (k.contains(KEY_INDEX_SEPARATOR)) {
+                // This key have multiple properties, need to concatenate its value.
+                val currentKey = k.split(KEY_INDEX_SEPARATOR).head
+                if (currentKey == previousKey) {
+                  valueToComplete += v
+                } else {
+                  if (valueToComplete.nonEmpty) {
+                    colStatMap += (previousKey.drop(keyPrefix.length) -> valueToComplete)
+                  }
+                  previousKey = currentKey
+                  valueToComplete = v
+                }
+              } else {
+                colStatMap += (k.drop(keyPrefix.length) -> v)
+              }
             }
           }
-          if (histogramValue.nonEmpty) {
-            colStatMap += ColumnStat.KEY_HISTOGRAM -> histogramValue
+          if (valueToComplete.nonEmpty) {
+            colStatMap += (previousKey.drop(keyPrefix.length) -> valueToComplete)
           }
           ColumnStat.fromMap(table, field, colStatMap.toMap).foreach {
             colStat => colStats += field.name -> colStat
@@ -1324,6 +1337,9 @@ object HiveExternalCatalog {
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
   val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
   val STATISTICS_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
+
+  // Separator for key name and its index if the key-value pair is split into multiple properties.
+  val KEY_INDEX_SEPARATOR = "-"
 
   val TABLE_PARTITION_PROVIDER = SPARK_SQL_PREFIX + "partitionProvider"
   val TABLE_PARTITION_PROVIDER_CATALOG = "catalog"
