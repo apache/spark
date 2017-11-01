@@ -108,8 +108,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
 
-    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1,
-      featureSubsetStrategy = "all",
+    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
@@ -118,13 +117,14 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
-  private[ml] def train(data: RDD[LabeledPoint],
-      oldStrategy: OldStrategy, featureSubsetStrategy: String): DecisionTreeRegressionModel = {
+  private[ml] def train(
+      data: RDD[LabeledPoint],
+      oldStrategy: OldStrategy,
+      featureSubsetStrategy: String): DecisionTreeRegressionModel = {
     val instr = Instrumentation.create(this, data)
     instr.logParams(params: _*)
 
-    val trees = RandomForest.run(data, oldStrategy, numTrees = 1,
-      featureSubsetStrategy,
+    val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy,
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
