@@ -31,7 +31,6 @@ class CachedColumnarRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[AnyRef] = {
     if (containsPartitionMetadata) {
-      println("evaluate with partition metadata")
       val parentIterator = dataRDD.iterator(split, context)
       if (!parentIterator.hasNext) {
         Iterator()
@@ -51,10 +50,8 @@ class CachedColumnarRDD(
   override private[spark] def getOrCompute(split: Partition, context: TaskContext):
       Iterator[AnyRef] = {
     val metadataBlockId = RDDPartitionMetadataBlockId(id, split.index)
-    val metadataBlockOpt = SparkEnv.get.blockManager.get[InternalRow](metadataBlockId)
     val superGetOrCompute: (Partition, TaskContext) => Iterator[AnyRef] = super.getOrCompute
-    if (metadataBlockOpt.isDefined) {
-      val metadataBlock = metadataBlockOpt.get
+    SparkEnv.get.blockManager.getSingle[InternalRow](metadataBlockId).map(metadataBlock =>
       new InterruptibleIterator[AnyRef](context, new Iterator[AnyRef] {
 
         private var fetchingFirstElement = true
@@ -65,7 +62,9 @@ class CachedColumnarRDD(
           if (fetchingFirstElement) {
             true
           } else {
-            delegate = superGetOrCompute(split, context)
+            if (delegate == null) {
+              delegate = superGetOrCompute(split, context)
+            }
             delegate.hasNext
           }
         }
@@ -73,16 +72,13 @@ class CachedColumnarRDD(
         override def next(): AnyRef = {
           if (fetchingFirstElement) {
             fetchingFirstElement = false
-            val mb = metadataBlock.data.next()
+            val mb = metadataBlock
             mb.asInstanceOf[InternalRow]
           } else {
             delegate.next()
           }
         }
       })
-    } else {
-      superGetOrCompute(split, context)
-    }
-
+    ).getOrElse(superGetOrCompute(split, context))
   }
 }
