@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Options for the ORC data source.
  */
-private[sql] class OrcOptions(
+class OrcOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
   extends Serializable {
@@ -59,7 +59,7 @@ private[sql] class OrcOptions(
   }
 }
 
-private[sql] object OrcOptions {
+object OrcOptions {
   // The ORC compression short names
   private val shortOrcCompressionCodecNames = Map(
     "none" -> "NONE",
