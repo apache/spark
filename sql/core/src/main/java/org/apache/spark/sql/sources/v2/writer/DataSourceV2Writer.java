@@ -75,12 +75,11 @@ public interface DataSourceV2Writer {
   void commit(WriterCommitMessage[] messages);
 
   /**
-   * Aborts this writing job because some data writers are failed to write the records and aborted,
-   * or the Spark job fails with some unknown reasons, or {@link #commit(WriterCommitMessage[])}
-   * fails.
+   * Aborts this writing job because some data writers are failed and keep failing when retry, or
+   * the Spark job fails with some unknown reasons, or {@link #commit(WriterCommitMessage[])} fails.
    *
-   * If this method fails (by throwing an exception), the underlying data source may have garbage
-   * that need to be cleaned manually.
+   * If this method fails (by throwing an exception), the underlying data source may require manual
+   * cleanup.
    *
    * Unless the abort is triggered by the failure of commit, the given messages should have some
    * null slots as there maybe only a few data writers that are committed before the abort
