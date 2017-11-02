@@ -49,7 +49,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   /** Header fields for the RDD table */
   private val rddHeader = Seq(
-    "RDD ID",
+    "ID",
     "RDD Name",
     "Storage Level",
     "Cached Partitions",

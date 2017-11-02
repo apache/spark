@@ -57,7 +57,7 @@ class StoragePageSuite extends SparkFunSuite {
     val xmlNodes = storagePage.rddTable(Seq(rdd1, rdd2, rdd3))
 
     val headers = Seq(
-      "RDD ID",
+      "ID",
       "RDD Name",
       "Storage Level",
       "Cached Partitions",
