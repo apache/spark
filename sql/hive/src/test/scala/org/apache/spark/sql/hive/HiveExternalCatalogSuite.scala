@@ -89,4 +89,22 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       assert(restoredTable.schema == newSchema)
     }
   }
+
+  test("SPARK-22306: alter table schema should not erase the bucketing metadata at hive side") {
+    val catalog = newBasicCatalog()
+    externalCatalog.client.runSqlHive(
+      """
+        |CREATE TABLE db1.t(a string, b string)
+        |CLUSTERED BY (a, b) SORTED BY (a, b) INTO 10 BUCKETS
+        |STORED AS PARQUET
+      """.stripMargin)
+
+    val newSchema = new StructType().add("a", "string").add("b", "string").add("c", "string")
+    catalog.alterTableDataSchema("db1", "t", newSchema)
+
+    assert(catalog.getTable("db1", "t").schema == newSchema)
+    val bucketString = externalCatalog.client.runSqlHive("DESC FORMATTED db1.t")
+      .filter(_.contains("Num Buckets")).head
+    assert(bucketString.contains("10"))
+  }
 }
