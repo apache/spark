@@ -20,8 +20,8 @@ package org.apache.spark.ml.feature
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.SparkException
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
