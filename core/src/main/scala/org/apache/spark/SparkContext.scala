@@ -1800,23 +1800,23 @@ class SparkContext(config: SparkConf) extends Logging {
    * If a jar is added during execution, it will not be available until the next TaskSet starts.
    *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
-   *             an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
   def addJar(path: String): Unit = {
-    addJar(path, false)
+    addJar(path, addToCurrentClassLoader = false)
   }
 
   /**
    * Adds a JAR dependency for all tasks to be executed on this `SparkContext` in the future.
+   *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
-   *             an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    * @param addToCurrentClassLoader if true will add the jar to the current threads' classloader.
-   *                                In general adding to the current threads' class loader will
-   *                                impact all other application threads unless they have explicitly
-   *                                changed their class loader.
+   * In general adding to the current threads' class loader will impact all other application
+   * threads unless they have explicitly changed their class loader.
    */
   @DeveloperApi
-  def addJar(path: String, addToCurrentClassLoader: Boolean) {
+  def addJar(path: String, addToCurrentClassLoader: Boolean): Unit = {
     def addJarFile(file: File): String = {
       try {
         if (!file.exists()) {
@@ -1852,6 +1852,7 @@ class SparkContext(config: SparkConf) extends Logging {
           case _ => path
         }
       }
+
       if (key != null) {
         val timestamp = System.currentTimeMillis
         if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
@@ -1860,17 +1861,10 @@ class SparkContext(config: SparkConf) extends Logging {
         }
 
         if (addToCurrentClassLoader) {
-          val currentCL = Utils.getContextOrSparkClassLoader
-          currentCL match {
-            case cl: MutableURLClassLoader =>
-              val uri = if (path.contains("\\")) {
-                // For local paths with backslashes on Windows, URI throws an exception
-                new File(path).toURI
-              } else {
-                new URI(path)
-              }
-              cl.addURL(uri.toURL)
-            case _ => logWarning(s"Unsupported cl $currentCL will not update jars thread cl")
+          Utils.getContextOrSparkClassLoader match {
+            case cl: MutableURLClassLoader => cl.addURL(Utils.resolveURI(path).toURL)
+            case cl => logWarning(
+              s"Unsupported class loader $cl will not update jars in the thread class loader.")
           }
         }
       }

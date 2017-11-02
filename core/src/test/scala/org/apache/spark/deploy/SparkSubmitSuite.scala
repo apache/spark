@@ -550,14 +550,14 @@ class SparkSubmitSuite
       Seq(sparkHome, "R", "pkg", "tests", "fulltests", "jarTest.R").mkString(File.separator)
     assert(new File(rScriptDir).exists)
 
-    val tempDir = Utils.createTempDir().toString
+    val tempDir = Utils.createTempDir().getAbsolutePath
     // compile a small jar containing a class that will be called from R code.
-    val jarURL = TestUtils.createDummyJar(tempDir, "sparkrtest", "DummyClass")
+    val jarURL = TestUtils.createDummyJar(tempDir, "sparkrtest", "DummyClass").toURI.toURL
 
     val args = Seq(
       "--name", "testApp",
       "--master", "local",
-      "--jars", jarURL,
+      "--jars", jarURL.toString,
       "--verbose",
       "--conf", "spark.ui.enabled=false",
       rScriptDir)
