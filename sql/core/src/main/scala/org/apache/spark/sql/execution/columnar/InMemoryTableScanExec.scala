@@ -234,6 +234,7 @@ case class InMemoryTableScanExec(
         iterForPartitionCase.next() match {
           case partitionStats: InternalRow =>
             if (!partitionFilter.eval(partitionStats)) {
+              logInfo(s"skip partition $index based on the stats")
               Iterator[CachedBatch]()
             } else {
               logInfo(s"accept partition $index based on the stats")
