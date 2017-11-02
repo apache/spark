@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.columnar
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.storage.{RDDBlockId, RDDPartitionMetadataBlockId}
+import org.apache.spark.storage.{RDDBlockId, RDDPartitionMetadataBlockId, StorageLevel}
 
 class CachedColumnarRDD(
     @transient private var _sc: SparkContext,
     private var dataRDD: RDD[CachedBatch],
-    containsPartitionMetadata: Boolean)
+    containsPartitionMetadata: Boolean,
+    expectedStorageLevel: StorageLevel)
   extends RDD[AnyRef](_sc, Seq(new OneToOneDependency(dataRDD))) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[AnyRef] = {
@@ -36,7 +37,7 @@ class CachedColumnarRDD(
       } else {
         val cachedBatch = parentIterator.next()
         SparkEnv.get.blockManager.putSingle(RDDPartitionMetadataBlockId(id, split.index),
-          cachedBatch.stats, dataRDD.getStorageLevel)
+          cachedBatch.stats, expectedStorageLevel)
         Iterator(cachedBatch)
       }
     } else {
@@ -51,7 +52,8 @@ class CachedColumnarRDD(
     // metadata block can be evicted by BlockManagers but we may still keep CachedBatch in memory
     // so that we still need to try to fetch it from Cache
     val blockId = RDDBlockId(id, partition.index)
-    SparkEnv.get.blockManager.getOrElseUpdate(blockId, getStorageLevel, elementClassTag, () => {
+    SparkEnv.get.blockManager.getOrElseUpdate(blockId, expectedStorageLevel, elementClassTag,
+      () => {
       computeOrReadCheckpoint(partition, context)
     }) match {
       case Left(blockResult) =>

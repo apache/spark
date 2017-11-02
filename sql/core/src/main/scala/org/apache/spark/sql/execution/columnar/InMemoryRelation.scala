@@ -200,7 +200,7 @@ case class InMemoryRelation(
     }
 
     val cached = new CachedColumnarRDD(batchedRDD.sparkContext, batchedRDD,
-      usePartitionLevelMetadata).persist(storageLevel)
+      usePartitionLevelMetadata, storageLevel).persist(storageLevel)
 
     cached.setName(
       tableName.map(n => s"In-memory table $n")
