@@ -275,6 +275,21 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("submit submitMiniBatch method of OnlineLDAOptimizer correctly processes an empty RDD") {
+    val lda = new LDA().setK(2).setOptimizer("online")
+    val corpus = sc.parallelize(tinyCorpus, 2)
+    val optimizer = lda.getOptimizer.asInstanceOf[OnlineLDAOptimizer]
+    val emptyRDD = sc.parallelize(Seq[(Long, Vector)]())
+
+    optimizer.initialize(corpus, lda)
+    val initialLambda = optimizer.getLambda.copy
+    optimizer.submitMiniBatch(emptyRDD)
+    val newLambda = optimizer.getLambda
+
+    assert(initialLambda === newLambda, "Submition of an empty mini-batch " +
+      "changes the state of the optimizer while it should not ")
+  }
+
   test("LocalLDAModel logLikelihood") {
     val ldaModel: LocalLDAModel = toyModel
 
