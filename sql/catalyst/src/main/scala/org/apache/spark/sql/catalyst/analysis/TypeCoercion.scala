@@ -422,7 +422,7 @@ object TypeCoercion {
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
           findCommonTypeForBinaryComparison(l.dataType, r.dataType)
-            .orElse(findTightestCommonType(l.dataType, r.dataType))
+            .orElse(findWiderTypeForTwo(l.dataType, r.dataType))
         }
 
         // The number of columns/expressions must match between LHS and RHS of an
@@ -453,7 +453,7 @@ object TypeCoercion {
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         findWiderCommonType(b.map(_.dataType)).flatMap(listDataType => {
           findCommonTypeForBinaryComparison(listDataType, a.dataType)
-            .orElse(findTightestCommonType(listDataType, a.dataType))
+            .orElse(findWiderTypeForTwo(listDataType, a.dataType))
         }) match {
           case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
           case None => i
