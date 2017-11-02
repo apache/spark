@@ -31,6 +31,7 @@ class CachedColumnarRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[AnyRef] = {
     if (containsPartitionMetadata) {
+      println("evaluate with partition metadata")
       val parentIterator = dataRDD.iterator(split, context)
       if (!parentIterator.hasNext) {
         Iterator()
