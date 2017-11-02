@@ -512,9 +512,41 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
+            import numpy as np
+
+            # Convert pandas.DataFrame to list of numpy records
+            np_records = data.to_records(index=False)
+
+            # Check if any columns need to be fixed for Spark to infer properly
+            record_type_list = None
+            if schema is None and len(np_records) > 0:
+                cur_dtypes = np_records[0].dtype
+                col_names = cur_dtypes.names
+                record_type_list = []
+                has_rec_fix = False
+                for i in xrange(len(cur_dtypes)):
+                    curr_type = cur_dtypes[i]
+                    # If type is a datetime64 timestamp, convert to microseconds
+                    # NOTE: if dtype is M8[ns] then np.record.tolist() will output values as longs,
+                    # this conversion will lead to an output of py datetime objects, see SPARK-22417
+                    if curr_type == np.dtype('M8[ns]'):
+                        curr_type = 'M8[us]'
+                        has_rec_fix = True
+                    record_type_list.append((str(col_names[i]), curr_type))
+                if not has_rec_fix:
+                    record_type_list = None
+
+            # If no schema supplied by user then get the names of columns only
             if schema is None:
                 schema = [str(x) for x in data.columns]
-            data = [r.tolist() for r in data.to_records(index=False)]
+
+            # Convert list of numpy records to python lists
+            if record_type_list is not None:
+                def fix_rec(rec):
+                    return rec.astype(record_type_list)
+                data = [fix_rec(r).tolist() for r in np_records]
+            else:
+                data = [r.tolist() for r in np_records]
 
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
