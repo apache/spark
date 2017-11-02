@@ -21,16 +21,17 @@ import java.util.{Collection, Collections, Date}
 
 import scala.collection.JavaConverters._
 
-import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.{Environment, Secret, TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Value.{Scalar, Type}
 import org.apache.mesos.SchedulerDriver
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.config
 
 class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 
@@ -337,5 +338,52 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     scheduler.resourceOffers(driver, Collections.singletonList(offer))
 
     verify(driver, times(1)).declineOffer(offerId, filter)
+  }
+
+  test("Creates an env-based reference secrets.") {
+    val launchedTasks = launchDriverTask(
+      Utils.configEnvBasedRefSecrets(config.driverSecretConfig))
+    Utils.verifyEnvBasedRefSecrets(launchedTasks)
+  }
+
+  test("Creates an env-based value secrets.") {
+    val launchedTasks = launchDriverTask(
+      Utils.configEnvBasedValueSecrets(config.driverSecretConfig))
+    Utils.verifyEnvBasedValueSecrets(launchedTasks)
+  }
+
+  test("Creates file-based reference secrets.") {
+    val launchedTasks = launchDriverTask(
+      Utils.configFileBasedRefSecrets(config.driverSecretConfig))
+    Utils.verifyFileBasedRefSecrets(launchedTasks)
+  }
+
+  test("Creates a file-based value secrets.") {
+    val launchedTasks = launchDriverTask(
+      Utils.configFileBasedValueSecrets(config.driverSecretConfig))
+    Utils.verifyFileBasedValueSecrets(launchedTasks)
+  }
+
+  private def launchDriverTask(addlSparkConfVars: Map[String, String]): List[TaskInfo] = {
+    setScheduler()
+    val mem = 1000
+    val cpu = 1
+    val driverDesc = new MesosDriverDescription(
+      "d1",
+      "jar",
+      mem,
+      cpu,
+      true,
+      command,
+      Map("spark.mesos.executor.home" -> "test",
+        "spark.app.name" -> "test") ++
+        addlSparkConfVars,
+      "s1",
+      new Date())
+    val response = scheduler.submitDriver(driverDesc)
+    assert(response.success)
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, Collections.singletonList(offer))
+    Utils.verifyTaskLaunched(driver, "o1")
   }
 }

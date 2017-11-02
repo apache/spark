@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.{LongType, StringType, TypeCollection}
+import org.apache.spark.sql.types._
 
 class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
@@ -109,16 +109,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
 
-    assertError(EqualTo('mapField, 'mapField), "Cannot use map type in EqualTo")
-    assertError(EqualNullSafe('mapField, 'mapField), "Cannot use map type in EqualNullSafe")
+    assertError(EqualTo('mapField, 'mapField), "EqualTo does not support ordering on type MapType")
+    assertError(EqualNullSafe('mapField, 'mapField),
+      "EqualNullSafe does not support ordering on type MapType")
     assertError(LessThan('mapField, 'mapField),
-      s"requires ${TypeCollection.Ordered.simpleString} type")
+      "LessThan does not support ordering on type MapType")
     assertError(LessThanOrEqual('mapField, 'mapField),
-      s"requires ${TypeCollection.Ordered.simpleString} type")
+      "LessThanOrEqual does not support ordering on type MapType")
     assertError(GreaterThan('mapField, 'mapField),
-      s"requires ${TypeCollection.Ordered.simpleString} type")
+      "GreaterThan does not support ordering on type MapType")
     assertError(GreaterThanOrEqual('mapField, 'mapField),
-      s"requires ${TypeCollection.Ordered.simpleString} type")
+      "GreaterThanOrEqual does not support ordering on type MapType")
 
     assertError(If('intField, 'stringField, 'stringField),
       "type of predicate expression in If should be boolean")

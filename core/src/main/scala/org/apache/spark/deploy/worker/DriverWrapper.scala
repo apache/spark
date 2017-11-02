@@ -22,7 +22,8 @@ import java.io.File
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{DependencyUtils, SparkSubmit}
+import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil, SparkSubmit}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
@@ -30,7 +31,7 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, U
  * Utility object for launching driver programs such that they share fate with the Worker process.
  * This is used in standalone cluster mode only.
  */
-object DriverWrapper {
+object DriverWrapper extends Logging {
   def main(args: Array[String]) {
     args.toList match {
       /*
@@ -41,8 +42,10 @@ object DriverWrapper {
        */
       case workerUrl :: userJar :: mainClass :: extraArgs =>
         val conf = new SparkConf()
-        val rpcEnv = RpcEnv.create("Driver",
-          Utils.localHostName(), 0, conf, new SecurityManager(conf))
+        val host: String = Utils.localHostName()
+        val port: Int = sys.props.getOrElse("spark.driver.port", "0").toInt
+        val rpcEnv = RpcEnv.create("Driver", host, port, conf, new SecurityManager(conf))
+        logInfo(s"Driver address: ${rpcEnv.address}")
         rpcEnv.setupEndpoint("workerWatcher", new WorkerWatcher(rpcEnv, workerUrl))
 
         val currentLoader = Thread.currentThread.getContextClassLoader
@@ -72,6 +75,10 @@ object DriverWrapper {
   }
 
   private def setupDependencies(loader: MutableURLClassLoader, userJar: String): Unit = {
+    val sparkConf = new SparkConf()
+    val secMgr = new SecurityManager(sparkConf)
+    val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
+
     val Seq(packagesExclusions, packages, repositories, ivyRepoPath) =
       Seq("spark.jars.excludes", "spark.jars.packages", "spark.jars.repositories", "spark.jars.ivy")
         .map(sys.props.get(_).orNull)
@@ -86,7 +93,8 @@ object DriverWrapper {
         jarsProp
       }
     }
-    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar)
+    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf,
+      secMgr)
     DependencyUtils.addJarsToClassPath(localJars, loader)
   }
 }

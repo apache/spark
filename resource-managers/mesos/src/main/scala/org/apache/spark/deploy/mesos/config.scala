@@ -23,6 +23,39 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 package object config {
 
+  private[spark] class MesosSecretConfig private[config](taskType: String) {
+    private[spark] val SECRET_NAMES =
+      ConfigBuilder(s"spark.mesos.$taskType.secret.names")
+        .doc("A comma-separated list of secret reference names. Consult the Mesos Secret " +
+          "protobuf for more information.")
+        .stringConf
+        .toSequence
+        .createOptional
+
+    private[spark] val SECRET_VALUES =
+      ConfigBuilder(s"spark.mesos.$taskType.secret.values")
+        .doc("A comma-separated list of secret values.")
+        .stringConf
+        .toSequence
+        .createOptional
+
+    private[spark] val SECRET_ENVKEYS =
+      ConfigBuilder(s"spark.mesos.$taskType.secret.envkeys")
+        .doc("A comma-separated list of the environment variables to contain the secrets." +
+          "The environment variable will be set on the driver.")
+        .stringConf
+        .toSequence
+        .createOptional
+
+    private[spark] val SECRET_FILENAMES =
+      ConfigBuilder(s"spark.mesos.$taskType.secret.filenames")
+        .doc("A comma-separated list of file paths secret will be written to.  Consult the Mesos " +
+          "Secret protobuf for more information.")
+        .stringConf
+        .toSequence
+        .createOptional
+  }
+
   /* Common app configuration. */
 
   private[spark] val SHUFFLE_CLEANER_INTERVAL_S =
@@ -58,11 +91,15 @@ package object config {
 
   private[spark] val DRIVER_LABELS =
     ConfigBuilder("spark.mesos.driver.labels")
-      .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs.  Key-value " +
+      .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs. Key-value " +
         "pairs should be separated by a colon, and commas used to list more than one." +
         "Ex. key:value,key2:value2")
       .stringConf
       .createOptional
+
+  private[spark] val driverSecretConfig = new MesosSecretConfig("driver")
+
+  private[spark] val executorSecretConfig = new MesosSecretConfig("executor")
 
   private[spark] val DRIVER_FAILOVER_TIMEOUT =
     ConfigBuilder("spark.mesos.driver.failoverTimeout")

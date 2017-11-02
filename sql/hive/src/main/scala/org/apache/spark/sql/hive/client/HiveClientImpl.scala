@@ -28,6 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
@@ -110,12 +111,6 @@ private[hive] class HiveClientImpl(
     if (clientLoader.isolationOn) {
       // Switch to the initClassLoader.
       Thread.currentThread().setContextClassLoader(initClassLoader)
-      // Set up kerberos credentials for UserGroupInformation.loginUser within current class loader
-      if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
-        val principal = sparkConf.get("spark.yarn.principal")
-        val keytab = sparkConf.get("spark.yarn.keytab")
-        SparkHadoopUtil.get.loginUserFromKeytab(principal, keytab)
-      }
       try {
         newState()
       } finally {
@@ -132,14 +127,24 @@ private[hive] class HiveClientImpl(
       // in hive jars, which will turn off isolation, if SessionSate.detachSession is
       // called to remove the current state after that, hive client created later will initialize
       // its own state by newState()
-      Option(SessionState.get).getOrElse(newState())
+      val ret = SessionState.get
+      if (ret != null) {
+        // hive.metastore.warehouse.dir is determined in SharedState after the CliSessionState
+        // instance constructed, we need to follow that change here.
+        Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname)).foreach { dir =>
+          ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
+        }
+        ret
+      } else {
+        newState()
+      }
     }
   }
 
   // Log the default warehouse location.
   logInfo(
     s"Warehouse location for Hive client " +
-      s"(version ${version.fullVersion}) is ${conf.get("hive.metastore.warehouse.dir")}")
+      s"(version ${version.fullVersion}) is ${conf.getVar(ConfVars.METASTOREWAREHOUSE)}")
 
   private def newState(): SessionState = {
     val hiveConf = new HiveConf(classOf[SessionState])
@@ -450,7 +455,7 @@ private[hive] class HiveClientImpl(
         // in table properties. This means, if we have bucket spec in both hive metastore and
         // table properties, we will trust the one in table properties.
         bucketSpec = bucketSpec,
-        owner = h.getOwner,
+        owner = Option(h.getOwner).getOrElse(""),
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(
@@ -495,7 +500,10 @@ private[hive] class HiveClientImpl(
     shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
   }
 
-  override def alterTable(tableName: String, table: CatalogTable): Unit = withHiveState {
+  override def alterTable(
+      dbName: String,
+      tableName: String,
+      table: CatalogTable): Unit = withHiveState {
     // getTableOption removes all the Hive-specific properties. Here, we fill them back to ensure
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
@@ -503,7 +511,7 @@ private[hive] class HiveClientImpl(
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
-    val qualifiedTableName = s"${table.database}.$tableName"
+    val qualifiedTableName = s"$dbName.$tableName"
     shim.alterTable(client, qualifiedTableName, hiveTable)
   }
 
@@ -624,12 +632,13 @@ private[hive] class HiveClientImpl(
       table: CatalogTable,
       spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table, Some(userName))
-    val parts = spec match {
-      case None => shim.getAllPartitions(client, hiveTable).map(fromHivePartition)
+    val partSpec = spec match {
+      case None => CatalogTypes.emptyTablePartitionSpec
       case Some(s) =>
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
-        client.getPartitions(hiveTable, s.asJava).asScala.map(fromHivePartition)
+        s
     }
+    val parts = client.getPartitions(hiveTable, partSpec.asJava).asScala.map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
   }
@@ -846,7 +855,12 @@ private[hive] object HiveClientImpl {
         throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
     }
 
-    val metadata = new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
+    val metadata = if (hc.getType != columnType.catalogString) {
+      new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
+    } else {
+      Metadata.empty
+    }
+
     val field = StructField(
       name = hc.getName,
       dataType = columnType,

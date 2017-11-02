@@ -21,7 +21,6 @@ import java.net.{URI, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 
@@ -40,6 +39,7 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -90,6 +90,14 @@ private[spark] object JettyUtils extends Logging {
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
+            response.setHeader("X-XSS-Protection", conf.get(UI_X_XSS_PROTECTION))
+            if (conf.get(UI_X_CONTENT_TYPE_OPTIONS)) {
+              response.setHeader("X-Content-Type-Options", "nosniff")
+            }
+            if (request.getScheme == "https") {
+              conf.get(UI_STRICT_TRANSPORT_SECURITY).foreach(
+                response.setHeader("Strict-Transport-Security", _))
+            }
             response.getWriter.print(servletParams.extractFn(result))
           } else {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN)

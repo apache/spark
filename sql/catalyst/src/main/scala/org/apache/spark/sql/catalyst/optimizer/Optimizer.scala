@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Abstract class all optimizers should inherit of, contains the standard batches (extending
@@ -36,6 +37,12 @@ import org.apache.spark.sql.types._
  */
 abstract class Optimizer(sessionCatalog: SessionCatalog)
   extends RuleExecutor[LogicalPlan] {
+
+  // Check for structural integrity of the plan in test mode. Currently we only check if a plan is
+  // still resolved after the execution of each rule.
+  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
+    !Utils.isTesting || plan.resolved
+  }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
@@ -69,6 +76,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
+      ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
@@ -79,11 +87,12 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
+      InferFiltersFromConstraints,
+      BooleanSimplification,
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown,
       ColumnPruning,
-      InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -116,8 +125,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       SimplifyCreateMapOps,
       CombineConcats) ++
       extendedOperatorOptimizationRules: _*) ::
-    Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) ::
     Batch("Join Reorder", Once,
       CostBasedJoinReorder) ::
     Batch("Decimal Optimizations", fixedPoint,
@@ -128,6 +135,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
+    // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
+    Batch("Check Cartesian Products", Once,
+      CheckCartesianProducts) ::
     Batch("OptimizeCodegen", Once,
       OptimizeCodegen) ::
     Batch("RewriteSubquery", Once,
@@ -296,13 +306,20 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
-  private def maybePushLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
-    (limitExp, plan.maxRows) match {
-      case (IntegerLiteral(maxRow), Some(childMaxRows)) if maxRow < childMaxRows =>
+  private def maybePushLocalLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
+    (limitExp, plan.maxRowsPerPartition) match {
+      case (IntegerLiteral(newLimit), Some(childMaxRows)) if newLimit < childMaxRows =>
+        // If the child has a cap on max rows per partition and the cap is larger than
+        // the new limit, put a new LocalLimit there.
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
+
       case (_, None) =>
+        // If the child has no cap, put the new LocalLimit.
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
-      case _ => plan
+
+      case _ =>
+        // Otherwise, don't put a new LocalLimit.
+        plan
     }
   }
 
@@ -314,7 +331,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
     case LocalLimit(exp, Union(children)) =>
-      LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))))
+      LocalLimit(exp, Union(children.map(maybePushLocalLimit(exp, _))))
     // Add extra limits below OUTER JOIN. For LEFT OUTER and FULL OUTER JOIN we push limits to the
     // left and right sides, respectively. For FULL OUTER JOIN, we can only push limits to one side
     // because we need to ensure that rows from the limited side still have an opportunity to match
@@ -326,19 +343,19 @@ object LimitPushDown extends Rule[LogicalPlan] {
     //   - If neither side is limited, limit the side that is estimated to be bigger.
     case LocalLimit(exp, join @ Join(left, right, joinType, _)) =>
       val newJoin = joinType match {
-        case RightOuter => join.copy(right = maybePushLimit(exp, right))
-        case LeftOuter => join.copy(left = maybePushLimit(exp, left))
+        case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
+        case LeftOuter => join.copy(left = maybePushLocalLimit(exp, left))
         case FullOuter =>
           (left.maxRows, right.maxRows) match {
             case (None, None) =>
               if (left.stats.sizeInBytes >= right.stats.sizeInBytes) {
-                join.copy(left = maybePushLimit(exp, left))
+                join.copy(left = maybePushLocalLimit(exp, left))
               } else {
-                join.copy(right = maybePushLimit(exp, right))
+                join.copy(right = maybePushLocalLimit(exp, right))
               }
             case (Some(_), Some(_)) => join
-            case (Some(_), None) => join.copy(left = maybePushLimit(exp, left))
-            case (None, Some(_)) => join.copy(right = maybePushLimit(exp, right))
+            case (Some(_), None) => join.copy(left = maybePushLocalLimit(exp, left))
+            case (None, Some(_)) => join.copy(right = maybePushLocalLimit(exp, right))
 
           }
         case _ => join
@@ -378,21 +395,6 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     // We must promise the compiler that we did not discard the names in the case of project
     // expressions.  This is safe since the only transformation is from Attribute => Attribute.
     result.asInstanceOf[A]
-  }
-
-  /**
-   * Splits the condition expression into small conditions by `And`, and partition them by
-   * deterministic, and finally recombine them by `And`. It returns an expression containing
-   * all deterministic expressions (the first field of the returned Tuple2) and an expression
-   * containing all non-deterministic expressions (the second field of the returned Tuple2).
-   */
-  private def partitionByDeterministic(condition: Expression): (Expression, Expression) = {
-    val andConditions = splitConjunctivePredicates(condition)
-    andConditions.partition(_.deterministic) match {
-      case (deterministic, nondeterministic) =>
-        deterministic.reduceOption(And).getOrElse(Literal(true)) ->
-        nondeterministic.reduceOption(And).getOrElse(Literal(true))
-    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -451,6 +453,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Prunes the unused columns from child of Aggregate/Expand/Generate
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = prunedChild(child, a.references))
+    case f @ FlatMapGroupsInPandas(_, _, _, child) if (child.outputSet -- f.references).nonEmpty =>
+      f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
     case g: Generate if !g.join && (g.child.outputSet -- g.references).nonEmpty =>
@@ -738,8 +742,10 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     case Filter(Literal(true, BooleanType), child) => child
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
-    case Filter(Literal(null, _), child) => LocalRelation(child.output, data = Seq.empty)
-    case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
+    case Filter(Literal(null, _), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+    case Filter(Literal(false, BooleanType), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>
@@ -1094,6 +1100,9 @@ object CombineLimits extends Rule[LogicalPlan] {
  * SELECT * from R, S where R.r = S.s,
  * the join between R and S is not a cartesian product and therefore should be allowed.
  * The predicate R.r = S.s is not recognized as a join condition until the ReorderJoin rule.
+ *
+ * This rule must be run AFTER the batch "LocalRelation", since a join with empty relation should
+ * not be a cartesian product.
  */
 object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
   /**

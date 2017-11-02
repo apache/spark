@@ -26,8 +26,6 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -165,9 +163,9 @@ private[spark] class CoarseGrainedExecutorBackend(
     if (notifyDriver && driver.nonEmpty) {
       driver.get.ask[Boolean](
         RemoveExecutor(executorId, new ExecutorLossReason(reason))
-      ).onFailure { case e =>
+      ).failed.foreach(e =>
         logWarning(s"Unable to notify the driver due to " + e.getMessage, e)
-      }(ThreadUtils.sameThread)
+      )(ThreadUtils.sameThread)
     }
 
     System.exit(code)

@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.FileNotFoundException
 import java.util.Properties
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
@@ -289,6 +290,49 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   test("Pool should throw IllegalArgumentException when schedulingMode is not supported") {
     intercept[IllegalArgumentException] {
       new Pool("TestPool", SchedulingMode.NONE, 0, 1)
+    }
+  }
+
+  test("Fair Scheduler should build fair scheduler when " +
+    "valid spark.scheduler.allocation.file property is set") {
+    val xmlPath = getClass.getClassLoader.getResource("fairscheduler-with-valid-data.xml").getFile()
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, xmlPath)
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
+
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    schedulableBuilder.buildPools()
+
+    verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
+    verifyPool(rootPool, "pool1", 3, 1, FIFO)
+    verifyPool(rootPool, "pool2", 4, 2, FAIR)
+    verifyPool(rootPool, "pool3", 2, 3, FAIR)
+  }
+
+  test("Fair Scheduler should use default file(fairscheduler.xml) if it exists in classpath " +
+    "and spark.scheduler.allocation.file property is not set") {
+    val conf = new SparkConf()
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
+
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    schedulableBuilder.buildPools()
+
+    verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
+    verifyPool(rootPool, "1", 2, 1, FIFO)
+    verifyPool(rootPool, "2", 3, 1, FIFO)
+    verifyPool(rootPool, "3", 0, 1, FIFO)
+  }
+
+  test("Fair Scheduler should throw FileNotFoundException " +
+    "when invalid spark.scheduler.allocation.file property is set") {
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, "INVALID_FILE_PATH")
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
+
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    intercept[FileNotFoundException] {
+      schedulableBuilder.buildPools()
     }
   }
 
