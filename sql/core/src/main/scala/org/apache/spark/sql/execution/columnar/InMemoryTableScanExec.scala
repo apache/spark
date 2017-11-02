@@ -233,14 +233,16 @@ case class InMemoryTableScanExec(
       } else {
         iterForPartitionCase.next() match {
           case partitionStats: InternalRow =>
+            // scalastyle:off
             if (!partitionFilter.eval(partitionStats)) {
-              logInfo(s"skip partition $index based on the stats")
+              println(s"skip partition $index based on the stats")
               Iterator[CachedBatch]()
             } else {
-              logInfo(s"accept partition $index based on the stats")
+              println(s"accept partition $index based on the stats")
               doFilterCachedBatches(iterForPartitionCase.map(_.asInstanceOf[CachedBatch]),
                 schema, partitionFilter)
             }
+            // scalastyle:on
           case _: CachedBatch =>
             doFilterCachedBatches(iterForDefault.map(_.asInstanceOf[CachedBatch]), schema,
               partitionFilter)

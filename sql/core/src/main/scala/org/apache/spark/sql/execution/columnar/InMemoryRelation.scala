@@ -150,10 +150,6 @@ private[columnar] class CachedBatchIterator(
 
       val stats = InternalRow.fromSeq(statsInSeq)
 
-      // scalastyle:off
-      println(s"generate stats ${statsInSeq.toSeq}")
-      // scalastyle:on
-
       CachedBatch(rowCount, columnBuilders.map { builder =>
         JavaUtils.bufferToArray(builder.build())
       }, stats)
