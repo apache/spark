@@ -735,6 +735,12 @@
         <artifactId>scalap</artifactId>
         <version>${scala.version}</version>
       </dependency>
+      <!-- SPARK-16770 affecting Scala 2.11.x -->
+      <dependency>
+        <groupId>jline</groupId>
+        <artifactId>jline</artifactId>
+        <version>2.12.1</version>
+      </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
@@ -1187,6 +1193,10 @@
           <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1924,11 +1934,6 @@
         <groupId>org.antlr</groupId>
         <artifactId>antlr4-runtime</artifactId>
         <version>${antlr4.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>jline</groupId>
-        <artifactId>jline</artifactId>
-        <version>2.12.1</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
