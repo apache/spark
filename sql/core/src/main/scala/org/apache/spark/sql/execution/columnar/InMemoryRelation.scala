@@ -146,8 +146,13 @@ private[columnar] class CachedBatchIterator(
 
       batchStats.add(totalSize)
 
-      val stats = InternalRow.fromSeq(
-        columnBuilders.flatMap(_.columnStats.collectedStatistics))
+      val statsInSeq = columnBuilders.flatMap(_.columnStats.collectedStatistics)
+
+      val stats = InternalRow.fromSeq(statsInSeq)
+
+      // scalastyle:off
+      println(s"generate stats ${statsInSeq.toSeq}")
+      // scalastyle:on
 
       CachedBatch(rowCount, columnBuilders.map { builder =>
         JavaUtils.bufferToArray(builder.build())
