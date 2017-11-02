@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
@@ -42,6 +43,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.util.SQLUtils
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -93,6 +95,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       case (k, v) =>
         cliConf.set(k, v)
     }
+
+    cliConf.setVar(ConfVars.METASTOREWAREHOUSE, SQLUtils.warehousePath(sparkConf, hadoopConf, null))
 
     val sessionState = new CliSessionState(cliConf)
 

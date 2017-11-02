@@ -107,8 +107,8 @@ private[hive] class HiveClientImpl(
 
   // Create an internal session state for this HiveClientImpl.
   val state: SessionState = {
-    val original = Thread.currentThread().getContextClassLoader
     if (clientLoader.isolationOn) {
+      val original = Thread.currentThread().getContextClassLoader
       // Switch to the initClassLoader.
       Thread.currentThread().setContextClassLoader(initClassLoader)
       try {
@@ -127,17 +127,7 @@ private[hive] class HiveClientImpl(
       // in hive jars, which will turn off isolation, if SessionSate.detachSession is
       // called to remove the current state after that, hive client created later will initialize
       // its own state by newState()
-      val ret = SessionState.get
-      if (ret != null) {
-        // hive.metastore.warehouse.dir is determined in SharedState after the CliSessionState
-        // instance constructed, we need to follow that change here.
-        Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname)).foreach { dir =>
-          ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
-        }
-        ret
-      } else {
-        newState()
-      }
+      Option(SessionState.get).getOrElse(newState())
     }
   }
 

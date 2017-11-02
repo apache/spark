@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -27,12 +28,12 @@ import org.apache.spark.sql.hive.HiveUtils
 
 class HiveCliSessionStateSuite extends SparkFunSuite {
 
-  def withSessionClear(f: () => Unit): Unit = {
+  def withSessionClear()(f: => Unit): Unit = {
     try f finally SessionState.detachSession()
   }
 
   test("CliSessionState will be reused") {
-    withSessionClear { () =>
+    withSessionClear() {
       val hiveConf = new HiveConf(classOf[SessionState])
       HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
         case (key, value) => hiveConf.set(key, value)
@@ -48,8 +49,31 @@ class HiveCliSessionStateSuite extends SparkFunSuite {
     }
   }
 
+  test("CliSessionState will be reused if reset hive.metastore.warehouse.dir didn't work") {
+    withSessionClear() {
+      val tmpDir = System.getProperty("java.io.tmpdir")
+      val hiveConf = new HiveConf(classOf[SessionState])
+      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
+        case (key, value) => hiveConf.set(key, value)
+      }
+      val sessionState: SessionState = new CliSessionState(hiveConf)
+      SessionState.start(sessionState)
+      val s1 = SessionState.get
+      val sparkConf = new SparkConf()
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+      hadoopConf.set("hive.metastore.warehouse.dir", tmpDir)
+      val s2 = HiveUtils.newClientForExecution(sparkConf, hadoopConf).getState
+      assert(s1 === s2)
+      // Reset hive.metastore.warehouse.dir didn't work.
+      assert(s1.getConf.get(ConfVars.METASTOREWAREHOUSE.varname) ===
+        s2.getConf.get(ConfVars.METASTOREWAREHOUSE.varname))
+      assert(s2.getConf.get(ConfVars.METASTOREWAREHOUSE.varname) !== tmpDir)
+      assert(s2.isInstanceOf[CliSessionState])
+     }
+  }
+
   test("SessionState will not be reused") {
-    withSessionClear { () =>
+    withSessionClear() {
       val sparkConf = new SparkConf()
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
       HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
