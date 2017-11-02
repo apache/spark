@@ -138,16 +138,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Checks the validity of column names. Hive metastore disallows the table to use comma in
+   * Checks the validity of data column names. Hive metastore disallows the table to use comma in
    * data column names. Partition columns do not have such a restriction. Views do not have such
    * a restriction.
    */
-  private def verifyColumnNames(table: CatalogTable): Unit = {
-    if (table.tableType != VIEW) {
-      table.dataSchema.map(_.name).foreach { colName =>
+  private def verifyDataSchema(
+      tableName: TableIdentifier, tableType: CatalogTableType, dataSchema: StructType): Unit = {
+    if (tableType != VIEW) {
+      dataSchema.map(_.name).foreach { colName =>
         if (colName.contains(",")) {
           throw new AnalysisException("Cannot create a table having a column whose name contains " +
-            s"commas in Hive metastore. Table: ${table.identifier}; Column: $colName")
+            s"commas in Hive metastore. Table: $tableName; Column: $colName")
         }
       }
     }
@@ -218,7 +219,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val table = tableDefinition.identifier.table
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
-    verifyColumnNames(tableDefinition)
+    verifyDataSchema(
+      tableDefinition.identifier, tableDefinition.tableType, tableDefinition.dataSchema)
 
     if (tableExists(db, table) && !ignoreIfExists) {
       throw new TableAlreadyExistsException(db = db, table = table)
@@ -295,7 +297,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         storage = table.storage.copy(
           locationUri = None,
           properties = storagePropsWithLocation),
-        schema = table.partitionSchema,
+        schema = StructType(EMPTY_DATA_SCHEMA ++ table.partitionSchema),
         bucketSpec = None,
         properties = table.properties ++ tableProperties)
     }
@@ -312,6 +314,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         None
       }
 
+      // TODO: empty data schema is not hive compatible, we only do it to keep behavior as it was
+      // because previously we generate the special empty schema in `HiveClient`. Remove this in
+      // Spark 2.3.
+      val schema = if (table.dataSchema.isEmpty) {
+        StructType(EMPTY_DATA_SCHEMA ++ table.partitionSchema)
+      } else {
+        table.schema
+      }
+
       table.copy(
         storage = table.storage.copy(
           locationUri = location,
@@ -320,6 +331,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           serde = serde.serde,
           properties = storagePropsWithLocation
         ),
+        schema = schema,
         properties = table.properties ++ tableProperties)
     }
 
@@ -630,32 +642,32 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  override def alterTableSchema(db: String, table: String, schema: StructType): Unit = withClient {
+  override def alterTableDataSchema(
+      db: String, table: String, newDataSchema: StructType): Unit = withClient {
     requireTableExists(db, table)
-    val rawTable = getRawTable(db, table)
-    // Add table metadata such as table schema, partition columns, etc. to table properties.
-    val updatedProperties = rawTable.properties ++ tableMetaToTableProps(rawTable, schema)
-    val withNewSchema = rawTable.copy(properties = updatedProperties, schema = schema)
-    verifyColumnNames(withNewSchema)
+    val oldTable = getTable(db, table)
+    verifyDataSchema(oldTable.identifier, oldTable.tableType, newDataSchema)
+    val schemaProps =
+      tableMetaToTableProps(oldTable, StructType(newDataSchema ++ oldTable.partitionSchema)).toMap
 
-    if (isDatasourceTable(rawTable)) {
+    if (isDatasourceTable(oldTable)) {
       // For data source tables, first try to write it with the schema set; if that does not work,
       // try again with updated properties and the partition schema. This is a simplified version of
       // what createDataSourceTable() does, and may leave the table in a state unreadable by Hive
       // (for example, the schema does not match the data source schema, or does not match the
       // storage descriptor).
       try {
-        client.alterTable(withNewSchema)
+        client.alterTableDataSchema(db, table, newDataSchema, schemaProps)
       } catch {
         case NonFatal(e) =>
           val warningMessage =
-            s"Could not alter schema of table  ${rawTable.identifier.quotedString} in a Hive " +
+            s"Could not alter schema of table ${oldTable.identifier.quotedString} in a Hive " +
               "compatible way. Updating Hive metastore in Spark SQL specific format."
           logWarning(warningMessage, e)
-          client.alterTable(withNewSchema.copy(schema = rawTable.partitionSchema))
+          client.alterTableDataSchema(db, table, EMPTY_DATA_SCHEMA, schemaProps)
       }
     } else {
-      client.alterTable(withNewSchema)
+      client.alterTableDataSchema(db, table, newDataSchema, schemaProps)
     }
   }
 
@@ -1190,6 +1202,15 @@ object HiveExternalCatalog {
   val TABLE_PARTITION_PROVIDER = SPARK_SQL_PREFIX + "partitionProvider"
   val TABLE_PARTITION_PROVIDER_CATALOG = "catalog"
   val TABLE_PARTITION_PROVIDER_FILESYSTEM = "filesystem"
+
+  // When storing data source tables in hive metastore, we need to set data schema to empty if the
+  // schema is hive-incompatible. However we need a hack to preserve existing behavior. Before
+  // Spark 2.0, we do not set a default serde here (this was done in Hive), and so if the user
+  // provides an empty schema Hive would automatically populate the schema with a single field
+  // "col". However, after SPARK-14388, we set the default serde to LazySimpleSerde so this
+  // implicit behavior no longer happens. Therefore, we need to do it in Spark ourselves.
+  val EMPTY_DATA_SCHEMA = new StructType()
+    .add("col", "array<string>", nullable = true, comment = "from deserializer")
 
   /**
    * Returns the fully qualified name used in table properties for a particular column stat.

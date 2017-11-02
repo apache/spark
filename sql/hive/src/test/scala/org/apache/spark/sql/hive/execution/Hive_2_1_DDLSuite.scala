@@ -117,7 +117,7 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
     spark.sql(createTableStmt)
     val oldTable = spark.sessionState.catalog.externalCatalog.getTable("default", tableName)
     catalog.createTable(oldTable, true)
-    catalog.alterTableSchema("default", tableName, updatedSchema)
+    catalog.alterTableDataSchema("default", tableName, updatedSchema)
 
     val updatedTable = catalog.getTable("default", tableName)
     assert(updatedTable.schema.fieldNames === updatedSchema.fieldNames)
