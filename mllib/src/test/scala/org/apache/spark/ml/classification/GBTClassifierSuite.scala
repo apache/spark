@@ -362,6 +362,8 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     val numClasses = 2
     val gbt = new GBTClassifier()
       .setSeed(123)
+      .setMaxDepth(3)
+      .setMaxIter(5)
       .setFeatureSubsetStrategy("all")
 
     // In this data, feature 1 is very important.
