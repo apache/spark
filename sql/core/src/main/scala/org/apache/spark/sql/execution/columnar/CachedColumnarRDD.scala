@@ -29,6 +29,8 @@ class CachedColumnarRDD(
     expectedStorageLevel: StorageLevel)
   extends RDD[AnyRef](_sc, Seq(new OneToOneDependency(dataRDD))) {
 
+  logInfo(s"Created CachedColumnarRDD with ${partitions.length} partitions")
+
   override def compute(split: Partition, context: TaskContext): Iterator[AnyRef] = {
     if (containsPartitionMetadata) {
       val parentIterator = dataRDD.iterator(split, context)

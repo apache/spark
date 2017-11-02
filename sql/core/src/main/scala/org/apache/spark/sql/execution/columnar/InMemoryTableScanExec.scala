@@ -236,6 +236,7 @@ case class InMemoryTableScanExec(
             if (!partitionFilter.eval(partitionStats)) {
               Iterator[CachedBatch]()
             } else {
+              logInfo(s"accept partition $index based on the stats")
               doFilterCachedBatches(iterForPartitionCase.map(_.asInstanceOf[CachedBatch]),
                 schema, partitionFilter)
             }
