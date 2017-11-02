@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.orc
+package org.apache.spark.sql.execution.datasources.orc
 
 import java.util.Locale
 
@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Options for the ORC data source.
  */
-private[orc] class OrcOptions(
+class OrcOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
   extends Serializable {
@@ -59,7 +59,7 @@ private[orc] class OrcOptions(
   }
 }
 
-private[orc] object OrcOptions {
+object OrcOptions {
   // The ORC compression short names
   private val shortOrcCompressionCodecNames = Map(
     "none" -> "NONE",
