@@ -1461,6 +1461,7 @@ class DAGScheduler(
             mapOutputTracker.removeOutputsOnExecutor(execId)
         }
         sc.heartbeatReceiverRef.ask[Boolean](UpdatedEpoch(mapOutputTracker.getEpoch))
+        taskScheduler.updateEpoch(mapOutputTracker.getEpoch)
         clearCacheLocs()
 
       } else {

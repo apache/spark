@@ -119,4 +119,5 @@ private[spark] object CoarseGrainedClusterMessages {
   // Used internally by executors to shut themselves down.
   case object Shutdown extends CoarseGrainedClusterMessage
 
+  case class UpdateEpoch(newEpoch: Long) extends CoarseGrainedClusterMessage
 }

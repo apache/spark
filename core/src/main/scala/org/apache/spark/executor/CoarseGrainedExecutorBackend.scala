@@ -123,6 +123,12 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
+
+    case UpdateEpoch(newEpoch) =>
+      env.mapOutputTracker match {
+        case env: MapOutputTrackerWorker => env.updateEpoch(newEpoch)
+        case _ =>
+      }
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

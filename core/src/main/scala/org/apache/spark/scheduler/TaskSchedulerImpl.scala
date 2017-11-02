@@ -689,6 +689,10 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  override def updateEpoch(newEpoch: Long): Unit = {
+    backend.updateEpoch(newEpoch)
+  }
+
 }
 
 

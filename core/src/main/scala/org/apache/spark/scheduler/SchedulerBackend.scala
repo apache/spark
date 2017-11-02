@@ -69,4 +69,5 @@ private[spark] trait SchedulerBackend {
    */
   def getDriverLogUrls: Option[Map[String, String]] = None
 
+  def updateEpoch(newEpoch: Long): Unit = {}
 }

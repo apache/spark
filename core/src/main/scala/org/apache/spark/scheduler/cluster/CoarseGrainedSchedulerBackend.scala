@@ -159,6 +159,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         scheduler.getExecutorsAliveOnHost(host).foreach { exec =>
           killExecutors(exec.toSeq, replace = true, force = true)
         }
+
+      case msg@UpdateEpoch(newEpoch) =>
+        executorDataMap.values.foreach { executorData =>
+          executorData.executorEndpoint.send(msg)
+        }
+
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -478,6 +484,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected def removeWorker(workerId: String, host: String, message: String): Unit = {
     driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).failed.foreach(t =>
       logError(t.getMessage, t))(ThreadUtils.sameThread)
+  }
+
+  override def updateEpoch(newEpoch: Long): Unit = {
+    driverEndpoint.send(UpdateEpoch(newEpoch))
   }
 
   def sufficientResourcesRegistered(): Boolean = true

@@ -101,4 +101,5 @@ private[spark] trait TaskScheduler {
    */
   def applicationAttemptId(): Option[String]
 
+  def updateEpoch(newEpoch: Long): Unit = {}
 }
