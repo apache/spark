@@ -857,19 +857,23 @@ object DDLUtils {
     }
   }
 
-  private[sql] def checkDataSchemaFieldNames(table: CatalogTable): Unit = {
+  private[sql] def checkDataColNames(table: CatalogTable): Unit = {
+    checkDataColNames(table, table.dataSchema.fieldNames)
+  }
+
+  private[sql] def checkDataColNames(table: CatalogTable, colNames: Seq[String]): Unit = {
     table.provider.foreach {
       _.toLowerCase(Locale.ROOT) match {
         case HIVE_PROVIDER =>
           val serde = table.storage.serde
           if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
-            OrcFileFormat.checkFieldNames(table.dataSchema)
+            OrcFileFormat.checkFieldNames(colNames)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
               serde == Some("parquet.hive.serde.ParquetHiveSerDe")) {
-            ParquetSchemaConverter.checkFieldNames(table.dataSchema)
+            ParquetSchemaConverter.checkFieldNames(colNames)
           }
-        case "parquet" => ParquetSchemaConverter.checkFieldNames(table.dataSchema)
-        case "orc" => OrcFileFormat.checkFieldNames(table.dataSchema)
+        case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)
+        case "orc" => OrcFileFormat.checkFieldNames(colNames)
         case _ =>
       }
     }
