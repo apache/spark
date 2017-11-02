@@ -90,8 +90,13 @@ private[columnar] class CachedPartitionIterator(
     }
     batchStats.add(totalSize)
 
-    val stats = InternalRow.fromSeq(
-      columnBuilders.flatMap(_.columnStats.collectedStatistics))
+    val statsInSeq = columnBuilders.flatMap(_.columnStats.collectedStatistics)
+
+    // scalastyle:off
+    println(s"stats ${statsInSeq.toSeq}")
+    // scalastyle:on
+
+    val stats = InternalRow.fromSeq(statsInSeq)
 
     CachedBatch(rowCount, columnBuilders.map { builder =>
       JavaUtils.bufferToArray(builder.build())}, stats)
