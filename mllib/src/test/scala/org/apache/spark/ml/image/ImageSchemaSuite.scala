@@ -28,8 +28,7 @@ import org.apache.spark.sql.types._
 
 class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
   // Single column of images named "image"
-  private lazy val imagePath =
-    Thread.currentThread().getContextClassLoader.getResource("test-data/images").getPath
+  private lazy val imagePath = "../data/mllib/images"
 
   test("Smoke test: create basic ImageSchema dataframe") {
     val origin = "path"
