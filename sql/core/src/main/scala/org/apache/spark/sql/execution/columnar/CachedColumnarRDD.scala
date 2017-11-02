@@ -24,15 +24,24 @@ import org.apache.spark.storage.{RDDBlockId, RDDPartitionMetadataBlockId}
 
 class CachedColumnarRDD(
     @transient private var _sc: SparkContext,
-    private var dataRDD: RDD[CachedBatch])
+    private var dataRDD: RDD[CachedBatch],
+    containsPartitionMetadata: Boolean)
   extends RDD[AnyRef](_sc, Seq(new OneToOneDependency(dataRDD))) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[AnyRef] = {
-    val cachedBatch = dataRDD.iterator(split, context).next()
-    // put metadata to blockmanager
-    SparkEnv.get.blockManager.putSingle(RDDPartitionMetadataBlockId(id, split.index),
-      cachedBatch.stats, dataRDD.getStorageLevel)
-    Iterator(cachedBatch)
+    if (containsPartitionMetadata) {
+      val parentIterator = dataRDD.iterator(split, context)
+      if (!parentIterator.hasNext) {
+        Iterator()
+      } else {
+        val cachedBatch = parentIterator.next()
+        SparkEnv.get.blockManager.putSingle(RDDPartitionMetadataBlockId(id, split.index),
+          cachedBatch.stats, dataRDD.getStorageLevel)
+        Iterator(cachedBatch)
+      }
+    } else {
+      firstParent.iterator(split, context)
+    }
   }
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
@@ -63,15 +72,14 @@ class CachedColumnarRDD(
   override private[spark] def getOrCompute(split: Partition, context: TaskContext):
       Iterator[AnyRef] = {
     val metadataBlockId = RDDPartitionMetadataBlockId(id, split.index)
-    // if metadata block is not contained
     val metadataBlockOpt = SparkEnv.get.blockManager.get[InternalRow](metadataBlockId)
     if (metadataBlockOpt.isDefined) {
       val metadataBlock = metadataBlockOpt.get
       new InterruptibleIterator[AnyRef](context, new Iterator[AnyRef] {
 
-        var fetchingFirstElement = true
+        private var fetchingFirstElement = true
 
-        var delegate: Iterator[CachedBatch] = _
+        private var delegate: Iterator[CachedBatch] = _
 
         override def hasNext: Boolean = {
           if (fetchingFirstElement) {

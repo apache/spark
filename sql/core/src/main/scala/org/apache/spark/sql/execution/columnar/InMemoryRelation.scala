@@ -59,7 +59,7 @@ private[columnar] class CachedPartitionIterator(
     useCompression: Boolean,
     batchStats: LongAccumulator) extends Iterator[CachedBatch] {
 
-  private def buildCachedBatch(): CachedBatch = {
+  def next(): CachedBatch = {
     val columnBuilders = output.map { attribute =>
       ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
     }.toArray
@@ -97,10 +97,6 @@ private[columnar] class CachedPartitionIterator(
       JavaUtils.bufferToArray(builder.build())}, stats)
   }
 
-  def next(): CachedBatch = {
-    buildCachedBatch()
-  }
-
   def hasNext: Boolean = rowIterator.hasNext
 }
 
@@ -111,7 +107,7 @@ private[columnar] class CachedBatchIterator(
     useCompression: Boolean,
     batchStats: LongAccumulator) extends Iterator[CachedBatch] {
 
-    def next(): CachedBatch = {
+  def next(): CachedBatch = {
       val columnBuilders = output.map { attribute =>
         ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
       }.toArray
@@ -203,7 +199,8 @@ case class InMemoryRelation(
       }
     }
 
-    val cached = new CachedColumnarRDD(batchedRDD.sparkContext, batchedRDD).persist(storageLevel)
+    val cached = new CachedColumnarRDD(batchedRDD.sparkContext, batchedRDD,
+      usePartitionLevelMetadata).persist(storageLevel)
 
     cached.setName(
       tableName.map(n => s"In-memory table $n")
