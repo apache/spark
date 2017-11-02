@@ -314,6 +314,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         None
       }
 
+      // TODO: empty data schema is not hive compatible, we only do it to keep behavior as it was
+      // because previously we generate the special empty schema in `HiveClient`. Remove this in
+      // Spark 2.3.
+      val schema = if (table.dataSchema.isEmpty) {
+        StructType(EMPTY_DATA_SCHEMA ++ table.partitionSchema)
+      } else {
+        table.schema
+      }
+
       table.copy(
         storage = table.storage.copy(
           locationUri = location,
@@ -322,6 +331,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           serde = serde.serde,
           properties = storagePropsWithLocation
         ),
+        schema = schema,
         properties = table.properties ++ tableProperties)
     }
 
