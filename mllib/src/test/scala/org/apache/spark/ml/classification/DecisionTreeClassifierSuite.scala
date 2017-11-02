@@ -282,7 +282,7 @@ class DecisionTreeClassifierSuite
 
     newTree.transform(newData).select(dt.getFeaturesCol, dt.getPredictionCol).collect().foreach {
       case Row(features: Vector, prediction: Double) =>
-        assert(prediction ~== newTree.predict(features) relTol 1E-5)
+        assert(prediction === newTree.predict(features))
     }
   }
 
