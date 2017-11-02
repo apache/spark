@@ -542,9 +542,7 @@ class SparkSession(object):
 
             # Convert list of numpy records to python lists
             if record_type_list is not None:
-                def fix_rec(rec):
-                    return rec.astype(record_type_list)
-                data = [fix_rec(r).tolist() for r in np_records]
+                data = [r.astype(record_type_list).tolist() for r in np_records]
             else:
                 data = [r.tolist() for r in np_records]
 
