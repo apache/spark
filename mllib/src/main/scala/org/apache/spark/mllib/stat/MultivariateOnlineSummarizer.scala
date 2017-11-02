@@ -230,6 +230,12 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   override def count: Long = totalCnt
 
   /**
+   *
+   */
+  @Since("2.2.0")
+  override def numParam: Int = n
+
+  /**
    * Number of nonzero elements in each dimension.
    *
    */

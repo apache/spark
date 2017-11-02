@@ -44,6 +44,8 @@ trait MultivariateStatisticalSummary {
   @Since("1.0.0")
   def count: Long
 
+  def numParam: Int
+
   /**
    * Number of nonzero elements (including explicitly presented zero values) in each column.
    */
