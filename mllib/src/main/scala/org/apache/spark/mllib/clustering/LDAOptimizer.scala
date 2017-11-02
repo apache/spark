@@ -473,26 +473,25 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
                                         None
                                       }
 
-    val elementWiseSum = (
-        u: (BDM[Double], Option[BDV[Double]], Long),
-        v: (BDM[Double], Option[BDV[Double]], Long)) => {
-      u._1 += v._1
-      u._2.foreach(_ += v._2.get)
-      (u._1, u._2, u._3 + v._3)
-    }
-
     val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], batchSize: Long) =
       batch.treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase(), 0L))({
-        case (acc, (_, termCounts)) =>
-          val stat = BDM.zeros[Double](k, vocabSize)
+        case ((accStat, accLogPhatOption, accBatchSize), (_, termCounts)) =>
           val logphatPartOption = logphatPartOptionBase()
           val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
             termCounts, expElogbetaBc.value, alpha, gammaShape, k)
-          stat(::, ids) := stat(::, ids) + sstats
+          accStat(::, ids) := accStat(::, ids) + sstats
           logphatPartOption.foreach(_ += LDAUtils.dirichletExpectation(gammad))
 
-          elementWiseSum(acc, (stat, logphatPartOption, 1))
-        }, elementWiseSum)
+          accLogPhatOption.foreach(_ += logphatPartOption.get)
+          (accStat, accLogPhatOption, accBatchSize + 1)
+        }, { case (
+                 (uStat, uLogPhatOption, uBatchSize),
+                 (vStat, vLogPhatOption, vBatchSize)) =>
+               uStat += vStat
+               uLogPhatOption.foreach(_ += vLogPhatOption.get)
+               (uStat, uLogPhatOption, uBatchSize + vBatchSize)
+           }
+      )
 
     expElogbetaBc.destroy(false)
 
