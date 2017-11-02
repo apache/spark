@@ -271,6 +271,8 @@ class SparkSession(object):
     def catalog(self):
         """Interface through which the user may create, drop, alter or query underlying
         databases, tables, functions etc.
+
+        :return: :class:`Catalog`
         """
         if not hasattr(self, "_catalog"):
             self._catalog = Catalog(self)
