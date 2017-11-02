@@ -93,7 +93,7 @@ private[columnar] class CachedPartitionIterator(
     val statsInSeq = columnBuilders.flatMap(_.columnStats.collectedStatistics)
 
     // scalastyle:off
-    println(s"stats ${statsInSeq.toSeq}")
+    println(s"generate stats ${statsInSeq.toSeq}")
     // scalastyle:on
 
     val stats = InternalRow.fromSeq(statsInSeq)
