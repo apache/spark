@@ -44,6 +44,9 @@ launching applications). For example,
 
     ./bin/run-example SparkPi 10
 
+The above example runs the Monte Carlo method to estimate the value of Pi. The arguement passed
+(i.e. 10 in this case) is the number of partitions in the RDD.
+
 You can also run Spark interactively through a modified version of the Scala shell. This is a
 great way to learn the framework.
 
