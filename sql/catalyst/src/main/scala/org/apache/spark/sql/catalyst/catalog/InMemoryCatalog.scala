@@ -303,13 +303,14 @@ class InMemoryCatalog(
     catalog(db).tables(tableDefinition.identifier.table).table = newTableDefinition
   }
 
-  override def alterTableSchema(
+  override def alterTableDataSchema(
       db: String,
       table: String,
-      schema: StructType): Unit = synchronized {
+      newDataSchema: StructType): Unit = synchronized {
     requireTableExists(db, table)
     val origTable = catalog(db).tables(table).table
-    catalog(db).tables(table).table = origTable.copy(schema = schema)
+    val newSchema = StructType(newDataSchema ++ origTable.partitionSchema)
+    catalog(db).tables(table).table = origTable.copy(schema = newSchema)
   }
 
   override def alterTableStats(
