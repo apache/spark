@@ -356,7 +356,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   /////////////////////////////////////////////////////////////////////////////
-  // Tests of feature subset strategy
+  // Tests of  feature subset strategy
   /////////////////////////////////////////////////////////////////////////////
   test("Tests of feature subset strategy") {
     val numClasses = 2
