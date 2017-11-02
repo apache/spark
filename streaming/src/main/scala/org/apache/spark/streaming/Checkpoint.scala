@@ -53,6 +53,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.driver.host",
       "spark.driver.port",
       "spark.master",
+      "spark.yarn.jars",
       "spark.yarn.keytab",
       "spark.yarn.principal",
       "spark.yarn.credentials.file",
