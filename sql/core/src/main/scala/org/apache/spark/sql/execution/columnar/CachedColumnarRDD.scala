@@ -47,47 +47,24 @@ class CachedColumnarRDD(
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
-  private def fetchOrComputeCachedBatch(partition: Partition, context: TaskContext):
-      Iterator[CachedBatch] = {
-    // metadata block can be evicted by BlockManagers but we may still keep CachedBatch in memory
-    // so that we still need to try to fetch it from Cache
-    val blockId = RDDBlockId(id, partition.index)
-    SparkEnv.get.blockManager.getOrElseUpdate(blockId, expectedStorageLevel, elementClassTag,
-      () => {
-      computeOrReadCheckpoint(partition, context)
-    }) match {
-      case Left(blockResult) =>
-        val existingMetrics = context.taskMetrics().inputMetrics
-        existingMetrics.incBytesRead(blockResult.bytes)
-        new InterruptibleIterator[CachedBatch](context,
-          blockResult.data.asInstanceOf[Iterator[CachedBatch]]) {
-          override def next(): CachedBatch = {
-            existingMetrics.incRecordsRead(1)
-            delegate.next()
-          }
-        }
-      case Right(iter) =>
-        new InterruptibleIterator(context, iter.asInstanceOf[Iterator[CachedBatch]])
-    }
-  }
-
   override private[spark] def getOrCompute(split: Partition, context: TaskContext):
       Iterator[AnyRef] = {
     val metadataBlockId = RDDPartitionMetadataBlockId(id, split.index)
     val metadataBlockOpt = SparkEnv.get.blockManager.get[InternalRow](metadataBlockId)
+    val superGetOrCompute: (Partition, TaskContext) => Iterator[AnyRef] = super.getOrCompute
     if (metadataBlockOpt.isDefined) {
       val metadataBlock = metadataBlockOpt.get
       new InterruptibleIterator[AnyRef](context, new Iterator[AnyRef] {
 
         private var fetchingFirstElement = true
 
-        private var delegate: Iterator[CachedBatch] = _
+        private var delegate: Iterator[AnyRef] = _
 
         override def hasNext: Boolean = {
           if (fetchingFirstElement) {
             true
           } else {
-            delegate = fetchOrComputeCachedBatch(split, context)
+            delegate = superGetOrCompute(split, context)
             delegate.hasNext
           }
         }
@@ -103,7 +80,7 @@ class CachedColumnarRDD(
         }
       })
     } else {
-      fetchOrComputeCachedBatch(split, context)
+      superGetOrCompute(split, context)
     }
 
   }
