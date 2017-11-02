@@ -61,6 +61,34 @@ class StringIndexerSuite
     assert(output === expected)
   }
 
+  test("StringIndexer multiple input columns") {
+    val data = Seq((0, "a", "e"), (1, "b", "f"), (2, "c", "e"),
+      (3, "a", "f"), (4, "a", "f"), (5, "c", "f"))
+    val df = data.toDF("id", "label1", "label2")
+    val indexer = new StringIndexer()
+      .setInputCols(Array("label1", "label2"))
+      .setOutputCols(Array("labelIndex1", "labelIndex2"))
+    val indexerModel = indexer.fit(df)
+
+    MLTestingUtils.checkCopyAndUids(indexer, indexerModel)
+
+    val transformed = indexerModel.transform(df)
+    val attr1 = Attribute.fromStructField(transformed.schema("labelIndex1"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr1.values.get === Array("a", "c", "b"))
+    val attr2 = Attribute.fromStructField(transformed.schema("labelIndex2"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr2.values.get === Array("f", "e"))
+    val output = transformed.select("id", "labelIndex1", "labelIndex2").rdd.map { r =>
+      (r.getInt(0), r.getDouble(1), r.getDouble(2))
+    }.collect().toSet
+    // a -> 0, b -> 2, c -> 1
+    // e -> 1, f -> 0
+    val expected = Set((0, 0.0, 1.0), (1, 2.0, 0.0), (2, 1.0, 1.0),
+      (3, 0.0, 0.0), (4, 0.0, 0.0), (5, 1.0, 0.0))
+    assert(output === expected)
+  }
+
   test("StringIndexerUnseen") {
     val data = Seq((0, "a"), (1, "b"), (4, "b"))
     val data2 = Seq((0, "a"), (1, "b"), (2, "c"), (3, "d"))

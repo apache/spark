@@ -20,16 +20,15 @@ package org.apache.spark.ml.feature
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols,
-  HasOutputCol, HasOutputCols}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{Column, DataFrame, Dataset}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils.majorMinorVersion
@@ -98,23 +97,32 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
   }
 
   /** Validates and transforms the input schema. */
-  protected def validateAndTransformSchema(schema: StructType): StructType = {
-    val (inputColNames, outputColNames) = getInOutCols
+  protected def validateAndTransformSchema(schema: StructType,
+    skipNonExistsCol: Boolean = false): StructType = {
 
+    val (inputColNames, outputColNames) = getInOutCols
+    val inputFields = schema.fields
     val outputFields = for (i <- 0 until inputColNames.length) yield {
       val inputColName = inputColNames(i)
-      val inputDataType = schema(inputColName).dataType
-      require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
-        s"The input column $inputColName must be either string type or numeric type, " +
-          s"but got $inputDataType.")
-      val inputFields = schema.fields
-      val outputColName = outputColNames(i)
-      require(inputFields.forall(_.name != outputColName),
-        s"Output column $outputColName already exists.")
-      val attr = NominalAttribute.defaultAttr.withName($(outputCol))
-      attr.toStructField()
+      if (schema.fieldNames.contains(inputColName)) {
+        val inputDataType = schema(inputColName).dataType
+        require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
+          s"The input column $inputColName must be either string type or numeric type, " +
+            s"but got $inputDataType.")
+        val outputColName = outputColNames(i)
+        require(inputFields.forall(_.name != outputColName),
+          s"Output column $outputColName already exists.")
+        val attr = NominalAttribute.defaultAttr.withName($(outputCol))
+        attr.toStructField()
+      } else {
+        if (skipNonExistsCol) {
+          null
+        } else {
+          throw new SparkException(s"Input column ${inputColName} do not exist.")
+        }
+      }
     }
-    StructType(outputFields)
+    StructType(inputFields ++ outputFields.filter(_ != null))
   }
 }
 
@@ -164,20 +172,36 @@ class StringIndexer @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val labelsArray = for (inputCol <- getInOutCols._1) yield {
-      val values = dataset.na.drop(Array(inputCol))
-        .select(col(inputCol).cast(StringType))
-        .rdd.map(_.getString(0))
+    val inputCols = getInOutCols._1
+
+    val zeroState = Array.fill(inputCols.length)(new OpenHashMap[String, Long]())
+
+    val countByValueArray = dataset.na.drop(inputCols)
+      .select(inputCols.map(col(_).cast(StringType)): _*)
+      .rdd.aggregate(zeroState)(
+      (state: Array[OpenHashMap[String, Long]], row: Row) => {
+        for (i <- 0 until inputCols.length) {
+          state(i).changeValue(row.getString(i), 1L, _ + 1)
+        }
+        state
+      },
+      (state1: Array[OpenHashMap[String, Long]], state2: Array[OpenHashMap[String, Long]]) => {
+        for (i <- 0 until inputCols.length) {
+          state2(i).foreach { case (key: String, count: Long) =>
+            state1(i).changeValue(key, count, _ + count)
+          }
+        }
+        state1
+      }
+    )
+    val labelsArray = countByValueArray.map { countByValue =>
       $(stringOrderType) match {
-        case StringIndexer.frequencyDesc => values.countByValue().toSeq.sortBy(-_._2)
-          .map(_._1).toArray
-        case StringIndexer.frequencyAsc => values.countByValue().toSeq.sortBy(_._2)
-          .map(_._1).toArray
-        case StringIndexer.alphabetDesc => values.distinct.collect.sortWith(_ > _)
-        case StringIndexer.alphabetAsc => values.distinct.collect.sortWith(_ < _)
+        case StringIndexer.frequencyDesc => countByValue.toSeq.sortBy(-_._2).map(_._1).toArray
+        case StringIndexer.frequencyAsc => countByValue.toSeq.sortBy(_._2).map(_._1).toArray
+        case StringIndexer.alphabetDesc => countByValue.toSeq.map(_._1).sortWith(_ > _).toArray
+        case StringIndexer.alphabetAsc => countByValue.toSeq.map(_._1).sortWith(_ < _).toArray
       }
     }
-
     copyValues(new StringIndexerModel(uid, labelsArray).setParent(this))
   }
 
@@ -277,14 +301,15 @@ class StringIndexerModel (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    val (inputColNames, outputColNames) = getInOutCols
+    var (inputColNames, outputColNames) = getInOutCols
 
     val outputColumns = new Array[Column](outputColNames.length)
 
     var filteredDataset = dataset
     // If we are skipping invalid records, filter them out.
     if (getHandleInvalid == StringIndexer.SKIP_INVALID) {
-      filteredDataset = dataset.na.drop(inputColNames)
+      filteredDataset = dataset.na.drop(inputColNames.filter(
+        dataset.schema.fieldNames.contains(_)))
       for (i <- 0 until inputColNames.length) {
         val inputColName = inputColNames(i)
         val labelToIndex = labelToIndexArray(i)
@@ -346,12 +371,7 @@ class StringIndexerModel (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    if (schema.fieldNames.contains($(inputCol))) {
-      validateAndTransformSchema(schema)
-    } else {
-      // If the input column does not exist during transformation, we skip StringIndexerModel.
-      schema
-    }
+    validateAndTransformSchema(schema, skipNonExistsCol = true)
   }
 
   @Since("1.4.1")
