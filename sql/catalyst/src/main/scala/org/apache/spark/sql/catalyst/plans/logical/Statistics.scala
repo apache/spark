@@ -23,8 +23,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -170,6 +173,16 @@ object ColumnStat extends Logging {
     case _ => false
   }
 
+  /** Returns true iff the we support gathering histogram on column of the given type. */
+  def supportsHistogram(dataType: DataType): Boolean = dataType match {
+    case _: IntegralType => true
+    case _: DecimalType => true
+    case DoubleType | FloatType => true
+    case DateType => true
+    case TimestampType => true
+    case _ => false
+  }
+
   /**
    * Creates a [[ColumnStat]] object from the given map. This is used to deserialize column stats
    * from some external storage. The serialization side is defined in [[ColumnStat.toMap]].
@@ -230,6 +243,104 @@ object ColumnStat extends Logging {
       EquiHeightBucket(m.group(1).toDouble, m.group(2).toDouble, m.group(3).toLong)
     }.toSeq
     EquiHeightHistogram(height, buckets)
+  }
+
+  /**
+   * Constructs an expression to compute column statistics for a given column.
+   *
+   * The expression should create a single struct column with the following schema:
+   * distinctCount: Long, min: T, max: T, nullCount: Long, avgLen: Long, maxLen: Long,
+   * distinctCountsForIntervals: Array[Long]
+   *
+   * Together with [[rowToColumnStat]], this function is used to create [[ColumnStat]] and
+   * as a result should stay in sync with it.
+   */
+  def statExprs(
+      col: Attribute,
+      conf: SQLConf,
+      colPercentiles: AttributeMap[Array[Any]]): CreateNamedStruct = {
+    def struct(exprs: Expression*): CreateNamedStruct = CreateStruct(exprs.map { expr =>
+      expr.transformUp { case af: AggregateFunction => af.toAggregateExpression() }
+    })
+    val one = Literal(1, LongType)
+
+    // the approximate ndv (num distinct value) should never be larger than the number of rows
+    val numNonNulls = if (col.nullable) Count(col) else Count(one)
+    val ndv = Least(Seq(HyperLogLogPlusPlus(col, conf.ndvMaxError), numNonNulls))
+    val numNulls = Subtract(Count(one), numNonNulls)
+    val defaultSize = Literal(col.dataType.defaultSize, LongType)
+    val nullArray = Literal(null, ArrayType(LongType))
+
+    def fixedLenTypeExprs(castType: DataType) = {
+      // For fixed width types, avg size should be the same as max size.
+      Seq(ndv, Cast(Min(col), castType), Cast(Max(col), castType), numNulls, defaultSize,
+        defaultSize)
+    }
+
+    def fixedLenTypeStruct(dataType: DataType) = {
+      val genHistogram =
+        ColumnStat.supportsHistogram(dataType) && colPercentiles.contains(col)
+      val intervalNdvsExpr = if (genHistogram) {
+        ApproxCountDistinctForIntervals(col,
+          CreateArray(colPercentiles(col).map(Literal(_))), conf.ndvMaxError)
+      } else {
+        nullArray
+      }
+      struct(fixedLenTypeExprs(dataType) :+ intervalNdvsExpr: _*)
+    }
+
+    col.dataType match {
+      case dt: IntegralType => fixedLenTypeStruct(dt)
+      case _: DecimalType => fixedLenTypeStruct(col.dataType)
+      case dt @ (DoubleType | FloatType) => fixedLenTypeStruct(dt)
+      case BooleanType => fixedLenTypeStruct(col.dataType)
+      case DateType => fixedLenTypeStruct(col.dataType)
+      case TimestampType => fixedLenTypeStruct(col.dataType)
+      case BinaryType | StringType =>
+        // For string and binary type, we don't compute min, max or histogram
+        val nullLit = Literal(null, col.dataType)
+        struct(
+          ndv, nullLit, nullLit, numNulls,
+          // Set avg/max size to default size if all the values are null or there is no value.
+          Coalesce(Seq(Ceil(Average(Length(col))), defaultSize)),
+          Coalesce(Seq(Cast(Max(Length(col)), LongType), defaultSize)),
+          nullArray)
+      case _ =>
+        throw new AnalysisException("Analyzing column statistics is not supported for column " +
+          s"${col.name} of data type: ${col.dataType}.")
+    }
+  }
+
+  /** Convert a struct for column stats (defined in `statExprs`) into [[ColumnStat]]. */
+  def rowToColumnStat(
+      row: InternalRow,
+      attr: Attribute,
+      rowCount: Long,
+      percentiles: Option[Array[Any]]): ColumnStat = {
+    // The first 6 fields are basic column stats, the 7th is ndvs for histogram buckets.
+    val cs = ColumnStat(
+      distinctCount = BigInt(row.getLong(0)),
+      // for string/binary min/max, get should return null
+      min = Option(row.get(1, attr.dataType)),
+      max = Option(row.get(2, attr.dataType)),
+      nullCount = BigInt(row.getLong(3)),
+      avgLen = row.getLong(4),
+      maxLen = row.getLong(5)
+    )
+    if (row.isNullAt(6)) {
+      cs
+    } else {
+      val ndvs = row.getArray(6).toLongArray()
+      assert(percentiles.get.length == ndvs.length + 1)
+      val endpoints = percentiles.get.map(_.toString.toDouble)
+      // Construct equi-height histogram
+      val buckets = ndvs.zipWithIndex.map { case (ndv, i) =>
+        EquiHeightBucket(endpoints(i), endpoints(i + 1), ndv)
+      }
+      val nonNullRows = rowCount - cs.nullCount
+      val ehHistogram = EquiHeightHistogram(nonNullRows.toDouble / ndvs.length, buckets)
+      cs.copy(histogram = Some(ehHistogram))
+    }
   }
 
 }
