@@ -52,11 +52,11 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
   @Since("2.3.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "How to handle invalid data (unseen labels or NULL values). " +
-    "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
+    "Options are 'skip' (filter out rows with invalid data), 'error' (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
-    ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
+    ParamValidators.inArray(VectorIndexer.supportedHandleInvalids))
 
-  setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
+  setDefault(handleInvalid, VectorIndexer.ERROR_INVALID)
 
   /**
    * Threshold for the number of values a categorical feature can take.
@@ -315,10 +315,13 @@ class VectorIndexerModel private[ml] (
     while (featureIndex < numFeatures) {
       if (categoryMaps.contains(featureIndex)) {
         // categorical feature
-        var featureValues: Array[String] =
+        val rawFeatureValues: Array[String] =
           categoryMaps(featureIndex).toArray.sortBy(_._1).map(_._1).map(_.toString)
-        if (getHandleInvalid == VectorIndexer.KEEP_INVALID) {
-          featureValues = (featureValues.toList :+ "__unknown").toArray
+
+        val featureValues = if (getHandleInvalid == VectorIndexer.KEEP_INVALID) {
+          (rawFeatureValues.toList :+ "__unknown").toArray
+        } else {
+          rawFeatureValues
         }
         if (featureValues.length == 2 && getHandleInvalid != VectorIndexer.KEEP_INVALID) {
           attrs(featureIndex) = new BinaryAttribute(index = Some(featureIndex),
@@ -350,11 +353,9 @@ class VectorIndexerModel private[ml] (
     val f: Vector => Vector = { (v: Vector) =>
       assert(v.size == localNumFeatures, "VectorIndexerModel expected vector of length" +
         s" $numFeatures but found length ${v.size}")
-      val exceptMsg = "VectorIndexer encountered NULL value. To handle" +
-        " or skip NULLS, try setting VectorIndexer.handleInvalid."
       v match {
         case dv: DenseVector =>
-          var hasExist = false
+          var hasInvalid = false
           val tmpv = dv.copy
           localVectorMap.foreach { case (featureIndex: Int, categoryMap: Map[Double, Int]) =>
             try {
@@ -363,15 +364,17 @@ class VectorIndexerModel private[ml] (
               case _: NoSuchElementException =>
                 localHandleInvalid match {
                   case VectorIndexer.ERROR_INVALID =>
-                    throw new SparkException(exceptMsg)
+                    throw new SparkException(s"VectorIndexer encountered invalid value " +
+                      s"${tmpv(featureIndex)} on feature index ${featureIndex}. To handle " +
+                      s"or skip invalid value, try setting VectorIndexer.handleInvalid.")
                   case VectorIndexer.KEEP_INVALID =>
                     tmpv.values(featureIndex) = categoryMap.size
                   case VectorIndexer.SKIP_INVALID =>
-                    hasExist = true
+                    hasInvalid = true
                 }
             }
           }
-          if (hasExist) null else tmpv
+          if (hasInvalid) null else tmpv
         case sv: SparseVector =>
           // We use the fact that categorical value 0 is always mapped to index 0.
           var hasInvalid = false
@@ -391,7 +394,9 @@ class VectorIndexerModel private[ml] (
                 case _: NoSuchElementException =>
                   localHandleInvalid match {
                     case VectorIndexer.ERROR_INVALID =>
-                      throw new SparkException(exceptMsg)
+                      throw new SparkException(s"VectorIndexer encountered invalid value " +
+                        s"${tmpv.values(k)} on feature index ${featureIndex}. To handle " +
+                        s"or skip invalid value, try setting VectorIndexer.handleInvalid.")
                     case VectorIndexer.KEEP_INVALID =>
                       tmpv.values(k) = localVectorMap(featureIndex).size
                     case VectorIndexer.SKIP_INVALID =>
