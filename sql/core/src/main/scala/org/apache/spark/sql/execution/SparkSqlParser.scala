@@ -1454,14 +1454,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     def format(
         fmt: RowFormatContext,
         configKey: String,
-        defaultConfigValue: String): Format = fmt match {
+        defaultConfigValue: String,
+        isInFormat: Boolean): Format = fmt match {
       case c: RowFormatDelimitedContext =>
         // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
         // expects a seq of pairs in which the old parsers' token names are used as keys.
         // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
         // retrieving the key value pairs ourselves.
         def entry(key: String, value: Token): Seq[(String, String)] = {
-          Option(value).map(t => key -> t.getText).toSeq
+          Option(value).toSeq.map(x => key -> string(x))
         }
         val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
@@ -1469,7 +1470,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
           entry("TOK_TABLEROWFORMATLINES", c.linesSeparatedBy) ++
           entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs)
 
-        (entries, None, Seq.empty, None)
+        val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
+        (entries, None, Seq.empty, recordHandler)
 
       case c: RowFormatSerdeContext =>
         // Use a serde format.
@@ -1485,21 +1487,27 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
       case null =>
         // Use default (serde) format.
-        val name = conf.getConfString("hive.script.serde",
-          "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+        val name = if (isInFormat) {
+          conf.getConfString("hive.script.serde",
+            "org.apache.hadoop.hive.serde2.DelimitedJSONSerDe")
+        } else {
+          conf.getConfString("hive.script.serde",
+            "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+        }
         val props = Seq("field.delim" -> "\t")
         val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
         (Nil, Option(name), props, recordHandler)
     }
 
-    val (inFormat, inSerdeClass, inSerdeProps, reader) =
+    val (inFormat, inSerdeClass, inSerdeProps, writer) =
       format(
-        inRowFormat, "hive.script.recordreader", "org.apache.hadoop.hive.ql.exec.TextRecordReader")
+        inRowFormat, "hive.script.recordwriter",
+        "org.apache.hadoop.hive.ql.exec.TextRecordWriter", isInFormat = true)
 
-    val (outFormat, outSerdeClass, outSerdeProps, writer) =
+    val (outFormat, outSerdeClass, outSerdeProps, reader) =
       format(
-        outRowFormat, "hive.script.recordwriter",
-        "org.apache.hadoop.hive.ql.exec.TextRecordWriter")
+        outRowFormat, "hive.script.recordreader",
+        "org.apache.hadoop.hive.ql.exec.TextRecordReader", isInFormat = false)
 
     ScriptInputOutputSchema(
       inFormat, outFormat,

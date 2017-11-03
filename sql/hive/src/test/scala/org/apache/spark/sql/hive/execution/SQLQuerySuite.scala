@@ -98,6 +98,76 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
   }
 
+  test("script: processing map type") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    assume(TestUtils.testCommandAvailable("echo | sed"))
+    val scriptFilePath = getTestResourcePath("test_script.sh")
+    val df = Seq((Map("x0" -> "y0", "x1" -> "y1"), "z1"),
+      (Map("x2" -> "y2"), "z2")).toDF("c1", "c2")
+    df.createOrReplaceTempView("script_table")
+    val query = sql(
+      s"""
+         |SELECT TRANSFORM(c1, c2) USING 'bash $scriptFilePath' AS data FROM script_table
+       """.stripMargin)
+    checkAnswer(query, Row("""{"x0":"y0","x1":"y1"}_z1""") :: Row("""{"x2":"y2"}_z2""") :: Nil)
+  }
+
+  test("script: processing array type") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    assume(TestUtils.testCommandAvailable("echo | sed"))
+    val scriptFilePath = getTestResourcePath("test_script.sh")
+    val df = Seq((Array(0, 1, 2), "x"),
+      (Array(3, 4, 5), "y")).toDF("c1", "c2")
+    df.createOrReplaceTempView("script_table")
+    val query = sql(
+      s"""
+         |SELECT TRANSFORM(c1, c2) USING 'bash $scriptFilePath' AS data FROM script_table
+       """.stripMargin)
+    checkAnswer(query, Row("""[0,1,2]_x""") :: Row("""[3,4,5]_y""") :: Nil)
+  }
+
+  test("script: processing with row format") {
+    val df = Seq((Map("x0" -> "y0", "x1" -> "y1"), "z1"),
+      (Map("x2" -> "y2"), "z2")).toDF("c1", "c2")
+    df.createOrReplaceTempView("script_table")
+    val query = sql(
+      s"""
+         |SELECT TRANSFORM(c1, c2)
+         |ROW FORMAT DELIMITED
+         |FIELDS TERMINATED BY '\t'
+         |COLLECTION ITEMS TERMINATED BY '|'
+         |MAP KEYS TERMINATED BY '#'
+         |USING 'cat'
+         |AS (col1 STRING, col2 STRING)
+         |FROM script_table
+       """.stripMargin)
+    checkAnswer(query, Row("x0#y0|x1#y1", "z1") :: Row("x2#y2", "z2") :: Nil)
+  }
+
+  test("script: processing struct type") {
+    val schema = StructType(
+      StructField("s", StructType(
+        StructField("a", ArrayType(IntegerType), true) ::
+          StructField("m", MapType(StringType, IntegerType)) :: Nil
+      )) :: Nil
+    )
+    val rows = Row(Row(Array(1, 2, 3), Map("x1" -> 1))) ::
+      Row(Row(Array(4, 5, 6), Map("x2" -> 2))) :: Nil
+
+    val rowRdd = sparkContext.parallelize(rows)
+
+    spark.createDataFrame(rowRdd, schema).createOrReplaceTempView("script_table")
+    val query = sql(
+      """
+        |SELECT TRANSFORM(s)
+        |USING 'cat'
+        |AS data
+        |FROM script_table
+      """.stripMargin)
+    checkAnswer(query, Row("""{"a":[1,2,3],"m":{"x1":1}}""") ::
+      Row("""{"a":[4,5,6],"m":{"x2":2}}""") :: Nil)
+  }
+
   test("SPARK-6835: udtf in lateral view") {
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.createOrReplaceTempView("table1")

@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util.Map.Entry
 import java.util.Properties
 import javax.annotation.Nullable
 
@@ -267,6 +268,33 @@ private class ScriptTransformationWriterThread(
   /** Contains the exception thrown while writing the parent iterator to the external process. */
   def exception: Option[Throwable] = Option(_exception)
 
+  private def buildJSONString(sb: StringBuilder, obj: Any): Unit = {
+    obj match {
+      case null =>
+        sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATNULL"));
+      case list: java.util.List[_] =>
+        (0 until list.size()).foreach { i =>
+          if (i > 0) {
+            sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATCOLLITEMS"));
+          }
+          buildJSONString(sb, list.get(i))
+        }
+      case map: java.util.Map[_, _] =>
+        val entries = map.entrySet().toArray()
+        (0 until entries.size).foreach { i =>
+          if (i > 0) {
+            sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATCOLLITEMS"));
+          }
+          val entry = entries(i).asInstanceOf[Entry[_, _]]
+          buildJSONString(sb, entry.getKey)
+          sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATMAPKEYS"));
+          buildJSONString(sb, entry.getValue)
+        }
+      case other =>
+        sb.append(other.toString)
+    }
+  }
+
   override def run(): Unit = Utils.logUncaughtExceptions {
     TaskContext.setTaskContext(taskContext)
 
@@ -279,16 +307,19 @@ private class ScriptTransformationWriterThread(
     val len = inputSchema.length
     try {
       iter.map(outputProjection).foreach { row =>
+        val values = row.asInstanceOf[GenericInternalRow].values.zip(ioschema.wrappers).map {
+          case (value, wrapper) => wrapper(value)
+        }
         if (inputSerde == null) {
           val data = if (len == 0) {
             ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
           } else {
             val sb = new StringBuilder
-            sb.append(row.get(0, inputSchema(0)))
+            buildJSONString(sb, values(0))
             var i = 1
             while (i < len) {
               sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-              sb.append(row.get(i, inputSchema(i)))
+              buildJSONString(sb, values(i))
               i += 1
             }
             sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
@@ -296,9 +327,7 @@ private class ScriptTransformationWriterThread(
           }
           outputStream.write(data.getBytes(StandardCharsets.UTF_8))
         } else {
-          val writable = inputSerde.serialize(
-            row.asInstanceOf[GenericInternalRow].values, inputSoi)
-
+          val writable = inputSerde.serialize(values, inputSoi)
           if (scriptInputWriter != null) {
             scriptInputWriter.write(writable)
           } else {
@@ -370,8 +399,10 @@ case class HiveScriptIOSchema (
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
+  var wrappers: Seq[Any => Any] = _
 
   def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, ObjectInspector)] = {
+    wrappers = input.map(_.dataType).map(dt => (wrapperFor(toInspector(dt), dt)))
     inputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(input)
       val serde = initSerDe(serdeClass, columns, columnTypes, inputSerdeProps)
