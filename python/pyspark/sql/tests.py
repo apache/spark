@@ -3549,16 +3549,19 @@ class VectorizedUDFTests(ReusedSQLTestCase):
     def test_vectorized_udf_timestamps_respect_session_timezone(self):
         from pyspark.sql.functions import pandas_udf, col
         from datetime import datetime
+        import pandas as pd
         schema = StructType([
             StructField("idx", LongType(), True),
             StructField("timestamp", TimestampType(), True)])
         data = [(1, datetime(1969, 1, 1, 1, 1, 1)),
                 (2, datetime(2012, 2, 2, 2, 2, 2)),
-                (3, datetime(2100, 3, 3, 3, 3, 3))]
+                (3, None),
+                (4, datetime(2100, 4, 4, 4, 4, 4))]
         df = self.spark.createDataFrame(data, schema=schema)
 
         f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType())
-        internal_value = pandas_udf(lambda ts: ts.apply(lambda ts: ts.value), LongType())
+        internal_value = pandas_udf(
+            lambda ts: ts.apply(lambda ts: ts.value if ts is not pd.NaT else None), LongType())
 
         orig_tz = self.spark.conf.get("spark.sql.session.timeZone")
         try:
