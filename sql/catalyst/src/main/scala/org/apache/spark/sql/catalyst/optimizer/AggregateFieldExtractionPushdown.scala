@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
  * Pushes down aliases to [[expressions.GetStructField]] expressions in an aggregate's grouping and
  * aggregate expressions into a projection over its children. The original
  * [[expressions.GetStructField]] expressions are replaced with references to the pushed down
- * aliases.
+ * aliases. This allows the optimizer to minimize the columns read from a column-oriented file
+ * format for aggregation queries involving only nested fields.
  */
 object AggregateFieldExtractionPushdown extends FieldExtractionPushdown {
   override def apply(plan: LogicalPlan): LogicalPlan =
@@ -49,27 +50,31 @@ object AggregateFieldExtractionPushdown extends FieldExtractionPushdown {
         if (fieldExtractors.nonEmpty) {
           val (aliases, substituteAttributes) = constructAliasesAndSubstitutions(fieldExtractors)
 
-          // Construct the new grouping and aggregate expressions by substituting
-          // each GetStructField expression with a reference to its alias
-          val newAggregateExpressions =
-            aggregateExpressions.map(substituteAttributes)
-              .collect { case named: NamedExpression => named }
-          val newGroupingExpressions = groupingExpressions.map(substituteAttributes)
+          if (aliases.nonEmpty) {
+            // Construct the new grouping and aggregate expressions by substituting
+            // each GetStructField expression with a reference to its alias
+            val newAggregateExpressions =
+              aggregateExpressions.map(substituteAttributes)
+                .collect { case named: NamedExpression => named }
+            val newGroupingExpressions = groupingExpressions.map(substituteAttributes)
 
-          // We need to push down the aliases we've created. We do this with a new projection over
-          // this aggregate's child consisting of the aliases and original child's output sans
-          // attributes referenced by the aliases
+            // We need to push down the aliases we've created. We do this with a new projection over
+            // this aggregate's child consisting of the aliases and original child's output sans
+            // attributes referenced by the aliases
 
-          // None of these attributes are required by this aggregate because we filtered out the
-          // GetStructField instances which referred to attributes that were required
-          val unnecessaryAttributes = aliases.map(_.child.references).reduce(_ ++ _)
-          // The output we require from this aggregate is the child's output minus the unnecessary
-          // attributes
-          val requiredChildOutput = child.output.filterNot(unnecessaryAttributes.contains)
-          val projects = requiredChildOutput ++ aliases
-          val newProject = Project(projects, child)
+            // None of these attributes are required by this aggregate because we filtered out the
+            // GetStructField instances which referred to attributes that were required
+            val unnecessaryAttributes = aliases.map(_.child.references).reduce(_ ++ _)
+            // The output we require from this aggregate is the child's output minus the unnecessary
+            // attributes
+            val requiredChildOutput = child.output.filterNot(unnecessaryAttributes.contains)
+            val projects = requiredChildOutput ++ aliases
+            val newProject = Project(projects, child)
 
-          Aggregate(newGroupingExpressions, newAggregateExpressions, newProject)
+            Aggregate(newGroupingExpressions, newAggregateExpressions, newProject)
+          } else {
+            agg
+          }
         } else {
           agg
         }

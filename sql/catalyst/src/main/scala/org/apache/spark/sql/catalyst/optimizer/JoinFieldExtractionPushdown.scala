@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
 /**
  * Pushes down aliases to [[expressions.GetStructField]] expressions in a projection over a join
  * and its join condition. The original [[expressions.GetStructField]] expressions are replaced
- * with references to the pushed down aliases.
+ * with references to the pushed down aliases. This allows the optimizer to minimize the columns
+ * read from a column-oriented file format for joins involving only nested fields.
  */
 object JoinFieldExtractionPushdown extends FieldExtractionPushdown {
   override def apply(plan: LogicalPlan): LogicalPlan =
@@ -36,29 +37,33 @@ object JoinFieldExtractionPushdown extends FieldExtractionPushdown {
         if (fieldExtractors.nonEmpty) {
           val (aliases, substituteAttributes) = constructAliasesAndSubstitutions(fieldExtractors)
 
-          // Construct the new projections and join condition by substituting each GetStructField
-          // expression with a reference to its alias
-          val newProjects =
-            projects.map(substituteAttributes).collect { case named: NamedExpression => named }
-          val newJoinCondition = substituteAttributes(joinCondition)
+          if (aliases.nonEmpty) {
+            // Construct the new projections and join condition by substituting each GetStructField
+            // expression with a reference to its alias
+            val newProjects =
+              projects.map(substituteAttributes).collect { case named: NamedExpression => named }
+            val newJoinCondition = substituteAttributes(joinCondition)
 
-          // Prune left and right output attributes according to whether they're needed by the
-          // new projections or join conditions
-          val aliasAttributes = AttributeSet(aliases.map(_.toAttribute))
-          val neededAttributes = AttributeSet((newProjects :+ newJoinCondition)
-            .flatMap(_.collect { case att: Attribute => att })) -- aliasAttributes
-          val leftAtts = left.output.filter(neededAttributes.contains)
-          val rightAtts = right.output.filter(neededAttributes.contains)
+            // Prune left and right output attributes according to whether they're needed by the
+            // new projections or join conditions
+            val aliasAttributes = AttributeSet(aliases.map(_.toAttribute))
+            val neededAttributes = AttributeSet((newProjects :+ newJoinCondition)
+              .flatMap(_.collect { case att: Attribute => att })) -- aliasAttributes
+            val leftAtts = left.output.filter(neededAttributes.contains)
+            val rightAtts = right.output.filter(neededAttributes.contains)
 
-          // Construct the left and right side aliases by partitioning the aliases according to
-          // whether they reference attributes in the left side or the right side
-          val (leftAliases, rightAliases) =
-            aliases.partition(_.references.intersect(left.outputSet).nonEmpty)
+            // Construct the left and right side aliases by partitioning the aliases according to
+            // whether they reference attributes in the left side or the right side
+            val (leftAliases, rightAliases) =
+              aliases.partition(_.references.intersect(left.outputSet).nonEmpty)
 
-          val newLeft = Project(leftAtts.toSeq ++ leftAliases, left)
-          val newRight = Project(rightAtts.toSeq ++ rightAliases, right)
+            val newLeft = Project(leftAtts.toSeq ++ leftAliases, left)
+            val newRight = Project(rightAtts.toSeq ++ rightAliases, right)
 
-          Project(newProjects, Join(newLeft, newRight, joinType, Some(newJoinCondition)))
+            Project(newProjects, Join(newLeft, newRight, joinType, Some(newJoinCondition)))
+          } else {
+            op
+          }
         } else {
           op
         }
