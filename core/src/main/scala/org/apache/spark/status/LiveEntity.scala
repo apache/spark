@@ -39,9 +39,9 @@ private[spark] abstract class LiveEntity {
 
   var lastWriteTime = 0L
 
-  def write(store: KVStore): Unit = {
+  def write(store: KVStore, now: Long): Unit = {
     store.write(doUpdate())
-    lastWriteTime = System.nanoTime()
+    lastWriteTime = now
   }
 
   /**

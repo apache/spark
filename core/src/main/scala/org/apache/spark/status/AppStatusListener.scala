@@ -120,13 +120,13 @@ private[spark] class AppStatusListener(
     exec.totalCores = event.executorInfo.totalCores
     exec.maxTasks = event.executorInfo.totalCores / coresPerTask
     exec.executorLogs = event.executorInfo.logUrlMap
-    liveUpdate(exec)
+    liveUpdate(exec, System.nanoTime())
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     liveExecutors.remove(event.executorId).foreach { exec =>
       exec.isActive = false
-      update(exec)
+      update(exec, System.nanoTime())
     }
   }
 
@@ -149,21 +149,25 @@ private[spark] class AppStatusListener(
   private def updateBlackListStatus(execId: String, blacklisted: Boolean): Unit = {
     liveExecutors.get(execId).foreach { exec =>
       exec.isBlacklisted = blacklisted
-      liveUpdate(exec)
+      liveUpdate(exec, System.nanoTime())
     }
   }
 
   private def updateNodeBlackList(host: String, blacklisted: Boolean): Unit = {
+    val now = System.nanoTime()
+
     // Implicitly (un)blacklist every executor associated with the node.
     liveExecutors.values.foreach { exec =>
       if (exec.hostname == host) {
         exec.isBlacklisted = blacklisted
-        liveUpdate(exec)
+        liveUpdate(exec, now)
       }
     }
   }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
+    val now = System.nanoTime()
+
     // Compute (a potential over-estimate of) the number of tasks that will be run by this job.
     // This may be an over-estimate because the job start event references all of the result
     // stages' transitive stage dependencies, but some of these stages might be skipped if their
@@ -188,7 +192,7 @@ private[spark] class AppStatusListener(
       jobGroup,
       numTasks)
     liveJobs.put(event.jobId, job)
-    liveUpdate(job)
+    liveUpdate(job, now)
 
     event.stageInfos.foreach { stageInfo =>
       // A new job submission may re-use an existing stage, so this code needs to do an update
@@ -196,7 +200,7 @@ private[spark] class AppStatusListener(
       val stage = getOrCreateStage(stageInfo)
       stage.jobs :+= job
       stage.jobIds += event.jobId
-      liveUpdate(stage)
+      liveUpdate(stage, now)
     }
   }
 
@@ -208,11 +212,12 @@ private[spark] class AppStatusListener(
       }
 
       job.completionTime = Some(new Date(event.time))
-      update(job)
+      update(job, System.nanoTime())
     }
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
+    val now = System.nanoTime()
     val stage = getOrCreateStage(event.stageInfo)
     stage.status = v1.StageStatus.ACTIVE
     stage.schedulingPool = Option(event.properties).flatMap { p =>
@@ -228,38 +233,39 @@ private[spark] class AppStatusListener(
     stage.jobs.foreach { job =>
       job.completedStages = job.completedStages - event.stageInfo.stageId
       job.activeStages += 1
-      liveUpdate(job)
+      liveUpdate(job, now)
     }
 
     event.stageInfo.rddInfos.foreach { info =>
       if (info.storageLevel.isValid) {
-        liveUpdate(liveRDDs.getOrElseUpdate(info.id, new LiveRDD(info)))
+        liveUpdate(liveRDDs.getOrElseUpdate(info.id, new LiveRDD(info)), now)
       }
     }
 
-    liveUpdate(stage)
+    liveUpdate(stage, now)
   }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = {
+    val now = System.nanoTime()
     val task = new LiveTask(event.taskInfo, event.stageId, event.stageAttemptId)
     liveTasks.put(event.taskInfo.taskId, task)
-    liveUpdate(task)
+    liveUpdate(task, now)
 
     liveStages.get((event.stageId, event.stageAttemptId)).foreach { stage =>
       stage.activeTasks += 1
       stage.firstLaunchTime = math.min(stage.firstLaunchTime, event.taskInfo.launchTime)
-      maybeUpdate(stage)
+      maybeUpdate(stage, now)
 
       stage.jobs.foreach { job =>
         job.activeTasks += 1
-        maybeUpdate(job)
+        maybeUpdate(job, now)
       }
     }
 
     liveExecutors.get(event.taskInfo.executorId).foreach { exec =>
       exec.activeTasks += 1
       exec.totalTasks += 1
-      maybeUpdate(exec)
+      maybeUpdate(exec, now)
     }
   }
 
@@ -267,7 +273,7 @@ private[spark] class AppStatusListener(
     // Call update on the task so that the "getting result" time is written to the store; the
     // value is part of the mutable TaskInfo state that the live entity already references.
     liveTasks.get(event.taskInfo.taskId).foreach { task =>
-      maybeUpdate(task)
+      maybeUpdate(task, System.nanoTime())
     }
   }
 
@@ -276,6 +282,8 @@ private[spark] class AppStatusListener(
     if (event.taskInfo == null) {
       return
     }
+
+    val now = System.nanoTime()
 
     val metricsDelta = liveTasks.remove(event.taskInfo.taskId).map { task =>
       val errorMessage = event.reason match {
@@ -293,7 +301,7 @@ private[spark] class AppStatusListener(
       }
       task.errorMessage = errorMessage
       val delta = task.updateMetrics(event.taskMetrics)
-      update(task)
+      update(task, now)
       delta
     }.orNull
 
@@ -311,13 +319,13 @@ private[spark] class AppStatusListener(
       stage.activeTasks -= 1
       stage.completedTasks += completedDelta
       stage.failedTasks += failedDelta
-      maybeUpdate(stage)
+      maybeUpdate(stage, now)
 
       stage.jobs.foreach { job =>
         job.activeTasks -= 1
         job.completedTasks += completedDelta
         job.failedTasks += failedDelta
-        maybeUpdate(job)
+        maybeUpdate(job, now)
       }
 
       val esummary = stage.executorSummary(event.taskInfo.executorId)
@@ -327,7 +335,7 @@ private[spark] class AppStatusListener(
       if (metricsDelta != null) {
         esummary.metrics.update(metricsDelta)
       }
-      maybeUpdate(esummary)
+      maybeUpdate(esummary, now)
     }
 
     liveExecutors.get(event.taskInfo.executorId).foreach { exec =>
@@ -343,12 +351,13 @@ private[spark] class AppStatusListener(
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
       exec.totalDuration += event.taskInfo.duration
-      maybeUpdate(exec)
+      maybeUpdate(exec, now)
     }
   }
 
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
     liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptId)).foreach { stage =>
+      val now = System.nanoTime()
       stage.info = event.stageInfo
 
       // Because of SPARK-20205, old event logs may contain valid stages without a submission time
@@ -371,11 +380,11 @@ private[spark] class AppStatusListener(
             job.failedStages += 1
         }
         job.activeStages -= 1
-        liveUpdate(job)
+        liveUpdate(job, now)
       }
 
-      stage.executorSummaries.values.foreach(update)
-      update(stage)
+      stage.executorSummaries.values.foreach(update(_, now))
+      update(stage, now)
     }
   }
 
@@ -390,7 +399,7 @@ private[spark] class AppStatusListener(
     }
     exec.isActive = true
     exec.maxMemory = event.maxMem
-    liveUpdate(exec)
+    liveUpdate(exec, System.nanoTime())
   }
 
   override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
@@ -403,19 +412,21 @@ private[spark] class AppStatusListener(
   }
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    val now = System.nanoTime()
+
     event.accumUpdates.foreach { case (taskId, sid, sAttempt, accumUpdates) =>
       liveTasks.get(taskId).foreach { task =>
         val metrics = TaskMetrics.fromAccumulatorInfos(accumUpdates)
         val delta = task.updateMetrics(metrics)
-        maybeUpdate(task)
+        maybeUpdate(task, now)
 
         liveStages.get((sid, sAttempt)).foreach { stage =>
           stage.metrics.update(delta)
-          maybeUpdate(stage)
+          maybeUpdate(stage, now)
 
           val esummary = stage.executorSummary(event.execId)
           esummary.metrics.update(delta)
-          maybeUpdate(esummary)
+          maybeUpdate(esummary, now)
         }
       }
     }
@@ -430,14 +441,16 @@ private[spark] class AppStatusListener(
 
   /** Flush all live entities' data to the underlying store. */
   def flush(): Unit = {
-    liveStages.values.foreach(update)
-    liveJobs.values.foreach(update)
-    liveExecutors.values.foreach(update)
-    liveTasks.values.foreach(update)
-    liveRDDs.values.foreach(update)
+    val now = System.nanoTime()
+    liveStages.values.foreach(update(_, now))
+    liveJobs.values.foreach(update(_, now))
+    liveExecutors.values.foreach(update(_, now))
+    liveTasks.values.foreach(update(_, now))
+    liveRDDs.values.foreach(update(_, now))
   }
 
   private def updateRDDBlock(event: SparkListenerBlockUpdated, block: RDDBlockId): Unit = {
+    val now = System.nanoTime()
     val executorId = event.blockUpdatedInfo.blockManagerId.executorId
 
     // Whether values are being added to or removed from the existing accounting.
@@ -512,7 +525,7 @@ private[spark] class AppStatusListener(
       }
       rdd.memoryUsed = newValue(rdd.memoryUsed, memoryDelta)
       rdd.diskUsed = newValue(rdd.diskUsed, diskDelta)
-      update(rdd)
+      update(rdd, now)
     }
 
     maybeExec.foreach { exec =>
@@ -526,7 +539,7 @@ private[spark] class AppStatusListener(
       exec.memoryUsed = newValue(exec.memoryUsed, memoryDelta)
       exec.diskUsed = newValue(exec.diskUsed, diskDelta)
       exec.rddBlocks += rddBlocksDelta
-      maybeUpdate(exec)
+      maybeUpdate(exec, now)
     }
   }
 
@@ -540,24 +553,21 @@ private[spark] class AppStatusListener(
     stage
   }
 
-  private def update(entity: LiveEntity): Unit = {
-    entity.write(kvstore)
+  private def update(entity: LiveEntity, now: Long): Unit = {
+    entity.write(kvstore, now)
   }
 
   /** Update a live entity only if it hasn't been updated in the last configured period. */
-  private def maybeUpdate(entity: LiveEntity): Unit = {
-    if (liveUpdatePeriodNs >= 0) {
-      val now = System.nanoTime()
-      if (now - entity.lastWriteTime > liveUpdatePeriodNs) {
-        update(entity)
-      }
+  private def maybeUpdate(entity: LiveEntity, now: Long): Unit = {
+    if (liveUpdatePeriodNs >= 0 && now - entity.lastWriteTime > liveUpdatePeriodNs) {
+      update(entity, now)
     }
   }
 
   /** Update an entity only if in a live app; avoids redundant writes when replaying logs. */
-  private def liveUpdate(entity: LiveEntity): Unit = {
+  private def liveUpdate(entity: LiveEntity, now: Long): Unit = {
     if (live) {
-      update(entity)
+      update(entity, now)
     }
   }
 
