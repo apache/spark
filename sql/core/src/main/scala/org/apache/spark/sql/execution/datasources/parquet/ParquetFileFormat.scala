@@ -342,7 +342,7 @@ class ParquetFileFormat
     // TODO: if you move this into the closure it reverts to the default values.
     // If true, enable using the custom RecordReader for parquet. This only works for
     // a subset of the types (no complex types).
-    val resultSchema = StructType(partitionSchema.fields ++ requiredSchema.fields)
+    val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
     val enableVectorizedReader: Boolean =
       sparkSession.sessionState.conf.parquetVectorizedReaderEnabled &&
       resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
