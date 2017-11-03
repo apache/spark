@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import java.io.IOException
-import java.util.{List => JList}
+import java.util.{Locale, List => JList}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -173,7 +173,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     instr.logSuccess(bestModel)
-    copyValues(new TrainValidationSplitModel(uid, bestModel, metrics, subModels).setParent(this))
+    copyValues(new TrainValidationSplitModel(uid, bestModel, metrics)
+      .setSubModels(subModels).setParent(this))
   }
 
   @Since("1.5.0")
@@ -245,18 +246,28 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
 class TrainValidationSplitModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("1.5.0") val bestModel: Model[_],
-    @Since("1.5.0") val validationMetrics: Array[Double],
-    @Since("2.3.0") val subModels: Option[Array[Model[_]]])
+    @Since("1.5.0") val validationMetrics: Array[Double])
   extends Model[TrainValidationSplitModel] with TrainValidationSplitParams with MLWritable {
 
   /** A Python-friendly auxiliary constructor. */
   private[ml] def this(uid: String, bestModel: Model[_], validationMetrics: JList[Double]) = {
-    this(uid, bestModel, validationMetrics.asScala.toArray, null)
+    this(uid, bestModel, validationMetrics.asScala.toArray)
   }
 
-  private[ml] def this(uid: String, bestModel: Model[_], validationMetrics: Array[Double]) = {
-    this(uid, bestModel, validationMetrics, null)
+  private var _subModels: Option[Array[Model[_]]] = None
+
+  @Since("2.3.0")
+  private[tuning] def setSubModels(subModels: Option[Array[Model[_]]])
+    : TrainValidationSplitModel = {
+    _subModels = subModels
+    this
   }
+
+  @Since("2.3.0")
+  def subModels: Array[Model[_]] = _subModels.get
+
+  @Since("2.3.0")
+  def hasSubModels: Boolean = _subModels.isDefined
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -274,20 +285,13 @@ class TrainValidationSplitModel private[ml] (
     val copied = new TrainValidationSplitModel (
       uid,
       bestModel.copy(extra).asInstanceOf[Model[_]],
-      validationMetrics.clone(),
-      TrainValidationSplitModel.copySubModels(subModels))
+      validationMetrics.clone()
+    ).setSubModels(TrainValidationSplitModel.copySubModels(_subModels))
     copyValues(copied, extra).setParent(parent)
   }
 
   @Since("2.0.0")
   override def write: MLWriter = new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
-
-  @Since("2.3.0")
-  @throws[IOException]("If the input path already exists but overwrite is not enabled.")
-  def save(path: String, persistSubModels: Boolean): Unit = {
-    write.asInstanceOf[TrainValidationSplitModel.TrainValidationSplitModelWriter]
-      .persistSubModels(persistSubModels).save(path)
-  }
 }
 
 @Since("2.0.0")
@@ -315,14 +319,19 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
     ValidatorParams.validateParams(instance)
 
-    protected var shouldPersistSubModels: Boolean = false
+    protected var shouldPersistSubModels: Boolean = if (instance.hasSubModels) true else false
 
     /**
-     * Set option for persist sub models.
+     * Extra options for TrainValidationSplitModelWriter, current support "persistSubModels".
+     * if sub models exsit, the default value for option "persistSubModels" is "true".
      */
     @Since("2.3.0")
-    def persistSubModels(persist: Boolean): this.type = {
-      shouldPersistSubModels = persist
+    override def option(key: String, value: String): this.type = {
+      key.toLowerCase(Locale.ROOT) match {
+        case "persistsubmodels" => shouldPersistSubModels = value.toBoolean
+        case _ => throw new IllegalArgumentException(
+          s"Illegal option ${key} for TrainValidationSplitModelWriter")
+      }
       this
     }
 
@@ -334,11 +343,11 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
       if (shouldPersistSubModels) {
-        require(instance.subModels.isDefined, "Cannot get sub models to persist.")
+        require(instance.hasSubModels, "Cannot get sub models to persist.")
         val subModelsPath = new Path(path, "subModels")
         for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
-          instance.subModels.get(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+          instance.subModels(paramIndex).asInstanceOf[MLWritable].save(modelPath)
         }
       }
     }
@@ -370,8 +379,8 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
         Some(_subModels)
       } else None
 
-      val model = new TrainValidationSplitModel(metadata.uid, bestModel, validationMetrics,
-        subModels)
+      val model = new TrainValidationSplitModel(metadata.uid, bestModel, validationMetrics)
+        .setSubModels(subModels)
       model.set(model.estimator, estimator)
         .set(model.evaluator, evaluator)
         .set(model.estimatorParamMaps, estimatorParamMaps)

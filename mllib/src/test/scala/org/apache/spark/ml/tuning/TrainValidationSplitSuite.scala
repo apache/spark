@@ -192,8 +192,7 @@ class TrainValidationSplitSuite
       .addGrid(lr.maxIter, Array(0, 3))
       .build()
     val eval = new BinaryClassificationEvaluator
-    val subdirName = Identifiable.randomUID("testSubModels")
-    val subPath = new File(tempDir, subdirName)
+    val subPath = new File(tempDir, "testTrainValidationSplitSubModels")
 
     val tvs = new TrainValidationSplit()
       .setEstimator(lr)
@@ -204,21 +203,22 @@ class TrainValidationSplitSuite
 
     val tvsModel = tvs.fit(dataset)
 
-    assert(tvsModel.subModels.isDefined && tvsModel.subModels.get.length == lrParamMaps.length)
+    assert(tvsModel.hasSubModels && tvsModel.subModels.length == lrParamMaps.length)
+
+    // Test the default value for option "persistSubModel" to be "true"
+    val savingPathWithSubModels = new File(subPath, "tvsModel3").getPath
+    tvsModel.save(savingPathWithSubModels)
+    val tvsModel3 = TrainValidationSplitModel.load(savingPathWithSubModels)
+    assert(tvsModel3.hasSubModels && tvsModel3.subModels.length == lrParamMaps.length)
 
     val savingPathWithoutSubModels = new File(subPath, "tvsModel2").getPath
-    tvsModel.save(savingPathWithoutSubModels)
+    tvsModel.write.option("persistSubModels", "false").save(savingPathWithoutSubModels)
     val tvsModel2 = TrainValidationSplitModel.load(savingPathWithoutSubModels)
-    assert(tvsModel2.subModels.isEmpty)
-
-    val savingPathWithSubModels = new File(subPath, "tvsModel3").getPath
-    tvsModel.save(savingPathWithSubModels, persistSubModels = true)
-    val tvsModel3 = TrainValidationSplitModel.load(savingPathWithSubModels)
-    assert(tvsModel3.subModels.isDefined && tvsModel3.subModels.get.length == lrParamMaps.length)
+    assert(!tvsModel2.hasSubModels)
 
     for (i <- 0 until lrParamMaps.length) {
-      assert(tvsModel.subModels.get(i).asInstanceOf[LogisticRegressionModel].uid ===
-        tvsModel3.subModels.get(i).asInstanceOf[LogisticRegressionModel].uid)
+      assert(tvsModel.subModels(i).asInstanceOf[LogisticRegressionModel].uid ===
+        tvsModel3.subModels(i).asInstanceOf[LogisticRegressionModel].uid)
     }
   }
 

@@ -199,8 +199,7 @@ class CrossValidatorSuite
       .build()
     val eval = new BinaryClassificationEvaluator
     val numFolds = 3
-    val subdirName = Identifiable.randomUID("testSubModels")
-    val subPath = new File(tempDir, subdirName)
+    val subPath = new File(tempDir, "testCrossValidatorSubModels")
     val persistSubModelsPath = new File(subPath, "subModels").toString
 
     val cv = new CrossValidator()
@@ -213,24 +212,25 @@ class CrossValidatorSuite
 
     val cvModel = cv.fit(dataset)
 
-    assert(cvModel.subModels.isDefined && cvModel.subModels.get.length == numFolds)
-    cvModel.subModels.get.foreach(array => assert(array.length == lrParamMaps.length))
+    assert(cvModel.hasSubModels && cvModel.subModels.length == numFolds)
+    cvModel.subModels.foreach(array => assert(array.length == lrParamMaps.length))
+
+    // Test the default value for option "persistSubModel" to be "true"
+    val savingPathWithSubModels = new File(subPath, "cvModel3").getPath
+    cvModel.save(savingPathWithSubModels)
+    val cvModel3 = CrossValidatorModel.load(savingPathWithSubModels)
+    assert(cvModel3.hasSubModels && cvModel3.subModels.length == numFolds)
+    cvModel3.subModels.foreach(array => assert(array.length == lrParamMaps.length))
 
     val savingPathWithoutSubModels = new File(subPath, "cvModel2").getPath
-    cvModel.save(savingPathWithoutSubModels)
+    cvModel.write.option("persistSubModels", "false").save(savingPathWithoutSubModels)
     val cvModel2 = CrossValidatorModel.load(savingPathWithoutSubModels)
-    assert(cvModel2.subModels.isEmpty)
-
-    val savingPathWithSubModels = new File(subPath, "cvModel3").getPath
-    cvModel.save(savingPathWithSubModels, persistSubModels = true)
-    val cvModel3 = CrossValidatorModel.load(savingPathWithSubModels)
-    assert(cvModel3.subModels.isDefined && cvModel3.subModels.get.length == numFolds)
-    cvModel3.subModels.get.foreach(array => assert(array.length == lrParamMaps.length))
+    assert(!cvModel2.hasSubModels)
 
     for (i <- 0 until numFolds) {
       for (j <- 0 until lrParamMaps.length) {
-        assert(cvModel.subModels.get(i)(j).asInstanceOf[LogisticRegressionModel].uid ===
-          cvModel3.subModels.get(i)(j).asInstanceOf[LogisticRegressionModel].uid)
+        assert(cvModel.subModels(i)(j).asInstanceOf[LogisticRegressionModel].uid ===
+          cvModel3.subModels(i)(j).asInstanceOf[LogisticRegressionModel].uid)
       }
     }
   }

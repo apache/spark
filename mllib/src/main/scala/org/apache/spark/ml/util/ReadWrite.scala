@@ -108,6 +108,13 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   protected def saveImpl(path: String): Unit
 
   /**
+   * `option()` handles extra options. If subclasses need to support extra options, override this
+   * method.
+   */
+  @Since("2.3.0")
+  def option(key: String, value: String): this.type = this
+
+  /**
    * Overwrites if the output path already exists.
    */
   @Since("1.6.0")

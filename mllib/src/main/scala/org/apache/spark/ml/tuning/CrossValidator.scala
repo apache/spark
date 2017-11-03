@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import java.io.IOException
-import java.util.{List => JList}
+import java.util.{Locale, List => JList}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -176,7 +176,8 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     instr.logSuccess(bestModel)
-    copyValues(new CrossValidatorModel(uid, bestModel, metrics, subModels).setParent(this))
+    copyValues(new CrossValidatorModel(uid, bestModel, metrics)
+      .setSubModels(subModels).setParent(this))
   }
 
   @Since("1.4.0")
@@ -252,18 +253,28 @@ object CrossValidator extends MLReadable[CrossValidator] {
 class CrossValidatorModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.2.0") val bestModel: Model[_],
-    @Since("1.5.0") val avgMetrics: Array[Double],
-    @Since("2.3.0") val subModels: Option[Array[Array[Model[_]]]])
+    @Since("1.5.0") val avgMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams with MLWritable {
 
   /** A Python-friendly auxiliary constructor. */
   private[ml] def this(uid: String, bestModel: Model[_], avgMetrics: JList[Double]) = {
-    this(uid, bestModel, avgMetrics.asScala.toArray, null)
+    this(uid, bestModel, avgMetrics.asScala.toArray)
   }
 
-  private[ml] def this(uid: String, bestModel: Model[_], avgMetrics: Array[Double]) = {
-    this(uid, bestModel, avgMetrics, null)
+  private var _subModels: Option[Array[Array[Model[_]]]] = None
+
+  @Since("2.3.0")
+  private[tuning] def setSubModels(subModels: Option[Array[Array[Model[_]]]])
+    : CrossValidatorModel = {
+    _subModels = subModels
+    this
   }
+
+  @Since("2.3.0")
+  def subModels: Array[Array[Model[_]]] = _subModels.get
+
+  @Since("2.3.0")
+  def hasSubModels: Boolean = _subModels.isDefined
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -281,20 +292,13 @@ class CrossValidatorModel private[ml] (
     val copied = new CrossValidatorModel(
       uid,
       bestModel.copy(extra).asInstanceOf[Model[_]],
-      avgMetrics.clone(),
-      CrossValidatorModel.copySubModels(subModels))
+      avgMetrics.clone()
+    ).setSubModels(CrossValidatorModel.copySubModels(_subModels))
     copyValues(copied, extra).setParent(parent)
   }
 
   @Since("1.6.0")
   override def write: MLWriter = new CrossValidatorModel.CrossValidatorModelWriter(this)
-
-  @Since("2.3.0")
-  @throws[IOException]("If the input path already exists but overwrite is not enabled.")
-  def save(path: String, persistSubModels: Boolean): Unit = {
-    write.asInstanceOf[CrossValidatorModel.CrossValidatorModelWriter]
-      .persistSubModels(persistSubModels).save(path)
-  }
 }
 
 @Since("1.6.0")
@@ -325,14 +329,19 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
 
     ValidatorParams.validateParams(instance)
 
-    protected var shouldPersistSubModels: Boolean = false
+    protected var shouldPersistSubModels: Boolean = if (instance.hasSubModels) true else false
 
     /**
-     * Set option for persist sub models.
+     * Extra options for CrossValidatorModelWriter, current support "persistSubModels".
+     * if sub models exsit, the default value for option "persistSubModels" is "true".
      */
     @Since("2.3.0")
-    def persistSubModels(persist: Boolean): this.type = {
-      shouldPersistSubModels = persist
+    override def option(key: String, value: String): this.type = {
+      key.toLowerCase(Locale.ROOT) match {
+        case "persistsubmodels" => shouldPersistSubModels = value.toBoolean
+        case _ => throw new IllegalArgumentException(
+          s"Illegal option ${key} for CrossValidatorModelWriter")
+      }
       this
     }
 
@@ -344,13 +353,13 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
       if (shouldPersistSubModels) {
-        require(instance.subModels.isDefined, "Cannot get sub models to persist.")
+        require(instance.hasSubModels, "Cannot get sub models to persist.")
         val subModelsPath = new Path(path, "subModels")
         for (splitIndex <- 0 until instance.getNumFolds) {
           val splitPath = new Path(subModelsPath, splitIndex.toString)
           for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
-            instance.subModels.get(splitIndex)(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable].save(modelPath)
           }
         }
       }
@@ -388,7 +397,8 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
         Some(_subModels)
       } else None
 
-      val model = new CrossValidatorModel(metadata.uid, bestModel, avgMetrics, subModels)
+      val model = new CrossValidatorModel(metadata.uid, bestModel, avgMetrics)
+        .setSubModels(subModels)
       model.set(model.estimator, estimator)
         .set(model.evaluator, evaluator)
         .set(model.estimatorParamMaps, estimatorParamMaps)
