@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Comparator, Date, Locale}
+import java.util.{Arrays, Comparator, Date, Locale, TimeZone}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -424,6 +424,10 @@ class SparkHadoopUtil extends Logging {
 
   def isProxyUser(ugi: UserGroupInformation): Boolean = {
     ugi.getAuthenticationMethod() == UserGroupInformation.AuthenticationMethod.PROXY
+  }
+
+  def getTimeZone: TimeZone = {
+    TimeZone.getTimeZone(sparkConf.get("spark.history.timeZone", "GMT"))
   }
 
 }

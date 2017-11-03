@@ -17,10 +17,12 @@
 package org.apache.spark.status.api.v1
 
 import java.text.{ParseException, SimpleDateFormat}
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 import javax.ws.rs.WebApplicationException
 import javax.ws.rs.core.Response
 import javax.ws.rs.core.Response.Status
+
+import org.apache.spark.deploy.SparkHadoopUtil
 
 private[v1] class SimpleDateParam(val originalValue: String) {
 
@@ -31,7 +33,7 @@ private[v1] class SimpleDateParam(val originalValue: String) {
     } catch {
       case _: ParseException =>
         val gmtDay = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        gmtDay.setTimeZone(TimeZone.getTimeZone("GMT"))
+        gmtDay.setTimeZone(SparkHadoopUtil.get.getTimeZone)
         try {
           gmtDay.parse(originalValue).getTime()
         } catch {
