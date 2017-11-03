@@ -49,10 +49,25 @@ private[spark] case class ApplicationHistoryInfo(
 }
 
 /**
- * All the information returned from a call to `getAppUI()`: the new UI
- * and any required update state.
+ * A loaded UI for a Spark application.
+ *
+ * Loaded UIs are valid once created, and can be invalidated once the history provider detects
+ * changes in the underlying app data (e.g. an updated event log). Invalidating a UI does not
+ * unload it; it just signals the [[ApplicationCache]] that the UI should not be used to serve
+ * new requests.
+ *
+ * Reloading of the UI with new data requires collaboration between the cache and the provider;
+ * the provider invalidates the UI when it detects updated information, and the cache invalidates
+ * the cache entry when it detects the UI has been invalidated. That will trigger a callback
+ * on the provider to finally clean up any UI state. The cache should hold read locks when
+ * using the UI, and the provider should grab the UI's write lock before making destructive
+ * operations.
+ *
+ * Note that all this means that an invalidated UI will still stay in-memory, and any resources it
+ * references will remain open, until the cache either sees that it's invalidated, or evicts it to
+ * make room for another UI.
+ *
  * @param ui Spark UI
- * @param updateProbe probe to call to check on the update state of this application attempt
  */
 private[history] case class LoadedAppUI(ui: SparkUI) {
 

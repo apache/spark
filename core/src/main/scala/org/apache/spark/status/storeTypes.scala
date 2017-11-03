@@ -25,8 +25,7 @@ import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.util.kvstore.KVIndex
 
-private[spark] case class AppStatusStoreMetadata(
-    val version: Long)
+private[spark] case class AppStatusStoreMetadata(version: Long)
 
 private[spark] class ApplicationInfoWrapper(val info: ApplicationInfo) {
 

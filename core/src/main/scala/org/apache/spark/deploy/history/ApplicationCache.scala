@@ -23,7 +23,6 @@ import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, Servlet
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
@@ -36,13 +35,11 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Clock
 
 /**
- * Cache for applications.
+ * Cache for application UIs.
  *
- * Completed applications are cached for as long as there is capacity for them.
- * Incompleted applications have their update time checked on every
- * retrieval; if the cached entry is out of date, it is refreshed.
+ * Applications are cached for as long as there is capacity for them. See [[LoadedAppUI]] for a
+ * discussion of the UI lifecycle.
  *
- * Creating multiple instances will break this routing.
  * @param operations implementation of record access operations
  * @param retainedApplications number of retained applications
  * @param clock time source
@@ -52,9 +49,6 @@ private[history] class ApplicationCache(
     val retainedApplications: Int,
     val clock: Clock) extends Logging {
 
-  /**
-   * Services the load request from the cache.
-   */
   private val appLoader = new CacheLoader[CacheKey, CacheEntry] {
 
     /** the cache key doesn't match a cached entry, or the entry is out-of-date, so load it. */
@@ -64,9 +58,6 @@ private[history] class ApplicationCache(
 
   }
 
-  /**
-   * Handler for callbacks from the cache of entry removal.
-   */
   private val removalListener = new RemovalListener[CacheKey, CacheEntry] {
 
     /**
@@ -81,11 +72,6 @@ private[history] class ApplicationCache(
     }
   }
 
-  /**
-   * The cache of applications.
-   *
-   * Tagged as `protected` so as to allow subclasses in tests to access it directly
-   */
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
     CacheBuilder.newBuilder()
         .maximumSize(retainedApplications)
@@ -122,7 +108,7 @@ private[history] class ApplicationCache(
         entry.loadedUI.lock.readLock().unlock()
         entry = null
         try {
-          appCache.invalidate(new CacheKey(appId, attemptId))
+          invalidate(new CacheKey(appId, attemptId))
           entry = get(appId, attemptId)
           metrics.loadCount.inc()
         } finally {
@@ -140,25 +126,9 @@ private[history] class ApplicationCache(
     }
   }
 
-  /**
-   * Size probe, primarily for testing.
-   * @return size
-   */
+  /** @return Number of cached UIs. */
   def size(): Long = appCache.size()
 
-  /**
-   * Emptiness predicate, primarily for testing.
-   * @return true if the cache is empty
-   */
-  def isEmpty: Boolean = appCache.size() == 0
-
-  /**
-   * Time a closure, returning its output.
-   * @param t timer
-   * @param f function
-   * @tparam T type of return value of time
-   * @return the result of the function.
-   */
   private def time[T](t: Timer)(f: => T): T = {
     val timeCtx = t.time()
     try {
@@ -206,7 +176,7 @@ private[history] class ApplicationCache(
       val completed = loadedUI.ui.getApplicationInfoList.exists(_.attempts.last.completed)
       if (!completed) {
         // incomplete UIs have the cache-check filter put in front of them.
-        registerFilter(new CacheKey(appId, attemptId), loadedUI, this)
+        registerFilter(new CacheKey(appId, attemptId), loadedUI)
       }
       operations.attachSparkUI(appId, attemptId, loadedUI.ui, completed)
       new CacheEntry(loadedUI, completed)
@@ -243,10 +213,10 @@ private[history] class ApplicationCache(
    * @param appId application ID
    * @param attemptId attempt ID
    */
-  def registerFilter(key: CacheKey, loadedUI: LoadedAppUI, cache: ApplicationCache): Unit = {
+  private def registerFilter(key: CacheKey, loadedUI: LoadedAppUI): Unit = {
     require(loadedUI != null)
     val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.REQUEST)
-    val filter = new ApplicationCacheCheckFilter(key, loadedUI, cache)
+    val filter = new ApplicationCacheCheckFilter(key, loadedUI, this)
     val holder = new FilterHolder(filter)
     require(loadedUI.ui.getHandlers != null, "null handlers")
     loadedUI.ui.getHandlers.foreach { handler =>
@@ -264,9 +234,6 @@ private[history] class ApplicationCache(
  * @param ui Spark UI
  * @param completed Flag to indicated that the application has completed (and so
  *                 does not need refreshing).
- * @param updateProbe function to call to see if the application has been updated and
- *                    therefore that the cached value needs to be refreshed.
- * @param probeTime Times in milliseconds when the probe was last executed.
  */
 private[history] final class CacheEntry(
     val loadedUI: LoadedAppUI,

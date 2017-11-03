@@ -61,9 +61,6 @@ import org.apache.spark.util.kvstore._
  * and update or create a matching application info element in the list of applications.
  * - Updated attempts are also found in [[checkForLogs]] -- if the attempt's log file has grown, the
  * attempt is replaced by another one with a larger log size.
- * - When [[updateProbe()]] is invoked to check if a loaded [[SparkUI]]
- * instance is out of date, the log size of the cached instance is checked against the app last
- * loaded by [[checkForLogs]].
  *
  * The use of log size, rather than simply relying on modification times, is needed to
  * address the following issues
@@ -581,10 +578,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     replay(fileStatus, isApplicationCompleted(fileStatus), bus, eventsFilter)
     listener.applicationInfo.foreach { app =>
-      // Invalidate the existing UI for the reloaded app attempt, if any. Note that this does
-      // not remove the UI from the active list; that has to be done in onUIDetached, so that
-      // cleanup of files can be done in a thread-safe manner. It does mean the UI will remain
-      // in memory for longer than it should.
+      // Invalidate the existing UI for the reloaded app attempt, if any. See LoadedAppUI for a
+      // discussion on the UI lifecycle.
       synchronized {
         activeUIs.get((app.info.id, app.attempts.head.info.attemptId)).foreach { ui =>
           ui.invalidate()
@@ -796,13 +791,13 @@ private[history] object FsHistoryProvider {
 }
 
 private[history] case class FsHistoryProviderMetadata(
-  version: Long,
-  uiVersion: Long,
-  logDir: String)
+    version: Long,
+    uiVersion: Long,
+    logDir: String)
 
 private[history] case class LogInfo(
-  @KVIndexParam logPath: String,
-  fileSize: Long)
+    @KVIndexParam logPath: String,
+    fileSize: Long)
 
 private[history] class AttemptInfoWrapper(
     val info: v1.ApplicationAttemptInfo,
