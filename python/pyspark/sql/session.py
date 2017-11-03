@@ -23,6 +23,7 @@ from threading import RLock
 
 if sys.version >= '3':
     basestring = unicode = str
+    xrange = range
 else:
     from itertools import imap as map
 
@@ -416,6 +417,50 @@ class SparkSession(object):
         data = [schema.toInternal(row) for row in data]
         return self._sc.parallelize(data), schema
 
+    def _getNumpyRecordDtypes(self, rec):
+        """
+        Used when converting a pandas.DataFrame to Spark using to_records(), this will correct
+        the dtypes of records so they can be properly loaded into Spark.
+        :param rec: a numpy record to check dtypes
+        :return corrected dtypes for a numpy.record or None if no correction needed
+        """
+        import numpy as np
+        cur_dtypes = rec.dtype
+        col_names = cur_dtypes.names
+        record_type_list = []
+        has_rec_fix = False
+        for i in xrange(len(cur_dtypes)):
+            curr_type = cur_dtypes[i]
+            # If type is a datetime64 timestamp, convert to microseconds
+            # NOTE: if dtype is M8[ns] then np.record.tolist() will output values as longs,
+            # this conversion will lead to an output of py datetime objects, see SPARK-22417
+            if curr_type == np.dtype('M8[ns]'):
+                curr_type = 'M8[us]'
+                has_rec_fix = True
+            record_type_list.append((str(col_names[i]), curr_type))
+        return record_type_list if has_rec_fix else None
+
+    def _convertFromPandas(self, pdf, schema):
+        """
+         Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
+         :return tuple of list of records and schema
+        """
+        # Convert pandas.DataFrame to list of numpy records
+        np_records = pdf.to_records(index=False)
+
+        # If no schema supplied by user then get the names of columns only
+        if schema is None:
+            schema = [str(x) for x in pdf.columns]
+
+            # Check if any columns need to be fixed for Spark to infer properly
+            if len(np_records) > 0:
+                record_type_list = self._getNumpyRecordDtypes(np_records[0])
+                if record_type_list is not None:
+                    return [r.astype(record_type_list).tolist() for r in np_records], schema
+
+        # Convert list of numpy records to python lists
+        return [r.tolist() for r in np_records], schema
+
     @since(2.0)
     @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
@@ -512,39 +557,7 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
-            import numpy as np
-
-            # Convert pandas.DataFrame to list of numpy records
-            np_records = data.to_records(index=False)
-
-            # Check if any columns need to be fixed for Spark to infer properly
-            record_type_list = None
-            if schema is None and len(np_records) > 0:
-                cur_dtypes = np_records[0].dtype
-                col_names = cur_dtypes.names
-                record_type_list = []
-                has_rec_fix = False
-                for i in xrange(len(cur_dtypes)):
-                    curr_type = cur_dtypes[i]
-                    # If type is a datetime64 timestamp, convert to microseconds
-                    # NOTE: if dtype is M8[ns] then np.record.tolist() will output values as longs,
-                    # this conversion will lead to an output of py datetime objects, see SPARK-22417
-                    if curr_type == np.dtype('M8[ns]'):
-                        curr_type = 'M8[us]'
-                        has_rec_fix = True
-                    record_type_list.append((str(col_names[i]), curr_type))
-                if not has_rec_fix:
-                    record_type_list = None
-
-            # If no schema supplied by user then get the names of columns only
-            if schema is None:
-                schema = [str(x) for x in data.columns]
-
-            # Convert list of numpy records to python lists
-            if record_type_list is not None:
-                data = [r.astype(record_type_list).tolist() for r in np_records]
-            else:
-                data = [r.tolist() for r in np_records]
+            data, schema = self._convertFromPandas(data, schema)
 
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
