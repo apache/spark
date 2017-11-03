@@ -1629,15 +1629,6 @@ def to_arrow_type(dt):
     return arrow_type
 
 
-def to_arrow_schema(schema):
-    """ Convert a schema from Spark to Arrow
-    """
-    import pyarrow as pa
-    fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
-              for field in schema]
-    return pa.schema(fields)
-
-
 def from_arrow_type(at):
     """ Convert pyarrow type to Spark data type.
     """
