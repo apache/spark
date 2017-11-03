@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ProjectionOver
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
 /**
@@ -32,6 +33,13 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, St
  */
 private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
+    if (SQLConf.get.nestedSchemaPruningEnabled) {
+      apply0(plan)
+    } else {
+      plan
+    }
+
+  private def apply0(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
           l @ LogicalRelation(hadoopFsRelation @ HadoopFsRelation(_, partitionSchema,

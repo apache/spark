@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
  * format for aggregation queries involving only nested fields.
  */
 object AggregateFieldExtractionPushdown extends FieldExtractionPushdown {
-  override def apply(plan: LogicalPlan): LogicalPlan =
+  override protected def apply0(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case agg @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
         val expressions = groupingExpressions ++ aggregateExpressions

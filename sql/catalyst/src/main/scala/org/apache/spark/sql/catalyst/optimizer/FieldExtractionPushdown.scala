@@ -21,8 +21,18 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, GetStructFi
 import org.apache.spark.sql.catalyst.planning.SelectedField
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 abstract class FieldExtractionPushdown extends Rule[LogicalPlan] {
+  final override def apply(plan: LogicalPlan): LogicalPlan =
+    if (SQLConf.get.nestedSchemaPruningEnabled) {
+      apply0(plan)
+    } else {
+      plan
+    }
+
+  protected def apply0(plan: LogicalPlan): LogicalPlan
+
   // Gets the top-level GetStructField expressions from the given expression
   // and its children. This does not return children of a GetStructField.
   protected final def getFieldExtractors(expr: Expression): Seq[GetStructField] =

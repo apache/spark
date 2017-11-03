@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
  * read from a column-oriented file format for joins involving only nested fields.
  */
 object JoinFieldExtractionPushdown extends FieldExtractionPushdown {
-  override def apply(plan: LogicalPlan): LogicalPlan =
+  override protected def apply0(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ PhysicalOperation(projects, Seq(),
           join @ Join(left, right, joinType, Some(joinCondition))) =>
