@@ -125,14 +125,4 @@ class RegressionMetrics @Since("2.0.0") (
       1 - SSerr / SStot
     }
   }
-
-  /**
-   * Returns adjusted R^2^, the adjusted coefficient of determination.
-   * @see <a href="https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2">
-   * Coefficient of determination (Wikipedia)</a>
-   */
-  @Since("2.2.0")
-  def r2adj: Double = {
-    1 - (SSerr / (summary.count - summary.numParam - 1)) / (SStot / (summary.count - 1))
-  }
 }

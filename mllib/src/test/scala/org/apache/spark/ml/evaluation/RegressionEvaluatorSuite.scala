@@ -73,11 +73,6 @@ class RegressionEvaluatorSuite
     evaluator.setMetricName("r2")
     assert(evaluator.evaluate(predictions) ~== 0.9998387 absTol 0.01)
 
-    // Adjusted r2
-    evaluator.setMetricName("r2adj")
-    assert(evaluator.evaluate(predictions) ~== 0.9998 absTol 0.01)
-    print(evaluator.evaluate(predictions))
-
     // mae
     evaluator.setMetricName("mae")
     assert(evaluator.evaluate(predictions) ~== 0.08399089 absTol 0.01)

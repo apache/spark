@@ -764,6 +764,9 @@ class LinearRegressionSuite
           (Intercept) 6.3022157  0.0018600    3388   <2e-16 ***
           V2          4.6982442  0.0011805    3980   <2e-16 ***
           V3          7.1994344  0.0009044    7961   <2e-16 ***
+
+          # R code for r2adj
+          summary(lm(X1 ~ ., data = part_00000))
           ---
 
           ....
@@ -771,6 +774,7 @@ class LinearRegressionSuite
       assert(model.summary.meanSquaredError ~== 0.00985449 relTol 1E-4)
       assert(model.summary.meanAbsoluteError ~== 0.07961668 relTol 1E-4)
       assert(model.summary.r2 ~== 0.9998737 relTol 1E-4)
+      assert(model.summary.r2adj ~== 0.9999  relTol 1E-4)
 
       // Normal solver uses "WeightedLeastSquares". If no regularization is applied or only L2
       // regularization is applied, this algorithm uses a direct solver and does not generate an

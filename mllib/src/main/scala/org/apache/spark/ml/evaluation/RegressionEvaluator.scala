@@ -49,8 +49,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
    */
   @Since("1.4.0")
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("mse", "rmse", "r2", "r2adj", "mae"))
-    new Param(this, "metricName", "metric name available (mse|rmse|r2|r2adj|mae)", allowedParams)
+    val allowedParams = ParamValidators.inArray(Array("mse", "rmse", "r2", "mae"))
+    new Param(this, "metricName", "metric name in evaluation (mse|rmse|r2|mae)", allowedParams)
   }
 
   /** @group getParam */
@@ -86,7 +86,6 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       case "rmse" => metrics.rootMeanSquaredError
       case "mse" => metrics.meanSquaredError
       case "r2" => metrics.r2
-      case "r2adj" => metrics.r2adj
       case "mae" => metrics.meanAbsoluteError
     }
     metric
@@ -97,7 +96,6 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
     case "rmse" => false
     case "mse" => false
     case "r2" => true
-    case "r2adj" => true
     case "mae" => false
   }
 
