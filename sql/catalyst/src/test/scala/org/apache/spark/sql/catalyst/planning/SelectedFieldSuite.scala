@@ -178,14 +178,6 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private val testRelation = LocalRelation(schema.toAttributes)
 
-  override def beforeAll() {
-    val indentedSchema = schema.treeString.split('\n').map(x => "  " + x).mkString("\n") + "\n"
-    // Print the test schema at the beginning of the test
-    // scalastyle:off println
-    println("Testing SelectedField extractor using the following schema:\n" + indentedSchema)
-    // scalastyle:on println
-  }
-
   test("should not match an attribute reference") {
     assertResult(None)(unapplySelect("col1"))
     assertResult(None)(unapplySelect("col1 as foo"))
