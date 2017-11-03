@@ -173,13 +173,13 @@ abstract class ExternalCatalog
    * @param table Name of table to alter schema for
    * @param newDataSchema Updated data schema to be used for the table.
    */
-  final def alterTableSchema(db: String, table: String, newDataSchema: StructType): Unit = {
+  final def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit = {
     postToAll(AlterTableSchemaPreEvent(db, table))
-    doAlterTableSchema(db, table, newDataSchema)
+    doAlterTableDataSchema(db, table, newDataSchema)
     postToAll(AlterTableSchemaEvent(db, table))
   }
 
-  protected def doAlterTableSchema(db: String, table: String, newDataSchema: StructType): Unit
+  protected def doAlterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
   def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit

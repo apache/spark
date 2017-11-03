@@ -303,7 +303,7 @@ class InMemoryCatalog(
     catalog(db).tables(tableDefinition.identifier.table).table = newTableDefinition
   }
 
-  override def doAlterTableSchema(
+  override def doAlterTableDataSchema(
       db: String,
       table: String,
       newDataSchema: StructType): Unit = synchronized {

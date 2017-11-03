@@ -619,7 +619,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  override def doAlterTableSchema(
+  override def doAlterTableDataSchema(
       db: String,
       table: String,
       newDataSchema: StructType): Unit = withClient {
