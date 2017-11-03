@@ -17,6 +17,8 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.scheduler.SparkListenerEvent
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.types.StructType
 
 /**
  * Event emitted by the external catalog when it is modified. Events are either fired before or
@@ -60,6 +62,16 @@ case class DropDatabasePreEvent(database: String) extends DatabaseEvent
  * Event fired after a database has been dropped.
  */
 case class DropDatabaseEvent(database: String) extends DatabaseEvent
+
+/**
+ * Event fired before a database is altered.
+ */
+case class AlterDatabasePreEvent(database: String) extends DatabaseEvent
+
+/**
+ * Event fired after a database is altered.
+ */
+case class AlterDatabaseEvent(database: String) extends DatabaseEvent
 
 /**
  * Event fired when a table is created, dropped or renamed.
@@ -110,7 +122,27 @@ case class RenameTableEvent(
   extends TableEvent
 
 /**
- * Event fired when a function is created, dropped or renamed.
+ * Event fired before a table is altered.
+ */
+case class AlterTablePreEvent(database: String, name: String) extends TableEvent
+
+/**
+ * Event fired after a table is altered.
+ */
+case class AlterTableEvent(database: String, name: String) extends TableEvent
+
+/**
+ * Event fired before table schema is altered.
+ */
+case class AlterTableSchemaPreEvent(database: String, name: String) extends TableEvent
+
+/**
+ * Event fired after table schema is altered.
+ */
+case class AlterTableSchemaEvent(database: String, name: String) extends TableEvent
+
+/**
+ * Event fired when a function is created, dropped, altered or renamed.
  */
 trait FunctionEvent extends DatabaseEvent {
   /**
