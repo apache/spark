@@ -90,7 +90,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val model = rf.fit(df)
     model.transform(df).select("features", "prediction").collect()
       .foreach { case Row(features: Vector, prediction: Double) =>
-        assert(prediction ~== model.predict(features) relTol 1E-5)
+        assert(prediction === model.predict(features))
       }
   }
 

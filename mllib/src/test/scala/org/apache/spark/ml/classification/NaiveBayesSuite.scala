@@ -176,14 +176,10 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
 
-    val testDataset =
+    val trainDataset =
       generateNaiveBayesInput(piArray, thetaArray, nPoints, seed, "multinomial").toDF()
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
-    val model = nb.fit(testDataset)
-
-    validateModelFit(pi, theta, model)
-    assert(model.hasParent)
-    MLTestingUtils.checkCopyAndUids(nb, model)
+    val model = nb.fit(trainDataset)
 
     val validationDataset =
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()

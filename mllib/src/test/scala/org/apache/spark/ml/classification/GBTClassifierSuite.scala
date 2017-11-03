@@ -232,7 +232,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
 
     gbtModel.transform(trainingDataset).select("features", "prediction").collect().foreach {
       case Row(features: Vector, prediction: Double) =>
-        assert(prediction ~== gbtModel.predict(features) relTol 1E-5)
+        assert(prediction === gbtModel.predict(features))
     }
   }
 

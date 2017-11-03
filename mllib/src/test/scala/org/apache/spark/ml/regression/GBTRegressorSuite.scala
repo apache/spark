@@ -106,7 +106,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     val model = gbt.fit(trainData.toDF())
     model.transform(validationData.toDF).select("features", "prediction").collect().foreach {
       case Row(features: Vector, prediction: Double) =>
-        assert(prediction ~== model.predict(features) relTol 1E-5)
+        assert(prediction === model.predict(features))
     }
   }
 

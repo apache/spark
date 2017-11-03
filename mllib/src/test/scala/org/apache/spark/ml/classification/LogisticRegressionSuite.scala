@@ -569,13 +569,13 @@ class LogisticRegressionSuite
     val blorModel = blor.fit(smallBinaryDataset)
     blorModel.transform(smallBinaryDataset).select("features", "prediction").collect().foreach {
       case Row(features: Vector, prediction: Double) =>
-        assert(prediction ~== blorModel.predict(features) relTol 1E-5)
+        assert(prediction === blorModel.predict(features))
     }
     val mlor = new LogisticRegression().setFamily("multinomial")
     val mlorModel = mlor.fit(smallMultinomialDataset)
     mlorModel.transform(smallMultinomialDataset).select("features", "prediction").collect()
       .foreach { case Row(features: Vector, prediction: Double) =>
-        assert(prediction ~== mlorModel.predict(features) relTol 1E-5)
+        assert(prediction === mlorModel.predict(features))
     }
   }
 

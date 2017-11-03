@@ -608,7 +608,7 @@ class LinearRegressionSuite
 
     model.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
       case Row(features: Vector, prediction: Double) =>
-        assert(prediction ~== model.predict(features) relTol 1E-5)
+        assert(prediction === model.predict(features))
     }
   }
 

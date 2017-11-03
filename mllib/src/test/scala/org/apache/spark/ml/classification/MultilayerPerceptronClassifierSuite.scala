@@ -94,7 +94,7 @@ class MultilayerPerceptronClassifierSuite
     val model = trainer.fit(dataset)
     model.transform(dataset).select(trainer.getFeaturesCol, trainer.getPredictionCol).collect()
       .foreach { case Row(features: Vector, prediction: Double) =>
-        assert(prediction ~== model.predict(features) relTol 1E-5)
+        assert(prediction === model.predict(features))
       }
   }
 
