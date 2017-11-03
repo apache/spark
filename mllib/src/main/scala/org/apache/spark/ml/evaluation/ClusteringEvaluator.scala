@@ -24,6 +24,7 @@ import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors, VectorUDT
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{avg, col, udf}
 import org.apache.spark.sql.types.DoubleType
@@ -66,14 +67,14 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
 
   /**
    * param for metric name in evaluation
-   * (supports `"silhouette"` (default))
+   * (supports `"silhouette"` (default), "calinski-harabasz")
    * @group param
    */
   @Since("2.3.0")
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("silhouette"))
-    new Param(
-      this, "metricName", "metric name in evaluation (silhouette)", allowedParams)
+    val allowedParams = ParamValidators.inArray(Array("silhouette", "calinski-harabasz"))
+    new Param(this, "metricName", "metric name in evaluation (silhouette, calinski-harabasz)",
+      allowedParams)
   }
 
   /** @group getParam */
@@ -94,8 +95,9 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
     $(metricName) match {
       case "silhouette" =>
         SquaredEuclideanSilhouette.computeSilhouetteScore(
-          dataset, $(predictionCol), $(featuresCol)
-      )
+          dataset, $(predictionCol), $(featuresCol))
+      case "calinski-harabasz" =>
+        CalinskiHarabasz.computeScore(dataset, ${predictionCol}, ${featuresCol})
     }
   }
 }
@@ -432,5 +434,119 @@ private[evaluation] object SquaredEuclideanSilhouette {
     bClustersStatsMap.destroy()
 
     silhouetteScore
+  }
+}
+
+private[evaluation] object CalinskiHarabasz {
+
+  def computeScore(
+      dataset: Dataset[_],
+      predictionCol: String,
+      featuresCol: String): Double = {
+    val predictionAndFeaturesDf = dataset.select(
+      col(predictionCol).cast(DoubleType), col(featuresCol))
+    val predictionAndFeaturesRDD = predictionAndFeaturesDf.rdd
+      .map { row => (row.getDouble(0), row.getAs[Vector](1)) }
+
+    val numFeatures = dataset.select(col(featuresCol)).first().getAs[Vector](0).size
+
+    val featureSumsSquaredNormSumsAndNumOfPoints = computeFeatureSumsSquaredNormSumsAndNumOfPoints(
+      predictionAndFeaturesRDD,
+      predictionCol, featuresCol, numFeatures)
+
+    val (datasetCenter, datasetFeatureSums, datasetNumOfPoints) =
+      computeDatasetCenterDatasetFeatureSumsAndNumOfPoints(
+      featureSumsSquaredNormSumsAndNumOfPoints, numFeatures)
+
+    val clustersCenters = featureSumsSquaredNormSumsAndNumOfPoints.mapValues {
+      case (featureSum, _, numOfPoints) =>
+        BLAS.scal(1 / numOfPoints, featureSum)
+        featureSum
+    }
+
+    val datasetSquaredNormSum = featureSumsSquaredNormSumsAndNumOfPoints.map {
+      case (_, (_, clusterSquaredNormSum, _)) => clusterSquaredNormSum
+    }.sum
+
+    val tss = totalSumOfSquares(datasetCenter, datasetNumOfPoints, datasetFeatureSums,
+      datasetSquaredNormSum)
+    val SSW = withinClusterVariance(predictionAndFeaturesRDD, clustersCenters)
+    // SSB is the overall between-cluster variance
+    val SSB = tss - SSW
+    val numOfClusters = clustersCenters.size
+
+    SSB / SSW * (datasetNumOfPoints - numOfClusters) / (numOfClusters -1)
+  }
+
+  def computeFeatureSumsSquaredNormSumsAndNumOfPoints(
+      predictionAndFeaturesRDD: RDD[(Double, Vector)],
+      predictionCol: String,
+      featuresCol: String,
+      numFeatures: Int): Map[Double, (Vector, Double, Long)] = {
+    val featureSumsSquaredNormSumsAndNumOfPoints = predictionAndFeaturesRDD
+      .aggregateByKey[(DenseVector, Double, Long)]((Vectors.zeros(numFeatures).toDense, 0.0, 0L))(
+        seqOp = {
+          case ((featureSum: DenseVector, sumOfSquaredNorm: Double, numOfPoints: Long),
+          (features)) =>
+            BLAS.axpy(1.0, features, featureSum)
+            val squaredNorm = math.pow(Vectors.norm(features, 2.0), 2.0)
+            (featureSum, squaredNorm + sumOfSquaredNorm, numOfPoints + 1)
+        },
+        combOp = {
+          case ((featureSum1, sumOfSquaredNorm1, numOfPoints1),
+          (featureSum2, sumOfSquaredNorm2, numOfPoints2)) =>
+            BLAS.axpy(1.0, featureSum2, featureSum1)
+            (featureSum1, sumOfSquaredNorm1 + sumOfSquaredNorm2, numOfPoints1 + numOfPoints2)
+        }
+      )
+
+    featureSumsSquaredNormSumsAndNumOfPoints
+      .collectAsMap()
+      .toMap
+  }
+
+  def computeDatasetCenterDatasetFeatureSumsAndNumOfPoints(
+      featureSumsSquaredNormSumsAndNumOfPoints: Map[Double, (Vector, Double, Long)],
+      numFeatures: Int): (Vector, Vector, Long) = {
+    val (featureSums, datasetNumOfPoints) = featureSumsSquaredNormSumsAndNumOfPoints
+      .aggregate((Vectors.zeros(numFeatures).toDense, 0L))(
+        seqop = {
+          case ((featureSum: DenseVector, numOfPoints: Long),
+          (_: Double, (clusterFeatureSum: DenseVector, _: Double, clusterNumOfPoints: Long))) =>
+            BLAS.axpy(1.0, clusterFeatureSum, featureSum)
+            (featureSum, clusterNumOfPoints + numOfPoints)
+        },
+        combop = {
+          case ((featureSum1, numOfPoints1), (featureSum2, numOfPoints2)) =>
+            BLAS.axpy(1.0, featureSum2, featureSum1)
+            (featureSum1, numOfPoints1 + numOfPoints2)
+        }
+      )
+    val datasetCenter = featureSums.copy
+    BLAS.scal(1 / datasetNumOfPoints, datasetCenter)
+    (datasetCenter, featureSums, datasetNumOfPoints)
+  }
+
+  def totalSumOfSquares(
+      datasetCenter: Vector,
+      datasetNumOfPoints: Long,
+      datasetFeatureSums: Vector,
+      datasetSquaredNormSum: Double): Double = {
+    val datasetCenterSquaredNorm = math.pow(Vectors.norm(datasetCenter, 2.0), 2.0)
+
+    datasetSquaredNormSum + datasetNumOfPoints * datasetCenterSquaredNorm -
+      2 * BLAS.dot(datasetFeatureSums, datasetCenter)
+  }
+
+  def withinClusterVariance(
+      predictionAndFeaturesRDD: RDD[(Double, Vector)],
+      clusterCenters: Map[Double, Vector]): Double = {
+    val bClusterCenters = predictionAndFeaturesRDD.sparkContext.broadcast(clusterCenters)
+    val withinClusterVariance = predictionAndFeaturesRDD.map {
+      case (clusterId, features) =>
+        Vectors.sqdist(features, bClusterCenters.value(clusterId))
+    }.sum()
+    bClusterCenters.destroy()
+    withinClusterVariance
   }
 }
