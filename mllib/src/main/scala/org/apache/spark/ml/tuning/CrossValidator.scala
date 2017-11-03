@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import java.io.IOException
-import java.util.{Locale, List => JList}
+import java.util.{List => JList, Locale}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
