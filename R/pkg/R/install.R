@@ -152,6 +152,9 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
                      })
   if (!tarExists || overwrite || !success) {
     unlink(packageLocalPath)
+    if (success) {
+      assign(".sparkDownloaded", TRUE, envir = .sparkREnv)
+    }
   }
   if (!success) stop("Extract archive failed.")
   message("DONE.")

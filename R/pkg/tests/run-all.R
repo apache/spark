@@ -27,7 +27,7 @@ if (.Platform$OS.type == "windows") {
 
 # Setup global test environment
 # Install Spark first to set SPARK_HOME
-install.spark()
+sparkDownloadedDir <- install.spark()
 
 sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
 sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
@@ -46,7 +46,7 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   tmpDir <- tempdir()
   tmpArg <- paste0("-Djava.io.tmpdir=", tmpDir)
   sparkRTestConfig <- list(spark.driver.extraJavaOptions = tmpArg,
-                            spark.executor.extraJavaOptions = tmpArg)
+                           spark.executor.extraJavaOptions = tmpArg)
 }
 
 test_package("SparkR")
@@ -59,4 +59,20 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
                        file.path(sparkRDir, "pkg", "tests", "fulltests"),
                        NULL,
                        "summary")
+}
+
+# clean up if Spark was downloaded for the test run
+if (get0(".sparkDownloaded", envir = SparkR:::.sparkREnv, ifnotfound = FALSE)) {
+  cat(sparkDownloadedDir)
+  cat(list.files(sparkDownloadedDir, all.files = TRUE, include.dirs = TRUE, no.. = TRUE))
+  unlink(sparkDownloadedDir, recursive = TRUE, force = TRUE)
+
+  # .cache/spark, or on Windows, LOCALAPPDATA\Apache\Spark\Cache (there are 3 levels)
+  parentDir <- SparkR:::sparkCachePath()
+  dirs <- list(parentDir, dirname(parentDir), dirname(dirname(parentDir)))
+  lapply(dirs, function(d) {
+    if (length(list.files(d, all.files = TRUE, include.dirs = TRUE, no.. = TRUE)) == 0) {
+      unlink(d, recursive = TRUE, force = TRUE)
+    }
+  })
 }
