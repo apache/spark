@@ -190,7 +190,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     checkDataFilters(Set.empty)
 
     // Only one file should be read.
-    checkScan(table.where("p1 = 1 AND c1 = 1 AND (p1 + c1) = 1")) { partitions =>
+    checkScan(table.where("p1 = 1 AND c1 = 1 AND (p1 + c1) = 2")) { partitions =>
       assert(partitions.size == 1, "when checking partitions")
       assert(partitions.head.files.size == 1, "when checking files in partition 1")
       assert(partitions.head.files.head.partitionValues.getInt(0) == 1,
@@ -217,7 +217,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       checkDataFilters(Set.empty)
 
       // Only one file should be read.
-      checkScan(table.where("P1 = 1 AND C1 = 1 AND (P1 + C1) = 1")) { partitions =>
+      checkScan(table.where("P1 = 1 AND C1 = 1 AND (P1 + C1) = 2")) { partitions =>
         assert(partitions.size == 1, "when checking partitions")
         assert(partitions.head.files.size == 1, "when checking files in partition 1")
         assert(partitions.head.files.head.partitionValues.getInt(0) == 1,
@@ -235,13 +235,17 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           "p1=1/file1" -> 10,
           "p1=2/file2" -> 10))
 
-    val df = table.where("p1 = 1 AND (p1 + c1) = 2 AND c1 = 1")
+    val df1 = table.where("p1 = 1 AND (p1 + c1) = 2 AND c1 = 1")
     // Filter on data only are advisory so we have to reevaluate.
-    assert(getPhysicalFilters(df) contains resolve(df, "c1 = 1"))
-    // Need to evalaute filters that are not pushed down.
-    assert(getPhysicalFilters(df) contains resolve(df, "(p1 + c1) = 2"))
+    assert(getPhysicalFilters(df1) contains resolve(df1, "c1 = 1"))
     // Don't reevaluate partition only filters.
-    assert(!(getPhysicalFilters(df) contains resolve(df, "p1 = 1")))
+    assert(!(getPhysicalFilters(df1) contains resolve(df1, "p1 = 1")))
+
+    val df2 = table.where("(p1 + c2) = 2 AND c1 = 1")
+    // Filter on data only are advisory so we have to reevaluate.
+    assert(getPhysicalFilters(df2) contains resolve(df2, "c1 = 1"))
+    // Need to evaluate filters that are not pushed down.
+    assert(getPhysicalFilters(df2) contains resolve(df2, "(p1 + c2) = 2"))
   }
 
   test("bucketed table") {
@@ -552,7 +556,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
     if (buckets > 0) {
       val bucketed = df.queryExecution.analyzed transform {
-        case l @ LogicalRelation(r: HadoopFsRelation, _, _) =>
+        case l @ LogicalRelation(r: HadoopFsRelation, _, _, _) =>
           l.copy(relation =
             r.copy(bucketSpec =
               Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))

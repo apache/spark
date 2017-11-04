@@ -76,7 +76,8 @@ case class ObjectHashAggregateExec(
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time")
   )
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
@@ -94,19 +95,24 @@ case class ObjectHashAggregateExec(
     }
   }
 
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numOutputRows = longMetric("numOutputRows")
+    val aggTime = longMetric("aggTime")
     val fallbackCountThreshold = sqlContext.conf.objectAggSortBasedFallbackThreshold
 
-    child.execute().mapPartitionsInternal { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
+      val beforeAgg = System.nanoTime()
       val hasInput = iter.hasNext
-      if (!hasInput && groupingExpressions.nonEmpty) {
+      val res = if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input kvIterator is empty,
         // so return an empty kvIterator.
         Iterator.empty
       } else {
         val aggregationIterator =
           new ObjectAggregationIterator(
+            partIndex,
             child.output,
             groupingExpressions,
             aggregateExpressions,
@@ -126,6 +132,8 @@ case class ObjectHashAggregateExec(
           aggregationIterator
         }
       }
+      aggTime += (System.nanoTime() - beforeAgg) / 1000000
+      res
     }
   }
 

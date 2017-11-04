@@ -196,6 +196,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("DayOfWeek") {
+    checkEvaluation(DayOfWeek(Literal.create(null, DateType)), null)
+    checkEvaluation(DayOfWeek(Literal(d)), Calendar.WEDNESDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal(sdfDate.format(d)), DateType, gmtId)),
+      Calendar.WEDNESDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal(ts), DateType, gmtId)), Calendar.FRIDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal("2011-05-06"), DateType, gmtId)), Calendar.FRIDAY)
+    checkEvaluation(DayOfWeek(Literal(new Date(sdf.parse("2017-05-27 13:10:15").getTime))),
+      Calendar.SATURDAY)
+    checkEvaluation(DayOfWeek(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))),
+      Calendar.FRIDAY)
+    checkConsistencyBetweenInterpretedAndCodegen(DayOfWeek, DateType)
+  }
+
   test("WeekOfYear") {
     checkEvaluation(WeekOfYear(Literal.create(null, DateType)), null)
     checkEvaluation(WeekOfYear(Literal(d)), 15)

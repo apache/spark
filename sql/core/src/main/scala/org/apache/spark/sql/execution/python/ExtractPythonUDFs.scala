@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.python
 
@@ -24,8 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.{FilterExec, SparkPlan}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 
 
 /**
@@ -111,6 +110,9 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
+    // FlatMapGroupsInPandas can be evaluated directly in python worker
+    // Therefore we don't need to extract the UDFs
+    case plan: FlatMapGroupsInPandasExec => plan
     case plan: SparkPlan => extract(plan)
   }
 
@@ -125,20 +127,44 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       // If there aren't any, we are done.
       plan
     } else {
+      val inputsForPlan = plan.references ++ plan.outputSet
+      val prunedChildren = plan.children.map { child =>
+        val allNeededOutput = inputsForPlan.intersect(child.outputSet).toSeq
+        if (allNeededOutput.length != child.output.length) {
+          ProjectExec(allNeededOutput, child)
+        } else {
+          child
+        }
+      }
+      val planWithNewChildren = plan.withNewChildren(prunedChildren)
+
       val attributeMap = mutable.HashMap[PythonUDF, Expression]()
-      val splitFilter = trySplitFilter(plan)
+      val splitFilter = trySplitFilter(planWithNewChildren)
       // Rewrite the child that has the input required for the UDF
       val newChildren = splitFilter.children.map { child =>
         // Pick the UDF we are going to evaluate
         val validUdfs = udfs.filter { udf =>
           // Check to make sure that the UDF can be evaluated with only the input of this child.
           udf.references.subsetOf(child.outputSet)
-        }.toArray  // Turn it into an array since iterators cannot be serialized in Scala 2.10
+        }
         if (validUdfs.nonEmpty) {
+          if (validUdfs.exists(_.pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF)) {
+            throw new IllegalArgumentException("Can not use grouped vectorized UDFs")
+          }
+
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
-          val evaluation = BatchEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
+
+          val evaluation = validUdfs.partition(_.pythonUdfType == PythonUdfType.PANDAS_UDF) match {
+            case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
+              ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
+            case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
+              BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
+            case _ =>
+              throw new IllegalArgumentException("Can not mix vectorized and non-vectorized UDFs")
+          }
+
           attributeMap ++= validUdfs.zip(resultAttrs)
           evaluation
         } else {
@@ -160,7 +186,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       val newPlan = extract(rewritten)
       if (newPlan.output != plan.output) {
         // Trim away the new UDF value if it was only used for filtering or something.
-        execution.ProjectExec(plan.output, newPlan)
+        ProjectExec(plan.output, newPlan)
       } else {
         newPlan
       }

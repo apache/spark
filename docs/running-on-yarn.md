@@ -212,6 +212,15 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.dist.forceDownloadSchemes</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Comma-separated list of schemes for which files will be downloaded to the local disk prior to 
+    being added to YARN's distributed cache. For use in cases where the YARN service does not 
+    support schemes that are supported by Spark, like http, https and ftp.
+  </td>
+</tr>
+<tr>
  <td><code>spark.executor.instances</code></td>
   <td><code>2</code></td>
   <td>
@@ -393,6 +402,15 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.kerberos.relogin.period</code></td>
+  <td>1m</td>
+  <td>
+  How often to check whether the kerberos TGT should be renewed. This should be set to a value
+  that is shorter than the TGT renewal period (or the TGT lifetime if TGT renewal is not enabled).
+  The default value should be enough for most deployments.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.config.gatewayPath</code></td>
   <td>(none)</td>
   <td>
@@ -419,7 +437,7 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.security.credentials.${service}.enabled</code></td>
+  <td><code>spark.security.credentials.${service}.enabled</code></td>
   <td><code>true</code></td>
   <td>
   Controls whether to obtain credentials for services when security is enabled.
@@ -482,11 +500,11 @@ token for the cluster's default Hadoop filesystem, and potentially for HBase and
 
 An HBase token will be obtained if HBase is in on classpath, the HBase configuration declares
 the application is secure (i.e. `hbase-site.xml` sets `hbase.security.authentication` to `kerberos`),
-and `spark.yarn.security.credentials.hbase.enabled` is not set to `false`.
+and `spark.security.credentials.hbase.enabled` is not set to `false`.
 
 Similarly, a Hive token will be obtained if Hive is on the classpath, its configuration
 includes a URI of the metadata store in `"hive.metastore.uris`, and
-`spark.yarn.security.credentials.hive.enabled` is not set to `false`.
+`spark.security.credentials.hive.enabled` is not set to `false`.
 
 If an application needs to interact with other secure Hadoop filesystems, then
 the tokens needed to access these clusters must be explicitly requested at
@@ -500,7 +518,7 @@ Spark supports integrating with other security-aware services through Java Servi
 `java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider`
 should be available to Spark by listing their names in the corresponding file in the jar's
 `META-INF/services` directory. These plug-ins can be disabled by setting
-`spark.yarn.security.credentials.{service}.enabled` to `false`, where `{service}` is the name of
+`spark.security.credentials.{service}.enabled` to `false`, where `{service}` is the name of
 credential provider.
 
 ## Configuring the External Shuffle Service
@@ -564,8 +582,8 @@ the Spark configuration must be set to disable token collection for the services
 The Spark configuration must include the lines:
 
 ```
-spark.yarn.security.credentials.hive.enabled   false
-spark.yarn.security.credentials.hbase.enabled  false
+spark.security.credentials.hive.enabled   false
+spark.security.credentials.hbase.enabled  false
 ```
 
 The configuration option `spark.yarn.access.hadoopFileSystems` must be unset.

@@ -97,7 +97,7 @@ class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
 
   // Java api support
   def this(f: MapFunction[IN, Object]) = this(x => f.call(x))
-
+  
   def toColumnJava: TypedColumn[IN, java.lang.Long] = {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
   }
@@ -117,7 +117,7 @@ class TypedAverage[IN](val f: IN => Double)
   override def outputEncoder: Encoder[java.lang.Double] = ExpressionEncoder[java.lang.Double]()
 
   // Java api support
-  def this(f: MapFunction[IN, java.lang.Double]) = this(x => f.call(x).asInstanceOf[Double])
+  def this(f: MapFunction[IN, java.lang.Double]) = this(x => f.call(x))
 
   def toColumnScala: TypedColumn[IN, Double] = {
     toColumn.asInstanceOf[TypedColumn[IN, Double]]

@@ -24,12 +24,12 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -112,7 +112,7 @@ private[this] object SharedFactory {
  */
 @ExpressionDescription(
   usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
@@ -335,7 +335,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
        1  2
@@ -362,9 +362,9 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
   // eagerly evaluate any foldable the field names
-  @transient private lazy val foldableFieldNames: IndexedSeq[String] = {
+  @transient private lazy val foldableFieldNames: IndexedSeq[Option[String]] = {
     fieldExpressions.map {
-      case expr if expr.foldable => expr.eval().asInstanceOf[UTF8String].toString
+      case expr if expr.foldable => Option(expr.eval()).map(_.asInstanceOf[UTF8String].toString)
       case _ => null
     }.toIndexedSeq
   }
@@ -417,7 +417,7 @@ case class JsonTuple(children: Seq[Expression])
     val fieldNames = if (constantFields == fieldExpressions.length) {
       // typically the user will provide the field names as foldable expressions
       // so we can use the cached copy
-      foldableFieldNames
+      foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
       fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String].toString)
@@ -426,7 +426,7 @@ case class JsonTuple(children: Seq[Expression])
       // prefer the cached copy when available
       foldableFieldNames.zip(fieldExpressions).map {
         case (null, expr) => expr.eval(input).asInstanceOf[UTF8String].toString
-        case (fieldName, _) => fieldName
+        case (fieldName, _) => fieldName.orNull
       }
     }
 
@@ -436,7 +436,8 @@ case class JsonTuple(children: Seq[Expression])
     while (parser.nextToken() != JsonToken.END_OBJECT) {
       if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
         // check to see if this field is desired in the output
-        val idx = fieldNames.indexOf(parser.getCurrentName)
+        val jsonField = parser.getCurrentName
+        var idx = fieldNames.indexOf(jsonField)
         if (idx >= 0) {
           // it is, copy the child tree to the correct location in the output row
           val output = new ByteArrayOutputStream()
@@ -447,7 +448,14 @@ case class JsonTuple(children: Seq[Expression])
               generator => copyCurrentStructure(generator, parser)
             }
 
-            row(idx) = UTF8String.fromBytes(output.toByteArray)
+            val jsonValue = UTF8String.fromBytes(output.toByteArray)
+
+            // SPARK-21804: json_tuple returns null values within repeated columns
+            // except the first one; so that we need to check the remaining fields.
+            do {
+              row(idx) = jsonValue
+              idx = fieldNames.indexOf(jsonField, idx + 1)
+            } while (idx >= 0)
           }
         }
       }
@@ -492,13 +500,14 @@ case class JsonTuple(children: Seq[Expression])
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
        {"a":1, "b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"2015-08-26 00:00:00.0"}
-  """)
+  """,
+  since = "2.2.0")
 // scalastyle:on line.size.limit
 case class JsonToStructs(
     schema: DataType,
@@ -595,12 +604,13 @@ case class JsonToStructs(
 }
 
 /**
- * Converts a [[StructType]] or [[ArrayType]] of [[StructType]]s to a json output string.
+ * Converts a [[StructType]], [[ArrayType]] of [[StructType]]s, [[MapType]]
+ * or [[ArrayType]] of [[MapType]]s to a json output string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
        {"a":1,"b":2}
@@ -608,7 +618,16 @@ case class JsonToStructs(
        {"time":"26/08/2015"}
       > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
        [{"a":1,"b":2}]
-  """)
+      > SELECT _FUNC_(map('a', named_struct('b', 1)));
+       {"a":{"b":1}}
+      > SELECT _FUNC_(map(named_struct('a', 1),named_struct('b', 2)));
+       {"[1]":{"b":2}}
+      > SELECT _FUNC_(map('a', 1));
+       {"a":1}
+      > SELECT _FUNC_(array((map('a', 1))));
+       [{"a":1}]
+  """,
+  since = "2.2.0")
 // scalastyle:on line.size.limit
 case class StructsToJson(
     options: Map[String, String],
@@ -638,6 +657,8 @@ case class StructsToJson(
   lazy val rowSchema = child.dataType match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
+    case ArrayType(mt: MapType, _) => mt
   }
 
   // This converts rows to the JSON output according to the given schema.
@@ -659,6 +680,14 @@ case class StructsToJson(
         (arr: Any) =>
           gen.write(arr.asInstanceOf[ArrayData])
           getAndReset()
+      case _: MapType =>
+        (map: Any) =>
+          gen.write(map.asInstanceOf[MapData])
+          getAndReset()
+      case ArrayType(_: MapType, _) =>
+        (arr: Any) =>
+          gen.write(arr.asInstanceOf[ArrayData])
+          getAndReset()
     }
   }
 
@@ -667,14 +696,25 @@ case class StructsToJson(
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case _: StructType | ArrayType(_: StructType, _) =>
       try {
-        JacksonUtils.verifySchema(rowSchema)
+        JacksonUtils.verifySchema(rowSchema.asInstanceOf[StructType])
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    case _: MapType | ArrayType(_: MapType, _) =>
+      // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
+      try {
+        val st = StructType(StructField("a", rowSchema.asInstanceOf[MapType]) :: Nil)
+        JacksonUtils.verifySchema(st)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input type ${child.dataType.simpleString} must be a struct or array of structs.")
+      s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +
+          "a map or array of map.")
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =

@@ -19,7 +19,7 @@ AND    c.cv = (SELECT max(avg)
                FROM   (SELECT   c1.cv, avg(c1.cv) avg
                        FROM     c c1
                        WHERE    c1.ck = p.pk
-                       GROUP BY c1.cv) T);
+                       GROUP BY c1.cv));
 
 create temporary view t1 as select * from values
   ('val1a', 6S, 8, 10L, float(15.0), 20D, 20E2, timestamp '2014-04-04 00:00:00.000', date '2014-04-04'),

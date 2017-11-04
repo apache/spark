@@ -23,8 +23,8 @@ import scala.xml.Node
 
 import org.json4s.JValue
 
+import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
-import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
@@ -51,9 +51,11 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
 
     val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Logs", "Notes")
     val runningDrivers = workerState.drivers.sortBy(_.driverId).reverse
-    val runningDriverTable = UIUtils.listingTable(driverHeaders, driverRow, runningDrivers)
+    val runningDriverTable = UIUtils.listingTable[DriverRunner](driverHeaders,
+      driverRow(workerState.workerId, _), runningDrivers)
     val finishedDrivers = workerState.finishedDrivers.sortBy(_.driverId).reverse
-    val finishedDriverTable = UIUtils.listingTable(driverHeaders, driverRow, finishedDrivers)
+    val finishedDriverTable = UIUtils.listingTable[DriverRunner](driverHeaders,
+      driverRow(workerState.workerId, _), finishedDrivers)
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
@@ -102,6 +104,11 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   }
 
   def executorRow(executor: ExecutorRunner): Seq[Node] = {
+    val workerUrlRef = UIUtils.makeHref(parent.worker.reverseProxy, executor.workerId,
+      parent.webUrl)
+    val appUrlRef = UIUtils.makeHref(parent.worker.reverseProxy, executor.appId,
+      executor.appDesc.appUiUrl)
+
     <tr>
       <td>{executor.execId}</td>
       <td>{executor.cores}</td>
@@ -112,21 +119,30 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       <td>
         <ul class="unstyled">
           <li><strong>ID:</strong> {executor.appId}</li>
-          <li><strong>Name:</strong> {executor.appDesc.name}</li>
+          <li><strong>Name:</strong>
+          {
+            if ({executor.state == ExecutorState.RUNNING} && executor.appDesc.appUiUrl.nonEmpty) {
+              <a href={appUrlRef}> {executor.appDesc.name}</a>
+            } else {
+              {executor.appDesc.name}
+            }
+          }
+          </li>
           <li><strong>User:</strong> {executor.appDesc.user}</li>
         </ul>
       </td>
       <td>
-     <a href={"logPage?appId=%s&executorId=%s&logType=stdout"
-        .format(executor.appId, executor.execId)}>stdout</a>
-     <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
-        .format(executor.appId, executor.execId)}>stderr</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor
+          .appId}&executorId=${executor.execId}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor
+          .appId}&executorId=${executor.execId}&logType=stderr"}>stderr</a>
       </td>
     </tr>
 
   }
 
-  def driverRow(driver: DriverRunner): Seq[Node] = {
+  def driverRow(workerId: String, driver: DriverRunner): Seq[Node] = {
+    val workerUrlRef = UIUtils.makeHref(parent.worker.reverseProxy, workerId, parent.webUrl)
     <tr>
       <td>{driver.driverId}</td>
       <td>{driver.driverDesc.command.arguments(2)}</td>
@@ -138,8 +154,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
         {Utils.megabytesToString(driver.driverDesc.mem)}
       </td>
       <td>
-        <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
-        <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
+        <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
       </td>
       <td>
         {driver.finalException.getOrElse("")}

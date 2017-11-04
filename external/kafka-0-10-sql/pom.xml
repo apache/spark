@@ -29,6 +29,7 @@
   <artifactId>spark-sql-kafka-0-10_2.11</artifactId>
   <properties>
     <sbt.project.name>sql-kafka-0-10</sbt.project.name>
+    <kafka.version>0.10.0.1</kafka.version>
   </properties>
   <packaging>jar</packaging>
   <name>Kafka 0.10 Source for Structured Streaming</name>
@@ -65,12 +66,12 @@
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
-      <version>0.10.0.1</version>
+      <version>${kafka.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka_${scala.binary.version}</artifactId>
-      <version>0.10.0.1</version>
+      <version>${kafka.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -101,8 +102,19 @@
     </dependency>
 
   </dependencies>
+
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
   </build>
+
+  <profiles>
+    <profile>
+      <id>scala-2.12</id>
+      <properties>
+        <kafka.version>0.10.1.1</kafka.version>
+      </properties>
+    </profile>
+  </profiles>
+
 </project>

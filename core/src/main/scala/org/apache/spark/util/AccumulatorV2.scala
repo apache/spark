@@ -23,11 +23,8 @@ import java.util.{ArrayList, Collections}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
-
 
 private[spark] case class AccumulatorMetadata(
     id: Long,
@@ -68,7 +65,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
 
   private def assertMetadataNotNull(): Unit = {
     if (metadata == null) {
-      throw new IllegalAccessError("The metadata of this accumulator has not been assigned yet.")
+      throw new IllegalStateException("The metadata of this accumulator has not been assigned yet.")
     }
   }
 
@@ -265,7 +262,7 @@ private[spark] object AccumulatorContext {
       // Since we are storing weak references, we must check whether the underlying data is valid.
       val acc = ref.get
       if (acc eq null) {
-        throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
+        throw new IllegalStateException(s"Attempted to access garbage collected accumulator $id")
       }
       acc
     }

@@ -106,8 +106,10 @@ abstract class ExternalCatalog
   final def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
     val db = tableDefinition.database
     val name = tableDefinition.identifier.table
+    val tableDefinitionWithVersion =
+      tableDefinition.copy(createVersion = org.apache.spark.SPARK_VERSION)
     postToAll(CreateTablePreEvent(db, name))
-    doCreateTable(tableDefinition, ignoreIfExists)
+    doCreateTable(tableDefinitionWithVersion, ignoreIfExists)
     postToAll(CreateTableEvent(db, name))
   }
 
@@ -148,21 +150,20 @@ abstract class ExternalCatalog
   def alterTable(tableDefinition: CatalogTable): Unit
 
   /**
-   * Alter the schema of a table identified by the provided database and table name. The new schema
-   * should still contain the existing bucket columns and partition columns used by the table. This
-   * method will also update any Spark SQL-related parameters stored as Hive table properties (such
-   * as the schema itself).
+   * Alter the data schema of a table identified by the provided database and table name. The new
+   * data schema should not have conflict column names with the existing partition columns, and
+   * should still contain all the existing data columns.
    *
    * @param db Database that table to alter schema for exists in
    * @param table Name of table to alter schema for
-   * @param schema Updated schema to be used for the table (must contain existing partition and
-   *               bucket columns)
+   * @param newDataSchema Updated data schema to be used for the table.
    */
-  def alterTableSchema(db: String, table: String, schema: StructType): Unit
+  def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
+
+  /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
+  def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
 
   def getTable(db: String, table: String): CatalogTable
-
-  def getTableOption(db: String, table: String): Option[CatalogTable]
 
   def tableExists(db: String, table: String): Boolean
 
@@ -328,6 +329,15 @@ abstract class ExternalCatalog
   }
 
   protected def doDropFunction(db: String, funcName: String): Unit
+
+  final def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = {
+    val name = funcDefinition.identifier.funcName
+    postToAll(AlterFunctionPreEvent(db, name))
+    doAlterFunction(db, funcDefinition)
+    postToAll(AlterFunctionEvent(db, name))
+  }
+
+  protected def doAlterFunction(db: String, funcDefinition: CatalogFunction): Unit
 
   final def renameFunction(db: String, oldName: String, newName: String): Unit = {
     postToAll(RenameFunctionPreEvent(db, oldName, newName))
