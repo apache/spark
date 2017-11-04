@@ -76,11 +76,32 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRe
     testNGram(nGram, dataset)
   }
 
+  test("NGramLength in [2, 4] yields length 2, 3, 4 n-grams") {
+    val nGram = new NGram()
+      .setInputCol("inputTokens")
+      .setOutputCol("nGrams")
+      .setN(2)
+      .setMaxN(4)
+    val dataset = Seq(NGramTestData(
+      Array("a", "b", "c", "d", "e", "f", "g"),
+      Array(
+        "a b", "a b c", "a b c d",
+        "b c", "b c d", "b c d e",
+        "c d", "c d e", "c d e f",
+        "d e", "d e f", "d e f g",
+        "e f", "e f g",
+        "f g"
+      )
+    )).toDF()
+    testNGram(nGram, dataset)
+  }
+
   test("read/write") {
     val t = new NGram()
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setN(3)
+      .setMaxN(5)
     testDefaultReadWrite(t)
   }
 }

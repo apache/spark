@@ -226,14 +226,22 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   }
 
   test("Word2Vec works with input that is non-nullable (NGram)") {
+    testNGramTransformation(new NGram().setN(2))
+  }
+
+  test("Word2Vec works with input from multi-length NGram transformation") {
+    testNGramTransformation(new NGram().setN(2).setMaxN(4))
+  }
+
+  def testNGramTransformation(ngram: NGram): Unit = {
     val spark = this.spark
     import spark.implicits._
 
     val sentence = "a q s t q s t b b b s t m s t m q "
     val docDF = sc.parallelize(Seq(sentence, sentence)).map(_.split(" ")).toDF("text")
 
-    val ngram = new NGram().setN(2).setInputCol("text").setOutputCol("ngrams")
-    val ngramDF = ngram.transform(docDF)
+    val ngramTransform = ngram.setInputCol("text").setOutputCol("ngrams")
+    val ngramDF = ngramTransform.transform(docDF)
 
     val model = new Word2Vec()
       .setVectorSize(2)
