@@ -55,7 +55,7 @@ public class JavaNGramExample {
 
     Dataset<Row> wordDataFrame = spark.createDataFrame(data, schema);
 
-    NGram ngramTransformer = new NGram().setN(2).setInputCol("words").setOutputCol("ngrams");
+    NGram ngramTransformer = new NGram().setN(2).setMaxN(4).setInputCol("words").setOutputCol("ngrams");
 
     Dataset<Row> ngramDataFrame = ngramTransformer.transform(wordDataFrame);
     ngramDataFrame.select("ngrams").show(false);

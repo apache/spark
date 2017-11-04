@@ -35,7 +35,7 @@ if __name__ == "__main__":
         (2, ["Logistic", "regression", "models", "are", "neat"])
     ], ["id", "words"])
 
-    ngram = NGram(n=2, inputCol="words", outputCol="ngrams")
+    ngram = NGram(n=2, maxN=4, inputCol="words", outputCol="ngrams")
 
     ngramDataFrame = ngram.transform(wordDataFrame)
     ngramDataFrame.select("ngrams").show(truncate=False)

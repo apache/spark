@@ -37,7 +37,7 @@ object NGramExample {
       (2, Array("Logistic", "regression", "models", "are", "neat"))
     )).toDF("id", "words")
 
-    val ngram = new NGram().setN(2).setInputCol("words").setOutputCol("ngrams")
+    val ngram = new NGram().setN(2).setMaxN(4).setInputCol("words").setOutputCol("ngrams")
 
     val ngramDataFrame = ngram.transform(wordDataFrame)
     ngramDataFrame.select("ngrams").show(false)
