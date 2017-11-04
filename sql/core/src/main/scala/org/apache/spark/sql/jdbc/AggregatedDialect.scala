@@ -42,6 +42,18 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
 
+  override def quoteIdentifier(colName: String): String = {
+    dialects.map(_.quoteIdentifier(colName)).head
+  }
+
+  override def getTableExistsQuery(table: String): String = {
+    dialects.map(_.getTableExistsQuery(table)).head
+  }
+
+  override def getSchemaQuery(table: String): String = {
+    dialects.map(_.getSchemaQuery(table)).head
+  }
+
   override def isCascadingTruncateTable(): Option[Boolean] = {
     // If any dialect claims cascading truncate, this dialect is also cascading truncate.
     // Otherwise, if any dialect has unknown cascading truncate, this dialect is also unknown.
