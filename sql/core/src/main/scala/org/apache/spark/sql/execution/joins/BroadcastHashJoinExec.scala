@@ -83,7 +83,7 @@ case class BroadcastHashJoinExec(
       // them in a buffer, because these result rows share one UnsafeRow instance. Note that here
       // we wait for the broadcast to be finished, which is a no-op because it's already finished
       // when we wait it in `doProduce`.
-      buildPlan.executeBroadcast[HashedRelation]().value.keyIsUnique
+      !buildPlan.executeBroadcast[HashedRelation]().value.keyIsUnique
 
     // Other joins types(semi, anti, existence) can at most produce one result row for one input
     // row from the streamed side, so no need to copy the result rows.

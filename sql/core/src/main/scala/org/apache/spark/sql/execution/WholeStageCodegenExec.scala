@@ -224,7 +224,7 @@ trait CodegenSupport extends SparkPlan {
     if (children.isEmpty) {
       false
     } else if (children.length == 1) {
-      children.head.asInstanceOf[CodegenSupport].needStopCheck
+      children.head.asInstanceOf[CodegenSupport].needCopyResult
     } else {
       throw new UnsupportedOperationException
     }
@@ -291,6 +291,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "")
   }
+
+  override def needCopyResult: Boolean = false
 }
 
 object WholeStageCodegenExec {
