@@ -42,11 +42,22 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
   /**
    * Minimum n-gram length, greater than or equal to 1.
+   * All values of m such that n <= m <= maxN will be used.
    * Default: 2, bigram features
    * @group param
    */
   @Since("1.5.0")
-  val n: IntParam = new IntParam(this, "n", "number elements per n-gram (>=1)",
+  val n: IntParam = new IntParam(this, "n", "minimum number of elements per n-gram (>=1)",
+    ParamValidators.gtEq(1))
+
+  /**
+   * Maximum n-gram length, greater than or equal to `n`.
+   * All values of m such that n <= m <= maxN will be used.
+   * Default: 2, bigram features
+   * @group param
+   */
+  @Since("From which version?")
+  val maxN: IntParam = new IntParam(this, "maxN", "maximum number elements per n-gram (>=n)",
     ParamValidators.gtEq(1))
 
   /** @group setParam */
@@ -57,10 +68,22 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   def getN: Int = $(n)
 
-  setDefault(n -> 2)
+  /** @group setParam */
+  @Since("From which version?")
+  def setMaxN(value: Int): this.type = set(maxN, value)
 
-  override protected def createTransformFunc: Seq[String] => Seq[String] = {
-    _.iterator.sliding($(n)).withPartial(false).map(_.mkString(" ")).toSeq
+  /** @group getParam */
+  @Since("From which version?")
+  def getMaxN: Int = Math.max($(maxN), $(n))
+
+  setDefault(n -> 2)
+  setDefault(maxN -> 2)
+
+  override protected def createTransformFunc: Seq[String] => Seq[String] = { input =>
+    import org.apache.spark.ml.extensions.seq._
+
+    val (min, max) = ($(n), getMaxN)
+    input.multiSliding(min, max).map(_.mkString(" "))
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
@@ -69,6 +92,7 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, false)
+
 }
 
 @Since("1.6.0")
