@@ -43,15 +43,15 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
   }
 
   override def quoteIdentifier(colName: String): String = {
-    dialects.map(_.quoteIdentifier(colName)).head
+    dialects.head.quoteIdentifier(colName)
   }
 
   override def getTableExistsQuery(table: String): String = {
-    dialects.map(_.getTableExistsQuery(table)).head
+    dialects.head.getTableExistsQuery(table)
   }
 
   override def getSchemaQuery(table: String): String = {
-    dialects.map(_.getSchemaQuery(table)).head
+    dialects.head.getSchemaQuery(table)
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = {
