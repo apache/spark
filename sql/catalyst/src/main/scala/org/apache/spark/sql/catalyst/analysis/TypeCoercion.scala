@@ -451,10 +451,10 @@ object TypeCoercion {
         }
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
-        findWiderCommonType(b.map(_.dataType)).flatMap(listDataType => {
+        findWiderCommonType(b.map(_.dataType)).flatMap { listDataType =>
           findCommonTypeForBinaryComparison(listDataType, a.dataType)
             .orElse(findWiderTypeForTwo(listDataType, a.dataType))
-        }) match {
+        } match {
           case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
           case None => i
         }
