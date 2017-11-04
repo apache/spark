@@ -186,7 +186,14 @@ case class GetArrayStructFields(
       val values = ctx.freshName("values")
       val j = ctx.freshName("j")
       val row = ctx.freshName("row")
-      val nullCheckElement = if (!field.nullable) "false" else s"$row.isNullAt($ordinal)"
+      val nullSafeEval = if (field.nullable) {
+        s"""
+         if ($row.isNullAt($ordinal)) {
+           $values[$j] = null;
+         } else
+        """
+      } else ""
+
       s"""
         final int $n = $eval.numElements();
         final Object[] $values = new Object[$n];
@@ -195,9 +202,7 @@ case class GetArrayStructFields(
             $values[$j] = null;
           } else {
             final InternalRow $row = $eval.getStruct($j, $numFields);
-            if ($nullCheckElement) {
-              $values[$j] = null;
-            } else {
+            $nullSafeEval {
               $values[$j] = ${ctx.getValue(row, field.dataType, ordinal.toString)};
             }
           }
@@ -243,8 +248,9 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
-      val nullCheck = if (!child.dataType.asInstanceOf[ArrayType].containsNull) ""
-        else s" || $eval1.isNullAt($index)"
+      val nullCheck = if (child.dataType.asInstanceOf[ArrayType].containsNull) {
+        s" || $eval1.isNullAt($index)"
+      } else ""
       s"""
         final int $index = (int) $eval2;
         if ($index >= $eval1.numElements() || $index < 0$nullCheck) {
@@ -312,8 +318,9 @@ case class GetMapValue(child: Expression, key: Expression)
     val found = ctx.freshName("found")
     val key = ctx.freshName("key")
     val values = ctx.freshName("values")
-    val nullCheck = if (!child.dataType.asInstanceOf[MapType].valueContainsNull) ""
-      else s" || $values.isNullAt($index)"
+    val nullCheck = if (child.dataType.asInstanceOf[MapType].valueContainsNull) {
+      s" || $values.isNullAt($index)"
+    } else ""
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int $length = $eval1.numElements();
