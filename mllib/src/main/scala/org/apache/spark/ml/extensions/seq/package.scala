@@ -48,14 +48,12 @@ package object seq {
    *   Seq(6, 7), Seq(6, 7, 8), Seq(6, 7, 8, 9), Seq(6, 7, 8, 9, 10),
    *   Seq(7, 8), Seq(7, 8, 9), Seq(7, 8, 9, 10),
    *   Seq(8, 9), Seq(8, 9, 10),
-   *   Seq(9, 10))
+   *   Seq(9, 10)
+   * )
    * }}}
    */
   @Since("From which version?")
   def multiSliding[A](x: Seq[A], min: Int, max: Int): Seq[Seq[A]] = {
-    require(  1 <= min, "  1 <= min")
-    require(min <= max, "min <= max")
-
     type B = Seq[A]
 
     def addWindowsFromBuffer(acc: List[B], buffer: Queue[A]): List[B] = {
@@ -74,31 +72,36 @@ package object seq {
       }
     }
 
-    val (accumulated, finalBuffer) = x.foldLeft((List.empty[B], Queue.empty[A])) {
+    def calculateMultiSliding(): List[B] = {
+      val (accumulated, finalBuffer) = x.foldLeft((List.empty[B], Queue.empty[A])) {
 
-      case ((acc, buffer), current) if buffer.length < min - 1 =>
-        (acc, buffer.enqueue(current))
+        case ((acc, buffer), current) if buffer.length < min - 1 =>
+          (acc, buffer.enqueue(current))
 
-      case ((acc, buffer), current) if buffer.length == min - 1 =>
-        val newBuffer = buffer.enqueue(current)
-        (newBuffer :: acc, newBuffer)
+        case ((acc, buffer), current) if buffer.length == min - 1 =>
+          val newBuffer = buffer.enqueue(current)
+          (newBuffer :: acc, newBuffer)
 
-      case ((acc, buffer), current) if buffer.length >= min && buffer.length < max =>
-        val newBuffer = buffer.enqueue(current)
-        (newBuffer :: acc, newBuffer)
+        case ((acc, buffer), current) if buffer.length >= min && buffer.length < max =>
+          val newBuffer = buffer.enqueue(current)
+          (newBuffer :: acc, newBuffer)
 
-      case ((acc, buffer), current) if buffer.length == max =>
-        val (_, newBuffer) = buffer.enqueue(current).dequeue
-        (addWindowsFromBuffer(acc, newBuffer), newBuffer)
+        case ((acc, buffer), current) if buffer.length == max =>
+          val (_, newBuffer) = buffer.enqueue(current).dequeue
+          (addWindowsFromBuffer(acc, newBuffer), newBuffer)
 
-      case ((acc, buffer), _)       if buffer.length > max =>
-        val fail = false
-        assume(fail, "multiSliding: unreachable case chosen")
-        (acc, buffer)
+        case ((acc, buffer), _) if buffer.length > max =>
+          (acc, buffer)
 
+      }
+
+      addWindowsFromFinalBuffer(accumulated, finalBuffer).reverse
     }
 
-    addWindowsFromFinalBuffer(accumulated, finalBuffer).reverse
+    (1 <= min) && (min <= max) match {
+      case true => calculateMultiSliding()
+      case false => Seq.empty
+    }
   }
 
   @Since("From which version?")
