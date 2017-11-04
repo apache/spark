@@ -61,6 +61,8 @@ public interface DataWriter<T> {
    *
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
    */
   void write(T record) throws IOException;
 
@@ -76,6 +78,8 @@ public interface DataWriter<T> {
    *
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
    */
   WriterCommitMessage commit() throws IOException;
 
@@ -89,6 +93,8 @@ public interface DataWriter<T> {
    * If this method fails(by throwing an exception), the underlying data source may have garbage
    * that need to be cleaned by {@link DataSourceV2Writer#abort(WriterCommitMessage[])} or manually,
    * but these garbage should not be visible to data source readers.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
    */
   void abort() throws IOException;
 }

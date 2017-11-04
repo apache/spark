@@ -39,8 +39,8 @@ public interface ReadTask<T> extends Serializable {
    * be run on any location. The location is a string representing the host name.
    *
    * Note that if a host name cannot be recognized by Spark, it will be ignored as it was not in
-   * the returned locations. By default this method returns empty string, which means this task
-   * has no location preference.
+   * the returned locations. By default this method returns empty string array, which means this
+   * task has no location preference.
    *
    * If this method fails (by throwing an exception), the action would fail and no Spark job was
    * submitted.

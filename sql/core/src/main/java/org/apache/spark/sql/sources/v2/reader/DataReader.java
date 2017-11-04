@@ -38,6 +38,8 @@ public interface DataReader<T> extends Closeable {
    *
    * If this method fails (by throwing an exception), the corresponding Spark task would fail and
    * get retried until hitting the maximum retry times.
+   *
+   * @throws IOException if failure happens during disk/network IO like reading files.
    */
   boolean next() throws IOException;
 
