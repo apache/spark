@@ -192,7 +192,9 @@ case class GetArrayStructFields(
            $values[$j] = null;
          } else
         """
-      } else ""
+      } else {
+        ""
+      }
 
       s"""
         final int $n = $eval.numElements();
@@ -250,7 +252,9 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
       val index = ctx.freshName("index")
       val nullCheck = if (child.dataType.asInstanceOf[ArrayType].containsNull) {
         s" || $eval1.isNullAt($index)"
-      } else ""
+      } else {
+        ""
+      }
       s"""
         final int $index = (int) $eval2;
         if ($index >= $eval1.numElements() || $index < 0$nullCheck) {
@@ -320,7 +324,9 @@ case class GetMapValue(child: Expression, key: Expression)
     val values = ctx.freshName("values")
     val nullCheck = if (child.dataType.asInstanceOf[MapType].valueContainsNull) {
       s" || $values.isNullAt($index)"
-    } else ""
+    } else {
+      ""
+    }
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int $length = $eval1.numElements();
