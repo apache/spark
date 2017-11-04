@@ -87,12 +87,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
   private val podAllocationInterval = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
-  require(podAllocationInterval > 0, s"Allocation batch delay " +
+  require(podAllocationInterval > 0, "Allocation batch delay " +
     s"${KUBERNETES_ALLOCATION_BATCH_DELAY} " +
     s"is ${podAllocationInterval}, should be a positive integer")
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
-  require(podAllocationSize > 0, s"Allocation batch size " +
+  require(podAllocationSize > 0, "Allocation batch size " +
     s"${KUBERNETES_ALLOCATION_BATCH_SIZE} " +
     s"is ${podAllocationSize}, should be a positive integer")
 

@@ -45,8 +45,8 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
 
   import ExecutorPodFactoryImpl._
 
-  private val executorExtraClasspath = sparkConf.get(
-    org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
+  private val executorExtraClasspath =
+    sparkConf.get(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
 
   private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
     sparkConf,
@@ -59,6 +59,9 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
     !executorLabels.contains(SPARK_EXECUTOR_ID_LABEL),
     s"Custom executor labels cannot contain $SPARK_EXECUTOR_ID_LABEL as it is reserved for" +
       s" Spark.")
+  require(
+    !executorLabels.contains(SPARK_ROLE_LABEL),
+    s"Custom executor labels cannot contain $SPARK_ROLE_LABEL as it is reserved for Spark.")
 
   private val executorAnnotations =
     ConfigurationUtils.parsePrefixedKeyValuePairs(
