@@ -19,6 +19,7 @@ package org.apache.spark.ml.tuning
 
 import scala.annotation.varargs
 import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
@@ -30,6 +31,7 @@ import org.apache.spark.ml.param._
 class ParamGridBuilder @Since("1.2.0") {
 
   private val paramGrid = mutable.Map.empty[Param[_], Iterable[_]]
+  private var searchRatio = 1.0
 
   /**
    * Sets the given parameters in this grid to fixed values.
@@ -103,6 +105,15 @@ class ParamGridBuilder @Since("1.2.0") {
     addGrid[Boolean](param, Array(true, false))
   }
 
+ /**
+  * Adds a searchRatio param for randomized cross validation
+  */
+  @Since("2.3.0")
+  def setSearchRatio (value: Double): this.type = {
+    searchRatio = value
+    this
+  }
+
   /**
    * Builds and returns all combinations of parameters specified by the param grid.
    */
@@ -115,6 +126,10 @@ class ParamGridBuilder @Since("1.2.0") {
       }
       paramMaps = newParamMaps.toArray
     }
-    paramMaps
+    if (searchRatio == 1.0) {paramMaps}
+    else {
+      Random.shuffle (paramMaps.toList)
+            .take (math.ceil (searchRatio * paramMaps.length).toInt).toArray
+    }
   }
 }

@@ -59,4 +59,13 @@ class ParamGridBuilderSuite extends SparkFunSuite {
       (20, "input1"))
     validateGrid(maps1, expected1)
   }
+
+  test("SearchRatio test") {
+    val maps0 = new ParamGridBuilder()
+      .baseOn(maxIter -> 10)
+      .addGrid(inputCol, Array("input0", "input1"))
+      .setSearchRatio(0.5)
+      .build()
+    assert(maps0.size === 1)
+  }
 }
