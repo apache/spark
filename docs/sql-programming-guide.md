@@ -1960,7 +1960,7 @@ Not all the APIs of the Hive UDF/UDTF/UDAF are supported by Spark SQL. Below are
   
 ### Incompatible Hive UDF
 
-Below is a list of Hive UDFs that we don't incompatible yet.
+Below are the scenarios in which Hive and Spark generate different results:
 
 * `SQRT(n)` If n < 0, Hive returns null, Spark SQL returns NaN.
 * `ACOS(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
