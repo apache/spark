@@ -232,7 +232,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(tree2.rootNode.prediction === lp.label)
   }
 
-  test("Multiclass classification with unordered categorical features: split calculations") {
+  ignore("Multiclass classification with unordered categorical features: split calculations") {
     val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML)
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
