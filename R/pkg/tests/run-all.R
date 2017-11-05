@@ -62,9 +62,12 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
 }
 
 # clean up if Spark was downloaded for the test run
-if (get0(".sparkDownloaded", envir = SparkR:::.sparkREnv, ifnotfound = FALSE)) {
-  cat(sparkDownloadedDir)
-  cat(list.files(sparkDownloadedDir, all.files = TRUE, include.dirs = TRUE, no.. = TRUE))
+# get0 not supported before R 3.2.0
+sparkDownloaded <- mget(".sparkDownloaded"[1L],
+                        envir = SparkR:::.sparkREnv,
+                        inherits = TRUE,
+                        ifnotfound = list(FALSE))[[1L]]
+if (sparkDownloaded) {
   unlink(sparkDownloadedDir, recursive = TRUE, force = TRUE)
 
   # .cache/spark, or on Windows, LOCALAPPDATA\Apache\Spark\Cache (there are 3 levels)
