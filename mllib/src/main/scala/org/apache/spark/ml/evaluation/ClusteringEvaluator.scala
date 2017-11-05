@@ -437,6 +437,83 @@ private[evaluation] object SquaredEuclideanSilhouette {
   }
 }
 
+
+/**
+ * [[CalinskiHarabasz]] computes Calinski-Harabasz index.
+ *
+ * This implementation differs slightly from the proposed one, to better fit in a big data
+ * environment.
+ * Indeed, Calinski-Harabasz is defined as:
+ *
+ * <blockquote>
+ *   $$
+ *   \frac{SSB}{SSW} * \frac{N - k}{k -1}
+ *   $$
+ * </blockquote>
+ *
+ * where `SSB` is the overall between-cluster variance, SSW is the overall within cluster
+ * variance, `N` is the number of points in the dataset and `k` is the number of clusters.
+ *
+ * In the original implementation, `SSW` is the sum of the squared distance between each point and
+ * the centroid of its cluster and `SSB` is computed as the sum of the squared distance between
+ * each point and the centroid of the whole datates (defined as the total sum of squares, `tss`)
+ * minus `SSW`.
+ * Here `SSW` and `SSB` are computed in the same way, but `tss` in a slightly different one.
+ * Indeed, we can write it as:
+ *
+ * <blockquote>
+ *   $$
+ *   tss = \sum\limits_{i=1}^N (X_{i} - C)^2 =
+ *   \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D (x_{ij}-c_{j})^2 \Big)
+ *   = \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D x_{ij}^2 +
+ *   \sum\limits_{j=1}^D c_{j}^2 -2\sum\limits_{j=1}^D x_{ij}c_{j} \Big)
+ *   = \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{ij}^2 +
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{j}^2
+ *   -2 \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{ij}c_{j}
+ *   $$
+ * </blockquote>
+ *
+ * In the last formula we can notice that:
+ *
+ * <blockquote>
+ *   $$
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{ij}^2 = \sum\limits_{i=1}^N \|X_{i}\|^2
+ *   $$
+ * </blockquote>
+ *
+ * ie. the first element is the sum of the squared norm of all the points in the dataset, and
+ *
+ * <blockquote>
+ *   $$
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{j}^2 = N \|C\|^2
+ *   $$
+ * </blockquote>
+ *
+ * ie. the second element is `N` multiplied by the squared norm of detaset's centroid, and, if we
+ * define `Y` as the vector which is the element-wise sum of all the points in the cluster, then
+ * the third and last element becomes
+ *
+ * <blockquote>
+ *   $$
+ *   2 \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{ij}c_{j} = 2 Y \cdot C
+ *   $$
+ * </blockquote>
+ *
+ * Thus, `tss` becomes:
+ *
+ * <blockquote>
+ *   $$
+ *   tss = \sum\limits_{i=1}^N \|X_{i}\|^2 + N \|C\|^2 - 2 Y \cdot C
+ *   $$
+ * </blockquote>
+ *
+ * where `$\sum\limits_{i=1}^N \|X_{i}\|^2$` and `Y` are precomputed with a single pass on the
+ * dataset.
+ *
+ * @see <a href="http://www.tandfonline.com/doi/abs/10.1080/03610927408827101">
+ *        T. Calinski and J. Harabasz, 1974. “A dendrite method for cluster analysis”.
+ *        Communications in Statistics</a>
+ */
 private[evaluation] object CalinskiHarabasz {
 
   def computeScore(
