@@ -77,7 +77,8 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     // Create a buffer with some randomly generated key-value pairs to use as the shuffle data
     // from each mappers (all mappers return the same shuffle data).
     val byteOutputStream = new ByteArrayOutputStream()
-    val serializationStream = serializer.newInstance().serializeStream(byteOutputStream)
+    val serializationStream = serializer.newInstance()
+      .serializeStreamForKVClass[Int, Int](byteOutputStream)
     (0 until keyValuePairsPerMap).foreach { i =>
       serializationStream.writeKey(i)
       serializationStream.writeValue(2*i)

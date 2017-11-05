@@ -171,7 +171,7 @@ private[spark] class SerializerManager(
     val byteStream = new BufferedOutputStream(outputStream)
     val autoPick = !blockId.isInstanceOf[StreamBlockId]
     val ser = getSerializer(implicitly[ClassTag[T]], autoPick).newInstance()
-    ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
+    ser.serializeStreamForClass[T](wrapForCompression(blockId, byteStream)).writeAll(values).close()
   }
 
   /** Serializes into a chunked byte buffer. */
@@ -190,7 +190,7 @@ private[spark] class SerializerManager(
     val byteStream = new BufferedOutputStream(bbos)
     val autoPick = !blockId.isInstanceOf[StreamBlockId]
     val ser = getSerializer(classTag, autoPick).newInstance()
-    ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
+    ser.serializeStreamForClass(wrapForCompression(blockId, byteStream)).writeAll(values).close()
     bbos.toChunkedByteBuffer
   }
 
@@ -206,7 +206,7 @@ private[spark] class SerializerManager(
     val autoPick = !blockId.isInstanceOf[StreamBlockId]
     getSerializer(classTag, autoPick)
       .newInstance()
-      .deserializeStream(wrapForCompression(blockId, inputStream))
+      .deserializeStreamForClass[T](wrapForCompression(blockId, inputStream))
       .asIterator.asInstanceOf[Iterator[T]]
   }
 }

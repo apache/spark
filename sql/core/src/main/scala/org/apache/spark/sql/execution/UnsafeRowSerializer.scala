@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
+import org.apache.spark.serializer._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.unsafe.Platform
@@ -181,4 +181,20 @@ private class UnsafeRowSerializerInstance(
     throw new UnsupportedOperationException
   override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =
     throw new UnsupportedOperationException
+  override def serializeStreamForClass[T](
+      s: OutputStream): ClassSpecificSerializationStream[T] = {
+    throw new UnsupportedOperationException
+  }
+  override def serializeStreamForKVClass[K, V](
+      s: OutputStream): KVClassSpecificSerializationStream[K, V] = {
+    throw new UnsupportedOperationException
+  }
+  override def deserializeStreamForClass[T](
+      s: InputStream): ClassSpecificDeserializationStream[T] = {
+    throw new UnsupportedOperationException
+  }
+  override def deserializeStreamForKVClass[K, V](
+      s: InputStream): KVClassSpecificDeserializationStream[K, V] = {
+    throw new UnsupportedOperationException
+  }
 }

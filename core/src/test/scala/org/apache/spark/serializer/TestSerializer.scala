@@ -44,6 +44,26 @@ class TestSerializerInstance extends SerializerInstance {
 
   override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =
     throw new UnsupportedOperationException
+
+  override def serializeStreamForClass[T](
+      s: OutputStream): ClassSpecificSerializationStream[T] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def serializeStreamForKVClass[K, V](
+      s: OutputStream): KVClassSpecificSerializationStream[K, V] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def deserializeStreamForClass[T](
+      s: InputStream): ClassSpecificDeserializationStream[T] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def deserializeStreamForKVClass[K, V](
+      s: InputStream): KVClassSpecificDeserializationStream[K, V] = {
+    throw new UnsupportedOperationException
+  }
 }
 
 

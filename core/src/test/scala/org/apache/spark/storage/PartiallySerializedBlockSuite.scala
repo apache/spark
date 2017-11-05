@@ -29,7 +29,7 @@ import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.serializer.{JavaSerializer, SerializationStream, SerializerManager}
+import org.apache.spark.serializer._
 import org.apache.spark.storage.memory.{MemoryStore, PartiallySerializedBlock, RedirectableOutputStream}
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream}
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
@@ -43,10 +43,6 @@ class PartiallySerializedBlockSuite
   private val conf = new SparkConf()
   private val memoryStore = Mockito.mock(classOf[MemoryStore], Mockito.RETURNS_SMART_NULLS)
   private val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
-
-  private val getSerializationStream = PrivateMethod[SerializationStream]('serializationStream)
-  private val getRedirectableOutputStream =
-    PrivateMethod[RedirectableOutputStream]('redirectableOutputStream)
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -71,11 +67,12 @@ class PartiallySerializedBlockSuite
       .getSerializer(implicitly[ClassTag[T]], autoPick = true).newInstance()
     val redirectableOutputStream = Mockito.spy(new RedirectableOutputStream)
     redirectableOutputStream.setOutputStream(bbos)
-    val serializationStream = Mockito.spy(serializer.serializeStream(redirectableOutputStream))
+    val serializationStream = Mockito.spy(
+      serializer.serializeStreamForClass[T](redirectableOutputStream))
 
     (1 to numItemsToBuffer).foreach { _ =>
       assert(iter.hasNext)
-      serializationStream.writeObject[T](iter.next())
+      serializationStream.writeObject(iter.next())
     }
 
     val unrollMemory = bbos.size
@@ -157,6 +154,11 @@ class PartiallySerializedBlockSuite
       testCaseName: String,
       items: Seq[T],
       numItemsToBuffer: Int): Unit = {
+    val getSerializationStream =
+    PrivateMethod[ClassSpecificSerializationStream[T]]('serializationStream)
+
+    val getRedirectableOutputStream =
+      PrivateMethod[RedirectableOutputStream]('redirectableOutputStream)
 
     test(s"$testCaseName with discard() and numBuffered = $numItemsToBuffer") {
       val partiallySerializedBlock = partiallyUnroll(items.iterator, numItemsToBuffer)
@@ -186,7 +188,8 @@ class PartiallySerializedBlockSuite
       val serializer = serializerManager
         .getSerializer(implicitly[ClassTag[T]], autoPick = true).newInstance()
       val deserialized =
-        serializer.deserializeStream(new ByteBufferInputStream(bbos.toByteBuffer)).asIterator.toSeq
+        serializer.deserializeStreamForClass[T](
+          new ByteBufferInputStream(bbos.toByteBuffer)).asIterator.toSeq
       assert(deserialized === items)
     }
 

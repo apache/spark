@@ -24,7 +24,7 @@ import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
+import scala.reflect._
 
 import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
@@ -40,7 +40,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf, Utils}
+import org.apache.spark.util._
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -266,6 +266,234 @@ class KryoDeserializationStream(
   }
 }
 
+private[spark]
+class KryoClassSpecificSerializationStream[T](
+    serInstance: KryoSerializerInstance,
+    outStream: OutputStream,
+    useUnsafe: Boolean) extends ClassSpecificSerializationStream[T] {
+
+  private[this] var output: KryoOutput =
+    if (useUnsafe) new KryoUnsafeOutput(outStream) else new KryoOutput(outStream)
+
+  private[this] var kryo: Kryo = serInstance.borrowKryo()
+
+  protected var classWrote: Boolean = false
+
+  override protected def writeClass(c: Class[_]): ClassSpecificSerializationStream[T] = {
+    kryo.writeClass(output, c)
+    classWrote = true
+    this
+  }
+
+  override protected def writeObjectWithoutClass(t: T): ClassSpecificSerializationStream[T] = {
+    kryo.writeObjectOrNull(output, t, t.getClass)
+    this
+  }
+
+  override def flush(): Unit = {
+    if (output == null) {
+      throw new IOException("Stream is closed")
+    }
+    output.flush()
+  }
+
+  override def close(): Unit = {
+    if (output != null) {
+      try {
+        output.close()
+      } finally {
+        serInstance.releaseKryo(kryo)
+        kryo = null
+        output = null
+        classWrote = false
+      }
+    }
+  }
+}
+
+private[spark]
+class KryoClassSpecificDeserializationStream[T](
+    serInstance: KryoSerializerInstance,
+    inStream: InputStream,
+    useUnsafe: Boolean) extends ClassSpecificDeserializationStream[T] {
+
+  private[this] var input: KryoInput =
+    if (useUnsafe) new KryoUnsafeInput(inStream) else new KryoInput(inStream)
+
+  private[this] var kryo: Kryo = serInstance.borrowKryo()
+
+  var classRead: Boolean = false
+
+  protected var classInfo: Class[T] = null
+
+  override protected def readClass(): Class[T] = {
+    safeCall {
+      classInfo = kryo.readClass(input).getType.asInstanceOf[Class[T]]
+      classRead = true
+      classInfo
+    }
+  }
+
+  override protected def readObjectWithoutClass(clazz: Class[T]): T = {
+    safeCall {
+      kryo.readObjectOrNull(input, classInfo)
+    }
+  }
+
+  override def close() {
+    if (input != null) {
+      try {
+        // Kryo's Input automatically closes the input stream it is using.
+        input.close()
+      } finally {
+        serInstance.releaseKryo(kryo)
+        kryo = null
+        input = null
+        classRead = false
+        classInfo = null
+      }
+    }
+  }
+
+  def safeCall[U](block: => U): U = {
+    try {
+      block
+    } catch {
+      // DeserializationStream uses the EOF exception to indicate stopping condition.
+      case e: KryoException
+        if e.getMessage.toLowerCase(Locale.ROOT).contains("buffer underflow") =>
+        throw new EOFException
+    }
+  }
+}
+
+private[spark]
+class KryoKVClassSpecificSerializationStream[K, V](
+    serInstance: KryoSerializerInstance,
+    outStream: OutputStream,
+    useUnsafe: Boolean) extends KVClassSpecificSerializationStream[K, V] {
+
+  private[this] var output: KryoOutput =
+    if (useUnsafe) new KryoUnsafeOutput(outStream) else new KryoOutput(outStream)
+
+  private[this] var kryo: Kryo = serInstance.borrowKryo()
+
+  protected var keyClassWrote: Boolean = false
+
+  protected var valueClassWrote: Boolean = false
+
+  override protected def writeKeyClass(
+      clazz: Class[_]): KVClassSpecificSerializationStream[K, V] = {
+    kryo.writeClass(output, clazz)
+    keyClassWrote = true
+    this
+  }
+
+  override protected def writeValueClass(
+      clazz: Class[_]): KVClassSpecificSerializationStream[K, V] = {
+    kryo.writeClass(output, clazz)
+    valueClassWrote = true
+    this
+  }
+
+  override protected def writeObjectWithoutClass[T](
+      t: T): KVClassSpecificSerializationStream[K, V] = {
+    kryo.writeObjectOrNull(output, t, t.getClass)
+    this
+  }
+
+  override def flush(): Unit = {
+    if (output == null) {
+      throw new IOException("Stream is closed")
+    }
+    output.flush()
+  }
+
+  override def close(): Unit = {
+    if (output != null) {
+      try {
+        output.close()
+      } finally {
+        serInstance.releaseKryo(kryo)
+        kryo = null
+        output = null
+        keyClassWrote = false
+        valueClassWrote = false
+      }
+    }
+  }
+}
+
+private[spark]
+class KryoKVClassSpecificDeserializationStream[K, V](
+    serInstance: KryoSerializerInstance,
+    inStream: InputStream,
+    useUnsafe: Boolean) extends KVClassSpecificDeserializationStream[K, V] {
+
+  private[this] var input: KryoInput =
+    if (useUnsafe) new KryoUnsafeInput(inStream) else new KryoInput(inStream)
+
+  private[this] var kryo: Kryo = serInstance.borrowKryo()
+
+  protected var keyClassRead: Boolean = false
+
+  protected var valueClassRead: Boolean = false
+
+  protected var keyClassInfo: Class[K] = null
+
+  protected var valueClassInfo: Class[V] = null
+
+  override protected def readKeyClass(): Class[K] = {
+    safeCall {
+      keyClassInfo = kryo.readClass(input).getType.asInstanceOf[Class[K]]
+      keyClassRead = true
+      keyClassInfo
+    }
+  }
+
+  override protected def readValueClass(): Class[V] = {
+    safeCall {
+      valueClassInfo = kryo.readClass(input).getType.asInstanceOf[Class[V]]
+      valueClassRead = true
+      valueClassInfo
+    }
+  }
+
+  override protected def readObjectWithoutClass[T](clazz: Class[T]): T = {
+    safeCall {
+      kryo.readObjectOrNull(input, clazz)
+    }
+  }
+
+  override def close(): Unit = {
+    if (input != null) {
+      try {
+        // Kryo's Input automatically closes the input stream it is using.
+        input.close()
+      } finally {
+        serInstance.releaseKryo(kryo)
+        kryo = null
+        input = null
+        keyClassRead = false
+        valueClassRead = false
+        keyClassInfo = null
+        valueClassInfo = null
+      }
+    }
+  }
+
+  def safeCall[U](block: => U): U = {
+    try {
+      block
+    } catch {
+      // DeserializationStream uses the EOF exception to indicate stopping condition.
+      case e: KryoException
+        if e.getMessage.toLowerCase(Locale.ROOT).contains("buffer underflow") =>
+        throw new EOFException
+    }
+  }
+}
+
 private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boolean)
   extends SerializerInstance {
   /**
@@ -352,6 +580,26 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boole
 
   override def deserializeStream(s: InputStream): DeserializationStream = {
     new KryoDeserializationStream(this, s, useUnsafe)
+  }
+
+  override def serializeStreamForClass[T](
+      s: OutputStream): ClassSpecificSerializationStream[T] = {
+    new KryoClassSpecificSerializationStream[T](this, s, useUnsafe)
+  }
+
+  override def deserializeStreamForClass[T](
+      s: InputStream): ClassSpecificDeserializationStream[T] = {
+    new KryoClassSpecificDeserializationStream[T](this, s, useUnsafe)
+  }
+
+  override def serializeStreamForKVClass[K, V](
+      s: OutputStream): KVClassSpecificSerializationStream[K, V] = {
+    new KryoKVClassSpecificSerializationStream[K, V](this, s, useUnsafe)
+  }
+
+  override def deserializeStreamForKVClass[K, V](
+      s: InputStream): KVClassSpecificDeserializationStream[K, V] = {
+    new KryoKVClassSpecificDeserializationStream[K, V](this, s, useUnsafe)
   }
 
   /**

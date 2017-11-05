@@ -48,7 +48,7 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
-import org.apache.spark.serializer.SerializationStream;
+import org.apache.spark.serializer.KVClassSpecificSerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
@@ -95,7 +95,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   private MyByteArrayOutputStream serBuffer;
-  private SerializationStream serOutputStream;
+  private KVClassSpecificSerializationStream<K, V> serOutputStream;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -219,7 +219,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       sparkConf,
       writeMetrics);
     serBuffer = new MyByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE);
-    serOutputStream = serializer.serializeStream(serBuffer);
+    serOutputStream = serializer.serializeStreamForKVClass(serBuffer);
   }
 
   @VisibleForTesting
@@ -258,8 +258,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final K key = record._1();
     final int partitionId = partitioner.getPartition(key);
     serBuffer.reset();
-    serOutputStream.writeKey(key, OBJECT_CLASS_TAG);
-    serOutputStream.writeValue(record._2(), OBJECT_CLASS_TAG);
+    serOutputStream.writeKey(key);
+    serOutputStream.writeValue(record._2());
     serOutputStream.flush();
 
     final int serializedRecordSize = serBuffer.size();
