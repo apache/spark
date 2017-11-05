@@ -113,8 +113,8 @@ class LimitPushdownSuite extends PlanTest {
     assert(x.stats(conf).sizeInBytes === y.stats(conf).sizeInBytes)
     val originalQuery = x.join(y, FullOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, LocalLimit(1, x).join(y, FullOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    // No pushdown for FULL OUTER JOINS.
+    comparePlans(optimized, originalQuery)
   }
 
   test("full outer join where neither side is limited and left side has larger statistics") {
@@ -122,8 +122,8 @@ class LimitPushdownSuite extends PlanTest {
     assert(xBig.stats(conf).sizeInBytes > y.stats(conf).sizeInBytes)
     val originalQuery = xBig.join(y, FullOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, LocalLimit(1, xBig).join(y, FullOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    // No pushdown for FULL OUTER JOINS.
+    comparePlans(optimized, originalQuery)
   }
 
   test("full outer join where neither side is limited and right side has larger statistics") {
@@ -131,15 +131,14 @@ class LimitPushdownSuite extends PlanTest {
     assert(x.stats(conf).sizeInBytes < yBig.stats(conf).sizeInBytes)
     val originalQuery = x.join(yBig, FullOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, x.join(LocalLimit(1, yBig), FullOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    // No pushdown for FULL OUTER JOINS.
+    comparePlans(optimized, originalQuery)
   }
 
   test("full outer join where both sides are limited") {
-    val originalQuery = x.limit(2).join(y.limit(2), FullOuter).limit(1)
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, Limit(2, x).join(Limit(2, y), FullOuter)).analyze
-    comparePlans(optimized, correctAnswer)
+    val originalQuery = x.limit(2).join(y.limit(2), FullOuter).limit(1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    // No pushdown for FULL OUTER JOINS.
+    comparePlans(optimized, originalQuery)
   }
 }
-

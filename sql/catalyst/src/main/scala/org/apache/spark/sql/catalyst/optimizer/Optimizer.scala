@@ -299,12 +299,11 @@ case class LimitPushDown(conf: SQLConf) extends Rule[LogicalPlan] {
     // pushdown Limit.
     case LocalLimit(exp, Union(children)) =>
       LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))))
-    // Add extra limits below OUTER JOIN. For LEFT OUTER and FULL OUTER JOIN we push limits to the
-    // left and right sides, respectively. For FULL OUTER JOIN, we can only push limits to one side
-    // because we need to ensure that rows from the limited side still have an opportunity to match
-    // against all candidates from the non-limited side. We also need to ensure that this limit
-    // pushdown rule will not eventually introduce limits on both sides if it is applied multiple
-    // times. Therefore:
+    // Add extra limits below OUTER JOIN. For LEFT OUTER and RIGHT OUTER JOIN we push limits to
+    // the left and right sides, respectively. It's not safe to push limits below FULL OUTER
+    // JOIN in the general case without a more invasive rewrite.
+    // We also need to ensure that this limit pushdown rule will not eventually introduce limits
+    // on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
     //   - If neither side is limited, limit the side that is estimated to be bigger.
@@ -312,19 +311,6 @@ case class LimitPushDown(conf: SQLConf) extends Rule[LogicalPlan] {
       val newJoin = joinType match {
         case RightOuter => join.copy(right = maybePushLimit(exp, right))
         case LeftOuter => join.copy(left = maybePushLimit(exp, left))
-        case FullOuter =>
-          (left.maxRows, right.maxRows) match {
-            case (None, None) =>
-              if (left.stats(conf).sizeInBytes >= right.stats(conf).sizeInBytes) {
-                join.copy(left = maybePushLimit(exp, left))
-              } else {
-                join.copy(right = maybePushLimit(exp, right))
-              }
-            case (Some(_), Some(_)) => join
-            case (Some(_), None) => join.copy(left = maybePushLimit(exp, left))
-            case (None, Some(_)) => join.copy(right = maybePushLimit(exp, right))
-
-          }
         case _ => join
       }
       LocalLimit(exp, newJoin)
