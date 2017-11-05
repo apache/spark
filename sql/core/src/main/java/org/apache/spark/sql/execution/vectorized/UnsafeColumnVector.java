@@ -35,10 +35,10 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   private byte[] data;
   private long offset;
 
-  // Only set if type is Array.
   private int lastArrayRow;
   private int lastArrayPos;
   private UnsafeArrayData unsafeArray = new UnsafeArrayData();
+  private boolean isTopLevel = true;
 
   public UnsafeColumnVector(int capacity, DataType type) {
     super(capacity, type);
@@ -110,7 +110,7 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   public boolean isNullAt(int rowId) {
     if (nulls == null) return false;
     // If @@@ existins in @@@@, data is null.
-    if (data != null) {
+    if (isTopLevel) {
       return nulls[rowId] == 1;
     } else {
       return unsafeArray.isNullAt(rowId);
@@ -430,7 +430,7 @@ public final class UnsafeColumnVector extends WritableColumnVector {
 
   private void updateLastArrayPos(int rowId) {
     int relative = rowId - lastArrayRow;
-    if (relative == 1) {
+    if (relative == 1 && !anyNullsSet()) {
       int totalBytesLastArray = Platform.getInt(data, offset + lastArrayPos);
       lastArrayPos += totalBytesLastArray + 4;  // 4 for totalbytes in UnsafeArrayData
     } else if (relative == 0) {
@@ -478,24 +478,13 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public ColumnVector.Array getArray(int rowId) {
-    int elements = setUnsafeArray(rowId);
-
-    resultArray.length = elements;
-    resultArray.offset = 0;
-    return resultArray;
-  }
-
-  @Override
   public int getArrayLength(int rowId) {
-    updateLastArrayPos(rowId);
-    return Platform.getInt(data, offset + lastArrayPos);
+    return setUnsafeArray(rowId);
   }
 
   @Override
   public int getArrayOffset(int rowId) {
-    updateLastArrayPos(rowId);
-    return lastArrayPos;
+    return 0;
   }
 
   @Override
