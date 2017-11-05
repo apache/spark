@@ -209,9 +209,6 @@ class CheckpointWriter(
       if (latestCheckpointTime == null || latestCheckpointTime < checkpointTime) {
         latestCheckpointTime = checkpointTime
       }
-      if (fs == null) {
-        fs = new Path(checkpointDir).getFileSystem(hadoopConf)
-      }
       var attempts = 0
       val startTime = System.currentTimeMillis()
       val tempFile = new Path(checkpointDir, "temp")
@@ -231,7 +228,9 @@ class CheckpointWriter(
         attempts += 1
         try {
           logInfo(s"Saving checkpoint for time $checkpointTime to file '$checkpointFile'")
-
+          if (fs == null) {
+            fs = new Path(checkpointDir).getFileSystem(hadoopConf)
+          }
           // Write checkpoint to temp file
           fs.delete(tempFile, true) // just in case it exists
           val fos = fs.create(tempFile)
