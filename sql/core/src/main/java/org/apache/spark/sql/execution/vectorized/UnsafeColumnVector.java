@@ -38,7 +38,6 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   private int lastArrayRow;
   private int lastArrayPos;
   private UnsafeArrayData unsafeArray = new UnsafeArrayData();
-  private boolean isTopLevel = true;
 
   public UnsafeColumnVector(int capacity, DataType type) {
     super(capacity, type);
@@ -109,8 +108,7 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   @Override
   public boolean isNullAt(int rowId) {
     if (nulls == null) return false;
-    // If @@@ existins in @@@@, data is null.
-    if (isTopLevel) {
+    if (data != null) {
       return nulls[rowId] == 1;
     } else {
       return unsafeArray.isNullAt(rowId);
