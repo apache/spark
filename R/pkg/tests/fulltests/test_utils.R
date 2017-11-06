@@ -158,14 +158,6 @@ test_that("varargsToJProperties", {
   expect_equal(callJMethod(jprops, "size"), 0L)
 })
 
-test_that("convertToJSaveMode", {
-  s <- convertToJSaveMode("error")
-  expect_true(class(s) == "jobj")
-  expect_match(capture.output(print.jobj(s)), "Java ref type org.apache.spark.sql.SaveMode id ")
-  expect_error(convertToJSaveMode("foo"),
-    'mode should be one of "append", "overwrite", "error", "ignore"') #nolint
-})
-
 test_that("captureJVMException", {
   method <- "createStructField"
   expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", method,
