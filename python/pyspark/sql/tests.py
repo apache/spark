@@ -2598,16 +2598,6 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
 
-    def test_printout(self):
-        print("Python [%s]" % str(sys.version_info))
-
-        if _have_pandas:
-            import pandas as pd
-            print("Pandas [%s]" % pd.__version__)
-        else:
-            print("")
-        raise Exeption()
-
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
@@ -3210,7 +3200,7 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertTrue(pdf.empty)
 
 
-@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
+@unittest.skipIf(not _have_pandas or not _have_arrow or sys.version >= '3', "Pandas or Arrow not installed")
 class VectorizedUDFTests(ReusedSQLTestCase):
 
     @classmethod
@@ -3478,58 +3468,56 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         res = df.select(date_f(col("date")))
         self.assertEquals(df.collect(), res.collect())
 
-    # def test_vectorized_udf_timestamps(self):
-    #     from pyspark.sql.functions import pandas_udf, col
-    #     from datetime import datetime
-    #     schema = StructType([
-    #         StructField("idx", LongType(), True),
-    #         StructField("timestamp", TimestampType(), True)])
-    #     data = [(0, datetime(1969, 1, 1, 1, 1, 1)),
-    #             (1, datetime(2012, 2, 2, 2, 2, 2)),
-    #             (2, None),
-    #             (3, datetime(2100, 4, 4, 4, 4, 4))]
-    #
-    #     # TODO: remove later
-    #     t = TimestampType()
-    #     print([(idx, t.toInternal(ts)) for idx, ts in data])
-    #     print([(idx, t.fromInternal(t.toInternal(ts))) for idx, ts in data])
-    #     print("Python [%s]" % str(sys.version_info))
-    #     import pandas as pd
-    #     print("Pandas [%s]" % pd.__version__)
-    #
-    #     df = self.spark.createDataFrame(data, schema=schema)
-    #     df.show()  # TODO: remove later
-    #
-    #     # Check that a timestamp passed through a pandas_udf will not be altered by timezone calc
-    #     f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType())
-    #     df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
-    #     df.show()  # TODO: remove later
-    #     if sys.version < '3':
-    #         raise Exception()
-    #     else:
-    #         @pandas_udf(returnType=StringType())
-    #         def check_data(idx, timestamp, timestamp_copy):
-    #             import pandas as pd
-    #             msgs = []
-    #             is_equal = timestamp.isnull()  # use this array to check values are equal
-    #             for i in range(len(idx)):
-    #                 # Check that timestamps are as expected in the UDF
-    #                 if (is_equal[i] and data[idx[i]][1] is None) or \
-    #                         timestamp[i].to_pydatetime() == data[idx[i]][1]:
-    #                     msgs.append(None)
-    #                 else:
-    #                     msgs.append(
-    #                         "timestamp values are not equal (timestamp='%s': data[%d][1]='%s')"
-    #                         % (timestamp[i], idx[i], data[idx[i]][1]))
-    #             return pd.Series(msgs)
-    #
-    #         result = df.withColumn("check_data", check_data(col("idx"), col("timestamp"),
-    #                                                         col("timestamp_copy"))).collect()
-    #         # Check that collection values are correct
-    #         self.assertEquals(len(data), len(result))
-    #         for i in range(len(result)):
-    #             self.assertEquals(data[i][1], result[i][1])  # "timestamp" col
-    #             self.assertIsNone(result[i][3])  # "check_data" col
+    def test_vectorized_udf_timestamps(self):
+        from pyspark.sql.functions import pandas_udf, col
+        from datetime import datetime
+        schema = StructType([
+            StructField("idx", LongType(), True),
+            StructField("timestamp", TimestampType(), True)])
+        data = [(0, datetime(1969, 1, 1, 1, 1, 1)),
+                (1, datetime(2012, 2, 2, 2, 2, 2)),
+                (2, None),
+                (3, datetime(2100, 4, 4, 4, 4, 4))]
+
+        # TODO: remove later
+        t = TimestampType()
+        print([(idx, t.toInternal(ts)) for idx, ts in data])
+        print([(idx, t.fromInternal(t.toInternal(ts))) for idx, ts in data])
+        print("Python [%s]" % str(sys.version_info))
+        import pandas as pd
+        print("Pandas [%s]" % pd.__version__)
+
+        df = self.spark.createDataFrame(data, schema=schema)
+        df.show()  # TODO: remove later
+
+        # Check that a timestamp passed through a pandas_udf will not be altered by timezone calc
+        f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType())
+        df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
+        df.show()  # TODO: remove later
+
+        @pandas_udf(returnType=StringType())
+        def check_data(idx, timestamp, timestamp_copy):
+            import pandas as pd
+            msgs = []
+            is_equal = timestamp.isnull()  # use this array to check values are equal
+            for i in range(len(idx)):
+                # Check that timestamps are as expected in the UDF
+                if (is_equal[i] and data[idx[i]][1] is None) or \
+                        timestamp[i].to_pydatetime() == data[idx[i]][1]:
+                    msgs.append(None)
+                else:
+                    msgs.append(
+                        "timestamp values are not equal (timestamp='%s': data[%d][1]='%s')"
+                        % (timestamp[i], idx[i], data[idx[i]][1]))
+            return pd.Series(msgs)
+
+        result = df.withColumn("check_data", check_data(col("idx"), col("timestamp"),
+                                                        col("timestamp_copy"))).collect()
+        # Check that collection values are correct
+        self.assertEquals(len(data), len(result))
+        for i in range(len(result)):
+            self.assertEquals(data[i][1], result[i][1])  # "timestamp" col
+            self.assertIsNone(result[i][3])  # "check_data" col
 
     def test_vectorized_udf_return_timestamp_tz(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -3569,46 +3557,46 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             else:
                 self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", orig_value)
 
-    # def test_vectorized_udf_timestamps_respect_session_timezone(self):
-    #     from pyspark.sql.functions import pandas_udf, col
-    #     from datetime import datetime
-    #     import pandas as pd
-    #     schema = StructType([
-    #         StructField("idx", LongType(), True),
-    #         StructField("timestamp", TimestampType(), True)])
-    #     data = [(1, datetime(1969, 1, 1, 1, 1, 1)),
-    #             (2, datetime(2012, 2, 2, 2, 2, 2)),
-    #             (3, None),
-    #             (4, datetime(2100, 4, 4, 4, 4, 4))]
-    #     df = self.spark.createDataFrame(data, schema=schema)
-    #
-    #     f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType())
-    #     internal_value = pandas_udf(
-    #         lambda ts: ts.apply(lambda ts: ts.value if ts is not pd.NaT else None), LongType())
-    #
-    #     orig_tz = self.spark.conf.get("spark.sql.session.timeZone")
-    #     try:
-    #         timezone = "America/New_York"
-    #         self.spark.conf.set("spark.sql.session.timeZone", timezone)
-    #         self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "false")
-    #         try:
-    #             df_la = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
-    #                 .withColumn("internal_value", internal_value(col("timestamp")))
-    #             result_la = df_la.select(col("idx"), col("internal_value")).collect()
-    #             diff = 3 * 60 * 60 * 1000 * 1000 * 1000
-    #             result_la_corrected = \
-    #                 df_la.select(col("idx"), col("tscopy"), col("internal_value") + diff).collect()
-    #         finally:
-    #             self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
-    #
-    #         df_ny = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
-    #             .withColumn("internal_value", internal_value(col("timestamp")))
-    #         result_ny = df_ny.select(col("idx"), col("tscopy"), col("internal_value")).collect()
-    #
-    #         self.assertNotEqual(result_ny, result_la)
-    #         self.assertEqual(result_ny, result_la_corrected)
-    #     finally:
-    #         self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
+    def test_vectorized_udf_timestamps_respect_session_timezone(self):
+        from pyspark.sql.functions import pandas_udf, col
+        from datetime import datetime
+        import pandas as pd
+        schema = StructType([
+            StructField("idx", LongType(), True),
+            StructField("timestamp", TimestampType(), True)])
+        data = [(1, datetime(1969, 1, 1, 1, 1, 1)),
+                (2, datetime(2012, 2, 2, 2, 2, 2)),
+                (3, None),
+                (4, datetime(2100, 4, 4, 4, 4, 4))]
+        df = self.spark.createDataFrame(data, schema=schema)
+
+        f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType())
+        internal_value = pandas_udf(
+            lambda ts: ts.apply(lambda ts: ts.value if ts is not pd.NaT else None), LongType())
+
+        orig_tz = self.spark.conf.get("spark.sql.session.timeZone")
+        try:
+            timezone = "America/New_York"
+            self.spark.conf.set("spark.sql.session.timeZone", timezone)
+            self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "false")
+            try:
+                df_la = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
+                    .withColumn("internal_value", internal_value(col("timestamp")))
+                result_la = df_la.select(col("idx"), col("internal_value")).collect()
+                diff = 3 * 60 * 60 * 1000 * 1000 * 1000
+                result_la_corrected = \
+                    df_la.select(col("idx"), col("tscopy"), col("internal_value") + diff).collect()
+            finally:
+                self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
+
+            df_ny = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
+                .withColumn("internal_value", internal_value(col("timestamp")))
+            result_ny = df_ny.select(col("idx"), col("tscopy"), col("internal_value")).collect()
+
+            self.assertNotEqual(result_ny, result_la)
+            self.assertEqual(result_ny, result_la_corrected)
+        finally:
+            self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
