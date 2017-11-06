@@ -232,7 +232,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(tree2.rootNode.prediction === lp.label)
   }
 
-  ignore("Multiclass classification with unordered categorical features: split calculations") {
+  test("Multiclass classification with unordered categorical features: split calculations") {
     val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML)
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -249,28 +249,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metadata.isUnordered(featureIndex = 1))
     val splits = RandomForest.findSplits(rdd, metadata, seed = 42)
     assert(splits.length === 2)
-    assert(splits(0).length === 3)
+    assert(splits(0).length === 0)
     assert(metadata.numSplits(0) === 3)
     assert(metadata.numBins(0) === 3)
     assert(metadata.numSplits(1) === 3)
     assert(metadata.numBins(1) === 3)
-
-    // Expecting 2^2 - 1 = 3 splits per feature
-    def checkCategoricalSplit(s: Split, featureIndex: Int, leftCategories: Array[Double]): Unit = {
-      assert(s.featureIndex === featureIndex)
-      assert(s.isInstanceOf[CategoricalSplit])
-      val s0 = s.asInstanceOf[CategoricalSplit]
-      assert(s0.leftCategories === leftCategories)
-      assert(s0.numCategories === 3)  // for this unit test
-    }
-    // Feature 0
-    checkCategoricalSplit(splits(0)(0), 0, Array(0.0))
-    checkCategoricalSplit(splits(0)(1), 0, Array(1.0))
-    checkCategoricalSplit(splits(0)(2), 0, Array(0.0, 1.0))
-    // Feature 1
-    checkCategoricalSplit(splits(1)(0), 1, Array(0.0))
-    checkCategoricalSplit(splits(1)(1), 1, Array(1.0))
-    checkCategoricalSplit(splits(1)(2), 1, Array(0.0, 1.0))
   }
 
   test("Multiclass classification with ordered categorical features: split calculations") {
@@ -630,6 +613,42 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     TreeEnsembleModel.normalizeMapValues(map)
     val expected = Map(0 -> 1.0 / 3.0, 2 -> 2.0 / 3.0)
     assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
+  }
+
+  test("traverseUnorderedSplits") {
+
+    val numBins = 8
+    val numSplits = DecisionTreeMetadata.numUnorderedSplits(numBins)
+
+    val resultCheck = Array.fill(numSplits + 1)(false)
+
+    RandomForest.traverseUnorderedSplits[Int](numBins, 0,
+      (statsVal, binIndex) => statsVal + (1 << binIndex),
+      (bitSet, statsVal) => {
+        // We get a combination here, the bitSet mark the bits to be true
+        // which are in the combination.
+        // the statsVal is the combNumber:
+        // e.g.
+        // suppose get combination [0,0,1,0,1,1,0,1] (binIndex from high to low)
+        // then the statsVal == the number which binary representation is "00101101"
+
+        // 1. check the combination do not be traversed more than once
+        assert(resultCheck(statsVal) === false)
+        resultCheck(statsVal) = true
+
+        // 2. check the combNumber we get is correct.
+        // e.g combNumber "00101101" (binary format) match the combination stored in
+        // the bitSet [0,0,1,0,1,1,0,1]
+        for (i <- 0 until numBins) {
+          val testBit = (((statsVal >> i) & 1) == 1)
+          assert(bitSet.get(i) === testBit)
+        }
+      }
+    )
+    // 3. check the traverse cover all combinations (total combination number = numSplits)
+    for (i <- 1 to numSplits) {
+      assert(resultCheck(i) === true)
+    }
   }
 }
 
