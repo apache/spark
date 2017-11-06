@@ -17,10 +17,9 @@
 
 package org.apache.spark.ml.summary
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.DataFrame
 
-trait PredictionSummary extends Serializable {
+private[spark] trait PredictionSummary extends Serializable {
 
   /** Dataframe output by the model's `transform` method. */
   def predictions: DataFrame
@@ -33,7 +32,7 @@ trait PredictionSummary extends Serializable {
 
 }
 
-trait SupervisedPredictionSummary extends PredictionSummary {
+private[spark] trait SupervisedPredictionSummary extends PredictionSummary {
 
   /** Field in "predictions" which gives the true label of each instance (if available). */
   def labelCol: String

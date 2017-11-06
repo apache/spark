@@ -21,7 +21,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
-trait RegressionSummary extends SupervisedPredictionSummary {
+private[spark] trait RegressionSummary extends SupervisedPredictionSummary {
 
   @transient private val metrics = new RegressionMetrics(
     predictions
@@ -29,7 +29,8 @@ trait RegressionSummary extends SupervisedPredictionSummary {
       .rdd
       .map { case Row(pred: Double, label: Double) => (pred, label) }, throughOrigin)
 
-  protected def throughOrigin: Boolean
+  /** If regression is linear and forced through the origin. */
+  protected def throughOrigin: Boolean = false
 
   /**
    * Returns the explained variance regression score.

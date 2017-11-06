@@ -30,7 +30,7 @@ import org.apache.spark.sql.DataFrame
  */
 @Since("2.0.0")
 @Experimental
-class KMeansSummary private[clustering] (
+class KMeansSummary private[ml] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,

@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Row}
  * @param k  Number of clusters.
  */
 @Experimental
+// TODO: make this a trait?
 class ClusteringSummary private[ml] (
     @transient override val predictions: DataFrame,
     override val predictionCol: String,

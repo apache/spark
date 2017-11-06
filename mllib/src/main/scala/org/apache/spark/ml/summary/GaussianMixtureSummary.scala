@@ -33,7 +33,7 @@ import org.apache.spark.sql.DataFrame
  */
 @Since("2.0.0")
 @Experimental
-class GaussianMixtureSummary private[clustering] (
+class GaussianMixtureSummary private[ml] (
     predictions: DataFrame,
     predictionCol: String,
     @Since("2.0.0") val probabilityCol: String,

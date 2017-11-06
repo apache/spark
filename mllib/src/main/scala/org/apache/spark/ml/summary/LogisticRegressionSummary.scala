@@ -67,9 +67,8 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
  */
 @Experimental
 sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary
-  with BinaryProbabilisticClassificationSummary {
+  with BinaryProbabilisticClassificationSummary
 
-}
 
 /**
  * :: Experimental ::

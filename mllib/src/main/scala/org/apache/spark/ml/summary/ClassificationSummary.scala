@@ -16,7 +16,6 @@
  */
 package org.apache.spark.ml.summary
 
-import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -24,7 +23,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 
-trait ClassificationSummary extends SupervisedPredictionSummary {
+private[spark] trait ClassificationSummary extends SupervisedPredictionSummary {
 
   @transient private val multiclassMetrics = {
     new MulticlassMetrics(
@@ -43,39 +42,32 @@ trait ClassificationSummary extends SupervisedPredictionSummary {
    * (e.g., from truePositiveRateByLabel) will be of length numClasses-1 instead of the
    * expected numClasses.
    */
-  @Since("2.3.0")
   def labels: Array[Double] = multiclassMetrics.labels
 
   /** Returns true positive rate for each label (category). */
-  @Since("2.3.0")
   def truePositiveRateByLabel: Array[Double] = recallByLabel
 
   /** Returns false positive rate for each label (category). */
-  @Since("2.3.0")
   def falsePositiveRateByLabel: Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.falsePositiveRate(label))
   }
 
   /** Returns precision for each label (category). */
-  @Since("2.3.0")
   def precisionByLabel: Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.precision(label))
   }
 
   /** Returns recall for each label (category). */
-  @Since("2.3.0")
   def recallByLabel: Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.recall(label))
   }
 
   /** Returns f-measure for each label (category). */
-  @Since("2.3.0")
   def fMeasureByLabel(beta: Double): Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.fMeasure(label, beta))
   }
 
   /** Returns f1-measure for each label (category). */
-  @Since("2.3.0")
   def fMeasureByLabel: Array[Double] = fMeasureByLabel(1.0)
 
   /**
@@ -83,51 +75,44 @@ trait ClassificationSummary extends SupervisedPredictionSummary {
    * (equals to the total number of correctly classified instances
    * out of the total number of instances.)
    */
-  @Since("2.3.0")
   def accuracy: Double = multiclassMetrics.accuracy
 
   /**
    * Returns weighted true positive rate.
    * (equals to precision, recall and f-measure)
    */
-  @Since("2.3.0")
   def weightedTruePositiveRate: Double = weightedRecall
 
   /** Returns weighted false positive rate. */
-  @Since("2.3.0")
   def weightedFalsePositiveRate: Double = multiclassMetrics.weightedFalsePositiveRate
 
   /**
    * Returns weighted averaged recall.
    * (equals to precision, recall and f-measure)
    */
-  @Since("2.3.0")
   def weightedRecall: Double = multiclassMetrics.weightedRecall
 
   /** Returns weighted averaged precision. */
-  @Since("2.3.0")
   def weightedPrecision: Double = multiclassMetrics.weightedPrecision
 
   /** Returns weighted averaged f-measure. */
-  @Since("2.3.0")
   def weightedFMeasure(beta: Double): Double = multiclassMetrics.weightedFMeasure(beta)
 
   /** Returns weighted averaged f1-measure. */
-  @Since("2.3.0")
   def weightedFMeasure: Double = multiclassMetrics.weightedFMeasure(1.0)
 
 }
 
-trait ProbabilisticClassificationSummary extends ClassificationSummary {
+private[spark] trait ProbabilisticClassificationSummary extends ClassificationSummary {
 
   /** Field in "predictions" which gives the probability of each class as a vector. */
   def probabilityCol: String
 
 }
 
-trait BinaryClassificationSummary extends ClassificationSummary
+private[spark] trait BinaryClassificationSummary extends ClassificationSummary
 
-trait BinaryProbabilisticClassificationSummary extends BinaryClassificationSummary
+private[spark] trait BinaryProbabilisticClassificationSummary extends BinaryClassificationSummary
   with ProbabilisticClassificationSummary {
 
   private val sparkSession = predictions.sparkSession
@@ -150,7 +135,6 @@ trait BinaryProbabilisticClassificationSummary extends BinaryClassificationSumma
    * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
    * This will change in later Spark versions.
    */
-  @Since("1.5.0")
   @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
 
   /**
@@ -159,7 +143,6 @@ trait BinaryProbabilisticClassificationSummary extends BinaryClassificationSumma
    * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
    * This will change in later Spark versions.
    */
-  @Since("1.5.0")
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
 
   /**
@@ -169,7 +152,6 @@ trait BinaryProbabilisticClassificationSummary extends BinaryClassificationSumma
    * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
    * This will change in later Spark versions.
    */
-  @Since("1.5.0")
   @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
 
   /**
@@ -178,7 +160,6 @@ trait BinaryProbabilisticClassificationSummary extends BinaryClassificationSumma
    * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
    * This will change in later Spark versions.
    */
-  @Since("1.5.0")
   @transient lazy val fMeasureByThreshold: DataFrame = {
     binaryMetrics.fMeasureByThreshold().toDF("threshold", "F-Measure")
   }
@@ -191,7 +172,6 @@ trait BinaryProbabilisticClassificationSummary extends BinaryClassificationSumma
    * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
    * This will change in later Spark versions.
    */
-  @Since("1.5.0")
   @transient lazy val precisionByThreshold: DataFrame = {
     binaryMetrics.precisionByThreshold().toDF("threshold", "precision")
   }
@@ -204,7 +184,6 @@ trait BinaryProbabilisticClassificationSummary extends BinaryClassificationSumma
    * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
    * This will change in later Spark versions.
    */
-  @Since("1.5.0")
   @transient lazy val recallByThreshold: DataFrame = {
     binaryMetrics.recallByThreshold().toDF("threshold", "recall")
   }

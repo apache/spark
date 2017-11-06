@@ -19,7 +19,8 @@ package org.apache.spark.ml.clustering
 
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.hadoop.fs.Path
-import org.apache.spark.annotation.{Experimental, Since}
+
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.EPSILON
@@ -27,7 +28,7 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
-import org.apache.spark.ml.summary.{ClusteringSummary, GaussianMixtureSummary}
+import org.apache.spark.ml.summary.GaussianMixtureSummary
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix, Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
@@ -670,5 +671,3 @@ private class ExpectationAggregator(
     this
   }
 }
-
-
