@@ -30,15 +30,15 @@ import org.apache.spark.sql.types.StructType;
  * {@link org.apache.spark.sql.sources.v2.ReadSupportWithSchema#createReader(
  * StructType, org.apache.spark.sql.sources.v2.DataSourceV2Options)}.
  * It can mix in various query optimization interfaces to speed up the data scan. The actual scan
- * logic should be delegated to {@link ReadTask}s that are returned by {@link #createReadTasks()}.
+ * logic is delegated to {@link ReadTask}s that are returned by {@link #createReadTasks()}.
  *
  * There are mainly 3 kinds of query optimizations:
  *   1. Operators push-down. E.g., filter push-down, required columns push-down(aka column
- *      pruning), etc. These push-down interfaces are named like `SupportsPushDownXXX`.
- *   2. Information Reporting. E.g., statistics reporting, ordering reporting, etc. These
- *      reporting interfaces are named like `SupportsReportingXXX`.
- *   3. Special scans. E.g, columnar scan, unsafe row scan, etc. These scan interfaces are named
- *      like `SupportsScanXXX`.
+ *      pruning), etc. Names of these interfaces start with `SupportsPushDown`.
+ *   2. Information Reporting. E.g., statistics reporting, ordering reporting, etc.
+ *      Names of these interfaces start with `SupportsReporting`.
+ *   3. Special scans. E.g, columnar scan, unsafe row scan, etc.
+ *      Names of these interfaces start with `SupportsScan`.
  *
  * Spark first applies all operator push-down optimizations that this data source supports. Then
  * Spark collects information this data source reported for further optimizations. Finally Spark

@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.orc
+package org.apache.spark.sql.execution.datasources.orc
 
 import java.util.Locale
+
+import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
@@ -25,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Options for the ORC data source.
  */
-private[orc] class OrcOptions(
+class OrcOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
   extends Serializable {
@@ -40,9 +42,9 @@ private[orc] class OrcOptions(
    * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
   val compressionCodec: String = {
-    // `compression`, `orc.compress`, and `spark.sql.orc.compression.codec` are
-    // in order of precedence from highest to lowest.
-    val orcCompressionConf = parameters.get(OrcRelation.ORC_COMPRESSION)
+    // `compression`, `orc.compress`(i.e., OrcConf.COMPRESS), and `spark.sql.orc.compression.codec`
+    // are in order of precedence from highest to lowest.
+    val orcCompressionConf = parameters.get(COMPRESS.getAttribute)
     val codecName = parameters
       .get("compression")
       .orElse(orcCompressionConf)
@@ -57,7 +59,7 @@ private[orc] class OrcOptions(
   }
 }
 
-private[orc] object OrcOptions {
+object OrcOptions {
   // The ORC compression short names
   private val shortOrcCompressionCodecNames = Map(
     "none" -> "NONE",

@@ -800,10 +800,11 @@ root
 {% endhighlight %}
 
 Notice that the data types of the partitioning columns are automatically inferred. Currently,
-numeric data types and string type are supported. Sometimes users may not want to automatically
-infer the data types of the partitioning columns. For these use cases, the automatic type inference
-can be configured by `spark.sql.sources.partitionColumnTypeInference.enabled`, which is default to
-`true`. When type inference is disabled, string type will be used for the partitioning columns.
+numeric data types, date, timestamp and string type are supported. Sometimes users may not want
+to automatically infer the data types of the partitioning columns. For these use cases, the
+automatic type inference can be configured by
+`spark.sql.sources.partitionColumnTypeInference.enabled`, which is default to `true`. When type
+inference is disabled, string type will be used for the partitioning columns.
 
 Starting from Spark 1.6.0, partition discovery only finds partitions under the given paths
 by default. For the above example, if users pass `path/to/table/gender=male` to either
@@ -1957,6 +1958,14 @@ Not all the APIs of the Hive UDF/UDTF/UDAF are supported by Spark SQL. Below are
   Spark SQL currently does not support the reuse of aggregation.
 * `getWindowingEvaluator` (`GenericUDAFEvaluator`) is a function to optimize aggregation by evaluating
   an aggregate over a fixed window.
+  
+### Incompatible Hive UDF
+
+Below are the scenarios in which Hive and Spark generate different results:
+
+* `SQRT(n)` If n < 0, Hive returns null, Spark SQL returns NaN.
+* `ACOS(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
+* `ASIN(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
 
 # Reference
 

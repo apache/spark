@@ -186,7 +186,7 @@ case class AlterTableRenameCommand(
 */
 case class AlterTableAddColumnsCommand(
     table: TableIdentifier,
-    columns: Seq[StructField]) extends RunnableCommand {
+    colsToAdd: Seq[StructField]) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(catalog, table)
@@ -199,17 +199,13 @@ case class AlterTableAddColumnsCommand(
     }
     catalog.refreshTable(table)
 
-    // make sure any partition columns are at the end of the fields
-    val reorderedSchema = catalogTable.dataSchema ++ columns ++ catalogTable.partitionSchema
-    val newSchema = catalogTable.schema.copy(fields = reorderedSchema.toArray)
-
     SchemaUtils.checkColumnNameDuplication(
-      reorderedSchema.map(_.name), "in the table definition of " + table.identifier,
+      (colsToAdd ++ catalogTable.schema).map(_.name),
+      "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
-    DDLUtils.checkDataSchemaFieldNames(catalogTable.copy(schema = newSchema))
+    DDLUtils.checkDataColNames(catalogTable, colsToAdd.map(_.name))
 
-    catalog.alterTableSchema(table, newSchema)
-
+    catalog.alterTableDataSchema(table, StructType(catalogTable.dataSchema ++ colsToAdd))
     Seq.empty[Row]
   }
 
@@ -235,11 +231,10 @@ case class AlterTableAddColumnsCommand(
       DataSource.lookupDataSource(catalogTable.provider.get).newInstance() match {
         // For datasource table, this command can only support the following File format.
         // TextFileFormat only default to one column "value"
-        // OrcFileFormat can not handle difference between user-specified schema and
-        // inferred schema yet. TODO, once this issue is resolved , we can add Orc back.
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
         case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat =>
+        case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
         case s =>
           throw new AnalysisException(
             s"""

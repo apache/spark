@@ -82,6 +82,9 @@ class BlockManagerMasterEndpoint(
     case GetLocations(blockId) =>
       context.reply(getLocations(blockId))
 
+    case GetLocationsAndStatus(blockId) =>
+      context.reply(getLocationsAndStatus(blockId))
+
     case GetLocationsMultipleBlockIds(blockIds) =>
       context.reply(getLocationsMultipleBlockIds(blockIds))
 
@@ -420,6 +423,17 @@ class BlockManagerMasterEndpoint(
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
+  }
+
+  private def getLocationsAndStatus(blockId: BlockId): Option[BlockLocationsAndStatus] = {
+    val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
+    val status = locations.headOption.flatMap { bmId => blockManagerInfo(bmId).getStatus(blockId) }
+
+    if (locations.nonEmpty && status.isDefined) {
+      Some(BlockLocationsAndStatus(locations, status.get))
+    } else {
+      None
+    }
   }
 
   private def getLocationsMultipleBlockIds(

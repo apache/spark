@@ -29,20 +29,14 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.StructType
 
+/**
+ * Physical plan node for scanning data from a data source.
+ */
 case class DataSourceV2ScanExec(
-    fullOutput: Array[AttributeReference],
-    @transient reader: DataSourceV2Reader,
-    // TODO: these 3 parameters are only used to determine the equality of the scan node, however,
-    // the reader also have this information, and ideally we can just rely on the equality of the
-    // reader. The only concern is, the reader implementation is outside of Spark and we have no
-    // control.
-    readSchema: StructType,
-    @transient filters: ExpressionSet,
-    hashPartitionKeys: Seq[String]) extends LeafExecNode {
+    fullOutput: Seq[AttributeReference],
+    @transient reader: DataSourceV2Reader) extends LeafExecNode with DataSourceReaderHolder {
 
-  def output: Seq[Attribute] = readSchema.map(_.name).map { name =>
-    fullOutput.find(_.name == name).get
-  }
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
 
   override def references: AttributeSet = AttributeSet.empty
 
@@ -73,8 +67,9 @@ class RowToUnsafeRowReadTask(rowReadTask: ReadTask[Row], schema: StructType)
 
   override def preferredLocations: Array[String] = rowReadTask.preferredLocations
 
-  override def createReader: DataReader[UnsafeRow] = {
-    new RowToUnsafeDataReader(rowReadTask.createReader, RowEncoder.apply(schema))
+  override def createDataReader: DataReader[UnsafeRow] = {
+    new RowToUnsafeDataReader(
+      rowReadTask.createDataReader, RowEncoder.apply(schema).resolveAndBind())
   }
 }
 

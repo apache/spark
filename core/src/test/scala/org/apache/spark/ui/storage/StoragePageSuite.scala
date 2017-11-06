@@ -57,6 +57,7 @@ class StoragePageSuite extends SparkFunSuite {
     val xmlNodes = storagePage.rddTable(Seq(rdd1, rdd2, rdd3))
 
     val headers = Seq(
+      "ID",
       "RDD Name",
       "Storage Level",
       "Cached Partitions",
@@ -67,19 +68,19 @@ class StoragePageSuite extends SparkFunSuite {
 
     assert((xmlNodes \\ "tr").size === 3)
     assert(((xmlNodes \\ "tr")(0) \\ "td").map(_.text.trim) ===
-      Seq("rdd1", "Memory Deserialized 1x Replicated", "10", "100%", "100.0 B", "0.0 B"))
+      Seq("1", "rdd1", "Memory Deserialized 1x Replicated", "10", "100%", "100.0 B", "0.0 B"))
     // Check the url
     assert(((xmlNodes \\ "tr")(0) \\ "td" \ "a")(0).attribute("href").map(_.text) ===
       Some("http://localhost:4040/storage/rdd?id=1"))
 
     assert(((xmlNodes \\ "tr")(1) \\ "td").map(_.text.trim) ===
-      Seq("rdd2", "Disk Serialized 1x Replicated", "5", "50%", "0.0 B", "200.0 B"))
+      Seq("2", "rdd2", "Disk Serialized 1x Replicated", "5", "50%", "0.0 B", "200.0 B"))
     // Check the url
     assert(((xmlNodes \\ "tr")(1) \\ "td" \ "a")(0).attribute("href").map(_.text) ===
       Some("http://localhost:4040/storage/rdd?id=2"))
 
     assert(((xmlNodes \\ "tr")(2) \\ "td").map(_.text.trim) ===
-      Seq("rdd3", "Disk Memory Serialized 1x Replicated", "10", "100%", "400.0 B", "500.0 B"))
+      Seq("3", "rdd3", "Disk Memory Serialized 1x Replicated", "10", "100%", "400.0 B", "500.0 B"))
     // Check the url
     assert(((xmlNodes \\ "tr")(2) \\ "td" \ "a")(0).attribute("href").map(_.text) ===
       Some("http://localhost:4040/storage/rdd?id=3"))

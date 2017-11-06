@@ -34,19 +34,8 @@ case class LogicalRelation(
     override val isStreaming: Boolean)
   extends LeafNode with MultiInstanceRelation {
 
-  // Logical Relations are distinct if they have different output for the sake of transformations.
-  override def equals(other: Any): Boolean = other match {
-    case l @ LogicalRelation(otherRelation, _, _, isStreaming) =>
-      relation == otherRelation && output == l.output && isStreaming == l.isStreaming
-    case _ => false
-  }
-
-  override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(relation, output)
-  }
-
   // Only care about relation when canonicalizing.
-  override lazy val canonicalized: LogicalPlan = copy(
+  override def doCanonicalize(): LogicalPlan = copy(
     output = output.map(QueryPlan.normalizeExprId(_, output)),
     catalogTable = None)
 

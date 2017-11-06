@@ -93,6 +93,8 @@ case class ExpandExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def needCopyResult: Boolean = true
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     /*
      * When the projections list looks like:
@@ -187,7 +189,6 @@ case class ExpandExec(
     val i = ctx.freshName("i")
     // these column have to declared before the loop.
     val evaluate = evaluateVariables(outputColumns)
-    ctx.copyResult = true
     s"""
        |$evaluate
        |for (int $i = 0; $i < ${projections.length}; $i ++) {

@@ -31,8 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression;
  * {@link SupportsPushDownFilters}, Spark will ignore {@link SupportsPushDownFilters} and only
  * process this interface.
  */
-@InterfaceStability.Evolving
-@Experimental
 @InterfaceStability.Unstable
 public interface SupportsPushDownCatalystFilters {
 
@@ -40,4 +38,12 @@ public interface SupportsPushDownCatalystFilters {
    * Pushes down filters, and returns unsupported filters.
    */
   Expression[] pushCatalystFilters(Expression[] filters);
+
+  /**
+   * Returns the catalyst filters that are pushed in {@link #pushCatalystFilters(Expression[])}.
+   * It's possible that there is no filters in the query and
+   * {@link #pushCatalystFilters(Expression[])} is never called, empty array should be returned for
+   * this case.
+   */
+  Expression[] pushedCatalystFilters();
 }

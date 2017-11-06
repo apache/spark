@@ -28,11 +28,11 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, Unresolved
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.execution.python.PythonUDF
+import org.apache.spark.sql.execution.python.{PythonUDF, PythonUdfType}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{NumericType, StructField, StructType}
+import org.apache.spark.sql.types.{NumericType, StructType}
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -85,7 +85,7 @@ class RelationalGroupedDataset protected[sql](
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
-    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
+    case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
@@ -321,10 +321,10 @@ class RelationalGroupedDataset protected[sql](
     // Get the distinct values of the column and sort them so its consistent
     val values = df.select(pivotColumn)
       .distinct()
+      .limit(maxValues + 1)
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
-      .rdd
+      .collect()
       .map(_.get(0))
-      .take(maxValues + 1)
       .toSeq
 
     if (values.length > maxValues) {
@@ -437,7 +437,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Applies a vectorized python user-defined function to each group of data.
+   * Applies a grouped vectorized python user-defined function to each group of data.
    * The user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`.
    * For each group, all elements in the group are passed as a `pandas.DataFrame` and the results
    * for all groups are combined into a new [[DataFrame]].
@@ -449,7 +449,8 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
-    require(expr.vectorized, "Must pass a vectorized python udf")
+    require(expr.pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF,
+      "Must pass a grouped vectorized python udf")
     require(expr.dataType.isInstanceOf[StructType],
       "The returnType of the vectorized python udf must be a StructType")
 
@@ -465,6 +466,19 @@ class RelationalGroupedDataset protected[sql](
 
     Dataset.ofRows(df.sparkSession, plan)
   }
+
+  override def toString: String = {
+    val builder = new StringBuilder
+    builder.append("RelationalGroupedDataset: [grouping expressions: [")
+    val kFields = groupingExprs.map(_.asInstanceOf[NamedExpression]).map {
+      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+    }
+    builder.append(kFields.take(2).mkString(", "))
+    if (kFields.length > 2) {
+      builder.append(" ... " + (kFields.length - 2) + " more field(s)")
+    }
+    builder.append(s"], value: ${df.toString}, type: $groupType]").toString()
+  }
 }
 
 private[sql] object RelationalGroupedDataset {
@@ -479,7 +493,9 @@ private[sql] object RelationalGroupedDataset {
   /**
    * The Grouping Type
    */
-  private[sql] trait GroupType
+  private[sql] trait GroupType {
+    override def toString: String = getClass.getSimpleName.stripSuffix("$").stripSuffix("Type")
+  }
 
   /**
    * To indicate it's the GroupBy
