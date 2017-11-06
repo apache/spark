@@ -18,8 +18,11 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import java.math.{MathContext, RoundingMode}
+import java.nio.ByteBuffer
 
 import scala.util.control.NonFatal
+
+import com.google.common.primitives.{Doubles, Ints, Longs}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -124,7 +127,7 @@ case class ColumnStat(
     map.put(ColumnStat.KEY_MAX_LEN, maxLen.toString)
     min.foreach { v => map.put(ColumnStat.KEY_MIN_VALUE, toExternalString(v, colName, dataType)) }
     max.foreach { v => map.put(ColumnStat.KEY_MAX_VALUE, toExternalString(v, colName, dataType)) }
-    histogram.foreach { h => map.put(ColumnStat.KEY_HISTOGRAM, h.toString)}
+    histogram.foreach { h => map.put(ColumnStat.KEY_HISTOGRAM, HistogramSerializer.serialize(h)) }
     map.toMap
   }
 
@@ -199,7 +202,7 @@ object ColumnStat extends Logging {
         nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
         avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
         maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong,
-        histogram = map.get(KEY_HISTOGRAM).map(convertToHistogram)
+        histogram = map.get(KEY_HISTOGRAM).map(HistogramSerializer.deserialize)
       ))
     } catch {
       case NonFatal(e) =>
@@ -230,19 +233,6 @@ object ColumnStat extends Logging {
         throw new AnalysisException("Column statistics deserialization is not supported for " +
           s"column $name of data type: $dataType.")
     }
-  }
-
-  private def convertToHistogram(s: String): EquiHeightHistogram = {
-    val idx = s.indexOf(",")
-    if (idx <= 0) {
-      throw new AnalysisException("Failed to parse histogram.")
-    }
-    val height = s.substring(0, idx).toDouble
-    val pattern = "Bucket\\(([^,]+), ([^,]+), ([^\\)]+)\\)".r
-    val buckets = pattern.findAllMatchIn(s).map { m =>
-      EquiHeightBucket(m.group(1).toDouble, m.group(2).toDouble, m.group(3).toLong)
-    }.toSeq
-    EquiHeightHistogram(height, buckets)
   }
 
   /**
@@ -363,23 +353,7 @@ trait Histogram
  * @param height number of rows in each bucket
  * @param ehBuckets equi-height histogram buckets
  */
-case class EquiHeightHistogram(height: Double, ehBuckets: Seq[EquiHeightBucket]) extends Histogram {
-
-  override def toString: String = {
-    def bucketString(bucket: EquiHeightBucket): String = {
-      val sb = new StringBuilder
-      sb.append("Bucket(")
-      sb.append(bucket.lo)
-      sb.append(", ")
-      sb.append(bucket.hi)
-      sb.append(", ")
-      sb.append(bucket.ndv)
-      sb.append(")")
-      sb.toString()
-    }
-    height + ", " + ehBuckets.map(bucketString).mkString(", ")
-  }
-}
+case class EquiHeightHistogram(height: Double, ehBuckets: Seq[EquiHeightBucket]) extends Histogram
 
 /**
  * A bucket in an equi-height histogram. We use double type for lower/higher bound for simplicity.
@@ -388,3 +362,62 @@ case class EquiHeightHistogram(height: Double, ehBuckets: Seq[EquiHeightBucket])
  * @param ndv approximate number of distinct values in this bucket
  */
 case class EquiHeightBucket(lo: Double, hi: Double, ndv: Long)
+
+object HistogramSerializer {
+  // A flag to indicate the type of histogram
+  val EQUI_HEIGHT_HISTOGRAM_TYPE: Byte = 1
+
+  /**
+   * Serializes a given histogram to a string. For advanced statistics like histograms, sketches,
+   * etc, we don't provide readability for their serialized formats in metastore (as
+   * string-to-string table properties). This is because it's hard or unnatural for these
+   * statistics to be human readable. For example, histogram is probably split into multiple
+   * key-value properties, instead of a single, self-described property. And for
+   * count-min-sketch, it's essentially unnatural to make it a readable string.
+   */
+  final def serialize(histogram: Histogram): String = histogram match {
+    case h: EquiHeightHistogram =>
+      // type + numBuckets + height + numBuckets * (lo + hi + ndv)
+      val length = 1 + Ints.BYTES + Doubles.BYTES +
+        h.ehBuckets.length * (Doubles.BYTES + Doubles.BYTES + Longs.BYTES)
+      val buffer = ByteBuffer.wrap(new Array(length))
+      buffer.put(EQUI_HEIGHT_HISTOGRAM_TYPE)
+      buffer.putInt(h.ehBuckets.length)
+      buffer.putDouble(h.height)
+      var i = 0
+      while (i < h.ehBuckets.length) {
+        val b = h.ehBuckets(i)
+        buffer.putDouble(b.lo)
+        buffer.putDouble(b.hi)
+        buffer.putLong(b.ndv)
+        i += 1
+      }
+      val s = org.apache.commons.codec.binary.Base64.encodeBase64String(buffer.array())
+      s
+    case _ =>
+      throw new AnalysisException(s"Unsupported histogram: $histogram")
+  }
+
+  /** Deserializes a given string to a histogram. */
+  final def deserialize(str: String): Histogram = {
+    val bytes = org.apache.commons.codec.binary.Base64.decodeBase64(str)
+    val buffer = ByteBuffer.wrap(bytes)
+    buffer.get() match {
+      case 1 =>
+        val numBuckets = buffer.getInt
+        val height = buffer.getDouble
+        val buckets = new Array[EquiHeightBucket](numBuckets)
+        var i = 0
+        while (i < numBuckets) {
+          val lo = buffer.getDouble
+          val hi = buffer.getDouble
+          val ndv = buffer.getLong
+          buckets(i) = EquiHeightBucket(lo, hi, ndv)
+          i += 1
+        }
+        EquiHeightHistogram(height, buckets)
+      case other =>
+        throw new AnalysisException(s"Unknown histogram type: $other")
+    }
+  }
+}

@@ -1022,8 +1022,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       stats: CatalogStatistics,
       schema: StructType): Map[String, String] = {
 
-    var statsProperties: Map[String, String] =
-      Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
+    val statsProperties = new mutable.HashMap[String, String]()
+    statsProperties += STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString()
     if (stats.rowCount.isDefined) {
       statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
     }
@@ -1051,7 +1051,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
     }
 
-    statsProperties
+    statsProperties.toMap
   }
 
   private def statsFromProperties(
@@ -1110,8 +1110,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           if (valueToComplete.nonEmpty) {
             colStatMap += (previousKey.drop(keyPrefix.length) -> valueToComplete)
           }
-          ColumnStat.fromMap(table, field, colStatMap.toMap).foreach {
-            colStat => colStats += field.name -> colStat
+          ColumnStat.fromMap(table, field, colStatMap.toMap).foreach { cs =>
+            colStats += field.name -> cs
           }
         }
       }
