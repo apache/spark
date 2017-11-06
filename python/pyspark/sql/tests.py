@@ -3497,7 +3497,6 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         if sys.version < '3':
             raise Exception()
 
-
         @pandas_udf(returnType=StringType())
         def check_data(idx, timestamp, timestamp_copy):
             import pandas as pd
