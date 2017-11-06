@@ -705,7 +705,8 @@ private[spark] class Client(
       }
     }
 
-    val confDir = sys.env.getOrElse("SPARK_CONF_DIR", sys.env("SPARK_HOME") + "/conf")
+    val confDir =
+      sys.env.getOrElse("SPARK_CONF_DIR", sys.env("SPARK_HOME") + File.separator + "conf")
     val dir = new File(confDir)
     if (dir.isDirectory) {
       val files = dir.listFiles(new FileFilter {
