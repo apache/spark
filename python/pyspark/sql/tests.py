@@ -3494,6 +3494,9 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType())
         df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
         df.show()  # TODO: remove later
+        if sys.version < '3':
+            raise Exception()
+
 
         @pandas_udf(returnType=StringType())
         def check_data(idx, timestamp, timestamp_copy):
