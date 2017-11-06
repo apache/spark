@@ -537,9 +537,9 @@ private[evaluation] object CalinskiHarabasz {
 
     val clustersCenters = featureSumsSquaredNormSumsAndNumOfPoints.mapValues {
       case (featureSum, _, numOfPoints) =>
-        BLAS.scal(1 / numOfPoints, featureSum)
+        BLAS.scal(1 / numOfPoints.toDouble, featureSum)
         featureSum
-    }
+    }.map(identity) // required by https://issues.scala-lang.org/browse/SI-7005
 
     val datasetSquaredNormSum = featureSumsSquaredNormSumsAndNumOfPoints.map {
       case (_, (_, clusterSquaredNormSum, _)) => clusterSquaredNormSum
@@ -600,7 +600,7 @@ private[evaluation] object CalinskiHarabasz {
         }
       )
     val datasetCenter = featureSums.copy
-    BLAS.scal(1 / datasetNumOfPoints, datasetCenter)
+    BLAS.scal(1 / datasetNumOfPoints.toDouble, datasetCenter)
     (datasetCenter, featureSums, datasetNumOfPoints)
   }
 
