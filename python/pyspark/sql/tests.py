@@ -2598,6 +2598,16 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
 
+    def test_printout(self):
+        print("Python [%s]" % str(sys.version_info))
+
+        if _have_pandas:
+            import pandas as pd
+            print("Pandas [%s]" % pd.__version__)
+        else:
+            print("")
+        raise Exeption()
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
