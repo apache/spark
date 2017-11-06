@@ -158,7 +158,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
    */
   @tailrec
   private def submit(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
-    val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
+    val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
@@ -167,7 +167,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         try {
           proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
-              runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
+              runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
             }
           })
         } catch {
@@ -185,7 +185,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
             }
         }
       } else {
-        runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
+        runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
       }
     }
 
@@ -235,11 +235,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private[deploy] def prepareSubmitEnvironment(
       args: SparkSubmitArguments,
       conf: Option[HadoopConfiguration] = None)
-      : (Seq[String], Seq[String], Map[String, String], String) = {
+      : (Seq[String], Seq[String], SparkConf, String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
-    val sysProps = new HashMap[String, String]()
+    val sparkConf = new SparkConf()
     var childMainClass = ""
 
     // Set the cluster manager
@@ -337,10 +337,25 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }
     }
 
-    val sparkConf = new SparkConf(false)
     args.sparkProperties.foreach { case (k, v) => sparkConf.set(k, v) }
     val hadoopConf = conf.getOrElse(SparkHadoopUtil.newConfiguration(sparkConf))
     val targetDir = Utils.createTempDir()
+
+    // assure a keytab is available from any place in a JVM
+    if (clusterManager == YARN || clusterManager == LOCAL || clusterManager == MESOS) {
+      if (args.principal != null) {
+        if (args.keytab != null) {
+          require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")
+          // Add keytab and principal configurations in sysProps to make them available
+          // for later use; e.g. in spark sql, the isolated class loader used to talk
+          // to HiveMetastore will use these settings. They will be set as Java system
+          // properties and then loaded by SparkConf
+          sparkConf.set(KEYTAB, args.keytab)
+          sparkConf.set(PRINCIPAL, args.principal)
+          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+        }
+      }
+    }
 
     // Resolve glob path for different resources.
     args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
@@ -348,23 +363,24 @@ object SparkSubmit extends CommandLineUtils with Logging {
     args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
     args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
 
+    // This security manager will not need an auth secret, but set a dummy value in case
+    // spark.authenticate is enabled, otherwise an exception is thrown.
+    lazy val downloadConf = sparkConf.clone().set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
+    lazy val secMgr = new SecurityManager(downloadConf)
+
     // In client mode, download remote files.
     var localPrimaryResource: String = null
     var localJars: String = null
     var localPyFiles: String = null
     if (deployMode == CLIENT) {
-      // This security manager will not need an auth secret, but set a dummy value in case
-      // spark.authenticate is enabled, otherwise an exception is thrown.
-      sparkConf.set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
-      val secMgr = new SecurityManager(sparkConf)
       localPrimaryResource = Option(args.primaryResource).map {
-        downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr)
+        downloadFile(_, targetDir, downloadConf, hadoopConf, secMgr)
       }.orNull
       localJars = Option(args.jars).map {
-        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, downloadConf, hadoopConf, secMgr)
       }.orNull
       localPyFiles = Option(args.pyFiles).map {
-        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, downloadConf, hadoopConf, secMgr)
       }.orNull
     }
 
@@ -393,7 +409,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
             if (file.exists()) {
               file.toURI.toString
             } else {
-              downloadFile(resource, targetDir, sparkConf, hadoopConf, secMgr)
+              downloadFile(resource, targetDir, downloadConf, hadoopConf, secMgr)
             }
           case _ => uri.toString
         }
@@ -433,7 +449,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         args.files = mergeFileLists(args.files, args.pyFiles)
       }
       if (localPyFiles != null) {
-        sysProps("spark.submit.pyFiles") = localPyFiles
+        sparkConf.set("spark.submit.pyFiles", localPyFiles)
       }
     }
 
@@ -499,69 +515,69 @@ object SparkSubmit extends CommandLineUtils with Logging {
     }
 
     // Special flag to avoid deprecation warnings at the client
-    sysProps("SPARK_SUBMIT") = "true"
+    sys.props("SPARK_SUBMIT") = "true"
 
     // A list of rules to map each argument to system properties or command-line options in
     // each deploy mode; we iterate through these below
     val options = List[OptionAssigner](
 
       // All cluster managers
-      OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
+      OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.submit.deployMode"),
-      OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
-      OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
+        confKey = "spark.submit.deployMode"),
+      OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
+      OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
-        sysProp = "spark.driver.memory"),
+        confKey = "spark.driver.memory"),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.driver.extraClassPath"),
+        confKey = "spark.driver.extraClassPath"),
       OptionAssigner(args.driverExtraJavaOptions, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.driver.extraJavaOptions"),
+        confKey = "spark.driver.extraJavaOptions"),
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.driver.extraLibraryPath"),
+        confKey = "spark.driver.extraLibraryPath"),
 
       // Propagate attributes for dependency resolution at the driver side
-      OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars.packages"),
+      OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, confKey = "spark.jars.packages"),
       OptionAssigner(args.repositories, STANDALONE | MESOS, CLUSTER,
-        sysProp = "spark.jars.repositories"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars.ivy"),
+        confKey = "spark.jars.repositories"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS, CLUSTER, confKey = "spark.jars.ivy"),
       OptionAssigner(args.packagesExclusions, STANDALONE | MESOS,
-        CLUSTER, sysProp = "spark.jars.excludes"),
+        CLUSTER, confKey = "spark.jars.excludes"),
 
       // Yarn only
-      OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
+      OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
-        sysProp = "spark.executor.instances"),
-      OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.pyFiles"),
-      OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.jars"),
-      OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.files"),
-      OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.archives"),
-      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
-      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
+        confKey = "spark.executor.instances"),
+      OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.pyFiles"),
+      OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.jars"),
+      OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.files"),
+      OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.archives"),
+      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.principal"),
+      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.keytab"),
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
-        sysProp = "spark.executor.cores"),
+        confKey = "spark.executor.cores"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
-        sysProp = "spark.executor.memory"),
+        confKey = "spark.executor.memory"),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.cores.max"),
+        confKey = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.files"),
-      OptionAssigner(args.jars, LOCAL, CLIENT, sysProp = "spark.jars"),
-      OptionAssigner(args.jars, STANDALONE | MESOS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
+        confKey = "spark.files"),
+      OptionAssigner(args.jars, LOCAL, CLIENT, confKey = "spark.jars"),
+      OptionAssigner(args.jars, STANDALONE | MESOS, ALL_DEPLOY_MODES, confKey = "spark.jars"),
       OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN, CLUSTER,
-        sysProp = "spark.driver.memory"),
+        confKey = "spark.driver.memory"),
       OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN, CLUSTER,
-        sysProp = "spark.driver.cores"),
+        confKey = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
-        sysProp = "spark.driver.supervise"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
+        confKey = "spark.driver.supervise"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, confKey = "spark.jars.ivy"),
 
       // An internal option used only for spark-shell to add user jars to repl's classloader,
       // previously it uses "spark.jars" or "spark.yarn.dist.jars" which now may be pointed to
       // remote jars, so adding a new option to only specify local jars for spark-shell internally.
-      OptionAssigner(localJars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.repl.local.jars")
+      OptionAssigner(localJars, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.repl.local.jars")
     )
 
     // In client mode, launch the application main class directly
@@ -594,19 +610,24 @@ object SparkSubmit extends CommandLineUtils with Logging {
           (deployMode & opt.deployMode) != 0 &&
           (clusterManager & opt.clusterManager) != 0) {
         if (opt.clOption != null) { childArgs += (opt.clOption, opt.value) }
-        if (opt.sysProp != null) { sysProps.put(opt.sysProp, opt.value) }
+        if (opt.confKey != null) { sparkConf.set(opt.confKey, opt.value) }
       }
+    }
+
+    // In case of shells, spark.ui.showConsoleProgress can be true by default or by user.
+    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS)) {
+      sparkConf.set(UI_SHOW_CONSOLE_PROGRESS, true)
     }
 
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // For python and R files, the primary resource is already distributed as a regular file
     if (!isYarnCluster && !args.isPython && !args.isR) {
-      var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
+      var jars = sparkConf.getOption("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
       }
-      sysProps.put("spark.jars", jars.mkString(","))
+      sparkConf.set("spark.jars", jars.mkString(","))
     }
 
     // In standalone cluster mode, use the REST client to submit the application (Spark 1.3+).
@@ -632,28 +653,12 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // Let YARN know it's a pyspark app, so it distributes needed libraries.
     if (clusterManager == YARN) {
       if (args.isPython) {
-        sysProps.put("spark.yarn.isPython", "true")
-      }
-    }
-
-    // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL || clusterManager == MESOS) {
-      if (args.principal != null) {
-        if (args.keytab != null) {
-          require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")
-          // Add keytab and principal configurations in sysProps to make them available
-          // for later use; e.g. in spark sql, the isolated class loader used to talk
-          // to HiveMetastore will use these settings. They will be set as Java system
-          // properties and then loaded by SparkConf
-          sysProps.put("spark.yarn.keytab", args.keytab)
-          sysProps.put("spark.yarn.principal", args.principal)
-          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
-        }
+        sparkConf.set("spark.yarn.isPython", "true")
       }
     }
 
     if (clusterManager == MESOS && UserGroupInformation.isSecurityEnabled) {
-      setRMPrincipal(sysProps)
+      setRMPrincipal(sparkConf)
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
@@ -684,7 +689,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         // Second argument is main class
         childArgs += (args.primaryResource, "")
         if (args.pyFiles != null) {
-          sysProps("spark.submit.pyFiles") = args.pyFiles
+          sparkConf.set("spark.submit.pyFiles", args.pyFiles)
         }
       } else if (args.isR) {
         // Second argument is main class
@@ -699,12 +704,12 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     // Load any properties specified through --conf and the default properties file
     for ((k, v) <- args.sparkProperties) {
-      sysProps.getOrElseUpdate(k, v)
+      sparkConf.setIfMissing(k, v)
     }
 
     // Ignore invalid spark.driver.host in cluster modes.
     if (deployMode == CLUSTER) {
-      sysProps -= "spark.driver.host"
+      sparkConf.remove("spark.driver.host")
     }
 
     // Resolve paths in certain spark properties
@@ -716,15 +721,15 @@ object SparkSubmit extends CommandLineUtils with Logging {
       "spark.yarn.dist.jars")
     pathConfigs.foreach { config =>
       // Replace old URIs with resolved URIs, if they exist
-      sysProps.get(config).foreach { oldValue =>
-        sysProps(config) = Utils.resolveURIs(oldValue)
+      sparkConf.getOption(config).foreach { oldValue =>
+        sparkConf.set(config, Utils.resolveURIs(oldValue))
       }
     }
 
     // Resolve and format python file paths properly before adding them to the PYTHONPATH.
     // The resolving part is redundant in the case of --py-files, but necessary if the user
     // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
-    sysProps.get("spark.submit.pyFiles").foreach { pyFiles =>
+    sparkConf.getOption("spark.submit.pyFiles").foreach { pyFiles =>
       val resolvedPyFiles = Utils.resolveURIs(pyFiles)
       val formattedPyFiles = if (!isYarnCluster && !isMesosCluster) {
         PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
@@ -734,22 +739,22 @@ object SparkSubmit extends CommandLineUtils with Logging {
         // locally.
         resolvedPyFiles
       }
-      sysProps("spark.submit.pyFiles") = formattedPyFiles
+      sparkConf.set("spark.submit.pyFiles", formattedPyFiles)
     }
 
-    (childArgs, childClasspath, sysProps, childMainClass)
+    (childArgs, childClasspath, sparkConf, childMainClass)
   }
 
   // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
   // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
   // must trick it into thinking we're YARN.
-  private def setRMPrincipal(sysProps: HashMap[String, String]): Unit = {
+  private def setRMPrincipal(sparkConf: SparkConf): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
     // scalastyle:off println
     printStream.println(s"Setting ${key} to ${shortUserName}")
     // scalastyle:off println
-    sysProps.put(key, shortUserName)
+    sparkConf.set(key, shortUserName)
   }
 
   /**
@@ -761,7 +766,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private def runMain(
       childArgs: Seq[String],
       childClasspath: Seq[String],
-      sysProps: Map[String, String],
+      sparkConf: SparkConf,
       childMainClass: String,
       verbose: Boolean): Unit = {
     // scalastyle:off println
@@ -769,14 +774,14 @@ object SparkSubmit extends CommandLineUtils with Logging {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
       // sysProps may contain sensitive information, so redact before printing
-      printStream.println(s"System properties:\n${Utils.redact(sysProps).mkString("\n")}")
+      printStream.println(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).mkString("\n")}")
       printStream.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       printStream.println("\n")
     }
     // scalastyle:on println
 
     val loader =
-      if (sysProps.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
+      if (sparkConf.get(DRIVER_USER_CLASS_PATH_FIRST)) {
         new ChildFirstURLClassLoader(new Array[URL](0),
           Thread.currentThread.getContextClassLoader)
       } else {
@@ -787,10 +792,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     for (jar <- childClasspath) {
       addJarToClasspath(jar, loader)
-    }
-
-    for ((key, value) <- sysProps) {
-      System.setProperty(key, value)
     }
 
     var mainClass: Class[_] = null
@@ -818,14 +819,14 @@ object SparkSubmit extends CommandLineUtils with Logging {
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
     }
 
-    // SPARK-4170
-    if (classOf[scala.App].isAssignableFrom(mainClass)) {
-      printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
-    }
-
-    val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
-    if (!Modifier.isStatic(mainMethod.getModifiers)) {
-      throw new IllegalStateException("The main method in the given main class must be static")
+    val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
+      mainClass.newInstance().asInstanceOf[SparkApplication]
+    } else {
+      // SPARK-4170
+      if (classOf[scala.App].isAssignableFrom(mainClass)) {
+        printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
+      }
+      new JavaMainApplication(mainClass)
     }
 
     @tailrec
@@ -839,7 +840,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     }
 
     try {
-      mainMethod.invoke(null, childArgs.toArray)
+      app.start(childArgs.toArray, sparkConf)
     } catch {
       case t: Throwable =>
         findCause(t) match {
@@ -1266,4 +1267,4 @@ private case class OptionAssigner(
     clusterManager: Int,
     deployMode: Int,
     clOption: String = null,
-    sysProp: String = null)
+    confKey: String = null)

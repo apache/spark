@@ -20,7 +20,10 @@ package org.apache.spark.sql.execution.vectorized
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.execution.columnar.ColumnAccessor
+import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -31,14 +34,21 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     try block(vector) finally vector.close()
   }
 
+  private def withVectors(
+      size: Int,
+      dt: DataType)(
+      block: WritableColumnVector => Unit): Unit = {
+    withVector(new OnHeapColumnVector(size, dt))(block)
+    withVector(new OffHeapColumnVector(size, dt))(block)
+  }
+
   private def testVectors(
       name: String,
       size: Int,
       dt: DataType)(
       block: WritableColumnVector => Unit): Unit = {
     test(name) {
-      withVector(new OnHeapColumnVector(size, dt))(block)
-      withVector(new OffHeapColumnVector(size, dt))(block)
+      withVectors(size, dt)(block)
     }
   }
 
@@ -218,4 +228,173 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       (0 until 8).foreach(i => assert(testVector.isNullAt(i) == (i % 2 == 0)))
     }
   }
+
+  test("CachedBatch boolean Apis") {
+    val dataType = BooleanType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setBoolean(0, i % 2 == 0)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(16, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      assert(testVector.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(testVector.isNullAt(i) == false)
+        assert(testVector.getBoolean(i) == (i % 2 == 0))
+      }
+    }
+  }
+
+  test("CachedBatch byte Apis") {
+    val dataType = ByteType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setByte(0, i.toByte)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(16, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      assert(testVector.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(testVector.isNullAt(i) == false)
+        assert(testVector.getByte(i) == i)
+      }
+    }
+  }
+
+  test("CachedBatch short Apis") {
+    val dataType = ShortType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setShort(0, i.toShort)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(16, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      assert(testVector.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(testVector.isNullAt(i) == false)
+        assert(testVector.getShort(i) == i)
+      }
+    }
+  }
+
+  test("CachedBatch int Apis") {
+    val dataType = IntegerType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setInt(0, i)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(16, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      assert(testVector.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(testVector.isNullAt(i) == false)
+        assert(testVector.getInt(i) == i)
+      }
+    }
+  }
+
+  test("CachedBatch long Apis") {
+    val dataType = LongType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setLong(0, i.toLong)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(16, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      assert(testVector.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(testVector.isNullAt(i) == false)
+        assert(testVector.getLong(i) == i.toLong)
+      }
+    }
+  }
+
+  test("CachedBatch float Apis") {
+    val dataType = FloatType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setFloat(0, i.toFloat)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(16, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      assert(testVector.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(testVector.isNullAt(i) == false)
+        assert(testVector.getFloat(i) == i.toFloat)
+      }
+    }
+  }
+
+  test("CachedBatch double Apis") {
+    val dataType = DoubleType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setDouble(0, i.toDouble)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    withVectors(16, dataType) { testVector =>
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+      assert(testVector.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(testVector.isNullAt(i) == false)
+        assert(testVector.getDouble(i) == i.toDouble)
+      }
+    }
+  }
 }
+

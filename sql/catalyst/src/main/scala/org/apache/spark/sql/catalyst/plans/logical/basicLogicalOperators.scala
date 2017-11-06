@@ -191,12 +191,26 @@ object Union {
   }
 }
 
+/**
+ * Logical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ */
 case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
   override def maxRows: Option[Long] = {
     if (children.exists(_.maxRows.isEmpty)) {
       None
     } else {
       Some(children.flatMap(_.maxRows).sum)
+    }
+  }
+
+  /**
+   * Note the definition has assumption about how union is implemented physically.
+   */
+  override def maxRowsPerPartition: Option[Long] = {
+    if (children.exists(_.maxRowsPerPartition.isEmpty)) {
+      None
+    } else {
+      Some(children.flatMap(_.maxRowsPerPartition).sum)
     }
   }
 
@@ -669,6 +683,27 @@ case class Pivot(
   }
 }
 
+/**
+ * A constructor for creating a logical limit, which is split into two separate logical nodes:
+ * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
+ *
+ * This muds the water for clean logical/physical separation, and is done for better limit pushdown.
+ * In distributed query processing, a non-terminal global limit is actually an expensive operation
+ * because it requires coordination (in Spark this is done using a shuffle).
+ *
+ * In most cases when we want to push down limit, it is often better to only push some partition
+ * local limit. Consider the following:
+ *
+ *   GlobalLimit(Union(A, B))
+ *
+ * It is better to do
+ *   GlobalLimit(Union(LocalLimit(A), LocalLimit(B)))
+ *
+ * than
+ *   Union(GlobalLimit(A), GlobalLimit(B)).
+ *
+ * So we introduced LocalLimit and GlobalLimit in the logical plan node for limit pushdown.
+ */
 object Limit {
   def apply(limitExpr: Expression, child: LogicalPlan): UnaryNode = {
     GlobalLimit(limitExpr, LocalLimit(limitExpr, child))
@@ -682,6 +717,11 @@ object Limit {
   }
 }
 
+/**
+ * A global (coordinated) limit. This operator can emit at most `limitExpr` number in total.
+ *
+ * See [[Limit]] for more information.
+ */
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
@@ -692,9 +732,16 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
   }
 }
 
+/**
+ * A partition-local (non-coordinated) limit. This operator can emit at most `limitExpr` number
+ * of tuples on each physical partition.
+ *
+ * See [[Limit]] for more information.
+ */
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = {
+
+  override def maxRowsPerPartition: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
       case _ => None
@@ -713,7 +760,7 @@ case class SubqueryAlias(
     child: LogicalPlan)
   extends UnaryNode {
 
-  override lazy val canonicalized: LogicalPlan = child.canonicalized
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }

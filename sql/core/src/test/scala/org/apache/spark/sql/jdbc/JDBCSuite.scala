@@ -740,6 +740,15 @@ class JDBCSuite extends SparkFunSuite
         } else {
           None
         }
+      override def quoteIdentifier(colName: String): String = {
+        s"My $colName quoteIdentifier"
+      }
+      override def getTableExistsQuery(table: String): String = {
+        s"My $table Table"
+      }
+      override def getSchemaQuery(table: String): String = {
+        s"My $table Schema"
+      }
       override def isCascadingTruncateTable(): Option[Boolean] = Some(true)
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
@@ -747,6 +756,9 @@ class JDBCSuite extends SparkFunSuite
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
     assert(agg.isCascadingTruncateTable() === Some(true))
+    assert(agg.quoteIdentifier ("Dummy") === "My Dummy quoteIdentifier")
+    assert(agg.getTableExistsQuery ("Dummy") === "My Dummy Table")
+    assert(agg.getSchemaQuery ("Dummy") === "My Dummy Schema")
   }
 
   test("Aggregated dialects: isCascadingTruncateTable") {
@@ -815,6 +827,12 @@ class JDBCSuite extends SparkFunSuite
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null) ==
+      Some(FloatType))
+    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
+      Some(DoubleType))
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
+      Some(TimestampType))
   }
 
   test("table exists query by jdbc dialect") {

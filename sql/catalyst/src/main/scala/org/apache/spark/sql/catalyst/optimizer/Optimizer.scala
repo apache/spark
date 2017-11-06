@@ -76,6 +76,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
+      ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
@@ -305,13 +306,20 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
-  private def maybePushLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
-    (limitExp, plan.maxRows) match {
-      case (IntegerLiteral(maxRow), Some(childMaxRows)) if maxRow < childMaxRows =>
+  private def maybePushLocalLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
+    (limitExp, plan.maxRowsPerPartition) match {
+      case (IntegerLiteral(newLimit), Some(childMaxRows)) if newLimit < childMaxRows =>
+        // If the child has a cap on max rows per partition and the cap is larger than
+        // the new limit, put a new LocalLimit there.
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
+
       case (_, None) =>
+        // If the child has no cap, put the new LocalLimit.
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
-      case _ => plan
+
+      case _ =>
+        // Otherwise, don't put a new LocalLimit.
+        plan
     }
   }
 
@@ -323,33 +331,19 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
     case LocalLimit(exp, Union(children)) =>
-      LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))))
-    // Add extra limits below OUTER JOIN. For LEFT OUTER and FULL OUTER JOIN we push limits to the
-    // left and right sides, respectively. For FULL OUTER JOIN, we can only push limits to one side
-    // because we need to ensure that rows from the limited side still have an opportunity to match
-    // against all candidates from the non-limited side. We also need to ensure that this limit
-    // pushdown rule will not eventually introduce limits on both sides if it is applied multiple
-    // times. Therefore:
+      LocalLimit(exp, Union(children.map(maybePushLocalLimit(exp, _))))
+    // Add extra limits below OUTER JOIN. For LEFT OUTER and RIGHT OUTER JOIN we push limits to
+    // the left and right sides, respectively. It's not safe to push limits below FULL OUTER
+    // JOIN in the general case without a more invasive rewrite.
+    // We also need to ensure that this limit pushdown rule will not eventually introduce limits
+    // on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
     //   - If neither side is limited, limit the side that is estimated to be bigger.
     case LocalLimit(exp, join @ Join(left, right, joinType, _)) =>
       val newJoin = joinType match {
-        case RightOuter => join.copy(right = maybePushLimit(exp, right))
-        case LeftOuter => join.copy(left = maybePushLimit(exp, left))
-        case FullOuter =>
-          (left.maxRows, right.maxRows) match {
-            case (None, None) =>
-              if (left.stats.sizeInBytes >= right.stats.sizeInBytes) {
-                join.copy(left = maybePushLimit(exp, left))
-              } else {
-                join.copy(right = maybePushLimit(exp, right))
-              }
-            case (Some(_), Some(_)) => join
-            case (Some(_), None) => join.copy(left = maybePushLimit(exp, left))
-            case (None, Some(_)) => join.copy(right = maybePushLimit(exp, right))
-
-          }
+        case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
+        case LeftOuter => join.copy(left = maybePushLocalLimit(exp, left))
         case _ => join
       }
       LocalLimit(exp, newJoin)
@@ -445,6 +439,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Prunes the unused columns from child of Aggregate/Expand/Generate
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = prunedChild(child, a.references))
+    case f @ FlatMapGroupsInPandas(_, _, _, child) if (child.outputSet -- f.references).nonEmpty =>
+      f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
     case g: Generate if !g.join && (g.child.outputSet -- g.references).nonEmpty =>

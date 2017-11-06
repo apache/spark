@@ -58,7 +58,7 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<UnsafeRow> createReader() {
+    public DataReader<UnsafeRow> createDataReader() {
       return new JavaUnsafeRowReadTask(start - 1, end);
     }
 

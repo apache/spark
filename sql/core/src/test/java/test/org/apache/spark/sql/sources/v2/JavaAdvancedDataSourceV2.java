@@ -55,6 +55,11 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
+    public Filter[] pushedFilters() {
+      return filters;
+    }
+
+    @Override
     public List<ReadTask<Row>> createReadTasks() {
       List<ReadTask<Row>> res = new ArrayList<>();
 
@@ -95,7 +100,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<Row> createReader() {
+    public DataReader<Row> createDataReader() {
       return new JavaAdvancedReadTask(start - 1, end, requiredSchema);
     }
 

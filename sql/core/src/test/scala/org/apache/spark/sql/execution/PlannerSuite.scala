@@ -425,6 +425,23 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("EnsureRequirements should respect ClusteredDistribution's num partitioning") {
+    val distribution = ClusteredDistribution(Literal(1) :: Nil, Some(13))
+    // Number of partitions differ
+    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 13)
+    val childPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    assert(!childPartitioning.satisfies(distribution))
+    val inputPlan = DummySparkPlan(
+        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
+        requiredChildDistribution = Seq(distribution),
+        requiredChildOrdering = Seq(Seq.empty))
+
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val shuffle = outputPlan.collect { case e: ShuffleExchangeExec => e }
+    assert(shuffle.size === 1)
+    assert(shuffle.head.newPartitioning === finalPartitioning)
+  }
+
   test("Reuse exchanges") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)

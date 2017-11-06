@@ -402,7 +402,7 @@ case class SortMergeJoinExec(
     }
   }
 
-  private def genComparision(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
+  private def genComparison(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
     val comparisons = a.zip(b).zipWithIndex.map { case ((l, r), i) =>
       s"""
          |if (comp == 0) {
@@ -463,7 +463,7 @@ case class SortMergeJoinExec(
          |      continue;
          |    }
          |    if (!$matches.isEmpty()) {
-         |      ${genComparision(ctx, leftKeyVars, matchedKeyVars)}
+         |      ${genComparison(ctx, leftKeyVars, matchedKeyVars)}
          |      if (comp == 0) {
          |        return true;
          |      }
@@ -484,7 +484,7 @@ case class SortMergeJoinExec(
          |        }
          |        ${rightKeyVars.map(_.code).mkString("\n")}
          |      }
-         |      ${genComparision(ctx, leftKeyVars, rightKeyVars)}
+         |      ${genComparison(ctx, leftKeyVars, rightKeyVars)}
          |      if (comp > 0) {
          |        $rightRow = null;
          |      } else if (comp < 0) {
@@ -569,8 +569,9 @@ case class SortMergeJoinExec(
     }
   }
 
+  override def needCopyResult: Boolean = true
+
   override def doProduce(ctx: CodegenContext): String = {
-    ctx.copyResult = true
     val leftInput = ctx.freshName("leftInput")
     ctx.addMutableState("scala.collection.Iterator", leftInput, s"$leftInput = inputs[0];")
     val rightInput = ctx.freshName("rightInput")

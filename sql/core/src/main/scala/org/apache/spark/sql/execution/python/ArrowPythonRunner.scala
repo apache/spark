@@ -39,19 +39,19 @@ import org.apache.spark.util.Utils
  */
 class ArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
-    batchSize: Int,
     bufferSize: Int,
     reuseWorker: Boolean,
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    schema: StructType)
-  extends BasePythonRunner[InternalRow, ColumnarBatch](
+    schema: StructType,
+    timeZoneId: String)
+  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
     funcs, bufferSize, reuseWorker, evalType, argOffsets) {
 
   protected override def newWriterThread(
       env: SparkEnv,
       worker: Socket,
-      inputIterator: Iterator[InternalRow],
+      inputIterator: Iterator[Iterator[InternalRow]],
       partitionIndex: Int,
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
@@ -61,7 +61,7 @@ class ArrowPythonRunner(
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        val arrowSchema = ArrowUtils.toArrowSchema(schema)
+        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec", 0, Long.MaxValue)
 
@@ -82,12 +82,12 @@ class ArrowPythonRunner(
 
         Utils.tryWithSafeFinally {
           while (inputIterator.hasNext) {
-            var rowCount = 0
-            while (inputIterator.hasNext && (batchSize <= 0 || rowCount < batchSize)) {
-              val row = inputIterator.next()
-              arrowWriter.write(row)
-              rowCount += 1
+            val nextBatch = inputIterator.next()
+
+            while (nextBatch.hasNext) {
+              arrowWriter.write(nextBatch.next())
             }
+
             arrowWriter.finish()
             writer.writeBatch()
             arrowWriter.reset()

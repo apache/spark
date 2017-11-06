@@ -76,7 +76,7 @@ class SymmetricHashJoinStateManager(
   /** Get all the values of a key */
   def get(key: UnsafeRow): Iterator[UnsafeRow] = {
     val numValues = keyToNumValues.get(key)
-    keyWithIndexToValue.getAll(key, numValues)
+    keyWithIndexToValue.getAll(key, numValues).map(_.value)
   }
 
   /** Append a new value to the key */
@@ -87,70 +87,163 @@ class SymmetricHashJoinStateManager(
   }
 
   /**
-   * Remove using a predicate on keys. See class docs for more context and implement details.
+   * Remove using a predicate on keys.
+   *
+   * This produces an iterator over the (key, value) pairs satisfying condition(key), where the
+   * underlying store is updated as a side-effect of producing next.
+   *
+   * This implies the iterator must be consumed fully without any other operations on this manager
+   * or the underlying store being interleaved.
    */
-  def removeByKeyCondition(condition: UnsafeRow => Boolean): Unit = {
-    val allKeyToNumValues = keyToNumValues.iterator
+  def removeByKeyCondition(removalCondition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
+    new NextIterator[UnsafeRowPair] {
 
-    while (allKeyToNumValues.hasNext) {
-      val keyToNumValue = allKeyToNumValues.next
-      if (condition(keyToNumValue.key)) {
-        keyToNumValues.remove(keyToNumValue.key)
-        keyWithIndexToValue.removeAllValues(keyToNumValue.key, keyToNumValue.numValue)
+      private val allKeyToNumValues = keyToNumValues.iterator
+
+      private var currentKeyToNumValue: KeyAndNumValues = null
+      private var currentValues: Iterator[KeyWithIndexAndValue] = null
+
+      private def currentKey = currentKeyToNumValue.key
+
+      private val reusedPair = new UnsafeRowPair()
+
+      private def getAndRemoveValue() = {
+        val keyWithIndexAndValue = currentValues.next()
+        keyWithIndexToValue.remove(currentKey, keyWithIndexAndValue.valueIndex)
+        reusedPair.withRows(currentKey, keyWithIndexAndValue.value)
       }
+
+      override def getNext(): UnsafeRowPair = {
+        // If there are more values for the current key, remove and return the next one.
+        if (currentValues != null && currentValues.hasNext) {
+          return getAndRemoveValue()
+        }
+
+        // If there weren't any values left, try and find the next key that satisfies the removal
+        // condition and has values.
+        while (allKeyToNumValues.hasNext) {
+          currentKeyToNumValue = allKeyToNumValues.next()
+          if (removalCondition(currentKey)) {
+            currentValues = keyWithIndexToValue.getAll(
+              currentKey, currentKeyToNumValue.numValue)
+            keyToNumValues.remove(currentKey)
+
+            if (currentValues.hasNext) {
+              return getAndRemoveValue()
+            }
+          }
+        }
+
+        // We only reach here if there were no satisfying keys left, which means we're done.
+        finished = true
+        return null
+      }
+
+      override def close: Unit = {}
     }
   }
 
   /**
-   * Remove using a predicate on values. See class docs for more context and implementation details.
+   * Remove using a predicate on values.
+   *
+   * At a high level, this produces an iterator over the (key, value) pairs such that value
+   * satisfies the predicate, where producing an element removes the value from the state store
+   * and producing all elements with a given key updates it accordingly.
+   *
+   * This implies the iterator must be consumed fully without any other operations on this manager
+   * or the underlying store being interleaved.
    */
-  def removeByValueCondition(condition: UnsafeRow => Boolean): Unit = {
-    val allKeyToNumValues = keyToNumValues.iterator
+  def removeByValueCondition(removalCondition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
+    new NextIterator[UnsafeRowPair] {
 
-    while (allKeyToNumValues.hasNext) {
-      val keyToNumValue = allKeyToNumValues.next
-      val key = keyToNumValue.key
+      // Reuse this object to avoid creation+GC overhead.
+      private val reusedPair = new UnsafeRowPair()
 
-      var numValues: Long = keyToNumValue.numValue
-      var index: Long = 0L
-      var valueRemoved: Boolean = false
-      var valueForIndex: UnsafeRow = null
+      private val allKeyToNumValues = keyToNumValues.iterator
 
-      while (index < numValues) {
-        if (valueForIndex == null) {
-          valueForIndex = keyWithIndexToValue.get(key, index)
-        }
-        if (condition(valueForIndex)) {
-          if (numValues > 1) {
-            val valueAtMaxIndex = keyWithIndexToValue.get(key, numValues - 1)
-            keyWithIndexToValue.put(key, index, valueAtMaxIndex)
-            keyWithIndexToValue.remove(key, numValues - 1)
-            valueForIndex = valueAtMaxIndex
+      private var currentKey: UnsafeRow = null
+      private var numValues: Long = 0L
+      private var index: Long = 0L
+      private var valueRemoved: Boolean = false
+
+      // Push the data for the current key to the numValues store, and reset the tracking variables
+      // to their empty state.
+      private def updateNumValueForCurrentKey(): Unit = {
+        if (valueRemoved) {
+          if (numValues >= 1) {
+            keyToNumValues.put(currentKey, numValues)
           } else {
-            keyWithIndexToValue.remove(key, 0)
-            valueForIndex = null
+            keyToNumValues.remove(currentKey)
           }
-          numValues -= 1
-          valueRemoved = true
-        } else {
-          valueForIndex = null
-          index += 1
         }
-      }
-      if (valueRemoved) {
-        if (numValues >= 1) {
-          keyToNumValues.put(key, numValues)
-        } else {
-          keyToNumValues.remove(key)
-        }
-      }
-    }
-  }
 
-  def iterator(): Iterator[UnsafeRowPair] = {
-    val pair = new UnsafeRowPair()
-    keyWithIndexToValue.iterator.map { x =>
-      pair.withRows(x.key, x.value)
+        currentKey = null
+        numValues = 0
+        index = 0
+        valueRemoved = false
+      }
+
+      // Find the next value satisfying the condition, updating `currentKey` and `numValues` if
+      // needed. Returns null when no value can be found.
+      private def findNextValueForIndex(): UnsafeRow = {
+        // Loop across all values for the current key, and then all other keys, until we find a
+        // value satisfying the removal condition.
+        def hasMoreValuesForCurrentKey = currentKey != null && index < numValues
+        def hasMoreKeys = allKeyToNumValues.hasNext
+        while (hasMoreValuesForCurrentKey || hasMoreKeys) {
+          if (hasMoreValuesForCurrentKey) {
+            // First search the values for the current key.
+            val currentValue = keyWithIndexToValue.get(currentKey, index)
+            if (removalCondition(currentValue)) {
+              return currentValue
+            } else {
+              index += 1
+            }
+          } else if (hasMoreKeys) {
+            // If we can't find a value for the current key, cleanup and start looking at the next.
+            // This will also happen the first time the iterator is called.
+            updateNumValueForCurrentKey()
+
+            val currentKeyToNumValue = allKeyToNumValues.next()
+            currentKey = currentKeyToNumValue.key
+            numValues = currentKeyToNumValue.numValue
+          } else {
+            // Should be unreachable, but in any case means a value couldn't be found.
+            return null
+          }
+        }
+
+        // We tried and failed to find the next value.
+        return null
+      }
+
+      override def getNext(): UnsafeRowPair = {
+        val currentValue = findNextValueForIndex()
+
+        // If there's no value, clean up and finish. There aren't any more available.
+        if (currentValue == null) {
+          updateNumValueForCurrentKey()
+          finished = true
+          return null
+        }
+
+        // The backing store is arraylike - we as the caller are responsible for filling back in
+        // any hole. So we swap the last element into the hole and decrement numValues to shorten.
+        // clean
+        if (numValues > 1) {
+          val valueAtMaxIndex = keyWithIndexToValue.get(currentKey, numValues - 1)
+          keyWithIndexToValue.put(currentKey, index, valueAtMaxIndex)
+          keyWithIndexToValue.remove(currentKey, numValues - 1)
+        } else {
+          keyWithIndexToValue.remove(currentKey, 0)
+        }
+        numValues -= 1
+        valueRemoved = true
+
+        return reusedPair.withRows(currentKey, currentValue)
+      }
+
+      override def close: Unit = {}
     }
   }
 
@@ -291,7 +384,7 @@ class SymmetricHashJoinStateManager(
   }
 
   /** A wrapper around a [[StateStore]] that stores [(key, index) -> value]. */
-  private class KeyWithIndexToValueStore extends StateStoreHandler(KeyWithIndexToValuesType) {
+  private class KeyWithIndexToValueStore extends StateStoreHandler(KeyWithIndexToValueType) {
     private val keyWithIndexExprs = keyAttributes :+ Literal(1L)
     private val keyWithIndexSchema = keySchema.add("index", LongType)
     private val indexOrdinalInKeyWithIndexRow = keyAttributes.size
@@ -309,19 +402,24 @@ class SymmetricHashJoinStateManager(
       stateStore.get(keyWithIndexRow(key, valueIndex))
     }
 
-    /** Get all the values for key and all indices. */
-    def getAll(key: UnsafeRow, numValues: Long): Iterator[UnsafeRow] = {
+    /**
+     * Get all values and indices for the provided key.
+     * Should not return null.
+     */
+    def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
+      val keyWithIndexAndValue = new KeyWithIndexAndValue()
       var index = 0
-      new NextIterator[UnsafeRow] {
-        override protected def getNext(): UnsafeRow = {
+      new NextIterator[KeyWithIndexAndValue] {
+        override protected def getNext(): KeyWithIndexAndValue = {
           if (index >= numValues) {
             finished = true
             null
           } else {
             val keyWithIndex = keyWithIndexRow(key, index)
             val value = stateStore.get(keyWithIndex)
+            keyWithIndexAndValue.withNew(key, index, value)
             index += 1
-            value
+            keyWithIndexAndValue
           }
         }
 
@@ -373,7 +471,7 @@ class SymmetricHashJoinStateManager(
 object SymmetricHashJoinStateManager {
 
   def allStateStoreNames(joinSides: JoinSide*): Seq[String] = {
-    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToNumValuesType, KeyWithIndexToValuesType)
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToNumValuesType, KeyWithIndexToValueType)
     for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
       getStateStoreName(joinSide, stateStoreType)
     }
@@ -385,8 +483,8 @@ object SymmetricHashJoinStateManager {
     override def toString(): String = "keyToNumValues"
   }
 
-  private case object KeyWithIndexToValuesType extends StateStoreType {
-    override def toString(): String = "keyWithIndexToNumValues"
+  private case object KeyWithIndexToValueType extends StateStoreType {
+    override def toString(): String = "keyWithIndexToValue"
   }
 
   private def getStateStoreName(joinSide: JoinSide, storeType: StateStoreType): String = {

@@ -499,6 +499,12 @@ test_that("create DataFrame with different data types", {
   expect_equal(collect(df), data.frame(l, stringsAsFactors = FALSE))
 })
 
+test_that("SPARK-17902: collect() with stringsAsFactors enabled", {
+  df <- suppressWarnings(collect(createDataFrame(iris), stringsAsFactors = TRUE))
+  expect_equal(class(iris$Species), class(df$Species))
+  expect_equal(iris$Species, df$Species)
+})
+
 test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
   df <- data.frame(
     id = 1:2,
@@ -2538,7 +2544,7 @@ test_that("describe() and summary() on a DataFrame", {
 
   stats2 <- summary(df)
   expect_equal(collect(stats2)[5, "summary"], "25%")
-  expect_equal(collect(stats2)[5, "age"], "30")
+  expect_equal(collect(stats2)[5, "age"], "19")
 
   stats3 <- summary(df, "min", "max", "55.1%")
 
@@ -2738,7 +2744,7 @@ test_that("sampleBy() on a DataFrame", {
 })
 
 test_that("approxQuantile() on a DataFrame", {
-  l <- lapply(c(0:99), function(i) { list(i, 99 - i) })
+  l <- lapply(c(0:100), function(i) { list(i, 100 - i) })
   df <- createDataFrame(l, list("a", "b"))
   quantiles <- approxQuantile(df, "a", c(0.5, 0.8), 0.0)
   expect_equal(quantiles, list(50, 80))
@@ -2749,8 +2755,8 @@ test_that("approxQuantile() on a DataFrame", {
   dfWithNA <- createDataFrame(data.frame(a = c(NA, 30, 19, 11, 28, 15),
                                          b = c(-30, -19, NA, -11, -28, -15)))
   quantiles3 <- approxQuantile(dfWithNA, c("a", "b"), c(0.5), 0.0)
-  expect_equal(quantiles3[[1]], list(28))
-  expect_equal(quantiles3[[2]], list(-15))
+  expect_equal(quantiles3[[1]], list(19))
+  expect_equal(quantiles3[[2]], list(-19))
 })
 
 test_that("SQL error message is returned from JVM", {
@@ -3074,6 +3080,11 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
 
   df1Collect <- gapplyCollect(df, list("a"), function(key, x) { x })
   expect_identical(df1Collect, expected)
+
+  # gapply on empty grouping columns.
+  df1 <- gapply(df, c(), function(key, x) { x }, schema(df))
+  actual <- collect(df1)
+  expect_identical(actual, expected)
 
   # Computes the sum of second column by grouping on the first and third columns
   # and checks if the sum is larger than 2
