@@ -812,8 +812,8 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
-  val AUTO_UPDATE_SIZE =
-    buildConf("spark.sql.statistics.autoUpdate.size")
+  val AUTO_SIZE_UPDATE_ENABLED =
+    buildConf("spark.sql.statistics.size.autoUpdate.enabled")
       .doc("Enables automatic update for table size once table's data is changed. Note that if " +
         "the total number of files of the table is very large, this can be expensive and slow " +
         "down data change commands.")
@@ -1206,7 +1206,7 @@ class SQLConf extends Serializable with Logging {
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
-  def autoUpdateSize: Boolean = getConf(SQLConf.AUTO_UPDATE_SIZE)
+  def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
 
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
