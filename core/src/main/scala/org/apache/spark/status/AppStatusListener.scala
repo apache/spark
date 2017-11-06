@@ -34,11 +34,21 @@ import org.apache.spark.util.kvstore.KVStore
  * A Spark listener that writes application information to a data store. The types written to the
  * store are defined in the `storeTypes.scala` file and are based on the public REST API.
  */
-private class AppStatusListener(kvstore: KVStore) extends SparkListener with Logging {
+private[spark] class AppStatusListener(
+    kvstore: KVStore,
+    conf: SparkConf,
+    live: Boolean) extends SparkListener with Logging {
+
+  import config._
 
   private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var coresPerTask: Int = 1
+
+  // How often to update live entities. -1 means "never update" when replaying applications,
+  // meaning only the last write will happen. For live applications, this avoids a few
+  // operations that we can live without when rapidly processing incoming task events.
+  private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
 
   // Keep track of live entities, so that task metrics can be efficiently updated (without
   // causing too many writes to the underlying store, and other expensive operations).
@@ -110,13 +120,13 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
     exec.totalCores = event.executorInfo.totalCores
     exec.maxTasks = event.executorInfo.totalCores / coresPerTask
     exec.executorLogs = event.executorInfo.logUrlMap
-    update(exec)
+    liveUpdate(exec, System.nanoTime())
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     liveExecutors.remove(event.executorId).foreach { exec =>
       exec.isActive = false
-      update(exec)
+      update(exec, System.nanoTime())
     }
   }
 
@@ -139,21 +149,25 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
   private def updateBlackListStatus(execId: String, blacklisted: Boolean): Unit = {
     liveExecutors.get(execId).foreach { exec =>
       exec.isBlacklisted = blacklisted
-      update(exec)
+      liveUpdate(exec, System.nanoTime())
     }
   }
 
   private def updateNodeBlackList(host: String, blacklisted: Boolean): Unit = {
+    val now = System.nanoTime()
+
     // Implicitly (un)blacklist every executor associated with the node.
     liveExecutors.values.foreach { exec =>
       if (exec.hostname == host) {
         exec.isBlacklisted = blacklisted
-        update(exec)
+        liveUpdate(exec, now)
       }
     }
   }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
+    val now = System.nanoTime()
+
     // Compute (a potential over-estimate of) the number of tasks that will be run by this job.
     // This may be an over-estimate because the job start event references all of the result
     // stages' transitive stage dependencies, but some of these stages might be skipped if their
@@ -178,7 +192,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       jobGroup,
       numTasks)
     liveJobs.put(event.jobId, job)
-    update(job)
+    liveUpdate(job, now)
 
     event.stageInfos.foreach { stageInfo =>
       // A new job submission may re-use an existing stage, so this code needs to do an update
@@ -186,7 +200,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       val stage = getOrCreateStage(stageInfo)
       stage.jobs :+= job
       stage.jobIds += event.jobId
-      update(stage)
+      liveUpdate(stage, now)
     }
   }
 
@@ -198,11 +212,12 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       }
 
       job.completionTime = Some(new Date(event.time))
-      update(job)
+      update(job, System.nanoTime())
     }
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
+    val now = System.nanoTime()
     val stage = getOrCreateStage(event.stageInfo)
     stage.status = v1.StageStatus.ACTIVE
     stage.schedulingPool = Option(event.properties).flatMap { p =>
@@ -218,38 +233,39 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
     stage.jobs.foreach { job =>
       job.completedStages = job.completedStages - event.stageInfo.stageId
       job.activeStages += 1
-      update(job)
+      liveUpdate(job, now)
     }
 
     event.stageInfo.rddInfos.foreach { info =>
       if (info.storageLevel.isValid) {
-        update(liveRDDs.getOrElseUpdate(info.id, new LiveRDD(info)))
+        liveUpdate(liveRDDs.getOrElseUpdate(info.id, new LiveRDD(info)), now)
       }
     }
 
-    update(stage)
+    liveUpdate(stage, now)
   }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = {
+    val now = System.nanoTime()
     val task = new LiveTask(event.taskInfo, event.stageId, event.stageAttemptId)
     liveTasks.put(event.taskInfo.taskId, task)
-    update(task)
+    liveUpdate(task, now)
 
     liveStages.get((event.stageId, event.stageAttemptId)).foreach { stage =>
       stage.activeTasks += 1
       stage.firstLaunchTime = math.min(stage.firstLaunchTime, event.taskInfo.launchTime)
-      update(stage)
+      maybeUpdate(stage, now)
 
       stage.jobs.foreach { job =>
         job.activeTasks += 1
-        update(job)
+        maybeUpdate(job, now)
       }
     }
 
     liveExecutors.get(event.taskInfo.executorId).foreach { exec =>
       exec.activeTasks += 1
       exec.totalTasks += 1
-      update(exec)
+      maybeUpdate(exec, now)
     }
   }
 
@@ -257,7 +273,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
     // Call update on the task so that the "getting result" time is written to the store; the
     // value is part of the mutable TaskInfo state that the live entity already references.
     liveTasks.get(event.taskInfo.taskId).foreach { task =>
-      update(task)
+      maybeUpdate(task, System.nanoTime())
     }
   }
 
@@ -266,6 +282,8 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
     if (event.taskInfo == null) {
       return
     }
+
+    val now = System.nanoTime()
 
     val metricsDelta = liveTasks.remove(event.taskInfo.taskId).map { task =>
       val errorMessage = event.reason match {
@@ -283,7 +301,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       }
       task.errorMessage = errorMessage
       val delta = task.updateMetrics(event.taskMetrics)
-      update(task)
+      update(task, now)
       delta
     }.orNull
 
@@ -301,13 +319,13 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       stage.activeTasks -= 1
       stage.completedTasks += completedDelta
       stage.failedTasks += failedDelta
-      update(stage)
+      maybeUpdate(stage, now)
 
       stage.jobs.foreach { job =>
         job.activeTasks -= 1
         job.completedTasks += completedDelta
         job.failedTasks += failedDelta
-        update(job)
+        maybeUpdate(job, now)
       }
 
       val esummary = stage.executorSummary(event.taskInfo.executorId)
@@ -317,7 +335,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       if (metricsDelta != null) {
         esummary.metrics.update(metricsDelta)
       }
-      update(esummary)
+      maybeUpdate(esummary, now)
     }
 
     liveExecutors.get(event.taskInfo.executorId).foreach { exec =>
@@ -333,12 +351,13 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
       exec.totalDuration += event.taskInfo.duration
-      update(exec)
+      maybeUpdate(exec, now)
     }
   }
 
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
     liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptId)).foreach { stage =>
+      val now = System.nanoTime()
       stage.info = event.stageInfo
 
       // Because of SPARK-20205, old event logs may contain valid stages without a submission time
@@ -349,7 +368,6 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
         case _ if event.stageInfo.submissionTime.isDefined => v1.StageStatus.COMPLETE
         case _ => v1.StageStatus.SKIPPED
       }
-      update(stage)
 
       stage.jobs.foreach { job =>
         stage.status match {
@@ -362,11 +380,11 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
             job.failedStages += 1
         }
         job.activeStages -= 1
-        update(job)
+        liveUpdate(job, now)
       }
 
-      stage.executorSummaries.values.foreach(update)
-      update(stage)
+      stage.executorSummaries.values.foreach(update(_, now))
+      update(stage, now)
     }
   }
 
@@ -381,7 +399,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
     }
     exec.isActive = true
     exec.maxMemory = event.maxMem
-    update(exec)
+    liveUpdate(exec, System.nanoTime())
   }
 
   override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
@@ -394,19 +412,21 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
   }
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    val now = System.nanoTime()
+
     event.accumUpdates.foreach { case (taskId, sid, sAttempt, accumUpdates) =>
       liveTasks.get(taskId).foreach { task =>
         val metrics = TaskMetrics.fromAccumulatorInfos(accumUpdates)
         val delta = task.updateMetrics(metrics)
-        update(task)
+        maybeUpdate(task, now)
 
         liveStages.get((sid, sAttempt)).foreach { stage =>
           stage.metrics.update(delta)
-          update(stage)
+          maybeUpdate(stage, now)
 
           val esummary = stage.executorSummary(event.execId)
           esummary.metrics.update(delta)
-          update(esummary)
+          maybeUpdate(esummary, now)
         }
       }
     }
@@ -419,7 +439,18 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
     }
   }
 
+  /** Flush all live entities' data to the underlying store. */
+  def flush(): Unit = {
+    val now = System.nanoTime()
+    liveStages.values.foreach(update(_, now))
+    liveJobs.values.foreach(update(_, now))
+    liveExecutors.values.foreach(update(_, now))
+    liveTasks.values.foreach(update(_, now))
+    liveRDDs.values.foreach(update(_, now))
+  }
+
   private def updateRDDBlock(event: SparkListenerBlockUpdated, block: RDDBlockId): Unit = {
+    val now = System.nanoTime()
     val executorId = event.blockUpdatedInfo.blockManagerId.executorId
 
     // Whether values are being added to or removed from the existing accounting.
@@ -494,7 +525,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       }
       rdd.memoryUsed = newValue(rdd.memoryUsed, memoryDelta)
       rdd.diskUsed = newValue(rdd.diskUsed, diskDelta)
-      update(rdd)
+      update(rdd, now)
     }
 
     maybeExec.foreach { exec =>
@@ -508,9 +539,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       exec.memoryUsed = newValue(exec.memoryUsed, memoryDelta)
       exec.diskUsed = newValue(exec.diskUsed, diskDelta)
       exec.rddBlocks += rddBlocksDelta
-      if (exec.hasMemoryInfo || rddBlocksDelta != 0) {
-        update(exec)
-      }
+      maybeUpdate(exec, now)
     }
   }
 
@@ -524,8 +553,22 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
     stage
   }
 
-  private def update(entity: LiveEntity): Unit = {
-    entity.write(kvstore)
+  private def update(entity: LiveEntity, now: Long): Unit = {
+    entity.write(kvstore, now)
+  }
+
+  /** Update a live entity only if it hasn't been updated in the last configured period. */
+  private def maybeUpdate(entity: LiveEntity, now: Long): Unit = {
+    if (liveUpdatePeriodNs >= 0 && now - entity.lastWriteTime > liveUpdatePeriodNs) {
+      update(entity, now)
+    }
+  }
+
+  /** Update an entity only if in a live app; avoids redundant writes when replaying logs. */
+  private def liveUpdate(entity: LiveEntity, now: Long): Unit = {
+    if (live) {
+      update(entity, now)
+    }
   }
 
 }

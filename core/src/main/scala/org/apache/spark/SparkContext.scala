@@ -54,6 +54,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
@@ -213,6 +214,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
+  private var _statusStore: AppStatusStore = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -422,6 +424,10 @@ class SparkContext(config: SparkConf) extends Logging {
     _jobProgressListener = new JobProgressListener(_conf)
     listenerBus.addToStatusQueue(jobProgressListener)
 
+    // Initialize the app status store and listener before SparkEnv is created so that it gets
+    // all events.
+    _statusStore = AppStatusStore.createLiveStore(conf, listenerBus)
+
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
     SparkEnv.set(_env)
@@ -443,8 +449,12 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _ui =
       if (conf.getBoolean("spark.ui.enabled", true)) {
-        Some(SparkUI.createLiveUI(this, _conf, _jobProgressListener,
-          _env.securityManager, appName, startTime = startTime))
+        Some(SparkUI.create(Some(this), _statusStore, _conf,
+          l => listenerBus.addToStatusQueue(l),
+          _env.securityManager,
+          appName,
+          "",
+          startTime))
       } else {
         // For tests, do not enable the UI
         None
@@ -1939,6 +1949,9 @@ class SparkContext(config: SparkConf) extends Logging {
         _env.stop()
       }
       SparkEnv.set(null)
+    }
+    if (_statusStore != null) {
+      _statusStore.close()
     }
     // Clear this `InheritableThreadLocal`, or it will still be inherited in child threads even this
     // `SparkContext` is stopped.
