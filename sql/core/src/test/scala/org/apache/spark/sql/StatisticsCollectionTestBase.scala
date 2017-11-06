@@ -88,25 +88,25 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   protected val statsWithEHHs = {
     val colStats = mutable.LinkedHashMap(stats.toSeq: _*)
     colStats.update("cbyte", stats("cbyte").copy(histogram =
-      Some(EquiHeightHistogram(1, EquiHeightBucket(1, 1, 1) :: EquiHeightBucket(1, 2, 1) :: Nil))))
+      Some(EquiHeightHistogram(1, Array(EquiHeightBucket(1, 1, 1), EquiHeightBucket(1, 2, 1))))))
     colStats.update("cshort", stats("cshort").copy(histogram =
-      Some(EquiHeightHistogram(1, EquiHeightBucket(1, 1, 1) :: EquiHeightBucket(1, 3, 1) :: Nil))))
+      Some(EquiHeightHistogram(1, Array(EquiHeightBucket(1, 1, 1), EquiHeightBucket(1, 3, 1))))))
     colStats.update("cint", stats("cint").copy(histogram =
-      Some(EquiHeightHistogram(1, EquiHeightBucket(1, 1, 1) :: EquiHeightBucket(1, 4, 1) :: Nil))))
+      Some(EquiHeightHistogram(1, Array(EquiHeightBucket(1, 1, 1), EquiHeightBucket(1, 4, 1))))))
     colStats.update("clong", stats("clong").copy(histogram =
-      Some(EquiHeightHistogram(1, EquiHeightBucket(1, 1, 1) :: EquiHeightBucket(1, 5, 1) :: Nil))))
+      Some(EquiHeightHistogram(1, Array(EquiHeightBucket(1, 1, 1), EquiHeightBucket(1, 5, 1))))))
     colStats.update("cdouble", stats("cdouble").copy(histogram =
-      Some(EquiHeightHistogram(1, EquiHeightBucket(1, 1, 1) :: EquiHeightBucket(1, 6, 1) :: Nil))))
+      Some(EquiHeightHistogram(1, Array(EquiHeightBucket(1, 1, 1), EquiHeightBucket(1, 6, 1))))))
     colStats.update("cfloat", stats("cfloat").copy(histogram =
-      Some(EquiHeightHistogram(1, EquiHeightBucket(1, 1, 1) :: EquiHeightBucket(1, 7, 1) :: Nil))))
+      Some(EquiHeightHistogram(1, Array(EquiHeightBucket(1, 1, 1), EquiHeightBucket(1, 7, 1))))))
     colStats.update("cdecimal", stats("cdecimal").copy(histogram =
-      Some(EquiHeightHistogram(1, EquiHeightBucket(1, 1, 1) :: EquiHeightBucket(1, 8, 1) :: Nil))))
+      Some(EquiHeightHistogram(1, Array(EquiHeightBucket(1, 1, 1), EquiHeightBucket(1, 8, 1))))))
     colStats.update("cdate", stats("cdate").copy(histogram =
-      Some(EquiHeightHistogram(1, EquiHeightBucket(d1Internal, d1Internal, 1) ::
-        EquiHeightBucket(d1Internal, d2Internal, 1) :: Nil))))
+      Some(EquiHeightHistogram(1, Array(EquiHeightBucket(d1Internal, d1Internal, 1),
+        EquiHeightBucket(d1Internal, d2Internal, 1))))))
     colStats.update("ctimestamp", stats("ctimestamp").copy(histogram =
-      Some(EquiHeightHistogram(1, EquiHeightBucket(t1Internal, t1Internal, 1) ::
-        EquiHeightBucket(t1Internal, t2Internal, 1) :: Nil))))
+      Some(EquiHeightHistogram(1, Array(EquiHeightBucket(t1Internal, t1Internal, 1),
+        EquiHeightBucket(t1Internal, t2Internal, 1))))))
     colStats
   }
 

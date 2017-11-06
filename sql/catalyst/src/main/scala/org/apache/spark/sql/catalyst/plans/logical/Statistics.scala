@@ -353,7 +353,18 @@ trait Histogram
  * @param height number of rows in each bucket
  * @param ehBuckets equi-height histogram buckets
  */
-case class EquiHeightHistogram(height: Double, ehBuckets: Seq[EquiHeightBucket]) extends Histogram
+case class EquiHeightHistogram(height: Double, ehBuckets: Array[EquiHeightBucket])
+  extends Histogram {
+
+  // Only for histogram equality test.
+  override def equals(other: Any): Boolean = other match {
+    case otherEHH: EquiHeightHistogram =>
+      height == otherEHH.height && ehBuckets.sameElements(otherEHH.ehBuckets)
+    case _ => false
+  }
+
+  override def hashCode(): Int = super.hashCode()
+}
 
 /**
  * A bucket in an equi-height histogram. We use double type for lower/higher bound for simplicity.
