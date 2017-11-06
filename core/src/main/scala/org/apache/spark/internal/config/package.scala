@@ -475,4 +475,14 @@ package object config {
     .stringConf
     .toSequence
     .createOptional
+
+  private[spark] val SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD =
+    ConfigBuilder("spark.shuffle.spill.numElementsForceSpillThreshold")
+      .internal()
+      .doc("The maximum number of elements in memory before forcing the shuffle sorter to spill. " +
+        "By default it's Integer.MAX_VALUE, which means we never force the sorter to spill, " +
+        "until we reach some limitations, like the max page size limitation for the pointer " +
+        "array in the sorter.")
+      .intConf
+      .createWithDefault(Integer.MAX_VALUE)
 }

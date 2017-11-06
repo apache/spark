@@ -22,8 +22,8 @@ import java.io.Closeable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A data reader returned by {@link ReadTask#createReader()} and is responsible for outputting data
- * for a RDD partition.
+ * A data reader returned by {@link ReadTask#createDataReader()} and is responsible for
+ * outputting data for a RDD partition.
  *
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.Row} for normal data
  * source readers, or {@link org.apache.spark.sql.catalyst.expressions.UnsafeRow} for data source

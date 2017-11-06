@@ -836,6 +836,27 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
+    def test_parallel_evaluation(self):
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 6]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        # test save/load of CrossValidator
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        cv.setParallelism(1)
+        cvSerialModel = cv.fit(dataset)
+        cv.setParallelism(2)
+        cvParallelModel = cv.fit(dataset)
+        self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
+
     def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
@@ -985,6 +1006,24 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+
+    def test_parallel_evaluation(self):
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 6]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        tvs.setParallelism(1)
+        tvsSerialModel = tvs.fit(dataset)
+        tvs.setParallelism(2)
+        tvsParallelModel = tvs.fit(dataset)
+        self.assertEqual(tvsSerialModel.validationMetrics, tvsParallelModel.validationMetrics)
 
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.

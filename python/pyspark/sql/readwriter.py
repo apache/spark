@@ -915,7 +915,7 @@ class DataFrameWriter(OptionUtils):
         jprop = JavaClass("java.util.Properties", self._spark._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
-        self._jwrite.mode(mode).jdbc(url, table, jprop)
+        self.mode(mode)._jwrite.jdbc(url, table, jprop)
 
 
 def _test():
