@@ -22,7 +22,7 @@ import javax.ws.rs.WebApplicationException
 import javax.ws.rs.core.Response
 import javax.ws.rs.core.Response.Status
 
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.Utils
 
 private[v1] class SimpleDateParam(val originalValue: String) {
 
@@ -33,7 +33,7 @@ private[v1] class SimpleDateParam(val originalValue: String) {
     } catch {
       case _: ParseException =>
         val gmtDay = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        gmtDay.setTimeZone(SparkHadoopUtil.get.getTimeZone)
+        gmtDay.setTimeZone(Utils.getTimeZone)
         try {
           gmtDay.parse(originalValue).getTime()
         } catch {
