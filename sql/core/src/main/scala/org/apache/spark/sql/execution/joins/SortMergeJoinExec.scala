@@ -492,7 +492,7 @@ case class SortMergeJoinExec(
          |  }
          |  return false; // unreachable
          |}
-       """.stripMargin)
+       """.stripMargin, inlineToOuterClass = true)
 
     (leftRow, matches)
   }

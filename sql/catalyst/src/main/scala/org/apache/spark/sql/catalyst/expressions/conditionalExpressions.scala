@@ -131,8 +131,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
          |  $globalValue = ${ev.value};
          |}
          """.stripMargin
-    ctx.addNewFunction(funcName, funcBody)
-    (funcName, globalIsNull, globalValue)
+    val fullFuncName = ctx.addNewFunction(funcName, funcBody)
+    (fullFuncName, globalIsNull, globalValue)
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
