@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.clustering
+package org.apache.spark.ml.summary
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.{DataFrame, Row}
@@ -30,11 +30,11 @@ import org.apache.spark.sql.{DataFrame, Row}
  * @param k  Number of clusters.
  */
 @Experimental
-class ClusteringSummary private[clustering] (
-    @transient val predictions: DataFrame,
-    val predictionCol: String,
-    val featuresCol: String,
-    val k: Int) extends Serializable {
+class ClusteringSummary private[ml] (
+    @transient override val predictions: DataFrame,
+    override val predictionCol: String,
+    override val featuresCol: String,
+    val k: Int) extends PredictionSummary {
 
   /**
    * Cluster centers of the transformed data.
