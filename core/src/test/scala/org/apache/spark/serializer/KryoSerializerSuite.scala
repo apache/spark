@@ -108,6 +108,18 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(Array(Array("1", "2"), Array("1", "2", "3", "4")))
   }
 
+  test("safely register class for mllib") {
+    val conf = new SparkConf(false)
+    val ser = new KryoSerializer(conf)
+
+    assert(ser.safeClassLoader("org.apache.spark.mllib.linalg.Vector").isEmpty)
+    assert(ser.safeClassLoader("org.apache.spark.mllib.linalg.DenseVector").isEmpty)
+    assert(ser.safeClassLoader("org.apache.spark.mllib.linalg.SparseVector").isEmpty)
+    assert(ser.safeClassLoader("org.apache.spark.mllib.linalg.Matrix").isEmpty)
+    assert(ser.safeClassLoader("org.apache.spark.mllib.linalg.DenseMatrix").isEmpty)
+    assert(ser.safeClassLoader("org.apache.spark.mllib.linalg.SparseMatrix").isEmpty)
+  }
+
   test("pairs") {
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrationRequired", "true")

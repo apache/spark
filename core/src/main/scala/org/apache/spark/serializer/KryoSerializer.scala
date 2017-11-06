@@ -178,8 +178,29 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(classOf[ArrayBuffer[Any]])
 
+    // We can't load those class directly in order to avoid unnecessary jar dependencies.
+    // We load them safely, ignore it if the class not found.
+    safeClassLoader("org.apache.spark.mllib.linalg.Vector").foreach(kryo.register(_))
+    safeClassLoader("org.apache.spark.mllib.linalg.DenseVector").foreach(kryo.register(_))
+    safeClassLoader("org.apache.spark.mllib.linalg.SparseVector").foreach(kryo.register(_))
+    safeClassLoader("org.apache.spark.mllib.linalg.Matrix").foreach(kryo.register(_))
+    safeClassLoader("org.apache.spark.mllib.linalg.DenseMatrix").foreach(kryo.register(_))
+    safeClassLoader("org.apache.spark.mllib.linalg.SparseMatrix").foreach(kryo.register(_))
+
     kryo.setClassLoader(classLoader)
     kryo
+  }
+
+  /**
+   * Loading the class safely, ignore it if class not found.
+   */
+  private[spark] def safeClassLoader(className: String): Option[Class[_]] = {
+    try {
+      val clazz = Utils.classForName(className)
+      Some(clazz)
+    } catch {
+      case _: ClassNotFoundException => None
+    }
   }
 
   override def newInstance(): SerializerInstance = {
