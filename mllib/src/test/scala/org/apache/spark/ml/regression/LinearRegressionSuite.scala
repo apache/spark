@@ -1237,7 +1237,7 @@ class LinearRegressionSuite
     assert(model2.scale ~== scalePy2 relTol 1E-3)
   }
 
-  test("huber loss model match squared error for large m") {
+  test("huber loss model match squared error for large epsilon") {
     val trainer1 = new LinearRegression().setLoss("huber").setEpsilon(1E5)
     val model1 = trainer1.fit(datasetWithOutlier)
     val trainer2 = new LinearRegression()

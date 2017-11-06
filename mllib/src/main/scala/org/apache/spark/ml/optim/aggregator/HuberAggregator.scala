@@ -75,12 +75,12 @@ private[ml] class HuberAggregator(
 
   protected override val dim: Int = bcParameters.value.size
   private val numFeatures: Int = if (fitIntercept) dim - 2 else dim - 1
-
-  @transient private lazy val coefficients: Array[Double] =
-    bcParameters.value.toArray.slice(0, numFeatures)
   private val sigma: Double = bcParameters.value(dim - 1)
-
-  @transient private lazy val featuresStd = bcFeaturesStd.value
+  private val intercept: Double = if (fitIntercept) {
+    bcParameters.value(dim - 2)
+  } else {
+    0.0
+  }
 
   /**
    * Add a new training instance to this HuberAggregator, and update the loss and gradient
@@ -96,46 +96,51 @@ private[ml] class HuberAggregator(
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
+      val localFeaturesStd = bcFeaturesStd.value
+      val localCoefficients = bcParameters.value.toArray.slice(0, numFeatures)
+      val localGradientSumArray = gradientSumArray
 
       val margin = {
         var sum = 0.0
         features.foreachActive { (index, value) =>
-          if (featuresStd(index) != 0.0 && value != 0.0) {
-            sum += coefficients(index) * (value / featuresStd(index))
+          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+            sum += localCoefficients(index) * (value / localFeaturesStd(index))
           }
         }
-        if (fitIntercept) sum += bcParameters.value(dim - 2)
+        if (fitIntercept) sum += intercept
         sum
       }
       val linearLoss = label - margin
 
       if (math.abs(linearLoss) <= sigma * epsilon) {
         lossSum += 0.5 * weight * (sigma +  math.pow(linearLoss, 2.0) / sigma)
+        val linearLossDivSigma = linearLoss / sigma
 
         features.foreachActive { (index, value) =>
-          if (featuresStd(index) != 0.0 && value != 0.0) {
-            gradientSumArray(index) +=
-              -1.0 * weight * (linearLoss / sigma) * (value / featuresStd(index))
+          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+            localGradientSumArray(index) +=
+              -1.0 * weight * linearLossDivSigma * (value / localFeaturesStd(index))
           }
         }
         if (fitIntercept) {
-          gradientSumArray(dim - 2) += -1.0 * weight * (linearLoss / sigma)
+          localGradientSumArray(dim - 2) += -1.0 * weight * linearLossDivSigma
         }
-        gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
+        localGradientSumArray(dim - 1) += 0.5 * weight * (1.0 - math.pow(linearLossDivSigma, 2.0))
       } else {
         val sign = if (linearLoss >= 0) -1.0 else 1.0
         lossSum += 0.5 * weight *
           (sigma + 2.0 * epsilon * math.abs(linearLoss) - sigma * epsilon * epsilon)
 
         features.foreachActive { (index, value) =>
-          if (featuresStd(index) != 0.0 && value != 0.0) {
-            gradientSumArray(index) += weight * sign * epsilon * (value / featuresStd(index))
+          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+            localGradientSumArray(index) +=
+              weight * sign * epsilon * (value / localFeaturesStd(index))
           }
         }
         if (fitIntercept) {
-          gradientSumArray(dim - 2) += weight * sign * epsilon
+          localGradientSumArray(dim - 2) += weight * sign * epsilon
         }
-        gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - epsilon * epsilon)
+        localGradientSumArray(dim - 1) += 0.5 * weight * (1.0 - epsilon * epsilon)
       }
 
       weightSum += weight

@@ -88,7 +88,9 @@ private[regression] trait LinearRegressionParams extends PredictorParams
    * At larger values of epsilon, the huber criterion becomes more similar to least squares
    * regression; for small values of epsilon, the criterion is more similar to L1 regression.
    * Default is 1.35 to get as much robustness as possible while retaining
-   * 95% statistical efficiency for normally distributed data.
+   * 95% statistical efficiency for normally distributed data. It matches sklearn
+   * HuberRegressor and is "M" from <a href="http://statweb.stanford.edu/~owen/reports/hhu.pdf">
+   * A robust hybrid of lasso and ridge regression</a>.
    * Only valid when "loss" is "huber".
    *
    * @group expertParam
@@ -221,7 +223,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * For alpha in (0,1), the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
    *
-   * Note: Fitting with huber loss only supports L2 regularization,
+   * Note: Fitting with huber loss only supports None and L2 regularization,
    * so throws exception if this param is non-zero value.
    *
    * @group setParam
