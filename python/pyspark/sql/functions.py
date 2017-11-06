@@ -869,6 +869,19 @@ def month(col):
     return Column(sc._jvm.functions.month(_to_java_column(col)))
 
 
+@since(2.2)
+def dayofweek(col):
+    """
+    Extract the day of the week of a given date as integer.
+
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(dayofweek('dt').alias('day')).collect()
+    [Row(day=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.dayofweek(_to_java_column(col)))
+
+
 @since(1.5)
 def dayofmonth(col):
     """

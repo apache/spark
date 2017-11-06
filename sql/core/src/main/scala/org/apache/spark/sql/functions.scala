@@ -2550,6 +2550,13 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  def dayofweek(e: Column): Column = withExpr { DayOfWeek(e.expr) }
+
+  /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
   def dayofmonth(e: Column): Column = withExpr { DayOfMonth(e.expr) }
 
   /**
