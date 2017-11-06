@@ -869,7 +869,7 @@ def month(col):
     return Column(sc._jvm.functions.month(_to_java_column(col)))
 
 
-@since(2.2)
+@since(2.3)
 def dayofweek(col):
     """
     Extract the day of the week of a given date as integer.
