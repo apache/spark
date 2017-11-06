@@ -220,6 +220,11 @@ class TrainValidationSplitSuite
       assert(tvsModel.subModels(i).asInstanceOf[LogisticRegressionModel].uid ===
         tvsModel3.subModels(i).asInstanceOf[LogisticRegressionModel].uid)
     }
+
+    val savingPathTestingIllegalParam = new File(subPath, "tvsModel4").getPath
+    intercept[IllegalArgumentException] {
+      tvsModel2.write.option("persistSubModels", "true").save(savingPathTestingIllegalParam)
+    }
   }
 
   test("read/write: TrainValidationSplit with nested estimator") {

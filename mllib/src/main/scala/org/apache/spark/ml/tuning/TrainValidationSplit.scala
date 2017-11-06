@@ -101,8 +101,18 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.3.0")
   def setParallelism(value: Int): this.type = set(parallelism, value)
 
-  /** @group expertSetParam */
-  @Since("2.3.0")
+  /**
+   * Whether to collect submodels when fitting. If set, we can get submodels from
+   * the returned model.
+   *
+   * Note: If set this param, when you save the returned model, you can set an option
+   * "persistSubModels" to be "true" before saving, in order to save these submodels.
+   * You can check documents of
+   * {@link org.apache.spark.ml.tuning.CrossValidatorModel.CrossValidatorModelWriter}
+   * for more information.
+   *
+   * @group expertSetParam
+   */@Since("2.3.0")
   def setCollectSubModels(value: Boolean): this.type = set(collectSubModels, value)
 
   @Since("2.0.0")
@@ -192,7 +202,9 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   }
 
   @Since("2.0.0")
-  override def write: MLWriter = new TrainValidationSplit.TrainValidationSplitWriter(this)
+  override def write: TrainValidationSplit.TrainValidationSplitWriter = {
+    new TrainValidationSplit.TrainValidationSplitWriter(this)
+  }
 }
 
 @Since("2.0.0")
@@ -255,15 +267,25 @@ class TrainValidationSplitModel private[ml] (
 
   private var _subModels: Option[Array[Model[_]]] = None
 
-  @Since("2.3.0")
   private[tuning] def setSubModels(subModels: Option[Array[Model[_]]])
     : TrainValidationSplitModel = {
     _subModels = subModels
     this
   }
 
+  /**
+   * @return submodels represented in array. The index of array corresponds to the ordering of
+   *         estimatorParamsMaps
+   *
+   * Note: If submodels not available, exception will be thrown. only when we set collectSubModels
+   *  Param before fitting, submodels will be available.
+   */
   @Since("2.3.0")
-  def subModels: Array[Model[_]] = _subModels.get
+  def subModels: Array[Model[_]] = {
+    require(_subModels.isDefined, "submodels not available, set collectSubModels param before " +
+      "fitting will address this issue.")
+    _subModels.get
+  }
 
   @Since("2.3.0")
   def hasSubModels: Boolean = _subModels.isDefined
@@ -296,15 +318,9 @@ class TrainValidationSplitModel private[ml] (
 @Since("2.0.0")
 object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
-  private[TrainValidationSplitModel] def copySubModels(subModels: Option[Array[Model[_]]]) = {
-    subModels.map { subModels =>
-      val numParamMaps = subModels.length
-      val copiedSubModels = Array.fill[Model[_]](numParamMaps)(null)
-      for (i <- 0 until numParamMaps) {
-          copiedSubModels(i) = subModels(i).copy(ParamMap.empty).asInstanceOf[Model[_]]
-      }
-      copiedSubModels
-    }
+  private[TrainValidationSplitModel] def copySubModels(subModels: Option[Array[Model[_]]])
+    : Option[Array[Model[_]]] = {
+    subModels.map(_.map(_.copy(ParamMap.empty).asInstanceOf[Model[_]]))
   }
 
   @Since("2.0.0")
@@ -313,36 +329,36 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
   @Since("2.0.0")
   override def load(path: String): TrainValidationSplitModel = super.load(path)
 
-  private[TrainValidationSplitModel]
+  /**
+   * Writer for TrainValidationSplitModel.
+   * @param instance TrainValidationSplitModel instance used to construct the writer
+   *
+   * Options:
+   * TrainValidationSplitModel support an option "persistSubModels", available value is
+   * "true" or "false". If you set collectSubModels param before fitting, and then you can set
+   * the option "persistSubModels" to be "true" and the submodels will be persisted.
+   * The default value of "persistSubModels" will be "true", if you set collectSubModels
+   * param before fitting, but if you do not set collectSubModels param before fitting, setting
+   * "persistSubModels" will cause exception.
+   */
   class TrainValidationSplitModelWriter(instance: TrainValidationSplitModel) extends MLWriter {
 
     ValidatorParams.validateParams(instance)
 
-    protected var shouldPersistSubModels: Boolean = if (instance.hasSubModels) true else false
-
-    /**
-     * Extra options for TrainValidationSplitModelWriter, current support "persistSubModels".
-     * if sub models exsit, the default value for option "persistSubModels" is "true".
-     */
-    @Since("2.3.0")
-    override def option(key: String, value: String): this.type = {
-      key.toLowerCase(Locale.ROOT) match {
-        case "persistsubmodels" => shouldPersistSubModels = value.toBoolean
-        case _ => throw new IllegalArgumentException(
-          s"Illegal option ${key} for TrainValidationSplitModelWriter")
-      }
-      this
-    }
-
     override protected def saveImpl(path: String): Unit = {
+      val persistSubModels = optionMap.getOrElse("persistsubmodels",
+        if (instance.hasSubModels) "true" else "false").toBoolean
+
       import org.json4s.JsonDSL._
       val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toSeq) ~
-        ("shouldPersistSubModels" -> shouldPersistSubModels)
+        ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
-      if (shouldPersistSubModels) {
-        require(instance.hasSubModels, "Cannot get sub models to persist.")
+      if (persistSubModels) {
+        require(instance.hasSubModels, "When persisting tuning models, you can only set " +
+          "persistSubModels to true if the tuning was done with collectSubModels set to true. " +
+          "To save the sub-models, try rerunning fitting with collectSubModels set to true.")
         val subModelsPath = new Path(path, "subModels")
         for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
@@ -365,7 +381,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
       val validationMetrics = (metadata.metadata \ "validationMetrics").extract[Seq[Double]].toArray
-      val shouldPersistSubModels = (metadata.metadata \ "shouldPersistSubModels").extract[Boolean]
+      val shouldPersistSubModels = (metadata.metadata \ "persistSubModels").extract[Boolean]
 
       val subModels: Option[Array[Model[_]]] = if (shouldPersistSubModels) {
         val subModelsPath = new Path(path, "subModels")

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import java.util.{List => JList, Locale}
+import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -102,7 +102,18 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.3.0")
   def setParallelism(value: Int): this.type = set(parallelism, value)
 
-  /** @group expertSetParam */
+  /**
+   * Whether to collect submodels when fitting. If set, we can get submodels from
+   * the returned model.
+   *
+   * Note: If set this param, when you save the returned model, you can set an option
+   * "persistSubModels" to be "true" before saving, in order to save these submodels.
+   * You can check documents of
+   * {@link org.apache.spark.ml.tuning.CrossValidatorModel.CrossValidatorModelWriter}
+   * for more information.
+   *
+   * @group expertSetParam
+   */
   @Since("2.3.0")
   def setCollectSubModels(value: Boolean): this.type = set(collectSubModels, value)
 
@@ -262,15 +273,26 @@ class CrossValidatorModel private[ml] (
 
   private var _subModels: Option[Array[Array[Model[_]]]] = None
 
-  @Since("2.3.0")
   private[tuning] def setSubModels(subModels: Option[Array[Array[Model[_]]]])
     : CrossValidatorModel = {
     _subModels = subModels
     this
   }
 
+  /**
+   * @return submodels represented in two dimension array. The index of outer array is the
+   *         fold index, and the index of inner array corresponds to the ordering of
+   *         estimatorParamsMaps
+   *
+   * Note: If submodels not available, exception will be thrown. only when we set collectSubModels
+   *  Param before fitting, submodels will be available.
+   */
   @Since("2.3.0")
-  def subModels: Array[Array[Model[_]]] = _subModels.get
+  def subModels: Array[Array[Model[_]]] = {
+    require(_subModels.isDefined, "submodels not available, set collectSubModels param before " +
+      "fitting will address this issue.")
+    _subModels.get
+  }
 
   @Since("2.3.0")
   def hasSubModels: Boolean = _subModels.isDefined
@@ -297,24 +319,17 @@ class CrossValidatorModel private[ml] (
   }
 
   @Since("1.6.0")
-  override def write: MLWriter = new CrossValidatorModel.CrossValidatorModelWriter(this)
+  override def write: CrossValidatorModel.CrossValidatorModelWriter = {
+    new CrossValidatorModel.CrossValidatorModelWriter(this)
+  }
 }
 
 @Since("1.6.0")
 object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
 
-  private[CrossValidatorModel] def copySubModels(subModels: Option[Array[Array[Model[_]]]]) = {
-    subModels.map { subModels =>
-      val numFolds = subModels.length
-      val numParamMaps = subModels(0).length
-      val copiedSubModels = Array.fill(numFolds)(Array.fill[Model[_]](numParamMaps)(null))
-      for (i <- 0 until numFolds) {
-        for (j <- 0 until numParamMaps) {
-          copiedSubModels(i)(j) = subModels(i)(j).copy(ParamMap.empty).asInstanceOf[Model[_]]
-        }
-      }
-      copiedSubModels
-    }
+  private[CrossValidatorModel] def copySubModels(subModels: Option[Array[Array[Model[_]]]])
+    : Option[Array[Array[Model[_]]]] = {
+    subModels.map(_.map(_.map(_.copy(ParamMap.empty).asInstanceOf[Model[_]])))
   }
 
   @Since("1.6.0")
@@ -323,39 +338,40 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
   @Since("1.6.0")
   override def load(path: String): CrossValidatorModel = super.load(path)
 
-  private[CrossValidatorModel]
+  /**
+   * Writer for CrossValidatorModel.
+   * @param instance CrossValidatorModel instance used to construct the writer
+   *
+   * Options:
+   * CrossValidatorModelWriter support an option "persistSubModels", available value is
+   * "true" or "false". If you set collectSubModels param before fitting, and then you can set
+   * the option "persistSubModels" to be "true" and the submodels will be persisted.
+   * The default value of "persistSubModels" will be "true", if you set collectSubModels
+   * param before fitting, but if you do not set collectSubModels param before fitting, setting
+   * "persistSubModels" will cause exception.
+   */
+  @Since("2.3.0")
   class CrossValidatorModelWriter(instance: CrossValidatorModel) extends MLWriter {
 
     ValidatorParams.validateParams(instance)
 
-    protected var shouldPersistSubModels: Boolean = if (instance.hasSubModels) true else false
-
-    /**
-     * Extra options for CrossValidatorModelWriter, current support "persistSubModels".
-     * if sub models exsit, the default value for option "persistSubModels" is "true".
-     */
-    @Since("2.3.0")
-    override def option(key: String, value: String): this.type = {
-      key.toLowerCase(Locale.ROOT) match {
-        case "persistsubmodels" => shouldPersistSubModels = value.toBoolean
-        case _ => throw new IllegalArgumentException(
-          s"Illegal option ${key} for CrossValidatorModelWriter")
-      }
-      this
-    }
-
     override protected def saveImpl(path: String): Unit = {
+      val persistSubModels = optionMap.getOrElse("persistsubmodels",
+        if (instance.hasSubModels) "true" else "false").toBoolean
+
       import org.json4s.JsonDSL._
       val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toSeq) ~
-        ("shouldPersistSubModels" -> shouldPersistSubModels)
+        ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
-      if (shouldPersistSubModels) {
-        require(instance.hasSubModels, "Cannot get sub models to persist.")
+      if (persistSubModels) {
+        require(instance.hasSubModels, "When persisting tuning models, you can only set " +
+          "persistSubModels to true if the tuning was done with collectSubModels set to true. " +
+          "To save the sub-models, try rerunning fitting with collectSubModels set to true.")
         val subModelsPath = new Path(path, "subModels")
         for (splitIndex <- 0 until instance.getNumFolds) {
-          val splitPath = new Path(subModelsPath, splitIndex.toString)
+          val splitPath = new Path(subModelsPath, s"fold${splitIndex.toString}")
           for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
             instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable].save(modelPath)
@@ -379,14 +395,14 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
       val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
-      val shouldPersistSubModels = (metadata.metadata \ "shouldPersistSubModels").extract[Boolean]
+      val shouldPersistSubModels = (metadata.metadata \ "persistSubModels").extract[Boolean]
 
       val subModels: Option[Array[Array[Model[_]]]] = if (shouldPersistSubModels) {
         val subModelsPath = new Path(path, "subModels")
         val _subModels = Array.fill(numFolds)(Array.fill[Model[_]](
           estimatorParamMaps.length)(null))
         for (splitIndex <- 0 until numFolds) {
-          val splitPath = new Path(subModelsPath, splitIndex.toString)
+          val splitPath = new Path(subModelsPath, s"fold${splitIndex.toString}")
           for (paramIndex <- 0 until estimatorParamMaps.length) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
             _subModels(splitIndex)(paramIndex) =

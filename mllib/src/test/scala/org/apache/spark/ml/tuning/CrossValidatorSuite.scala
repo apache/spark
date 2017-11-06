@@ -233,6 +233,11 @@ class CrossValidatorSuite
           cvModel3.subModels(i)(j).asInstanceOf[LogisticRegressionModel].uid)
       }
     }
+
+    val savingPathTestingIllegalParam = new File(subPath, "cvModel4").getPath
+    intercept[IllegalArgumentException] {
+      cvModel2.write.option("persistSubModels", "true").save(savingPathTestingIllegalParam)
+    }
   }
 
   test("read/write: CrossValidator with nested estimator") {
