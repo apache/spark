@@ -3482,6 +3482,10 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         # TODO: remove later
         t = TimestampType()
         print([(idx, t.toInternal(ts)) for idx, ts in data])
+        print([(idx, t.fromInternal(t.toInternal(ts))) for idx, ts in data])
+        print("Python [%s]" % str(sys.version_info))
+        import pandas as pd
+        print("Pandas [%s]" % pd.__version__)
 
         df = self.spark.createDataFrame(data, schema=schema)
         df.show()  # TODO: remove later
