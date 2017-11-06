@@ -76,6 +76,20 @@ case class BroadcastHashJoinExec(
     streamedPlan.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
+  override def needCopyResult: Boolean = joinType match {
+    case _: InnerLike | LeftOuter | RightOuter =>
+      // For inner and outer joins, one row from the streamed side may produce multiple result rows,
+      // if the build side has duplicated keys. Then we need to copy the result rows before putting
+      // them in a buffer, because these result rows share one UnsafeRow instance. Note that here
+      // we wait for the broadcast to be finished, which is a no-op because it's already finished
+      // when we wait it in `doProduce`.
+      !buildPlan.executeBroadcast[HashedRelation]().value.keyIsUnique
+
+    // Other joins types(semi, anti, existence) can at most produce one result row for one input
+    // row from the streamed side, so no need to copy the result rows.
+    case _ => false
+  }
+
   override def doProduce(ctx: CodegenContext): String = {
     streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
@@ -237,7 +251,6 @@ case class BroadcastHashJoinExec(
        """.stripMargin
 
     } else {
-      ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       s"""
@@ -310,7 +323,6 @@ case class BroadcastHashJoinExec(
        """.stripMargin
 
     } else {
-      ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")

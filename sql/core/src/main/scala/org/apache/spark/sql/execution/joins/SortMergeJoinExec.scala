@@ -569,8 +569,9 @@ case class SortMergeJoinExec(
     }
   }
 
+  override def needCopyResult: Boolean = true
+
   override def doProduce(ctx: CodegenContext): String = {
-    ctx.copyResult = true
     val leftInput = ctx.freshName("leftInput")
     ctx.addMutableState("scala.collection.Iterator", leftInput, s"$leftInput = inputs[0];")
     val rightInput = ctx.freshName("rightInput")
