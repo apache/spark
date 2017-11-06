@@ -17,8 +17,6 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.scheduler.SparkListenerEvent
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.types.StructType
 
 /**
  * Event emitted by the external catalog when it is modified. Events are either fired before or
@@ -132,14 +130,14 @@ case class AlterTablePreEvent(database: String, name: String) extends TableEvent
 case class AlterTableEvent(database: String, name: String) extends TableEvent
 
 /**
- * Event fired before table schema is altered.
+ * Event fired before table data schema is altered.
  */
-case class AlterTableSchemaPreEvent(database: String, name: String) extends TableEvent
+case class AlterTableDataSchemaPreEvent(database: String, name: String) extends TableEvent
 
 /**
- * Event fired after table schema is altered.
+ * Event fired after table data schema is altered.
  */
-case class AlterTableSchemaEvent(database: String, name: String) extends TableEvent
+case class AlterTableDataSchemaEvent(database: String, name: String) extends TableEvent
 
 /**
  * Event fired when a function is created, dropped, altered or renamed.

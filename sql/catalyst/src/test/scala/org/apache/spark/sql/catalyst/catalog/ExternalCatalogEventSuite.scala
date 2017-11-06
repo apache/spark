@@ -109,8 +109,6 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       tableType = CatalogTableType.MANAGED,
       storage = storage,
       schema = new StructType().add("id", "long"))
-    val tableDefWithSparkVersion =
-      tableDefinition.copy(createVersion = org.apache.spark.SPARK_VERSION)
 
     catalog.createDatabase(dbDefinition, ignoreIfExists = false)
     checkEvents(CreateDatabasePreEvent("db5") :: CreateDatabaseEvent("db5") :: Nil)
@@ -134,8 +132,8 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     // ALTER schema
     val newSchema = new StructType().add("id", "long", nullable = false)
     catalog.alterTableDataSchema("db5", "tbl1", newSchema)
-    checkEvents(
-      AlterTableSchemaPreEvent("db5", "tbl1") :: AlterTableSchemaEvent("db5", "tbl1") :: Nil)
+    checkEvents(AlterTableDataSchemaPreEvent("db5", "tbl1") ::
+      AlterTableDataSchemaEvent("db5", "tbl1") :: Nil)
 
     // RENAME
     catalog.renameTable("db5", "tbl1", "tbl2")

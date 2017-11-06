@@ -174,9 +174,9 @@ abstract class ExternalCatalog
    * @param newDataSchema Updated data schema to be used for the table.
    */
   final def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit = {
-    postToAll(AlterTableSchemaPreEvent(db, table))
+    postToAll(AlterTableDataSchemaPreEvent(db, table))
     doAlterTableDataSchema(db, table, newDataSchema)
-    postToAll(AlterTableSchemaEvent(db, table))
+    postToAll(AlterTableDataSchemaEvent(db, table))
   }
 
   protected def doAlterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
