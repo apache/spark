@@ -511,7 +511,7 @@ private[evaluation] object SquaredEuclideanSilhouette {
  * dataset.
  *
  * @see <a href="http://www.tandfonline.com/doi/abs/10.1080/03610927408827101">
- *        T. Calinski and J. Harabasz, 1974. “A dendrite method for cluster analysis”.
+ *        T. Calinski and J. Harabasz, 1974. "A dendrite method for cluster analysis".
  *        Communications in Statistics</a>
  */
 private[evaluation] object CalinskiHarabasz {
