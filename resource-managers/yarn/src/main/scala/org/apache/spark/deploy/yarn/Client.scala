@@ -705,17 +705,17 @@ private[spark] class Client(
       }
     }
 
-    sys.env.get("SPARK_CONF_DIR").foreach { path =>
-      val dir = new File(path)
-      if (dir.isDirectory) {
-        val files = dir.listFiles(new FileFilter {
-          override def accept(pathname: File): Boolean = {
-            pathname.isFile && pathname.getName.endsWith("xml")
-          }
-        })
-        files.foreach { f => hadoopConfFiles(f.getName) = f }
-      }
+    val confDir = sys.env.getOrElse("SPARK_CONF_DIR", sys.env("SPARK_HOME") + "/conf")
+    val dir = new File(confDir)
+    if (dir.isDirectory) {
+      val files = dir.listFiles(new FileFilter {
+        override def accept(pathname: File): Boolean = {
+          pathname.isFile && pathname.getName.endsWith("xml")
+        }
+      })
+      files.foreach { f => hadoopConfFiles(f.getName) = f }
     }
+
 
     val confArchive = File.createTempFile(LOCALIZED_CONF_DIR, ".zip",
       new File(Utils.getLocalDir(sparkConf)))
