@@ -132,9 +132,10 @@ case class GenerateExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def needCopyResult: Boolean = true
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     ctx.currentVars = input
-    ctx.copyResult = true
 
     // Add input rows to the values when we are joining
     val values = if (join) {

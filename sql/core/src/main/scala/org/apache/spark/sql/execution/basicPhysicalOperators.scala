@@ -279,6 +279,8 @@ case class SampleExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def needCopyResult: Boolean = withReplacement
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
     val sampler = ctx.freshName("sampler")
@@ -286,7 +288,6 @@ case class SampleExec(
     if (withReplacement) {
       val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
       val initSampler = ctx.freshName("initSampler")
-      ctx.copyResult = true
 
       val initSamplerFuncName = ctx.addNewFunction(initSampler,
         s"""
@@ -450,7 +451,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
     val range = ctx.freshName("range")
-    val shouldStop = if (isShouldStopRequired) {
+    val shouldStop = if (parent.needStopCheck) {
       s"if (shouldStop()) { $number = $value + ${step}L; return; }"
     } else {
       "// shouldStop check is eliminated"

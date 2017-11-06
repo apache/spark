@@ -115,7 +115,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
     val numRows = ctx.freshName("numRows")
-    val shouldStop = if (isShouldStopRequired) {
+    val shouldStop = if (parent.needStopCheck) {
       s"if (shouldStop()) { $idx = $rowidx + 1; return; }"
     } else {
       "// shouldStop check is eliminated"
