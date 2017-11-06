@@ -472,6 +472,19 @@ object SparkHadoopUtil {
   }
 
   /**
+   * Given an expiration date (e.g. for Hadoop Delegation Tokens) return a the date
+   * when a given fraction of the duration until the expiration date has passed.
+   * Formula: current time + (fraction * (time until expiration))
+   * @param expirationDate Drop-dead expiration date
+   * @param fraction fraction of the time until expiration return
+   * @return Date when the fraction of the time until expiration has passed
+   */
+  def getDateOfNextUpdate(expirationDate: Long, fraction: Double): Long = {
+    val ct = System.currentTimeMillis
+    (ct + (fraction * (expirationDate - ct))).toLong
+  }
+
+  /**
    * Returns a Configuration object with Spark configuration applied on top. Unlike
    * the instance method, this will always return a Configuration instance, and not a
    * cluster manager-specific type.

@@ -26,12 +26,15 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.mesos.config._
-import org.apache.spark.deploy.security.{HadoopCredentialRenewer, HadoopDelegationTokenManager}
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
@@ -59,17 +62,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
-  override def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] =
-    Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
-
-  override def hadoopCredentialRenewer: Option[HadoopCredentialRenewer] =
-    Some(new MesosCredentialRenewer(
-      conf,
-      hadoopDelegationTokenManager.get,
-      renewableDelegationTokens.get.nextRenewalTime,
-      driverEndpoint))
-
-  private val principal = conf.get(config.PRINCIPAL).orNull
+  private lazy val hadoopCredentialRenewer: MesosCredentialRenewer =
+    new MesosCredentialRenewer(
+      conf, new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
@@ -224,10 +219,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     )
 
     // check that the credentials are defined, even though it's likely that auth would have failed
-    // already if you've made it this far
-    if (principal != null) {
-      logDebug(s"Principal found ($principal) starting token renewer")
-      hadoopCredentialRenewer.get.scheduleTokenRenewal
+    // already if you've made it this far, then start the token renewer
+    if (hadoopDelegationTokens.isDefined) {
+      // the driver endpoint isn't set when the initial tokens are generated (as well as their
+      // expiration time, so we pass the driver endpoint here.
+      hadoopCredentialRenewer.scheduleTokenRenewal(driverEndpoint)
     }
 
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
@@ -787,6 +783,14 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       "0.0.0.0"
     } else {
       offer.getHostname
+    }
+  }
+
+  override def initializeHadoopDelegationTokens(): Option[Array[Byte]] = {
+    if (UserGroupInformation.isSecurityEnabled) {
+      Some(hadoopCredentialRenewer.tokens)
+    } else {
+      None
     }
   }
 }

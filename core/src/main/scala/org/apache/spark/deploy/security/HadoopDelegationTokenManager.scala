@@ -19,10 +19,9 @@ package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 
 /**
@@ -56,8 +55,8 @@ private[spark] class HadoopDelegationTokenManager(
   logDebug(s"Using the following delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
-  /** Construct a [[HadoopDelegationTokenManager]] for the default Hadoop filesystem with a
-   * credential renewer
+  /**
+   * Construct a [[HadoopDelegationTokenManager]] for the default Hadoop filesystem.
    */
   def this(sparkConf: SparkConf, hadoopConf: Configuration) = {
     this(
@@ -76,17 +75,6 @@ private[spark] class HadoopDelegationTokenManager(
       .filter { p => isServiceEnabled(p.serviceName) }
       .map { p => (p.serviceName, p) }
       .toMap
-  }
-
-  def getRenewableDelegationTokens(): Option[RenewableDelegationTokens] = {
-    if (UserGroupInformation.isSecurityEnabled) {
-      val creds = UserGroupInformation.getCurrentUser.getCredentials
-      val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-      val rt = obtainDelegationTokens(hadoopConf, creds)
-      Some(new RenewableDelegationTokens(SparkHadoopUtil.get.serialize(creds), rt))
-    } else {
-      None
-    }
   }
 
   def isServiceEnabled(serviceName: String): Boolean = {
@@ -142,4 +130,3 @@ private[spark] class HadoopDelegationTokenManager(
   }
 }
 
-case class RenewableDelegationTokens(credentials: Array[Byte], nextRenewalTime: Long)

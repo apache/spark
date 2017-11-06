@@ -20,15 +20,12 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.{HadoopCredentialRenewer, HadoopDelegationTokenManager, RenewableDelegationTokens}
-import org.apache.spark.internal.config
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
 import org.apache.spark.util.ThreadUtils
@@ -45,17 +42,28 @@ import org.apache.spark.util.ThreadUtils
  */
 class MesosCredentialRenewer(
     conf: SparkConf,
-    tokenManager: HadoopDelegationTokenManager,
-    nextRenewal: Long,
-    driverEndpoint: RpcEndpointRef) extends HadoopCredentialRenewer {
-  override val credentialRenewerThread: ScheduledExecutorService =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
+    tokenManager: HadoopDelegationTokenManager) extends Logging {
 
-  @volatile override protected var timeOfNextRenewal: Long = nextRenewal
+  private val credentialRenewerThread: ScheduledExecutorService =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
 
   private val principal = conf.get(config.PRINCIPAL).orNull
 
   private val (secretFile, mode) = getSecretFile(conf)
+
+  var (tokens: Array[Byte], timeOfNextRenewal: Long) = {
+    try {
+      val creds = UserGroupInformation.getCurrentUser.getCredentials
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+      val rt = tokenManager.obtainDelegationTokens(hadoopConf, creds)
+      (SparkHadoopUtil.get.serialize(creds), rt)
+    } catch {
+      case e: Exception =>
+        throw new IllegalStateException("Failed to initialize Hadoop delegation tokens\n" +
+          s"\tPricipal: $principal\n\tmode: $mode\n\tsecret file $secretFile\n\tException: $e")
+    }
+
+  }
 
   private def getSecretFile(conf: SparkConf): (String, String) = {
     val keytab = conf.get(config.KEYTAB).orNull
@@ -71,18 +79,35 @@ class MesosCredentialRenewer(
       val sf = if (keytab != null) keytab else tgt
       (sf, m)
     }
-    logInfo(s"Usung $principal with mode $mode to retrieve Hadoop delegation tokens")
+
+    if (principal == null) {
+      logInfo(s"Using mode: $mode to retrieve Hadoop delegation tokens")
+    } else {
+      logInfo(s"Using principal: $principal with mode: $mode to retrieve Hadoop delegation tokens")
+    }
+
     logDebug(s"secretFile is $secretFile")
     (secretFile, mode)
   }
 
-  override def scheduleTokenRenewal(): Unit = {
+  def scheduleTokenRenewal(driverEndpoint: RpcEndpointRef): Unit = {
+    def scheduleRenewal(runnable: Runnable): Unit = {
+      val remainingTime = timeOfNextRenewal - System.currentTimeMillis()
+      if (remainingTime <= 0) {
+        logInfo("Credentials have expired, creating new ones now.")
+        runnable.run()
+      } else {
+        logInfo(s"Scheduling login from keytab in $remainingTime millis.")
+        credentialRenewerThread.schedule(runnable, remainingTime, TimeUnit.MILLISECONDS)
+      }
+    }
+
     val credentialRenewerRunnable =
       new Runnable {
         override def run(): Unit = {
           try {
             val tokensBytes = getNewDelegationTokens
-            broadcastDelegationTokens(tokensBytes)
+            broadcastDelegationTokens(tokensBytes, driverEndpoint)
           } catch {
             case e: Exception =>
               // Log the error and try to write new tokens back in an hour
@@ -96,7 +121,7 @@ class MesosCredentialRenewer(
     scheduleRenewal(credentialRenewerRunnable)
   }
 
-  private def getNewDelegationTokens: RenewableDelegationTokens = {
+  private def getNewDelegationTokens: Array[Byte] = {
     logInfo(s"Attempting to login to KDC with ${conf.get(config.PRINCIPAL).orNull}")
     // Get new delegation tokens by logging in with a new UGI
     // inspired by AMCredentialRenewer.scala:L174
@@ -124,22 +149,18 @@ class MesosCredentialRenewer(
         "related configurations in the target services.")
       currTime
     } else {
-      getTimeOfNextUpdate(nextRenewalTime, 0.75)
+      SparkHadoopUtil.getDateOfNextUpdate(nextRenewalTime, 0.75)
     }
     logInfo(s"Time of next renewal is $timeOfNextRenewal")
 
     // Add the temp credentials back to the original ones.
-    for (t <- tempCreds.getAllTokens.asScala) {
-      val s = DelegationTokenIdentifier.stringifyToken(t)
-      logDebug(s"Got updated tokens: $s")
-    }
     UserGroupInformation.getCurrentUser.addCredentials(tempCreds)
-    new RenewableDelegationTokens(SparkHadoopUtil.get.serialize(tempCreds), timeOfNextRenewal)
+    SparkHadoopUtil.get.serialize(tempCreds)
   }
 
-  private def broadcastDelegationTokens(renewableDelegationTokens: RenewableDelegationTokens) = {
+  private def broadcastDelegationTokens(tokens: Array[Byte], driverEndpoint: RpcEndpointRef) = {
     logInfo("Sending new tokens to all executors")
-    driverEndpoint.send(UpdateDelegationTokens(renewableDelegationTokens))
+    driverEndpoint.send(UpdateDelegationTokens(tokens))
   }
 }
 

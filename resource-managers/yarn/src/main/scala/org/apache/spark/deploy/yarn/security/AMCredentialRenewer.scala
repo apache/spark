@@ -25,7 +25,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.HadoopCredentialRenewer
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -55,12 +55,11 @@ import org.apache.spark.util.ThreadUtils
 private[yarn] class AMCredentialRenewer(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    credentialManager: YARNHadoopDelegationTokenManager)
-  extends HadoopCredentialRenewer with Logging {
+    credentialManager: YARNHadoopDelegationTokenManager) extends Logging {
 
   private var lastCredentialsFileSuffix = 0
 
-  override protected val credentialRenewerThread: ScheduledExecutorService =
+  private val credentialRenewerThread: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Refresh Thread")
 
   private val hadoopUtil = YarnSparkHadoopUtil.get
@@ -71,7 +70,7 @@ private[yarn] class AMCredentialRenewer(
   private val freshHadoopConf =
     hadoopUtil.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
-  @volatile override protected var timeOfNextRenewal: Long = sparkConf.get(CREDENTIALS_RENEWAL_TIME)
+  @volatile private var timeOfNextRenewal: Long = sparkConf.get(CREDENTIALS_RENEWAL_TIME)
 
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab
@@ -80,9 +79,25 @@ private[yarn] class AMCredentialRenewer(
    * SparkConf to do the login. This method is a no-op in non-YARN mode.
    *
    */
-  override def scheduleTokenRenewal(): Unit = {
+  private[spark] def scheduleLoginFromKeytab(): Unit = {
     val principal = sparkConf.get(PRINCIPAL).get
     val keytab = sparkConf.get(KEYTAB).get
+
+    /**
+     * Schedule re-login and creation of new credentials. If credentials have already expired, this
+     * method will synchronously create new ones.
+     */
+    def scheduleRenewal(runnable: Runnable): Unit = {
+      // Run now!
+      val remainingTime = timeOfNextRenewal - System.currentTimeMillis()
+      if (remainingTime <= 0) {
+        logInfo("Credentials have expired, creating new ones now.")
+        runnable.run()
+      } else {
+        logInfo(s"Scheduling login from keytab in $remainingTime millis.")
+        credentialRenewerThread.schedule(runnable, remainingTime, TimeUnit.MILLISECONDS)
+      }
+    }
 
     // This thread periodically runs on the AM to update the credentials on HDFS.
     val credentialRenewerRunnable =
@@ -180,8 +195,9 @@ private[yarn] class AMCredentialRenewer(
     } else {
       // Next valid renewal time is about 75% of credential renewal time, and update time is
       // slightly later than valid renewal time (80% of renewal time).
-      timeOfNextRenewal = getTimeOfNextUpdate(nearestNextRenewalTime, 0.75)
-      getTimeOfNextUpdate(nearestNextRenewalTime, 0.8)
+      timeOfNextRenewal =
+        SparkHadoopUtil.getDateOfNextUpdate(nearestNextRenewalTime, 0.75)
+      SparkHadoopUtil.getDateOfNextUpdate(nearestNextRenewalTime, 0.8)
     }
 
     // Add the temp credentials back to the original ones.

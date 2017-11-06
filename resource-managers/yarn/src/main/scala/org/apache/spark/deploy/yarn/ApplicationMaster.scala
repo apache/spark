@@ -315,7 +315,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
 
             val credentialRenewer =
               new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)
-            credentialRenewer.scheduleTokenRenewal()
+            credentialRenewer.scheduleLoginFromKeytab()
           }
         }
 
