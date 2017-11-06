@@ -74,6 +74,26 @@ class ClusteringEvaluatorSuite
     assert(e.getMessage.contains("Number of clusters must be greater than one"))
   }
 
+  /*
+    Use the following python code to load the data and evaluate it using scikit-learn package.
+
+    from sklearn import datasets
+    from sklearn.metrics import calinski_harabaz_score
+    iris = datasets.load_iris()
+    round(calinski_harabaz_score(iris.data, iris.target, metric='sqeuclidean'), 10)
+
+    486.3208393186
+  */
+  test("Calinski-Harabasz") {
+    val iris = ClusteringEvaluatorSuite.irisDataset(spark)
+    val evaluator = new ClusteringEvaluator()
+      .setFeaturesCol("features")
+      .setPredictionCol("label")
+      .setMetricName("calinski-harabasz")
+
+    assert(evaluator.evaluate(iris) ~== 486.3208393186 relTol 1e-5)
+  }
+
 }
 
 object ClusteringEvaluatorSuite {
