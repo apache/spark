@@ -42,7 +42,7 @@ private[spark] class RollingFileAppender(
     val rollingPolicy: RollingPolicy,
     conf: SparkConf,
     bufferSize: Int = RollingFileAppender.DEFAULT_BUFFER_SIZE
-  ) extends FileAppender(inputStream, activeFile, bufferSize) {
+  ) extends FileAppender(inputStream, activeFile, conf, bufferSize) {
 
   import RollingFileAppender._
 

@@ -26,10 +26,12 @@ import org.apache.spark.util.{IntParam, Utils}
 /**
  * Continuously appends the data from an input stream into the given file.
  */
-private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSize: Int = 8192)
+private[spark] class FileAppender(inputStream: InputStream, file: File, conf: SparkConf,
+    bufferSize: Int = 8192)
   extends Logging {
   @volatile private var outputStream: FileOutputStream = null
   @volatile private var markedForStop = false     // has the appender been asked to stopped
+  val fileOutEnabled: Boolean = conf.getBoolean("spark.executorLog.enabled", true)
 
   // Thread that reads the input stream and writes to file
   private val writingThread = new Thread("File appending thread for " + file) {
@@ -71,7 +73,7 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
             // asynchronously, so once appender has been flagged to stop these will be ignored
             case _: IOException if markedForStop =>  // do nothing and proceed to stop appending
           }
-          if (n > 0) {
+          if (n > 0 && fileOutEnabled) {
             appendToFile(buf, n)
           }
         }
@@ -145,7 +147,7 @@ private[spark] object FileAppender extends Logging {
           new RollingFileAppender(
             inputStream, file, new TimeBasedRollingPolicy(interval, pattern), conf)
       }.getOrElse {
-        new FileAppender(inputStream, file)
+        new FileAppender(inputStream, file, conf)
       }
     }
 
@@ -157,13 +159,13 @@ private[spark] object FileAppender extends Logging {
         case _ =>
           logWarning(
             s"Illegal size [$rollingSizeBytes] for rolling executor logs, rolling logs not enabled")
-          new FileAppender(inputStream, file)
+          new FileAppender(inputStream, file, conf)
       }
     }
 
     rollingStrategy match {
       case "" =>
-        new FileAppender(inputStream, file)
+        new FileAppender(inputStream, file, conf)
       case "time" =>
         createTimeBasedAppender()
       case "size" =>
@@ -172,7 +174,7 @@ private[spark] object FileAppender extends Logging {
         logWarning(
           s"Illegal strategy [$rollingStrategy] for rolling executor logs, " +
             s"rolling logs not enabled")
-        new FileAppender(inputStream, file)
+        new FileAppender(inputStream, file, conf)
     }
   }
 }
