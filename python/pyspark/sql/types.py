@@ -191,8 +191,12 @@ class TimestampType(AtomicType):
         if dt is not None:
             seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                        else time.mktime(dt.timetuple()))
+
+            print("-------------- timetuple: %s" % str(dt.timetuple()))
+            print("-------------- mktime: %s" % str(time.mktime(dt.timetuple())))
             print("-------------- tzinfo: %s" % str(dt.tzinfo))
-            print("-------------- internl ts: %s" % str(int(seconds) * 1000000 + dt.microsecond))
+            print("-------------- internl ts: %s" % str(int(calendar.timegm(dt.utctimetuple()) * 1000000 + dt.microsecond)))
+            print("-------------- internl ts: %s" % str(int(time.mktime(dt.timetuple())) * 1000000 + dt.microsecond))
             return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts):
