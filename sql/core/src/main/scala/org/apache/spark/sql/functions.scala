@@ -2546,16 +2546,16 @@ object functions {
   def month(e: Column): Column = withExpr { Month(e.expr) }
 
   /**
-   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * Extracts the day of the week as an integer from a given date/timestamp/string.
    * @group datetime_funcs
-   * @since 1.5.0
+   * @since 2.3.0
    */
   def dayofweek(e: Column): Column = withExpr { DayOfWeek(e.expr) }
 
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @group datetime_funcs
-   * @since 2.3.0
+   * @since 1.5.0
    */
   def dayofmonth(e: Column): Column = withExpr { DayOfMonth(e.expr) }
 
