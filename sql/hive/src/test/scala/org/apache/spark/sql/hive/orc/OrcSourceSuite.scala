@@ -18,10 +18,13 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
+import java.util.Locale
 
+import org.apache.orc.OrcConf.COMPRESS
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.orc.OrcOptions
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -150,7 +153,8 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     val conf = sqlContext.sessionState.conf
-    assert(new OrcOptions(Map("Orc.Compress" -> "NONE"), conf).compressionCodec == "NONE")
+    val option = new OrcOptions(Map(COMPRESS.getAttribute.toUpperCase(Locale.ROOT) -> "NONE"), conf)
+    assert(option.compressionCodec == "NONE")
   }
 
   test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
@@ -205,8 +209,8 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
     // `compression` -> `orc.compression` -> `spark.sql.orc.compression.codec`
     withSQLConf(SQLConf.ORC_COMPRESSION.key -> "uncompressed") {
       assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "NONE")
-      val map1 = Map("orc.compress" -> "zlib")
-      val map2 = Map("orc.compress" -> "zlib", "compression" -> "lzo")
+      val map1 = Map(COMPRESS.getAttribute -> "zlib")
+      val map2 = Map(COMPRESS.getAttribute -> "zlib", "compression" -> "lzo")
       assert(new OrcOptions(map1, conf).compressionCodec == "ZLIB")
       assert(new OrcOptions(map2, conf).compressionCodec == "LZO")
     }

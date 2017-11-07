@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
+import java.io.IOException
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
@@ -207,14 +208,13 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
-      val trainRatio = (metadata.params \ "trainRatio").extract[Double]
-      val seed = (metadata.params \ "seed").extract[Long]
-      new TrainValidationSplit(metadata.uid)
+      val tvs = new TrainValidationSplit(metadata.uid)
         .setEstimator(estimator)
         .setEvaluator(evaluator)
         .setEstimatorParamMaps(estimatorParamMaps)
-        .setTrainRatio(trainRatio)
-        .setSeed(seed)
+      DefaultParamsReader.getAndSetParams(tvs, metadata,
+        skipParams = Option(List("estimatorParamMaps")))
+      tvs
     }
   }
 }
@@ -295,17 +295,17 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
-      val trainRatio = (metadata.params \ "trainRatio").extract[Double]
-      val seed = (metadata.params \ "seed").extract[Long]
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
       val validationMetrics = (metadata.metadata \ "validationMetrics").extract[Seq[Double]].toArray
+
       val model = new TrainValidationSplitModel(metadata.uid, bestModel, validationMetrics)
       model.set(model.estimator, estimator)
         .set(model.evaluator, evaluator)
         .set(model.estimatorParamMaps, estimatorParamMaps)
-        .set(model.trainRatio, trainRatio)
-        .set(model.seed, seed)
+      DefaultParamsReader.getAndSetParams(model, metadata,
+        skipParams = Option(List("estimatorParamMaps")))
+      model
     }
   }
 }

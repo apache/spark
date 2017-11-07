@@ -19,12 +19,9 @@ package org.apache.spark.sql.sources.v2.reader;
 
 import java.util.List;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
-import org.apache.spark.sql.sources.v2.reader.ReadTask;
 
 /**
  * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
@@ -32,14 +29,13 @@ import org.apache.spark.sql.sources.v2.reader.ReadTask;
  * This is an experimental and unstable interface, as {@link UnsafeRow} is not public and may get
  * changed in the future Spark versions.
  */
-@InterfaceStability.Evolving
-@Experimental
 @InterfaceStability.Unstable
 public interface SupportsScanUnsafeRow extends DataSourceV2Reader {
 
   @Override
   default List<ReadTask<Row>> createReadTasks() {
-    throw new IllegalStateException("createReadTasks should not be called with SupportsScanUnsafeRow.");
+    throw new IllegalStateException(
+        "createReadTasks should not be called with SupportsScanUnsafeRow.");
   }
 
   /**

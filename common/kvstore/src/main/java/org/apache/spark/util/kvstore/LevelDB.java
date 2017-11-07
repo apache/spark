@@ -76,7 +76,7 @@ public class LevelDB implements KVStore {
     this.types = new ConcurrentHashMap<>();
 
     Options options = new Options();
-    options.createIfMissing(!path.exists());
+    options.createIfMissing(true);
     this._db = new AtomicReference<>(JniDBFactory.factory.open(path, options));
 
     byte[] versionData = db().get(STORE_VERSION_KEY);
@@ -213,17 +213,32 @@ public class LevelDB implements KVStore {
 
   @Override
   public void close() throws IOException {
-    DB _db = this._db.getAndSet(null);
-    if (_db == null) {
-      return;
-    }
+    synchronized (this._db) {
+      DB _db = this._db.getAndSet(null);
+      if (_db == null) {
+        return;
+      }
 
-    try {
-      _db.close();
-    } catch (IOException ioe) {
-      throw ioe;
-    } catch (Exception e) {
-      throw new IOException(e.getMessage(), e);
+      try {
+        _db.close();
+      } catch (IOException ioe) {
+        throw ioe;
+      } catch (Exception e) {
+        throw new IOException(e.getMessage(), e);
+      }
+    }
+  }
+
+  /**
+   * Closes the given iterator if the DB is still open. Trying to close a JNI LevelDB handle
+   * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
+   */
+  void closeIterator(LevelDBIterator it) throws IOException {
+    synchronized (this._db) {
+      DB _db = this._db.get();
+      if (_db != null) {
+        it.close();
+      }
     }
   }
 

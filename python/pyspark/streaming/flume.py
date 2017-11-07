@@ -53,7 +53,14 @@ class FlumeUtils(object):
         :param enableDecompression:  Should netty server decompress input stream
         :param bodyDecoder:  A function used to decode body (default is utf8_decoder)
         :return: A DStream object
+
+        .. note:: Deprecated in 2.3.0. Flume support is deprecated as of Spark 2.3.0.
+            See SPARK-22142.
         """
+        warnings.warn(
+            "Deprecated in 2.3.0. Flume support is deprecated as of Spark 2.3.0. "
+            "See SPARK-22142.",
+            DeprecationWarning)
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         helper = FlumeUtils._get_helper(ssc._sc)
         jstream = helper.createStream(ssc._jssc, hostname, port, jlevel, enableDecompression)
@@ -79,7 +86,14 @@ class FlumeUtils(object):
                              will result in this stream using more threads
         :param bodyDecoder:  A function used to decode body (default is utf8_decoder)
         :return: A DStream object
+
+        .. note:: Deprecated in 2.3.0. Flume support is deprecated as of Spark 2.3.0.
+            See SPARK-22142.
         """
+        warnings.warn(
+            "Deprecated in 2.3.0. Flume support is deprecated as of Spark 2.3.0. "
+            "See SPARK-22142.",
+            DeprecationWarning)
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         hosts = []
         ports = []

@@ -25,7 +25,7 @@ grammar SqlBase;
    * For char stream "2.3", "2." is not a valid decimal token, because it is followed by digit '3'.
    * For char stream "2.3_", "2.3" is not a valid decimal token, because it is followed by '_'.
    * For char stream "2.3W", "2.3" is not a valid decimal token, because it is followed by 'W'.
-   * For char stream "12.0D 34.E2+0.12 "  12.0D is a valid decimal token because it is folllowed
+   * For char stream "12.0D 34.E2+0.12 "  12.0D is a valid decimal token because it is followed
    * by a space. 34.E2 is a valid decimal token because it is followed by symbol '+'
    * which is not a digit or letter or underscore.
    */
@@ -38,10 +38,6 @@ grammar SqlBase;
       return true;
     }
   }
-}
-
-tokens {
-    DELIMITER
 }
 
 singleStatement
@@ -447,12 +443,15 @@ joinCriteria
     ;
 
 sample
-    : TABLESAMPLE '('
-      ( (negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) sampleType=PERCENTLIT)
-      | (expression sampleType=ROWS)
-      | sampleType=BYTELENGTH_LITERAL
-      | (sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE (ON (identifier | qualifiedName '(' ')'))?))
-      ')'
+    : TABLESAMPLE '(' sampleMethod? ')'
+    ;
+
+sampleMethod
+    : negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
+    | expression ROWS                                                             #sampleByRows
+    | sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE
+        (ON (identifier | qualifiedName '(' ')'))?                                #sampleByBucket
+    | bytes=expression                                                            #sampleByBytes
     ;
 
 identifierList
@@ -565,8 +564,7 @@ valueExpression
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
-    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    : CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
@@ -748,7 +746,7 @@ nonReserved
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
-    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT | CURRENT_DATE | CURRENT_TIMESTAMP
+    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
     | DIRECTORY
     | BOTH | LEADING | TRAILING
     ;
@@ -984,8 +982,6 @@ OPTION: 'OPTION';
 ANTI: 'ANTI';
 LOCAL: 'LOCAL';
 INPATH: 'INPATH';
-CURRENT_DATE: 'CURRENT_DATE';
-CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
@@ -1002,10 +998,6 @@ SMALLINT_LITERAL
 
 TINYINT_LITERAL
     : DIGIT+ 'Y'
-    ;
-
-BYTELENGTH_LITERAL
-    : DIGIT+ ('B' | 'K' | 'M' | 'G')
     ;
 
 INTEGER_VALUE

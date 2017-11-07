@@ -96,7 +96,7 @@ case class GenerateExec(
           } else {
             outputRows.map(joinedRow.withRight)
           }
-        } ++ LazyIterator(boundGenerator.terminate).map { row =>
+        } ++ LazyIterator(() => boundGenerator.terminate()).map { row =>
           // we leave the left side as the last element of its child output
           // keep it the same as Hive does
           joinedRow.withRight(row)
@@ -109,7 +109,7 @@ case class GenerateExec(
           } else {
             outputRows
           }
-        } ++ LazyIterator(boundGenerator.terminate)
+        } ++ LazyIterator(() => boundGenerator.terminate())
       }
 
       // Convert the rows to unsafe rows.
@@ -132,9 +132,10 @@ case class GenerateExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def needCopyResult: Boolean = true
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     ctx.currentVars = input
-    ctx.copyResult = true
 
     // Add input rows to the values when we are joining
     val values = if (join) {
