@@ -45,7 +45,9 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set("spark.memory.fraction", "1")
       .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
       .set("spark.memory.offHeap.size",
-        if (maxOffHeapExecutionMemory != 0L) { maxOffHeapExecutionMemory.toString } else {
+        if (maxOffHeapExecutionMemory != 0L) {
+          maxOffHeapExecutionMemory.toString
+        } else {
           sc.get("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString)
         })
       .set("spark.memory.storageFraction", storageFraction.toString)

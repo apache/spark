@@ -83,8 +83,8 @@ class VectorizedHashMapGenerator(
       "OffHeapColumnVector"
     }
     s"""
-       |  private org.apache.spark.sql.execution.vectorized.OnHeapColumnVector[] batchVectors;
-       |  private org.apache.spark.sql.execution.vectorized.OnHeapColumnVector[] bufferVectors;
+       |  private org.apache.spark.sql.execution.vectorized.WritableColumnVector[] batchVectors;
+       |  private org.apache.spark.sql.execution.vectorized.WritableColumnVector[] bufferVectors;
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch aggregateBufferBatch;
        |  private int[] buckets;
@@ -99,7 +99,7 @@ class VectorizedHashMapGenerator(
        |
        |  public $generatedClassName() {
        |    batchVectors = org.apache.spark.sql.execution.vectorized
-       |      .OnHeapColumnVector.allocateColumns(capacity, schema);
+       |      .$columnVector.allocateColumns(capacity, schema);
        |    batch = new org.apache.spark.sql.execution.vectorized.ColumnarBatch(
        |      schema, batchVectors, capacity);
        |
