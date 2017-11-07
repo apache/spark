@@ -417,12 +417,12 @@ class SparkSession(object):
         data = [schema.toInternal(row) for row in data]
         return self._sc.parallelize(data), schema
 
-    def _get_numpy_record_dtypes(self, rec):
+    def _get_numpy_record_dtype(self, rec):
         """
         Used when converting a pandas.DataFrame to Spark using to_records(), this will correct
-        the dtypes of records so they can be properly loaded into Spark.
-        :param rec: a numpy record to check dtypes
-        :return corrected dtypes for a numpy.record or None if no correction needed
+        the dtypes of fields in a record so they can be properly loaded into Spark.
+        :param rec: a numpy record to check field dtypes
+        :return corrected dtype for a numpy.record or None if no correction needed
         """
         import numpy as np
         cur_dtypes = rec.dtype
@@ -438,7 +438,7 @@ class SparkSession(object):
                 curr_type = 'datetime64[us]'
                 has_rec_fix = True
             record_type_list.append((str(col_names[i]), curr_type))
-        return record_type_list if has_rec_fix else None
+        return np.dtype(record_type_list) if has_rec_fix else None
 
     def _convert_from_pandas(self, pdf, schema):
         """
@@ -454,9 +454,9 @@ class SparkSession(object):
 
         # Check if any columns need to be fixed for Spark to infer properly
         if len(np_records) > 0:
-            record_type_list = self._get_numpy_record_dtypes(np_records[0])
-            if record_type_list is not None:
-                return [r.astype(record_type_list).tolist() for r in np_records], schema
+            record_dtype = self._get_numpy_record_dtype(np_records[0])
+            if record_dtype is not None:
+                return [r.astype(record_dtype).tolist() for r in np_records], schema
 
         # Convert list of numpy records to python lists
         return [r.tolist() for r in np_records], schema
