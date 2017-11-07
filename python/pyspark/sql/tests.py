@@ -3207,6 +3207,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
 
+        print("Before %s" % str(time.tzname))s
         # Synchronize default timezone between Python and Java
         cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
         tz = "America/Los_Angeles"
@@ -3218,7 +3219,6 @@ class VectorizedUDFTests(ReusedSQLTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        print("Before %s" % str(time.tzname))
         del os.environ["TZ"]
         if cls.tz_prev is not None:
             os.environ["TZ"] = cls.tz_prev
@@ -3253,7 +3253,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         # df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
         # df.show()  # TODO: remove later
 
-        if sys.version_info[0] == 2:
+        if sys.version_info[0] == 3:
             raise Exception()
 
 
