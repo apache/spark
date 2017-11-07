@@ -3199,18 +3199,8 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf.columns[0], "i")
         self.assertTrue(pdf.empty)
 
-    def test_printout(self):
-        print("Python [%s]" % str(sys.version_info))
-        if _have_pandas:
-            import pandas as pd
-            print("Pandas [%s]" % pd.__version__)
-        else:
-            print("Pandas it not installed.")
-        if sys.version < '3':
-            raise Exception()
 
-
-@unittest.skipIf(not _have_pandas or not _have_arrow or sys.version >= '3', "Pandas or Arrow not installed")
+@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class VectorizedUDFTests(ReusedSQLTestCase):
 
     @classmethod
