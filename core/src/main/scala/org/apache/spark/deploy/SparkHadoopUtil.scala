@@ -426,6 +426,8 @@ class SparkHadoopUtil extends Logging {
     ugi.getAuthenticationMethod() == UserGroupInformation.AuthenticationMethod.PROXY
   }
 
+  def getHistoryServerTimeZone: String = sparkConf.get("spark.history.timeZone", "GMT")
+
 }
 
 object SparkHadoopUtil {

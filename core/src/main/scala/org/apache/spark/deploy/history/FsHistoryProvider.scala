@@ -324,7 +324,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       Map()
     }
     Map("Event log directory" -> logDir.toString,
-      "Time zone" -> Utils.getTimeZone.getID) ++ safeMode
+      "Time zone" -> Utils.getHistoryServerTimeZone.getID) ++ safeMode
   }
 
   override def stop(): Unit = {

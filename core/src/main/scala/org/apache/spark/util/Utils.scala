@@ -2742,10 +2742,8 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  def getTimeZone: TimeZone = {
-    val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
-    TimeZone.getTimeZone(sparkConf.get("spark.history.timeZone", "GMT"))
-  }
+  def getHistoryServerTimeZone: TimeZone =
+    TimeZone.getTimeZone(SparkHadoopUtil.get.getHistoryServerTimeZone)
 
 }
 

@@ -33,7 +33,7 @@ private[v1] class SimpleDateParam(val originalValue: String) {
     } catch {
       case _: ParseException =>
         val gmtDay = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        gmtDay.setTimeZone(Utils.getTimeZone)
+        gmtDay.setTimeZone(Utils.getHistoryServerTimeZone)
         try {
           gmtDay.parse(originalValue).getTime()
         } catch {

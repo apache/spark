@@ -88,7 +88,7 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
 
 private[spark] object JacksonMessageWriter {
   def makeISODateFormat: SimpleDateFormat = {
-    val timeZone = Utils.getTimeZone
+    val timeZone = Utils.getHistoryServerTimeZone
     val iso8601 = new SimpleDateFormat(s"yyyy-MM-dd'T'HH:mm:ss.SSS'${timeZone.getID}'", Locale.US)
     val cal = Calendar.getInstance(timeZone)
     iso8601.setCalendar(cal)
