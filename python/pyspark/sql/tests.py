@@ -3247,6 +3247,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
 
         df = self.spark.createDataFrame(data, schema=schema)
         df.show()  # TODO: remove later
+        print(df.collect())
 
         # Check that a timestamp passed through a pandas_udf will not be altered by timezone calc
         # f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType())
