@@ -368,8 +368,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
     args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
     args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
 
-    // This security manager will not need an auth secret, but set a dummy value in case
-    // spark.authenticate is enabled, otherwise an exception is thrown.
     lazy val secMgr = new SecurityManager(sparkConf)
 
     // In client mode, download remote files.
