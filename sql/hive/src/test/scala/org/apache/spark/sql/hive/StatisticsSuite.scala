@@ -29,7 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, EquiHeightBucket, EquiHeightHistogram, HistogramSerializer}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, EquiHeightBucket, HistogramSerializer}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1125,16 +1125,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         val tsHistogramProps = table.properties
           .filterKeys(_.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram-"))
-        assert(tsHistogramProps.size == intHistogramProps.size)
 
         // Validate histogram after deserialization.
         val cs = getCatalogStatistics(tableName).colStats
-        val intHistogram = cs("cint").histogram.get.asInstanceOf[EquiHeightHistogram]
-        val tsHistogram = cs("ctimestamp").histogram.get.asInstanceOf[EquiHeightHistogram]
-        assert(intHistogram.ehBuckets.length == spark.sessionState.conf.histogramBucketsNum)
-        checkBucketsOrder(intHistogram.ehBuckets)
-        assert(tsHistogram.ehBuckets.length == spark.sessionState.conf.histogramBucketsNum)
-        checkBucketsOrder(tsHistogram.ehBuckets)
+        val intHistogram = cs("cint").histogram.get
+        val tsHistogram = cs("ctimestamp").histogram.get
+        assert(intHistogram.buckets.length == spark.sessionState.conf.histogramBucketsNum)
+        checkBucketsOrder(intHistogram.buckets)
+        assert(tsHistogram.buckets.length == spark.sessionState.conf.histogramBucketsNum)
+        checkBucketsOrder(tsHistogram.buckets)
       }
     }
   }

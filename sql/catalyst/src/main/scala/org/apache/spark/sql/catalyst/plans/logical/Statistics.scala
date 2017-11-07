@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.math.{MathContext, RoundingMode}
-import java.nio.ByteBuffer
 
 import scala.util.control.NonFatal
 
-import com.google.common.primitives.{Doubles, Ints, Longs}
+import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -101,7 +101,7 @@ case class ColumnStat(
     nullCount: BigInt,
     avgLen: Long,
     maxLen: Long,
-    histogram: Option[Histogram] = None) {
+    histogram: Option[EquiHeightHistogram] = None) {
 
   // We currently don't store min/max for binary/string type. This can change in the future and
   // then we need to remove this require.
@@ -336,30 +336,19 @@ object ColumnStat extends Logging {
 }
 
 /**
- * There are a few types of histograms in state-of-the-art estimation methods. E.g. equi-width
- * histogram, equi-height histogram, frequency histogram (value-frequency pairs) and hybrid
- * histogram, etc.
- * Currently in Spark, we support equi-height histogram since it is good at handling skew
- * distribution, and also provides reasonable accuracy in other cases.
- * We can add other histograms in the future, which will make estimation logic more complicated.
- * This is because we will have to deal with computation between different types of histograms in
- * some cases, e.g. for join columns.
- */
-trait Histogram
-
-/**
- * Equi-height histogram represents column value distribution by a sequence of buckets. Each bucket
- * has a value range and contains approximately the same number of rows.
+ * Equi-height histogram represents the distribution of a column's values by a sequence of buckets.
+ * Each bucket has a value range and contains approximately the same number of rows.
+ * In the context of Spark SQL statistics, we may use "histogram" to denote "equi-height histogram"
+ * for simplicity.
  * @param height number of rows in each bucket
- * @param ehBuckets equi-height histogram buckets
+ * @param buckets equi-height histogram buckets
  */
-case class EquiHeightHistogram(height: Double, ehBuckets: Array[EquiHeightBucket])
-  extends Histogram {
+case class EquiHeightHistogram(height: Double, buckets: Array[EquiHeightBucket]) {
 
   // Only for histogram equality test.
   override def equals(other: Any): Boolean = other match {
     case otherEHH: EquiHeightHistogram =>
-      height == otherEHH.height && ehBuckets.sameElements(otherEHH.ehBuckets)
+      height == otherEHH.height && buckets.sameElements(otherEHH.buckets)
     case _ => false
   }
 
@@ -375,9 +364,6 @@ case class EquiHeightHistogram(height: Double, ehBuckets: Array[EquiHeightBucket
 case class EquiHeightBucket(lo: Double, hi: Double, ndv: Long)
 
 object HistogramSerializer {
-  // A flag to indicate the type of histogram
-  val EQUI_HEIGHT_HISTOGRAM_TYPE: Byte = 1
-
   /**
    * Serializes a given histogram to a string. For advanced statistics like histograms, sketches,
    * etc, we don't provide readability for their serialized formats in metastore (as
@@ -386,49 +372,43 @@ object HistogramSerializer {
    * key-value properties, instead of a single, self-described property. And for
    * count-min-sketch, it's essentially unnatural to make it a readable string.
    */
-  final def serialize(histogram: Histogram): String = histogram match {
-    case h: EquiHeightHistogram =>
-      // type + numBuckets + height + numBuckets * (lo + hi + ndv)
-      val length = 1 + Ints.BYTES + Doubles.BYTES +
-        h.ehBuckets.length * (Doubles.BYTES + Doubles.BYTES + Longs.BYTES)
-      val buffer = ByteBuffer.wrap(new Array(length))
-      buffer.put(EQUI_HEIGHT_HISTOGRAM_TYPE)
-      buffer.putInt(h.ehBuckets.length)
-      buffer.putDouble(h.height)
-      var i = 0
-      while (i < h.ehBuckets.length) {
-        val b = h.ehBuckets(i)
-        buffer.putDouble(b.lo)
-        buffer.putDouble(b.hi)
-        buffer.putLong(b.ndv)
-        i += 1
-      }
-      val s = org.apache.commons.codec.binary.Base64.encodeBase64String(buffer.array())
-      s
-    case _ =>
-      throw new AnalysisException(s"Unsupported histogram: $histogram")
+  final def serialize(histogram: EquiHeightHistogram): String = {
+    val bos = new ByteArrayOutputStream()
+    val out = new DataOutputStream(new LZ4BlockOutputStream(bos))
+    out.writeDouble(histogram.height)
+    out.writeInt(histogram.buckets.length)
+    var i = 0
+    while (i < histogram.buckets.length) {
+      val bucket = histogram.buckets(i)
+      out.writeDouble(bucket.lo)
+      out.writeDouble(bucket.hi)
+      out.writeLong(bucket.ndv)
+      i += 1
+    }
+    out.writeInt(-1)
+    out.flush()
+    out.close()
+
+    org.apache.commons.codec.binary.Base64.encodeBase64String(bos.toByteArray)
   }
 
   /** Deserializes a given string to a histogram. */
-  final def deserialize(str: String): Histogram = {
+  final def deserialize(str: String): EquiHeightHistogram = {
     val bytes = org.apache.commons.codec.binary.Base64.decodeBase64(str)
-    val buffer = ByteBuffer.wrap(bytes)
-    buffer.get() match {
-      case 1 =>
-        val numBuckets = buffer.getInt
-        val height = buffer.getDouble
-        val buckets = new Array[EquiHeightBucket](numBuckets)
-        var i = 0
-        while (i < numBuckets) {
-          val lo = buffer.getDouble
-          val hi = buffer.getDouble
-          val ndv = buffer.getLong
-          buckets(i) = EquiHeightBucket(lo, hi, ndv)
-          i += 1
-        }
-        EquiHeightHistogram(height, buckets)
-      case other =>
-        throw new AnalysisException(s"Unknown histogram type: $other")
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(new LZ4BlockInputStream(bis))
+    val height = ins.readDouble()
+    val numBuckets = ins.readInt()
+    val buckets = new Array[EquiHeightBucket](numBuckets)
+    var i = 0
+    while (i < numBuckets) {
+      val lo = ins.readDouble()
+      val hi = ins.readDouble()
+      val ndv = ins.readLong()
+      buckets(i) = EquiHeightBucket(lo, hi, ndv)
+      i += 1
     }
+    ins.close()
+    EquiHeightHistogram(height, buckets)
   }
 }
