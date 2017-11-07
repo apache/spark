@@ -655,7 +655,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  override def alterTableStats(
+  /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
+  override def doAlterTableStats(
       db: String,
       table: String,
       stats: Option[CatalogStatistics]): Unit = withClient {
