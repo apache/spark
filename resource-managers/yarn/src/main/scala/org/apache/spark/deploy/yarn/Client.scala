@@ -687,6 +687,20 @@ private[spark] class Client(
   private def createConfArchive(): File = {
     val hadoopConfFiles = new HashMap[String, File]()
 
+    // SPARK_CONF_DIR shows up in the classpath before HADOOP_CONF_DIR/YARN_CONF_DIR
+    val localConfDir = System.getProperty("SPARK_CONF_DIR",
+      System.getProperty("SPARK_HOME") + File.separator + "conf")
+    val dir = new File(localConfDir)
+    if (dir.isDirectory) {
+      val files = dir.listFiles(new FileFilter {
+        override def accept(pathname: File): Boolean = {
+          pathname.isFile && pathname.getName.endsWith("xml")
+        }
+      })
+      files.foreach { f => hadoopConfFiles(f.getName) = f }
+    }
+
+    // Ensure HADOOP_CONF_DIR/YARN_CONF_DIR not overriding existing files
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
@@ -704,19 +718,6 @@ private[spark] class Client(
         }
       }
     }
-
-    val confDir =
-      sys.env.getOrElse("SPARK_CONF_DIR", sys.env("SPARK_HOME") + File.separator + "conf")
-    val dir = new File(confDir)
-    if (dir.isDirectory) {
-      val files = dir.listFiles(new FileFilter {
-        override def accept(pathname: File): Boolean = {
-          pathname.isFile && pathname.getName.endsWith("xml")
-        }
-      })
-      files.foreach { f => hadoopConfFiles(f.getName) = f }
-    }
-
 
     val confArchive = File.createTempFile(LOCALIZED_CONF_DIR, ".zip",
       new File(Utils.getLocalDir(sparkConf)))
