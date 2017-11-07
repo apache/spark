@@ -153,8 +153,8 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   if (!tarExists || overwrite || !success) {
     unlink(packageLocalPath)
     if (success) {
-      # if tar file not existing (or we are told to overwrite) and untar is successful
-      # set a flag that we have downloaded (and untar) Spark package.
+      # if tar file was not there before (or it was, but we are told to overwrite it),
+      # and untar is successful - set a flag that we have downloaded (and untar) Spark package.
       assign(".sparkDownloaded", TRUE, envir = .sparkREnv)
     }
   }
