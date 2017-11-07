@@ -28,6 +28,7 @@ import org.apache.spark.api.java.JavaRDD;
 import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.linalg.Vector;
+import org.apache.spark.ml.summary.LogisticRegressionTrainingSummary;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
