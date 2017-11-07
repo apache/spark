@@ -3207,7 +3207,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
 
-        print("Before %s" % str(time.tzname))s
+        print("Before %s" % str(time.tzname))
         # Synchronize default timezone between Python and Java
         cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
         tz = "America/Los_Angeles"
