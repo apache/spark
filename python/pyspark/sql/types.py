@@ -187,10 +187,12 @@ class TimestampType(AtomicType):
     def needConversion(self):
         return True
 
-    def toInternal(self, dt):
+    def toInternal(self, dt, a=False):
         if dt is not None:
             seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                        else time.mktime(dt.timetuple()))
+            print("-------------- tzinfo: %s" % str(dt.tzinfo))
+            print("-------------- internl ts: %s" % str(int(seconds) * 1000000 + dt.microsecond))
             return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts):

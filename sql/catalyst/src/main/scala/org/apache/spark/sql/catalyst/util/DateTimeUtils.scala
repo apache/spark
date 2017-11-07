@@ -153,6 +153,8 @@ object DateTimeUtils {
   def timestampToString(us: SQLTimestamp, timeZone: TimeZone): String = {
     val ts = toJavaTimestamp(us)
     val timestampString = ts.toString
+    println(s"++++++++++ timestamp: $us")
+    println(s"++++++++++ timeZone: $timeZone")
     val timestampFormat = getThreadLocalTimestampFormat(timeZone)
     val formatted = timestampFormat.format(ts)
 
