@@ -441,8 +441,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.UnionExec(unionChildren.map(planLater)) :: Nil
       case g @ logical.Generate(generator, join, outer, omitGeneratorChild, _, _, child) =>
         execution.GenerateExec(
-          generator, join = join, outer = outer, omitGeneratorChild = omitGeneratorChild, g.qualifiedGeneratorOutput,
-          planLater(child)) :: Nil
+          generator, join = join, outer = outer, omitGeneratorChild = omitGeneratorChild,
+          g.qualifiedGeneratorOutput, planLater(child)) :: Nil
       case _: logical.OneRowRelation =>
         execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
       case r: logical.Range =>

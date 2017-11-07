@@ -848,7 +848,8 @@ class Analyzer(
         if (newG.fastEquals(generator)) {
           g
         } else {
-          Generate(newG.asInstanceOf[Generator], join, outer, omitGeneratorChild, qualifier, output, child)
+          Generate(newG.asInstanceOf[Generator], join, outer, omitGeneratorChild,
+            qualifier, output, child)
         }
 
       // Skips plan which contains deserializer expressions, as they should be resolved by another

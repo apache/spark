@@ -76,8 +76,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
- * @param omitGeneratorChild when true, output rows will not contain the generator's child. Used to prevent
- *                           unnecessary duplications of data.
+ * @param omitGeneratorChild when true, output rows will not contain the generator's child. Used
+ *                           to prevent unnecessary duplications of data.
  * @param qualifier Qualifier for the attributes of generator(UDTF)
  * @param generatorOutput The output schema of the Generator.
  * @param child Children logical plan node

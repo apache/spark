@@ -51,6 +51,8 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
+ * @param omitGeneratorChild when true, output rows will not contain the generator's child. Used
+ *                           to prevent unnecessary duplications of data.
  * @param generatorOutput the qualified output attributes of the generator of this node, which
  *                        constructed in analysis phase, and we can not change it, as the
  *                        parent node bound with it already.
@@ -66,14 +68,14 @@ case class GenerateExec(
 
   override def output: Seq[Attribute] = {
     if (join) {
-      generator match {
-        case g: UnaryExpression if omitGeneratorChild =>
-          (child.output diff Seq(g.child)) ++ generatorOutput
-        case _ =>
-          child.output ++ generatorOutput
-      }
-    } else {
-      generatorOutput
+        generator match {
+          case g: UnaryExpression if omitGeneratorChild =>
+            (child.output diff Seq(g.child)) ++ generatorOutput
+          case _ =>
+            child.output ++ generatorOutput
+        }
+      } else {
+        generatorOutput
     }
   }
 
@@ -94,7 +96,7 @@ case class GenerateExec(
       val rows = if (join) {
 
         val project = UnsafeProjection.create(
-          (child.output diff List(generator.asInstanceOf[UnaryExpression].child)),
+          child.output diff List(generator.asInstanceOf[UnaryExpression].child),
           child.output,
           subexpressionEliminationEnabled)
 
