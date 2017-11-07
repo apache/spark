@@ -19,6 +19,7 @@ package org.apache.spark.memory
 
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
@@ -41,15 +42,12 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   override protected def createMemoryManager(
       maxOnHeapExecutionMemory: Long,
       maxOffHeapExecutionMemory: Long): UnifiedMemoryManager = {
+    val offHeapSize = sc.get(MEMORY_OFFHEAP_SIZE)
     val conf = new SparkConf()
       .set("spark.memory.fraction", "1")
       .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
       .set("spark.memory.offHeap.size",
-        if (maxOffHeapExecutionMemory != 0L) {
-          maxOffHeapExecutionMemory.toString
-        } else {
-          sc.get("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString)
-        })
+        (if (offHeapSize > 0) offHeapSize else maxOffHeapExecutionMemory).toString)
       .set("spark.memory.storageFraction", storageFraction.toString)
     UnifiedMemoryManager(conf, numCores = 1)
   }

@@ -80,6 +80,11 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
+  private[spark] val MEMORY_OFFHEAP_SIZE = ConfigBuilder("spark.memory.offHeap.size")
+    .bytesConf(ByteUnit.BYTE)
+    .checkValue(_ >= 0, "The off-heap memory size must not be negative")
+    .createWithDefault(0)
+
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
