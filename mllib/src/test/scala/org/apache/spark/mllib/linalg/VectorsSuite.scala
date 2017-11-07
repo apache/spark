@@ -29,8 +29,6 @@ import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.serializer.KryoSerializer
 
-
-
 class VectorsSuite extends SparkFunSuite with Logging {
 
   val arr = Array(0.1, 0.0, 0.3, 0.4)
