@@ -59,13 +59,19 @@ case class GenerateExec(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
+    omitGeneratorChild: Boolean,
     generatorOutput: Seq[Attribute],
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = {
     if (join) {
-      child.output ++ generatorOutput
+      generator match {
+        case g: UnaryExpression if omitGeneratorChild =>
+          (child.output diff Seq(g.child)) ++ generatorOutput
+        case _ =>
+          child.output ++ generatorOutput
+      }
     } else {
       generatorOutput
     }
@@ -86,10 +92,24 @@ case class GenerateExec(
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
       val rows = if (join) {
+
+        val project = UnsafeProjection.create(
+          (child.output diff List(generator.asInstanceOf[UnaryExpression].child)),
+          child.output,
+          subexpressionEliminationEnabled)
+
         val joinedRow = new JoinedRow
         iter.flatMap { row =>
+
+          val projectedRow = if (omitGeneratorChild) {
+            project.initialize(index)
+            project(row)
+          } else {
+            row
+          }
+
           // we should always set the left (child output)
-          joinedRow.withLeft(row)
+          joinedRow.withLeft(projectedRow)
           val outputRows = boundGenerator.eval(row)
           if (outer && outputRows.isEmpty) {
             joinedRow.withRight(generatorNullRow) :: Nil

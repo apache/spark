@@ -841,14 +841,14 @@ class Analyzer(
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
-      case g @ Generate(generator, _, _, _, _, _) if generator.resolved => g
+      case g @ Generate(generator, _, _, _, _, _, _) if generator.resolved => g
 
-      case g @ Generate(generator, join, outer, qualifier, output, child) =>
+      case g @ Generate(generator, join, outer, omitGeneratorChild, qualifier, output, child) =>
         val newG = resolveExpression(generator, child, throws = true)
         if (newG.fastEquals(generator)) {
           g
         } else {
-          Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
+          Generate(newG.asInstanceOf[Generator], join, outer, omitGeneratorChild, qualifier, output, child)
         }
 
       // Skips plan which contains deserializer expressions, as they should be resolved by another
@@ -1597,6 +1597,7 @@ class Analyzer(
                 generator,
                 join = projectList.size > 1, // Only join if there are other expressions in SELECT.
                 outer = outer,
+                omitGeneratorChild = false,
                 qualifier = None,
                 generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                 child)
