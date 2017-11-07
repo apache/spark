@@ -108,7 +108,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
    * Note: If set this param, when you save the returned model, you can set an option
    * "persistSubModels" to be "true" before saving, in order to save these submodels.
    * You can check documents of
-   * {@link org.apache.spark.ml.tuning.CrossValidatorModel.CrossValidatorModelWriter}
+   * {@link org.apache.spark.ml.tuning.TrainValidationSplitModel.TrainValidationSplitModelWriter}
    * for more information.
    *
    * @group expertSetParam
@@ -275,15 +275,14 @@ class TrainValidationSplitModel private[ml] (
 
   /**
    * @return submodels represented in array. The index of array corresponds to the ordering of
-   *         estimatorParamsMaps
-   *
-   * Note: If submodels not available, exception will be thrown. only when we set collectSubModels
-   *  Param before fitting, submodels will be available.
+   *         estimatorParamMaps
+   * @throws IllegalArgumentException if subModels are not available. To retrieve subModels,
+   *         make sure to set collectSubModels to true before fitting.
    */
   @Since("2.3.0")
   def subModels: Array[Model[_]] = {
-    require(_subModels.isDefined, "submodels not available, set collectSubModels param before " +
-      "fitting will address this issue.")
+    require(_subModels.isDefined, "subModels not available, To retrieve subModels, make sure " +
+      "to set collectSubModels to true before fitting.")
     _subModels.get
   }
 
@@ -333,21 +332,26 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
    * Writer for TrainValidationSplitModel.
    * @param instance TrainValidationSplitModel instance used to construct the writer
    *
-   * Options:
-   * TrainValidationSplitModel support an option "persistSubModels", available value is
-   * "true" or "false". If you set collectSubModels param before fitting, and then you can set
-   * the option "persistSubModels" to be "true" and the submodels will be persisted.
-   * The default value of "persistSubModels" will be "true", if you set collectSubModels
-   * param before fitting, but if you do not set collectSubModels param before fitting, setting
-   * "persistSubModels" will cause exception.
+   * TrainValidationSplitModel supports an option "persistSubModels", with possible values
+   * "true" or "false". If you set the collectSubModels Param before fitting, then you can
+   * set "persistSubModels" to "true" in order to persist the subModels. By default,
+   * "persistSubModels" will be "true" when subModels are available and "false" otherwise.
+   * If subModels are not available, then setting "persistSubModels" to "true" will cause
+   * an exception.
    */
-  class TrainValidationSplitModelWriter(instance: TrainValidationSplitModel) extends MLWriter {
+  final class TrainValidationSplitModelWriter private[tuning] (
+      instance: TrainValidationSplitModel) extends MLWriter {
 
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
-      val persistSubModels = optionMap.getOrElse("persistsubmodels",
-        if (instance.hasSubModels) "true" else "false").toBoolean
+      val persistSubModelsParam = optionMap.getOrElse("persistsubmodels",
+        if (instance.hasSubModels) "true" else "false")
+
+      require(Array("true", "false").contains(persistSubModelsParam.toLowerCase(Locale.ROOT)),
+        s"persistSubModels option value ${persistSubModelsParam} is invalid, the possible " +
+        "values are \"true\" or \"false\"")
+      val persistSubModels = persistSubModelsParam.toBoolean
 
       import org.json4s.JsonDSL._
       val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toSeq) ~

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import java.util.{List => JList}
+import java.util.{List => JList, Locale}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -282,15 +282,14 @@ class CrossValidatorModel private[ml] (
   /**
    * @return submodels represented in two dimension array. The index of outer array is the
    *         fold index, and the index of inner array corresponds to the ordering of
-   *         estimatorParamsMaps
-   *
-   * Note: If submodels not available, exception will be thrown. only when we set collectSubModels
-   *  Param before fitting, submodels will be available.
+   *         estimatorParamMaps
+   * @throws IllegalArgumentException if subModels are not available. To retrieve subModels,
+   *         make sure to set collectSubModels to true before fitting.
    */
   @Since("2.3.0")
   def subModels: Array[Array[Model[_]]] = {
-    require(_subModels.isDefined, "submodels not available, set collectSubModels param before " +
-      "fitting will address this issue.")
+    require(_subModels.isDefined, "subModels not available, To retrieve subModels, make sure " +
+      "to set collectSubModels to true before fitting.")
     _subModels.get
   }
 
@@ -342,22 +341,27 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
    * Writer for CrossValidatorModel.
    * @param instance CrossValidatorModel instance used to construct the writer
    *
-   * Options:
-   * CrossValidatorModelWriter support an option "persistSubModels", available value is
-   * "true" or "false". If you set collectSubModels param before fitting, and then you can set
-   * the option "persistSubModels" to be "true" and the submodels will be persisted.
-   * The default value of "persistSubModels" will be "true", if you set collectSubModels
-   * param before fitting, but if you do not set collectSubModels param before fitting, setting
-   * "persistSubModels" will cause exception.
+   * CrossValidatorModelWriter supports an option "persistSubModels", with possible values
+   * "true" or "false". If you set the collectSubModels Param before fitting, then you can
+   * set "persistSubModels" to "true" in order to persist the subModels. By default,
+   * "persistSubModels" will be "true" when subModels are available and "false" otherwise.
+   * If subModels are not available, then setting "persistSubModels" to "true" will cause
+   * an exception.
    */
   @Since("2.3.0")
-  class CrossValidatorModelWriter(instance: CrossValidatorModel) extends MLWriter {
+  final class CrossValidatorModelWriter private[tuning] (
+      instance: CrossValidatorModel) extends MLWriter {
 
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
-      val persistSubModels = optionMap.getOrElse("persistsubmodels",
-        if (instance.hasSubModels) "true" else "false").toBoolean
+      val persistSubModelsParam = optionMap.getOrElse("persistsubmodels",
+        if (instance.hasSubModels) "true" else "false")
+
+      require(Array("true", "false").contains(persistSubModelsParam.toLowerCase(Locale.ROOT)),
+        s"persistSubModels option value ${persistSubModelsParam} is invalid, the possible " +
+        "values are \"true\" or \"false\"")
+      val persistSubModels = persistSubModelsParam.toBoolean
 
       import org.json4s.JsonDSL._
       val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toSeq) ~

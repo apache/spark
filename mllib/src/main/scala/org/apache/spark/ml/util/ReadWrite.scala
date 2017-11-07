@@ -111,12 +111,13 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   protected def saveImpl(path: String): Unit
 
   /**
-   * Map store extra options for this writer.
+   * Map to store extra options for this writer.
    */
   protected val optionMap: mutable.Map[String, String] = new mutable.HashMap[String, String]()
 
   /**
-   * `option()` handles extra options.
+   * Adds an option to the underlying MLWriter. See the documentation for the specific model's
+   * writer for possible options. The option name (key) is case-insensitive.
    */
   @Since("2.3.0")
   def option(key: String, value: String): this.type = {
