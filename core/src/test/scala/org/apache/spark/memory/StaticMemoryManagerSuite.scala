@@ -19,8 +19,8 @@ package org.apache.spark.memory
 
 import org.mockito.Mockito.when
 
-import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
 import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
 
