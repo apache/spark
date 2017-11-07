@@ -577,6 +577,18 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   }
 
   /**
+   * An extractor that matches all binary comparison operators except null-safe equality.
+   *
+   * Null-safe equality is not supported by Hive metastore partition predicate pushdown
+   */
+  object SpecialBinaryComparison {
+    def unapply(e: BinaryComparison): Option[(Expression, Expression)] = e match {
+      case _: EqualNullSafe => None
+      case _ => Some((e.left, e.right))
+    }
+  }
+
+  /**
    * Converts catalyst expression to the format that Hive's getPartitionsByFilter() expects, i.e.
    * a string that represents partition predicates like "str_key=\"value\" and int_key=1 ...".
    *
@@ -590,14 +602,14 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       .map(col => col.getName).toSet
 
     filters.collect {
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
+      case op @ SpecialBinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
         s"${a.name} ${op.symbol} $v"
-      case op @ BinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
+      case op @ SpecialBinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
         s"$v ${op.symbol} ${a.name}"
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: StringType))
+      case op @ SpecialBinaryComparison(a: Attribute, Literal(v, _: StringType))
           if !varcharKeys.contains(a.name) =>
         s"""${a.name} ${op.symbol} ${quoteStringLiteral(v.toString)}"""
-      case op @ BinaryComparison(Literal(v, _: StringType), a: Attribute)
+      case op @ SpecialBinaryComparison(Literal(v, _: StringType), a: Attribute)
           if !varcharKeys.contains(a.name) =>
         s"""${quoteStringLiteral(v.toString)} ${op.symbol} ${a.name}"""
     }.mkString(" and ")
