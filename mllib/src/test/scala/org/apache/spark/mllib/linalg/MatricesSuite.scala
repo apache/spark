@@ -31,8 +31,6 @@ import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.serializer.KryoSerializer
 
-
-
 class MatricesSuite extends SparkFunSuite {
   test("kryo class register") {
     val conf = new SparkConf(false)

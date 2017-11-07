@@ -180,12 +180,21 @@ class KryoSerializer(conf: SparkConf)
 
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
-    safeClassLoader("org.apache.spark.mllib.linalg.Vector").foreach(kryo.register(_))
-    safeClassLoader("org.apache.spark.mllib.linalg.DenseVector").foreach(kryo.register(_))
-    safeClassLoader("org.apache.spark.mllib.linalg.SparseVector").foreach(kryo.register(_))
-    safeClassLoader("org.apache.spark.mllib.linalg.Matrix").foreach(kryo.register(_))
-    safeClassLoader("org.apache.spark.mllib.linalg.DenseMatrix").foreach(kryo.register(_))
-    safeClassLoader("org.apache.spark.mllib.linalg.SparseMatrix").foreach(kryo.register(_))
+    Seq("org.apache.spark.mllib.linalg.Vector",
+      "org.apache.spark.mllib.linalg.DenseVector",
+      "org.apache.spark.mllib.linalg.SparseVector",
+      "org.apache.spark.mllib.linalg.Matrix",
+      "org.apache.spark.mllib.linalg.DenseMatrix",
+      "org.apache.spark.mllib.linalg.SparseMatrix",
+      "org.apache.spark.ml.linalg.Vector",
+      "org.apache.spark.ml.linalg.DenseVector",
+      "org.apache.spark.ml.linalg.SparseVector",
+      "org.apache.spark.ml.linalg.Matrix",
+      "org.apache.spark.ml.linalg.DenseMatrix",
+      "org.apache.spark.ml.linalg.SparseMatrix",
+      "org.apache.spark.ml.feature.Instance",
+      "org.apache.spark.ml.feature.OffsetInstance"
+    ).flatMap(safeClassLoader(_)).foreach(kryo.register(_))
 
     kryo.setClassLoader(classLoader)
     kryo
