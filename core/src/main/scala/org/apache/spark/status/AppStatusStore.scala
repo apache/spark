@@ -33,6 +33,15 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
  */
 private[spark] class AppStatusStore(store: KVStore) {
 
+  def applicationInfo(): v1.ApplicationInfo = {
+    store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
+  }
+
+  def environmentInfo(): v1.ApplicationEnvironmentInfo = {
+    val klass = classOf[ApplicationEnvironmentInfoWrapper]
+    store.read(klass, klass.getName()).info
+  }
+
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
     val it = store.view(classOf[JobDataWrapper]).asScala.map(_.info)
     if (!statuses.isEmpty()) {

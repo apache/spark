@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources.v2.writer;
 
+import java.io.IOException;
+
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
@@ -59,8 +61,10 @@ public interface DataWriter<T> {
    *
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
    */
-  void write(T record);
+  void write(T record) throws IOException;
 
   /**
    * Commits this writer after all records are written successfully, returns a commit message which
@@ -74,8 +78,10 @@ public interface DataWriter<T> {
    *
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
    */
-  WriterCommitMessage commit();
+  WriterCommitMessage commit() throws IOException;
 
   /**
    * Aborts this writer if it is failed. Implementations should clean up the data for already
@@ -84,9 +90,11 @@ public interface DataWriter<T> {
    * This method will only be called if there is one record failed to write, or {@link #commit()}
    * failed.
    *
-   * If this method fails(throw exception), the underlying data source may have garbage that need
-   * to be cleaned by {@link DataSourceV2Writer#abort(WriterCommitMessage[])} or manually, but
-   * these garbage should not be visible to data source readers.
+   * If this method fails(by throwing an exception), the underlying data source may have garbage
+   * that need to be cleaned by {@link DataSourceV2Writer#abort(WriterCommitMessage[])} or manually,
+   * but these garbage should not be visible to data source readers.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
    */
-  void abort();
+  void abort() throws IOException;
 }

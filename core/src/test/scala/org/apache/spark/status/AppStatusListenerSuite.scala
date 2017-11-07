@@ -56,6 +56,46 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     Utils.deleteRecursively(testDir)
   }
 
+  test("environment info") {
+    val listener = new AppStatusListener(store, conf, true)
+
+    val details = Map(
+      "JVM Information" -> Seq(
+        "Java Version" -> sys.props("java.version"),
+        "Java Home" -> sys.props("java.home"),
+        "Scala Version" -> scala.util.Properties.versionString
+      ),
+      "Spark Properties" -> Seq(
+        "spark.conf.1" -> "1",
+        "spark.conf.2" -> "2"
+      ),
+      "System Properties" -> Seq(
+        "sys.prop.1" -> "1",
+        "sys.prop.2" -> "2"
+      ),
+      "Classpath Entries" -> Seq(
+        "/jar1" -> "System",
+        "/jar2" -> "User"
+      )
+    )
+
+    listener.onEnvironmentUpdate(SparkListenerEnvironmentUpdate(details))
+
+    val appEnvKey = classOf[ApplicationEnvironmentInfoWrapper].getName()
+    check[ApplicationEnvironmentInfoWrapper](appEnvKey) { env =>
+      val info = env.info
+
+      val runtimeInfo = Map(details("JVM Information"): _*)
+      assert(info.runtime.javaVersion == runtimeInfo("Java Version"))
+      assert(info.runtime.javaHome == runtimeInfo("Java Home"))
+      assert(info.runtime.scalaVersion == runtimeInfo("Scala Version"))
+
+      assert(info.sparkProperties === details("Spark Properties"))
+      assert(info.systemProperties === details("System Properties"))
+      assert(info.classpathEntries === details("Classpath Entries"))
+    }
+  }
+
   test("scheduler events") {
     val listener = new AppStatusListener(store, conf, true)
 

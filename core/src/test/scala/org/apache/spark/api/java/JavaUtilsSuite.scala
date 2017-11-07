@@ -14,19 +14,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api.v1
 
-import javax.ws.rs._
-import javax.ws.rs.core.MediaType
+package org.apache.spark.api.java
 
-import org.apache.spark.ui.SparkUI
+import java.io.Serializable
 
-@Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class ApplicationEnvironmentResource(ui: SparkUI) {
+import org.mockito.Mockito._
 
-  @GET
-  def getEnvironmentInfo(): ApplicationEnvironmentInfo = {
-    ui.store.environmentInfo()
+import org.apache.spark.SparkFunSuite
+
+
+class JavaUtilsSuite extends SparkFunSuite {
+
+  test("containsKey implementation without iteratively entrySet call") {
+    val src = new scala.collection.mutable.HashMap[Double, String]
+    val key: Double = 42.5
+    val key2 = "key"
+
+    src.put(key, "42")
+
+    val map: java.util.Map[Double, String] = spy(JavaUtils.mapAsSerializableJavaMap(src))
+
+    assert(map.containsKey(key))
+
+    // ClassCast checking, shouldn't throw exception
+    assert(!map.containsKey(key2))
+    assert(map.get(key2) == null)
+
+    assert(map.get(key).eq("42"))
+    assert(map.isInstanceOf[Serializable])
+
+    verify(map, never()).entrySet()
   }
-
 }

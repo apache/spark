@@ -40,6 +40,9 @@ import org.apache.spark.sql.types.StructType;
  *   3. Special scans. E.g, columnar scan, unsafe row scan, etc.
  *      Names of these interfaces start with `SupportsScan`.
  *
+ * If an exception was throw when applying any of these query optimizations, the action would fail
+ * and no Spark job was submitted.
+ *
  * Spark first applies all operator push-down optimizations that this data source supports. Then
  * Spark collects information this data source reported for further optimizations. Finally Spark
  * issues the scan request and does the actual data reading.
@@ -50,6 +53,9 @@ public interface DataSourceV2Reader {
   /**
    * Returns the actual schema of this data source reader, which may be different from the physical
    * schema of the underlying storage, as column pruning or other optimizations may happen.
+   *
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * submitted.
    */
   StructType readSchema();
 
@@ -61,6 +67,9 @@ public interface DataSourceV2Reader {
    * Note that, this may not be a full scan if the data source reader mixes in other optimization
    * interfaces like column pruning, filter push-down, etc. These optimizations are applied before
    * Spark issues the scan request.
+   *
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * submitted.
    */
   List<ReadTask<Row>> createReadTasks();
 }

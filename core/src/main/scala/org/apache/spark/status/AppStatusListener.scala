@@ -91,10 +91,22 @@ private[spark] class AppStatusListener(
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     val details = event.environmentDetails
 
-    coresPerTask = details.getOrElse("Spark Properties", Nil).toMap
-      .get("spark.task.cpus")
-      .map(_.toInt)
+    val jvmInfo = Map(details("JVM Information"): _*)
+    val runtime = new v1.RuntimeInfo(
+      jvmInfo.get("Java Version").orNull,
+      jvmInfo.get("Java Home").orNull,
+      jvmInfo.get("Scala Version").orNull)
+
+    val envInfo = new v1.ApplicationEnvironmentInfo(
+      runtime,
+      details.getOrElse("Spark Properties", Nil),
+      details.getOrElse("System Properties", Nil),
+      details.getOrElse("Classpath Entries", Nil))
+
+    coresPerTask = envInfo.sparkProperties.toMap.get("spark.task.cpus").map(_.toInt)
       .getOrElse(coresPerTask)
+
+    kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
   }
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
