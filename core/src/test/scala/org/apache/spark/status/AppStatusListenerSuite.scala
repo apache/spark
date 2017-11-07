@@ -701,7 +701,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     // Add a block from a different RDD. Verify the executor is updated correctly and also that
-    // the distribution data for rdd1 is up to date.
+    // the distribution data for both rdds is updated to match the remaining memory.
     listener.onBlockUpdated(SparkListenerBlockUpdated(
       BlockUpdatedInfo(bm1, rdd2b1.blockId, level, rdd2b1.memSize, rdd2b1.diskSize)))
 
@@ -709,6 +709,12 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(exec.info.rddBlocks === 2L)
       assert(exec.info.memoryUsed === rdd1b2.memSize + rdd2b1.memSize)
       assert(exec.info.diskUsed === rdd1b2.diskSize + rdd2b1.diskSize)
+    }
+
+    check[RDDStorageInfoWrapper](rdd1b2.rddId) { wrapper =>
+      assert(wrapper.info.dataDistribution.get.size === 1L)
+      val dist = wrapper.info.dataDistribution.get(0)
+      assert(dist.memoryRemaining === maxMemory - rdd2b1.memSize - rdd1b2.memSize )
     }
 
     check[RDDStorageInfoWrapper](rdd2b1.rddId) { wrapper =>

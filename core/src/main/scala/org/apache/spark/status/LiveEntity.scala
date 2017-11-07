@@ -469,9 +469,8 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
 
 }
 
-private class LiveRDD(info: RDDInfo) extends LiveEntity {
+private class LiveRDD(val info: RDDInfo) extends LiveEntity {
 
-  val id = info.id
   val name = info.name
   val numPartitions = info.numPartitions
 

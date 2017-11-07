@@ -547,8 +547,9 @@ private[spark] class AppStatusListener(
 
         // Trigger an update on other RDDs so that the free memory information is updated.
         liveRDDs.values.foreach { otherRdd =>
-          if (otherRdd.id != block.rddId) {
+          if (otherRdd.info.id != block.rddId) {
             otherRdd.distributionOpt(exec).foreach { dist =>
+              dist.lastUpdate = null
               update(otherRdd, now)
             }
           }
