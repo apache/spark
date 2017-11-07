@@ -88,6 +88,24 @@ private[spark] class AppStatusListener(
     kvstore.write(new ApplicationInfoWrapper(appInfo))
   }
 
+  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
+    val details = event.environmentDetails
+
+    val jvmInfo = Map(details("JVM Information"): _*)
+    val runtime = new v1.RuntimeInfo(
+      jvmInfo.get("Java Version").orNull,
+      jvmInfo.get("Java Home").orNull,
+      jvmInfo.get("Scala Version").orNull)
+
+    val envInfo = new v1.ApplicationEnvironmentInfo(
+      runtime,
+      details.getOrElse("Spark Properties", Nil),
+      details.getOrElse("System Properties", Nil),
+      details.getOrElse("Classpath Entries", Nil))
+
+    kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
+  }
+
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     val old = appInfo.attempts.head
     val attempt = new v1.ApplicationAttemptInfo(
