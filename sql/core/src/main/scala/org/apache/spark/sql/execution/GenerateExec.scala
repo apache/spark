@@ -66,14 +66,16 @@ case class GenerateExec(
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
+  private def projectedChildOutput = generator match {
+    case g: UnaryExpression if omitGeneratorChild =>
+      (child.output diff Seq(g.child))
+    case _ =>
+      child.output
+  }
+
   override def output: Seq[Attribute] = {
     if (join) {
-        generator match {
-          case g: UnaryExpression if omitGeneratorChild =>
-            (child.output diff Seq(g.child)) ++ generatorOutput
-          case _ =>
-            child.output ++ generatorOutput
-        }
+      projectedChildOutput ++ generatorOutput
       } else {
         generatorOutput
     }
@@ -95,8 +97,8 @@ case class GenerateExec(
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
       val rows = if (join) {
 
-        val project = UnsafeProjection.create(
-          child.output diff List(generator.asInstanceOf[UnaryExpression].child),
+        lazy val project = UnsafeProjection.create(
+          projectedChildOutput,
           child.output,
           subexpressionEliminationEnabled)
 
