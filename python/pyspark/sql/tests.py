@@ -3218,6 +3218,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        print("Before %s" % str(time.tzname))
         del os.environ["TZ"]
         if cls.tz_prev is not None:
             os.environ["TZ"] = cls.tz_prev
@@ -3237,6 +3238,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
 
         # TODO: remove later
         t = TimestampType()
+        print("After %s" % str(time.tzname))
         print([(idx, t.toInternal(ts)) for idx, ts in data])
         print([(idx, t.fromInternal(t.toInternal(ts))) for idx, ts in data])
         print("Python [%s]" % str(sys.version_info))
