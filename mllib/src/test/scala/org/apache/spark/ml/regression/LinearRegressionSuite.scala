@@ -178,6 +178,7 @@ class LinearRegressionSuite
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
     assert(model.intercept !== 0.0)
+    assert(model.scale === 1.0)
     assert(model.hasParent)
     val numFeatures = datasetWithDenseFeature.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
