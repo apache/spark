@@ -596,9 +596,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   /**
    * An extractor that matches all binary comparison operators except null-safe equality.
    *
-   * null-safe equality is not supported by Hive metastore partition predicate pushdown
+   * Null-safe equality is not supported by Hive metastore partition predicate pushdown
    */
-  object OperatorsInMetastorePartitionFPD {
+  object SpecialBinaryComparison {
     def unapply(e: BinaryComparison): Option[(Expression, Expression)] = e match {
       case _: EqualNullSafe => None
       case _ => Some((e.left, e.right))
@@ -613,14 +613,14 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       .map(col => col.getName).toSet
 
     filters.collect {
-      case op @ OperatorsInMetastorePartitionFPD(a: Attribute, Literal(v, _: IntegralType)) =>
+      case op @ SpecialBinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
         s"${a.name} ${op.symbol} $v"
-      case op @ OperatorsInMetastorePartitionFPD(Literal(v, _: IntegralType), a: Attribute) =>
+      case op @ SpecialBinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
         s"$v ${op.symbol} ${a.name}"
-      case op @ OperatorsInMetastorePartitionFPD(a: Attribute, Literal(v, _: StringType))
+      case op @ SpecialBinaryComparison(a: Attribute, Literal(v, _: StringType))
         if !varcharKeys.contains(a.name) =>
         s"""${a.name} ${op.symbol} ${quoteStringLiteral(v.toString)}"""
-      case op @ OperatorsInMetastorePartitionFPD(Literal(v, _: StringType), a: Attribute)
+      case op @ SpecialBinaryComparison(Literal(v, _: StringType), a: Attribute)
         if !varcharKeys.contains(a.name) =>
         s"""${quoteStringLiteral(v.toString)} ${op.symbol} ${a.name}"""
     }.mkString(" and ")
@@ -679,10 +679,10 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       case InSet(a: Attribute, ExtractableValues(values))
           if !varcharKeys.contains(a.name) && values.nonEmpty =>
         convertInToOr(a, values)
-      case op @ OperatorsInMetastorePartitionFPD(a: Attribute, ExtractableLiteral(value))
+      case op @ SpecialBinaryComparison(a: Attribute, ExtractableLiteral(value))
           if !varcharKeys.contains(a.name) =>
         s"${a.name} ${op.symbol} $value"
-      case op @ OperatorsInMetastorePartitionFPD(ExtractableLiteral(value), a: Attribute)
+      case op @ SpecialBinaryComparison(ExtractableLiteral(value), a: Attribute)
           if !varcharKeys.contains(a.name) =>
         s"$value ${op.symbol} ${a.name}"
       case And(expr1, expr2)
