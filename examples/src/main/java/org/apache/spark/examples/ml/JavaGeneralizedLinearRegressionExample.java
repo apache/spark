@@ -22,7 +22,7 @@ import java.util.Arrays;
 
 import org.apache.spark.ml.regression.GeneralizedLinearRegression;
 import org.apache.spark.ml.regression.GeneralizedLinearRegressionModel;
-import org.apache.spark.ml.regression.GeneralizedLinearRegressionTrainingSummary;
+import org.apache.spark.ml.summary.GeneralizedLinearRegressionTrainingSummary;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 // $example off$

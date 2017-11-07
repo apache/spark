@@ -19,7 +19,8 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.summary.BinaryLogisticRegressionSummary
 // $example off$
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.max
