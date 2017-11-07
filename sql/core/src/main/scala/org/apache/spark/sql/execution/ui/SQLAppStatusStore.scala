@@ -118,7 +118,7 @@ private[sql] class SQLExecutionUIData(
     @JsonDeserialize(keyAs = classOf[Integer])
     val jobs: Map[Int, JobExecutionStatus],
     @JsonDeserialize(contentAs = classOf[Integer])
-    val stages: Seq[Int],
+    val stages: Set[Int],
     /**
      * This field is only populated after the execution is finished; it will be null while the
      * execution is still running. During execution, aggregate metrics need to be retrieved

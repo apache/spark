@@ -68,7 +68,7 @@ private[sql] class SQLAppStatusListener(
     }
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
-    exec.stages = event.stageIds
+    exec.stages = event.stageIds.toSet
     update(exec)
   }
 
@@ -144,7 +144,7 @@ private[sql] class SQLAppStatusListener(
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = synchronized {
     val metricIds = exec.metrics.map(_.accumulatorId).sorted
     val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
-    val metrics = exec.stages
+    val metrics = exec.stages.toSeq
       .flatMap(stageMetrics.get)
       .flatMap(_.taskMetrics.values().asScala)
       .flatMap { metrics => metrics.ids.zip(metrics.values) }
@@ -316,7 +316,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var completionTime: Option[Date] = None
 
   var jobs = Map[Int, JobExecutionStatus]()
-  var stages = Seq[Int]()
+  var stages = Set[Int]()
   var driverAccumUpdates = Map[Long, Long]()
 
   var metricsValues: Map[Long, String] = null
