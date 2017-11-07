@@ -229,7 +229,7 @@ private[sql] class SQLAppStatusListener(
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
-      node.metrics.map(metric => (metric.accumulatorId, metric))
+      node.metrics.map { metric => (metric.accumulatorId, metric) }
     }.toMap.values.toList
 
     val graphToStore = new SparkPlanGraphWrapper(
@@ -336,7 +336,6 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       completionTime,
       jobs,
       stages,
-      driverAccumUpdates,
       metricsValues)
   }
 

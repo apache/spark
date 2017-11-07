@@ -386,9 +386,18 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
       Thread.sleep(100)
     }
 
-    val driverUpdates = statusStore.executionsList().last.driverAccumUpdates
-    assert(driverUpdates.size === 1)
-    assert(driverUpdates.values.head === expectedAccumValue)
+    // Wait for listener to finish computing the metrics for the execution.
+    while (statusStore.executionsList().last.metricValues == null) {
+      Thread.sleep(100)
+    }
+
+    val execId = statusStore.executionsList().last.executionId
+    val metrics = statusStore.executionMetrics(execId)
+    val driverMetric = physicalPlan.metrics("dummy")
+    val expectedValue = SQLMetrics.stringValue(driverMetric.metricType, Seq(expectedAccumValue))
+
+    assert(metrics.contains(driverMetric.id))
+    assert(metrics(driverMetric.id) === expectedValue)
   }
 
   private def assertJobs(

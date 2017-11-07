@@ -119,12 +119,10 @@ private[sql] class SQLExecutionUIData(
     val jobs: Map[Int, JobExecutionStatus],
     @JsonDeserialize(contentAs = classOf[Integer])
     val stages: Seq[Int],
-    @JsonDeserialize(keyAs = classOf[JLong], contentAs = classOf[JLong])
-    val driverAccumUpdates: Map[Long, Long],
     /**
      * This field is only populated after the execution is finished; it will be null while the
-     * execution is still running. During execution, aggregate metrics need to be calculated from
-     * the individal SQLStageMetrics objects and driver updates.
+     * execution is still running. During execution, aggregate metrics need to be retrieved
+     * from the SQL listener instance.
      */
     @JsonDeserialize(keyAs = classOf[JLong])
     val metricValues: Map[Long, String]
