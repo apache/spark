@@ -29,7 +29,6 @@ import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
-import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.jobs.{JobProgressListener, StagePage, StagesTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
 
