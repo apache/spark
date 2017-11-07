@@ -62,7 +62,7 @@ library(SparkR)
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
 
 ```{r, include=FALSE}
-sparkDownloadedDir <- install.spark()
+install.spark()
 sparkR.session(master = "local[1]", sparkConfig = sparkSessionConfig, enableHiveSupport = FALSE)
 ```
 ```{r, eval=FALSE}
@@ -1185,22 +1185,5 @@ sparkR.session.stop()
 ```
 
 ```{r cleanup, include=FALSE}
-# clean up if Spark was downloaded
-# get0 not supported before R 3.2.0
-sparkDownloaded <- mget(".sparkDownloaded"[1L],
-                        envir = SparkR:::.sparkREnv,
-                        inherits = TRUE,
-                        ifnotfound = list(FALSE))[[1L]]
-if (sparkDownloaded) {
-  unlink(sparkDownloadedDir, recursive = TRUE, force = TRUE)
-
-  # .cache/spark, or on Windows, LOCALAPPDATA\Apache\Spark\Cache (there are 3 levels)
-  parentDir <- SparkR:::sparkCachePath()
-  dirs <- list(parentDir, dirname(parentDir), dirname(dirname(parentDir)))
-  lapply(dirs, function(d) {
-    if (length(list.files(d, all.files = TRUE, include.dirs = TRUE, no.. = TRUE)) == 0) {
-      unlink(d, recursive = TRUE, force = TRUE)
-    }
-  })
-}
+SparkR:::uninstallDownloadedSpark()
 ```

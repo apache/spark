@@ -27,7 +27,7 @@ if (.Platform$OS.type == "windows") {
 
 # Setup global test environment
 # Install Spark first to set SPARK_HOME
-sparkDownloadedDir <- install.spark()
+install.spark()
 
 sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
 sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
@@ -61,21 +61,4 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
                        "summary")
 }
 
-# clean up if Spark was downloaded for the test run
-# get0 not supported before R 3.2.0
-sparkDownloaded <- mget(".sparkDownloaded"[1L],
-                        envir = SparkR:::.sparkREnv,
-                        inherits = TRUE,
-                        ifnotfound = list(FALSE))[[1L]]
-if (sparkDownloaded) {
-  unlink(sparkDownloadedDir, recursive = TRUE, force = TRUE)
-
-  # .cache/spark, or on Windows, LOCALAPPDATA\Apache\Spark\Cache (there are 3 levels)
-  parentDir <- SparkR:::sparkCachePath()
-  dirs <- list(parentDir, dirname(parentDir), dirname(dirname(parentDir)))
-  lapply(dirs, function(d) {
-    if (length(list.files(d, all.files = TRUE, include.dirs = TRUE, no.. = TRUE)) == 0) {
-      unlink(d, recursive = TRUE, force = TRUE)
-    }
-  })
-}
+SparkR:::uninstallDownloadedSpark()
