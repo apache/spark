@@ -252,6 +252,9 @@ test_that("traverseParentDirs", {
   } else {
     dirs <- traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1)
     expect <- c("/Users/user/Library/Caches/spark/spark2.2", "/Users/user/Library/Caches/spark")
+
+    dirs <- traverseParentDirs("/home/u/.cache/spark/spark2.2", 1)
+    expect <- c("/home/u/.cache/spark/spark2.2", "/home/u/.cache/spark")
   }
   expect_equal(dirs, expect)
 })
