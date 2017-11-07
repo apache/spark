@@ -2579,8 +2579,15 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreach(f: T => Unit): Unit = withNewExecutionId {
-    rdd.foreach(f)
+  def foreach(f: T => Unit): Unit = {
+    // Because we directly evaluate on the RDD rather than the Dataset, we should bind
+    // the new execution id to the `QueryExecution` of RDD.
+    SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
+      rddQueryExecution.executedPlan.foreach { plan =>
+        plan.resetMetrics()
+      }
+      rdd.foreach(f)
+    }
   }
 
   /**
@@ -2598,8 +2605,15 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreachPartition(f: Iterator[T] => Unit): Unit = withNewExecutionId {
-    rdd.foreachPartition(f)
+  def foreachPartition(f: Iterator[T] => Unit): Unit = {
+    // Because we directly evaluate on the RDD rather than the Dataset, we should bind
+    // the new execution id to the `QueryExecution` of RDD.
+    SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
+      rddQueryExecution.executedPlan.foreach { plan =>
+        plan.resetMetrics()
+      }
+      rdd.foreachPartition(f)
+    }
   }
 
   /**
@@ -2836,6 +2850,12 @@ class Dataset[T] private[sql](
    */
   def unpersist(): this.type = unpersist(blocking = false)
 
+  // Represents the `QueryExecution` used to produce the content of the Dataset as an `RDD`.
+  @transient private lazy val rddQueryExecution: QueryExecution = {
+    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    sparkSession.sessionState.executePlan(deserialized)
+  }
+
   /**
    * Represents the content of the Dataset as an `RDD` of `T`.
    *
@@ -2844,8 +2864,7 @@ class Dataset[T] private[sql](
    */
   lazy val rdd: RDD[T] = {
     val objectType = exprEnc.deserializer.dataType
-    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
-    sparkSession.sessionState.executePlan(deserialized).toRdd.mapPartitions { rows =>
+    rddQueryExecution.toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])
     }
   }
