@@ -3226,6 +3226,11 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         ReusedSQLTestCase.tearDownClass()
 
     def test_vectorized_udf_timestamps(self):
+        # Minimised reproducer
+        import time
+        from datetime import datetime
+        print(time.mktime(datetime(2100, 4, 4, 4, 4, 4).timetuple()))
+
         from pyspark.sql.functions import col
         from datetime import datetime
         schema = StructType([
