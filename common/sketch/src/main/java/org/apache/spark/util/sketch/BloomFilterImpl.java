@@ -221,6 +221,49 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
   }
 
   @Override
+  public double approxItems() {
+    double m = bitSize();
+    return (-m / numHashFunctions) * Math.log(1 - (bits.cardinality() / m));
+  }
+
+  @Override
+  public BloomFilterImpl union(BloomFilter other) throws IncompatibleUnionException {
+    // Duplicates the logic of `isCompatible` here to provide better error message.
+    if (other == null) {
+      throw new IncompatibleUnionException("Cannot union null bloom filters");
+    }
+
+    if (!(other instanceof BloomFilterImpl)) {
+      throw new IncompatibleUnionException(
+          "Cannot union bloom filter of class " + other.getClass().getName()
+      );
+    }
+
+    BloomFilterImpl that = (BloomFilterImpl) other;
+
+    if (this.bitSize() != that.bitSize()) {
+      throw new IncompatibleUnionException("Cannot union bloom filters with different bit size");
+    }
+
+    if (this.numHashFunctions != that.numHashFunctions) {
+      throw new IncompatibleUnionException("Cannot union bloom filters with different number of hash functions");
+    }
+
+    BloomFilterImpl bfUnion = (BloomFilterImpl)BloomFilter.create(bitSize()/Long.SIZE);
+
+    bfUnion.bits.putAll(this.bits);
+    bfUnion.bits.putAll(that.bits);
+    return bfUnion;
+  }
+
+  @Override
+  public double approxItemsInIntersection(BloomFilter that) throws IncompatibleUnionException {
+    BloomFilterImpl union = union(that);
+
+    return this.approxItems() + that.approxItems() - union.approxItems();
+  }
+
+  @Override
   public void writeTo(OutputStream out) throws IOException {
     DataOutputStream dos = new DataOutputStream(out);
 

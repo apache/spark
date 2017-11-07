@@ -81,6 +81,24 @@ public abstract class BloomFilter {
   public abstract long bitSize();
 
   /**
+   * Swamidass & Baldi (2007) approximation for number of items in a Bloom filter
+   *
+   * n* = - m/k * ln(1- X/m)
+   * where:
+   *  n* = the estimated number of items in the Bloom filter,
+   *  k = the number of hash functions used (k-fold compression),
+   *  m = the length of the filter,
+   *  X = the number of bits set to one
+   *
+   *  Note: the approximation is not valid when the Bloom filter is close to full
+   *  since it yields a diverging value.
+   *
+   * @see <a href="http://pubs.acs.org/doi/abs/10.1021/ci600526a">
+   *   Mathematical Correction for Fingerprint Similarity Measures to Improve Chemical Retrieval</a>
+   */
+  public abstract double approxItems();
+
+  /**
    * Puts an item into this {@code BloomFilter}. Ensures that subsequent invocations of
    * {@linkplain #mightContain(Object)} with the same item will always return {@code true}.
    *
@@ -146,6 +164,35 @@ public abstract class BloomFilter {
    * A specialized variant of {@link #mightContain(Object)} that only tests byte array items.
    */
   public abstract boolean mightContainBinary(byte[] item);
+
+  /**
+   * Returns a new Bloom filter of the union of two Bloom filters.
+   * Unlike mergeInplace, this will not cause a mutation.
+   * Callers must ensure the bloom filters are appropriately sized to avoid saturating them.
+   *
+   * @param other The bloom filter to union this bloom filter with.
+   * @throws IncompatibleUnionException if {@code isCompatible(other) == false}
+   * @see #approxItems()
+   */
+  public abstract BloomFilterImpl union(BloomFilter other) throws IncompatibleUnionException;
+
+  /**
+   * Swamidass & Baldi (2007) approximation for number of items in the intersection of two Bloom filters
+   *
+   * n(A* ∩ B*) = n(A*) + n(B*) - n(A* ∪ B*)
+   * The approx. of the intersection is the approx. of A plus B minus the approx. of their union
+   *
+   * Running approxItems() directly on A ∩ B leads to overestimation because "some bits in A ∩ B are
+   * set to 1 by chance and do not correspond to a compression of bits present in the uncompressed intersection vector
+   * (A->)* ∩ (B->)*"
+   *
+   * @param other The bloom filter to intersect this bloom filter with.
+   * @throws IncompatibleUnionException if {@code isCompatible(other) == false}
+   * @see #approxItems()
+   * @see <a href="http://pubs.acs.org/doi/abs/10.1021/ci600526a">
+   *   Mathematical Correction for Fingerprint Similarity Measures to Improve Chemical Retrieval</a>
+   */
+  public abstract double approxItemsInIntersection(BloomFilter that) throws IncompatibleUnionException;
 
   /**
    * Writes out this {@link BloomFilter} to an output stream in binary format. It is the caller's
