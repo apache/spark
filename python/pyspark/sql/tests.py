@@ -179,6 +179,18 @@ class MyObject(object):
         self.value = value
 
 
+class ReusedSQLTestCase(ReusedPySparkTestCase):
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
+
+
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
     def test_data_type_eq(self):
@@ -214,21 +226,19 @@ class DataTypeTests(unittest.TestCase):
         self.assertRaises(TypeError, struct_field.typeName)
 
 
-class SQLTests(ReusedPySparkTestCase):
+class SQLTests(ReusedSQLTestCase):
 
     @classmethod
     def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
+        ReusedSQLTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
-        cls.spark = SparkSession(cls.sc)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.df = cls.spark.createDataFrame(cls.testData)
 
     @classmethod
     def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-        cls.spark.stop()
+        ReusedSQLTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
     def test_sqlcontext_reuses_sparksession(self):
@@ -2582,6 +2592,21 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
 
+    @unittest.skipIf(not _have_pandas, "Pandas not installed")
+    def test_create_dataframe_from_pandas_with_timestamp(self):
+        import pandas as pd
+        from datetime import datetime
+        pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
+                            "d": [pd.Timestamp.now().date()]})
+        # test types are inferred correctly without specifying schema
+        df = self.spark.createDataFrame(pdf)
+        self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
+        self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
+        # test with schema will accept pdf as input
+        df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
+        self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
+        self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
@@ -2623,17 +2648,7 @@ class HiveSparkSubmitTests(SparkSubmitTests):
         self.assertTrue(os.path.exists(metastore_path))
 
 
-class SQLTests2(ReusedPySparkTestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.spark = SparkSession(cls.sc)
-
-    @classmethod
-    def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-        cls.spark.stop()
+class SQLTests2(ReusedSQLTestCase):
 
     # We can't include this test into SQLTests because we will stop class's SparkContext and cause
     # other tests failed.
@@ -3082,12 +3097,12 @@ class DataTypeVerificationTests(unittest.TestCase):
 
 
 @unittest.skipIf(not _have_arrow, "Arrow not installed")
-class ArrowTests(ReusedPySparkTestCase):
+class ArrowTests(ReusedSQLTestCase):
 
     @classmethod
     def setUpClass(cls):
         from datetime import datetime
-        ReusedPySparkTestCase.setUpClass()
+        ReusedSQLTestCase.setUpClass()
 
         # Synchronize default timezone between Python and Java
         cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
@@ -3095,7 +3110,6 @@ class ArrowTests(ReusedPySparkTestCase):
         os.environ["TZ"] = tz
         time.tzset()
 
-        cls.spark = SparkSession(cls.sc)
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
         cls.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
         cls.schema = StructType([
@@ -3116,8 +3130,7 @@ class ArrowTests(ReusedPySparkTestCase):
         if cls.tz_prev is not None:
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
-        ReusedPySparkTestCase.tearDownClass()
-        cls.spark.stop()
+        ReusedSQLTestCase.tearDownClass()
 
     def assertFramesEqual(self, df_with_arrow, df_without):
         msg = ("DataFrame from Arrow is not equal" +
@@ -3215,17 +3228,7 @@ class ArrowTests(ReusedPySparkTestCase):
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
-class VectorizedUDFTests(ReusedPySparkTestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.spark = SparkSession(cls.sc)
-
-    @classmethod
-    def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-        cls.spark.stop()
+class VectorizedUDFTests(ReusedSQLTestCase):
 
     def test_vectorized_udf_basic(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -3522,18 +3525,29 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
             expected = spark_ts_t.fromInternal(spark_ts_t.toInternal(ts_tz))
             self.assertEquals(expected, ts)
 
+    def test_vectorized_udf_check_config(self):
+        from pyspark.sql.functions import pandas_udf, col
+        orig_value = self.spark.conf.get("spark.sql.execution.arrow.maxRecordsPerBatch", None)
+        self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", 3)
+        try:
+            df = self.spark.range(10, numPartitions=1)
+
+            @pandas_udf(returnType=LongType())
+            def check_records_per_batch(x):
+                self.assertTrue(x.size <= 3)
+                return x
+
+            result = df.select(check_records_per_batch(col("id")))
+            self.assertEquals(df.collect(), result.collect())
+        finally:
+            if orig_value is None:
+                self.spark.conf.unset("spark.sql.execution.arrow.maxRecordsPerBatch")
+            else:
+                self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", orig_value)
+
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
-class GroupbyApplyTests(ReusedPySparkTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.spark = SparkSession(cls.sc)
-
-    @classmethod
-    def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-        cls.spark.stop()
+class GroupbyApplyTests(ReusedSQLTestCase):
 
     def assertFramesEqual(self, expected, result):
         msg = ("DataFrames are not equal: " +

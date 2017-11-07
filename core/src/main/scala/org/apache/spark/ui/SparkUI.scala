@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
   UIRoot}
 import org.apache.spark.storage.StorageStatusListener
@@ -39,6 +40,7 @@ import org.apache.spark.util.Utils
  * Top level user interface for a Spark application.
  */
 private[spark] class SparkUI private (
+    val store: AppStatusStore,
     val sc: Option[SparkContext],
     val conf: SparkConf,
     securityManager: SecurityManager,
@@ -51,7 +53,8 @@ private[spark] class SparkUI private (
     var appName: String,
     val basePath: String,
     val lastUpdateTime: Option[Long] = None,
-    val startTime: Long)
+    val startTime: Long,
+    val appSparkVersion: String)
   extends WebUI(securityManager, securityManager.getSSLOptions("ui"), SparkUI.getUIPort(conf),
     conf, basePath, "SparkUI")
   with Logging
@@ -60,8 +63,6 @@ private[spark] class SparkUI private (
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
   var appId: String = _
-
-  var appSparkVersion = org.apache.spark.SPARK_VERSION
 
   private var streamingJobProgressListener: Option[SparkListener] = None
 
@@ -104,8 +105,12 @@ private[spark] class SparkUI private (
     logInfo(s"Stopped Spark web UI at $webUrl")
   }
 
-  def getSparkUI(appId: String): Option[SparkUI] = {
-    if (appId == this.appId) Some(this) else None
+  override def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T = {
+    if (appId == this.appId) {
+      fn(this)
+    } else {
+      throw new NoSuchElementException()
+    }
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
@@ -159,63 +164,26 @@ private[spark] object SparkUI {
     conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
   }
 
-  def createLiveUI(
-      sc: SparkContext,
-      conf: SparkConf,
-      jobProgressListener: JobProgressListener,
-      securityManager: SecurityManager,
-      appName: String,
-      startTime: Long): SparkUI = {
-    create(Some(sc), conf,
-      sc.listenerBus.addToStatusQueue,
-      securityManager, appName, jobProgressListener = Some(jobProgressListener),
-      startTime = startTime)
-  }
-
-  def createHistoryUI(
-      conf: SparkConf,
-      listenerBus: SparkListenerBus,
-      securityManager: SecurityManager,
-      appName: String,
-      basePath: String,
-      lastUpdateTime: Option[Long],
-      startTime: Long): SparkUI = {
-    val sparkUI = create(None, conf, listenerBus.addListener, securityManager, appName, basePath,
-      lastUpdateTime = lastUpdateTime, startTime = startTime)
-
-    val listenerFactories = ServiceLoader.load(classOf[SparkHistoryListenerFactory],
-      Utils.getContextOrSparkClassLoader).asScala
-    listenerFactories.foreach { listenerFactory =>
-      val listeners = listenerFactory.createListeners(conf, sparkUI)
-      listeners.foreach(listenerBus.addListener)
-    }
-    sparkUI
-  }
-
   /**
-   * Create a new Spark UI.
-   *
-   * @param sc optional SparkContext; this can be None when reconstituting a UI from event logs.
-   * @param jobProgressListener if supplied, this JobProgressListener will be used; otherwise, the
-   *                            web UI will create and register its own JobProgressListener.
+   * Create a new UI backed by an AppStatusStore.
    */
-  private def create(
+  def create(
       sc: Option[SparkContext],
+      store: AppStatusStore,
       conf: SparkConf,
       addListenerFn: SparkListenerInterface => Unit,
       securityManager: SecurityManager,
       appName: String,
-      basePath: String = "",
-      jobProgressListener: Option[JobProgressListener] = None,
+      basePath: String,
+      startTime: Long,
       lastUpdateTime: Option[Long] = None,
-      startTime: Long): SparkUI = {
+      appSparkVersion: String = org.apache.spark.SPARK_VERSION): SparkUI = {
 
-    val _jobProgressListener: JobProgressListener = jobProgressListener.getOrElse {
+    val jobProgressListener = sc.map(_.jobProgressListener).getOrElse {
       val listener = new JobProgressListener(conf)
       addListenerFn(listener)
       listener
     }
-
     val environmentListener = new EnvironmentListener
     val storageStatusListener = new StorageStatusListener(conf)
     val executorsListener = new ExecutorsListener(storageStatusListener, conf)
@@ -228,8 +196,9 @@ private[spark] object SparkUI {
     addListenerFn(storageListener)
     addListenerFn(operationGraphListener)
 
-    new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
-      executorsListener, _jobProgressListener, storageListener, operationGraphListener,
-      appName, basePath, lastUpdateTime, startTime)
+    new SparkUI(store, sc, conf, securityManager, environmentListener, storageStatusListener,
+      executorsListener, jobProgressListener, storageListener, operationGraphListener,
+      appName, basePath, lastUpdateTime, startTime, appSparkVersion)
   }
+
 }

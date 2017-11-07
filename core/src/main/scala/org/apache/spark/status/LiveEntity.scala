@@ -37,8 +37,11 @@ import org.apache.spark.util.kvstore.KVStore
  */
 private[spark] abstract class LiveEntity {
 
-  def write(store: KVStore): Unit = {
+  var lastWriteTime = 0L
+
+  def write(store: KVStore, now: Long): Unit = {
     store.write(doUpdate())
+    lastWriteTime = now
   }
 
   /**
@@ -204,7 +207,7 @@ private class LiveTask(
       newAccumulatorInfos(info.accumulables),
       errorMessage,
       Option(recordedMetrics))
-    new TaskDataWrapper(task)
+    new TaskDataWrapper(task, stageId, stageAttemptId)
   }
 
 }
