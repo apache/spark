@@ -2560,12 +2560,16 @@ class SQLTests(ReusedSQLTestCase):
 
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas(self):
+        from datetime import datetime, date
         import numpy as np
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
-                             .add("c", BooleanType()).add("d", FloatType())
+                             .add("c", BooleanType()).add("d", FloatType())\
+                             .add("dt", DateType()).add("ts", TimestampType())
         data = [
-            (1, "foo", True, 3.0), (2, "foo", True, 5.0),
-            (3, "bar", False, -1.0), (4, "bar", False, 6.0),
+            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+            (2, "foo", True, 5.0, None, None),
+            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3)),
+            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4)),
         ]
         df = self.spark.createDataFrame(data, schema)
         types = df.toPandas().dtypes
@@ -2573,6 +2577,8 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEquals(types[1], np.object)
         self.assertEquals(types[2], np.bool)
         self.assertEquals(types[3], np.float32)
+        self.assertEquals(types[4], 'datetime64[ns]')
+        self.assertEquals(types[5], 'datetime64[ns]')
 
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas_avoid_astype(self):
@@ -3136,13 +3142,41 @@ class ArrowTests(ReusedSQLTestCase):
         null_counts = pdf.isnull().sum().tolist()
         self.assertTrue(all([c == 1 for c in null_counts]))
 
+    def _toPandas_arrow_toggle(self, df):
+        self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
+        try:
+            pdf = df.toPandas()
+        finally:
+            self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
+        pdf_arrow = df.toPandas()
+        return pdf, pdf_arrow
+
     def test_toPandas_arrow_toggle(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
-        self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
-        pdf = df.toPandas()
-        self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-        pdf_arrow = df.toPandas()
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
         self.assertFramesEqual(pdf_arrow, pdf)
+
+    def test_toPandas_respect_session_timezone(self):
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        orig_tz = self.spark.conf.get("spark.sql.session.timeZone")
+        try:
+            timezone = "America/New_York"
+            self.spark.conf.set("spark.sql.session.timeZone", timezone)
+            self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "false")
+            try:
+                pdf_la, pdf_arrow_la = self._toPandas_arrow_toggle(df)
+                self.assertFramesEqual(pdf_arrow_la, pdf_la)
+            finally:
+                self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
+            pdf_ny, pdf_arrow_ny = self._toPandas_arrow_toggle(df)
+            self.assertFramesEqual(pdf_arrow_ny, pdf_ny)
+
+            from pyspark.sql.types import _check_dataframe_localize_timestamps
+            self.assertFalse(pdf_ny.equals(pdf_la))
+            self.assertTrue(pdf_ny.equals(
+                _check_dataframe_localize_timestamps(pdf_la, self.schema, timezone)))
+        finally:
+            self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
     def test_pandas_round_trip(self):
         import pandas as pd
@@ -3166,255 +3200,38 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertTrue(pdf.empty)
 
 
-@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
+@unittest.skipIf(not _have_pandas, "Pandas or Arrow not installed")
 class VectorizedUDFTests(ReusedSQLTestCase):
 
-    def test_vectorized_udf_basic(self):
-        from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10).select(
-            col('id').cast('string').alias('str'),
-            col('id').cast('int').alias('int'),
-            col('id').alias('long'),
-            col('id').cast('float').alias('float'),
-            col('id').cast('double').alias('double'),
-            col('id').cast('boolean').alias('bool'))
-        f = lambda x: x
-        str_f = pandas_udf(f, StringType())
-        int_f = pandas_udf(f, IntegerType())
-        long_f = pandas_udf(f, LongType())
-        float_f = pandas_udf(f, FloatType())
-        double_f = pandas_udf(f, DoubleType())
-        bool_f = pandas_udf(f, BooleanType())
-        res = df.select(str_f(col('str')), int_f(col('int')),
-                        long_f(col('long')), float_f(col('float')),
-                        double_f(col('double')), bool_f(col('bool')))
-        self.assertEquals(df.collect(), res.collect())
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
 
-    def test_vectorized_udf_null_boolean(self):
-        from pyspark.sql.functions import pandas_udf, col
-        data = [(True,), (True,), (None,), (False,)]
-        schema = StructType().add("bool", BooleanType())
-        df = self.spark.createDataFrame(data, schema)
-        bool_f = pandas_udf(lambda x: x, BooleanType())
-        res = df.select(bool_f(col('bool')))
-        self.assertEquals(df.collect(), res.collect())
+        print("Before %s" % str(time.tzname))
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
 
-    def test_vectorized_udf_null_byte(self):
-        from pyspark.sql.functions import pandas_udf, col
-        data = [(None,), (2,), (3,), (4,)]
-        schema = StructType().add("byte", ByteType())
-        df = self.spark.createDataFrame(data, schema)
-        byte_f = pandas_udf(lambda x: x, ByteType())
-        res = df.select(byte_f(col('byte')))
-        self.assertEquals(df.collect(), res.collect())
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
 
-    def test_vectorized_udf_null_short(self):
-        from pyspark.sql.functions import pandas_udf, col
-        data = [(None,), (2,), (3,), (4,)]
-        schema = StructType().add("short", ShortType())
-        df = self.spark.createDataFrame(data, schema)
-        short_f = pandas_udf(lambda x: x, ShortType())
-        res = df.select(short_f(col('short')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_null_int(self):
-        from pyspark.sql.functions import pandas_udf, col
-        data = [(None,), (2,), (3,), (4,)]
-        schema = StructType().add("int", IntegerType())
-        df = self.spark.createDataFrame(data, schema)
-        int_f = pandas_udf(lambda x: x, IntegerType())
-        res = df.select(int_f(col('int')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_null_long(self):
-        from pyspark.sql.functions import pandas_udf, col
-        data = [(None,), (2,), (3,), (4,)]
-        schema = StructType().add("long", LongType())
-        df = self.spark.createDataFrame(data, schema)
-        long_f = pandas_udf(lambda x: x, LongType())
-        res = df.select(long_f(col('long')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_null_float(self):
-        from pyspark.sql.functions import pandas_udf, col
-        data = [(3.0,), (5.0,), (-1.0,), (None,)]
-        schema = StructType().add("float", FloatType())
-        df = self.spark.createDataFrame(data, schema)
-        float_f = pandas_udf(lambda x: x, FloatType())
-        res = df.select(float_f(col('float')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_null_double(self):
-        from pyspark.sql.functions import pandas_udf, col
-        data = [(3.0,), (5.0,), (-1.0,), (None,)]
-        schema = StructType().add("double", DoubleType())
-        df = self.spark.createDataFrame(data, schema)
-        double_f = pandas_udf(lambda x: x, DoubleType())
-        res = df.select(double_f(col('double')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_null_string(self):
-        from pyspark.sql.functions import pandas_udf, col
-        data = [("foo",), (None,), ("bar",), ("bar",)]
-        schema = StructType().add("str", StringType())
-        df = self.spark.createDataFrame(data, schema)
-        str_f = pandas_udf(lambda x: x, StringType())
-        res = df.select(str_f(col('str')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_zero_parameter(self):
-        from pyspark.sql.functions import pandas_udf
-        error_str = '0-arg pandas_udfs.*not.*supported'
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, error_str):
-                pandas_udf(lambda: 1, LongType())
-
-            with self.assertRaisesRegexp(ValueError, error_str):
-                @pandas_udf
-                def zero_no_type():
-                    return 1
-
-            with self.assertRaisesRegexp(ValueError, error_str):
-                @pandas_udf(LongType())
-                def zero_with_type():
-                    return 1
-
-    def test_vectorized_udf_datatype_string(self):
-        from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10).select(
-            col('id').cast('string').alias('str'),
-            col('id').cast('int').alias('int'),
-            col('id').alias('long'),
-            col('id').cast('float').alias('float'),
-            col('id').cast('double').alias('double'),
-            col('id').cast('boolean').alias('bool'))
-        f = lambda x: x
-        str_f = pandas_udf(f, 'string')
-        int_f = pandas_udf(f, 'integer')
-        long_f = pandas_udf(f, 'long')
-        float_f = pandas_udf(f, 'float')
-        double_f = pandas_udf(f, 'double')
-        bool_f = pandas_udf(f, 'boolean')
-        res = df.select(str_f(col('str')), int_f(col('int')),
-                        long_f(col('long')), float_f(col('float')),
-                        double_f(col('double')), bool_f(col('bool')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_complex(self):
-        from pyspark.sql.functions import pandas_udf, col, expr
-        df = self.spark.range(10).select(
-            col('id').cast('int').alias('a'),
-            col('id').cast('int').alias('b'),
-            col('id').cast('double').alias('c'))
-        add = pandas_udf(lambda x, y: x + y, IntegerType())
-        power2 = pandas_udf(lambda x: 2 ** x, IntegerType())
-        mul = pandas_udf(lambda x, y: x * y, DoubleType())
-        res = df.select(add(col('a'), col('b')), power2(col('a')), mul(col('b'), col('c')))
-        expected = df.select(expr('a + b'), expr('power(2, a)'), expr('b * c'))
-        self.assertEquals(expected.collect(), res.collect())
-
-    def test_vectorized_udf_exception(self):
-        from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10)
-        raise_exception = pandas_udf(lambda x: x * (1 / 0), LongType())
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'division( or modulo)? by zero'):
-                df.select(raise_exception(col('id'))).collect()
-
-    def test_vectorized_udf_invalid_length(self):
-        from pyspark.sql.functions import pandas_udf, col
-        import pandas as pd
-        df = self.spark.range(10)
-        raise_exception = pandas_udf(lambda _: pd.Series(1), LongType())
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    Exception,
-                    'Result vector from pandas_udf was not the required length'):
-                df.select(raise_exception(col('id'))).collect()
-
-    def test_vectorized_udf_mix_udf(self):
-        from pyspark.sql.functions import pandas_udf, udf, col
-        df = self.spark.range(10)
-        row_by_row_udf = udf(lambda x: x, LongType())
-        pd_udf = pandas_udf(lambda x: x, LongType())
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    Exception,
-                    'Can not mix vectorized and non-vectorized UDFs'):
-                df.select(row_by_row_udf(col('id')), pd_udf(col('id'))).collect()
-
-    def test_vectorized_udf_chained(self):
-        from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10)
-        f = pandas_udf(lambda x: x + 1, LongType())
-        g = pandas_udf(lambda x: x - 1, LongType())
-        res = df.select(g(f(col('id'))))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_wrong_return_type(self):
-        from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10)
-        f = pandas_udf(lambda x: x * 1.0, StringType())
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Invalid.*type'):
-                df.select(f(col('id'))).collect()
-
-    def test_vectorized_udf_return_scalar(self):
-        from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10)
-        f = pandas_udf(lambda x: 1.0, DoubleType())
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Return.*type.*Series'):
-                df.select(f(col('id'))).collect()
-
-    def test_vectorized_udf_decorator(self):
-        from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10)
-
-        @pandas_udf(returnType=LongType())
-        def identity(x):
-            return x
-        res = df.select(identity(col('id')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_empty_partition(self):
-        from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))
-        f = pandas_udf(lambda x: x, LongType())
-        res = df.select(f(col('id')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_varargs(self):
-        from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))
-        f = pandas_udf(lambda *v: v[0], LongType())
-        res = df.select(f(col('id')))
-        self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_unsupported_types(self):
-        from pyspark.sql.functions import pandas_udf, col
-        schema = StructType([StructField("dt", DecimalType(), True)])
-        df = self.spark.createDataFrame([(None,)], schema=schema)
-        f = pandas_udf(lambda x: x, DecimalType())
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
-                df.select(f(col('dt'))).collect()
-
-    def test_vectorized_udf_null_date(self):
-        from pyspark.sql.functions import pandas_udf, col
-        from datetime import date
-        schema = StructType().add("date", DateType())
-        data = [(date(1969, 1, 1),),
-                (date(2012, 2, 2),),
-                (None,),
-                (date(2100, 4, 4),)]
-        df = self.spark.createDataFrame(data, schema=schema)
-        date_f = pandas_udf(lambda t: t, returnType=DateType())
-        res = df.select(date_f(col("date")))
-        self.assertEquals(df.collect(), res.collect())
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedSQLTestCase.tearDownClass()
 
     def test_vectorized_udf_timestamps(self):
-        from pyspark.sql.functions import pandas_udf, col
+        # Minimised reproducer
+        import time
+        from datetime import datetime
+        print(time.mktime(datetime(2100, 4, 4, 4, 4, 4).timetuple()))
+
+        from pyspark.sql.functions import col
         from datetime import datetime
         schema = StructType([
             StructField("idx", LongType(), True),
@@ -3423,66 +3240,27 @@ class VectorizedUDFTests(ReusedSQLTestCase):
                 (1, datetime(2012, 2, 2, 2, 2, 2)),
                 (2, None),
                 (3, datetime(2100, 4, 4, 4, 4, 4))]
+
+        # TODO: remove later
+        t = TimestampType()
+        print("After %s" % str(time.tzname))
+        print([(idx, t.toInternal(ts)) for idx, ts in data])
+        print([(idx, t.fromInternal(t.toInternal(ts))) for idx, ts in data])
+        print("Python [%s]" % str(sys.version_info))
+        import pandas as pd
+        print("Pandas [%s]" % pd.__version__)
+
         df = self.spark.createDataFrame(data, schema=schema)
+        df.show()  # TODO: remove later
+        print(df.collect())
 
         # Check that a timestamp passed through a pandas_udf will not be altered by timezone calc
-        f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType())
-        df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
+        # f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType())
+        # df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
+        # df.show()  # TODO: remove later
 
-        @pandas_udf(returnType=BooleanType())
-        def check_data(idx, timestamp, timestamp_copy):
-            is_equal = timestamp.isnull()  # use this array to check values are equal
-            for i in range(len(idx)):
-                # Check that timestamps are as expected in the UDF
-                is_equal[i] = (is_equal[i] and data[idx[i]][1] is None) or \
-                    timestamp[i].to_pydatetime() == data[idx[i]][1]
-            return is_equal
-
-        result = df.withColumn("is_equal", check_data(col("idx"), col("timestamp"),
-                                                      col("timestamp_copy"))).collect()
-        # Check that collection values are correct
-        self.assertEquals(len(data), len(result))
-        for i in range(len(result)):
-            self.assertEquals(data[i][1], result[i][1])  # "timestamp" col
-            self.assertTrue(result[i][3])  # "is_equal" data in udf was as expected
-
-    def test_vectorized_udf_return_timestamp_tz(self):
-        from pyspark.sql.functions import pandas_udf, col
-        import pandas as pd
-        df = self.spark.range(10)
-
-        @pandas_udf(returnType=TimestampType())
-        def gen_timestamps(id):
-            ts = [pd.Timestamp(i, unit='D', tz='America/Los_Angeles') for i in id]
-            return pd.Series(ts)
-
-        result = df.withColumn("ts", gen_timestamps(col("id"))).collect()
-        spark_ts_t = TimestampType()
-        for r in result:
-            i, ts = r
-            ts_tz = pd.Timestamp(i, unit='D', tz='America/Los_Angeles').to_pydatetime()
-            expected = spark_ts_t.fromInternal(spark_ts_t.toInternal(ts_tz))
-            self.assertEquals(expected, ts)
-
-    def test_vectorized_udf_check_config(self):
-        from pyspark.sql.functions import pandas_udf, col
-        orig_value = self.spark.conf.get("spark.sql.execution.arrow.maxRecordsPerBatch", None)
-        self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", 3)
-        try:
-            df = self.spark.range(10, numPartitions=1)
-
-            @pandas_udf(returnType=LongType())
-            def check_records_per_batch(x):
-                self.assertTrue(x.size <= 3)
-                return x
-
-            result = df.select(check_records_per_batch(col("id")))
-            self.assertEquals(df.collect(), result.collect())
-        finally:
-            if orig_value is None:
-                self.spark.conf.unset("spark.sql.execution.arrow.maxRecordsPerBatch")
-            else:
-                self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", orig_value)
+        if sys.version_info[0] == 3:
+            raise Exception()
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
