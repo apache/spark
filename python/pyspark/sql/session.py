@@ -470,7 +470,6 @@ class SparkSession(object):
         from pyspark.serializers import ArrowSerializer, _create_batch
         from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
         from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
-        import pyarrow as pa
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
@@ -488,8 +487,8 @@ class SparkSession(object):
         pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
 
         # Create Arrow record batches
-        batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)])
-                   for pdf_slice in pdf_slices]
+        batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)],
+                                 copy=True) for pdf_slice in pdf_slices]
 
         # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)
         if schema is None or isinstance(schema, list):
@@ -508,7 +507,6 @@ class SparkSession(object):
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df
-
 
     @since(2.0)
     @ignore_unicode_prefix

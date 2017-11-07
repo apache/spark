@@ -3138,7 +3138,7 @@ class ArrowTests(ReusedSQLTestCase):
                ("\n\nWithout:\n%s\n%s" % (df_without, df_without.dtypes)))
         self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
 
-    def createPandasDataFrameFromData(self):
+    def create_pandas_data_frame(self):
         import pandas as pd
         import numpy as np
         data_dict = {}
@@ -3173,7 +3173,7 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_pandas_round_trip(self):
-        pdf = self.createPandasDataFrameFromData()
+        pdf = self.create_pandas_data_frame()
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
@@ -3186,7 +3186,7 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertTrue(pdf.empty)
 
     def test_createDataFrame_toggle(self):
-        pdf = self.createPandasDataFrameFromData()
+        pdf = self.create_pandas_data_frame()
         self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
         try:
             df_no_arrow = self.spark.createDataFrame(pdf)
@@ -3196,21 +3196,21 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEquals(df_no_arrow.collect(), df_arrow.collect())
 
     def test_createDataFrame_with_schema(self):
-        pdf = self.createPandasDataFrameFromData()
+        pdf = self.create_pandas_data_frame()
         df = self.spark.createDataFrame(pdf, schema=self.schema)
         self.assertEquals(self.schema, df.schema)
         pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_createDataFrame_with_incorrect_schema(self):
-        pdf = self.createPandasDataFrameFromData()
+        pdf = self.create_pandas_data_frame()
         wrong_schema = StructType([field for field in reversed(self.schema)])
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(TypeError, ".*field.*can.not.accept.*type"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
-        pdf = self.createPandasDataFrameFromData()
+        pdf = self.create_pandas_data_frame()
         df = self.spark.createDataFrame(pdf, schema=list('abcdefg'))
         self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
 

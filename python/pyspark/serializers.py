@@ -213,7 +213,15 @@ class ArrowSerializer(FramedSerializer):
         return "ArrowSerializer"
 
 
-def _create_batch(series):
+def _create_batch(series, copy=False):
+    """
+    Create an Arrow record batch from the given pandas.Series or list of Series, with optional type.
+
+    :param series: A single pandas.Series, list of Series, or list of (series, arrow_type)
+    :param copy: Option to make a copy of the series before performing any type casts
+    :return: ArrowRecordBatch
+    """
+
     from pyspark.sql.types import _check_series_convert_timestamps_internal
     import pyarrow as pa
     # Make input conform to [(series1, type1), (series2, type2), ...]
@@ -228,14 +236,14 @@ def _create_batch(series):
         if t is not None and type(t) == pa.TimestampType:
             # NOTE: convert to 'us' with astype here, unit ignored in `from_pandas` see ARROW-1680
             return _check_series_convert_timestamps_internal(s.fillna(0))\
-                .values.astype('datetime64[us]', copy=False)
+                .values.astype('datetime64[us]', copy=copy)
         elif t is not None and t == pa.date32():
             # TODO: this converts the series to Python objects, possibly avoid with Arrow >= 0.8
             return s.dt.date
         elif t is None or s.dtype == t.to_pandas_dtype():
             return s
         else:
-            return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
+            return s.fillna(0).astype(t.to_pandas_dtype(), copy=copy)
 
     # Some object types don't support masks in Arrow, see ARROW-1721
     def create_array(s, t):
