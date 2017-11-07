@@ -249,14 +249,16 @@ test_that("traverseParentDirs", {
                 "c:/Users/user/AppData/Local/Apache/Spark/Cache",
                 "c:/Users/user/AppData/Local/Apache/Spark",
                 "c:/Users/user/AppData/Local/Apache")
+    expect_equal(dirs, expect)
   } else {
     dirs <- traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1)
     expect <- c("/Users/user/Library/Caches/spark/spark2.2", "/Users/user/Library/Caches/spark")
+    expect_equal(dirs, expect)
 
     dirs <- traverseParentDirs("/home/u/.cache/spark/spark2.2", 1)
     expect <- c("/home/u/.cache/spark/spark2.2", "/home/u/.cache/spark")
+    expect_equal(dirs, expect)
   }
-  expect_equal(dirs, expect)
 })
 
 sparkR.session.stop()
