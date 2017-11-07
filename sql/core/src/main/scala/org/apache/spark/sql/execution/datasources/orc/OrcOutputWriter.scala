@@ -19,24 +19,21 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcOutputFormat
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 private[orc] class OrcOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
-  private lazy val orcStruct: OrcStruct =
-    OrcUtils.createOrcValue(dataSchema).asInstanceOf[OrcStruct]
 
-  private[this] val writableWrappers =
-    dataSchema.fields.map(f => OrcUtils.getWritableWrapper(f.dataType))
+  private[this] val serializer = new OrcSerializer(dataSchema)
 
   private val recordWriter = {
     new OrcOutputFormat[OrcStruct]() {
@@ -47,10 +44,7 @@ private[orc] class OrcOutputWriter(
   }
 
   override def write(row: InternalRow): Unit = {
-    recordWriter.write(
-      NullWritable.get,
-      OrcUtils.convertInternalRowToOrcStruct(
-        row, dataSchema, Some(writableWrappers), Some(orcStruct)))
+    recordWriter.write(NullWritable.get(), serializer.serialize(row))
   }
 
   override def close(): Unit = {

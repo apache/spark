@@ -111,7 +111,7 @@ class OrcFileFormat
       override def getFileExtension(context: TaskAttemptContext): String = {
         val compressionExtension: String = {
           val name = context.getConfiguration.get(COMPRESS.getAttribute)
-          OrcOptions.extensionsForCompressionCodecNames.getOrElse(name, "")
+          OrcUtils.extensionsForCompressionCodecNames.getOrElse(name, "")
         }
 
         compressionExtension + ".orc"
@@ -126,7 +126,7 @@ class OrcFileFormat
     true
   }
 
-  override def buildReaderWithPartitionValues(
+  override def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -162,29 +162,15 @@ class OrcFileFormat
           new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-        val partitionValues = file.partitionValues
-
-        val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
 
         val orcRecordReader = new OrcInputFormat[OrcStruct]
           .createRecordReader(fileSplit, taskAttemptContext)
         val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
 
-        val mutableRow = new SpecificInternalRow(resultSchema.map(_.dataType))
-        val unsafeProjection = UnsafeProjection.create(resultSchema)
-
-        // Initialize the partition column values once.
-        for (i <- requiredSchema.length until resultSchema.length) {
-          val value = partitionValues.get(i - requiredSchema.length, resultSchema(i).dataType)
-          mutableRow.update(i, value)
-        }
-
-        val valueWrappers = requiredSchema.fields.map(f => OrcUtils.getValueWrapper(f.dataType))
-        iter.map { value =>
-          unsafeProjection(OrcUtils.convertOrcStructToInternalRow(value, dataSchema, requiredSchema,
-            maybeMissingSchema, Some(valueWrappers), Some(mutableRow)))
-        }
+        val unsafeProjection = UnsafeProjection.create(requiredSchema)
+        val deserializer = new OrcDeserializer(dataSchema, requiredSchema, maybeMissingSchema)
+        iter.map(value => unsafeProjection(deserializer.deserialize(value)))
       }
     }
   }
