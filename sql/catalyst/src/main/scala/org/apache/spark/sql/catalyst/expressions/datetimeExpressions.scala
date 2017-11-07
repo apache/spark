@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.text.{NumberFormat, SimpleDateFormat}
 import java.sql.Timestamp
 import java.text.DateFormat
 import java.util.{Calendar, TimeZone}
@@ -620,7 +621,7 @@ abstract class UnixTime
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
 
-  override def dataType: DataType = LongType
+  override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
@@ -630,6 +631,8 @@ abstract class UnixTime
     } catch {
       case NonFatal(_) => null
     }
+  private lazy val nf: NumberFormat = NumberFormat.getNumberInstance
+  nf.setMaximumFractionDigits(3)
 
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
@@ -638,16 +641,17 @@ abstract class UnixTime
     } else {
       left.dataType match {
         case DateType =>
-          DateTimeUtils.daysToMillis(t.asInstanceOf[Int], timeZone) / 1000L
+          nf.format(DateTimeUtils.daysToMillis(t.asInstanceOf[Int], timeZone) / 1000d)
+            .replace(",", "").toDouble
         case TimestampType =>
-          t.asInstanceOf[Long] / 1000000L
+          nf.format(t.asInstanceOf[Long] / 1000000d).replace(",", "").toDouble
         case StringType if right.foldable =>
           if (constFormat == null || formatter == null) {
             null
           } else {
             try {
-              formatter.parse(
-                t.asInstanceOf[UTF8String].toString).getTime / 1000L
+              nf.format(formatter.parse(t.asInstanceOf[UTF8String].toString).getTime / 1000d)
+                .replace(",", "").toDouble
             } catch {
               case NonFatal(_) => null
             }
@@ -659,8 +663,9 @@ abstract class UnixTime
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              DateTimeUtils.newDateFormat(formatString, timeZone).parse(
-                t.asInstanceOf[UTF8String].toString).getTime / 1000L
+              nf.format(DateTimeUtils.newDateFormat(formatString, timeZone).parse(
+                t.asInstanceOf[UTF8String].toString).getTime / 1000d)
+                .replace(",", "").toDouble
             } catch {
               case NonFatal(_) => null
             }
@@ -670,6 +675,8 @@ abstract class UnixTime
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val sdf1 = classOf[NumberFormat].getName
+    val nfName = ctx.addReferenceObj("nf", nf, sdf1)
     left.dataType match {
       case StringType if right.foldable =>
         val df = classOf[DateFormat].getName
@@ -684,7 +691,8 @@ abstract class UnixTime
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
-                ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
+                ${ev.value} = Double.parseDouble($nfName.format($formatterName.parse(
+                  ${eval1.value}.toString()).getTime() / 1000d).replace(",",""));
               } catch (java.text.ParseException e) {
                 ${ev.isNull} = true;
               }
@@ -696,8 +704,9 @@ abstract class UnixTime
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
-              ${ev.value} = $dtu.newDateFormat($format.toString(), $tz)
-                .parse($string.toString()).getTime() / 1000L;
+              ${ev.value} = Double.parseDouble($nfName.format(
+                $dtu.newDateFormat($format.toString(), $tz).parse($string.toString())
+                  .getTime() / 1000d).replace(",",""));
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             } catch (java.text.ParseException e) {
@@ -712,7 +721,8 @@ abstract class UnixTime
           boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = ${eval1.value} / 1000000L;
+            ${ev.value} = Double.parseDouble(
+              $nfName.format(${eval1.value} / 1000000d).replace(",",""));
           }""")
       case DateType =>
         val tz = ctx.addReferenceMinorObj(timeZone)
@@ -723,7 +733,8 @@ abstract class UnixTime
           boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / 1000L;
+            ${ev.value} = Double.parseDouble(
+              $nfName.format($dtu.daysToMillis(${eval1.value}, $tz) / 1000d).replace(",",""));
           }""")
     }
   }
