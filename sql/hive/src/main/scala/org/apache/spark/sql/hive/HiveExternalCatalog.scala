@@ -1069,7 +1069,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val sortedStatsProps = statsProps.toSeq.sortBy { case (k, v) =>
         val items = k.split(KEY_INDEX_SEPARATOR)
         if (items.length == 2) {
-          // This key have multiple properties, they need to be sorted by name and index.
+          // This key have multiple properties, which need to be sorted by name and index.
           (items(0), items(1).toInt)
         } else {
           // For other stats properties, only sort by name.

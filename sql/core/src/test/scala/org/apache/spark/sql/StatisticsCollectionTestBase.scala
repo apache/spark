@@ -82,7 +82,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   )
 
   /**
-   * A mapping from column to the stats (including equi-height histograms) collected.
+   * A mapping from column to the stats collected (including equi-height histograms).
    * The number of buckets in equi-height histograms is 2.
    */
   protected val statsWithEHHs = {

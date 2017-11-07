@@ -1092,7 +1092,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("serde/deser of histograms exceeding 4000 length") {
     import testImplicits._
 
-    def checkBucketsOrder(buckets: Seq[EquiHeightBucket]): Unit = {
+    def checkBucketsOrder(buckets: Array[EquiHeightBucket]): Unit = {
       for (i <- buckets.indices) {
         val b = buckets(i)
         assert(b.lo <= b.hi)
@@ -1117,7 +1117,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS cint, ctimestamp")
         val table = hiveClient.getTable("default", tableName)
         // Based on the bucket number(`spark.sessionState.conf.histogramBucketsNum`), the
-        // length histogram string will exceed 4000, and thus histogram string will be split to
+        // length of histogram string will exceed 4000, and thus the string will be split to
         // multiple properties.
         val intHistogramProps = table.properties
           .filterKeys(_.startsWith("spark.sql.statistics.colStats.cint.histogram-"))
@@ -1125,6 +1125,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         val tsHistogramProps = table.properties
           .filterKeys(_.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram-"))
+        assert(tsHistogramProps.size > 1)
 
         // Validate histogram after deserialization.
         val cs = getCatalogStatistics(tableName).colStats

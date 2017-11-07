@@ -94,7 +94,7 @@ case class AnalyzeColumnCommand(
     // To generate equi-height histogram, we need two jobs:
     // 1. compute percentiles p(0), p(1/n) ... p((n-1)/n), p(1).
     // 2. use the percentiles as value intervals of buckets, e.g. [p(0), p(1/n)],
-    // [p(1/n), p(2/n)] ... [p((n-1)/n), p(1)], and then count ndv in each bucket.
+    // [p(1/n), p(2/n)], ..., [p((n-1)/n), p(1)], and then count ndv in each bucket.
     // Basic column stats will be computed together in the second job.
     val attributePercentiles = computePercentiles(attributesToAnalyze, sparkSession, relation)
 
