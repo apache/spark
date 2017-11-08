@@ -1666,43 +1666,85 @@ def _check_series_convert_timestamps_internal(s, timezone):
         return s
 
 
-def _check_series_convert_timestamps_localize(s, timezone):
+def _check_series_convert_timestamps_localize(s, fromTimezone, toTimezone):
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
     :param s: a pandas.Series
-    :param timezone: the timezone to convert. if None then use local timezone
+    :param fromTimezone: the timezone to convert from. if None then use local timezone
+    :param toTimezone: the timezone to convert to. if None then use local timezone
     :return pandas.Series where if it is a timestamp, has been converted to tz-naive
     """
     import pandas as pd
     try:
         from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
-        tz = timezone or 'tzlocal()'
+        fromTz = fromTimezone or 'tzlocal()'
+        toTz = toTimezone or 'tzlocal()'
         # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
         if is_datetime64tz_dtype(s.dtype):
-            return s.dt.tz_convert(tz).dt.tz_localize(None)
-        elif is_datetime64_dtype(s.dtype) and timezone is not None:
+            return s.dt.tz_convert(toTz).dt.tz_localize(None)
+        elif is_datetime64_dtype(s.dtype) and fromTz != toTz:
             # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-            return s.apply(lambda ts: ts.tz_localize('tzlocal()').tz_convert(tz).tz_localize(None)
+            return s.apply(lambda ts: ts.tz_localize(fromTz).tz_convert(toTz).tz_localize(None)
                            if ts is not pd.NaT else pd.NaT)
         else:
             return s
     except ImportError:
-        from pandas.core.common import is_datetime64_dtype
-        from pandas.tslib import _dateutil_tzlocal
-        tzlocal = _dateutil_tzlocal()
-        tz = timezone or tzlocal
-        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-        if not is_datetime64_dtype(s.dtype):
-            # `s.dt.tz_convert(tzlocal).dt.tz_localize(None)` doesn't work properly.
-            return pd.Series([ts.tz_convert(tz).tz_localize(None)
-                              if ts is not pd.NaT else pd.NaT for ts in s])
-        elif is_datetime64_dtype(s.dtype) and timezone is not None:
-            # `s.dt.tz_localize(tzlocal)` doesn't work properly.
-            return pd.Series([ts.tz_localize(tzlocal).tz_convert(tz).tz_localize(None)
-                              if ts is not pd.NaT else pd.NaT for ts in s])
-        else:
-            return s
+        try:
+            # Pandas <0.19
+            from pandas.core.common import is_datetime64tz_dtype, is_datetime64_dtype
+            from pandas.tslib import _dateutil_tzlocal
+            tzlocal = _dateutil_tzlocal()
+            fromTz = fromTimezone or tzlocal
+            toTz = toTimezone or tzlocal
+            # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+            if is_datetime64tz_dtype(s.dtype):
+                # `s.dt.tz_convert(tzlocal).dt.tz_localize(None)` doesn't work properly.
+                return pd.Series([ts.tz_convert(toTz).tz_localize(None)
+                                  if ts is not pd.NaT else pd.NaT for ts in s])
+            elif is_datetime64_dtype(s.dtype) and fromTz != toTz:
+                # `s.dt.tz_localize(tzlocal)` doesn't work properly.
+                return pd.Series([ts.tz_localize(fromTz).tz_convert(toTz).tz_localize(None)
+                                  if ts is not pd.NaT else pd.NaT for ts in s])
+            else:
+                return s
+        except ImportError:
+            # Pandas <0.17
+            # can't handle datetime64tz
+            from pandas.core.common import is_datetime64_dtype
+            from pandas.tslib import _dateutil_tzlocal
+            tzlocal = _dateutil_tzlocal()
+            fromTz = fromTimezone or tzlocal
+            toTz = toTimezone or tzlocal
+            # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+            if is_datetime64_dtype(s.dtype) and fromTz != toTz:
+                # `s.dt.tz_localize(tzlocal)` doesn't work properly.
+                return pd.Series([ts.tz_localize(fromTz).tz_convert(toTz).tz_localize(None)
+                                  if ts is not pd.NaT else pd.NaT for ts in s])
+            else:
+                return s
+
+
+def _check_series_convert_timestamps_local_tz(s, timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert to. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    return _check_series_convert_timestamps_localize(s, None, timezone)
+
+
+def _check_series_convert_timestamps_tz_local(s, timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert from. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    return _check_series_convert_timestamps_localize(s, timezone, None)
 
 
 def _test():

@@ -34,8 +34,9 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, DataType, StringType, StructType, _make_type_verifier, \
-    _infer_schema, _has_nulltype, _merge_type, _create_converter, _parse_datatype_string
+from pyspark.sql.types import Row, DataType, StringType, StructType, TimestampType, \
+    _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
+    _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SparkSession"]
@@ -440,7 +441,7 @@ class SparkSession(object):
             record_type_list.append((str(col_names[i]), curr_type))
         return record_type_list if has_rec_fix else None
 
-    def _convert_from_pandas(self, pdf, schema):
+    def _convert_from_pandas(self, pdf, schema, timezone):
         """
          Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
          :return tuple of list of records and schema
@@ -448,6 +449,25 @@ class SparkSession(object):
         # If no schema supplied by user then get the names of columns only
         if schema is None:
             schema = [str(x) for x in pdf.columns]
+
+        if timezone is not None:
+            from pyspark.sql.types import _check_series_convert_timestamps_tz_local
+            copied = False
+            if isinstance(schema, StructType):
+                for field in schema:
+                    if isinstance(field.dataType, TimestampType):
+                        s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
+                        if not copied and s is not pdf[field.name]:
+                            pdf = pdf.copy()
+                            copied = True
+                        pdf[field.name] = s
+            else:
+                for column, series in pdf.iteritems():
+                    s = _check_series_convert_timestamps_tz_local(pdf[column], timezone)
+                    if not copied and s is not pdf[column]:
+                        pdf = pdf.copy()
+                        copied = True
+                    pdf[column] = s
 
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.to_records(index=False)
@@ -557,7 +577,13 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
-            data, schema = self._convert_from_pandas(data, schema)
+            if self.conf.get("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
+               == "true":
+                timezone = self.conf.get("spark.sql.session.timeZone")
+            else:
+                timezone = None
+
+            data, schema = self._convert_from_pandas(data, schema, timezone)
 
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True

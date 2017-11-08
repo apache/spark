@@ -1924,11 +1924,11 @@ class DataFrame(object):
             if timezone is None:
                 return pdf
             else:
-                from pyspark.sql.types import _check_series_convert_timestamps_localize
+                from pyspark.sql.types import _check_series_convert_timestamps_local_tz
                 for field in self.schema:
                     if isinstance(field.dataType, TimestampType):
                         pdf[field.name] = \
-                            _check_series_convert_timestamps_localize(pdf[field.name], timezone)
+                            _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
                 return pdf
 
     def _collectAsArrow(self):
