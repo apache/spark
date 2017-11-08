@@ -170,10 +170,14 @@ private[spark] class MemoryStore(
    * temporary unroll memory used during the materialization is "transferred" to storage memory,
    * so we won't acquire more memory than is actually needed to store the block.
    *
+   * @param blockId The block id.
+   * @param values The values which need be stored.
+   * @param classTag the [[ClassTag]] for the block.
    * @param memoryMode The values saved mode.
    * @param storeValue Store the record of values to the MemoryStore.
    * @param estimateSize Get the memory size which used to unroll the block. The parameters
    *                     determine whether we need precise size.
+   * @param createMemoryEntry Using [[MemoryEntry]] to hold the stored values or bytes.
    * @return if the block is stored successfully, return the stored data size. Else return the
    *         memory has used for unroll the block.
    */
@@ -317,7 +321,6 @@ private[spark] class MemoryStore(
         // We only call need the precise size after all values unrolled.
         arrayValues = vector.toArray
         preciseSize = SizeEstimator.estimate(arrayValues)
-        vector = null
         preciseSize
       } else {
         vector.estimateSize()
@@ -326,10 +329,7 @@ private[spark] class MemoryStore(
 
     def createMemoryEntry(): MemoryEntry[T] = {
       // We successfully unrolled the entirety of this block
-      assert(arrayValues != null, "arrayValue shouldn't be null!")
-      assert(preciseSize != -1, "preciseSize shouldn't be -1")
-      val entry = new DeserializedMemoryEntry[T](arrayValues, preciseSize, classTag)
-      entry
+      DeserializedMemoryEntry[T](arrayValues, preciseSize, classTag)
     }
 
     putIterator(blockId, values, classTag, MemoryMode.ON_HEAP, storeValue,
@@ -413,8 +413,7 @@ private[spark] class MemoryStore(
     }
 
     def createMemoryEntry(): MemoryEntry[T] = {
-      val entry = SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
-      entry
+      SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
     }
 
     putIterator(blockId, values, classTag, memoryMode, storeValue,
