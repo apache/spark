@@ -29,7 +29,7 @@ import org.apache.spark.status.api.v1._
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentTab
-import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
+import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobProgressListener, JobsTab, StagesTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
@@ -44,7 +44,6 @@ private[spark] class SparkUI private (
     val conf: SparkConf,
     securityManager: SecurityManager,
     val storageStatusListener: StorageStatusListener,
-    val executorsListener: ExecutorsListener,
     val jobProgressListener: JobProgressListener,
     val storageListener: StorageListener,
     val operationGraphListener: RDDOperationGraphListener,
@@ -68,7 +67,7 @@ private[spark] class SparkUI private (
   def initialize() {
     val jobsTab = new JobsTab(this)
     attachTab(jobsTab)
-    val stagesTab = new StagesTab(this)
+    val stagesTab = new StagesTab(this, store)
     attachTab(stagesTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this, store))
@@ -189,18 +188,16 @@ private[spark] object SparkUI {
     }
 
     val storageStatusListener = new StorageStatusListener(conf)
-    val executorsListener = new ExecutorsListener(storageStatusListener, conf)
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)
 
     addListenerFn(storageStatusListener)
-    addListenerFn(executorsListener)
     addListenerFn(storageListener)
     addListenerFn(operationGraphListener)
 
-    new SparkUI(store, sc, conf, securityManager, storageStatusListener, executorsListener,
-      jobProgressListener, storageListener, operationGraphListener, appName, basePath,
-      lastUpdateTime, startTime, appSparkVersion)
+    new SparkUI(store, sc, conf, securityManager, storageStatusListener, jobProgressListener,
+      storageListener, operationGraphListener, appName, basePath, lastUpdateTime, startTime,
+      appSparkVersion)
   }
 
 }

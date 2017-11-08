@@ -103,6 +103,9 @@ private[spark] class AppStatusListener(
       details.getOrElse("System Properties", Nil),
       details.getOrElse("Classpath Entries", Nil))
 
+    coresPerTask = envInfo.sparkProperties.toMap.get("spark.task.cpus").map(_.toInt)
+      .getOrElse(coresPerTask)
+
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
   }
 
@@ -132,7 +135,7 @@ private[spark] class AppStatusListener(
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     // This needs to be an update in case an executor re-registers after the driver has
     // marked it as "dead".
-    val exec = getOrCreateExecutor(event.executorId)
+    val exec = getOrCreateExecutor(event.executorId, event.time)
     exec.host = event.executorInfo.executorHost
     exec.isActive = true
     exec.totalCores = event.executorInfo.totalCores
@@ -144,6 +147,8 @@ private[spark] class AppStatusListener(
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     liveExecutors.remove(event.executorId).foreach { exec =>
       exec.isActive = false
+      exec.removeTime = new Date(event.time)
+      exec.removeReason = event.reason
       update(exec, System.nanoTime())
     }
   }
@@ -357,18 +362,25 @@ private[spark] class AppStatusListener(
     }
 
     liveExecutors.get(event.taskInfo.executorId).foreach { exec =>
-      if (event.taskMetrics != null) {
-        val readMetrics = event.taskMetrics.shuffleReadMetrics
-        exec.totalGcTime += event.taskMetrics.jvmGCTime
-        exec.totalInputBytes += event.taskMetrics.inputMetrics.bytesRead
-        exec.totalShuffleRead += readMetrics.localBytesRead + readMetrics.remoteBytesRead
-        exec.totalShuffleWrite += event.taskMetrics.shuffleWriteMetrics.bytesWritten
-      }
-
       exec.activeTasks -= 1
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
       exec.totalDuration += event.taskInfo.duration
+
+      // Note: For resubmitted tasks, we continue to use the metrics that belong to the
+      // first attempt of this task. This may not be 100% accurate because the first attempt
+      // could have failed half-way through. The correct fix would be to keep track of the
+      // metrics added by each attempt, but this is much more complicated.
+      if (event.reason != Resubmitted) {
+        if (event.taskMetrics != null) {
+          val readMetrics = event.taskMetrics.shuffleReadMetrics
+          exec.totalGcTime += event.taskMetrics.jvmGCTime
+          exec.totalInputBytes += event.taskMetrics.inputMetrics.bytesRead
+          exec.totalShuffleRead += readMetrics.localBytesRead + readMetrics.remoteBytesRead
+          exec.totalShuffleWrite += event.taskMetrics.shuffleWriteMetrics.bytesWritten
+        }
+      }
+
       maybeUpdate(exec, now)
     }
   }
@@ -409,7 +421,7 @@ private[spark] class AppStatusListener(
   override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded): Unit = {
     // This needs to set fields that are already set by onExecutorAdded because the driver is
     // considered an "executor" in the UI, but does not have a SparkListenerExecutorAdded event.
-    val exec = getOrCreateExecutor(event.blockManagerId.executorId)
+    val exec = getOrCreateExecutor(event.blockManagerId.executorId, event.time)
     exec.hostPort = event.blockManagerId.hostPort
     event.maxOnHeapMem.foreach { _ =>
       exec.totalOnHeap = event.maxOnHeapMem.get
@@ -561,8 +573,8 @@ private[spark] class AppStatusListener(
     }
   }
 
-  private def getOrCreateExecutor(executorId: String): LiveExecutor = {
-    liveExecutors.getOrElseUpdate(executorId, new LiveExecutor(executorId))
+  private def getOrCreateExecutor(executorId: String, addTime: Long): LiveExecutor = {
+    liveExecutors.getOrElseUpdate(executorId, new LiveExecutor(executorId, addTime))
   }
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {

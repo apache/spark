@@ -29,6 +29,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler._
+import org.apache.spark.status.api.v1.ExecutorSummary
 import org.apache.spark.ui._
 import org.apache.spark.ui.jobs.UIData.{JobUIData, StageUIData}
 import org.apache.spark.util.Utils
@@ -123,55 +124,53 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     }
   }
 
-  private def makeExecutorEvent(executorUIDatas: Seq[SparkListenerEvent]):
+  private def makeExecutorEvent(executors: Seq[ExecutorSummary]):
       Seq[String] = {
     val events = ListBuffer[String]()
-    executorUIDatas.foreach {
-      case a: SparkListenerExecutorAdded =>
-        val addedEvent =
-          s"""
-             |{
-             |  'className': 'executor added',
-             |  'group': 'executors',
-             |  'start': new Date(${a.time}),
-             |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="bottom"' +
-             |    'data-title="Executor ${a.executorId}<br>' +
-             |    'Added at ${UIUtils.formatDate(new Date(a.time))}"' +
-             |    'data-html="true">Executor ${a.executorId} added</div>'
-             |}
-           """.stripMargin
-        events += addedEvent
-      case e: SparkListenerExecutorRemoved =>
+    executors.foreach { e =>
+      val addedEvent =
+        s"""
+           |{
+           |  'className': 'executor added',
+           |  'group': 'executors',
+           |  'start': new Date(${e.addTime.getTime()}),
+           |  'content': '<div class="executor-event-content"' +
+           |    'data-toggle="tooltip" data-placement="bottom"' +
+           |    'data-title="Executor ${e.id}<br>' +
+           |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
+           |    'data-html="true">Executor ${e.id} added</div>'
+           |}
+         """.stripMargin
+      events += addedEvent
+
+      e.removeTime.foreach { removeTime =>
         val removedEvent =
           s"""
              |{
              |  'className': 'executor removed',
              |  'group': 'executors',
-             |  'start': new Date(${e.time}),
+             |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
              |    'data-toggle="tooltip" data-placement="bottom"' +
-             |    'data-title="Executor ${e.executorId}<br>' +
-             |    'Removed at ${UIUtils.formatDate(new Date(e.time))}' +
+             |    'data-title="Executor ${e.id}<br>' +
+             |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
-                      if (e.reason != null) {
-                        s"""<br>Reason: ${e.reason.replace("\n", " ")}"""
-                      } else {
-                        ""
-                      }
+                      e.removeReason.map { reason =>
+                        s"""<br>Reason: ${reason.replace("\n", " ")}"""
+                      }.getOrElse("")
                    }"' +
-             |    'data-html="true">Executor ${e.executorId} removed</div>'
+             |    'data-html="true">Executor ${e.id} removed</div>'
              |}
            """.stripMargin
         events += removedEvent
-
+      }
     }
     events.toSeq
   }
 
   private def makeTimeline(
       jobs: Seq[JobUIData],
-      executors: Seq[SparkListenerEvent],
+      executors: Seq[ExecutorSummary],
       startTime: Long): Seq[Node] = {
 
     val jobEventJsonAsStrSeq = makeJobEvent(jobs)
@@ -360,9 +359,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </div>
 
       var content = summary
-      val executorListener = parent.executorListener
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
-          executorListener.executorEvents, startTime)
+          parent.parent.store.executorList(false), startTime)
 
       if (shouldShowActiveJobs) {
         content ++= <h4 id="active">Active Jobs ({activeJobs.size})</h4> ++
