@@ -178,9 +178,14 @@ object NGram extends DefaultParamsReadable[NGram] {
       addWindowsFromFinalBuffer(accumulated, finalBuffer).reverse
     }
 
-    (1 <= min) && (min <= max) match {
-      case true => calculateMultiSliding()
-      case false => Seq.empty
+    def calculateSingleSliding(): Seq[B] = {
+      x.iterator.sliding(min).withPartial(false).toSeq
+    }
+
+    ((1 <= min) && (min <= max), min == max) match {
+      case (false, _) => Seq.empty
+      case (true, true) => calculateSingleSliding()
+      case (true, false) => calculateMultiSliding()
     }
   }
 
