@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkConf
@@ -32,38 +33,44 @@ import org.apache.spark.util.ThreadUtils
 
 
 /**
- * The MesosCredentialRenewer will update the Hadoop credentials for Spark drivers accessing
- * secured services using Kerberos authentication. It is modeled after the YARN AMCredential
- * renewer, and similarly will renew the Credentials when 75% of the renewal interval has passed.
+ * The MesosHadoopDelegationTokenManager fetches and updates Hadoop delegation tokens on the behalf
+ * of the MesosCoarseGrainedSchedulerBackend. It is modeled after the YARN AMCredentialRenewer,
+ * and similarly will renew the Credentials when 75% of the renewal interval has passed.
  * The principal difference is that instead of writing the new credentials to HDFS and
  * incrementing the timestamp of the file, the new credentials (called Tokens when they are
  * serialized) are broadcast to all running executors. On the executor side, when new Tokens are
- * recieved they overwrite the current credentials.
+ * received they overwrite the current credentials.
  */
-class MesosCredentialRenewer(
-    conf: SparkConf,
-    tokenManager: HadoopDelegationTokenManager) extends Logging {
+private[spark] class MesosHadoopDelegationTokenManager(
+    conf: SparkConf, hadoopConfig: Configuration,
+    driverEndpoint: RpcEndpointRef)
+  extends Logging {
 
   private val credentialRenewerThread: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
 
-  private val principal = conf.get(config.PRINCIPAL).orNull
+  private val tokenManager: HadoopDelegationTokenManager =
+    new HadoopDelegationTokenManager(conf, hadoopConfig)
 
-  private val (secretFile, mode) = getSecretFile(conf)
+  private val principal: String = conf.get(config.PRINCIPAL).orNull
 
-  var (tokens: Array[Byte], timeOfNextRenewal: Long) = {
+  private val (secretFile: String, mode: String) = getSecretFile(conf)
+
+  private var (tokens: Array[Byte], timeOfNextRenewal: Long) = {
     try {
       val creds = UserGroupInformation.getCurrentUser.getCredentials
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       val rt = tokenManager.obtainDelegationTokens(hadoopConf, creds)
+      logInfo(s"Initialized tokens: ${SparkHadoopUtil.get.dumpTokens(creds)}")
       (SparkHadoopUtil.get.serialize(creds), rt)
     } catch {
       case e: Exception =>
         throw new IllegalStateException("Failed to initialize Hadoop delegation tokens\n" +
           s"\tPricipal: $principal\n\tmode: $mode\n\tsecret file $secretFile\n\tException: $e")
     }
-
   }
+
+  scheduleTokenRenewal()
 
   private def getSecretFile(conf: SparkConf): (String, String) = {
     val keytab = conf.get(config.KEYTAB).orNull
@@ -90,7 +97,7 @@ class MesosCredentialRenewer(
     (secretFile, mode)
   }
 
-  def scheduleTokenRenewal(driverEndpoint: RpcEndpointRef): Unit = {
+  private def scheduleTokenRenewal(): Unit = {
     def scheduleRenewal(runnable: Runnable): Unit = {
       val remainingTime = timeOfNextRenewal - System.currentTimeMillis()
       if (remainingTime <= 0) {
@@ -107,7 +114,7 @@ class MesosCredentialRenewer(
         override def run(): Unit = {
           try {
             val tokensBytes = getNewDelegationTokens
-            broadcastDelegationTokens(tokensBytes, driverEndpoint)
+            broadcastDelegationTokens(tokensBytes)
           } catch {
             case e: Exception =>
               // Log the error and try to write new tokens back in an hour
@@ -151,16 +158,23 @@ class MesosCredentialRenewer(
     } else {
       SparkHadoopUtil.getDateOfNextUpdate(nextRenewalTime, 0.75)
     }
-    logInfo(s"Time of next renewal is $timeOfNextRenewal")
+    logInfo(s"Time of next renewal is in ${timeOfNextRenewal - System.currentTimeMillis()} ms")
 
     // Add the temp credentials back to the original ones.
     UserGroupInformation.getCurrentUser.addCredentials(tempCreds)
     SparkHadoopUtil.get.serialize(tempCreds)
   }
 
-  private def broadcastDelegationTokens(tokens: Array[Byte], driverEndpoint: RpcEndpointRef) = {
-    logInfo("Sending new tokens to all executors")
+  private def broadcastDelegationTokens(tokens: Array[Byte]) = {
+    logDebug("Sending new tokens to all executors")
+    if (driverEndpoint == null) {
+      throw new IllegalStateException("driver endpoint is Null!")
+    }
     driverEndpoint.send(UpdateDelegationTokens(tokens))
+  }
+
+  def getTokens(): Array[Byte] = {
+    tokens
   }
 }
 

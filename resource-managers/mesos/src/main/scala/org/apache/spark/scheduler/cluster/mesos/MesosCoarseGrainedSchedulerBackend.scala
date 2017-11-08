@@ -32,7 +32,6 @@ import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
@@ -60,9 +59,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
-  private lazy val hadoopCredentialRenewer: MesosCredentialRenewer =
-    new MesosCredentialRenewer(
-      conf, new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
+  private lazy val hadoopDelegationTokenManager: MesosHadoopDelegationTokenManager =
+    new MesosHadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint)
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
@@ -215,14 +213,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       Some(sc.conf.get(DRIVER_FAILOVER_TIMEOUT)),
       sc.conf.getOption("spark.mesos.driver.frameworkId").map(_ + suffix)
     )
-
-    // check that the credentials are defined, even though it's likely that auth would have failed
-    // already if you've made it this far, then start the token renewer
-    if (hadoopDelegationTokens.isDefined) {
-      // the driver endpoint isn't set when the initial tokens are generated (as well as their
-      // expiration time, so we pass the driver endpoint here.
-      hadoopCredentialRenewer.scheduleTokenRenewal(driverEndpoint)
-    }
 
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
     startScheduler(driver)
@@ -784,9 +774,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def initializeHadoopDelegationTokens(): Option[Array[Byte]] = {
+  override def fetchHadoopDelegationTokens(): Option[Array[Byte]] = {
     if (UserGroupInformation.isSecurityEnabled) {
-      Some(hadoopCredentialRenewer.tokens)
+      Some(hadoopDelegationTokenManager.getTokens())
     } else {
       None
     }
