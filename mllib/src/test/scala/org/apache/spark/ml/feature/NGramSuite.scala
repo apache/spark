@@ -100,12 +100,18 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRe
   }
 
   test("read/write") {
-    val t = new NGram()
+    testDefaultReadWrite(new NGram()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setN(3)
+    )
+
+    testDefaultReadWrite(new NGram()
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setN(3)
       .setMaxN(5)
-    testDefaultReadWrite(t)
+    )
   }
 
   test("NGram.multiSliding should calculate empty results for out-of-bound inputs") {
