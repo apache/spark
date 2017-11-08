@@ -40,7 +40,7 @@ private[sql] class SQLAppStatusListener(
     ui: Option[SparkUI] = None)
   extends SparkListener with Logging {
 
-  // How often to flush intermediate stage of a live execution to the store. When replaying logs,
+  // How often to flush intermediate state of a live execution to the store. When replaying logs,
   // never flush (only do the very last write).
   private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
 
