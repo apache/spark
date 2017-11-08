@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.status.AppStatusPlugin
 import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.ui.SparkUI
@@ -59,6 +59,9 @@ private[sql] class SQLAppStatusStore(
 
   def executionMetrics(executionId: Long): Map[Long, String] = {
     val exec = store.read(classOf[SQLExecutionUIData], executionId)
+
+    // Need to try to read from the underlying store twice, in case the live execution data is
+    // removed from the listener while this method is running.
     Option(exec.metricValues)
       .orElse(listener.map(_.executionMetrics(executionId)))
       .getOrElse(Map())

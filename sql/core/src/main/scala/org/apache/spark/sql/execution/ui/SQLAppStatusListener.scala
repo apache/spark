@@ -18,16 +18,15 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
+import java.util.function.Function
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
-import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.LiveEntity
 import org.apache.spark.status.config._
 import org.apache.spark.ui.SparkUI
@@ -44,8 +43,11 @@ private[sql] class SQLAppStatusListener(
   // never flush (only do the very last write).
   private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
 
-  private val liveExecutions = new HashMap[Long, LiveExecutionData]()
-  private val stageMetrics = new HashMap[Int, LiveStageMetrics]()
+  // Live tracked data is needed by the SQL status store to calculate metrics for in-flight
+  // executions; that means arbitrary threads may be querying these maps, so they need to be
+  // thread-safe.
+  private val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
+  private val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
 
   private var uiInitialized = false
 
@@ -78,14 +80,14 @@ private[sql] class SQLAppStatusListener(
     }
 
     // Reset the metrics tracking object for the new attempt.
-    stageMetrics.get(event.stageInfo.stageId).foreach { metrics =>
+    Option(stageMetrics.get(event.stageInfo.stageId)).foreach { metrics =>
       metrics.taskMetrics.clear()
       metrics.attemptId = event.stageInfo.attemptId
     }
   }
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = {
-    liveExecutions.values.foreach { exec =>
+    liveExecutions.values().asScala.foreach { exec =>
       if (exec.jobs.contains(event.jobId)) {
         val result = event.jobResult match {
           case JobSucceeded => JobExecutionStatus.SUCCEEDED
@@ -129,8 +131,8 @@ private[sql] class SQLAppStatusListener(
       info.successful)
   }
 
-  def executionMetrics(executionId: Long): Map[Long, String] = synchronized {
-    liveExecutions.get(executionId).map { exec =>
+  def executionMetrics(executionId: Long): Map[Long, String] = {
+    Option(liveExecutions.get(executionId)).map { exec =>
       if (exec.metricsValues != null) {
         exec.metricsValues
       } else {
@@ -141,20 +143,30 @@ private[sql] class SQLAppStatusListener(
     }
   }
 
-  private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = synchronized {
+  private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
     val metricIds = exec.metrics.map(_.accumulatorId).sorted
     val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
     val metrics = exec.stages.toSeq
-      .flatMap(stageMetrics.get)
+      .flatMap { stageId => Option(stageMetrics.get(stageId)) }
       .flatMap(_.taskMetrics.values().asScala)
       .flatMap { metrics => metrics.ids.zip(metrics.values) }
 
-    (metrics ++ exec.driverAccumUpdates.toSeq)
+    val aggregatedMetrics = (metrics ++ exec.driverAccumUpdates.toSeq)
       .filter { case (id, _) => metricIds.contains(id) }
       .groupBy(_._1)
       .map { case (id, values) =>
         id -> SQLMetrics.stringValue(metricTypes(id), values.map(_._2).toSeq)
       }
+
+    // Check the execution again for whether the aggregated metrics data has been calculated.
+    // This can happen if the UI is requesting this data, and the onExecutionEnd handler is
+    // running at the same time. The metrics calculcated for the UI can be innacurate in that
+    // case, since the onExecutionEnd handler will clean up tracked stage metrics.
+    if (exec.metricsValues != null) {
+      exec.metricsValues
+    } else {
+      aggregatedMetrics
+    }
   }
 
   private def updateStageMetrics(
@@ -163,7 +175,7 @@ private[sql] class SQLAppStatusListener(
       taskId: Long,
       accumUpdates: Seq[AccumulableInfo],
       succeeded: Boolean): Unit = {
-    stageMetrics.get(stageId).foreach { metrics =>
+    Option(stageMetrics.get(stageId)).foreach { metrics =>
       if (metrics.attemptId != attemptId || metrics.accumulatorIds.isEmpty) {
         return
       }
@@ -195,6 +207,7 @@ private[sql] class SQLAppStatusListener(
         }
       }
 
+      // TODO: storing metrics by task ID can lead to innacurate metrics when speculation is on.
       metrics.taskMetrics.put(taskId, new LiveTaskMetrics(ids, values, succeeded))
     }
   }
@@ -249,27 +262,25 @@ private[sql] class SQLAppStatusListener(
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
     val SparkListenerSQLExecutionEnd(executionId, time) = event
-    liveExecutions.get(executionId).foreach { exec =>
-      synchronized {
-        exec.metricsValues = aggregateMetrics(exec)
+    Option(liveExecutions.get(executionId)).foreach { exec =>
+      exec.metricsValues = aggregateMetrics(exec)
+      exec.completionTime = Some(new Date(time))
+      exec.endEvents += 1
+      update(exec)
 
-        // Remove stale LiveStageMetrics objects for stages that are not active anymore.
-        val activeStages = liveExecutions.values.flatMap { other =>
-          if (other != exec) other.stages else Nil
-        }.toSet
-        stageMetrics.retain { case (id, _) => activeStages.contains(id) }
-
-        exec.completionTime = Some(new Date(time))
-        exec.endEvents += 1
-
-        update(exec)
-      }
+      // Remove stale LiveStageMetrics objects for stages that are not active anymore.
+      val activeStages = liveExecutions.values().asScala.flatMap { other =>
+        if (other != exec) other.stages else Nil
+      }.toSet
+      stageMetrics.keySet().asScala
+        .filter(!activeStages.contains(_))
+        .foreach(stageMetrics.remove)
     }
   }
 
   private def onDriverAccumUpdates(event: SparkListenerDriverAccumUpdates): Unit = {
     val SparkListenerDriverAccumUpdates(executionId, accumUpdates) = event
-    liveExecutions.get(executionId).foreach { exec =>
+    Option(liveExecutions.get(executionId)).foreach { exec =>
       exec.driverAccumUpdates = accumUpdates.toMap
       update(exec)
     }
@@ -283,14 +294,17 @@ private[sql] class SQLAppStatusListener(
   }
 
   private def getOrCreateExecution(executionId: Long): LiveExecutionData = {
-    liveExecutions.getOrElseUpdate(executionId, new LiveExecutionData(executionId))
+    liveExecutions.computeIfAbsent(executionId,
+      new Function[Long, LiveExecutionData]() {
+        override def apply(key: Long): LiveExecutionData = new LiveExecutionData(executionId)
+      })
   }
 
   private def update(exec: LiveExecutionData): Unit = {
     val now = System.nanoTime()
     if (exec.endEvents >= exec.jobs.size + 1) {
-      liveExecutions.remove(exec.executionId)
       exec.write(kvstore, now)
+      liveExecutions.remove(exec.executionId)
     } else if (liveUpdatePeriodNs >= 0) {
       if (now - exec.lastWriteTime > liveUpdatePeriodNs) {
         exec.write(kvstore, now)
@@ -299,7 +313,7 @@ private[sql] class SQLAppStatusListener(
   }
 
   private def isSQLStage(stageId: Int): Boolean = {
-    liveExecutions.values.exists { exec =>
+    liveExecutions.values().asScala.exists { exec =>
       exec.stages.contains(stageId)
     }
   }
@@ -319,7 +333,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var stages = Set[Int]()
   var driverAccumUpdates = Map[Long, Long]()
 
-  var metricsValues: Map[Long, String] = null
+  @volatile var metricsValues: Map[Long, String] = null
 
   // Just in case job end and execution end arrive out of order, keep track of how many
   // end events arrived so that the listener can stop tracking the execution.
