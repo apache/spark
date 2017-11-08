@@ -56,6 +56,8 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   /**
    * Maximum n-gram length, greater than or equal to `n`.
    * All values of m such that n <= m <= maxN will be used.
+   * If maxN is not set, only n-grams with length on `n`
+   * will be considered.
    * Default: 2, bigram features
    * @group param
    */
