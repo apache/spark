@@ -243,9 +243,9 @@ test_that("getOne", {
 
 test_that("traverseParentDirs", {
   if (is_windows()) {
-    # dirname replaces \\ with / on windows
+    # original path is included as-is, otherwise dirname() replaces \\ with / on windows
     dirs <- traverseParentDirs("c:\\Users\\user\\AppData\\Local\\Apache\\Spark\\Cache\\spark2.2", 3)
-    expect <- c("c:/Users/user/AppData/Local/Apache/Spark/Cache/spark2.2",
+    expect <- c("c:\\Users\\user\\AppData\\Local\\Apache\\Spark\\Cache\\spark2.2",
                 "c:/Users/user/AppData/Local/Apache/Spark/Cache",
                 "c:/Users/user/AppData/Local/Apache/Spark",
                 "c:/Users/user/AppData/Local/Apache")
