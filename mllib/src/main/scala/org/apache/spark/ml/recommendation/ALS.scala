@@ -290,8 +290,10 @@ class ALSModel private[ml] (
   private val predict = udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
     if (featuresA != null && featuresB != null) {
       var dotProduct = 0.0f
-      for(i <- 0 until rank) {
+      var i = 0
+      while (i < rank) {
         dotProduct += featuresA(i) * featuresB(i)
+        i += 1
       }
       dotProduct
     } else {
