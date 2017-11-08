@@ -3171,10 +3171,15 @@ class ArrowTests(ReusedSQLTestCase):
             pdf_ny, pdf_arrow_ny = self._toPandas_arrow_toggle(df)
             self.assertFramesEqual(pdf_arrow_ny, pdf_ny)
 
-            from pyspark.sql.types import _check_dataframe_localize_timestamps
             self.assertFalse(pdf_ny.equals(pdf_la))
-            self.assertTrue(pdf_ny.equals(
-                _check_dataframe_localize_timestamps(pdf_la, self.schema, timezone)))
+
+            from pyspark.sql.types import _check_series_convert_timestamps_localize
+            pdf_la_corrected = pdf_la.copy()
+            for field in self.schema:
+                if isinstance(field.dataType, TimestampType):
+                    pdf_la_corrected[field.name] = _check_series_convert_timestamps_localize(
+                        pdf_la_corrected[field.name], timezone)
+            self.assertFramesEqual(pdf_ny, pdf_la_corrected)
         finally:
             self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 

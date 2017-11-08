@@ -278,13 +278,12 @@ class ArrowStreamPandasSerializer(Serializer):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
-        from pyspark.sql.types import _check_dataframe_localize_timestamps, from_arrow_schema
+        from pyspark.sql.types import _check_dataframe_localize_timestamps
         import pyarrow as pa
         reader = pa.open_stream(stream)
-        schema = from_arrow_schema(reader.schema)
         for batch in reader:
             # NOTE: changed from pa.Columns.to_pandas, timezone issue in conversion fixed in 0.7.1
-            pdf = _check_dataframe_localize_timestamps(batch.to_pandas(), schema, self._timezone)
+            pdf = _check_dataframe_localize_timestamps(batch.to_pandas(), self._timezone)
             yield [c for _, c in pdf.iteritems()]
 
     def __repr__(self):
