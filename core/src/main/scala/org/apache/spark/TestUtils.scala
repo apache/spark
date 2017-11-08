@@ -168,7 +168,7 @@ private[spark] object TestUtils {
     createCompiledClass(className, destDir, sourceFile, classpathUrls)
   }
 
-  /** Create a dummy compile jar for a given package, classname.  Jar will be placed in destDir */
+  /** Create a dummy compile jar for a given package, classname. Jar will be placed in destDir */
   def createDummyJar(destDir: String, packageName: String, className: String): File = {
     val srcDir = new File(destDir, packageName)
     srcDir.mkdirs()

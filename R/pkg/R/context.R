@@ -323,7 +323,12 @@ spark.addFile <- function(path, recursive = FALSE) {
 #'
 #' The \code{path} passed can be either a local file, a file in HDFS (or other Hadoop-supported
 #' filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
-#' If \code{addToCurrentClassLoader} is true, add the jar to the current driver.
+#' If \code{addToCurrentClassLoader} is true, add the jar to the current threads' class loader
+#' in the backing JVM. In general adding to the current threads' class loader will impact all
+#' other application threads unless they have explicitly changed their class loader.
+#'
+#' Note: \code{addToCurrentClassLoader} parameter is a developer API, which change or be removed
+#' in minor versions of Spark.
 #'
 #' @rdname spark.addJar
 #' @param path The path of the jar to be added

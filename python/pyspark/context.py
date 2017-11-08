@@ -865,11 +865,15 @@ class SparkContext(object):
         Adds a JAR dependency for Spark tasks to be executed in the future.
         The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
         filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
-        If `addToCurrentClassLoader` is true, add the jar to the current driver.
+        If `addToCurrentClassLoader` is true, add the jar to the current threads' class loader
+        in the backing JVM. In general adding to the current threads' class loader will impact all
+        other application threads unless they have explicitly changed their class loader.
+
+        .. note:: `addToCurrentClassLoader` parameter is a developer API, which change or be removed
+            in minor versions of Spark.
 
         :param path: The path of the jar to be added
         :param addToCurrentClassLoader: Whether to add the jar to the current driver class loader.
-               This defaults to False.
         """
         self._jsc.sc().addJar(path, addToCurrentClassLoader)
 
