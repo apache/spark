@@ -39,6 +39,8 @@ object MimaExcludes {
     // SPARK-18085: Better History Server scalability for many / large applications
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ExecutorSummary.executorLogs"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.history.HistoryServer.getSparkUI"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ui.env.EnvironmentListener"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ui.exec.ExecutorsListener"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ui.storage.StorageListener"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageStatusListener"),
 

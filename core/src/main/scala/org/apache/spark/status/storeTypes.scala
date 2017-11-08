@@ -34,6 +34,17 @@ private[spark] class ApplicationInfoWrapper(val info: ApplicationInfo) {
 
 }
 
+private[spark] class ApplicationEnvironmentInfoWrapper(val info: ApplicationEnvironmentInfo) {
+
+  /**
+   * There's always a single ApplicationEnvironmentInfo object per application, so this
+   * ID doesn't need to be dynamic. But the KVStore API requires an ID.
+   */
+  @JsonIgnore @KVIndex
+  def id: String = classOf[ApplicationEnvironmentInfoWrapper].getName()
+
+}
+
 private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
 
   @JsonIgnore @KVIndex

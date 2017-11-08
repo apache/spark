@@ -212,12 +212,16 @@ private class LiveTask(
 
 }
 
-private class LiveExecutor(val executorId: String) extends LiveEntity {
+private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
 
   var hostPort: String = null
   var host: String = null
   var isActive = true
   var totalCores = 0
+
+  val addTime = new Date(_addTime)
+  var removeTime: Date = null
+  var removeReason: String = null
 
   var rddBlocks = 0
   var memoryUsed = 0L
@@ -276,6 +280,9 @@ private class LiveExecutor(val executorId: String) extends LiveEntity {
       totalShuffleWrite,
       isBlacklisted,
       maxMemory,
+      addTime,
+      Option(removeTime),
+      Option(removeReason),
       executorLogs,
       memoryMetrics)
     new ExecutorSummaryWrapper(info)

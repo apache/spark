@@ -27,8 +27,8 @@ import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
-import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
+import org.apache.spark.ui.env.EnvironmentTab
+import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobProgressListener, JobsTab, StagesTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
 import org.apache.spark.ui.storage.StorageTab
@@ -42,8 +42,6 @@ private[spark] class SparkUI private (
     val sc: Option[SparkContext],
     val conf: SparkConf,
     securityManager: SecurityManager,
-    val environmentListener: EnvironmentListener,
-    val executorsListener: ExecutorsListener,
     val jobProgressListener: JobProgressListener,
     val operationGraphListener: RDDOperationGraphListener,
     var appName: String,
@@ -66,10 +64,10 @@ private[spark] class SparkUI private (
   def initialize() {
     val jobsTab = new JobsTab(this)
     attachTab(jobsTab)
-    val stagesTab = new StagesTab(this)
+    val stagesTab = new StagesTab(this, store)
     attachTab(stagesTab)
     attachTab(new StorageTab(this, store))
-    attachTab(new EnvironmentTab(this))
+    attachTab(new EnvironmentTab(this, store))
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
@@ -84,9 +82,13 @@ private[spark] class SparkUI private (
   initialize()
 
   def getSparkUser: String = {
-    environmentListener.sparkUser
-      .orElse(environmentListener.systemProperties.toMap.get("user.name"))
-      .getOrElse("<unknown>")
+    try {
+      Option(store.applicationInfo().attempts.head.sparkUser)
+        .orElse(store.environmentInfo().systemProperties.toMap.get("user.name"))
+        .getOrElse("<unknown>")
+    } catch {
+      case _: NoSuchElementException => "<unknown>"
+    }
   }
 
   def getAppName: String = appName
@@ -139,6 +141,7 @@ private[spark] class SparkUI private (
   def setStreamingJobProgressListener(sparkListener: SparkListener): Unit = {
     streamingJobProgressListener = Option(sparkListener)
   }
+
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
@@ -180,17 +183,12 @@ private[spark] object SparkUI {
       addListenerFn(listener)
       listener
     }
-    val environmentListener = new EnvironmentListener
-    val executorsListener = new ExecutorsListener(conf)
     val operationGraphListener = new RDDOperationGraphListener(conf)
 
-    addListenerFn(environmentListener)
-    addListenerFn(executorsListener)
     addListenerFn(operationGraphListener)
 
-    new SparkUI(store, sc, conf, securityManager, environmentListener, executorsListener,
-      jobProgressListener, operationGraphListener, appName, basePath, lastUpdateTime, startTime,
-      appSparkVersion)
+    new SparkUI(store, sc, conf, securityManager, jobProgressListener, operationGraphListener,
+      appName, basePath, lastUpdateTime, startTime, appSparkVersion)
   }
 
 }

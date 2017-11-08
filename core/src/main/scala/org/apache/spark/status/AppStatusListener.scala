@@ -88,6 +88,27 @@ private[spark] class AppStatusListener(
     kvstore.write(new ApplicationInfoWrapper(appInfo))
   }
 
+  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
+    val details = event.environmentDetails
+
+    val jvmInfo = Map(details("JVM Information"): _*)
+    val runtime = new v1.RuntimeInfo(
+      jvmInfo.get("Java Version").orNull,
+      jvmInfo.get("Java Home").orNull,
+      jvmInfo.get("Scala Version").orNull)
+
+    val envInfo = new v1.ApplicationEnvironmentInfo(
+      runtime,
+      details.getOrElse("Spark Properties", Nil),
+      details.getOrElse("System Properties", Nil),
+      details.getOrElse("Classpath Entries", Nil))
+
+    coresPerTask = envInfo.sparkProperties.toMap.get("spark.task.cpus").map(_.toInt)
+      .getOrElse(coresPerTask)
+
+    kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
+  }
+
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     val old = appInfo.attempts.head
     val attempt = new v1.ApplicationAttemptInfo(
@@ -114,7 +135,7 @@ private[spark] class AppStatusListener(
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     // This needs to be an update in case an executor re-registers after the driver has
     // marked it as "dead".
-    val exec = getOrCreateExecutor(event.executorId)
+    val exec = getOrCreateExecutor(event.executorId, event.time)
     exec.host = event.executorInfo.executorHost
     exec.isActive = true
     exec.totalCores = event.executorInfo.totalCores
@@ -127,6 +148,8 @@ private[spark] class AppStatusListener(
     liveExecutors.remove(event.executorId).foreach { exec =>
       val now = System.nanoTime()
       exec.isActive = false
+      exec.removeTime = new Date(event.time)
+      exec.removeReason = event.reason
       update(exec, now)
 
       // Remove all RDD distributions that reference the removed executor, in case there wasn't
@@ -348,18 +371,25 @@ private[spark] class AppStatusListener(
     }
 
     liveExecutors.get(event.taskInfo.executorId).foreach { exec =>
-      if (event.taskMetrics != null) {
-        val readMetrics = event.taskMetrics.shuffleReadMetrics
-        exec.totalGcTime += event.taskMetrics.jvmGCTime
-        exec.totalInputBytes += event.taskMetrics.inputMetrics.bytesRead
-        exec.totalShuffleRead += readMetrics.localBytesRead + readMetrics.remoteBytesRead
-        exec.totalShuffleWrite += event.taskMetrics.shuffleWriteMetrics.bytesWritten
-      }
-
       exec.activeTasks -= 1
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
       exec.totalDuration += event.taskInfo.duration
+
+      // Note: For resubmitted tasks, we continue to use the metrics that belong to the
+      // first attempt of this task. This may not be 100% accurate because the first attempt
+      // could have failed half-way through. The correct fix would be to keep track of the
+      // metrics added by each attempt, but this is much more complicated.
+      if (event.reason != Resubmitted) {
+        if (event.taskMetrics != null) {
+          val readMetrics = event.taskMetrics.shuffleReadMetrics
+          exec.totalGcTime += event.taskMetrics.jvmGCTime
+          exec.totalInputBytes += event.taskMetrics.inputMetrics.bytesRead
+          exec.totalShuffleRead += readMetrics.localBytesRead + readMetrics.remoteBytesRead
+          exec.totalShuffleWrite += event.taskMetrics.shuffleWriteMetrics.bytesWritten
+        }
+      }
+
       maybeUpdate(exec, now)
     }
   }
@@ -400,7 +430,7 @@ private[spark] class AppStatusListener(
   override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded): Unit = {
     // This needs to set fields that are already set by onExecutorAdded because the driver is
     // considered an "executor" in the UI, but does not have a SparkListenerExecutorAdded event.
-    val exec = getOrCreateExecutor(event.blockManagerId.executorId)
+    val exec = getOrCreateExecutor(event.blockManagerId.executorId, event.time)
     exec.hostPort = event.blockManagerId.hostPort
     event.maxOnHeapMem.foreach { _ =>
       exec.totalOnHeap = event.maxOnHeapMem.get
@@ -568,8 +598,8 @@ private[spark] class AppStatusListener(
     }
   }
 
-  private def getOrCreateExecutor(executorId: String): LiveExecutor = {
-    liveExecutors.getOrElseUpdate(executorId, new LiveExecutor(executorId))
+  private def getOrCreateExecutor(executorId: String, addTime: Long): LiveExecutor = {
+    liveExecutors.getOrElseUpdate(executorId, new LiveExecutor(executorId, addTime))
   }
 
   private def updateStreamBlock(event: SparkListenerBlockUpdated, stream: StreamBlockId): Unit = {
