@@ -20,28 +20,22 @@ package org.apache.spark.sql.execution.ui
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.LocalSparkContext.withSpark
 import org.apache.spark.internal.config
-import org.apache.spark.sql.{Column, DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.functions._
 
 class SQLListenerMemorySuite extends SparkFunSuite {
 
-  test("_stageIdToStageMetrics grows too large on long executions") {
+  test("SPARK-22471 - _stageIdToStageMetrics grows too large on long executions") {
     val conf = new SparkConf()
       .setMaster("local[*]")
       .setAppName("MemoryLeakTest")
       /* Don't retry the tasks to run this test quickly */
       .set(config.MAX_TASK_FAILURES, 1)
-//      .set("spark.sql.ui.retainedExecutions", "50")
       .set("spark.ui.retainedStages", "50")
     withSpark(new SparkContext(conf)) { sc =>
       SparkSession.sqlListener.set(null)
       val spark = new SparkSession(sc)
       import spark.implicits._
-
-      Console.err.print("--- executionIdToData: "
-        + spark.sharedState.listener.executionIdToData.size + "\n")
-      Console.err.print("--- stageIdToStageMetrics: "
-        + spark.sharedState.listener.stageIdToStageMetrics.size + "\n")
 
       val sample = List(
         (1, 10),
@@ -69,13 +63,6 @@ class SQLListenerMemorySuite extends SparkFunSuite {
       assert(spark.sharedState.listener.getCompletedExecutions.size == 1)
       assert(spark.sharedState.listener.stageIdToStageMetrics.size <= 50)
 
-      res.show()
-
-      Console.err.print("--- executionIdToData: "
-        + spark.sharedState.listener.executionIdToData.size + "\n")
-      Console.err.print("--- stageIdToStageMetrics: "
-        + spark.sharedState.listener.stageIdToStageMetrics.size + "\n")
-      Thread.sleep(10000L)
     }
   }
 }
