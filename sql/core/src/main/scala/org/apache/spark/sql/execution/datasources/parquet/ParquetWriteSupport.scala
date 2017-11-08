@@ -92,7 +92,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
 
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter).toArray[ValueWriter]
 
-    val messageType = new ParquetSchemaConverter(configuration).convert(schema)
+    val messageType = new SparkToParquetSchemaConverter(configuration).convert(schema)
     val metadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
 
     logInfo(

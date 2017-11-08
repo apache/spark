@@ -52,14 +52,10 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       sqlSchema: StructType,
       parquetSchema: String,
       binaryAsString: Boolean,
-      int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean,
-      int64AsTimestampMillis: Boolean = false): Unit = {
-    val converter = new ParquetSchemaConverter(
+      int96AsTimestamp: Boolean): Unit = {
+    val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
-      assumeInt96IsTimestamp = int96AsTimestamp,
-      writeLegacyParquetFormat = writeLegacyParquetFormat,
-      writeTimestampInMillis = int64AsTimestampMillis)
+      assumeInt96IsTimestamp = int96AsTimestamp)
 
     test(s"sql <= parquet: $testName") {
       val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
@@ -77,13 +73,9 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       testName: String,
       sqlSchema: StructType,
       parquetSchema: String,
-      binaryAsString: Boolean,
-      int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean,
       int64AsTimestampMillis: Boolean = false): Unit = {
-    val converter = new ParquetSchemaConverter(
-      assumeBinaryIsString = binaryAsString,
-      assumeInt96IsTimestamp = int96AsTimestamp,
+    val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = writeLegacyParquetFormat,
       writeTimestampInMillis = int64AsTimestampMillis)
 
@@ -108,8 +100,6 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       testName,
       sqlSchema,
       parquetSchema,
-      binaryAsString,
-      int96AsTimestamp,
       writeLegacyParquetFormat,
       int64AsTimestampMillis)
 
@@ -118,9 +108,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       sqlSchema,
       parquetSchema,
       binaryAsString,
-      int96AsTimestamp,
-      writeLegacyParquetFormat,
-      int64AsTimestampMillis)
+      int96AsTimestamp)
   }
 }
 
@@ -411,8 +399,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with nullable element type - 2",
@@ -430,8 +417,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 1 - standard",
@@ -446,8 +432,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 2",
@@ -462,8 +447,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 3",
@@ -476,8 +460,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 4",
@@ -500,8 +483,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 5 - parquet-avro style",
@@ -522,8 +504,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 6 - parquet-thrift style",
@@ -544,8 +525,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type 7 - " +
@@ -557,8 +537,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type 8 - " +
@@ -580,8 +559,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   // =======================================================
   // Tests for converting Catalyst ArrayType to Parquet LIST
@@ -602,8 +580,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
@@ -621,8 +597,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
   testCatalystToParquet(
@@ -640,8 +614,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
@@ -657,8 +629,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
   // ====================================================
@@ -682,8 +652,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with non-nullable value type - 2",
@@ -702,8 +671,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with non-nullable value type - 3 - prior to 1.4.x",
@@ -722,8 +690,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 1 - standard",
@@ -742,8 +709,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 2",
@@ -762,8 +728,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 3 - parquet-avro style",
@@ -782,8 +747,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   // ====================================================
   // Tests for converting Catalyst MapType to Parquet Map
@@ -805,8 +769,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
@@ -825,8 +787,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
   testCatalystToParquet(
@@ -845,8 +805,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
@@ -865,8 +823,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
   // =================================
