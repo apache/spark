@@ -250,7 +250,7 @@ partitionSpecLocation
     ;
 
 partitionSpec
-    : PARTITION '(' partitionVal (',' partitionVal)* ')'
+    : PARTITION '(' (partitionVal | expression) (',' (partitionVal | expression))* ')'
     ;
 
 partitionVal

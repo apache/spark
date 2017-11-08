@@ -283,6 +283,27 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a partition fileter specification.
+   */
+  def visitPartitionFilterSpec(ctx: PartitionSpecContext): Expression = withOrigin(ctx) {
+    val parts = ctx.expression.asScala.map { pVal =>
+      expression(pVal) match {
+        case EqualNullSafe(_, _) =>
+          throw new ParseException("'<=>' operator is not allowed in partition specification.", ctx)
+        case cmp @ BinaryComparison(UnresolvedAttribute(name :: Nil), constant: Literal) =>
+          cmp.withNewChildren(Seq(AttributeReference(name, StringType)(), constant))
+        case _ =>
+          throw new ParseException("Invalid partition filter specification", ctx)
+      }
+    }
+    if(parts.isEmpty) {
+      null
+    } else {
+      parts.reduceLeft(And)
+    }
+  }
+
+  /**
    * Create a partition specification map without optional values.
    */
   protected def visitNonOptionalPartitionSpec(
