@@ -62,16 +62,17 @@ sealed abstract class SummaryBuilder {
  * an example in Scala:
  * {{{
  *   import org.apache.spark.ml.linalg._
+  *   import org.apache.spark.sql.Row
  *   val dataframe = ... // Some dataframe containing a feature column and a weight column
  *   val multiStatsDF = dataframe.select(
  *       Summarizer.metrics("min", "max", "count").summary($"features", $"weight")
- *   val Tuple1((minVec, maxVec, count)) = multiStatsDF.as[Tuple1[(Vector, Vector, Long)]].first()
+ *   val Row(Row(minVec, maxVec, count)) = multiStatsDF.first()
  * }}}
  *
  * If one wants to get a single metric, shortcuts are also available:
  * {{{
  *   val meanDF = dataframe.select(Summarizer.mean($"features"))
- *   val Tuple1(meanVec) = meanDF.as[Tuple1[Vector]].first()
+ *   val Row(meanVec) = meanDF.first()
  * }}}
  *
  * Note: Currently, the performance of this interface is about 2x~3x slower then using the RDD
