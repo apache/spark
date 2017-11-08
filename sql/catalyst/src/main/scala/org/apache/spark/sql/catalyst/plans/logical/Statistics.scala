@@ -29,7 +29,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -248,7 +248,7 @@ object ColumnStat extends Logging {
   def statExprs(
       col: Attribute,
       conf: SQLConf,
-      colPercentiles: AttributeMap[Array[Any]]): CreateNamedStruct = {
+      colPercentiles: AttributeMap[ArrayData]): CreateNamedStruct = {
     def struct(exprs: Expression*): CreateNamedStruct = CreateStruct(exprs.map { expr =>
       expr.transformUp { case af: AggregateFunction => af.toAggregateExpression() }
     })
@@ -272,7 +272,7 @@ object ColumnStat extends Logging {
         ColumnStat.supportsHistogram(dataType) && colPercentiles.contains(col)
       val intervalNdvsExpr = if (genHistogram) {
         ApproxCountDistinctForIntervals(col,
-          CreateArray(colPercentiles(col).map(Literal(_))), conf.ndvMaxError)
+          Literal(colPercentiles(col), ArrayType(col.dataType)), conf.ndvMaxError)
       } else {
         nullArray
       }
@@ -306,7 +306,7 @@ object ColumnStat extends Logging {
       row: InternalRow,
       attr: Attribute,
       rowCount: Long,
-      percentiles: Option[Array[Any]]): ColumnStat = {
+      percentiles: Option[ArrayData]): ColumnStat = {
     // The first 6 fields are basic column stats, the 7th is ndvs for histogram buckets.
     val cs = ColumnStat(
       distinctCount = BigInt(row.getLong(0)),
@@ -321,8 +321,8 @@ object ColumnStat extends Logging {
       cs
     } else {
       val ndvs = row.getArray(6).toLongArray()
-      assert(percentiles.get.length == ndvs.length + 1)
-      val endpoints = percentiles.get.map(_.toString.toDouble)
+      assert(percentiles.get.numElements() == ndvs.length + 1)
+      val endpoints = percentiles.get.toArray[Any](attr.dataType).map(_.toString.toDouble)
       // Construct equi-height histogram
       val buckets = ndvs.zipWithIndex.map { case (ndv, i) =>
         EquiHeightBucket(endpoints(i), endpoints(i + 1), ndv)
@@ -377,12 +377,20 @@ object HistogramSerializer {
     val out = new DataOutputStream(new LZ4BlockOutputStream(bos))
     out.writeDouble(histogram.height)
     out.writeInt(histogram.buckets.length)
+    // Write data with same type together for compression.
     var i = 0
     while (i < histogram.buckets.length) {
-      val bucket = histogram.buckets(i)
-      out.writeDouble(bucket.lo)
-      out.writeDouble(bucket.hi)
-      out.writeLong(bucket.ndv)
+      out.writeDouble(histogram.buckets(i).lo)
+      i += 1
+    }
+    i = 0
+    while (i < histogram.buckets.length) {
+      out.writeDouble(histogram.buckets(i).hi)
+      i += 1
+    }
+    i = 0
+    while (i < histogram.buckets.length) {
+      out.writeLong(histogram.buckets(i).ndv)
       i += 1
     }
     out.writeInt(-1)
@@ -399,16 +407,33 @@ object HistogramSerializer {
     val ins = new DataInputStream(new LZ4BlockInputStream(bis))
     val height = ins.readDouble()
     val numBuckets = ins.readInt()
-    val buckets = new Array[EquiHeightBucket](numBuckets)
+
+    val los = new Array[Double](numBuckets)
     var i = 0
     while (i < numBuckets) {
-      val lo = ins.readDouble()
-      val hi = ins.readDouble()
-      val ndv = ins.readLong()
-      buckets(i) = EquiHeightBucket(lo, hi, ndv)
+      los(i) = ins.readDouble()
+      i += 1
+    }
+    val his = new Array[Double](numBuckets)
+    i = 0
+    while (i < numBuckets) {
+      his(i) = ins.readDouble()
+      i += 1
+    }
+    val ndvs = new Array[Long](numBuckets)
+    i = 0
+    while (i < numBuckets) {
+      ndvs(i) = ins.readLong()
       i += 1
     }
     ins.close()
+
+    val buckets = new Array[EquiHeightBucket](numBuckets)
+    i = 0
+    while (i < numBuckets) {
+      buckets(i) = EquiHeightBucket(los(i), his(i), ndvs(i))
+      i += 1
+    }
     EquiHeightHistogram(height, buckets)
   }
 }

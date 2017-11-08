@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableTyp
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.execution.QueryExecution
 
 
@@ -121,13 +122,13 @@ case class AnalyzeColumnCommand(
   private def computePercentiles(
       attributesToAnalyze: Seq[Attribute],
       sparkSession: SparkSession,
-      relation: LogicalPlan): AttributeMap[Array[Any]] = {
+      relation: LogicalPlan): AttributeMap[ArrayData] = {
     val attrsToGenHistogram = if (conf.histogramEnabled) {
       attributesToAnalyze.filter(a => ColumnStat.supportsHistogram(a.dataType))
     } else {
       Nil
     }
-    val attributePercentiles = mutable.HashMap[Attribute, Array[Any]]()
+    val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
     if (attrsToGenHistogram.nonEmpty) {
       val percentiles = (0 to conf.histogramBucketsNum)
         .map(i => i.toDouble / conf.histogramBucketsNum).toArray
@@ -142,7 +143,7 @@ case class AnalyzeColumnCommand(
       val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation))
         .executedPlan.executeTake(1).head
       attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
-        attributePercentiles += attr -> percentilesRow.getArray(i).toArray(attr.dataType)
+        attributePercentiles += attr -> percentilesRow.getArray(i)
       }
     }
     AttributeMap(attributePercentiles.toSeq)
