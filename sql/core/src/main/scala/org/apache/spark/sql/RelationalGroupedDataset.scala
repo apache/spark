@@ -321,10 +321,10 @@ class RelationalGroupedDataset protected[sql](
     // Get the distinct values of the column and sort them so its consistent
     val values = df.select(pivotColumn)
       .distinct()
+      .limit(maxValues + 1)
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
-      .rdd
+      .collect()
       .map(_.get(0))
-      .take(maxValues + 1)
       .toSeq
 
     if (values.length > maxValues) {

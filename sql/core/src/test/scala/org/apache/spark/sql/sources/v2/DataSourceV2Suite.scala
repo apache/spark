@@ -167,7 +167,7 @@ class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
 class SimpleReadTask(start: Int, end: Int) extends ReadTask[Row] with DataReader[Row] {
   private var current = start - 1
 
-  override def createReader(): DataReader[Row] = new SimpleReadTask(start, end)
+  override def createDataReader(): DataReader[Row] = new SimpleReadTask(start, end)
 
   override def next(): Boolean = {
     current += 1
@@ -233,7 +233,9 @@ class AdvancedReadTask(start: Int, end: Int, requiredSchema: StructType)
 
   private var current = start - 1
 
-  override def createReader(): DataReader[Row] = new AdvancedReadTask(start, end, requiredSchema)
+  override def createDataReader(): DataReader[Row] = {
+    new AdvancedReadTask(start, end, requiredSchema)
+  }
 
   override def close(): Unit = {}
 
@@ -273,7 +275,7 @@ class UnsafeRowReadTask(start: Int, end: Int)
 
   private var current = start - 1
 
-  override def createReader(): DataReader[UnsafeRow] = new UnsafeRowReadTask(start, end)
+  override def createDataReader(): DataReader[UnsafeRow] = new UnsafeRowReadTask(start, end)
 
   override def next(): Boolean = {
     current += 1

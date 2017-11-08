@@ -18,7 +18,8 @@
 package org.apache.spark.status
 
 import java.io.File
-import java.util.{Date, Properties}
+import java.lang.{Integer => JInteger, Long => JLong}
+import java.util.{Arrays, Date, Properties}
 
 import scala.collection.JavaConverters._
 import scala.reflect.{classTag, ClassTag}
@@ -36,6 +37,10 @@ import org.apache.spark.util.kvstore._
 
 class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
+  import config._
+
+  private val conf = new SparkConf().set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
+
   private var time: Long = _
   private var testDir: File = _
   private var store: KVStore = _
@@ -51,8 +56,48 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     Utils.deleteRecursively(testDir)
   }
 
+  test("environment info") {
+    val listener = new AppStatusListener(store, conf, true)
+
+    val details = Map(
+      "JVM Information" -> Seq(
+        "Java Version" -> sys.props("java.version"),
+        "Java Home" -> sys.props("java.home"),
+        "Scala Version" -> scala.util.Properties.versionString
+      ),
+      "Spark Properties" -> Seq(
+        "spark.conf.1" -> "1",
+        "spark.conf.2" -> "2"
+      ),
+      "System Properties" -> Seq(
+        "sys.prop.1" -> "1",
+        "sys.prop.2" -> "2"
+      ),
+      "Classpath Entries" -> Seq(
+        "/jar1" -> "System",
+        "/jar2" -> "User"
+      )
+    )
+
+    listener.onEnvironmentUpdate(SparkListenerEnvironmentUpdate(details))
+
+    val appEnvKey = classOf[ApplicationEnvironmentInfoWrapper].getName()
+    check[ApplicationEnvironmentInfoWrapper](appEnvKey) { env =>
+      val info = env.info
+
+      val runtimeInfo = Map(details("JVM Information"): _*)
+      assert(info.runtime.javaVersion == runtimeInfo("Java Version"))
+      assert(info.runtime.javaHome == runtimeInfo("Java Home"))
+      assert(info.runtime.scalaVersion == runtimeInfo("Scala Version"))
+
+      assert(info.sparkProperties === details("Spark Properties"))
+      assert(info.systemProperties === details("System Properties"))
+      assert(info.classpathEntries === details("Classpath Entries"))
+    }
+  }
+
   test("scheduler events") {
-    val listener = new AppStatusListener(store)
+    val listener = new AppStatusListener(store, conf, true)
 
     // Start the application.
     time += 1
@@ -174,6 +219,14 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     s1Tasks.foreach { task =>
       check[TaskDataWrapper](task.taskId) { wrapper =>
         assert(wrapper.info.taskId === task.taskId)
+        assert(wrapper.stageId === stages.head.stageId)
+        assert(wrapper.stageAttemptId === stages.head.attemptId)
+        assert(Arrays.equals(wrapper.stage, Array(stages.head.stageId, stages.head.attemptId)))
+
+        val runtime = Array[AnyRef](stages.head.stageId: JInteger, stages.head.attemptId: JInteger,
+          -1L: JLong)
+        assert(Arrays.equals(wrapper.runtime, runtime))
+
         assert(wrapper.info.index === task.index)
         assert(wrapper.info.attempt === task.attemptNumber)
         assert(wrapper.info.launchTime === new Date(task.launchTime))
@@ -510,7 +563,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("storage events") {
-    val listener = new AppStatusListener(store)
+    val listener = new AppStatusListener(store, conf, true)
     val maxMemory = 42L
 
     // Register a couple of block managers.

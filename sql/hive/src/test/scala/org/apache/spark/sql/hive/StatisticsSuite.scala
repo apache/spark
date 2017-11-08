@@ -755,7 +755,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("change stats after insert command for hive table") {
     val table = s"change_stats_insert_hive_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           sql(s"CREATE TABLE $table (i int, j string)")
           // analyze to get initial stats
@@ -783,7 +783,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("change stats after load data command") {
     val table = "change_stats_load_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           sql(s"CREATE TABLE $table (i INT, j STRING) STORED AS PARQUET")
           // analyze to get initial stats
@@ -817,7 +817,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("change stats after add/drop partition command") {
     val table = "change_stats_part_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           sql(s"CREATE TABLE $table (i INT, j STRING) PARTITIONED BY (ds STRING, hr STRING)")
           // table has two partitions initially
