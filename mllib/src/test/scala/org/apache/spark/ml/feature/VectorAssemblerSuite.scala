@@ -127,7 +127,7 @@ class VectorAssemblerSuite
     testDefaultReadWrite(t)
   }
 
-  test("VectorAssembler's UDF should not apply on filtered data") {
+  test("SPARK-22446: VectorAssembler's UDF should not apply on filtered data") {
     val df = Seq(
       (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L),
       (0, 1.0, null, "b", null, 20L)
