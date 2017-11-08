@@ -3477,7 +3477,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         data = [(0, datetime(1969, 1, 1, 1, 1, 1)),
                 (1, datetime(2012, 2, 2, 2, 2, 2)),
                 (2, None),
-                (3, datetime(2100, 4, 4, 4, 4, 4))]
+                (3, datetime(2100, 3, 3, 3, 3, 3))]
 
         df = self.spark.createDataFrame(data, schema=schema)
 
@@ -3557,7 +3557,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         data = [(1, datetime(1969, 1, 1, 1, 1, 1)),
                 (2, datetime(2012, 2, 2, 2, 2, 2)),
                 (3, None),
-                (4, datetime(2100, 4, 4, 4, 4, 4))]
+                (4, datetime(2100, 3, 3, 3, 3, 3))]
         df = self.spark.createDataFrame(data, schema=schema)
 
         f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType())
