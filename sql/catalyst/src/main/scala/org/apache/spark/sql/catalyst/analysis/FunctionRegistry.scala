@@ -376,7 +376,6 @@ object FunctionRegistry {
     expression[DayOfMonth]("day"),
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
-    expression[DayOfWeek]("dayofweek"),
     expression[FromUnixTime]("from_unixtime"),
     expression[FromUTCTimestamp]("from_utc_timestamp"),
     expression[Hour]("hour"),
