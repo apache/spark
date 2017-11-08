@@ -114,7 +114,9 @@ object ReferenceValueClass {
 class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
 
-  implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
+  implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = verifyNotLeakingReflectionObjects {
+    ExpressionEncoder()
+  }
 
   // test flat encoders
   encodeDecodeTest(false, "primitive boolean")
@@ -370,7 +372,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {
-    test(s"encode/decode for $testName: $input") {
+    testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input") {
       val encoder = implicitly[ExpressionEncoder[T]]
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
@@ -439,6 +441,30 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
              |${boundEncoder.deserializer.treeString}
          """.stripMargin)
       }
+    }
+  }
+
+  /**
+   * Verify the size of scala.reflect.runtime.JavaUniverse.undoLog before and after `func` to
+   * ensure we don't leak Scala reflection garbage.
+   *
+   * @see org.apache.spark.sql.catalyst.ScalaReflection.cleanUpReflectionObjects
+   */
+  private def verifyNotLeakingReflectionObjects[T](func: => T): T = {
+    def undoLogSize: Int = {
+      import scala.reflect.runtime.{JavaUniverse, universe}
+      universe.asInstanceOf[JavaUniverse].undoLog.log.size
+    }
+
+    val previousUndoLogSize = undoLogSize
+    val r = func
+    assert(previousUndoLogSize == undoLogSize)
+    r
+  }
+
+  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any) {
+    test(testName) {
+      verifyNotLeakingReflectionObjects(testFun)
     }
   }
 }
