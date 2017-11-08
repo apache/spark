@@ -60,9 +60,7 @@ class SQLListenerMemorySuite extends SparkFunSuite {
       res.collect()
 
       sc.listenerBus.waitUntilEmpty(10000)
-      assert(spark.sharedState.listener.getCompletedExecutions.size == 1)
       assert(spark.sharedState.listener.stageIdToStageMetrics.size <= 50)
-
     }
   }
 }
