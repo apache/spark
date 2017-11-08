@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ClosureCleaner
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -374,6 +375,10 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       testName: String): Unit = {
     testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input") {
       val encoder = implicitly[ExpressionEncoder[T]]
+
+      // Make sure encoder is serializable.
+      ClosureCleaner.clean((s: String) => encoder.getClass.getName)
+
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
       val boundEncoder = encoder.resolveAndBind()
@@ -452,8 +457,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
    */
   private def verifyNotLeakingReflectionObjects[T](func: => T): T = {
     def undoLogSize: Int = {
-      import scala.reflect.runtime.{JavaUniverse, universe}
-      universe.asInstanceOf[JavaUniverse].undoLog.log.size
+      scala.reflect.runtime.universe
+        .asInstanceOf[scala.reflect.runtime.JavaUniverse].undoLog.log.size
     }
 
     val previousUndoLogSize = undoLogSize
