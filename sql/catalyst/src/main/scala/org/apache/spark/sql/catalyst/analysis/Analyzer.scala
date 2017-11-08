@@ -1161,13 +1161,19 @@ class Analyzer(
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
+    private def isGroupingAnalyticsOp(plan: LogicalPlan): Boolean = plan match {
+      case Aggregate(Seq(c @ Cube(groupByExprs)), _, _) => true
+      case Aggregate(Seq(r @ Rollup(groupByExprs)), _, _) => true
+      case x: GroupingSets => true
+      case _ => false
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
           case u: UnresolvedAttribute
-              if (q.isInstanceOf[GroupingSets] || q.isInstanceOf[Aggregate]) &&
-              resolver(u.name, VirtualColumn.groupingIdName) =>
+              if resolver(u.name, VirtualColumn.groupingIdName) && isGroupingAnalyticsOp(q) =>
             withPosition(u) {
               Alias(GroupingID(Nil), VirtualColumn.groupingIdName)()
             }
