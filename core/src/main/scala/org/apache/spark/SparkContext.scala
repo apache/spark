@@ -1811,7 +1811,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
    * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
-   * @param addToCurrentClassLoader if true will add the jar to the current threads' classloader.
+   * @param addToCurrentClassLoader if true will add the jar to the current threads' class loader.
    * In general adding to the current threads' class loader will impact all other application
    * threads unless they have explicitly changed their class loader.
    */
