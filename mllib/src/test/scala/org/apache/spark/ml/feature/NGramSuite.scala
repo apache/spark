@@ -19,6 +19,8 @@ package org.apache.spark.ml.feature
 
 import scala.beans.BeanInfo
 
+import org.scalatest.Matchers
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -27,7 +29,8 @@ import org.apache.spark.sql.{Dataset, Row}
 @BeanInfo
 case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String])
 
-class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest
+    with Matchers {
 
   import org.apache.spark.ml.feature.NGramSuite._
   import testImplicits._
@@ -104,6 +107,47 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRe
       .setMaxN(5)
     testDefaultReadWrite(t)
   }
+
+  test("NGram.multiSliding should calculate empty results for out-of-bound inputs") {
+    import NGram.multiSliding
+
+    multiSliding(Seq.empty, -1, -1) shouldBe Seq.empty
+    multiSliding(Seq.empty, -1, 0)  shouldBe Seq.empty
+    multiSliding(Seq.empty, 0, -1)  shouldBe Seq.empty
+    multiSliding(Seq.empty, 0, 0)   shouldBe Seq.empty
+    multiSliding(Seq.empty, 2, 1)   shouldBe Seq.empty
+    multiSliding(Seq.empty, 2, 2)   shouldBe Seq.empty
+
+    multiSliding(1 to 10, -1, -1) shouldBe Seq.empty
+    multiSliding(1 to 10, -1, 0)  shouldBe Seq.empty
+    multiSliding(1 to 10, 0, -1)  shouldBe Seq.empty
+    multiSliding(1 to 10, 0, 0)   shouldBe Seq.empty
+    multiSliding(1 to 10, 2, 1)   shouldBe Seq.empty
+  }
+
+  test("NGram.multiSliding should calculate multiple sliding windows correctly") {
+    import NGram.multiSliding
+
+    multiSliding(1 to 5, min = 2, max = 4) shouldBe Seq(
+      Seq(1, 2), Seq(1, 2, 3), Seq(1, 2, 3, 4),
+      Seq(2, 3), Seq(2, 3, 4), Seq(2, 3, 4, 5),
+      Seq(3, 4), Seq(3, 4, 5),
+      Seq(4, 5)
+    )
+
+    multiSliding(1 to 10, min = 2, max = 5) shouldBe Seq(
+      Seq(1, 2), Seq(1, 2, 3), Seq(1, 2, 3, 4), Seq(1, 2, 3, 4, 5),
+      Seq(2, 3), Seq(2, 3, 4), Seq(2, 3, 4, 5), Seq(2, 3, 4, 5, 6),
+      Seq(3, 4), Seq(3, 4, 5), Seq(3, 4, 5, 6), Seq(3, 4, 5, 6, 7),
+      Seq(4, 5), Seq(4, 5, 6), Seq(4, 5, 6, 7), Seq(4, 5, 6, 7, 8),
+      Seq(5, 6), Seq(5, 6, 7), Seq(5, 6, 7, 8), Seq(5, 6, 7, 8, 9),
+      Seq(6, 7), Seq(6, 7, 8), Seq(6, 7, 8, 9), Seq(6, 7, 8, 9, 10),
+      Seq(7, 8), Seq(7, 8, 9), Seq(7, 8, 9, 10),
+      Seq(8, 9), Seq(8, 9, 10),
+      Seq(9, 10)
+    )
+  }
+
 }
 
 object NGramSuite extends SparkFunSuite {

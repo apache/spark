@@ -17,6 +17,9 @@
 
 package org.apache.spark.ml.feature
 
+import scala.annotation.tailrec
+import scala.collection.immutable.Queue
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
@@ -80,10 +83,9 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   setDefault(maxN -> 2)
 
   override protected def createTransformFunc: Seq[String] => Seq[String] = { input =>
-    import org.apache.spark.ml.extensions.seq._
-
+    import NGram.multiSliding
     val (min, max) = ($(n), getMaxN)
-    input.multiSliding(min, max).map(_.mkString(" "))
+    multiSliding(input, min, max).map(_.mkString(" "))
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
@@ -100,4 +102,84 @@ object NGram extends DefaultParamsReadable[NGram] {
 
   @Since("1.6.0")
   override def load(path: String): NGram = super.load(path)
+
+  /**
+   * Calculates sliding windows over multiple length parameters simultaneously.
+   * @param x    the input sequence over which sliding windows will be collected
+   * @param min  the inclusive minimal length of the window to be collected
+   * @param max  the inclusive maximal length of the window to be collected
+   * @return     the collected windows
+   *
+   * @example {{{
+   * multiSliding(1 to 5, min = 2, max = 4) == Seq(
+   *   Seq(1, 2), Seq(1, 2, 3), Seq(1, 2, 3, 4),
+   *   Seq(2, 3), Seq(2, 3, 4), Seq(2, 3, 4, 5),
+   *   Seq(3, 4), Seq(3, 4, 5),
+   *   Seq(4, 5)
+   * )
+   *
+   * multiSliding(1 to 10, min = 2, max = 5) == Seq(
+   *   Seq(1, 2), Seq(1, 2, 3), Seq(1, 2, 3, 4), Seq(1, 2, 3, 4, 5),
+   *   Seq(2, 3), Seq(2, 3, 4), Seq(2, 3, 4, 5), Seq(2, 3, 4, 5, 6),
+   *   Seq(3, 4), Seq(3, 4, 5), Seq(3, 4, 5, 6), Seq(3, 4, 5, 6, 7),
+   *   Seq(4, 5), Seq(4, 5, 6), Seq(4, 5, 6, 7), Seq(4, 5, 6, 7, 8),
+   *   Seq(5, 6), Seq(5, 6, 7), Seq(5, 6, 7, 8), Seq(5, 6, 7, 8, 9),
+   *   Seq(6, 7), Seq(6, 7, 8), Seq(6, 7, 8, 9), Seq(6, 7, 8, 9, 10),
+   *   Seq(7, 8), Seq(7, 8, 9), Seq(7, 8, 9, 10),
+   *   Seq(8, 9), Seq(8, 9, 10),
+   *   Seq(9, 10)
+   * )
+   * }}}
+   */
+  private[ml] def multiSliding[A](x: Seq[A], min: Int, max: Int): Seq[Seq[A]] = {
+    type B = Seq[A]
+
+    def addWindowsFromBuffer(acc: List[B], buffer: Queue[A]): List[B] = {
+      buffer.drop(min - 1).foldLeft((acc, buffer.take(min - 1))) {
+        case ((a, b), current) =>
+          val newB = b.enqueue(current)
+          (newB :: a, newB)
+      }._1
+    }
+
+    @tailrec
+    def addWindowsFromFinalBuffer(acc: List[B], buffer: Queue[A]): List[B] = {
+      buffer.dequeueOption match {
+        case Some((_, tail)) => addWindowsFromFinalBuffer(addWindowsFromBuffer(acc, tail), tail)
+        case None => acc
+      }
+    }
+
+    def calculateMultiSliding(): List[B] = {
+      val (accumulated, finalBuffer) = x.foldLeft((List.empty[B], Queue.empty[A])) {
+
+        case ((acc, buffer), current) if buffer.length < min - 1 =>
+          (acc, buffer.enqueue(current))
+
+        case ((acc, buffer), current) if buffer.length == min - 1 =>
+          val newBuffer = buffer.enqueue(current)
+          (newBuffer :: acc, newBuffer)
+
+        case ((acc, buffer), current) if buffer.length >= min && buffer.length < max =>
+          val newBuffer = buffer.enqueue(current)
+          (newBuffer :: acc, newBuffer)
+
+        case ((acc, buffer), current) if buffer.length == max =>
+          val (_, newBuffer) = buffer.enqueue(current).dequeue
+          (addWindowsFromBuffer(acc, newBuffer), newBuffer)
+
+        case ((acc, buffer), _) if buffer.length > max =>
+          (acc, buffer)
+
+      }
+
+      addWindowsFromFinalBuffer(accumulated, finalBuffer).reverse
+    }
+
+    (1 <= min) && (min <= max) match {
+      case true => calculateMultiSliding()
+      case false => Seq.empty
+    }
+  }
+
 }
