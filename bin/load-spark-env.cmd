@@ -24,10 +24,8 @@ rem conf/ subdirectory.
 if [%SPARK_ENV_LOADED%] == [] (
   set SPARK_ENV_LOADED=1
 
-  if not [%SPARK_CONF_DIR%] == [] (
-    set user_conf_dir=%SPARK_CONF_DIR%
-  ) else (
-    set user_conf_dir=..\conf
+  if [%SPARK_CONF_DIR%] == [] (
+    set SPARK_CONF_DIR=..\conf
   )
 
   call :LoadSparkEnv
@@ -54,6 +52,6 @@ if [%SPARK_SCALA_VERSION%] == [] (
 exit /b 0
 
 :LoadSparkEnv
-if exist "%user_conf_dir%\spark-env.cmd" (
-  call "%user_conf_dir%\spark-env.cmd"
+if exist "%SPARK_CONF_DIR%\spark-env.cmd" (
+  call "%SPARK_CONF_DIR%\spark-env.cmd"
 )
