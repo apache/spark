@@ -694,13 +694,12 @@ private[spark] class Client(
     if (dir.isDirectory) {
       val files = dir.listFiles(new FileFilter {
         override def accept(pathname: File): Boolean = {
-          pathname.isFile && pathname.getName.endsWith("xml")
+          pathname.isFile && pathname.getName.endsWith(".xml")
         }
       })
       files.foreach { f => hadoopConfFiles(f.getName) = f }
     }
 
-    // Ensure HADOOP_CONF_DIR/YARN_CONF_DIR not overriding existing files
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
