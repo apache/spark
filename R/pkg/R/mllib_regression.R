@@ -169,6 +169,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @param link.power the index of the power link function in the Tweedie family.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
+#' @aliases glm
 #' @export
 #' @examples
 #' \dontrun{

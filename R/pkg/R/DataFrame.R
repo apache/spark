@@ -3118,7 +3118,7 @@ setMethod("as.data.frame",
 #'
 #' @family SparkDataFrame functions
 #' @rdname attach
-#' @aliases attach,SparkDataFrame-method
+#' @aliases attach attach,SparkDataFrame-method
 #' @param what (SparkDataFrame) The SparkDataFrame to attach
 #' @param pos (integer) Specify position in search() where to attach.
 #' @param name (character) Name to use for the attached SparkDataFrame. Names
@@ -3134,9 +3134,12 @@ setMethod("as.data.frame",
 #' @note attach since 1.6.0
 setMethod("attach",
           signature(what = "SparkDataFrame"),
-          function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
-            newEnv <- assignNewEnv(what)
-            attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
+          function(what, pos = 2L, name = deparse(substitute(what), backtick = FALSE),
+                   warn.conflicts = TRUE) {
+            args <- as.list(environment()) # capture all parameters - this must be the first line
+            newEnv <- assignNewEnv(args$what)
+            args$what <- newEnv
+            do.call(attach, args)
           })
 
 #' Evaluate a R expression in an environment constructed from a SparkDataFrame
