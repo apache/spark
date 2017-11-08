@@ -37,8 +37,11 @@ import org.apache.spark.util.kvstore.KVStore
  */
 private[spark] abstract class LiveEntity {
 
-  def write(store: KVStore): Unit = {
+  var lastWriteTime = 0L
+
+  def write(store: KVStore, now: Long): Unit = {
     store.write(doUpdate())
+    lastWriteTime = now
   }
 
   /**
@@ -204,17 +207,21 @@ private class LiveTask(
       newAccumulatorInfos(info.accumulables),
       errorMessage,
       Option(recordedMetrics))
-    new TaskDataWrapper(task)
+    new TaskDataWrapper(task, stageId, stageAttemptId)
   }
 
 }
 
-private class LiveExecutor(val executorId: String) extends LiveEntity {
+private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
 
   var hostPort: String = null
   var host: String = null
   var isActive = true
   var totalCores = 0
+
+  val addTime = new Date(_addTime)
+  var removeTime: Date = null
+  var removeReason: String = null
 
   var rddBlocks = 0
   var memoryUsed = 0L
@@ -273,6 +280,9 @@ private class LiveExecutor(val executorId: String) extends LiveEntity {
       totalShuffleWrite,
       isBlacklisted,
       maxMemory,
+      addTime,
+      Option(removeTime),
+      Option(removeReason),
       executorLogs,
       memoryMetrics)
     new ExecutorSummaryWrapper(info)

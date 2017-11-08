@@ -223,7 +223,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
           // analyze to get initial stats
@@ -259,7 +259,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("change stats after insert command for datasource table") {
     val table = "change_stats_insert_datasource_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
           // analyze to get initial stats
@@ -292,7 +292,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("invalidation of tableRelationCache after inserts") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           spark.range(100).write.saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
@@ -309,7 +309,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("invalidation of tableRelationCache after table truncation") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           spark.range(100).write.saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
@@ -325,7 +325,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("invalidation of tableRelationCache after alter table add partition") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTempDir { dir =>
           withTable(table) {
             val path = dir.getCanonicalPath
