@@ -203,7 +203,7 @@ details and default values.
 
 Executors are brought up eagerly when the application starts, until
 `spark.cores.max` is reached.  If you don't set `spark.cores.max`, the
-Spark application will reserve all resources offered to it by Mesos,
+Spark application will consume all resources offered to it by Mesos,
 so we of course urge you to set this variable in any sort of
 multi-tenant cluster, including one which runs multiple concurrent
 Spark applications.
@@ -678,6 +678,30 @@ See the [configuration page](configuration.html) for information on Spark config
     it tears down the driver framework by killing all its 
     executors. The default value is zero, meaning no timeout: if the 
     driver disconnects, the master immediately tears down the framework.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td><code>120s</code></td>
+  <td>
+    Time to consider unused resources refused, serves as a fallback of
+    `spark.mesos.rejectOfferDurationForUnmetConstraints`,
+    `spark.mesos.rejectOfferDurationForReachedMaxCores`
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForUnmetConstraints</code></td>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td>
+    Time to consider unused resources refused with unmet constraints
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForReachedMaxCores</code></td>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td>
+    Time to consider unused resources refused when maximum number of cores
+    <code>spark.cores.max</code> is reached
   </td>
 </tr>
 </table>
