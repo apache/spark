@@ -59,9 +59,6 @@ private[sql] class SQLAppStatusStore(
 
   def executionMetrics(executionId: Long): Map[Long, String] = {
     val exec = store.read(classOf[SQLExecutionUIData], executionId)
-
-    // Need to try to read from the underlying store twice, in case the live execution data is
-    // removed from the listener while this method is running.
     Option(exec.metricValues)
       .orElse(listener.map(_.executionMetrics(executionId)))
       .getOrElse(Map())
