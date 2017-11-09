@@ -131,15 +131,13 @@ private[sql] class SQLAppStatusListener(
       info.successful)
   }
 
-  def executionMetrics(executionId: Long): Map[Long, String] = {
+  def liveExecutionMetrics(executionId: Long): Option[Map[Long, String]] = {
     Option(liveExecutions.get(executionId)).map { exec =>
       if (exec.metricsValues != null) {
         exec.metricsValues
       } else {
         aggregateMetrics(exec)
       }
-    }.getOrElse {
-      throw new NoSuchElementException(s"execution $executionId not found")
     }
   }
 
@@ -207,7 +205,8 @@ private[sql] class SQLAppStatusListener(
         }
       }
 
-      // TODO: storing metrics by task ID can lead to innacurate metrics when speculation is on.
+      // TODO: storing metrics by task ID can cause metrics for the same task index to be
+      // counted multiple times, for example due to speculation or re-attempts.
       metrics.taskMetrics.put(taskId, new LiveTaskMetrics(ids, values, succeeded))
     }
   }
