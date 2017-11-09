@@ -229,6 +229,10 @@ case class InMemoryTableScanExec(
         schema)
       partitionFilter.initialize(index)
 
+      if (cachedBatchIterator.isInstanceOf[CachedColumnarPartitionIterator]) {
+        cachedBatchIterator.asInstanceOf[CachedColumnarPartitionIterator].partitionStats
+      }
+
       cachedBatchIterator match {
         case cachedIter: CachedColumnarPartitionIterator
           if !partitionFilter.eval(cachedIter.partitionStats) =>
