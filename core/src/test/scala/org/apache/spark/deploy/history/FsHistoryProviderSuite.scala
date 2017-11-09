@@ -41,6 +41,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.security.GroupMappingServiceProvider
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
@@ -611,13 +612,50 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Manually overwrite the version in the listing db; this should cause the new provider to
     // discard all data because the versions don't match.
-    val meta = new KVStoreMetadata(FsHistoryProvider.CURRENT_LISTING_VERSION + 1,
-      conf.get(LOCAL_STORE_DIR).get)
+    val meta = new FsHistoryProviderMetadata(FsHistoryProvider.CURRENT_LISTING_VERSION + 1,
+      AppStatusStore.CURRENT_VERSION, conf.get(LOCAL_STORE_DIR).get)
     oldProvider.listing.setMetadata(meta)
     oldProvider.stop()
 
     val mistatchedVersionProvider = new FsHistoryProvider(conf)
     assert(mistatchedVersionProvider.listing.count(classOf[ApplicationInfoWrapper]) === 0)
+  }
+
+  test("invalidate cached UI") {
+    val provider = new FsHistoryProvider(createTestConf())
+    val appId = "new1"
+
+    // Write an incomplete app log.
+    val appLog = newLogFile(appId, None, inProgress = true)
+    writeFile(appLog, true, None,
+      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None)
+      )
+    provider.checkForLogs()
+
+    // Load the app UI.
+    val oldUI = provider.getAppUI(appId, None)
+    assert(oldUI.isDefined)
+    intercept[NoSuchElementException] {
+      oldUI.get.ui.store.job(0)
+    }
+
+    // Add more info to the app log, and trigger the provider to update things.
+    writeFile(appLog, true, None,
+      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None),
+      SparkListenerJobStart(0, 1L, Nil, null),
+      SparkListenerApplicationEnd(5L)
+      )
+    provider.checkForLogs()
+
+    // Manually detach the old UI; ApplicationCache would do this automatically in a real SHS
+    // when the app's UI was requested.
+    provider.onUIDetached(appId, None, oldUI.get.ui)
+
+    // Load the UI again and make sure we can get the new info added to the logs.
+    val freshUI = provider.getAppUI(appId, None)
+    assert(freshUI.isDefined)
+    assert(freshUI != oldUI)
+    freshUI.get.ui.store.job(0)
   }
 
   /**

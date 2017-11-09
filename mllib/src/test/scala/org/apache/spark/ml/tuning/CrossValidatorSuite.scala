@@ -137,8 +137,8 @@ class CrossValidatorSuite
     cv.setParallelism(2)
     val cvParallelModel = cv.fit(dataset)
 
-    val serialMetrics = cvSerialModel.avgMetrics.sorted
-    val parallelMetrics = cvParallelModel.avgMetrics.sorted
+    val serialMetrics = cvSerialModel.avgMetrics
+    val parallelMetrics = cvParallelModel.avgMetrics
     assert(serialMetrics === parallelMetrics)
 
     val parentSerial = cvSerialModel.bestModel.parent.asInstanceOf[LogisticRegression]

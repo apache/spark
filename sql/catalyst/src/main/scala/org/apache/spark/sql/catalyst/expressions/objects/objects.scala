@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -214,11 +215,13 @@ case class Invoke(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
+  private lazy val encodedFunctionName = TermName(functionName).encodedName.toString
+
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      val m = cls.getMethods.find(_.getName == functionName)
+      val m = cls.getMethods.find(_.getName == encodedFunctionName)
       if (m.isEmpty) {
-        sys.error(s"Couldn't find $functionName on $cls")
+        sys.error(s"Couldn't find $encodedFunctionName on $cls")
       } else {
         m
       }
@@ -247,7 +250,7 @@ case class Invoke(
     }
 
     val evaluate = if (returnPrimitive) {
-      getFuncResult(ev.value, s"${obj.value}.$functionName($argString)")
+      getFuncResult(ev.value, s"${obj.value}.$encodedFunctionName($argString)")
     } else {
       val funcResult = ctx.freshName("funcResult")
       // If the function can return null, we do an extra check to make sure our null bit is still
@@ -265,7 +268,7 @@ case class Invoke(
       }
       s"""
         Object $funcResult = null;
-        ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
+        ${getFuncResult(funcResult, s"${obj.value}.$encodedFunctionName($argString)")}
         $assignResult
       """
     }
@@ -591,18 +594,43 @@ case class MapObjects private(
       case _ => inputData.dataType
     }
 
-    val (getLength, getLoopVar) = inputDataType match {
+    // `MapObjects` generates a while loop to traverse the elements of the input collection. We
+    // need to take care of Seq and List because they may have O(n) complexity for indexed accessing
+    // like `list.get(1)`. Here we use Iterator to traverse Seq and List.
+    val (getLength, prepareLoop, getLoopVar) = inputDataType match {
       case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-        s"${genInputData.value}.size()" -> s"${genInputData.value}.apply($loopIndex)"
+        val it = ctx.freshName("it")
+        (
+          s"${genInputData.value}.size()",
+          s"scala.collection.Iterator $it = ${genInputData.value}.toIterator();",
+          s"$it.next()"
+        )
       case ObjectType(cls) if cls.isArray =>
-        s"${genInputData.value}.length" -> s"${genInputData.value}[$loopIndex]"
+        (
+          s"${genInputData.value}.length",
+          "",
+          s"${genInputData.value}[$loopIndex]"
+        )
       case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-        s"${genInputData.value}.size()" -> s"${genInputData.value}.get($loopIndex)"
+        val it = ctx.freshName("it")
+        (
+          s"${genInputData.value}.size()",
+          s"java.util.Iterator $it = ${genInputData.value}.iterator();",
+          s"$it.next()"
+        )
       case ArrayType(et, _) =>
-        s"${genInputData.value}.numElements()" -> ctx.getValue(genInputData.value, et, loopIndex)
+        (
+          s"${genInputData.value}.numElements()",
+          "",
+          ctx.getValue(genInputData.value, et, loopIndex)
+        )
       case ObjectType(cls) if cls == classOf[Object] =>
-        s"$seq == null ? $array.length : $seq.size()" ->
-          s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
+        val it = ctx.freshName("it")
+        (
+          s"$seq == null ? $array.length : $seq.size()",
+          s"scala.collection.Iterator $it = $seq == null ? null : $seq.toIterator();",
+          s"$it == null ? $array[$loopIndex] : $it.next()"
+        )
     }
 
     // Make a copy of the data if it's unsafe-backed
@@ -676,6 +704,7 @@ case class MapObjects private(
         $initCollection
 
         int $loopIndex = 0;
+        $prepareLoop
         while ($loopIndex < $dataLength) {
           $loopValue = ($elementJavaType) ($getLoopVar);
           $loopNullCheck

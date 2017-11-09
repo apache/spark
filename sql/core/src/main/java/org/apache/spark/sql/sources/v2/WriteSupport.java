@@ -35,9 +35,12 @@ public interface WriteSupport {
    * Creates an optional {@link DataSourceV2Writer} to save the data to this data source. Data
    * sources can return None if there is no writing needed to be done according to the save mode.
    *
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * submitted.
+   *
    * @param jobId A unique string for the writing job. It's possible that there are many writing
-   *              jobs running at the same time, and the returned {@link DataSourceV2Writer} should
-   *              use this job id to distinguish itself with writers of other jobs.
+   *              jobs running at the same time, and the returned {@link DataSourceV2Writer} can
+   *              use this job id to distinguish itself from other jobs.
    * @param schema the schema of the data to be written.
    * @param mode the save mode which determines what to do when the data are already in this data
    *             source, please refer to {@link SaveMode} for more details.

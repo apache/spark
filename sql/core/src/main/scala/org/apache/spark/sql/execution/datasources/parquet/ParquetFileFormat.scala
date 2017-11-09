@@ -24,7 +24,6 @@ import java.util.concurrent.{Callable, TimeUnit}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.parallel.ForkJoinTaskSupport
-import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.{Failure, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder, RemovalListener, RemovalNotification}
@@ -380,10 +379,10 @@ class ParquetFileFormat
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
       ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
+      requiredSchema.json)
     hadoopConf.set(
       ParquetWriteSupport.SPARK_ROW_SCHEMA,
-      ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
+      requiredSchema.json)
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 

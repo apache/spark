@@ -67,8 +67,9 @@ class RowToUnsafeRowReadTask(rowReadTask: ReadTask[Row], schema: StructType)
 
   override def preferredLocations: Array[String] = rowReadTask.preferredLocations
 
-  override def createReader: DataReader[UnsafeRow] = {
-    new RowToUnsafeDataReader(rowReadTask.createReader, RowEncoder.apply(schema).resolveAndBind())
+  override def createDataReader: DataReader[UnsafeRow] = {
+    new RowToUnsafeDataReader(
+      rowReadTask.createDataReader, RowEncoder.apply(schema).resolveAndBind())
   }
 }
 

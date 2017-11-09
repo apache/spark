@@ -887,6 +887,19 @@ def month(col):
     return Column(sc._jvm.functions.month(_to_java_column(col)))
 
 
+@since(2.3)
+def dayofweek(col):
+    """
+    Extract the day of the week of a given date as integer.
+
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(dayofweek('dt').alias('day')).collect()
+    [Row(day=4)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.dayofweek(_to_java_column(col)))
+
+
 @since(1.5)
 def dayofmonth(col):
     """
@@ -2186,6 +2199,13 @@ def udf(f=None, returnType=StringType()):
         duplicate invocations may be eliminated or the function may even be invoked more times than
         it is present in the query.
 
+    .. note:: The user-defined functions do not support conditional execution by using them with
+        SQL conditional expressions such as `when` or `if`. The functions still apply on all rows no
+        matter the conditions are met or not. So the output is correct if the functions can be
+        correctly run on all rows without failure. If the functions can cause runtime failure on the
+        rows that do not satisfy the conditions, the suggested workaround is to incorporate the
+        condition logic into the functions.
+
     :param f: python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
 
@@ -2279,6 +2299,13 @@ def pandas_udf(f=None, returnType=StringType()):
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 
     .. note:: The user-defined function must be deterministic.
+
+    .. note:: The user-defined functions do not support conditional execution by using them with
+        SQL conditional expressions such as `when` or `if`. The functions still apply on all rows no
+        matter the conditions are met or not. So the output is correct if the functions can be
+        correctly run on all rows without failure. If the functions can cause runtime failure on the
+        rows that do not satisfy the conditions, the suggested workaround is to incorporate the
+        condition logic into the functions.
     """
     return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.PANDAS_UDF)
 
