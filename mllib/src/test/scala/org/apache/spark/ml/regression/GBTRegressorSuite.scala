@@ -215,7 +215,6 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
       allParamSettings, checkModelData)
   }
-
 }
 
 private object GBTRegressorSuite extends SparkFunSuite {
