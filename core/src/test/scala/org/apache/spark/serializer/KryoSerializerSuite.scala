@@ -126,7 +126,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       "org.apache.spark.ml.linalg.SparseMatrix",
       "org.apache.spark.ml.feature.Instance",
       "org.apache.spark.ml.feature.OffsetInstance"
-    ).map(ser.safeClassLoader(_)).foreach(_.isEmpty)
+    ).foreach(!Utils.classIsLoadable(_))
   }
 
   test("pairs") {

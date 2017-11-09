@@ -25,6 +25,7 @@ import javax.annotation.Nullable
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
@@ -194,22 +195,14 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.ml.linalg.SparseMatrix",
       "org.apache.spark.ml.feature.Instance",
       "org.apache.spark.ml.feature.OffsetInstance"
-    ).flatMap(safeClassLoader(_)).foreach(kryo.register(_))
+    ).map(name => Try(Utils.classForName(name))).foreach { t =>
+      if (t.isSuccess) {
+        kryo.register(t.get)
+      }
+    }
 
     kryo.setClassLoader(classLoader)
     kryo
-  }
-
-  /**
-   * Loading the class safely, ignore it if class not found.
-   */
-  private[spark] def safeClassLoader(className: String): Option[Class[_]] = {
-    try {
-      val clazz = Utils.classForName(className)
-      Some(clazz)
-    } catch {
-      case _: ClassNotFoundException => None
-    }
   }
 
   override def newInstance(): SerializerInstance = {

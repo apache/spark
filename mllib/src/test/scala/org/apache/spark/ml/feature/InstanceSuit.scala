@@ -35,11 +35,6 @@ class InstanceSuit extends SparkFunSuite{
       assert(serInstance.deserialize[T](serInstance.serialize(t)) === t)
     }
 
-    assert(ser.safeClassLoader("org.apache.spark.ml.linalg.Vector").isDefined)
-    assert(ser.safeClassLoader("org.apache.spark.ml.linalg.DenseVector").isDefined)
-    assert(ser.safeClassLoader("org.apache.spark.ml.linalg.SparseVector").isDefined)
-    assert(ser.safeClassLoader("org.apache.spark.ml.feature.Instance").isDefined)
-    assert(ser.safeClassLoader("org.apache.spark.ml.feature.OffsetInstance").isDefined)
     val instance1 = Instance(19.0, 2.0, Vectors.dense(1.0, 7.0))
     val instance2 = Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse)
     val oInstance1 = OffsetInstance(0.2, 1.0, 2.0, Vectors.dense(0.0, 5.0))
