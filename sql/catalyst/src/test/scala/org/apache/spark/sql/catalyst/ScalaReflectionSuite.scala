@@ -346,9 +346,9 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(serializer.dataType(1).name == "field 2")
 
     val argumentsFields = deserializer.asInstanceOf[NewInstance].arguments.flatMap { _.collect {
-      case UpCast(u: UnresolvedAttribute, _, _) => u.name
+      case UpCast(u: UnresolvedAttribute, _, _) => u.nameParts
     }}
-    assert(argumentsFields(0) == "`field.1`")
-    assert(argumentsFields(1) == "field 2")
+    assert(argumentsFields(0) == Seq("field.1"))
+    assert(argumentsFields(1) == Seq("field 2"))
   }
 }
