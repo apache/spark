@@ -52,20 +52,29 @@ class CachedColumnarRDD(
     val metadataBlockId = RDDPartitionMetadataBlockId(id, split.index)
     val superGetOrCompute: (Partition, TaskContext) => Iterator[CachedBatch] = super.getOrCompute
     SparkEnv.get.blockManager.getSingle[InternalRow](metadataBlockId).map(metadataBlock =>
-      new CachedColumnarPartitionIterator(metadataBlock, context, superGetOrCompute(split, context))
+      new InterruptibleIterator[CachedBatch](context,
+        new CachedColumnarPartitionIterator(metadataBlock, split, context, superGetOrCompute))
     ).getOrElse(superGetOrCompute(split, context))
   }
 }
 
 private[columnar] class CachedColumnarPartitionIterator(
     val partitionStats: InternalRow,
+    partition: Partition,
     context: TaskContext,
-    delegate: Iterator[CachedBatch])
-  extends InterruptibleIterator[CachedBatch](context, delegate) {
+    fetchRDDPartition: (Partition, TaskContext) => Iterator[CachedBatch])
+  extends Iterator[CachedBatch] {
+
+  private var delegate: Iterator[CachedBatch] = _
+
+  override def hasNext: Boolean = {
+    if (delegate == null) {
+      delegate = fetchRDDPartition(partition, context)
+    }
+    delegate.hasNext
+  }
+
   override def next(): CachedBatch = {
-    // scalastyle:off
-    println("next")
-    // scalastyle:on
-    super.next()
+    delegate.next()
   }
 }

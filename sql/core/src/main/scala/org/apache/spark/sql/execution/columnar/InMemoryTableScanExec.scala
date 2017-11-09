@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{InterruptibleIterator, SparkEnv}
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -229,22 +229,7 @@ case class InMemoryTableScanExec(
         schema)
       partitionFilter.initialize(index)
 
-      if (cachedBatchIterator.isInstanceOf[CachedColumnarPartitionIterator]) {
-        val cachedIter = cachedBatchIterator.asInstanceOf[CachedColumnarPartitionIterator]
-        if (!partitionFilter.eval(cachedIter.partitionStats)) {
-          // scalastyle:off
-          println(s"skipped partition $index")
-          // scalastyle:on
-          Iterator()
-        } else {
-          doFilterCachedBatches(cachedBatchIterator, schema, partitionFilter)
-        }
-      } else {
-        doFilterCachedBatches(cachedBatchIterator, schema, partitionFilter)
-      }
-
-      /*
-      cachedBatchIterator match {
+      cachedBatchIterator.asInstanceOf[InterruptibleIterator[_]].delegate match {
         case cachedIter: CachedColumnarPartitionIterator
           if !partitionFilter.eval(cachedIter.partitionStats) =>
           // scalastyle:off
@@ -254,7 +239,6 @@ case class InMemoryTableScanExec(
         case _ =>
           doFilterCachedBatches(cachedBatchIterator, schema, partitionFilter)
       }
-      */
     }
   }
 
