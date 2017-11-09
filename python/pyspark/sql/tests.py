@@ -46,6 +46,14 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+_have_pandas = False
+try:
+    import pandas
+    _have_pandas = True
+except:
+    # No Pandas, but that's okay, we'll skip those tests
+    pass
+
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
@@ -2208,9 +2216,10 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
         # test with schema will accept pdf as input
-        df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
+        df = self.spark.createDataFrame(pdf, schema="d: date, ts: timestamp")
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
