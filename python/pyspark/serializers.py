@@ -213,7 +213,7 @@ class ArrowSerializer(FramedSerializer):
         return "ArrowSerializer"
 
 
-def _create_batch(series, copy=False):
+def _create_batch(series):
     """
     Create an Arrow record batch from the given pandas.Series or list of Series, with optional type.
 
@@ -232,30 +232,24 @@ def _create_batch(series, copy=False):
 
     # If a nullable integer series has been promoted to floating point with NaNs, need to cast
     # NOTE: this is not necessary with Arrow >= 0.7
-    def cast_series(s, t, mask, copy_series):
+    def cast_series(s, t):
         if t is not None and type(t) == pa.TimestampType:
-            if mask.any():
-                s = s.fillna(0)
-                copy_series = False  # NOTE: fillna will make a copy regardless
             # NOTE: convert to 'us' with astype here, unit ignored in `from_pandas` see ARROW-1680
-            return _check_series_convert_timestamps_internal(s).values.astype('datetime64[us]',
-                                                                              copy=copy_series)
+            return _check_series_convert_timestamps_internal(s.fillna(0))\
+                .values.astype('datetime64[us]', copy=False)
         elif t is not None and t == pa.date32():
             # TODO: this converts the series to Python objects, possibly avoid with Arrow >= 0.8
             return s.dt.date
         elif t is None or s.dtype == t.to_pandas_dtype():
             return s
         else:
-            if mask.any():
-                s = s.fillna(0)
-                copy_series = False  # NOTE: fillna will make a copy regardless
-            return s.astype(t.to_pandas_dtype(), copy=copy_series)
+            return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
 
     # Some object types don't support masks in Arrow, see ARROW-1721
     def create_array(s, t):
-        mask = s.isnull()
-        casted = cast_series(s, t, mask, copy_series=copy)
-        return pa.Array.from_pandas(casted, mask=None if casted.dtype == 'object' else mask, type=t)
+        casted = cast_series(s, t)
+        mask = None if casted.dtype == 'object' else s.isnull()
+        return pa.Array.from_pandas(casted, mask=mask, type=t)
 
     arrs = [create_array(s, t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
