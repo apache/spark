@@ -46,4 +46,6 @@ case class SaveIntoDataSourceCommand(
 
     Seq.empty[Row]
   }
+
+  override def simpleString: String = s"SaveIntoDataSourceCommand ${dataSource}, ${mode}"
 }
