@@ -2220,6 +2220,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
 
+
 class HiveSparkSubmitTests(SparkSubmitTests):
 
     def test_hivecontext(self):
