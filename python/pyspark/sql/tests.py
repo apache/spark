@@ -3220,6 +3220,17 @@ class ArrowTests(ReusedSQLTestCase):
             with self.assertRaisesRegexp(TypeError, ".*IntegerType.*tuple"):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
+    def test_createDataFrame_does_not_modify_input(self):
+        # Some series get converted for Spark to consume, this makes sure input is unchanged
+        pdf = self.create_pandas_data_frame()
+        # Use a nanosecond value to make sure it is not truncated
+        pdf.ix[0, '7_timestamp_t'] = 1
+        # Integers with nulls will get NaNs filled with 0 and will be casted
+        pdf.ix[1, '2_int_t'] = None
+        pdf_copy = pdf.copy(deep=True)
+        self.spark.createDataFrame(pdf, schema=self.schema)
+        self.assertTrue(pdf.equals(pdf_copy))
+
     def test_schema_conversion_roundtrip(self):
         from pyspark.sql.types import from_arrow_schema, to_arrow_schema
         arrow_schema = to_arrow_schema(self.schema)
