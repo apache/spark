@@ -258,6 +258,23 @@ trait HasOutputCol extends Params {
 }
 
 /**
+ * Trait for shared param outputCols. This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasOutputCols extends Params {
+
+  /**
+   * Param for output column names.
+   * @group param
+   */
+  final val outputCols: StringArrayParam = new StringArrayParam(this, "outputCols", "output column names")
+
+  /** @group getParam */
+  final def getOutputCols: Array[String] = $(outputCols)
+}
+
+/**
  * Trait for shared param checkpointInterval. This trait may be changed or
  * removed between minor versions.
  */
