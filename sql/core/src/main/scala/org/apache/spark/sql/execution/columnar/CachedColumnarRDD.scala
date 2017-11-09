@@ -59,7 +59,6 @@ class CachedColumnarRDD(
 
 private[columnar] class CachedColumnarPartitionIterator(
     val metadataBlock: InternalRow,
-    split: Partition,
     context: TaskContext,
     delegate: Iterator[CachedBatch])
   extends InterruptibleIterator[CachedBatch](context, delegate) {}
