@@ -76,8 +76,6 @@ class CrossValidatorSuite
     val goodLrParamMaps = builder.build(5)
     val badLrParamMaps = builder.addUniformDistribution(lr.regParam, 100.0, 150.0).build(5)
 
-    case class ModelResult(parent: LogisticRegression, nCorrect: Long)
-
     val Array(goodModel, badModel) = Array(goodLrParamMaps, badLrParamMaps).map { maps =>
       val eval = new BinaryClassificationEvaluator
       val cv = new CrossValidator()
@@ -87,17 +85,19 @@ class CrossValidatorSuite
         .setNumFolds(3)
       val cvModel = cv.fit(dataset)
 
-
       val nCorrect = cvModel.transform(dataset)
         .withColumn("correct", F.expr("label == prediction"))
         .select("correct").where("correct").count()
 
       MLTestingUtils.checkCopyAndUids(cv, cvModel)
-      val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
-      ModelResult(parent, nCorrect)
+
+      assert(cvModel.avgMetrics.length === badLrParamMaps.length)
+
+      val parent: LogisticRegression = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
+      nCorrect
     }
 
-    assert(goodModel.nCorrect > badModel.nCorrect)
+    assert(goodModel > badModel)
   }
 
   test("cross validation with linear regression") {
