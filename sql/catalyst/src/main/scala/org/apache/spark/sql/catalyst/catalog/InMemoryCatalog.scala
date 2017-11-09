@@ -152,7 +152,7 @@ class InMemoryCatalog(
     }
   }
 
-  override def alterDatabase(dbDefinition: CatalogDatabase): Unit = synchronized {
+  override def doAlterDatabase(dbDefinition: CatalogDatabase): Unit = synchronized {
     requireDbExists(dbDefinition.name)
     catalog(dbDefinition.name).db = dbDefinition
   }
@@ -294,7 +294,7 @@ class InMemoryCatalog(
     catalog(db).tables.remove(oldName)
   }
 
-  override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
+  override def doAlterTable(tableDefinition: CatalogTable): Unit = synchronized {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
@@ -303,7 +303,7 @@ class InMemoryCatalog(
     catalog(db).tables(tableDefinition.identifier.table).table = newTableDefinition
   }
 
-  override def alterTableDataSchema(
+  override def doAlterTableDataSchema(
       db: String,
       table: String,
       newDataSchema: StructType): Unit = synchronized {
@@ -313,7 +313,7 @@ class InMemoryCatalog(
     catalog(db).tables(table).table = origTable.copy(schema = newSchema)
   }
 
-  override def alterTableStats(
+  override def doAlterTableStats(
       db: String,
       table: String,
       stats: Option[CatalogStatistics]): Unit = synchronized {

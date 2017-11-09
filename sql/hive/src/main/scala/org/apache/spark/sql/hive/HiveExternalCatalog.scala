@@ -177,7 +177,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    *
    * Note: As of now, this only supports altering database properties!
    */
-  override def alterDatabase(dbDefinition: CatalogDatabase): Unit = withClient {
+  override def doAlterDatabase(dbDefinition: CatalogDatabase): Unit = withClient {
     val existingDb = getDatabase(dbDefinition.name)
     if (existingDb.properties == dbDefinition.properties) {
       logWarning(s"Request to alter database ${dbDefinition.name} is a no-op because " +
@@ -540,7 +540,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * Note: As of now, this doesn't support altering table schema, partition column names and bucket
    * specification. We will ignore them even if users do specify different values for these fields.
    */
-  override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
+  override def doAlterTable(tableDefinition: CatalogTable): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
@@ -619,8 +619,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  override def alterTableDataSchema(
-      db: String, table: String, newDataSchema: StructType): Unit = withClient {
+  /**
+   * Alter the data schema of a table identified by the provided database and table name. The new
+   * data schema should not have conflict column names with the existing partition columns, and
+   * should still contain all the existing data columns.
+   */
+  override def doAlterTableDataSchema(
+      db: String,
+      table: String,
+      newDataSchema: StructType): Unit = withClient {
     requireTableExists(db, table)
     val oldTable = getTable(db, table)
     verifyDataSchema(oldTable.identifier, oldTable.tableType, newDataSchema)
@@ -648,7 +655,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  override def alterTableStats(
+  /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
+  override def doAlterTableStats(
       db: String,
       table: String,
       stats: Option[CatalogStatistics]): Unit = withClient {
