@@ -35,17 +35,17 @@ class RandomParamGridBuilder(seed: Option[Long] = None) {
   private val distributionGrid = mutable.Map.empty[Param[_], () => _]
 
   /**
-    * Add a function where each time it is called, returns a value from the intended distribution.
-    */
+   * Add a function where each time it is called, returns a value from the intended distribution.
+   */
   def addDistribution[T](param: Param[T], distribution: () => T): this.type = {
     distributionGrid.put(param, distribution)
     this
   }
 
   /**
-    * Add a numeric parameter with lower and upper bounds.
-    * Values used are sampled between these bounds (inclusive) using a uniform distribution.
-    */
+   * Add a numeric parameter with lower and upper bounds.
+   * Values used are sampled between these bounds (inclusive) using a uniform distribution.
+   */
   def addUniformDistribution[T](param: Param[T], start: T, end: T): this.type = {
     (param, start, end) match {
       case (p: Param[Int], s: Int, e: Int) =>
@@ -63,9 +63,9 @@ class RandomParamGridBuilder(seed: Option[Long] = None) {
   }
 
   /**
-    * Adds a parameter, where the values sampled are equally likely to be any entry within
-    * the values array.
-    */
+   * Adds a parameter, where the values sampled are equally likely to be any entry within
+   * the values array.
+   */
   def addUniformChoice[T](param: Param[T], values: Array[T]): this.type = {
     if (values.length == 0) {
       throw new IllegalArgumentException("Choice array must have at least one element")
@@ -78,35 +78,35 @@ class RandomParamGridBuilder(seed: Option[Long] = None) {
   }
 
   /**
-    * Adds a Int param, with start and end ranges.
-    * Values are sampled from a uniform distribution within these limits
-    * (inclusive of start and end).
-    */
+   * Adds a Int param, with start and end ranges.
+   * Values are sampled from a uniform distribution within these limits
+   * (inclusive of start and end).
+   */
   def addUniformDistribution(param: IntParam, start: Int, end: Int): this.type = {
     addUniformDistribution[Int](param, start, end)
   }
 
   /**
-    * Adds a Long param, with start and end ranges.
-    * Values are sampled from a uniform distribution within these limits
-    * (inclusive of start and end).
-    */
+   * Adds a Long param, with start and end ranges.
+   * Values are sampled from a uniform distribution within these limits
+   * (inclusive of start and end).
+   */
   def addUniformDistribution(param: LongParam, start: Long, end: Long): this.type = {
     addUniformDistribution[Long](param, start, end)
   }
 
   /**
-    * Adds a Float param, with start and end ranges.
-    * Values are sampled from a uniform distribution within these limits.
-    */
+   * Adds a Float param, with start and end ranges.
+   * Values are sampled from a uniform distribution within these limits.
+   */
   def addUniformDistribution(param: FloatParam, start: Float, end: Float): this.type = {
     addUniformDistribution[Float](param, start, end)
   }
 
   /**
-    * Adds a Double param, with start and end ranges.
-    * Values are sampled from a uniform distribution within these limits.
-    */
+   * Adds a Double param, with start and end ranges.
+   * Values are sampled from a uniform distribution within these limits.
+   */
   def addUniformDistribution(param: DoubleParam, start: Double, end: Double): this.type = {
     addUniformDistribution[Double](param, start, end)
   }
@@ -141,22 +141,22 @@ class RandomParamGridBuilder(seed: Option[Long] = None) {
   }
 
   /**
-    * Adds a boolean param with true and false, will be equally likely to sample true or false.
-    */
+   * Adds a boolean param with true and false, will be equally likely to sample true or false.
+   */
   def addUniformDistribution(param: BooleanParam): this.type = {
     addDistribution(param, () => rng.nextBoolean())
   }
 
   /**
-    * Adds a boolean param with true and false, will be equally likely to sample true or false.
-    */
+   * Adds a boolean param with true and false, will be equally likely to sample true or false.
+   */
   def addUniformDistribution(param: Param[Boolean]): this.type = {
     addDistribution(param, () => rng.nextBoolean())
   }
 
   /**
-    * Builds and returns nIterations grids of randomly selected parameters.
-    */
+   * Builds and returns nIterations grids of randomly selected parameters.
+   */
   def build(nIterations: Int): Array[ParamMap] = {
 
     val paramMaps = (0 until nIterations).map { _ =>

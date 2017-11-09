@@ -17,8 +17,8 @@
 
 package org.apache.spark.ml.tuning
 
-import org.apache.spark.ml.param._
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param._
 
 
 class RandomParamGridBuilderSuite extends SparkFunSuite {
@@ -56,7 +56,7 @@ class RandomParamGridBuilderSuite extends SparkFunSuite {
 
     assert(paramMaps.length === nIterations)
   }
-  
+
   test("random grid builder: each build call should generate a new set of random values") {
     val nIterations = 6
     val floatParam = new Param[Float]("parent", "floatParam", "doc")
