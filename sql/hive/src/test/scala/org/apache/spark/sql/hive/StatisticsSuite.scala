@@ -29,7 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, EquiHeightBucket, HistogramSerializer}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBucket, HistogramSerializer}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1049,23 +1049,23 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
     val expectedSerializedHistograms = Map(
       "spark.sql.statistics.colStats.cbyte.histogram" ->
-        HistogramSerializer.serialize(statsWithEHHs("cbyte").histogram.get),
+        HistogramSerializer.serialize(statsWithHgms("cbyte").histogram.get),
       "spark.sql.statistics.colStats.cshort.histogram" ->
-        HistogramSerializer.serialize(statsWithEHHs("cshort").histogram.get),
+        HistogramSerializer.serialize(statsWithHgms("cshort").histogram.get),
       "spark.sql.statistics.colStats.cint.histogram" ->
-        HistogramSerializer.serialize(statsWithEHHs("cint").histogram.get),
+        HistogramSerializer.serialize(statsWithHgms("cint").histogram.get),
       "spark.sql.statistics.colStats.clong.histogram" ->
-        HistogramSerializer.serialize(statsWithEHHs("clong").histogram.get),
+        HistogramSerializer.serialize(statsWithHgms("clong").histogram.get),
       "spark.sql.statistics.colStats.cdouble.histogram" ->
-        HistogramSerializer.serialize(statsWithEHHs("cdouble").histogram.get),
+        HistogramSerializer.serialize(statsWithHgms("cdouble").histogram.get),
       "spark.sql.statistics.colStats.cfloat.histogram" ->
-        HistogramSerializer.serialize(statsWithEHHs("cfloat").histogram.get),
+        HistogramSerializer.serialize(statsWithHgms("cfloat").histogram.get),
       "spark.sql.statistics.colStats.cdecimal.histogram" ->
-        HistogramSerializer.serialize(statsWithEHHs("cdecimal").histogram.get),
+        HistogramSerializer.serialize(statsWithHgms("cdecimal").histogram.get),
       "spark.sql.statistics.colStats.cdate.histogram" ->
-        HistogramSerializer.serialize(statsWithEHHs("cdate").histogram.get),
+        HistogramSerializer.serialize(statsWithHgms("cdate").histogram.get),
       "spark.sql.statistics.colStats.ctimestamp.histogram" ->
-        HistogramSerializer.serialize(statsWithEHHs("ctimestamp").histogram.get)
+        HistogramSerializer.serialize(statsWithHgms("ctimestamp").histogram.get)
     )
 
     def checkColStatsProps(expected: Map[String, String]): Unit = {
@@ -1092,7 +1092,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("serde/deser of histograms exceeding 4000 length") {
     import testImplicits._
 
-    def checkBucketsOrder(buckets: Array[EquiHeightBucket]): Unit = {
+    def checkBucketsOrder(buckets: Array[HistogramBucket]): Unit = {
       for (i <- buckets.indices) {
         val b = buckets(i)
         assert(b.lo <= b.hi)

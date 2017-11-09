@@ -101,7 +101,7 @@ case class ColumnStat(
     nullCount: BigInt,
     avgLen: Long,
     maxLen: Long,
-    histogram: Option[EquiHeightHistogram] = None) {
+    histogram: Option[Histogram] = None) {
 
   // We currently don't store min/max for binary/string type. This can change in the future and
   // then we need to remove this require.
@@ -325,30 +325,29 @@ object ColumnStat extends Logging {
       val endpoints = percentiles.get.toArray[Any](attr.dataType).map(_.toString.toDouble)
       // Construct equi-height histogram
       val buckets = ndvs.zipWithIndex.map { case (ndv, i) =>
-        EquiHeightBucket(endpoints(i), endpoints(i + 1), ndv)
+        HistogramBucket(endpoints(i), endpoints(i + 1), ndv)
       }
       val nonNullRows = rowCount - cs.nullCount
-      val ehHistogram = EquiHeightHistogram(nonNullRows.toDouble / ndvs.length, buckets)
-      cs.copy(histogram = Some(ehHistogram))
+      val histogram = Histogram(nonNullRows.toDouble / ndvs.length, buckets)
+      cs.copy(histogram = Some(histogram))
     }
   }
 
 }
 
 /**
+ * This class is an implementation of equi-height histogram.
  * Equi-height histogram represents the distribution of a column's values by a sequence of buckets.
  * Each bucket has a value range and contains approximately the same number of rows.
- * In the context of Spark SQL statistics, we may use "histogram" to denote "equi-height histogram"
- * for simplicity.
  * @param height number of rows in each bucket
  * @param buckets equi-height histogram buckets
  */
-case class EquiHeightHistogram(height: Double, buckets: Array[EquiHeightBucket]) {
+case class Histogram(height: Double, buckets: Array[HistogramBucket]) {
 
   // Only for histogram equality test.
   override def equals(other: Any): Boolean = other match {
-    case otherEHH: EquiHeightHistogram =>
-      height == otherEHH.height && buckets.sameElements(otherEHH.buckets)
+    case otherHgm: Histogram =>
+      height == otherHgm.height && buckets.sameElements(otherHgm.buckets)
     case _ => false
   }
 
@@ -361,7 +360,7 @@ case class EquiHeightHistogram(height: Double, buckets: Array[EquiHeightBucket])
  * @param hi higher bound of the value range in this bucket
  * @param ndv approximate number of distinct values in this bucket
  */
-case class EquiHeightBucket(lo: Double, hi: Double, ndv: Long)
+case class HistogramBucket(lo: Double, hi: Double, ndv: Long)
 
 object HistogramSerializer {
   /**
@@ -372,7 +371,7 @@ object HistogramSerializer {
    * key-value properties, instead of a single, self-described property. And for
    * count-min-sketch, it's essentially unnatural to make it a readable string.
    */
-  final def serialize(histogram: EquiHeightHistogram): String = {
+  final def serialize(histogram: Histogram): String = {
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(new LZ4BlockOutputStream(bos))
     out.writeDouble(histogram.height)
@@ -401,7 +400,7 @@ object HistogramSerializer {
   }
 
   /** Deserializes a given string to a histogram. */
-  final def deserialize(str: String): EquiHeightHistogram = {
+  final def deserialize(str: String): Histogram = {
     val bytes = org.apache.commons.codec.binary.Base64.decodeBase64(str)
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(new LZ4BlockInputStream(bis))
@@ -428,12 +427,12 @@ object HistogramSerializer {
     }
     ins.close()
 
-    val buckets = new Array[EquiHeightBucket](numBuckets)
+    val buckets = new Array[HistogramBucket](numBuckets)
     i = 0
     while (i < numBuckets) {
-      buckets(i) = EquiHeightBucket(los(i), his(i), ndvs(i))
+      buckets(i) = HistogramBucket(los(i), his(i), ndvs(i))
       i += 1
     }
-    EquiHeightHistogram(height, buckets)
+    Histogram(height, buckets)
   }
 }

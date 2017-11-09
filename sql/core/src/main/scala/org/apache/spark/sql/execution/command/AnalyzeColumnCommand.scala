@@ -92,7 +92,7 @@ case class AnalyzeColumnCommand(
     // If no histogram is required, we run a job to compute basic column stats such as
     // min, max, ndv, etc. Otherwise, besides basic column stats, histogram will also be
     // generated. Currently we only support equi-height histogram.
-    // To generate equi-height histogram, we need two jobs:
+    // To generate an equi-height histogram, we need two jobs:
     // 1. compute percentiles p(0), p(1/n) ... p((n-1)/n), p(1).
     // 2. use the percentiles as value intervals of buckets, e.g. [p(0), p(1/n)],
     // [p(1/n), p(2/n)], ..., [p((n-1)/n), p(1)], and then count ndv in each bucket.
