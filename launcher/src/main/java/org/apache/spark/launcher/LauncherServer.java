@@ -90,7 +90,11 @@ class LauncherServer implements Closeable {
   private static volatile LauncherServer serverInstance;
 
   static synchronized LauncherServer getOrCreateServer() throws IOException {
-    LauncherServer server = serverInstance != null ? serverInstance : new LauncherServer();
+    LauncherServer server;
+    do {
+      server = serverInstance != null ? serverInstance : new LauncherServer();
+    } while (!server.running);
+
     server.ref();
     serverInstance = server;
     return server;
@@ -152,19 +156,26 @@ class LauncherServer implements Closeable {
   @Override
   public void close() throws IOException {
     synchronized (this) {
-      if (running) {
-        running = false;
-        timeoutTimer.cancel();
-        server.close();
-        synchronized (clients) {
-          List<ServerConnection> copy = new ArrayList<>(clients);
-          clients.clear();
-          for (ServerConnection client : copy) {
-            client.close();
-          }
-        }
+      if (!running) {
+        return;
+      }
+      running = false;
+    }
+
+    synchronized(LauncherServer.class) {
+      serverInstance = null;
+    }
+
+    timeoutTimer.cancel();
+    server.close();
+    synchronized (clients) {
+      List<ServerConnection> copy = new ArrayList<>(clients);
+      clients.clear();
+      for (ServerConnection client : copy) {
+        client.close();
       }
     }
+
     if (serverThread != null) {
       try {
         serverThread.join();
@@ -185,8 +196,6 @@ class LauncherServer implements Closeable {
           close();
         } catch (IOException ioe) {
           // no-op.
-        } finally {
-          serverInstance = null;
         }
       }
     }

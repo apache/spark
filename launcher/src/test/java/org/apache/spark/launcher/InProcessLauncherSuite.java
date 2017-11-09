@@ -17,6 +17,8 @@
 
 package org.apache.spark.launcher;
 
+import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -78,84 +80,88 @@ public class InProcessLauncherSuite extends BaseSuite {
       .startApplication();
   }
 
-  private static void runTest(String[] args) {
-    assertTrue(args.length != 0);
+  public static void runTest(String[] args) {
+    try {
+      assertTrue(args.length != 0);
 
-    // Make sure at least the launcher-provided config options are in the args array.
-    final AtomicReference<String> port = new AtomicReference<>();
-    final AtomicReference<String> secret = new AtomicReference<>();
-    SparkSubmitOptionParser parser = new SparkSubmitOptionParser() {
+      // Make sure at least the launcher-provided config options are in the args array.
+      final AtomicReference<String> port = new AtomicReference<>();
+      final AtomicReference<String> secret = new AtomicReference<>();
+      SparkSubmitOptionParser parser = new SparkSubmitOptionParser() {
 
-      @Override
-      protected boolean handle(String opt, String value) {
-        if (opt == CONF) {
-          String[] conf = value.split("=");
-          switch(conf[0]) {
-            case LauncherProtocol.CONF_LAUNCHER_PORT:
-              port.set(conf[1]);
-              break;
+        @Override
+        protected boolean handle(String opt, String value) {
+          if (opt == CONF) {
+            String[] conf = value.split("=");
+            switch(conf[0]) {
+              case LauncherProtocol.CONF_LAUNCHER_PORT:
+                port.set(conf[1]);
+                break;
 
-            case LauncherProtocol.CONF_LAUNCHER_SECRET:
-              secret.set(conf[1]);
-              break;
+              case LauncherProtocol.CONF_LAUNCHER_SECRET:
+                secret.set(conf[1]);
+                break;
 
-            default:
-              // no op
+              default:
+                // no op
+            }
           }
+
+          return true;
         }
 
-        return true;
+        @Override
+        protected boolean handleUnknown(String opt) {
+          return true;
+        }
+
+        @Override
+        protected void handleExtraArgs(List<String> extra) {
+          // no op.
+        }
+
+      };
+
+      parser.parse(Arrays.asList(args));
+      assertNotNull("Launcher port not found.", port.get());
+      assertNotNull("Launcher secret not found.", secret.get());
+
+      String test = args[args.length - 1];
+      switch (test) {
+      case TEST_SUCCESS:
+        break;
+
+      case TEST_FAILURE:
+        throw new IllegalStateException(TEST_FAILURE_MESSAGE);
+
+      case TEST_KILL:
+        try {
+          // Wait for a reasonable amount of time to avoid the test hanging forever on failure,
+          // but still allowing for time outs to hopefully not occur on busy machines.
+          Thread.sleep(10000);
+          fail("Did not get expected interrupt after 10s.");
+        } catch (InterruptedException ie) {
+          // Expected.
+        }
+        break;
+
+      default:
+        fail("Unknown test " + test);
       }
-
-      @Override
-      protected boolean handleUnknown(String opt) {
-        return true;
-      }
-
-      @Override
-      protected void handleExtraArgs(List<String> extra) {
-        // no op.
-      }
-
-    };
-
-    parser.parse(Arrays.asList(args));
-    assertNotNull("Launcher port not found.", port.get());
-    assertNotNull("Launcher secret not found.", secret.get());
-
-    String test = args[args.length - 1];
-    switch (test) {
-    case TEST_SUCCESS:
-      break;
-
-    case TEST_FAILURE:
-      throw new IllegalStateException(TEST_FAILURE_MESSAGE);
-
-    case TEST_KILL:
-      try {
-        // Wait for a reasonable amount of time to avoid the test hanging forever on failure,
-        // but still allowing for time outs to hopefully not occur on busy machines.
-        Thread.sleep(10000);
-        fail("Did not get expected interrupt after 10s.");
-      } catch (InterruptedException ie) {
-        // Expected.
-      }
-      break;
-
-    default:
-      fail("Unknown test " + test);
+    } catch (Throwable t) {
+      lastError = t;
+      throw new RuntimeException(t);
     }
   }
 
   private static class TestInProcessLauncher extends InProcessLauncher {
 
     @Override
-    void runApplication(String[] args) {
+    Method findSparkSubmit() throws IOException {
       try {
-        runTest(args);
-      } catch (Error | RuntimeException e) {
-        lastError = e;
-        throw e;
+        return InProcessLauncherSuite.class.getMethod("runTest", String[].class);
+      } catch (Exception e) {
+        throw new IOException(e);
       }
     }
 

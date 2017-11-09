@@ -35,7 +35,16 @@ class BaseSuite {
 
   @After
   public void postChecks() {
-    assertNull(LauncherServer.getServer());
+    LauncherServer server = LauncherServer.getServer();
+    if (server != null) {
+      // Shut down the server to clean things up for the next test.
+      try {
+        server.close();
+      } catch (Exception e) {
+        // Ignore.
+      }
+    }
+    assertNull(server);
   }
 
   protected void waitFor(SparkAppHandle handle) throws Exception {

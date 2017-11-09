@@ -17,16 +17,18 @@
 
 package org.apache.spark.launcher;
 
+import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.concurrent.ThreadFactory;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 class InProcessAppHandle extends AbstractAppHandle {
 
   private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
-  private static final ThreadFactory THREAD_FACTORY =
-    new NamedThreadFactory("spark-app-monitor-%d");
+  private static final ThreadFactory THREAD_FACTORY = new NamedThreadFactory("spark-app-%d");
 
-  private Thread thread;
+  private Thread app;
 
   InProcessAppHandle(LauncherServer server) {
     super(server);
@@ -38,39 +40,35 @@ class InProcessAppHandle extends AbstractAppHandle {
     disconnect();
 
     // Interrupt the thread. This is not guaranteed to kill the app, though.
-    if (thread != null) {
-      thread.interrupt();
+    if (app != null) {
+      app.interrupt();
     }
 
     setState(State.KILLED);
   }
 
-  synchronized void setAppThread(Thread thread) {
-    this.thread = thread;
-    THREAD_FACTORY.newThread(this::monitorChild).start();
-  }
-
-  private void monitorChild() {
-    try {
-      while (thread.isAlive() && !isDisposed()) {
-        thread.join();
-      }
-    } catch (InterruptedException ie) {
-      // Ignore.
-    }
-
-    synchronized (this) {
-      if (isDisposed()) {
-        return;
+  synchronized void start(Method main, String[] args) {
+    CommandBuilderUtils.checkState(app == null, "Handle already started.");
+    app = THREAD_FACTORY.newThread(() -> {
+      try {
+        main.invoke(null, (Object) args);
+      } catch (Throwable t) {
+        LOG.log(Level.WARNING, "Application failed with exception.", t);
+        setState(State.FAILED);
       }
 
-      State currState = getState();
-      disconnect();
+      synchronized (InProcessAppHandle.this) {
+        if (!isDisposed()) {
+          State currState = getState();
+          disconnect();
 
-      if (!currState.isFinal()) {
-        setState(State.LOST, true);
+          if (!currState.isFinal()) {
+            setState(State.LOST, true);
+          }
+        }
       }
-    }
+    });
+    app.start();
   }
 
 }

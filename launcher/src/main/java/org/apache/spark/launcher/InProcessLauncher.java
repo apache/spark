@@ -21,11 +21,7 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.List;
-import java.util.concurrent.ThreadFactory;
-import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 /**
  * In-process launcher for Spark applications.
@@ -46,7 +42,6 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
 
   private static final Logger LOG = Logger.getLogger(InProcessLauncher.class.getName());
-  private static final ThreadFactory THREAD_FACTORY = new NamedThreadFactory("spark-app-%d");
 
   /**
    * Starts a Spark application.
@@ -61,11 +56,13 @@ public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
       LOG.warning("It's not recommended to run client-mode applications using InProcessLauncher.");
     }
 
+    Method main = findSparkSubmit();
     LauncherServer server = LauncherServer.getOrCreateServer();
     InProcessAppHandle handle = new InProcessAppHandle(server);
     for (SparkAppHandle.Listener l : listeners) {
       handle.addListener(l);
     }
+
 
     String secret = server.registerHandle(handle);
     setConf(LauncherProtocol.CONF_LAUNCHER_PORT, String.valueOf(server.getPort()));
@@ -74,8 +71,7 @@ public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
     List<String> sparkArgs = builder.buildSparkSubmitArgs();
     String[] argv = sparkArgs.toArray(new String[sparkArgs.size()]);
 
-    Thread app = start(handle, argv);
-    handle.setAppThread(app);
+    handle.start(main, argv);
     return handle;
   }
 
@@ -85,7 +81,7 @@ public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
   }
 
   // Visible for testing.
-  void runApplication(String[] args) throws Exception {
+  Method findSparkSubmit() throws IOException {
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
     if (cl == null) {
       cl = getClass().getClassLoader();
@@ -95,8 +91,7 @@ public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
     try {
       sparkSubmit = cl.loadClass("org.apache.spark.deploy.SparkSubmit");
     } catch (Exception e) {
-      throw new IOException("Error finding SparkSubmit; make sure necessary jars are available.",
-        e);
+      throw new IOException("Cannot find SparkSubmit; make sure necessary jars are available.", e);
     }
 
     Method main;
@@ -106,22 +101,9 @@ public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
       throw new IOException("Cannot find SparkSubmit main method.", e);
     }
 
-    checkState(Modifier.isStatic(main.getModifiers()), "main method is not static.");
-
-    main.invoke(null, (Object) args);
-  }
-
-  private Thread start(InProcessAppHandle handle, String[] args) throws IOException {
-    Thread app = THREAD_FACTORY.newThread(() -> {
-      try {
-        runApplication(args);
-      } catch (Exception e) {
-        LOG.log(Level.WARNING, "Application failed with exception.", e);
-        handle.setState(SparkAppHandle.State.FAILED);
-      }
-    });
-    app.start();
-    return app;
+    CommandBuilderUtils.checkState(Modifier.isStatic(main.getModifiers()),
+      "main method is not static.");
+    return main;
   }
 
 }
