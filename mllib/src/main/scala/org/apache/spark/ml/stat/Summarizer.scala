@@ -62,7 +62,7 @@ sealed abstract class SummaryBuilder {
  * an example in Scala:
  * {{{
  *   import org.apache.spark.ml.linalg._
-  *   import org.apache.spark.sql.Row
+ *   import org.apache.spark.sql.Row
  *   val dataframe = ... // Some dataframe containing a feature column and a weight column
  *   val multiStatsDF = dataframe.select(
  *       Summarizer.metrics("min", "max", "count").summary($"features", $"weight")
@@ -106,6 +106,7 @@ object Summarizer extends Logging {
    * interface.
    */
   @Since("2.3.0")
+  @scala.annotation.varargs
   def metrics(metrics: String*): SummaryBuilder = {
     require(metrics.size >= 1, "Should include at least one metric")
     val (typedMetrics, computeMetrics) = getRelevantMetrics(metrics)
