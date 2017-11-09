@@ -118,8 +118,8 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.writeLegacyParquetFormat.toString)
 
     conf.set(
-      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
-      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis.toString)
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
+      sparkSession.sessionState.conf.parquetOutputTimestampType.toString)
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
@@ -521,8 +521,6 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
-    val writeTimestampInMillis = sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis
-    val writeLegacyParquetFormat = sparkSession.sessionState.conf.writeLegacyParquetFormat
     val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
     // !! HACK ALERT !!

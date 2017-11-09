@@ -147,6 +147,7 @@ class ParquetToSparkSchemaConverter(
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
           case UINT_64 => typeNotSupported()
+          case TIMESTAMP_MICROS => TimestampType
           case TIMESTAMP_MILLIS => TimestampType
           case _ => illegalType()
         }
@@ -301,20 +302,21 @@ class ParquetToSparkSchemaConverter(
  *        and prior versions when converting a Catalyst [[StructType]] to a Parquet [[MessageType]].
  *        When set to false, use standard format defined in parquet-format spec.  This argument only
  *        affects Parquet write path.
- * @param writeTimestampInMillis Whether to write timestamp values as INT64 annotated by logical
- *        type TIMESTAMP_MILLIS.
+ * @param outputTimestampType which parquet timestamp type to use when writing.
  */
 class SparkToParquetSchemaConverter(
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,
-    writeTimestampInMillis: Boolean = SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.defaultValue.get) {
+    outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
+      SQLConf.ParquetOutputTimestampType.INT96) {
 
   def this(conf: SQLConf) = this(
     writeLegacyParquetFormat = conf.writeLegacyParquetFormat,
-    writeTimestampInMillis = conf.isParquetINT64AsTimestampMillis)
+    outputTimestampType = conf.parquetOutputTimestampType)
 
   def this(conf: Configuration) = this(
     writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean,
-    writeTimestampInMillis = conf.get(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key).toBoolean)
+    outputTimestampType = SQLConf.ParquetOutputTimestampType.withName(
+      conf.get(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key)))
 
   /**
    * Converts a Spark SQL [[StructType]] to a Parquet [[MessageType]].
@@ -368,7 +370,9 @@ class SparkToParquetSchemaConverter(
       case DateType =>
         Types.primitive(INT32, repetition).as(DATE).named(field.name)
 
-      // NOTE: Spark SQL TimestampType is NOT a well defined type in Parquet format spec.
+      // NOTE: Spark SQL can write timestamp values to Parquet using INT96, TIMESTAMP_MICROS or
+      // TIMESTAMP_MILLIS. TIMESTAMP_MICROS is recommended but INT96 is the default to keep the
+      // behavior same as before.
       //
       // As stated in PARQUET-323, Parquet `INT96` was originally introduced to represent nanosecond
       // timestamp in Impala for some historical reasons.  It's not recommended to be used for any
@@ -377,23 +381,18 @@ class SparkToParquetSchemaConverter(
       // `TIMESTAMP_MICROS` which are both logical types annotating `INT64`.
       //
       // Originally, Spark SQL uses the same nanosecond timestamp type as Impala and Hive.  Starting
-      // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
-      // a timestamp into a `Long`.  This design decision is subject to change though, for example,
-      // we may resort to microsecond precision in the future.
-      //
-      // For Parquet, we plan to write all `TimestampType` value as `TIMESTAMP_MICROS`, but it's
-      // currently not implemented yet because parquet-mr 1.8.1 (the version we're currently using)
-      // hasn't implemented `TIMESTAMP_MICROS` yet, however it supports TIMESTAMP_MILLIS. We will
-      // encode timestamp values as TIMESTAMP_MILLIS annotating INT64 if
-      // 'spark.sql.parquet.int64AsTimestampMillis' is set.
-      //
-      // TODO Converts `TIMESTAMP_MICROS` once parquet-mr implements that.
-
-      case TimestampType if writeTimestampInMillis =>
-        Types.primitive(INT64, repetition).as(TIMESTAMP_MILLIS).named(field.name)
-
+      // from Spark 1.5.0, we resort to a timestamp type with microsecond precision so that we can
+      // store a timestamp into a `Long`.  This design decision is subject to change though, for
+      // example, we may resort to nanosecond precision in the future.
       case TimestampType =>
-        Types.primitive(INT96, repetition).named(field.name)
+        outputTimestampType match {
+          case SQLConf.ParquetOutputTimestampType.INT96 =>
+            Types.primitive(INT96, repetition).named(field.name)
+          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
+            Types.primitive(INT64, repetition).as(TIMESTAMP_MICROS).named(field.name)
+          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
+            Types.primitive(INT64, repetition).as(TIMESTAMP_MILLIS).named(field.name)
+        }
 
       case BinaryType =>
         Types.primitive(BINARY, repetition).named(field.name)

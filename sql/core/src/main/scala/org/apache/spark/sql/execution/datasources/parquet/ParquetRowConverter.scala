@@ -252,6 +252,13 @@ private[parquet] class ParquetRowConverter(
       case StringType =>
         new ParquetStringConverter(updater)
 
+      case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MICROS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            updater.setLong(value)
+          }
+        }
+
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
@@ -260,7 +267,6 @@ private[parquet] class ParquetRowConverter(
         }
 
       case TimestampType =>
-        // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {

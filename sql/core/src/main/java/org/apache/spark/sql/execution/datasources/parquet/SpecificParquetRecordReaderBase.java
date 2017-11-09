@@ -197,8 +197,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     Configuration config = new Configuration();
     config.set("spark.sql.parquet.binaryAsString", "false");
     config.set("spark.sql.parquet.int96AsTimestamp", "false");
-    config.set("spark.sql.parquet.writeLegacyFormat", "false");
-    config.set("spark.sql.parquet.int64AsTimestampMillis", "false");
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();

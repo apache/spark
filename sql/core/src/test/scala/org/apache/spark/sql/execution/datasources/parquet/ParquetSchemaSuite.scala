@@ -24,6 +24,7 @@ import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -74,10 +75,11 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       sqlSchema: StructType,
       parquetSchema: String,
       writeLegacyParquetFormat: Boolean,
-      int64AsTimestampMillis: Boolean = false): Unit = {
+      outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
+        SQLConf.ParquetOutputTimestampType.INT96): Unit = {
     val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = writeLegacyParquetFormat,
-      writeTimestampInMillis = int64AsTimestampMillis)
+      outputTimestampType = outputTimestampType)
 
     test(s"sql => parquet: $testName") {
       val actual = converter.convert(sqlSchema)
@@ -94,14 +96,15 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean,
-      int64AsTimestampMillis: Boolean = false): Unit = {
+      outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
+        SQLConf.ParquetOutputTimestampType.INT96): Unit = {
 
     testCatalystToParquet(
       testName,
       sqlSchema,
       parquetSchema,
       writeLegacyParquetFormat,
-      int64AsTimestampMillis)
+      outputTimestampType)
 
     testParquetToCatalyst(
       testName,
@@ -938,7 +941,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = false,
     writeLegacyParquetFormat = true,
-    int64AsTimestampMillis = true)
+    outputTimestampType = SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS)
 
   private def testSchemaClipping(
       testName: String,
