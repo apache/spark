@@ -165,7 +165,7 @@ case class InMemoryRelation(
     storageLevel: StorageLevel,
     @transient child: SparkPlan,
     tableName: Option[String])(
-    @transient var _cachedColumnBuffers: RDD[AnyRef] = null,
+    @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
     val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator)
   extends logical.LeafNode with MultiInstanceRelation {
 
@@ -196,7 +196,7 @@ case class InMemoryRelation(
   private def buildBuffers(): Unit = {
     val output = child.output
 
-    // TODO:
+    // TODO: need better abstraction for two iterators here
     val batchedRDD = child.execute().mapPartitionsInternal { rowIterator =>
       if (!usePartitionLevelMetadata) {
         new CachedBatchIterator(rowIterator, output, batchSize, useCompression, batchStats)
@@ -232,7 +232,7 @@ case class InMemoryRelation(
         batchStats).asInstanceOf[this.type]
   }
 
-  def cachedColumnBuffers: RDD[AnyRef] = _cachedColumnBuffers
+  def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
     Seq(_cachedColumnBuffers, batchStats)

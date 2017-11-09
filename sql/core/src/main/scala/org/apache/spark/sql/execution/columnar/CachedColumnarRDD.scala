@@ -20,16 +20,14 @@ package org.apache.spark.sql.execution.columnar
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.storage.{RDDBlockId, RDDPartitionMetadataBlockId, StorageLevel}
+import org.apache.spark.storage.{RDDPartitionMetadataBlockId, StorageLevel}
 
 class CachedColumnarRDD(
     @transient private var _sc: SparkContext,
     private var dataRDD: RDD[CachedBatch],
     containsPartitionMetadata: Boolean,
     expectedStorageLevel: StorageLevel)
-  extends RDD[AnyRef](_sc, Seq(new OneToOneDependency(dataRDD))) {
-
-  logInfo(s"Created CachedColumnarRDD $id with ${partitions.length} partitions")
+  extends RDD[CachedBatch](_sc, Seq(new OneToOneDependency(dataRDD))) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[AnyRef] = {
     if (containsPartitionMetadata) {
@@ -52,35 +50,16 @@ class CachedColumnarRDD(
   override private[spark] def getOrCompute(split: Partition, context: TaskContext):
       Iterator[AnyRef] = {
     val metadataBlockId = RDDPartitionMetadataBlockId(id, split.index)
-    val superGetOrCompute: (Partition, TaskContext) => Iterator[AnyRef] = super.getOrCompute
+    val superGetOrCompute: (Partition, TaskContext) => Iterator[CachedBatch] = super.getOrCompute
     SparkEnv.get.blockManager.getSingle[InternalRow](metadataBlockId).map(metadataBlock =>
-      new InterruptibleIterator[AnyRef](context, new Iterator[AnyRef] {
-
-        private var fetchingFirstElement = true
-
-        private var delegate: Iterator[AnyRef] = _
-
-        override def hasNext: Boolean = {
-          if (fetchingFirstElement) {
-            true
-          } else {
-            if (delegate == null) {
-              delegate = superGetOrCompute(split, context)
-            }
-            delegate.hasNext
-          }
-        }
-
-        override def next(): AnyRef = {
-          if (fetchingFirstElement) {
-            fetchingFirstElement = false
-            val mb = metadataBlock
-            mb.asInstanceOf[InternalRow]
-          } else {
-            delegate.next()
-          }
-        }
-      })
+      new CachedColumnarPartitionIterator(metadataBlock, context, superGetOrCompute(split, context))
     ).getOrElse(superGetOrCompute(split, context))
   }
 }
+
+private[columnar] class CachedColumnarPartitionIterator(
+    val metadataBlock: InternalRow,
+    split: Partition,
+    context: TaskContext,
+    delegate: Iterator[CachedBatch])
+  extends InterruptibleIterator[CachedBatch](context, delegate) {}

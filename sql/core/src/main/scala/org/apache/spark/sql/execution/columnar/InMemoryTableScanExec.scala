@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -227,26 +228,16 @@ case class InMemoryTableScanExec(
         partitionFilters.reduceOption(And).getOrElse(Literal(true)),
         schema)
       partitionFilter.initialize(index)
-      val (iterForPartitionCase, iterForDefault) = cachedBatchIterator.duplicate
-      if (!iterForDefault.hasNext) {
-        Iterator[CachedBatch]()
-      } else {
-        iterForPartitionCase.next() match {
-          case partitionStats: InternalRow =>
-            // scalastyle:off
-            if (!partitionFilter.eval(partitionStats)) {
-              println(s"skip partition $index based on the stats")
-              Iterator[CachedBatch]()
-            } else {
-              println(s"accept partition $index based on the stats")
-              doFilterCachedBatches(iterForPartitionCase.map(_.asInstanceOf[CachedBatch]),
-                schema, partitionFilter)
-            }
-            // scalastyle:on
-          case _: CachedBatch =>
-            doFilterCachedBatches(iterForDefault.map(_.asInstanceOf[CachedBatch]), schema,
-              partitionFilter)
-        }
+
+      cachedBatchIterator match {
+        case cachedIter: CachedColumnarPartitionIterator
+          if !partitionFilter.eval(cachedIter.metadataBlock) =>
+          // scalastyle:off
+          println(s"skipped partition $index")
+          // scalastyle:on
+          Iterator[CachedBatch]()
+        case _ =>
+          cachedBatchIterator
       }
     }
   }
