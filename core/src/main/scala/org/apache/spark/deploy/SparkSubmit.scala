@@ -563,7 +563,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.keytab"),
 
       OptionAssigner(args.kubernetesNamespace, KUBERNETES, ALL_DEPLOY_MODES,
-        sysProp = "spark.kubernetes.namespace"),
+        confKey = "spark.kubernetes.namespace"),
 
         // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
@@ -571,20 +571,12 @@ object SparkSubmit extends CommandLineUtils with Logging {
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
         confKey = "spark.executor.memory"),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
-<<<<<<< HEAD
-        sysProp = "spark.cores.max"),
-      OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
-        sysProp = "spark.files"),
-      OptionAssigner(args.jars, LOCAL, CLIENT, sysProp = "spark.jars"),
-      OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
-        sysProp = "spark.jars"),
-=======
         confKey = "spark.cores.max"),
-      OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
+      OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.files"),
       OptionAssigner(args.jars, LOCAL, CLIENT, confKey = "spark.jars"),
-      OptionAssigner(args.jars, STANDALONE | MESOS, ALL_DEPLOY_MODES, confKey = "spark.jars"),
->>>>>>> upstream/master
+      OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
+        confKey = "spark.jars"),
       OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN, CLUSTER,
         confKey = "spark.driver.memory"),
       OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN, CLUSTER,
@@ -642,13 +634,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // In Kubernetes cluster mode, the jar will be uploaded by the client separately.
     // For python and R files, the primary resource is already distributed as a regular file
-<<<<<<< HEAD
     if (!isYarnCluster && !isKubernetesCluster && !args.isPython && !args.isR) {
-      var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
-=======
-    if (!isYarnCluster && !args.isPython && !args.isR) {
       var jars = sparkConf.getOption("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
->>>>>>> upstream/master
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
       }
