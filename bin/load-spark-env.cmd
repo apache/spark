@@ -19,13 +19,13 @@ rem
 
 rem This script loads spark-env.cmd if it exists, and ensures it is only loaded once.
 rem spark-env.cmd is loaded from SPARK_CONF_DIR if set, or within the current directory's
-rem conf/ subdirectory.
+rem conf\ subdirectory.
 
 if [%SPARK_ENV_LOADED%] == [] (
   set SPARK_ENV_LOADED=1
 
   if [%SPARK_CONF_DIR%] == [] (
-    set SPARK_CONF_DIR=..\conf
+    set SPARK_CONF_DIR=%~dp0..\conf
   )
 
   call :LoadSparkEnv
