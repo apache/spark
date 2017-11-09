@@ -478,9 +478,6 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
 
 private class LiveRDD(val info: RDDInfo) extends LiveEntity {
 
-  val name = info.name
-  val numPartitions = info.numPartitions
-
   var storageLevel: String = info.storageLevel.description
   var memoryUsed = 0L
   var diskUsed = 0L
