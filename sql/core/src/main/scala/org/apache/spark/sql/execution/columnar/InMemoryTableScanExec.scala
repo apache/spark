@@ -230,9 +230,20 @@ case class InMemoryTableScanExec(
       partitionFilter.initialize(index)
 
       if (cachedBatchIterator.isInstanceOf[CachedColumnarPartitionIterator]) {
-        cachedBatchIterator.asInstanceOf[CachedColumnarPartitionIterator].partitionStats
+        val cachedIter = cachedBatchIterator.asInstanceOf[CachedColumnarPartitionIterator]
+        if (!partitionFilter.eval(cachedIter.partitionStats)) {
+          // scalastyle:off
+          println(s"skipped partition $index")
+          // scalastyle:on
+          Iterator()
+        } else {
+          doFilterCachedBatches(cachedBatchIterator, schema, partitionFilter)
+        }
+      } else {
+        doFilterCachedBatches(cachedBatchIterator, schema, partitionFilter)
       }
 
+      /*
       cachedBatchIterator match {
         case cachedIter: CachedColumnarPartitionIterator
           if !partitionFilter.eval(cachedIter.partitionStats) =>
@@ -243,6 +254,7 @@ case class InMemoryTableScanExec(
         case _ =>
           doFilterCachedBatches(cachedBatchIterator, schema, partitionFilter)
       }
+      */
     }
   }
 
