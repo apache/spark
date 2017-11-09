@@ -311,8 +311,10 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages</code></td>
-    <td>A list of all stages for a given application.</td>
-    <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
+    <td>
+      A list of all stages for a given application.
+      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
@@ -398,7 +400,11 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>
     <td>Environment details of the given application.</td>
-  </tr>       
+  </tr>
+  <tr>
+    <td><code>/version</code></td>
+    <td>Get the current spark version.</td>
+  </tr>
 </table>
 
 The number of jobs and stages which can retrieved is constrained by the same retention
