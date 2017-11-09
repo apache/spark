@@ -2216,7 +2216,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
         # test with schema will accept pdf as input
-        df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
+        df = self.spark.createDataFrame(pdf, schema="d: date, ts: timestamp")
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
 
