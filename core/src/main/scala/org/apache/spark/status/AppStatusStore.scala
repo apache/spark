@@ -230,8 +230,10 @@ private[spark] class AppStatusStore(store: KVStore) {
     indexed.skip(offset).max(length).asScala.map(_.info).toSeq
   }
 
-  def rddList(): Seq[v1.RDDStorageInfo] = {
-    store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).toSeq
+  def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
+    store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).filter { rdd =>
+      !cachedOnly || rdd.numCachedPartitions > 0
+    }.toSeq
   }
 
   private def stageWithDetails(stage: v1.StageData): v1.StageData = {
@@ -284,6 +286,10 @@ private[spark] class AppStatusStore(store: KVStore) {
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {
     store.read(classOf[RDDStorageInfoWrapper], rddId).info
+  }
+
+  def streamBlocksList(): Seq[StreamBlockData] = {
+    store.view(classOf[StreamBlockData]).asScala.toSeq
   }
 
   def operationGraphForStage(stageId: Int): RDDOperationGraph = {

@@ -58,14 +58,23 @@ setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
 #' Set options/mode and then return the write object
 #' @noRd
 setWriteOptions <- function(write, path = NULL, mode = "error", ...) {
-    options <- varargsToStrEnv(...)
-    if (!is.null(path)) {
-      options[["path"]] <- path
-    }
-    jmode <- convertToJSaveMode(mode)
-    write <- callJMethod(write, "mode", jmode)
-    write <- callJMethod(write, "options", options)
-    write
+  options <- varargsToStrEnv(...)
+  if (!is.null(path)) {
+    options[["path"]] <- path
+  }
+  write <- setWriteMode(write, mode)
+  write <- callJMethod(write, "options", options)
+  write
+}
+
+#' Set mode and then return the write object
+#' @noRd
+setWriteMode <- function(write, mode) {
+  if (!is.character(mode)) {
+    stop("mode should be character or omitted. It is 'error' by default.")
+  }
+  write <- handledCallJMethod(write, "mode", mode)
+  write
 }
 
 #' @export
@@ -556,9 +565,8 @@ setMethod("registerTempTable",
 setMethod("insertInto",
           signature(x = "SparkDataFrame", tableName = "character"),
           function(x, tableName, overwrite = FALSE) {
-            jmode <- convertToJSaveMode(ifelse(overwrite, "overwrite", "append"))
             write <- callJMethod(x@sdf, "write")
-            write <- callJMethod(write, "mode", jmode)
+            write <- setWriteMode(write, ifelse(overwrite, "overwrite", "append"))
             invisible(callJMethod(write, "insertInto", tableName))
           })
 
@@ -810,7 +818,8 @@ setMethod("toJSON",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -841,7 +850,8 @@ setMethod("write.json",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -872,7 +882,8 @@ setMethod("write.orc",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -917,7 +928,8 @@ setMethod("saveAsParquetFile",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -2871,18 +2883,19 @@ setMethod("except",
 #' Additionally, mode is used to specify the behavior of the save operation when data already
 #' exists in the data source. There are four modes:
 #' \itemize{
-#'   \item append: Contents of this SparkDataFrame are expected to be appended to existing data.
-#'   \item overwrite: Existing data is expected to be overwritten by the contents of this
+#'   \item 'append': Contents of this SparkDataFrame are expected to be appended to existing data.
+#'   \item 'overwrite': Existing data is expected to be overwritten by the contents of this
 #'         SparkDataFrame.
-#'   \item error: An exception is expected to be thrown.
-#'   \item ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'   \item 'error' or 'errorifexists': An exception is expected to be thrown.
+#'   \item 'ignore': The save operation is expected to not save the contents of the SparkDataFrame
 #'         and to not change the existing data.
 #' }
 #'
 #' @param df a SparkDataFrame.
 #' @param path a name for the table.
 #' @param source a name for external data source.
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -2940,17 +2953,18 @@ setMethod("saveDF",
 #'
 #' Additionally, mode is used to specify the behavior of the save operation when
 #' data already exists in the data source. There are four modes: \cr
-#'  append: Contents of this SparkDataFrame are expected to be appended to existing data. \cr
-#'  overwrite: Existing data is expected to be overwritten by the contents of this
+#'  'append': Contents of this SparkDataFrame are expected to be appended to existing data. \cr
+#'  'overwrite': Existing data is expected to be overwritten by the contents of this
 #'     SparkDataFrame. \cr
-#'  error: An exception is expected to be thrown. \cr
-#'  ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'  'error' or 'errorifexists': An exception is expected to be thrown. \cr
+#'  'ignore': The save operation is expected to not save the contents of the SparkDataFrame
 #'     and to not change the existing data. \cr
 #'
 #' @param df a SparkDataFrame.
 #' @param tableName a name for the table.
 #' @param source a name for external data source.
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default).
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional option(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -2972,12 +2986,11 @@ setMethod("saveAsTable",
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
-            jmode <- convertToJSaveMode(mode)
             options <- varargsToStrEnv(...)
 
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)
-            write <- callJMethod(write, "mode", jmode)
+            write <- setWriteMode(write, mode)
             write <- callJMethod(write, "options", options)
             invisible(callJMethod(write, "saveAsTable", tableName))
           })
@@ -3544,18 +3557,19 @@ setMethod("histogram",
 #' Also, mode is used to specify the behavior of the save operation when
 #' data already exists in the data source. There are four modes:
 #' \itemize{
-#'   \item append: Contents of this SparkDataFrame are expected to be appended to existing data.
-#'   \item overwrite: Existing data is expected to be overwritten by the contents of this
+#'   \item 'append': Contents of this SparkDataFrame are expected to be appended to existing data.
+#'   \item 'overwrite': Existing data is expected to be overwritten by the contents of this
 #'         SparkDataFrame.
-#'   \item error: An exception is expected to be thrown.
-#'   \item ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'   \item 'error' or 'errorifexists': An exception is expected to be thrown.
+#'   \item 'ignore': The save operation is expected to not save the contents of the SparkDataFrame
 #'         and to not change the existing data.
 #' }
 #'
 #' @param x a SparkDataFrame.
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}.
 #' @param tableName yhe name of the table in the external database.
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default).
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional JDBC database connection properties.
 #' @family SparkDataFrame functions
 #' @rdname write.jdbc
@@ -3572,10 +3586,9 @@ setMethod("histogram",
 setMethod("write.jdbc",
           signature(x = "SparkDataFrame", url = "character", tableName = "character"),
           function(x, url, tableName, mode = "error", ...) {
-            jmode <- convertToJSaveMode(mode)
             jprops <- varargsToJProperties(...)
             write <- callJMethod(x@sdf, "write")
-            write <- callJMethod(write, "mode", jmode)
+            write <- setWriteMode(write, mode)
             invisible(handledCallJMethod(write, "jdbc", url, tableName, jprops))
           })
 

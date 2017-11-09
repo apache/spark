@@ -325,13 +325,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val loadedUI = {
-      val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf,
-        l => replayBus.addListener(l),
-        secManager,
-        app.info.name,
+      val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf, secManager, app.info.name,
         HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
         attempt.info.startTime.getTime(),
-        appSparkVersion = attempt.info.appSparkVersion)
+        attempt.info.appSparkVersion)
       LoadedAppUI(ui)
     }
 

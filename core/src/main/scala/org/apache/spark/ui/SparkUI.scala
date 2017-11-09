@@ -26,12 +26,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1._
-import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentTab
 import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobsTab, StagesTab}
-import org.apache.spark.ui.storage.{StorageListener, StorageTab}
+import org.apache.spark.ui.storage.StorageTab
 import org.apache.spark.util.Utils
 
 /**
@@ -42,8 +41,6 @@ private[spark] class SparkUI private (
     val sc: Option[SparkContext],
     val conf: SparkConf,
     securityManager: SecurityManager,
-    val storageStatusListener: StorageStatusListener,
-    val storageListener: StorageListener,
     var appName: String,
     val basePath: String,
     val startTime: Long,
@@ -65,7 +62,7 @@ private[spark] class SparkUI private (
     attachTab(jobsTab)
     val stagesTab = new StagesTab(this, store)
     attachTab(stagesTab)
-    attachTab(new StorageTab(this))
+    attachTab(new StorageTab(this, store))
     attachTab(new EnvironmentTab(this, store))
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
@@ -171,21 +168,13 @@ private[spark] object SparkUI {
       sc: Option[SparkContext],
       store: AppStatusStore,
       conf: SparkConf,
-      addListenerFn: SparkListenerInterface => Unit,
       securityManager: SecurityManager,
       appName: String,
       basePath: String,
       startTime: Long,
       appSparkVersion: String = org.apache.spark.SPARK_VERSION): SparkUI = {
 
-    val storageStatusListener = new StorageStatusListener(conf)
-    val storageListener = new StorageListener(storageStatusListener)
-
-    addListenerFn(storageStatusListener)
-    addListenerFn(storageListener)
-
-    new SparkUI(store, sc, conf, securityManager, storageStatusListener, storageListener,
-      appName, basePath, startTime, appSparkVersion)
+    new SparkUI(store, sc, conf, securityManager, appName, basePath, startTime, appSparkVersion)
   }
 
 }

@@ -630,6 +630,10 @@ test_that("read/write json files", {
     jsonPath2 <- tempfile(pattern = "jsonPath2", fileext = ".json")
     write.df(df, jsonPath2, "json", mode = "overwrite")
 
+    # Test errorifexists
+    expect_error(write.df(df, jsonPath2, "json", mode = "errorifexists"),
+                 "analysis error - path file:.*already exists")
+
     # Test write.json
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
     write.json(df, jsonPath3)
@@ -1371,6 +1375,9 @@ test_that("test HiveContext", {
     expect_equal(count(df5), 3)
     unlink(parquetDataPath)
 
+    # Invalid mode
+    expect_error(saveAsTable(df, "parquetest", "parquet", mode = "abc", path = parquetDataPath),
+                 "illegal argument - Unknown save mode: abc")
     unsetHiveContext()
   }
 })
@@ -3303,6 +3310,7 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
               "Error in orc : analysis error - path file:.*already exists")
   expect_error(write.parquet(df, jsonPath),
               "Error in parquet : analysis error - path file:.*already exists")
+  expect_error(write.parquet(df, jsonPath, mode = 123), "mode should be character or omitted.")
 
   # Arguments checking in R side.
   expect_error(write.df(df, "data.tmp", source = c(1, 2)),

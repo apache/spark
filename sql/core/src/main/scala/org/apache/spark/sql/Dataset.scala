@@ -2135,11 +2135,26 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset by adding columns with metadata.
+   */
+  private[spark] def withColumns(
+      colNames: Seq[String],
+      cols: Seq[Column],
+      metadata: Seq[Metadata]): DataFrame = {
+    require(colNames.size == metadata.size,
+      s"The size of column names: ${colNames.size} isn't equal to " +
+        s"the size of metadata elements: ${metadata.size}")
+    val newCols = colNames.zip(cols).zip(metadata).map { case ((colName, col), metadata) =>
+      col.as(colName, metadata)
+    }
+    withColumns(colNames, newCols)
+  }
+
+  /**
    * Returns a new Dataset by adding a column with metadata.
    */
-  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
-    withColumn(colName, col.as(colName, metadata))
-  }
+  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame =
+    withColumns(Seq(colName), Seq(col), Seq(metadata))
 
   /**
    * Returns a new Dataset with a column renamed.

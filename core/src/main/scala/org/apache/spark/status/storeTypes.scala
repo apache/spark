@@ -138,6 +138,22 @@ private[spark] class ExecutorStageSummaryWrapper(
 
 }
 
+private[spark] class StreamBlockData(
+  val name: String,
+  val executorId: String,
+  val hostPort: String,
+  val storageLevel: String,
+  val useMemory: Boolean,
+  val useDisk: Boolean,
+  val deserialized: Boolean,
+  val memSize: Long,
+  val diskSize: Long) {
+
+  @JsonIgnore @KVIndex
+  def key: Array[String] = Array(name, executorId)
+
+}
+
 private[spark] class RDDOperationClusterWrapper(
     val id: String,
     val name: String,
