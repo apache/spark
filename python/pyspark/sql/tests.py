@@ -1765,6 +1765,13 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(first['date'], epoch)
         self.assertEqual(first['lit_date'], epoch)
 
+    def test_dayofweek(self):
+        from pyspark.sql.functions import dayofweek
+        dt = datetime.datetime(2017, 11, 6)
+        df = self.spark.createDataFrame([Row(date=dt)])
+        row = df.select(dayofweek(df.date)).first()
+        self.assertEqual(row[0], 2)
+
     def test_decimal(self):
         from decimal import Decimal
         schema = StructType([StructField("decimal", DecimalType(10, 5))])
