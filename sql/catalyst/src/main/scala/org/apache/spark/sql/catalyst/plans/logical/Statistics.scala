@@ -261,31 +261,27 @@ object ColumnStat extends Logging {
     val defaultSize = Literal(col.dataType.defaultSize, LongType)
     val nullArray = Literal(null, ArrayType(LongType))
 
-    def fixedLenTypeExprs(castType: DataType) = {
-      // For fixed width types, avg size should be the same as max size.
-      Seq(ndv, Cast(Min(col), castType), Cast(Max(col), castType), numNulls, defaultSize,
-        defaultSize)
-    }
-
-    def fixedLenTypeStruct(dataType: DataType) = {
+    def fixedLenTypeStruct: CreateNamedStruct = {
       val genHistogram =
-        ColumnStat.supportsHistogram(dataType) && colPercentiles.contains(col)
+        ColumnStat.supportsHistogram(col.dataType) && colPercentiles.contains(col)
       val intervalNdvsExpr = if (genHistogram) {
         ApproxCountDistinctForIntervals(col,
           Literal(colPercentiles(col), ArrayType(col.dataType)), conf.ndvMaxError)
       } else {
         nullArray
       }
-      struct(fixedLenTypeExprs(dataType) :+ intervalNdvsExpr: _*)
+      // For fixed width types, avg size should be the same as max size.
+      struct(ndv, Cast(Min(col), col.dataType), Cast(Max(col), col.dataType), numNulls,
+        defaultSize, defaultSize, intervalNdvsExpr)
     }
 
     col.dataType match {
-      case dt: IntegralType => fixedLenTypeStruct(dt)
-      case _: DecimalType => fixedLenTypeStruct(col.dataType)
-      case dt @ (DoubleType | FloatType) => fixedLenTypeStruct(dt)
-      case BooleanType => fixedLenTypeStruct(col.dataType)
-      case DateType => fixedLenTypeStruct(col.dataType)
-      case TimestampType => fixedLenTypeStruct(col.dataType)
+      case _: IntegralType => fixedLenTypeStruct
+      case _: DecimalType => fixedLenTypeStruct
+      case DoubleType | FloatType => fixedLenTypeStruct
+      case BooleanType => fixedLenTypeStruct
+      case DateType => fixedLenTypeStruct
+      case TimestampType => fixedLenTypeStruct
       case BinaryType | StringType =>
         // For string and binary type, we don't compute min, max or histogram
         val nullLit = Literal(null, col.dataType)
