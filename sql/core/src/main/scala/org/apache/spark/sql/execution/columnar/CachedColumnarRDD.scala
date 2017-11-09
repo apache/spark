@@ -58,7 +58,14 @@ class CachedColumnarRDD(
 }
 
 private[columnar] class CachedColumnarPartitionIterator(
-    val metadataBlock: InternalRow,
+    val partitionStats: InternalRow,
     context: TaskContext,
     delegate: Iterator[CachedBatch])
-  extends InterruptibleIterator[CachedBatch](context, delegate) {}
+  extends InterruptibleIterator[CachedBatch](context, delegate) {
+  override def next(): CachedBatch = {\
+    // scalastyle:off
+    println("next")
+    // scalastyle:on
+    super.next()
+  }
+}

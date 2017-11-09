@@ -231,7 +231,7 @@ case class InMemoryTableScanExec(
 
       cachedBatchIterator match {
         case cachedIter: CachedColumnarPartitionIterator
-          if !partitionFilter.eval(cachedIter.metadataBlock) =>
+          if !partitionFilter.eval(cachedIter.partitionStats) =>
           // scalastyle:off
           println(s"skipped partition $index")
           // scalastyle:on
