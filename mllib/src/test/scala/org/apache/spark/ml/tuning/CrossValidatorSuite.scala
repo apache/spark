@@ -29,6 +29,7 @@ import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
+import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
 
@@ -64,6 +65,39 @@ class CrossValidatorSuite
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
     assert(cvModel.avgMetrics.length === lrParamMaps.length)
+  }
+
+  test("cross validation with random search logistic regression") {
+    val lr = new LogisticRegression
+    val builder = new RandomParamGridBuilder()
+      .addUniformDistribution(lr.regParam, 0.0005, 0.0015)
+      .addUniformDistribution(lr.maxIter, 10, 15)
+
+    val goodLrParamMaps = builder.build(5)
+    val badLrParamMaps = builder.addUniformDistribution(lr.regParam, 100.0, 150.0).build(5)
+
+    case class ModelResult(parent: LogisticRegression, nCorrect: Long)
+
+    val Array(goodModel, badModel) = Array(goodLrParamMaps, badLrParamMaps).map { maps =>
+      val eval = new BinaryClassificationEvaluator
+      val cv = new CrossValidator()
+        .setEstimator(lr)
+        .setEstimatorParamMaps(maps)
+        .setEvaluator(eval)
+        .setNumFolds(3)
+      val cvModel = cv.fit(dataset)
+
+
+      val nCorrect = cvModel.transform(dataset)
+        .withColumn("correct", F.expr("label == prediction"))
+        .select("correct").where("correct").count()
+
+      MLTestingUtils.checkCopyAndUids(cv, cvModel)
+      val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
+      ModelResult(parent, nCorrect)
+    }
+
+    assert(goodModel.nCorrect > badModel.nCorrect)
   }
 
   test("cross validation with linear regression") {
@@ -106,17 +140,23 @@ class CrossValidatorSuite
       .addGrid(est.inputCol, Array("input1", "input2"))
       .build()
 
-    val cv = new CrossValidator()
-      .setEstimator(est)
-      .setEstimatorParamMaps(paramMaps)
-      .setEvaluator(eval)
+    val randomParamMaps = new RandomParamGridBuilder(Some(4))
+      .addUniformChoice(est.inputCol, Array("input1", "input2"))
+      .build(4)
 
-    cv.transformSchema(new StructType()) // This should pass.
+    Seq(paramMaps, randomParamMaps).map{ maps =>
+      val cv = new CrossValidator()
+        .setEstimator(est)
+        .setEstimatorParamMaps(paramMaps)
+        .setEvaluator(eval)
 
-    val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")
-    cv.setEstimatorParamMaps(invalidParamMaps)
-    intercept[IllegalArgumentException] {
-      cv.transformSchema(new StructType())
+      cv.transformSchema(new StructType()) // This should pass.
+
+      val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")
+      cv.setEstimatorParamMaps(invalidParamMaps)
+      intercept[IllegalArgumentException] {
+        cv.transformSchema(new StructType())
+      }
     }
   }
 
@@ -331,13 +371,21 @@ class CrossValidatorSuite
       .addGrid(lr.regParam, Array(0.1, 0.2))
       .addGrid(lr2.regParam, Array(0.1, 0.2))
       .build()
-    val cv = new CrossValidator()
-      .setEstimator(lr)
-      .setEvaluator(evaluator)
-      .setEstimatorParamMaps(paramMaps)
-    withClue("CrossValidator.write failed to catch extraneous Param error") {
-      intercept[IllegalArgumentException] {
-        cv.write
+
+    val randomParamMaps = new RandomParamGridBuilder(Some(4))
+      .addUniformDistribution(lr.regParam, 0.1, 0.2)
+      .addUniformDistribution(lr2.regParam, 0.1, 0.2)
+      .build(4)
+
+    Seq(paramMaps, randomParamMaps).map{ maps =>
+      val cv = new CrossValidator()
+        .setEstimator(lr)
+        .setEvaluator(evaluator)
+        .setEstimatorParamMaps(maps)
+      withClue("CrossValidator.write failed to catch extraneous Param error") {
+        intercept[IllegalArgumentException] {
+          cv.write
+        }
       }
     }
   }
