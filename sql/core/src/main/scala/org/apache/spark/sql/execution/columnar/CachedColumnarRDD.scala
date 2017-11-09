@@ -62,7 +62,7 @@ private[columnar] class CachedColumnarPartitionIterator(
     context: TaskContext,
     delegate: Iterator[CachedBatch])
   extends InterruptibleIterator[CachedBatch](context, delegate) {
-  override def next(): CachedBatch = {\
+  override def next(): CachedBatch = {
     // scalastyle:off
     println("next")
     // scalastyle:on
