@@ -25,8 +25,8 @@ import org.scalatest.FlatSpec
  */
 class GenericFlatSpecSuite extends FlatSpec with SharedSparkSession {
   import testImplicits._
-  initializeSession()
-  val ds = Seq((1, 1), (2, 1), (3, 2), (4, 2), (5, 3), (6, 3), (7, 4), (8, 4)).toDS
+
+  def ds = Seq((1, 1), (2, 1), (3, 2), (4, 2), (5, 3), (6, 3), (7, 4), (8, 4)).toDS
 
   "A Simple Dataset" should "have the specified number of elements" in {
     assert(8 === ds.count)
