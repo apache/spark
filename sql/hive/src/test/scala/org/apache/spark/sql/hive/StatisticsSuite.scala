@@ -1089,7 +1089,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("serde/deser of histograms exceeding 4000 length") {
+  test("serialization and deserialization of histograms to/from hive metastore") {
     import testImplicits._
 
     def checkBinsOrder(bins: Array[HistogramBin]): Unit = {
@@ -1107,24 +1107,21 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val df = (1 to 5000)
       .map(i => (i, DateTimeUtils.toJavaTimestamp(startTimestamp + i)))
       .toDF("cint", "ctimestamp")
-    val tableName = "long_histogram_test"
+    val tableName = "histogram_serde_test"
 
     withTable(tableName) {
       df.write.saveAsTable(tableName)
 
-      withSQLConf(
-        SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "1000") {
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true") {
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS cint, ctimestamp")
         val table = hiveClient.getTable("default", tableName)
-        // Based on the bin number set in this test, the length of histogram string will exceed
-        // the threshold (4000), and thus the string will be split to multiple properties.
         val intHistogramProps = table.properties
-          .filterKeys(_.startsWith("spark.sql.statistics.colStats.cint.histogram-"))
-        assert(intHistogramProps.size > 1)
+          .filterKeys(_.startsWith("spark.sql.statistics.colStats.cint.histogram"))
+        assert(intHistogramProps.size == 1)
 
         val tsHistogramProps = table.properties
-          .filterKeys(_.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram-"))
-        assert(tsHistogramProps.size > 1)
+          .filterKeys(_.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram"))
+        assert(tsHistogramProps.size == 1)
 
         // Validate histogram after deserialization.
         val cs = getCatalogStatistics(tableName).colStats
@@ -1134,6 +1131,23 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         checkBinsOrder(intHistogram.bins)
         assert(tsHistogram.bins.length == spark.sessionState.conf.histogramNumBins)
         checkBinsOrder(tsHistogram.bins)
+      }
+    }
+  }
+
+  test("fail to persist stat property due to length threshold") {
+    import testImplicits._
+
+    val df = (1 to 5000).toDF("cint")
+    val tableName = "long_histogram_test"
+
+    withTable(tableName) {
+      df.write.saveAsTable(tableName)
+      withSQLConf(
+        SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "1000") {
+        intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS cint")
+        }
       }
     }
   }

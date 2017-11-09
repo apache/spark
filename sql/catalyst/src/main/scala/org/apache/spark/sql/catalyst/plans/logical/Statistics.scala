@@ -368,9 +368,9 @@ object HistogramSerializer {
    * Serializes a given histogram to a string. For advanced statistics like histograms, sketches,
    * etc, we don't provide readability for their serialized formats in metastore
    * (string-to-string table properties). This is because it's hard or unnatural for these
-   * statistics to be human readable. For example, a histogram is probably split into multiple
-   * key-value properties, instead of a single, self-described property. And for
-   * count-min-sketch, it's essentially unnatural to make it a readable string.
+   * statistics to be human readable. For example, a histogram usually cannot fit in a single,
+   * self-described property. And for count-min-sketch, it's essentially unnatural to make it
+   * a readable string.
    */
   final def serialize(histogram: Histogram): String = {
     val bos = new ByteArrayOutputStream()
