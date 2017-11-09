@@ -821,12 +821,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val HISTOGRAM_BUCKETS_NUM =
-    buildConf("spark.sql.statistics.histogram.buckets")
+  val HISTOGRAM_NUM_BINS =
+    buildConf("spark.sql.statistics.histogram.numBins")
       .internal()
-      .doc("The number of buckets when generating histograms.")
+      .doc("The number of bins when generating histograms.")
       .intConf
-      .checkValue(num => num > 1, "The number of buckets must be large than 1.")
+      .checkValue(num => num > 1, "The number of bins must be large than 1.")
       .createWithDefault(254)
 
   val PERCENTILE_ACCURACY =
@@ -1232,7 +1232,7 @@ class SQLConf extends Serializable with Logging {
 
   def histogramEnabled: Boolean = getConf(HISTOGRAM_ENABLED)
 
-  def histogramBucketsNum: Int = getConf(HISTOGRAM_BUCKETS_NUM)
+  def histogramNumBins: Int = getConf(HISTOGRAM_NUM_BINS)
 
   def percentileAccuracy: Int = getConf(PERCENTILE_ACCURACY)
 

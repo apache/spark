@@ -307,7 +307,7 @@ object ColumnStat extends Logging {
       attr: Attribute,
       rowCount: Long,
       percentiles: Option[ArrayData]): ColumnStat = {
-    // The first 6 fields are basic column stats, the 7th is ndvs for histogram buckets.
+    // The first 6 fields are basic column stats, the 7th is ndvs for histogram bins.
     val cs = ColumnStat(
       distinctCount = BigInt(row.getLong(0)),
       // for string/binary min/max, get should return null
@@ -324,11 +324,11 @@ object ColumnStat extends Logging {
       assert(percentiles.get.numElements() == ndvs.length + 1)
       val endpoints = percentiles.get.toArray[Any](attr.dataType).map(_.toString.toDouble)
       // Construct equi-height histogram
-      val buckets = ndvs.zipWithIndex.map { case (ndv, i) =>
-        HistogramBucket(endpoints(i), endpoints(i + 1), ndv)
+      val bins = ndvs.zipWithIndex.map { case (ndv, i) =>
+        HistogramBin(endpoints(i), endpoints(i + 1), ndv)
       }
       val nonNullRows = rowCount - cs.nullCount
-      val histogram = Histogram(nonNullRows.toDouble / ndvs.length, buckets)
+      val histogram = Histogram(nonNullRows.toDouble / ndvs.length, bins)
       cs.copy(histogram = Some(histogram))
     }
   }
@@ -337,30 +337,35 @@ object ColumnStat extends Logging {
 
 /**
  * This class is an implementation of equi-height histogram.
- * Equi-height histogram represents the distribution of a column's values by a sequence of buckets.
- * Each bucket has a value range and contains approximately the same number of rows.
- * @param height number of rows in each bucket
- * @param buckets equi-height histogram buckets
+ * Equi-height histogram represents the distribution of a column's values by a sequence of bins.
+ * Each bin has a value range and contains approximately the same number of rows.
+ * @param height number of rows in each bin
+ * @param bins equi-height histogram bins
  */
-case class Histogram(height: Double, buckets: Array[HistogramBucket]) {
+case class Histogram(height: Double, bins: Array[HistogramBin]) {
 
   // Only for histogram equality test.
   override def equals(other: Any): Boolean = other match {
     case otherHgm: Histogram =>
-      height == otherHgm.height && buckets.sameElements(otherHgm.buckets)
+      height == otherHgm.height && bins.sameElements(otherHgm.bins)
     case _ => false
   }
 
-  override def hashCode(): Int = super.hashCode()
+  override def hashCode(): Int = {
+    val temp = java.lang.Double.doubleToLongBits(height)
+    var result = (temp ^ (temp >>> 32)).toInt
+    result = 31 * result + java.util.Arrays.hashCode(bins.asInstanceOf[Array[AnyRef]])
+    result
+  }
 }
 
 /**
- * A bucket in an equi-height histogram. We use double type for lower/higher bound for simplicity.
- * @param lo lower bound of the value range in this bucket
- * @param hi higher bound of the value range in this bucket
- * @param ndv approximate number of distinct values in this bucket
+ * A bin in an equi-height histogram. We use double type for lower/higher bound for simplicity.
+ * @param lo lower bound of the value range in this bin
+ * @param hi higher bound of the value range in this bin
+ * @param ndv approximate number of distinct values in this bin
  */
-case class HistogramBucket(lo: Double, hi: Double, ndv: Long)
+case class HistogramBin(lo: Double, hi: Double, ndv: Long)
 
 object HistogramSerializer {
   /**
@@ -375,21 +380,21 @@ object HistogramSerializer {
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(new LZ4BlockOutputStream(bos))
     out.writeDouble(histogram.height)
-    out.writeInt(histogram.buckets.length)
+    out.writeInt(histogram.bins.length)
     // Write data with same type together for compression.
     var i = 0
-    while (i < histogram.buckets.length) {
-      out.writeDouble(histogram.buckets(i).lo)
+    while (i < histogram.bins.length) {
+      out.writeDouble(histogram.bins(i).lo)
       i += 1
     }
     i = 0
-    while (i < histogram.buckets.length) {
-      out.writeDouble(histogram.buckets(i).hi)
+    while (i < histogram.bins.length) {
+      out.writeDouble(histogram.bins(i).hi)
       i += 1
     }
     i = 0
-    while (i < histogram.buckets.length) {
-      out.writeLong(histogram.buckets(i).ndv)
+    while (i < histogram.bins.length) {
+      out.writeLong(histogram.bins(i).ndv)
       i += 1
     }
     out.writeInt(-1)
@@ -405,34 +410,34 @@ object HistogramSerializer {
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(new LZ4BlockInputStream(bis))
     val height = ins.readDouble()
-    val numBuckets = ins.readInt()
+    val numBins = ins.readInt()
 
-    val los = new Array[Double](numBuckets)
+    val los = new Array[Double](numBins)
     var i = 0
-    while (i < numBuckets) {
+    while (i < numBins) {
       los(i) = ins.readDouble()
       i += 1
     }
-    val his = new Array[Double](numBuckets)
+    val his = new Array[Double](numBins)
     i = 0
-    while (i < numBuckets) {
+    while (i < numBins) {
       his(i) = ins.readDouble()
       i += 1
     }
-    val ndvs = new Array[Long](numBuckets)
+    val ndvs = new Array[Long](numBins)
     i = 0
-    while (i < numBuckets) {
+    while (i < numBins) {
       ndvs(i) = ins.readLong()
       i += 1
     }
     ins.close()
 
-    val buckets = new Array[HistogramBucket](numBuckets)
+    val bins = new Array[HistogramBin](numBins)
     i = 0
-    while (i < numBuckets) {
-      buckets(i) = HistogramBucket(los(i), his(i), ndvs(i))
+    while (i < numBins) {
+      bins(i) = HistogramBin(los(i), his(i), ndvs(i))
       i += 1
     }
-    Histogram(height, buckets)
+    Histogram(height, bins)
   }
 }

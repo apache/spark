@@ -159,7 +159,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     checkColStats(df, stats)
 
     // test column stats with histograms
-    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_BUCKETS_NUM.key -> "2") {
+    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
       checkColStats(df, statsWithHgms)
     }
   }

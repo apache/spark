@@ -29,7 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBucket, HistogramSerializer}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1082,7 +1082,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       checkColStatsProps(expectedSerializedColStats)
 
       withSQLConf(
-        SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_BUCKETS_NUM.key -> "2") {
+        SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
 
         checkColStatsProps(expectedSerializedColStats ++ expectedSerializedHistograms)
       }
@@ -1092,12 +1092,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("serde/deser of histograms exceeding 4000 length") {
     import testImplicits._
 
-    def checkBucketsOrder(buckets: Array[HistogramBucket]): Unit = {
-      for (i <- buckets.indices) {
-        val b = buckets(i)
+    def checkBinsOrder(bins: Array[HistogramBin]): Unit = {
+      for (i <- bins.indices) {
+        val b = bins(i)
         assert(b.lo <= b.hi)
         if (i > 0) {
-          val pre = buckets(i - 1)
+          val pre = bins(i - 1)
           assert(pre.hi <= b.lo)
         }
       }
@@ -1113,12 +1113,11 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       df.write.saveAsTable(tableName)
 
       withSQLConf(
-        SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_BUCKETS_NUM.key -> "1000") {
+        SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "1000") {
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS cint, ctimestamp")
         val table = hiveClient.getTable("default", tableName)
-        // Based on the bucket number(`spark.sessionState.conf.histogramBucketsNum`), the
-        // length of histogram string will exceed 4000, and thus the string will be split to
-        // multiple properties.
+        // Based on the bin number set in this test, the length of histogram string will exceed
+        // the threshold (4000), and thus the string will be split to multiple properties.
         val intHistogramProps = table.properties
           .filterKeys(_.startsWith("spark.sql.statistics.colStats.cint.histogram-"))
         assert(intHistogramProps.size > 1)
@@ -1131,10 +1130,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val cs = getCatalogStatistics(tableName).colStats
         val intHistogram = cs("cint").histogram.get
         val tsHistogram = cs("ctimestamp").histogram.get
-        assert(intHistogram.buckets.length == spark.sessionState.conf.histogramBucketsNum)
-        checkBucketsOrder(intHistogram.buckets)
-        assert(tsHistogram.buckets.length == spark.sessionState.conf.histogramBucketsNum)
-        checkBucketsOrder(tsHistogram.buckets)
+        assert(intHistogram.bins.length == spark.sessionState.conf.histogramNumBins)
+        checkBinsOrder(intHistogram.bins)
+        assert(tsHistogram.bins.length == spark.sessionState.conf.histogramNumBins)
+        checkBinsOrder(tsHistogram.bins)
       }
     }
   }

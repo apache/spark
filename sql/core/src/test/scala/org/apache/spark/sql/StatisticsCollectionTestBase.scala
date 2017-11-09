@@ -25,7 +25,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBucket, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -83,30 +83,30 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   /**
    * A mapping from column to the stats collected including histograms.
-   * The number of buckets in the histograms is 2.
+   * The number of bins in the histograms is 2.
    */
   protected val statsWithHgms = {
     val colStats = mutable.LinkedHashMap(stats.toSeq: _*)
     colStats.update("cbyte", stats("cbyte").copy(histogram =
-      Some(Histogram(1, Array(HistogramBucket(1, 1, 1), HistogramBucket(1, 2, 1))))))
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 2, 1))))))
     colStats.update("cshort", stats("cshort").copy(histogram =
-      Some(Histogram(1, Array(HistogramBucket(1, 1, 1), HistogramBucket(1, 3, 1))))))
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 3, 1))))))
     colStats.update("cint", stats("cint").copy(histogram =
-      Some(Histogram(1, Array(HistogramBucket(1, 1, 1), HistogramBucket(1, 4, 1))))))
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 4, 1))))))
     colStats.update("clong", stats("clong").copy(histogram =
-      Some(Histogram(1, Array(HistogramBucket(1, 1, 1), HistogramBucket(1, 5, 1))))))
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 5, 1))))))
     colStats.update("cdouble", stats("cdouble").copy(histogram =
-      Some(Histogram(1, Array(HistogramBucket(1, 1, 1), HistogramBucket(1, 6, 1))))))
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 6, 1))))))
     colStats.update("cfloat", stats("cfloat").copy(histogram =
-      Some(Histogram(1, Array(HistogramBucket(1, 1, 1), HistogramBucket(1, 7, 1))))))
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 7, 1))))))
     colStats.update("cdecimal", stats("cdecimal").copy(histogram =
-      Some(Histogram(1, Array(HistogramBucket(1, 1, 1), HistogramBucket(1, 8, 1))))))
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 8, 1))))))
     colStats.update("cdate", stats("cdate").copy(histogram =
-      Some(Histogram(1, Array(HistogramBucket(d1Internal, d1Internal, 1),
-        HistogramBucket(d1Internal, d2Internal, 1))))))
+      Some(Histogram(1, Array(HistogramBin(d1Internal, d1Internal, 1),
+        HistogramBin(d1Internal, d2Internal, 1))))))
     colStats.update("ctimestamp", stats("ctimestamp").copy(histogram =
-      Some(Histogram(1, Array(HistogramBucket(t1Internal, t1Internal, 1),
-        HistogramBucket(t1Internal, t2Internal, 1))))))
+      Some(Histogram(1, Array(HistogramBin(t1Internal, t1Internal, 1),
+        HistogramBin(t1Internal, t2Internal, 1))))))
     colStats
   }
 

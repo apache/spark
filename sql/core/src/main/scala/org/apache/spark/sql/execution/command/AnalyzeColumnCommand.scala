@@ -94,8 +94,8 @@ case class AnalyzeColumnCommand(
     // generated. Currently we only support equi-height histogram.
     // To generate an equi-height histogram, we need two jobs:
     // 1. compute percentiles p(0), p(1/n) ... p((n-1)/n), p(1).
-    // 2. use the percentiles as value intervals of buckets, e.g. [p(0), p(1/n)],
-    // [p(1/n), p(2/n)], ..., [p((n-1)/n), p(1)], and then count ndv in each bucket.
+    // 2. use the percentiles as value intervals of bins, e.g. [p(0), p(1/n)],
+    // [p(1/n), p(2/n)], ..., [p((n-1)/n), p(1)], and then count ndv in each bin.
     // Basic column stats will be computed together in the second job.
     val attributePercentiles = computePercentiles(attributesToAnalyze, sparkSession, relation)
 
@@ -130,8 +130,8 @@ case class AnalyzeColumnCommand(
     }
     val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
     if (attrsToGenHistogram.nonEmpty) {
-      val percentiles = (0 to conf.histogramBucketsNum)
-        .map(i => i.toDouble / conf.histogramBucketsNum).toArray
+      val percentiles = (0 to conf.histogramNumBins)
+        .map(i => i.toDouble / conf.histogramNumBins).toArray
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
