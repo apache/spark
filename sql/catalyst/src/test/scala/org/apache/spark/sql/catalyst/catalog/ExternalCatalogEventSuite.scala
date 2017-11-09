@@ -127,19 +127,19 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     // ALTER
     val newTableDefinition = tableDefinition.copy(tableType = CatalogTableType.EXTERNAL)
     catalog.alterTable(newTableDefinition)
-    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.Table) ::
-      AlterTableEvent("db5", "tbl1", AlterTableKind.Table) :: Nil)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.TABLE) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.TABLE) :: Nil)
 
     // ALTER schema
     val newSchema = new StructType().add("id", "long", nullable = false)
     catalog.alterTableDataSchema("db5", "tbl1", newSchema)
-    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.DataSchema) ::
-      AlterTableEvent("db5", "tbl1", AlterTableKind.DataSchema) :: Nil)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.DATASCHEMA) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.DATASCHEMA) :: Nil)
 
     // ALTER stats
     catalog.alterTableStats("db5", "tbl1", None)
-    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.Stats) ::
-      AlterTableEvent("db5", "tbl1", AlterTableKind.Stats) :: Nil)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.STATS) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.STATS) :: Nil)
 
     // RENAME
     catalog.renameTable("db5", "tbl1", "tbl2")

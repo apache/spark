@@ -120,11 +120,13 @@ case class RenameTableEvent(
   extends TableEvent
 
 /**
- * Enumeration to indicate which part of table is altered. If a plain alterTable API is called, then
+ * String to indicate which part of table is altered. If a plain alterTable API is called, then
  * type will generally be Table.
  */
 object AlterTableKind extends Enumeration {
-  val Table, DataSchema, Stats = Value
+  val TABLE = "table"
+  val DATASCHEMA = "dataSchema"
+  val STATS = "stats"
 }
 
 /**
@@ -133,7 +135,7 @@ object AlterTableKind extends Enumeration {
 case class AlterTablePreEvent(
     database: String,
     name: String,
-    kind: AlterTableKind.Value) extends TableEvent
+    kind: String) extends TableEvent
 
 /**
  * Event fired after a table is altered.
@@ -141,7 +143,7 @@ case class AlterTablePreEvent(
 case class AlterTableEvent(
     database: String,
     name: String,
-    kind: AlterTableKind.Value) extends TableEvent
+    kind: String) extends TableEvent
 
 /**
  * Event fired when a function is created, dropped, altered or renamed.

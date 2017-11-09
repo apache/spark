@@ -157,9 +157,9 @@ abstract class ExternalCatalog
   final def alterTable(tableDefinition: CatalogTable): Unit = {
     val db = tableDefinition.database
     val name = tableDefinition.identifier.table
-    postToAll(AlterTablePreEvent(db, name, AlterTableKind.Table))
+    postToAll(AlterTablePreEvent(db, name, AlterTableKind.TABLE))
     doAlterTable(tableDefinition)
-    postToAll(AlterTableEvent(db, name, AlterTableKind.Table))
+    postToAll(AlterTableEvent(db, name, AlterTableKind.TABLE))
   }
 
   protected def doAlterTable(tableDefinition: CatalogTable): Unit
@@ -174,18 +174,18 @@ abstract class ExternalCatalog
    * @param newDataSchema Updated data schema to be used for the table.
    */
   final def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit = {
-    postToAll(AlterTablePreEvent(db, table, AlterTableKind.DataSchema))
+    postToAll(AlterTablePreEvent(db, table, AlterTableKind.DATASCHEMA))
     doAlterTableDataSchema(db, table, newDataSchema)
-    postToAll(AlterTableEvent(db, table, AlterTableKind.DataSchema))
+    postToAll(AlterTableEvent(db, table, AlterTableKind.DATASCHEMA))
   }
 
   protected def doAlterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
   final def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit = {
-    postToAll(AlterTablePreEvent(db, table, AlterTableKind.Stats))
+    postToAll(AlterTablePreEvent(db, table, AlterTableKind.STATS))
     doAlterTableStats(db, table, stats)
-    postToAll(AlterTableEvent(db, table, AlterTableKind.Stats))
+    postToAll(AlterTableEvent(db, table, AlterTableKind.STATS))
   }
 
   protected def doAlterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
