@@ -29,7 +29,7 @@ class CachedColumnarRDD(
     expectedStorageLevel: StorageLevel)
   extends RDD[CachedBatch](_sc, Seq(new OneToOneDependency(dataRDD))) {
 
-  override def compute(split: Partition, context: TaskContext): Iterator[AnyRef] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[CachedBatch] = {
     if (containsPartitionMetadata) {
       val parentIterator = dataRDD.iterator(split, context)
       if (!parentIterator.hasNext) {
@@ -48,7 +48,7 @@ class CachedColumnarRDD(
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   override private[spark] def getOrCompute(split: Partition, context: TaskContext):
-      Iterator[AnyRef] = {
+      Iterator[CachedBatch] = {
     val metadataBlockId = RDDPartitionMetadataBlockId(id, split.index)
     val superGetOrCompute: (Partition, TaskContext) => Iterator[CachedBatch] = super.getOrCompute
     SparkEnv.get.blockManager.getSingle[InternalRow](metadataBlockId).map(metadataBlock =>
