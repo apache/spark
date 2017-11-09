@@ -101,7 +101,8 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
   private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
 
-  private val retainedStages = conf.getInt("spark.ui.retainedStages", 1000)
+  private val retainedStages = conf.getInt("spark.ui.retainedStages",
+    SparkUI.DEFAULT_RETAINED_STAGES)
 
   private val activeExecutions = mutable.HashMap[Long, SQLExecutionUIData]()
 
