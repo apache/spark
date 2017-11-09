@@ -218,8 +218,7 @@ def _create_batch(series):
     Create an Arrow record batch from the given pandas.Series or list of Series, with optional type.
 
     :param series: A single pandas.Series, list of Series, or list of (series, arrow_type)
-    :param copy: Option to make a copy of the series before performing any type casts
-    :return: ArrowRecordBatch
+    :return: Arrow RecordBatch
     """
 
     from pyspark.sql.types import _check_series_convert_timestamps_internal
