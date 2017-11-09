@@ -943,6 +943,18 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     outputTimestampType = SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS)
 
+  testSchema(
+    "Timestamp written and read as INT64 with TIMESTAMP_MICROS",
+    StructType(Seq(StructField("f1", TimestampType))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP_MICROS);
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = false,
+    writeLegacyParquetFormat = true,
+    outputTimestampType = SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
+
   private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
