@@ -257,7 +257,7 @@ class Catalog(object):
         [Row(stringLengthInt(test)=4)]
         """
         udf = UserDefinedFunction(f, returnType=returnType, name=name,
-                                  udfType=PythonEvalType.SQL_BATCHED_UDF)
+                                  evalType=PythonEvalType.SQL_BATCHED_UDF)
         self._jsparkSession.udf().registerPython(name, udf._judf)
         return udf._wrapped()
 

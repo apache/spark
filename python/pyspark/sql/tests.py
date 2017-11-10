@@ -3175,19 +3175,19 @@ class PandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(udf.returnType, DoubleType())
         self.assertEquals(udf.evalType, PythonEvalType.PANDAS_SCALAR_UDF)
 
-        udf = pandas_udf(lambda x: x, DoubleType(), PandasUDFType.GROUP_FLATMAP)
+        udf = pandas_udf(lambda x: x, DoubleType(), PandasUDFType.GROUP_MAP)
         self.assertEquals(udf.returnType, DoubleType())
-        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_GROUP_MAP_UDF)
 
         udf = pandas_udf(lambda x: x, DoubleType(),
-                         functionType=PandasUDFType.GROUP_FLATMAP)
+                         functionType=PandasUDFType.GROUP_MAP)
         self.assertEquals(udf.returnType, DoubleType())
-        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_GROUP_MAP_UDF)
 
         udf = pandas_udf(lambda x: x, returnType=DoubleType(),
-                         functionType=PandasUDFType.GROUP_FLATMAP)
+                         functionType=PandasUDFType.GROUP_MAP)
         self.assertEquals(udf.returnType, DoubleType())
-        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_GROUP_MAP_UDF)
 
     def test_pandas_udf_decorator(self):
         from pyspark.rdd import PythonEvalType
@@ -3208,23 +3208,23 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         schema = StructType([StructField("v", DoubleType())])
 
-        @pandas_udf(schema, PandasUDFType.GROUP_FLATMAP)
+        @pandas_udf(schema, PandasUDFType.GROUP_MAP)
         def foo(x):
             return x
         self.assertEquals(foo.returnType, schema)
-        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_GROUP_MAP_UDF)
 
-        @pandas_udf(schema, functionType=PandasUDFType.GROUP_FLATMAP)
+        @pandas_udf(schema, functionType=PandasUDFType.GROUP_MAP)
         def foo(x):
             return x
         self.assertEquals(foo.returnType, schema)
-        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_GROUP_MAP_UDF)
 
-        @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUP_FLATMAP)
+        @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUP_MAP)
         def foo(x):
             return x
         self.assertEquals(foo.returnType, schema)
-        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_GROUP_MAP_UDF)
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
@@ -3558,7 +3558,7 @@ class GroupbyApplyTests(ReusedSQLTestCase):
             .withColumn("v", explode(col('vs'))).drop('vs')
 
     def test_simple(self):
-        from pyspark.sql.functions import pandas_udf, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         foo_udf = pandas_udf(
@@ -3568,7 +3568,7 @@ class GroupbyApplyTests(ReusedSQLTestCase):
                  StructField('v', IntegerType()),
                  StructField('v1', DoubleType()),
                  StructField('v2', LongType())]),
-            PandasUdfType.GROUP_FLATMAP
+            PandasUDFType.GROUP_MAP
         )
 
         result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
@@ -3576,12 +3576,12 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_decorator(self):
-        from pyspark.sql.functions import pandas_udf, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         @pandas_udf(
             'id long, v int, v1 double, v2 long',
-            PandasUdfType.GROUP_FLATMAP
+            PandasUDFType.GROUP_MAP
         )
         def foo(pdf):
             return pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id)
@@ -3591,13 +3591,13 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_coerce(self):
-        from pyspark.sql.functions import pandas_udf, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         foo = pandas_udf(
             lambda pdf: pdf,
             'id long, v double',
-            PandasUdfType.GROUP_FLATMAP
+            PandasUDFType.GROUP_MAP
         )
 
         result = df.groupby('id').apply(foo).sort('id').toPandas()
@@ -3606,12 +3606,12 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_complex_groupby(self):
-        from pyspark.sql.functions import pandas_udf, col, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, col, PandasUDFType
         df = self.data
 
         @pandas_udf(
             'id long, v int, norm double',
-            PandasUdfType.GROUP_FLATMAP
+            PandasUDFType.GROUP_MAP
         )
         def normalize(pdf):
             v = pdf.v
@@ -3625,12 +3625,12 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_empty_groupby(self):
-        from pyspark.sql.functions import pandas_udf, col, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, col, PandasUDFType
         df = self.data
 
         @pandas_udf(
             'id long, v int, norm double',
-            PandasUdfType.GROUP_FLATMAP
+            PandasUDFType.GROUP_MAP
         )
         def normalize(pdf):
             v = pdf.v
@@ -3644,13 +3644,13 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_datatype_string(self):
-        from pyspark.sql.functions import pandas_udf, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         foo_udf = pandas_udf(
             lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
             'id long, v int, v1 double, v2 long',
-            PandasUdfType.GROUP_FLATMAP
+            PandasUDFType.GROUP_MAP
         )
 
         result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
@@ -3658,13 +3658,13 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_wrong_return_type(self):
-        from pyspark.sql.functions import pandas_udf, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         foo = pandas_udf(
             lambda pdf: pdf,
             'id long, v string',
-            PandasUdfType.GROUP_FLATMAP
+            PandasUDFType.GROUP_MAP
         )
 
         with QuietTest(self.sc):
@@ -3672,7 +3672,7 @@ class GroupbyApplyTests(ReusedSQLTestCase):
                 df.groupby('id').apply(foo).sort('id').toPandas()
 
     def test_wrong_args(self):
-        from pyspark.sql.functions import udf, pandas_udf, sum, PandasUdfType
+        from pyspark.sql.functions import udf, pandas_udf, sum, PandasUDFType
         df = self.data
 
         with QuietTest(self.sc):
@@ -3693,14 +3693,14 @@ class GroupbyApplyTests(ReusedSQLTestCase):
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(
                     pandas_udf(lambda x, y: x, StructType([StructField("d", DoubleType())]),
-                               PandasUdfType.SCALAR))
+                               PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
-        from pyspark.sql.functions import pandas_udf, col, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, col, PandasUDFType
         schema = StructType(
             [StructField("id", LongType(), True), StructField("dt", DecimalType(), True)])
         df = self.spark.createDataFrame([(1, None,)], schema=schema)
-        f = pandas_udf(lambda x: x, df.schema, PandasUdfType.GROUP_FLATMAP)
+        f = pandas_udf(lambda x: x, df.schema, PandasUDFType.GROUP_MAP)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
                 df.groupby('id').apply(f).collect()

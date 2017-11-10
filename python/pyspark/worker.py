@@ -104,7 +104,7 @@ def read_single_udf(pickleSer, infile, eval_type):
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.PANDAS_SCALAR_UDF:
         return arg_offsets, wrap_pandas_udf(row_func, return_type)
-    elif eval_type == PythonEvalType.PANDAS_GROUP_FLATMAP_UDF:
+    elif eval_type == PythonEvalType.PANDAS_GROUP_MAP_UDF:
         # a groupby apply udf has already been wrapped under apply()
         return arg_offsets, row_func
     else:
@@ -130,7 +130,7 @@ def read_udfs(pickleSer, infile, eval_type):
     func = lambda _, it: map(mapper, it)
 
     if eval_type == PythonEvalType.PANDAS_SCALAR_UDF \
-       or eval_type == PythonEvalType.PANDAS_GROUP_FLATMAP_UDF:
+       or eval_type == PythonEvalType.PANDAS_GROUP_MAP_UDF:
         ser = ArrowStreamPandasSerializer()
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)

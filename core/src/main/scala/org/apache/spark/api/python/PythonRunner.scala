@@ -39,8 +39,6 @@ private[spark] object PythonEvalType {
 
   val PANDAS_SCALAR_UDF = 200
   val PANDAS_GROUP_MAP_UDF = 201
-  val PANDAS_GROUP_AGGREGATE_UDF = 202
-  val PANDAS_GROUP_FLATMAP_UDF = 203
 }
 
 /**

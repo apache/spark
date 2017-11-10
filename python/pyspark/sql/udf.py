@@ -32,8 +32,8 @@ def _wrap_function(sc, func, returnType):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
-def _create_udf(f, *, returnType, evalType):
-    if evalType in (PythonEvalType.PANDAS_SCALAR_UDF, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF):
+def _create_udf(f, returnType, evalType):
+    if evalType in (PythonEvalType.PANDAS_SCALAR_UDF, PythonEvalType.PANDAS_GROUP_MAP_UDF):
         import inspect
         argspec = inspect.getargspec(f)
         if len(argspec.args) == 0 and argspec.varargs is None:

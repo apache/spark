@@ -68,8 +68,6 @@ class PythonEvalType(object):
 
     PANDAS_SCALAR_UDF = 200
     PANDAS_GROUP_MAP_UDF = 201
-    PANDAS_GROUP_AGGREGATE_UDF = 202
-    PANDAS_GROUP_FLATMAP_UDF = 203
 
 
 def portable_hash(x):

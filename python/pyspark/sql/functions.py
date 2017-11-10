@@ -2055,7 +2055,6 @@ class PandasUDFType(enum.Enum):
     """Pandas UDF
 
     """
-
     SCALAR = PythonEvalType.PANDAS_SCALAR_UDF
 
     GROUP_MAP = PythonEvalType.PANDAS_GROUP_MAP_UDF

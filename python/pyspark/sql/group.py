@@ -214,11 +214,11 @@ class GroupedData(object):
 
         :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
 
-        >>> from pyspark.sql.functions import pandas_udf, PandasUdfType
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
-        >>> @pandas_udf(returnType=df.schema, functionType=PandasUdfType.GROUP_FLATMAP)
+        >>> @pandas_udf(returnType=df.schema, functionType=PandasUDFType.GROUP_MAP)
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
@@ -239,9 +239,9 @@ class GroupedData(object):
 
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
-           or udf.udfType != PythonEvalType.PANDAS_GROUP_FLATMAP_UDF:
+           or udf.evalType != PythonEvalType.PANDAS_GROUP_MAP_UDF:
             raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "`GROUP_FLATMAP`.")
+                             "`GROUP_MAP`.")
         if not isinstance(udf.returnType, StructType):
             raise ValueError("Invalid returnType: The returnType of the udf must be a StructType")
 
@@ -271,7 +271,7 @@ class GroupedData(object):
                     for i, arrow_type in enumerate(arrow_return_types)]
 
         udf_obj = UserDefinedFunction(
-            wrapped, returnType=returnType, name=udf.__name__, udfType=udf.udfType)
+            wrapped, returnType=returnType, name=udf.__name__, evalType=udf.evalType)
         udf_column = udf_obj(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
