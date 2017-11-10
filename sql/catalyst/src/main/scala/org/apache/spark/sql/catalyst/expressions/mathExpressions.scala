@@ -1044,7 +1044,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
     dataType match {
       case DecimalType.Fixed(_, s) =>
         val decimal = input1.asInstanceOf[Decimal]
-        decimal.toPrecision(decimal.precision, s, mode).orNull
+        decimal.toPrecision(decimal.precision, s, mode)
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType =>
@@ -1076,12 +1076,8 @@ abstract class RoundBase(child: Expression, scale: Expression,
     val evaluationCode = dataType match {
       case DecimalType.Fixed(_, s) =>
         s"""
-        if (${ce.value}.changePrecision(${ce.value}.precision(), ${s},
-            java.math.BigDecimal.${modeStr})) {
-          ${ev.value} = ${ce.value};
-        } else {
-          ${ev.isNull} = true;
-        }"""
+        ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s, Decimal.$modeStr());
+        ${ev.isNull} = ${ev.value} == null;"""
       case ByteType =>
         if (_scale < 0) {
           s"""

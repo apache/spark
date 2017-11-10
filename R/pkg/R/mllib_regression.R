@@ -58,8 +58,8 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'               Note that there are two ways to specify the tweedie family.
 #'               \itemize{
 #'                \item Set \code{family = "tweedie"} and specify the var.power and link.power;
-#'                \item When package \code{statmod} is loaded, the tweedie family is specified using the
-#'                family definition therein, i.e., \code{tweedie(var.power, link.power)}.
+#'                \item When package \code{statmod} is loaded, the tweedie family is specified
+#'                using the family definition therein, i.e., \code{tweedie(var.power, link.power)}.
 #'               }
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
@@ -71,13 +71,15 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'                      applicable to the Tweedie family.
 #' @param link.power the index in the power link function. Only applicable to the Tweedie family.
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
-#'                               decide the base level of a string feature as the last category after
-#'                               ordering is dropped when encoding strings. Supported options are
-#'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
-#'                               The default value is "frequencyDesc". When the ordering is set to
-#'                               "alphabetDesc", this drops the same category as R when encoding strings.
-#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
-#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
+#'                               decide the base level of a string feature as the last category
+#'                               after ordering is dropped when encoding strings. Supported options
+#'                               are "frequencyDesc", "frequencyAsc", "alphabetDesc", and
+#'                               "alphabetAsc". The default value is "frequencyDesc". When the
+#'                               ordering is set to "alphabetDesc", this drops the same category
+#'                               as R when encoding strings.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance
+#'                  offsets as 0.0. The feature specified as offset has a constant coefficient of
+#'                  1.0.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model.
@@ -197,15 +199,18 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @param var.power the index of the power variance function in the Tweedie family.
 #' @param link.power the index of the power link function in the Tweedie family.
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
-#'                               decide the base level of a string feature as the last category after
-#'                               ordering is dropped when encoding strings. Supported options are
-#'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
-#'                               The default value is "frequencyDesc". When the ordering is set to
-#'                               "alphabetDesc", this drops the same category as R when encoding strings.
-#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
-#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
+#'                               decide the base level of a string feature as the last category
+#'                               after ordering is dropped when encoding strings. Supported options
+#'                               are "frequencyDesc", "frequencyAsc", "alphabetDesc", and
+#'                               "alphabetAsc". The default value is "frequencyDesc". When the
+#'                               ordering is set to "alphabetDesc", this drops the same category
+#'                               as R when encoding strings.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance
+#'                  offsets as 0.0. The feature specified as offset has a constant coefficient of
+#'                  1.0.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
+#' @aliases glm
 #' @export
 #' @examples
 #' \dontrun{
@@ -233,11 +238,11 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 
 #' @param object a fitted generalized linear model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list of components includes at least the \code{coefficients} (coefficients matrix, which includes
-#'         coefficients, standard error of coefficients, t value and p value),
+#'         The list of components includes at least the \code{coefficients} (coefficients matrix,
+#'         which includes coefficients, standard error of coefficients, t value and p value),
 #'         \code{null.deviance} (null/residual degrees of freedom), \code{aic} (AIC)
-#'         and \code{iter} (number of iterations IRLS takes). If there are collinear columns in the data,
-#'         the coefficients matrix only provides coefficients.
+#'         and \code{iter} (number of iterations IRLS takes). If there are collinear columns in
+#'         the data, the coefficients matrix only provides coefficients.
 #' @rdname spark.glm
 #' @export
 #' @note summary(GeneralizedLinearRegressionModel) since 2.0.0
@@ -457,15 +462,17 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', ':', '+', and '-'.
 #'                Note that operator '.' is not supported currently.
-#' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
-#'                         or the number of partitions are large, this param could be adjusted to a larger size.
-#'                         This is an expert parameter. Default value should be good for most cases.
+#' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the
+#'                         dimensions of features or the number of partitions are large, this
+#'                         param could be adjusted to a larger size. This is an expert parameter.
+#'                         Default value should be good for most cases.
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
-#'                               decide the base level of a string feature as the last category after
-#'                               ordering is dropped when encoding strings. Supported options are
-#'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
-#'                               The default value is "frequencyDesc". When the ordering is set to
-#'                               "alphabetDesc", this drops the same category as R when encoding strings.
+#'                               decide the base level of a string feature as the last category
+#'                               after ordering is dropped when encoding strings. Supported options
+#'                               are "frequencyDesc", "frequencyAsc", "alphabetDesc", and
+#'                               "alphabetAsc". The default value is "frequencyDesc". When the
+#'                               ordering is set to "alphabetDesc", this drops the same category
+#'                               as R when encoding strings.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg

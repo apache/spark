@@ -47,7 +47,7 @@ abstract class LogicalPlan
    */
   def analyzed: Boolean = _analyzed
 
-  /** Returns true if this subtree contains any streaming data sources. */
+  /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true)
 
   /**
@@ -96,6 +96,11 @@ abstract class LogicalPlan
    * Any operator that can push through a Limit should override this function (e.g., Project).
    */
   def maxRows: Option[Long] = None
+
+  /**
+   * Returns the maximum number of rows this plan may compute on each partition.
+   */
+  def maxRowsPerPartition: Option[Long] = maxRows
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
@@ -297,7 +302,6 @@ abstract class UnaryNode extends LogicalPlan {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
         })
-        allConstraints += EqualNullSafe(e, a.toAttribute)
       case _ => // Don't change.
     }
 

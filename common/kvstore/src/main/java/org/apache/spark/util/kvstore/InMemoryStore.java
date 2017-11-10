@@ -171,7 +171,7 @@ public class InMemoryStore implements KVStore {
     public <T> InMemoryView<T> view(Class<T> type) {
       Preconditions.checkArgument(ti.type().equals(type), "Unexpected type: %s", type);
       Collection<T> all = (Collection<T>) data.values();
-      return new InMemoryView(type, all, ti);
+      return new InMemoryView<>(type, all, ti);
     }
 
   }

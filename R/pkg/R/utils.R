@@ -625,7 +625,7 @@ appendPartitionLengths <- function(x, other) {
     x <- lapplyPartition(x, appendLength)
     other <- lapplyPartition(other, appendLength)
   }
-  list (x, other)
+  list(x, other)
 }
 
 # Perform zip or cartesian between elements from two RDDs in each partition
@@ -657,7 +657,7 @@ mergePartitions <- function(rdd, zip) {
           keys <- list()
         }
         if (lengthOfValues > 1) {
-          values <- part[ (lengthOfKeys + 1) : (len - 1) ]
+          values <- part[(lengthOfKeys + 1) : (len - 1)]
         } else {
           values <- list()
         }
@@ -734,15 +734,6 @@ assignNewEnv <- function(data) {
 # Utility function to split by ',' and whitespace, remove empty tokens
 splitString <- function(input) {
   Filter(nzchar, unlist(strsplit(input, ",|\\s")))
-}
-
-convertToJSaveMode <- function(mode) {
- allModes <- c("append", "overwrite", "error", "ignore")
- if (!(mode %in% allModes)) {
-   stop('mode should be one of "append", "overwrite", "error", "ignore"')  # nolint
- }
- jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
- jmode
 }
 
 varargsToJProperties <- function(...) {

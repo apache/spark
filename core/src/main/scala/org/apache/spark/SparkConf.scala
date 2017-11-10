@@ -597,7 +597,9 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
         "Please use the new blacklisting options, spark.blacklist.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used any more"),
-      DeprecatedConfig("spark.executor.port", "2.0.0", "Not used any more")
+      DeprecatedConfig("spark.executor.port", "2.0.0", "Not used any more"),
+      DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
+        "Not used any more. Please use spark.shuffle.service.index.cache.size")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -660,7 +662,9 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
     "spark.yarn.access.hadoopFileSystems" -> Seq(
-      AlternateConfig("spark.yarn.access.namenodes", "2.2"))
+      AlternateConfig("spark.yarn.access.namenodes", "2.2")),
+    "spark.maxRemoteBlockSizeFetchToMem" -> Seq(
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3"))
   )
 
   /**
