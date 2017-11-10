@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -349,4 +349,9 @@ class ScalaReflectionSuite extends SparkFunSuite {
           }
         }
     }
+
+  test("SPARK-22472: add null check for top-level primitive values") {
+    assert(deserializerFor[Int].isInstanceOf[AssertNotNull])
+    assert(!deserializerFor[String].isInstanceOf[AssertNotNull])
+  }
 }

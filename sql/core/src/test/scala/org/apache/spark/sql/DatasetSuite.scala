@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -1209,6 +1210,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.orderBy(col("id")), expected)
     checkAnswer(df.orderBy($"id"), expected)
     checkAnswer(df.orderBy('id), expected)
+  }
+
+  test("SPARK-22472: add null check for top-level primitive values") {
+    // If the primitive values are from Option, we need to do runtime null check.
+    val ds = Seq(Some(1), None).toDS().as[Int]
+    intercept[NullPointerException](ds.collect())
+    val e = intercept[SparkException](ds.map(_ * 2).collect())
+    assert(e.getCause.isInstanceOf[NullPointerException])
+
+    withTempPath { path =>
+      Seq(new Integer(1), null).toDF("i").write.parquet(path.getCanonicalPath)
+      // If the primitive values are from files, we need to do runtime null check.
+      val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
+      intercept[NullPointerException](ds.collect())
+      val e = intercept[SparkException](ds.map(_ * 2).collect())
+      assert(e.getCause.isInstanceOf[NullPointerException])
+    }
   }
 }
 

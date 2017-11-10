@@ -133,7 +133,13 @@ object ScalaReflection extends ScalaReflection {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
-    deserializerFor(tpe, None, walkedTypePath)
+    val expr = deserializerFor(tpe, None, walkedTypePath)
+    val Schema(_, nullable) = schemaFor(tpe)
+    if (nullable) {
+      expr
+    } else {
+      AssertNotNull(expr, walkedTypePath)
+    }
   }
 
   private def deserializerFor(
