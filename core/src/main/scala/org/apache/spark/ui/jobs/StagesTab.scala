@@ -20,19 +20,22 @@ package org.apache.spark.ui.jobs
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.scheduler.SchedulingMode
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils}
 
 /** Web UI showing progress status of all stages in the given SparkContext. */
-private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages") {
+private[ui] class StagesTab(val parent: SparkUI, store: AppStatusStore)
+  extends SparkUITab(parent, "stages") {
+
   val sc = parent.sc
   val conf = parent.conf
   val killEnabled = parent.killEnabled
   val progressListener = parent.jobProgressListener
   val operationGraphListener = parent.operationGraphListener
-  val executorsListener = parent.executorsListener
+  val lastUpdateTime = parent.lastUpdateTime
 
   attachPage(new AllStagesPage(this))
-  attachPage(new StagePage(this))
+  attachPage(new StagePage(this, store))
   attachPage(new PoolPage(this))
 
   def isFairScheduler: Boolean = progressListener.schedulingMode == Some(SchedulingMode.FAIR)

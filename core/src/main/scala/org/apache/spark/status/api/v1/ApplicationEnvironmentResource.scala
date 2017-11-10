@@ -26,20 +26,7 @@ private[v1] class ApplicationEnvironmentResource(ui: SparkUI) {
 
   @GET
   def getEnvironmentInfo(): ApplicationEnvironmentInfo = {
-    val listener = ui.environmentListener
-    listener.synchronized {
-      val jvmInfo = Map(listener.jvmInformation: _*)
-      val runtime = new RuntimeInfo(
-        jvmInfo("Java Version"),
-        jvmInfo("Java Home"),
-        jvmInfo("Scala Version"))
-
-      new ApplicationEnvironmentInfo(
-        runtime,
-        listener.sparkProperties,
-        listener.systemProperties,
-        listener.classpathEntries)
-    }
+    ui.store.environmentInfo()
   }
 
 }

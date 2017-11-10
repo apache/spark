@@ -1203,4 +1203,46 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .csv(Seq("a").toDS())
     checkAnswer(df, Row("a", null, "a"))
   }
+
+  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
+    "from a file") {
+    val columnNameOfCorruptRecord = "_corrupt_record"
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", TimestampType)
+      .add(columnNameOfCorruptRecord, StringType)
+    // negative cases
+    val msg = intercept[AnalysisException] {
+      spark
+        .read
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .csv(testFile(valueMalformedFile))
+        .select(columnNameOfCorruptRecord)
+        .collect()
+    }.getMessage
+    assert(msg.contains("only include the internal corrupt record column"))
+    intercept[org.apache.spark.sql.catalyst.errors.TreeNodeException[_]] {
+      spark
+        .read
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .csv(testFile(valueMalformedFile))
+        .filter($"_corrupt_record".isNotNull)
+        .count()
+    }
+    // workaround
+    val df = spark
+      .read
+      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+      .schema(schema)
+      .csv(testFile(valueMalformedFile))
+      .cache()
+    assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
+    assert(df.filter($"_corrupt_record".isNull).count() == 1)
+    checkAnswer(
+      df.select(columnNameOfCorruptRecord),
+      Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
+    )
+  }
 }

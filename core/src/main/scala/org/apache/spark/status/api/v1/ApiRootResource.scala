@@ -248,7 +248,13 @@ private[spark] object ApiRootResource {
  * interface needed for them all to expose application info as json.
  */
 private[spark] trait UIRoot {
-  def getSparkUI(appKey: String): Option[SparkUI]
+  /**
+   * Runs some code with the current SparkUI instance for the app / attempt.
+   *
+   * @throws NoSuchElementException If the app / attempt pair does not exist.
+   */
+  def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T
+
   def getApplicationInfoList: Iterator[ApplicationInfo]
   def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
@@ -293,15 +299,18 @@ private[v1] trait ApiRequestContext {
    * to it.  If there is no such app, throw an appropriate exception
    */
   def withSparkUI[T](appId: String, attemptId: Option[String])(f: SparkUI => T): T = {
-    val appKey = attemptId.map(appId + "/" + _).getOrElse(appId)
-    uiRoot.getSparkUI(appKey) match {
-      case Some(ui) =>
+    try {
+      uiRoot.withSparkUI(appId, attemptId) { ui =>
         val user = httpRequest.getRemoteUser()
         if (!ui.securityManager.checkUIViewPermissions(user)) {
           throw new ForbiddenException(raw"""user "$user" is not authorized""")
         }
         f(ui)
-      case None => throw new NotFoundException("no such app: " + appId)
+      }
+    } catch {
+      case _: NoSuchElementException =>
+        val appKey = attemptId.map(appId + "/" + _).getOrElse(appId)
+        throw new NotFoundException(s"no such app: $appKey")
     }
   }
 }

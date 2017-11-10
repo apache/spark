@@ -29,18 +29,17 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui._
-import org.apache.spark.ui.exec.ExecutorsListener
 import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Distribution, Utils}
 
 /** Page showing statistics and task list for a given stage */
-private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
+private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends WebUIPage("stage") {
   import StagePage._
 
   private val progressListener = parent.progressListener
   private val operationGraphListener = parent.operationGraphListener
-  private val executorsListener = parent.executorsListener
 
   private val TIMELINE_LEGEND = {
     <div class="legend-area">
@@ -299,11 +298,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           stageData.hasShuffleRead,
           stageData.hasShuffleWrite,
           stageData.hasBytesSpilled,
+          parent.lastUpdateTime,
           currentTime,
           pageSize = taskPageSize,
           sortColumn = taskSortColumn,
           desc = taskSortDesc,
-          executorsListener = executorsListener
+          store = store
         )
         (_taskTable, _taskTable.table(page))
       } catch {
@@ -562,7 +562,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             stripeRowsWithCss = false))
         }
 
-      val executorTable = new ExecutorTable(stageId, stageAttemptId, parent)
+      val executorTable = new ExecutorTable(stageId, stageAttemptId, parent, store)
 
       val maybeAccumulableTable: Seq[Node] =
         if (hasAccumulators) { <h4>Accumulators</h4> ++ accumulableTable } else Seq.empty
@@ -863,11 +863,12 @@ private[ui] class TaskDataSource(
     hasShuffleRead: Boolean,
     hasShuffleWrite: Boolean,
     hasBytesSpilled: Boolean,
+    lastUpdateTime: Option[Long],
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
-    executorsListener: ExecutorsListener) extends PagedDataSource[TaskTableRowData](pageSize) {
+    store: AppStatusStore) extends PagedDataSource[TaskTableRowData](pageSize) {
   import StagePage._
 
   // Convert TaskUIData to TaskTableRowData which contains the final contents to show in the table
@@ -889,8 +890,9 @@ private[ui] class TaskDataSource(
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
     val info = taskData.taskInfo
     val metrics = taskData.metrics
-    val duration = taskData.taskDuration.getOrElse(1L)
-    val formatDuration = taskData.taskDuration.map(d => UIUtils.formatDuration(d)).getOrElse("")
+    val duration = taskData.taskDuration(lastUpdateTime).getOrElse(1L)
+    val formatDuration =
+      taskData.taskDuration(lastUpdateTime).map(d => UIUtils.formatDuration(d)).getOrElse("")
     val schedulerDelay = metrics.map(getSchedulerDelay(info, _, currentTime)).getOrElse(0L)
     val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
     val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
@@ -1009,8 +1011,7 @@ private[ui] class TaskDataSource(
         None
       }
 
-    val logs = executorsListener.executorToTaskSummary.get(info.executorId)
-      .map(_.executorLogs).getOrElse(Map.empty)
+    val logs = store.executorSummary(info.executorId).map(_.executorLogs).getOrElse(Map.empty)
     new TaskTableRowData(
       info.index,
       info.taskId,
@@ -1154,11 +1155,12 @@ private[ui] class TaskPagedTable(
     hasShuffleRead: Boolean,
     hasShuffleWrite: Boolean,
     hasBytesSpilled: Boolean,
+    lastUpdateTime: Option[Long],
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
-    executorsListener: ExecutorsListener) extends PagedTable[TaskTableRowData] {
+    store: AppStatusStore) extends PagedTable[TaskTableRowData] {
 
   override def tableId: String = "task-table"
 
@@ -1179,11 +1181,12 @@ private[ui] class TaskPagedTable(
     hasShuffleRead,
     hasShuffleWrite,
     hasBytesSpilled,
+    lastUpdateTime,
     currentTime,
     pageSize,
     sortColumn,
     desc,
-    executorsListener)
+    store)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")

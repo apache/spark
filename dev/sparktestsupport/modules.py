@@ -249,6 +249,12 @@ streaming_kafka = Module(
         "external/kafka-0-8",
         "external/kafka-0-8-assembly",
     ],
+    build_profile_flags=[
+        "-Pkafka-0-8",
+    ],
+    environ={
+        "ENABLE_KAFKA_0_8_TESTS": "1"
+    },
     sbt_test_goals=[
         "streaming-kafka-0-8/test",
     ]
@@ -273,6 +279,12 @@ streaming_flume_sink = Module(
     source_file_regexes=[
         "external/flume-sink",
     ],
+    build_profile_flags=[
+        "-Pflume",
+    ],
+    environ={
+        "ENABLE_FLUME_TESTS": "1"
+    },
     sbt_test_goals=[
         "streaming-flume-sink/test",
     ]
@@ -285,6 +297,12 @@ streaming_flume = Module(
     source_file_regexes=[
         "external/flume",
     ],
+    build_profile_flags=[
+        "-Pflume",
+    ],
+    environ={
+        "ENABLE_FLUME_TESTS": "1"
+    },
     sbt_test_goals=[
         "streaming-flume/test",
     ]
@@ -296,7 +314,13 @@ streaming_flume_assembly = Module(
     dependencies=[streaming_flume, streaming_flume_sink],
     source_file_regexes=[
         "external/flume-assembly",
-    ]
+    ],
+    build_profile_flags=[
+        "-Pflume",
+    ],
+    environ={
+        "ENABLE_FLUME_TESTS": "1"
+    }
 )
 
 

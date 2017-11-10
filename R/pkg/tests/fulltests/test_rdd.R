@@ -698,14 +698,14 @@ test_that("fullOuterJoin() on pairwise RDDs", {
 })
 
 test_that("sortByKey() on pairwise RDDs", {
-  numPairsRdd <- map(rdd, function(x) { list (x, x) })
+  numPairsRdd <- map(rdd, function(x) { list(x, x) })
   sortedRdd <- sortByKey(numPairsRdd, ascending = FALSE)
   actual <- collectRDD(sortedRdd)
-  numPairs <- lapply(nums, function(x) { list (x, x) })
+  numPairs <- lapply(nums, function(x) { list(x, x) })
   expect_equal(actual, sortKeyValueList(numPairs, decreasing = TRUE))
 
   rdd2 <- parallelize(sc, sort(nums, decreasing = TRUE), 2L)
-  numPairsRdd2 <- map(rdd2, function(x) { list (x, x) })
+  numPairsRdd2 <- map(rdd2, function(x) { list(x, x) })
   sortedRdd2 <- sortByKey(numPairsRdd2)
   actual <- collectRDD(sortedRdd2)
   expect_equal(actual, numPairs)

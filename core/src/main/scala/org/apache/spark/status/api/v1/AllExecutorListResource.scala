@@ -20,22 +20,11 @@ import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.ui.exec.ExecutorsPage
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AllExecutorListResource(ui: SparkUI) {
 
   @GET
-  def executorList(): Seq[ExecutorSummary] = {
-    val listener = ui.executorsListener
-    listener.synchronized {
-      // The follow codes should be protected by `listener` to make sure no executors will be
-      // removed before we query their status. See SPARK-12784.
-      (0 until listener.activeStorageStatusList.size).map { statusId =>
-        ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
-      } ++ (0 until listener.deadStorageStatusList.size).map { statusId =>
-        ExecutorsPage.getExecInfo(listener, statusId, isActive = false)
-      }
-    }
-  }
+  def executorList(): Seq[ExecutorSummary] = ui.store.executorList(false)
+
 }

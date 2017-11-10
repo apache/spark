@@ -23,9 +23,9 @@ import java.sql.{Date, Timestamp}
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -83,6 +83,16 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   def getCatalogTable(tableName: String): CatalogTable = {
     spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+  }
+
+  def getTableFromCatalogCache(tableName: String): LogicalPlan = {
+    val catalog = spark.sessionState.catalog
+    val qualifiedTableName = QualifiedTableName(catalog.getCurrentDatabase, tableName)
+    catalog.getCachedTable(qualifiedTableName)
+  }
+
+  def isTableInCatalogCache(tableName: String): Boolean = {
+    getTableFromCatalogCache(tableName) != null
   }
 
   def getCatalogStatistics(tableName: String): CatalogStatistics = {
