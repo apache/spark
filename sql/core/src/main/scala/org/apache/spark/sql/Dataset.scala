@@ -2580,12 +2580,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def foreach(f: T => Unit): Unit = {
-    // Because we directly evaluate on the RDD rather than the Dataset, we should bind
-    // the new execution id to the `QueryExecution` of RDD.
-    SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
-      rddQueryExecution.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
+    withNewRDDExecutionId {
       rdd.foreach(f)
     }
   }
@@ -2606,12 +2601,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def foreachPartition(f: Iterator[T] => Unit): Unit = {
-    // Because we directly evaluate on the RDD rather than the Dataset, we should bind
-    // the new execution id to the `QueryExecution` of RDD.
-    SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
-      rddQueryExecution.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
+    withNewRDDExecutionId {
       rdd.foreachPartition(f)
     }
   }
@@ -3115,6 +3105,20 @@ class Dataset[T] private[sql](
    */
   private def withNewExecutionId[U](body: => U): U = {
     SQLExecution.withNewExecutionId(sparkSession, queryExecution)(body)
+  }
+
+  /**
+   * Wrap an action of the Dataset's RDD to track all Spark jobs in the body so that we can connect
+   * them with an execution. Before performing the action, the metrics of the executed plan will be
+   * reset.
+   */
+  private def withNewRDDExecutionId[U](body: => U): U = {
+    SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
+      rddQueryExecution.executedPlan.foreach { plan =>
+        plan.resetMetrics()
+      }
+      body
+    }
   }
 
   /**
