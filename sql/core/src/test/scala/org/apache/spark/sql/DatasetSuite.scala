@@ -1274,8 +1274,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(spark.range(1).map { x => scala.math.BigDecimal(1, 18) }.head ==
       scala.math.BigDecimal(1, 18))
 
-    assert(spark.range(1).map { x => new java.sql.Date(2016, 12, 12) }.head ==
-      new java.sql.Date(2016, 12, 12))
+    assert(spark.range(1).map { x => java.sql.Date.valueOf("2016-12-12") }.head ==
+      java.sql.Date.valueOf("2016-12-12"))
 
     assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
       new java.sql.Timestamp(100000))
