@@ -142,13 +142,13 @@ class OrcFileFormat
 
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-    val resolver = sparkSession.sessionState.conf.resolver
+    val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
 
       val maybeMissingSchema = OrcUtils.getMissingSchema(
-        resolver, dataSchema, partitionSchema, new Path(new URI(file.filePath)), conf)
+        isCaseSensitive, dataSchema, partitionSchema, new Path(new URI(file.filePath)), conf)
       if (maybeMissingSchema.isEmpty) {
         Iterator.empty
       } else {

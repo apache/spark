@@ -28,7 +28,7 @@ import org.apache.orc.{OrcFile, TypeDescription}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
 
@@ -71,6 +71,7 @@ object OrcUtils extends Logging {
   private[orc] def readSchema(sparkSession: SparkSession, files: Seq[FileStatus])
       : Option[StructType] = {
     val conf = sparkSession.sessionState.newHadoopConf()
+    // TODO: We need to support merge schema. Please see SPARK-11412.
     files.map(_.getPath).flatMap(readSchema(_, conf)).headOption.map { schema =>
       logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
       CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType]
@@ -90,11 +91,12 @@ object OrcUtils extends Logging {
    * Return a missing schema in a give ORC file.
    */
   private[orc] def getMissingSchema(
-      resolver: Resolver,
+      isCaseSensitive: Boolean,
       dataSchema: StructType,
       partitionSchema: StructType,
       file: Path,
       conf: Configuration): Option[StructType] = {
+    val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
     try {
       val fs = file.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
