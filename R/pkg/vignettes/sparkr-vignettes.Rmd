@@ -37,7 +37,7 @@ opts_hooks$set(eval = function(options) {
   options
 })
 r_tmp_dir <- tempdir()
-tmp_arg <- paste("-Djava.io.tmpdir=", r_tmp_dir, sep = "")
+tmp_arg <- paste0("-Djava.io.tmpdir=", r_tmp_dir)
 sparkSessionConfig <- list(spark.driver.extraJavaOptions = tmp_arg,
                            spark.executor.extraJavaOptions = tmp_arg)
 old_java_opt <- Sys.getenv("_JAVA_OPTIONS")
@@ -1182,4 +1182,8 @@ env | map
 
 ```{r, echo=FALSE}
 sparkR.session.stop()
+```
+
+```{r cleanup, include=FALSE}
+SparkR:::uninstallDownloadedSpark()
 ```
