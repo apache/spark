@@ -559,7 +559,7 @@ private[spark] class MesosClusterScheduler(
       var remainingResources: JList[Resource],
       var attributes: JList[Attribute]) {
     override def toString(): String = {
-      s"Offer id: ${offer.getId}, resources: ${remainingResources}"
+      s"Offer id: ${offer.getId}, resources: ${remainingResources}, attributes: ${attributes}"
     }
   }
 
@@ -603,7 +603,7 @@ private[spark] class MesosClusterScheduler(
       val driverCpu = submission.cores
       val driverMem = submission.mem
       val driverConstraints =
-        parseConstraintString(submission.conf.get("spark.mesos.driver.constraints", ""))
+        parseConstraintString(submission.conf.get(config.DRIVER_CONSTRAINTS))
       logTrace(s"Finding offer to launch driver with cpu: $driverCpu, mem: $driverMem, " +
         s"driverConstraints: $driverConstraints")
       val offerOption = currentOffers.find { offer =>

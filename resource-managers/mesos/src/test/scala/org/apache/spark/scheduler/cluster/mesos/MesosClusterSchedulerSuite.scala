@@ -274,7 +274,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
           command,
           Map("spark.mesos.executor.home" -> "test",
             "spark.app.name" -> "test",
-            "spark.mesos.driver.constraints" -> driverConstraints),
+            config.DRIVER_CONSTRAINTS.key -> driverConstraints),
           "s1",
           new Date()))
       assert(response.success)

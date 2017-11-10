@@ -450,7 +450,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.constraints</code></td>
   <td>(none)</td>
   <td>
-    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos Attributes & Resources</a> for more information on attributes.
+    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. This setting
+    applies only to executors. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos
+    Attributes & Resources</a> for more information on attributes.
     <ul>
       <li>Scalar constraints are matched with "less than equal" semantics i.e. value in the constraint must be less than or equal to the value in the resource offer.</li>
       <li>Range constraints are matched with "contains" semantics i.e. value in the constraint must be within the resource offer's value.</li>
@@ -465,7 +467,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Same as <code>spark.mesos.constraints</code> except applied to drivers when launched through the dispatcher. By default,
-    all resource offers will be accepted.
+    all offers with sufficient resources will be accepted.
   </td>
 </tr>
 <tr>
