@@ -46,7 +46,7 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   tmpDir <- tempdir()
   tmpArg <- paste0("-Djava.io.tmpdir=", tmpDir)
   sparkRTestConfig <- list(spark.driver.extraJavaOptions = tmpArg,
-                            spark.executor.extraJavaOptions = tmpArg)
+                           spark.executor.extraJavaOptions = tmpArg)
 }
 
 test_package("SparkR")
@@ -60,3 +60,5 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
                        NULL,
                        "summary")
 }
+
+SparkR:::uninstallDownloadedSpark()

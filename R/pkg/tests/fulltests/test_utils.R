@@ -228,4 +228,29 @@ test_that("basenameSansExtFromUrl", {
   expect_equal(basenameSansExtFromUrl(z), "spark-2.1.0--hive")
 })
 
+test_that("getOne", {
+  dummy <- getOne(".dummyValue", envir = new.env(), ifnotfound = FALSE)
+  expect_equal(dummy, FALSE)
+})
+
+test_that("traverseParentDirs", {
+  if (is_windows()) {
+    # original path is included as-is, otherwise dirname() replaces \\ with / on windows
+    dirs <- traverseParentDirs("c:\\Users\\user\\AppData\\Local\\Apache\\Spark\\Cache\\spark2.2", 3)
+    expect <- c("c:\\Users\\user\\AppData\\Local\\Apache\\Spark\\Cache\\spark2.2",
+                "c:/Users/user/AppData/Local/Apache/Spark/Cache",
+                "c:/Users/user/AppData/Local/Apache/Spark",
+                "c:/Users/user/AppData/Local/Apache")
+    expect_equal(dirs, expect)
+  } else {
+    dirs <- traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1)
+    expect <- c("/Users/user/Library/Caches/spark/spark2.2", "/Users/user/Library/Caches/spark")
+    expect_equal(dirs, expect)
+
+    dirs <- traverseParentDirs("/home/u/.cache/spark/spark2.2", 1)
+    expect <- c("/home/u/.cache/spark/spark2.2", "/home/u/.cache/spark")
+    expect_equal(dirs, expect)
+  }
+})
+
 sparkR.session.stop()
