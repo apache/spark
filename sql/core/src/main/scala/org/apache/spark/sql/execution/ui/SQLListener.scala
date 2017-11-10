@@ -210,7 +210,7 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
     val extraStages = _stageIdToStageMetrics.size - retainedStages
     if (extraStages > 0) {
       val toRemove = _stageIdToStageMetrics.take(extraStages).keys
