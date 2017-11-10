@@ -240,10 +240,10 @@ class GroupedData(object):
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
            or udf.udfType != PythonEvalType.PANDAS_GROUP_FLATMAP_UDF:
-            raise ValueError('Invalid udf: the udf argument must be a pandas_udf of type '
-                             '`GROUP_FLATMAP`.')
+            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
+                             "`GROUP_FLATMAP`.")
         if not isinstance(udf.returnType, StructType):
-            raise ValueError('Invalid returnType: The returnType of the udf must be a StructType')
+            raise ValueError("Invalid returnType: The returnType of the udf must be a StructType")
 
         df = self._df
         func = udf.func
@@ -259,13 +259,13 @@ class GroupedData(object):
             import pandas as pd
             result = func(pd.concat(cols, axis=1, keys=columns))
             if not isinstance(result, pd.DataFrame):
-                raise TypeError('Return type of the user-defined function should be '
-                                'Pandas.DataFrame, but is {}'.format(type(result)))
+                raise TypeError("Return type of the user-defined function should be "
+                                "pandas.DataFrame, but is {}".format(type(result)))
             if not len(result.columns) == len(returnType):
                 raise RuntimeError(
-                    'Number of columns of the returned Pandas.DataFrame '
-                    'doesn\'t match specified schema. '
-                    'Expected: {} Actual: {}'.format(len(returnType), len(result.columns)))
+                    "Number of columns of the returned pandas.DataFrame "
+                    "doesn't match specified schema. "
+                    "Expected: {} Actual: {}".format(len(returnType), len(result.columns)))
             arrow_return_types = (to_arrow_type(field.dataType) for field in returnType)
             return [(result[result.columns[i]], arrow_type)
                     for i, arrow_type in enumerate(arrow_return_types)]
@@ -283,8 +283,8 @@ def _test():
     import pyspark.sql.group
     globs = pyspark.sql.group.__dict__.copy()
     spark = SparkSession.builder\
-        .master('local[4]')\
-        .appName('sql.group tests')\
+        .master("local[4]")\
+        .appName("sql.group tests")\
         .getOrCreate()
     sc = spark.sparkContext
     globs['sc'] = sc

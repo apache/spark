@@ -3169,62 +3169,62 @@ class ArrowTests(ReusedSQLTestCase):
 class PandasUDFTests(ReusedSQLTestCase):
     def test_pandas_udf_basic(self):
         from pyspark.rdd import PythonEvalType
-        from pyspark.sql.functions import pandas_udf, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         udf = pandas_udf(lambda x: x, DoubleType())
         self.assertEquals(udf.returnType, DoubleType())
-        self.assertEquals(udf.udfType, PythonEvalType.PANDAS_SCALAR_UDF)
+        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_SCALAR_UDF)
 
-        udf = pandas_udf(lambda x: x, DoubleType(), PandasUdfType.GROUP_FLATMAP)
+        udf = pandas_udf(lambda x: x, DoubleType(), PandasUDFType.GROUP_FLATMAP)
         self.assertEquals(udf.returnType, DoubleType())
-        self.assertEquals(udf.udfType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
 
         udf = pandas_udf(lambda x: x, DoubleType(),
-                         functionType=PandasUdfType.GROUP_FLATMAP)
+                         functionType=PandasUDFType.GROUP_FLATMAP)
         self.assertEquals(udf.returnType, DoubleType())
-        self.assertEquals(udf.udfType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
 
         udf = pandas_udf(lambda x: x, returnType=DoubleType(),
-                         functionType=PandasUdfType.GROUP_FLATMAP)
+                         functionType=PandasUDFType.GROUP_FLATMAP)
         self.assertEquals(udf.returnType, DoubleType())
-        self.assertEquals(udf.udfType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(udf.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
 
     def test_pandas_udf_decorator(self):
         from pyspark.rdd import PythonEvalType
-        from pyspark.sql.functions import pandas_udf, PandasUdfType
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
         from pyspark.sql.types import StructType, StructField, DoubleType
 
         @pandas_udf(DoubleType())
         def foo(x):
             return x
         self.assertEquals(foo.returnType, DoubleType())
-        self.assertEquals(foo.udfType, PythonEvalType.PANDAS_SCALAR_UDF)
+        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_SCALAR_UDF)
 
         @pandas_udf(returnType=DoubleType())
         def foo(x):
             return x
         self.assertEquals(foo.returnType, DoubleType())
-        self.assertEquals(foo.udfType, PythonEvalType.PANDAS_SCALAR_UDF)
+        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_SCALAR_UDF)
 
         schema = StructType([StructField("v", DoubleType())])
 
-        @pandas_udf(schema, PandasUdfType.GROUP_FLATMAP)
+        @pandas_udf(schema, PandasUDFType.GROUP_FLATMAP)
         def foo(x):
             return x
         self.assertEquals(foo.returnType, schema)
-        self.assertEquals(foo.udfType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
 
-        @pandas_udf(schema, functionType=PandasUdfType.GROUP_FLATMAP)
+        @pandas_udf(schema, functionType=PandasUDFType.GROUP_FLATMAP)
         def foo(x):
             return x
         self.assertEquals(foo.returnType, schema)
-        self.assertEquals(foo.udfType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
 
-        @pandas_udf(returnType=schema, functionType=PandasUdfType.GROUP_FLATMAP)
+        @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUP_FLATMAP)
         def foo(x):
             return x
         self.assertEquals(foo.returnType, schema)
-        self.assertEquals(foo.udfType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
+        self.assertEquals(foo.evalType, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF)
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")

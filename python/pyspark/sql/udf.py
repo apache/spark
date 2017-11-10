@@ -32,8 +32,8 @@ def _wrap_function(sc, func, returnType):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
-def _create_udf(f, *, returnType, udfType):
-    if udfType in (PythonEvalType.PANDAS_SCALAR_UDF, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF):
+def _create_udf(f, *, returnType, evalType):
+    if evalType in (PythonEvalType.PANDAS_SCALAR_UDF, PythonEvalType.PANDAS_GROUP_FLATMAP_UDF):
         import inspect
         argspec = inspect.getargspec(f)
         if len(argspec.args) == 0 and argspec.varargs is None:
@@ -41,7 +41,7 @@ def _create_udf(f, *, returnType, udfType):
                 "0-arg pandas_udfs are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
-    udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, udfType=udfType)
+    udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, evalType=evalType)
     return udf_obj._wrapped()
 
 
@@ -53,11 +53,15 @@ class UserDefinedFunction(object):
     """
     def __init__(self, func,
                  returnType=StringType(), name=None,
-                 udfType=PythonEvalType.SQL_BATCHED_UDF):
+                 evalType=PythonEvalType.SQL_BATCHED_UDF):
         if not callable(func):
             raise TypeError(
                 "Not a function or callable (__call__ is not defined): "
                 "{0}".format(type(func)))
+
+        if not isinstance(evalType, int):
+            raise TypeError(
+                "Invalid evalType. evalType should be an int but is {}".format(evalType))
 
         self.func = func
         self._returnType = returnType
@@ -67,7 +71,7 @@ class UserDefinedFunction(object):
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
-        self.udfType = udfType
+        self.evalType = evalType
 
 
     @property
@@ -100,7 +104,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.udfType)
+            self._name, wrapped_func, jdt, self.evalType)
         return judf
 
     def __call__(self, *cols):
@@ -131,6 +135,6 @@ class UserDefinedFunction(object):
 
         wrapper.func = self.func
         wrapper.returnType = self.returnType
-        wrapper.udfType = self.udfType
+        wrapper.evalType = self.evalType
 
         return wrapper

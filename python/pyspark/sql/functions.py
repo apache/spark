@@ -18,6 +18,7 @@
 """
 A collections of builtin functions
 """
+import enum
 import math
 import sys
 import functools
@@ -2049,7 +2050,7 @@ def map_values(col):
 
 # ---------------------------- User Defined Function ----------------------------------
 
-class PandasUdfType(object):
+class PandasUDFType(enum.Enum):
     """
     TODO: Add docs
     """
@@ -2099,10 +2100,10 @@ def udf(f=None, returnType=StringType()):
         # for decorator use it as a returnType
         return_type = f or returnType
         return functools.partial(_create_udf, returnType=return_type,
-                                 udfType=PythonEvalType.SQL_BATCHED_UDF)
+                                 evalType=PythonEvalType.SQL_BATCHED_UDF)
     else:
         return _create_udf(f=f, returnType=returnType,
-                           udfType=PythonEvalType.SQL_BATCHED_UDF)
+                           evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
 @since(2.3)
@@ -2187,23 +2188,25 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         if functionType is not None:
             # @pandas_udf(dataType, functionType=functionType)
             # @pandas_udf(returnType=dataType, functionType=functionType)
-            udf_type = functionType
-        elif returnType is not None and isinstance(returnType, int):
+            eval_type = functionType.value
+        elif returnType is not None and isinstance(returnType, PandasUDFType):
             # @pandas_udf(dataType, functionType)
-            udf_type = returnType
+            eval_type = returnType.value
         else:
             # @pandas_udf(dataType) or @pandas_udf(returnType=dataType)
-            udf_type = PythonEvalType.PANDAS_SCALAR_UDF
+            eval_type = PythonEvalType.PANDAS_SCALAR_UDF
 
-        return functools.partial(_create_udf, returnType=return_type, udfType=udf_type)
+        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type)
     else:
-
         if returnType is None:
             raise ValueError("Must specify return type.")
 
-        udf_type = functionType or PythonEvalType.PANDAS_SCALAR_UDF
+        if functionType is not None:
+            eval_type = functionType.value
+        else:
+            eval_type = PythonEvalType.PANDAS_SCALAR_UDF
 
-        return _create_udf(f=f, returnType=returnType, udfType=udf_type)
+        return _create_udf(f=f, returnType=returnType, evalType=eval_type)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
