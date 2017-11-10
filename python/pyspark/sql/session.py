@@ -440,14 +440,11 @@ class SparkSession(object):
             record_type_list.append((str(col_names[i]), curr_type))
         return np.dtype(record_type_list) if has_rec_fix else None
 
-    def _convert_from_pandas(self, pdf, schema):
+    def _convert_from_pandas(self, pdf):
         """
          Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
-         :return tuple of list of records and schema
+         :return list of records
         """
-        # If no schema supplied by user then get the names of columns only
-        if schema is None:
-            schema = [str(x) for x in pdf.columns]
 
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.to_records(index=False)
@@ -456,10 +453,10 @@ class SparkSession(object):
         if len(np_records) > 0:
             record_dtype = self._get_numpy_record_dtype(np_records[0])
             if record_dtype is not None:
-                return [r.astype(record_dtype).tolist() for r in np_records], schema
+                return [r.astype(record_dtype).tolist() for r in np_records]
 
         # Convert list of numpy records to python lists
-        return [r.tolist() for r in np_records], schema
+        return [r.tolist() for r in np_records]
 
     def _create_from_pandas_with_arrow(self, pdf, schema):
         """
@@ -491,14 +488,12 @@ class SparkSession(object):
                    for pdf_slice in pdf_slices]
 
         # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)
-        if schema is None or isinstance(schema, list):
-            schema_from_arrow = from_arrow_schema(batches[0].schema)
-            names = pdf.columns if schema is None else schema
-            fields = []
-            for i, field in enumerate(schema_from_arrow):
-                field.name = names[i]
-                fields.append(field)
-            schema = StructType(fields)
+        if isinstance(schema, (list, tuple)):
+            struct = from_arrow_schema(batches[0].schema)
+            for i, name in enumerate(schema):
+                struct.fields[i].name = name
+                struct.names[i] = name
+            schema = struct
 
         # Create the Spark DataFrame directly from the Arrow data and schema
         jrdd = self._sc._serialize_to_jvm(batches, len(batches), ArrowSerializer())
@@ -604,6 +599,11 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
+
+            # If no schema supplied by user then get the names of columns only
+            if schema is None:
+                schema = [str(x) for x in data.columns]
+
             if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
                     and len(data) > 0:
                 try:
@@ -611,7 +611,7 @@ class SparkSession(object):
                 except Exception as e:
                     warnings.warn("Arrow will not be used in createDataFrame: %s" % str(e))
                     # Fallback to create DataFrame without arrow if raise some exception
-            data, schema = self._convert_from_pandas(data, schema)
+            data = self._convert_from_pandas(data)
 
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
@@ -630,7 +630,7 @@ class SparkSession(object):
                 verify_func(obj)
                 return obj,
         else:
-            if isinstance(schema, list):
+            if isinstance(schema, (list, tuple)):
                 schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 

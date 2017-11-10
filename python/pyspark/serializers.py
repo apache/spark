@@ -232,10 +232,11 @@ def _create_batch(series):
     # If a nullable integer series has been promoted to floating point with NaNs, need to cast
     # NOTE: this is not necessary with Arrow >= 0.7
     def cast_series(s, t):
-        if t is not None and type(t) == pa.TimestampType:
+        if type(t) == pa.TimestampType:
             # NOTE: convert to 'us' with astype here, unit ignored in `from_pandas` see ARROW-1680
             return _check_series_convert_timestamps_internal(s.fillna(0))\
                 .values.astype('datetime64[us]', copy=False)
+        # NOTE: can not compare None with pyarrow.DataType(), fixed with Arrow >= 0.7.1
         elif t is not None and t == pa.date32():
             # TODO: this converts the series to Python objects, possibly avoid with Arrow >= 0.8
             return s.dt.date

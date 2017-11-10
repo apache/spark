@@ -3204,14 +3204,18 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
-        wrong_schema = StructType([field for field in reversed(self.schema)])
+        wrong_schema = StructType(list(reversed(self.schema)))
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(TypeError, ".*field.*can.not.accept.*type"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
+        # Test that schema as a list of column names gets applied
         df = self.spark.createDataFrame(pdf, schema=list('abcdefg'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
+        # Test that schema as tuple of column names gets applied
+        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefg'))
         self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
 
     def test_createDataFrame_with_single_data_type(self):
