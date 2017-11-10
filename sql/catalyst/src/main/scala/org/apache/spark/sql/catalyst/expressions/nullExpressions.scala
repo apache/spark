@@ -72,14 +72,11 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val first = children(0)
-    val rest = children.drop(1)
-    val firstEval = first.genCode(ctx)
-    ev.copy(code = s"""
-      ${firstEval.code}
-      boolean ${ev.isNull} = ${firstEval.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};""" +
-      rest.map { e =>
+    ctx.addMutableState("boolean", ev.isNull, s"${ev.isNull} = true;")
+    ctx.addMutableState(ctx.javaType(dataType), ev.value,
+      s"${ev.value} = ${ctx.defaultValue(dataType)};")
+
+    val evals = children.map { e =>
       val eval = e.genCode(ctx)
       s"""
         if (${ev.isNull}) {
@@ -90,7 +87,9 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
           }
         }
       """
-    }.mkString("\n"))
+    }
+
+    ev.copy(code = ctx.splitExpressions(ctx.INPUT_ROW, evals))
   }
 }
 
@@ -357,7 +356,8 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val nonnull = ctx.freshName("nonnull")
-    val code = children.map { e =>
+    ctx.addMutableState("int", nonnull, s"$nonnull = 0;")
+    val evals = children.map { e =>
       val eval = e.genCode(ctx)
       e.dataType match {
         case DoubleType | FloatType =>
@@ -379,9 +379,11 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
             }
           """
       }
-    }.mkString("\n")
+    }
+
+    val code = ctx.splitExpressions(ctx.INPUT_ROW, evals)
+
     ev.copy(code = s"""
-      int $nonnull = 0;
       $code
       boolean ${ev.value} = $nonnull >= $n;""", isNull = "false")
   }
