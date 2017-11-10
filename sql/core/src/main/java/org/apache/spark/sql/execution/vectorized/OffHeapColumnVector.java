@@ -97,11 +97,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     offsetData = 0;
   }
 
-  @Override
-  public void putUnsafeData(ByteBuffer array) {
-    throw new RuntimeException("Cannot put UnsafeData for off-heap column");
-  }
-
   //
   // APIs dealing with nulls
   //

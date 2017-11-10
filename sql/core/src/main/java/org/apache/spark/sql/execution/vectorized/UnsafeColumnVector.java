@@ -48,18 +48,6 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public void putUnsafeData(ByteBuffer buffer) {
-    assert(this.resultArray != null);
-    data = buffer.array();
-    offset = Platform.BYTE_ARRAY_OFFSET + buffer.position();
-
-    lastArrayRow = Integer.MAX_VALUE;
-    lastArrayPos = 0;
-
-    setIsConstant();
-  }
-
-  @Override
   public long valuesNativeAddress() {
     throw new RuntimeException("Cannot get native address for on heap column");
   }
@@ -501,7 +489,16 @@ public final class UnsafeColumnVector extends WritableColumnVector {
 
   @Override
   public int putByteArray(int rowId, byte[] value, int offset, int length) {
-    throw new NotImplementedException();
+    assert(this.resultArray != null);
+    data = value;
+    this.offset = Platform.BYTE_ARRAY_OFFSET + offset;
+
+    lastArrayRow = Integer.MAX_VALUE;
+    lastArrayPos = 0;
+
+    setIsConstant();
+
+    return value.length - offset;
   }
 
   // Spilt this function out since it is the slow path.
