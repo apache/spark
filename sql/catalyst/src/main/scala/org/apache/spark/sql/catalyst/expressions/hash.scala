@@ -389,9 +389,10 @@ abstract class HashExpression[E] extends Expression {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
-    fields.zipWithIndex.map { case (field, index) =>
+    val hashes = fields.zipWithIndex.map { case (field, index) =>
       nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
-    }.mkString("\n")
+    }
+    ctx.splitExpressions(input, hashes)
   }
 
   @tailrec
