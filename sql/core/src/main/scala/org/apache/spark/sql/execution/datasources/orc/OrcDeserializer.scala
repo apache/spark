@@ -37,11 +37,11 @@ private[orc] class OrcDeserializer(
 
   private[this] val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
-  private[this] val valueWrappers = requiredSchema.fields.map(f => getValueWrapper(f.dataType))
+  private[this] val unwrappers = requiredSchema.fields.map(f => unwrapperFor(f.dataType))
 
   def deserialize(writable: OrcStruct): InternalRow = {
     convertOrcStructToInternalRow(writable, dataSchema, requiredSchema,
-      maybeMissingSchema, Some(valueWrappers), Some(mutableRow))
+      maybeMissingSchema, Some(unwrappers), Some(mutableRow))
   }
 
   /**
@@ -53,11 +53,11 @@ private[orc] class OrcDeserializer(
       dataSchema: StructType,
       requiredSchema: StructType,
       missingSchema: Option[StructType] = None,
-      valueWrappers: Option[Seq[Any => Any]] = None,
+      valueUnwrappers: Option[Seq[(Any, InternalRow, Int) => Unit]] = None,
       internalRow: Option[InternalRow] = None): InternalRow = {
     val mutableRow = internalRow.getOrElse(new SpecificInternalRow(requiredSchema.map(_.dataType)))
-    val wrappers =
-      valueWrappers.getOrElse(requiredSchema.fields.map(_.dataType).map(getValueWrapper).toSeq)
+    val unwrappers =
+      valueUnwrappers.getOrElse(requiredSchema.fields.map(_.dataType).map(unwrapperFor).toSeq)
     var i = 0
     val len = requiredSchema.length
     val names = orcStruct.getSchema.getFieldNames
@@ -75,7 +75,7 @@ private[orc] class OrcDeserializer(
       if (writable == null) {
         mutableRow.setNullAt(i)
       } else {
-        mutableRow(i) = wrappers(i)(writable)
+        unwrappers(i)(writable, mutableRow, i)
       }
       i += 1
     }
@@ -90,7 +90,7 @@ private[orc] class OrcDeserializer(
    * Builds a catalyst-value return function ahead of time according to DataType
    * to avoid pattern matching and branching costs per row.
    */
-  private[this] def getValueWrapper(dataType: DataType): Any => Any = dataType match {
+  private[this] def getValueUnwrapper(dataType: DataType): Any => Any = dataType match {
     case NullType => _ => null
 
     case BooleanType => withNullSafe(o => o.asInstanceOf[BooleanWritable].get)
@@ -138,7 +138,7 @@ private[orc] class OrcDeserializer(
 
     case ArrayType(elementType, _) =>
       withNullSafe { o =>
-        val wrapper = getValueWrapper(elementType)
+        val wrapper = getValueUnwrapper(elementType)
         val data = new ArrayBuffer[Any]
         o.asInstanceOf[OrcList[WritableComparable[_]]].asScala.foreach { x =>
           data += wrapper(x)
@@ -148,8 +148,8 @@ private[orc] class OrcDeserializer(
 
     case MapType(keyType, valueType, _) =>
       withNullSafe { o =>
-        val keyWrapper = getValueWrapper(keyType)
-        val valueWrapper = getValueWrapper(valueType)
+        val keyWrapper = getValueUnwrapper(keyType)
+        val valueWrapper = getValueUnwrapper(valueType)
         val map = new java.util.TreeMap[Any, Any]
         o.asInstanceOf[OrcMap[WritableComparable[_], WritableComparable[_]]]
           .entrySet().asScala.foreach { entry =>
@@ -159,9 +159,48 @@ private[orc] class OrcDeserializer(
       }
 
     case udt: UserDefinedType[_] =>
-      withNullSafe { o => getValueWrapper(udt.sqlType)(o) }
+      withNullSafe { o => getValueUnwrapper(udt.sqlType)(o) }
 
     case _ =>
       throw new UnsupportedOperationException(s"$dataType is not supported yet.")
   }
+
+  private[this] def unwrapperFor(dataType: DataType): (Any, InternalRow, Int) => Unit =
+    dataType match {
+      case NullType =>
+        (value: Any, row: InternalRow, ordinal: Int) => row.setNullAt(ordinal)
+
+      case BooleanType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setBoolean(ordinal, value.asInstanceOf[BooleanWritable].get)
+
+      case ByteType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setByte(ordinal, value.asInstanceOf[ByteWritable].get)
+
+      case ShortType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setShort(ordinal, value.asInstanceOf[ShortWritable].get)
+
+      case IntegerType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setInt(ordinal, value.asInstanceOf[IntWritable].get)
+
+      case LongType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setLong(ordinal, value.asInstanceOf[LongWritable].get)
+
+      case FloatType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setFloat(ordinal, value.asInstanceOf[FloatWritable].get)
+
+      case DoubleType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setDouble(ordinal, value.asInstanceOf[DoubleWritable].get)
+
+      case _ =>
+        val unwrapper = getValueUnwrapper(dataType)
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row(ordinal) = unwrapper(value)
+    }
 }

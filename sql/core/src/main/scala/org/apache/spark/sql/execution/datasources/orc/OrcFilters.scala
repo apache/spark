@@ -43,7 +43,9 @@ private[orc] object OrcFilters {
     } yield filter
 
     for {
+      // Combines all convertible filters using `And` to produce a single conjunction
       conjunction <- convertibleFilters.reduceOption(org.apache.spark.sql.sources.And)
+      // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
     } yield builder.build()
   }
