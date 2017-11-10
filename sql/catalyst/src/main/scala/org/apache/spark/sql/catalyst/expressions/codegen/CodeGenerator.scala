@@ -810,7 +810,7 @@ class CodegenContext {
 
   /**
    * Wrap the generated code of expression, which was created from a row object in INPUT_ROW,
-   * by a function. ev,isNull and ev.value are passed by global variables
+   * by a function. ev.isNull and ev.value are passed by global variables
    *
    * @param ev the code to evaluate expressions.
    * @param dataType the data type of ev.value.
