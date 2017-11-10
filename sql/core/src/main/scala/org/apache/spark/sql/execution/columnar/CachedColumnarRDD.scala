@@ -30,19 +30,7 @@ class CachedColumnarRDD(
   extends RDD[CachedBatch](_sc, Seq(new OneToOneDependency(dataRDD))) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[CachedBatch] = {
-    if (containsPartitionMetadata) {
-      val parentIterator = dataRDD.iterator(split, context)
-      if (!parentIterator.hasNext) {
-        Iterator()
-      } else {
-        val cachedBatch = parentIterator.next()
-        SparkEnv.get.blockManager.putSingle(RDDPartitionMetadataBlockId(id, split.index),
-          cachedBatch.stats, expectedStorageLevel)
-        Iterator(cachedBatch)
-      }
-    } else {
-      firstParent.iterator(split, context)
-    }
+    firstParent.iterator(split, context)
   }
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
@@ -54,7 +42,17 @@ class CachedColumnarRDD(
     SparkEnv.get.blockManager.getSingle[InternalRow](metadataBlockId).map(metadataBlock =>
       new InterruptibleIterator[CachedBatch](context,
         new CachedColumnarIterator(metadataBlock, split, context, superGetOrCompute))
-    ).getOrElse(superGetOrCompute(split, context))
+    ).getOrElse {
+      val batchIter = superGetOrCompute(split, context)
+      if (containsPartitionMetadata && getStorageLevel != StorageLevel.NONE && batchIter.hasNext) {
+        val cachedBatch = batchIter.next()
+        SparkEnv.get.blockManager.putSingle(metadataBlockId, cachedBatch.stats,
+          expectedStorageLevel)
+        new InterruptibleIterator[CachedBatch](context, Iterator(cachedBatch))
+      } else {
+        batchIter
+      }
+    }
   }
 }
 

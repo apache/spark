@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
@@ -30,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.RDDPartitionMetadataBlockId
 import org.apache.spark.storage.StorageLevel._
 
 class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
@@ -482,7 +484,6 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("table cache can prune unnecessary partitions correctly") {
-    // scalastyle:off
     var bytesReadWithoutPruning = 0L
     var bytesReadWithPruning = 0L
     var inMemoryPartitionMetadata = false
@@ -499,14 +500,56 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(SQLConf.IN_MEMORY_PARTITION_METADATA.key -> enabled) {
         inMemoryPartitionMetadata = conf.inMemoryPartitionMetadata
-        val df1 = (0 until 1000000).toDF("value").repartition(4).cache()
-        df1.where("value >= 999999").collect()
-        val resultArr = df1.where("value >= 999999").collect()
+        val df1 = (0 until 100000).toDF("value").repartition(4).cache()
+        df1.where("value >= 99999").collect()
+        val resultArr = df1.where("value >= 99999").collect()
         assert(resultArr.length == 1)
-        assert(resultArr.head.getInt(0) == 999999)
+        assert(resultArr.head.getInt(0) == 99999)
         df1.unpersist(true)
       }
     }
+    assert(bytesReadWithoutPruning > 0)
+    assert(bytesReadWithPruning > 0)
     assert(bytesReadWithoutPruning > bytesReadWithPruning * 3)
+  }
+
+  test("generate correct results when metadata block is removed") {
+    var bytesReadWithMetadata = 0L
+    var bytesReadWithoutMetadata = 0L
+    @volatile var removePartitionMetadata = false
+    sparkContext.addSparkListener(new SparkListener() {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+        val metrics = taskEnd.taskMetrics
+        if (removePartitionMetadata) {
+          bytesReadWithoutMetadata += metrics.inputMetrics.bytesRead
+        } else {
+          bytesReadWithMetadata += metrics.inputMetrics.bytesRead
+        }
+      }
+    })
+    Seq("true").foreach { enabled =>
+      withSQLConf(SQLConf.IN_MEMORY_PARTITION_METADATA.key -> enabled) {
+        removePartitionMetadata = true
+        val df1 = (0 until 100000).toDF("value").repartition(4).cache()
+        val inMemoryRelation = df1.queryExecution.optimizedPlan.collect {
+          case m: InMemoryRelation => m
+        }
+        df1.where("value >= 99999").collect()
+        (0 until 4).foreach(partitionId => SparkEnv.get.blockManager.removeBlock(
+            RDDPartitionMetadataBlockId(inMemoryRelation.head.cachedColumnBuffers.id, partitionId)))
+        var resultArr = df1.where("value >= 99999").collect()
+        assert(resultArr.length === 1)
+        assert(resultArr.head.getInt(0) === 99999)
+        // scalastyle:off
+        removePartitionMetadata = false
+        resultArr = df1.where("value >= 99999").collect()
+        assert(resultArr.length === 1)
+        assert(resultArr.head.getInt(0) === 99999)
+        df1.unpersist(blocking = true)
+        assert(bytesReadWithMetadata > 0)
+        assert(bytesReadWithoutMetadata > 0)
+        assert(bytesReadWithoutMetadata > bytesReadWithMetadata * 3)
+      }
+    }
   }
 }
