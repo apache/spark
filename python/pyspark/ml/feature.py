@@ -1412,14 +1412,17 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
     returned.
 
     >>> df = spark.createDataFrame([Row(inputTokens=["a", "b", "c", "d", "e"])])
-    >>> ngram = NGram(n=2, inputCol="inputTokens", outputCol="nGrams")
+    >>> ngram = NGram(n=2, maxN=2, inputCol="inputTokens", outputCol="nGrams")
     >>> ngram.transform(df).head()
     Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b', u'b c', u'c d', u'd e'])
     >>> # Change n-gram length
-    >>> ngram.setParams(n=4).transform(df).head()
+    >>> ngram.setParams(n=4, maxN=4).transform(df).head()
     Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
+    >>> # Generate n-grams of variable length
+    >>> ngram.setParams(n=2, maxN=3).transform(df).head()
+    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b', u'a b c', u'b c', u'b c d', u'c d', u'c d e', u'd e'])
     >>> # Temporarily modify output column.
-    >>> ngram.transform(df, {ngram.outputCol: "output"}).head()
+    >>> ngram.setParams(n=4, maxN=4).transform(df, {ngram.outputCol: "output"}).head()
     Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], output=[u'a b c d', u'b c d e'])
     >>> ngram.transform(df).head()
     Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
@@ -1429,33 +1432,37 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
         ...
     TypeError: Method setParams forces keyword arguments.
     >>> ngramPath = temp_path + "/ngram"
-    >>> ngram.save(ngramPath)
+    >>> ngram.setParams(n=2, maxN=3).save(ngramPath)
     >>> loadedNGram = NGram.load(ngramPath)
     >>> loadedNGram.getN() == ngram.getN()
+    True
+    >>> loadedNGram.getMaxN() == ngram.getMaxN()
     True
 
     .. versionadded:: 1.5.0
     """
 
-    n = Param(Params._dummy(), "n", "number of elements per n-gram (>=1)",
+    n = Param(Params._dummy(), "n", "minimum number of elements per n-gram (>=1)",
+              typeConverter=TypeConverters.toInt)
+    maxN = Param(Params._dummy(), "maxN", "maximum number of elements per n-gram (>=1)",
               typeConverter=TypeConverters.toInt)
 
     @keyword_only
-    def __init__(self, n=2, inputCol=None, outputCol=None):
+    def __init__(self, n=2, maxN=2, inputCol=None, outputCol=None):
         """
-        __init__(self, n=2, inputCol=None, outputCol=None)
+        __init__(self, n=2, maxN=2, inputCol=None, outputCol=None)
         """
         super(NGram, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.NGram", self.uid)
-        self._setDefault(n=2)
+        self._setDefault(n=2, maxN=2)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.5.0")
-    def setParams(self, n=2, inputCol=None, outputCol=None):
+    def setParams(self, n=2, maxN=2, inputCol=None, outputCol=None):
         """
-        setParams(self, n=2, inputCol=None, outputCol=None)
+        setParams(self, n=2, maxN=2, inputCol=None, outputCol=None)
         Sets params for this NGram.
         """
         kwargs = self._input_kwargs
@@ -1474,6 +1481,20 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
         Gets the value of n or its default value.
         """
         return self.getOrDefault(self.n)
+
+    @since("which version?")
+    def setMaxN(self, value):
+        """
+        Sets the value of :py:attr:`maxN`.
+        """
+        return self._set(maxN=value)
+
+    @since("which version?")
+    def getMaxN(self):
+        """
+        Gets the value of maxN or its default value.
+        """
+        return max(self.getN(), self.getOrDefault(self.maxN))
 
 
 @inherit_doc

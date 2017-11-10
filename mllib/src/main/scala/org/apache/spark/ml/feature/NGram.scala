@@ -61,7 +61,7 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
    * Default: 2, bigram features
    * @group param
    */
-  @Since("From which version?")
+  @Since("which version?")
   val maxN: IntParam = new IntParam(this, "maxN", "maximum number elements per n-gram (>=n)",
     ParamValidators.gtEq(1))
 
@@ -74,11 +74,11 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   def getN: Int = $(n)
 
   /** @group setParam */
-  @Since("From which version?")
+  @Since("which version?")
   def setMaxN(value: Int): this.type = set(maxN, value)
 
   /** @group getParam */
-  @Since("From which version?")
+  @Since("which version?")
   def getMaxN: Int = Math.max($(maxN), $(n))
 
   setDefault(n -> 2)
