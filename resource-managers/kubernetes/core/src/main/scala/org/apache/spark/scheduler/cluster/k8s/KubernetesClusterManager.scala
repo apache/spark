@@ -45,7 +45,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
       KUBERNETES_MASTER_INTERNAL_URL,
       Some(sparkConf.get(KUBERNETES_NAMESPACE)),
-      APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+      KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
       sparkConf,
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))

@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
@@ -29,6 +31,12 @@ private[spark] object Config extends Logging {
         "--kubernetes-namespace command line argument.")
       .stringConf
       .createWithDefault("default")
+
+  val DRIVER_DOCKER_IMAGE =
+    ConfigBuilder("spark.kubernetes.driver.docker.image")
+      .doc("Docker image to use for the driver. Specify this using the standard Docker tag format.")
+      .stringConf
+      .createOptional
 
   val EXECUTOR_DOCKER_IMAGE =
     ConfigBuilder("spark.kubernetes.executor.docker.image")
@@ -44,9 +52,9 @@ private[spark] object Config extends Logging {
       .checkValues(Set("Always", "Never", "IfNotPresent"))
       .createWithDefault("IfNotPresent")
 
-  val APISERVER_AUTH_DRIVER_CONF_PREFIX =
+  val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
-  val APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
+  val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver.mounted"
   val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
   val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
@@ -55,12 +63,33 @@ private[spark] object Config extends Logging {
   val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
 
   val KUBERNETES_SERVICE_ACCOUNT_NAME =
-    ConfigBuilder(s"$APISERVER_AUTH_DRIVER_CONF_PREFIX.serviceAccountName")
-      .doc("Service account that is used when running the driver pod. The driver pod uses " +
-        "this service account when requesting executor pods from the API server. If specific " +
-        "credentials are given for the driver pod to use, the driver will favor " +
-        "using those credentials instead.")
+    ConfigBuilder(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.serviceAccountName")
+      .doc("Service account that is used when running the driver pod. The driver pod uses" +
+        " this service account when requesting executor pods from the API server. If specific" +
+        " credentials are given for the driver pod to use, the driver will favor" +
+        " using those credentials instead.")
       .stringConf
+      .createOptional
+
+  val KUBERNETES_DRIVER_LIMIT_CORES =
+    ConfigBuilder("spark.kubernetes.driver.limit.cores")
+      .doc("Specify the hard cpu limit for the driver pod")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_LIMIT_CORES =
+    ConfigBuilder("spark.kubernetes.executor.limit.cores")
+      .doc("Specify the hard cpu limit for a single executor pod")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_DRIVER_MEMORY_OVERHEAD =
+    ConfigBuilder("spark.kubernetes.driver.memoryOverhead")
+      .doc("The amount of off-heap memory (in megabytes) to be allocated for the driver and the" +
+        " driver submission server. This is memory that accounts for things like VM overheads," +
+        " interned strings, other native overheads, etc. This tends to grow with the driver's" +
+        " memory size (typically 6-10%).")
+      .bytesConf(ByteUnit.MiB)
       .createOptional
 
   // Note that while we set a default for this when we start up the
@@ -73,9 +102,6 @@ private[spark] object Config extends Logging {
         "overheads, etc. This tends to grow with the executor size. (typically 6-10%).")
       .bytesConf(ByteUnit.MiB)
       .createOptional
-
-  val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
-  val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
 
   val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")
@@ -104,12 +130,6 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Allocation batch delay should be a positive integer")
       .createWithDefault(1)
 
-  val KUBERNETES_EXECUTOR_LIMIT_CORES =
-    ConfigBuilder("spark.kubernetes.executor.limit.cores")
-      .doc("Specify the hard cpu limit for a single executor pod")
-      .stringConf
-      .createOptional
-
   val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
     ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")
       .doc("Maximum number of attempts allowed for checking the reason of an executor loss " +
@@ -119,5 +139,45 @@ private[spark] object Config extends Logging {
         "must be a positive integer")
       .createWithDefault(10)
 
+  val WAIT_FOR_APP_COMPLETION =
+    ConfigBuilder("spark.kubernetes.submission.waitAppCompletion")
+      .doc("In cluster mode, whether to wait for the application to finish before exiting the" +
+        " launcher process.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val REPORT_INTERVAL =
+    ConfigBuilder("spark.kubernetes.report.interval")
+      .doc("Interval between reports of the current app status in cluster mode.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("1s")
+
+  val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
+    "spark.kubernetes.authenticate.submission"
+
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
+
+  val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
+  val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
+
+  val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
+  val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
+
+  val KUBERNETES_DRIVER_ENV_KEY = "spark.kubernetes.driverEnv."
+
+  def getK8sMasterUrl(rawMasterString: String): String = {
+    if (!rawMasterString.startsWith("k8s://")) {
+      throw new IllegalArgumentException("Master URL should start with k8s:// in Kubernetes mode.")
+    }
+    val masterWithoutK8sPrefix = rawMasterString.replaceFirst("k8s://", "")
+    if (masterWithoutK8sPrefix.startsWith("http://")
+      || masterWithoutK8sPrefix.startsWith("https://")) {
+      masterWithoutK8sPrefix
+    } else {
+      val resolvedURL = s"https://$masterWithoutK8sPrefix"
+      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved" +
+        s" URL is $resolvedURL")
+      resolvedURL
+    }
+  }
 }
