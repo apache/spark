@@ -646,44 +646,26 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val O = 50
     val seed = 42
 
-    val wideRow1 = new GenericInternalRow(Seq.tabulate(O)(j =>
-      new GenericInternalRow(Seq.tabulate(L)(i =>
-        new GenericInternalRow(Array[Any](
-          UTF8String.fromString((j * L + i).toString))))
-        .toArray[Any])).toArray[Any])
-    val inner1 = new StructType(
-      (0 until L).map(_ => StructField("structOfString", structOfString)).toArray)
-    val schema1 = new StructType(
-      (0 until O).map(_ => StructField("structOfStructOfStrings", inner1)).toArray)
-    val exprs1 = schema1.fields.zipWithIndex.map { case (f, i) =>
-      BoundReference(i, f.dataType, true)
-    }
-    val murmur3HashExpr1 = Murmur3Hash(exprs1, seed)
-    val murmur3HashPlan1 = GenerateMutableProjection.generate(Seq(murmur3HashExpr1))
-
-    val murmursHashEval1 = Murmur3Hash(exprs1, seed).eval(wideRow1)
-    assert(murmur3HashPlan1(wideRow1).getInt(0) == murmursHashEval1)
-
-    val wideRow2 = new GenericInternalRow(Seq.tabulate(O)(k =>
+    val wideRow = new GenericInternalRow(Seq.tabulate(O)(k =>
       new GenericInternalRow(Seq.tabulate(M)(j =>
         new GenericInternalRow(Seq.tabulate(N)(i =>
           new GenericInternalRow(Array[Any](
             UTF8String.fromString((k * L + j * N + i).toString))))
           .toArray[Any])).toArray[Any])).toArray[Any])
-    val inner2 = new StructType(
+    val inner = new StructType(
       (0 until N).map(_ => StructField("structOfString", structOfString)).toArray)
-    val outer2 = new StructType(
-      (0 until M).map(_ => StructField("structOfStructOfString", inner2)).toArray)
-    val schema2 = new StructType(
-      (0 until O).map(_ => StructField("structOfStructOfStructOfString", outer2)).toArray)
-    val exprs2 = schema2.fields.zipWithIndex.map { case (f, i) =>
+    val outer = new StructType(
+      (0 until M).map(_ => StructField("structOfStructOfString", inner)).toArray)
+    val schema = new StructType(
+      (0 until O).map(_ => StructField("structOfStructOfStructOfString", outer)).toArray)
+    val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
     }
-    val murmur3HashExpr2 = Murmur3Hash(exprs2, 42)
-    val murmur3HashPlan2 = GenerateMutableProjection.generate(Seq(murmur3HashExpr2))
+    val murmur3HashExpr = Murmur3Hash(exprs, 42)
+    val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
 
-    val murmursHashEval2 = Murmur3Hash(exprs2, 42).eval(wideRow2)
-    assert(murmur3HashPlan2(wideRow2).getInt(0) == murmursHashEval2)
+    val murmursHashEval = Murmur3Hash(exprs, 42).eval(wideRow)
+    assert(murmur3HashPlan(wideRow).getInt(0) == murmursHashEval)
   }
 
   private def testHash(inputSchema: StructType): Unit = {
