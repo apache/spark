@@ -267,13 +267,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         useTempCheckpointLocation = true,
         trigger = trigger)
     } else {
-      val recoverFromCheckpointLocation = true
-      val useTempCheckpointLocation =
-        if (source == "console") {
-          true
-        } else {
-          false
-        }
       val dataSource =
         DataSource(
           df.sparkSession,
@@ -286,8 +279,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         df,
         dataSource.createSink(outputMode),
         outputMode,
-        useTempCheckpointLocation = useTempCheckpointLocation,
-        recoverFromCheckpointLocation = recoverFromCheckpointLocation,
+        useTempCheckpointLocation = source == "console",
+        recoverFromCheckpointLocation = true,
         trigger = trigger)
     }
   }
