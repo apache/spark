@@ -820,7 +820,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("rename temporary table") {
+  test("rename temporary view") {
     withTempView("tab1", "tab2") {
       spark.range(10).createOrReplaceTempView("tab1")
       sql("ALTER TABLE tab1 RENAME TO tab2")
