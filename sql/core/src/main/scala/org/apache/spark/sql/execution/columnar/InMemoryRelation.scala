@@ -152,7 +152,6 @@ case class InMemoryRelation(
   private def buildBuffers(): Unit = {
     val output = child.output
 
-    // TODO: need better abstraction for two iterators here
     val batchedRDD = child.execute().mapPartitionsInternal { rowIterator =>
       new CachedBatchIterator(rowIterator, output, batchSize, useCompression, batchStats,
         usePartitionLevelMetadata)
