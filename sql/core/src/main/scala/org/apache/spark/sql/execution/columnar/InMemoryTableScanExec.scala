@@ -230,7 +230,7 @@ case class InMemoryTableScanExec(
       partitionFilter.initialize(index)
 
       cachedBatchIterator.asInstanceOf[InterruptibleIterator[_]].delegate match {
-        case cachedIter: CachedColumnarPartitionIterator
+        case cachedIter: CachedColumnarIterator
           if !partitionFilter.eval(cachedIter.partitionStats) =>
           // scalastyle:off
           println(s"skipped partition $index")

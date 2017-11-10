@@ -53,12 +53,12 @@ class CachedColumnarRDD(
     val superGetOrCompute: (Partition, TaskContext) => Iterator[CachedBatch] = super.getOrCompute
     SparkEnv.get.blockManager.getSingle[InternalRow](metadataBlockId).map(metadataBlock =>
       new InterruptibleIterator[CachedBatch](context,
-        new CachedColumnarPartitionIterator(metadataBlock, split, context, superGetOrCompute))
+        new CachedColumnarIterator(metadataBlock, split, context, superGetOrCompute))
     ).getOrElse(superGetOrCompute(split, context))
   }
 }
 
-private[columnar] class CachedColumnarPartitionIterator(
+private[columnar] class CachedColumnarIterator(
     val partitionStats: InternalRow,
     partition: Partition,
     context: TaskContext,
