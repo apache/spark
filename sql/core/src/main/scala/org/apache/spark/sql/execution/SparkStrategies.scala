@@ -111,10 +111,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     /**
      * Matches a plan whose output should be small enough to be used in broadcast join.
      */
-    private def canBroadcast(plan: LogicalPlan): Boolean = {
-      plan.stats.hints.broadcast ||
-        (plan.stats.sizeInBytes >= 0 &&
+    private def canBroadcast(plan: LogicalPlan, isBroadcastHint: Boolean): Boolean = {
+      val broadcast = plan.stats.hints.broadcast
+      if (isBroadcastHint) {
+        broadcast
+      } else {
+        broadcast || (plan.stats.sizeInBytes >= 0 &&
           plan.stats.sizeInBytes <= conf.autoBroadcastJoinThreshold)
+      }
     }
 
     /**
@@ -154,12 +158,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- BroadcastHashJoin --------------------------------------------------------------------
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if canBuildRight(joinType) && canBroadcast(right) =>
+        if canBuildRight(joinType) && canBroadcast(right, left.stats.hints.broadcast) =>
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if canBuildLeft(joinType) && canBroadcast(left) =>
+        if canBuildLeft(joinType) && canBroadcast(left, right.stats.hints.broadcast) =>
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
 
@@ -190,11 +194,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcasted
       case j @ logical.Join(left, right, joinType, condition)
-          if canBuildRight(joinType) && canBroadcast(right) =>
+          if canBuildRight(joinType) && canBroadcast(right, left.stats.hints.broadcast) =>
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
       case j @ logical.Join(left, right, joinType, condition)
-          if canBuildLeft(joinType) && canBroadcast(left) =>
+          if canBuildLeft(joinType) && canBroadcast(left, right.stats.hints.broadcast) =>
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), BuildLeft, joinType, condition) :: Nil
 

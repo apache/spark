@@ -223,4 +223,19 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     assert(HashJoin.rewriteKeyExpr(l :: ss :: Nil) === l :: ss :: Nil)
     assert(HashJoin.rewriteKeyExpr(i :: ss :: Nil) === i :: ss :: Nil)
   }
+
+  test("Shouldn't change broadcast join buildSide if user clearly specified") {
+    spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value").createTempView("table1")
+    spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value").createTempView("table2")
+
+    val bl = sql(s"SELECT /*+ MAPJOIN(t1) */ * FROM table1 t1 JOIN table2 t2 ON t1.key = t2.key")
+      .queryExecution
+      .executedPlan
+    assert(bl.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === BuildLeft)
+
+    val br = sql(s"SELECT /*+ MAPJOIN(t2) */ * FROM table1 t1 JOIN table2 t2 ON t1.key = t2.key")
+      .queryExecution
+      .executedPlan
+    assert(br.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === BuildRight)
+  }
 }
