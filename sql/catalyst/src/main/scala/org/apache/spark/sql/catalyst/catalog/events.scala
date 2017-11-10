@@ -62,6 +62,16 @@ case class DropDatabasePreEvent(database: String) extends DatabaseEvent
 case class DropDatabaseEvent(database: String) extends DatabaseEvent
 
 /**
+ * Event fired before a database is altered.
+ */
+case class AlterDatabasePreEvent(database: String) extends DatabaseEvent
+
+/**
+ * Event fired after a database is altered.
+ */
+case class AlterDatabaseEvent(database: String) extends DatabaseEvent
+
+/**
  * Event fired when a table is created, dropped or renamed.
  */
 trait TableEvent extends DatabaseEvent {
@@ -110,7 +120,33 @@ case class RenameTableEvent(
   extends TableEvent
 
 /**
- * Event fired when a function is created, dropped or renamed.
+ * String to indicate which part of table is altered. If a plain alterTable API is called, then
+ * type will generally be Table.
+ */
+object AlterTableKind extends Enumeration {
+  val TABLE = "table"
+  val DATASCHEMA = "dataSchema"
+  val STATS = "stats"
+}
+
+/**
+ * Event fired before a table is altered.
+ */
+case class AlterTablePreEvent(
+    database: String,
+    name: String,
+    kind: String) extends TableEvent
+
+/**
+ * Event fired after a table is altered.
+ */
+case class AlterTableEvent(
+    database: String,
+    name: String,
+    kind: String) extends TableEvent
+
+/**
+ * Event fired when a function is created, dropped, altered or renamed.
  */
 trait FunctionEvent extends DatabaseEvent {
   /**

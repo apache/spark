@@ -736,15 +736,6 @@ splitString <- function(input) {
   Filter(nzchar, unlist(strsplit(input, ",|\\s")))
 }
 
-convertToJSaveMode <- function(mode) {
- allModes <- c("append", "overwrite", "error", "ignore")
- if (!(mode %in% allModes)) {
-   stop('mode should be one of "append", "overwrite", "error", "ignore"')  # nolint
- }
- jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
- jmode
-}
-
 varargsToJProperties <- function(...) {
   pairs <- list(...)
   props <- newJObject("java.util.Properties")

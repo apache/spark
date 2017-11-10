@@ -25,7 +25,7 @@ import org.apache.spark.graphx._
  * Computes shortest paths to the given set of landmark vertices, returning a graph where each
  * vertex attribute is a map containing the shortest-path distance to each reachable landmark.
  */
-object ShortestPaths {
+object ShortestPaths extends Serializable {
   /** Stores a map from the vertex id of a landmark to the distance to that landmark. */
   type SPMap = Map[VertexId, Int]
 

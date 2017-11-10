@@ -210,6 +210,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'                  1.0.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
+#' @aliases glm
 #' @export
 #' @examples
 #' \dontrun{

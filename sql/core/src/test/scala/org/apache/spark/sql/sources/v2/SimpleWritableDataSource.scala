@@ -18,8 +18,7 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
-import java.text.SimpleDateFormat
-import java.util.{Collections, Date, List => JList, Locale, Optional, UUID}
+import java.util.{Collections, List => JList, Optional}
 
 import scala.collection.JavaConverters._
 
@@ -157,7 +156,7 @@ class SimpleCSVReadTask(path: String, conf: SerializableConfiguration)
   @transient private var currentLine: String = _
   @transient private var inputStream: FSDataInputStream = _
 
-  override def createReader(): DataReader[Row] = {
+  override def createDataReader(): DataReader[Row] = {
     val filePath = new Path(path)
     val fs = filePath.getFileSystem(conf.value)
     inputStream = fs.open(filePath)
@@ -185,7 +184,7 @@ class SimpleCSVReadTask(path: String, conf: SerializableConfiguration)
 class SimpleCSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
   extends DataWriterFactory[Row] {
 
-  override def createWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
+  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
     val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
     val fs = filePath.getFileSystem(conf.value)
@@ -218,7 +217,7 @@ class SimpleCSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[Row] {
 class InternalRowCSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
   extends DataWriterFactory[InternalRow] {
 
-  override def createWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
+  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
     val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
     val fs = filePath.getFileSystem(conf.value)
