@@ -50,11 +50,12 @@ private[orc] object OrcFilters {
 
   /**
    * Return true if this is a searchable type in ORC.
+   * Both CharType and VarcharType are cleaned at AstBuilder.
    */
   private def isSearchableType(dataType: DataType) = dataType match {
-    case ByteType | ShortType | FloatType | DoubleType => true
-    case IntegerType | LongType | StringType | BooleanType => true
-    case TimestampType | _: DecimalType => true
+    // TODO: SPARK-21787 Support for pushing down filters for DateType in ORC
+    case BinaryType | DateType => false
+    case _: AtomicType => true
     case _ => false
   }
 
