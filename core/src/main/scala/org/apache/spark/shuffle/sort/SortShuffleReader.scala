@@ -55,7 +55,8 @@ private[spark] class SortShuffleReader[K, C](
       SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue),
       SparkEnv.get.conf.get(config.REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS),
       SparkEnv.get.conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM),
-      SparkEnv.get.conf.getBoolean("spark.shuffle.detectCorrupt", true))
+      SparkEnv.get.conf.getBoolean("spark.shuffle.detectCorrupt", true),
+      rawFetcher = true)
 
     val merger = new ExternalMerger(
       context,
@@ -81,6 +82,7 @@ private[spark] class SortShuffleReader[K, C](
     // Update the spill metrics
     context.taskMetrics().incMemoryBytesSpilled(merger.memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(merger.diskBytesSpilled)
+    context.taskMetrics().incPeakExecutionMemory(merger.peakMemoryUsedBytes)
 
     new InterruptibleIterator(context, metricIter.map(p => (p._1, p._2)))
   }

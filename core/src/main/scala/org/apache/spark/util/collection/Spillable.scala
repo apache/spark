@@ -90,6 +90,10 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
       // or we already had more memory than myMemoryThreshold), spill the current collection
       shouldSpill = currentMemory >= myMemoryThreshold
     }
+    // Just hack for spill scenario test, @jerry-shao for review
+    // if (frequency == 1 && elementsRead % 2 == 0) {
+    //   shouldSpill = true
+    // }
     shouldSpill = shouldSpill || _elementsRead > numElementsForceSpillThreshold
     // Actually spill
     if (shouldSpill) {

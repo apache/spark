@@ -105,6 +105,7 @@ private[spark] class TieredDiskMerger[K, C](
   def readMerged(): Iterator[Product2[K, C]] = {
     mergeFinished.await()
 
+    logInfo(s"${onDiskBlocks.size} onDiskBlocks merged")
     // Merge the final group for combiner to directly feed to the reducer
     val finalMergedBlocks = onDiskBlocks.toArray(new Array[DiskShuffleBlock](onDiskBlocks.size()))
     val finalItrGroup = onDiskBlocksToIterators(finalMergedBlocks)
