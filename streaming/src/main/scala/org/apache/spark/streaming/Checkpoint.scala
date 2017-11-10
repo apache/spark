@@ -51,6 +51,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.yarn.app.id",
       "spark.yarn.app.attemptId",
       "spark.driver.host",
+      "spark.driver.bindAddress",
       "spark.driver.port",
       "spark.master",
       "spark.yarn.jars",
@@ -64,6 +65,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
 
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
+      .remove("spark.driver.bindAddress")
       .remove("spark.driver.port")
     val newReloadConf = new SparkConf(loadDefaults = true)
     propertiesToReload.foreach { prop =>
