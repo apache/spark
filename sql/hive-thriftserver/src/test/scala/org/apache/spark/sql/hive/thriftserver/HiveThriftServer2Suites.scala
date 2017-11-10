@@ -525,19 +525,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
-  test("Checks Hive version via SET") {
-    withJdbcStatement() { statement =>
-      val resultSet = statement.executeQuery("SET")
-
-      val conf = mutable.Map.empty[String, String]
-      while (resultSet.next()) {
-        conf += resultSet.getString(1) -> resultSet.getString(2)
-      }
-
-      assert(conf.get("spark.sql.hive.metastore.version") === Some("1.2.1"))
-    }
-  }
-
   test("SPARK-11595 ADD JAR with input path having URL scheme") {
     withJdbcStatement("test_udtf") { statement =>
       try {
