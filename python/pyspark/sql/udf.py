@@ -73,7 +73,6 @@ class UserDefinedFunction(object):
             else func.__class__.__name__)
         self.evalType = evalType
 
-
     @property
     def returnType(self):
         # This makes sure this is called after SparkContext is initialized.

@@ -35,6 +35,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
+
 def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
     def _(col):
@@ -2051,17 +2052,14 @@ def map_values(col):
 # ---------------------------- User Defined Function ----------------------------------
 
 class PandasUDFType(enum.Enum):
-    """
-    TODO: Add docs
+    """Pandas UDF
+
     """
 
     SCALAR = PythonEvalType.PANDAS_SCALAR_UDF
 
     GROUP_MAP = PythonEvalType.PANDAS_GROUP_MAP_UDF
 
-    GROUP_AGG = PythonEvalType.PANDAS_GROUP_AGGREGATE_UDF
-
-    GROUP_FLATMAP = PythonEvalType.PANDAS_GROUP_FLATMAP_UDF
 
 @since(1.3)
 def udf(f=None, returnType=StringType()):
