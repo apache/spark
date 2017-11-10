@@ -152,7 +152,9 @@ class SparkHadoopUtil extends Logging {
    */
   def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
     UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
-    addCurrentUserCredentials(deserialize(tokens))
+    val creds = deserialize(tokens)
+    logInfo(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
+    addCurrentUserCredentials(creds)
   }
 
   /**
@@ -447,6 +449,8 @@ object SparkHadoopUtil {
   } catch {
     case e: Exception => throw new SparkException("Unable to load YARN support", e)
   }
+
+  val TICKET_CACHE_ENVVAR = "KRB5CCNAME"
 
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
 

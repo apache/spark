@@ -95,8 +95,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
-  private val hadoopDelegationTokens: () => Option[Array[Byte]] = fetchHadoopDelegationTokens
-
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -153,7 +151,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       case UpdateDelegationTokens(newDelegationTokens) =>
-        // Update the driver's delegation tokens in case new executors are added later.
         executorDataMap.values.foreach { ed =>
           ed.executorEndpoint.send(UpdateDelegationTokens(newDelegationTokens))
         }
@@ -234,7 +231,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
-          hadoopDelegationTokens.apply())
+          fetchHadoopDelegationTokens())
         context.reply(reply)
     }
 

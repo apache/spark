@@ -223,6 +223,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       cfg.hadoopDelegationCreds.foreach { tokens =>
+        logInfo(s"Received tokens of ${tokens.length} bytes")
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
 

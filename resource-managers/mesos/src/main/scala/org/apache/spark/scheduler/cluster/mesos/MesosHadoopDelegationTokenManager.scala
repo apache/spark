@@ -42,9 +42,12 @@ import org.apache.spark.util.ThreadUtils
  * received they overwrite the current credentials.
  */
 private[spark] class MesosHadoopDelegationTokenManager(
-    conf: SparkConf, hadoopConfig: Configuration,
+    conf: SparkConf,
+    hadoopConfig: Configuration,
     driverEndpoint: RpcEndpointRef)
   extends Logging {
+
+  require(driverEndpoint != null, "DriverEndpoint is not initialized")
 
   private val credentialRenewerThread: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
@@ -54,7 +57,7 @@ private[spark] class MesosHadoopDelegationTokenManager(
 
   private val principal: String = conf.get(config.PRINCIPAL).orNull
 
-  private val (secretFile: String, mode: String) = getSecretFile(conf)
+  private val (secretFile: Option[String], mode: String) = getSecretFile(conf)
 
   private var (tokens: Array[Byte], timeOfNextRenewal: Long) = {
     try {
@@ -65,32 +68,34 @@ private[spark] class MesosHadoopDelegationTokenManager(
       (SparkHadoopUtil.get.serialize(creds), rt)
     } catch {
       case e: Exception =>
-        throw new IllegalStateException("Failed to initialize Hadoop delegation tokens\n" +
+        logError("Failed to initialize Hadoop delegation tokens\n" +
           s"\tPricipal: $principal\n\tmode: $mode\n\tsecret file $secretFile\n\tException: $e")
+        throw e
     }
   }
 
   scheduleTokenRenewal()
 
-  private def getSecretFile(conf: SparkConf): (String, String) = {
-    val keytab = conf.get(config.KEYTAB).orNull
-    val tgt = conf.getenv("KRB5CCNAME")
-    require(keytab != null || tgt != null, "A keytab or TGT required.")
-    // if both Keytab and TGT are detected we use the Keytab.
-    val (secretFile, mode) = if (keytab != null && tgt != null) {
-      logWarning(s"Keytab and TGT were detected, using keytab, " +
-        s"unset ${config.KEYTAB.key} to use TGT")
+  private def getSecretFile(conf: SparkConf): (Option[String], String) = {
+    val keytab = conf.get(config.KEYTAB)
+    val tgt = Option(conf.getenv(SparkHadoopUtil.TICKET_CACHE_ENVVAR))
+    val (secretFile, mode) = if (keytab.isDefined && tgt.isDefined) {
+      // if a keytab and a specific ticket cache is specified use the keytab and log the behavior
+      logWarning(s"Keytab and TGT were detected, using keytab, ${keytab.get}, " +
+        s"unset ${config.KEYTAB.key} to use TGT (${tgt.get})")
       (keytab, "keytab")
     } else {
-      val m = if (keytab != null) "keytab" else "tgt"
-      val sf = if (keytab != null) keytab else tgt
+      val m = if (keytab.isDefined) "keytab" else "tgt"
+      val sf = if (keytab.isDefined) keytab else tgt
       (sf, m)
     }
 
     if (principal == null) {
-      logInfo(s"Using mode: $mode to retrieve Hadoop delegation tokens")
+      require(mode == "tgt", s"Must specify a principal when using a Keytab, was $principal")
+      logInfo(s"Using ticket cache to fetch Hadoop delegation tokens")
     } else {
-      logInfo(s"Using principal: $principal with mode: $mode to retrieve Hadoop delegation tokens")
+      logInfo(s"Using principal: $principal with mode and keytab $keytab " +
+        s"to fetch Hadoop delegation tokens")
     }
 
     logDebug(s"secretFile is $secretFile")
@@ -128,24 +133,27 @@ private[spark] class MesosHadoopDelegationTokenManager(
     scheduleRenewal(credentialRenewerRunnable)
   }
 
-  private def getNewDelegationTokens: Array[Byte] = {
+  private def getNewDelegationTokens(): Array[Byte] = {
     logInfo(s"Attempting to login to KDC with ${conf.get(config.PRINCIPAL).orNull}")
     // Get new delegation tokens by logging in with a new UGI
     // inspired by AMCredentialRenewer.scala:L174
     val ugi = if (mode == "keytab") {
-      UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, secretFile)
+      UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, secretFile.get)
     } else {
-      UserGroupInformation.getUGIFromTicketCache(secretFile, principal)
+      // if the ticket cache is not explicitly defined, use the default
+      if (secretFile.isEmpty) {
+        UserGroupInformation.getCurrentUser
+      } else {
+        UserGroupInformation.getUGIFromTicketCache(secretFile.get, principal)
+      }
     }
     logInfo("Successfully logged into KDC")
 
     val tempCreds = ugi.getCredentials
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    var nextRenewalTime = Long.MaxValue
-    ugi.doAs(new PrivilegedExceptionAction[Void] {
-      override def run(): Void = {
-        nextRenewalTime = tokenManager.obtainDelegationTokens(hadoopConf, tempCreds)
-        null
+    val nextRenewalTime = ugi.doAs(new PrivilegedExceptionAction[Long] {
+      override def run(): Long = {
+        tokenManager.obtainDelegationTokens(hadoopConf, tempCreds)
       }
     })
 
@@ -166,10 +174,7 @@ private[spark] class MesosHadoopDelegationTokenManager(
   }
 
   private def broadcastDelegationTokens(tokens: Array[Byte]) = {
-    logDebug("Sending new tokens to all executors")
-    if (driverEndpoint == null) {
-      throw new IllegalStateException("driver endpoint is Null!")
-    }
+    logInfo("Sending new tokens to all executors")
     driverEndpoint.send(UpdateDelegationTokens(tokens))
   }
 
