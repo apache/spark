@@ -25,7 +25,7 @@ import javax.annotation.Nullable
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
-import scala.util.Try
+import scala.util.control.NonFatal
 
 import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
@@ -195,9 +195,12 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.ml.linalg.SparseMatrix",
       "org.apache.spark.ml.feature.Instance",
       "org.apache.spark.ml.feature.OffsetInstance"
-    ).map(name => Try(Utils.classForName(name))).foreach { t =>
-      if (t.isSuccess) {
-        kryo.register(t.get)
+    ).foreach { name =>
+      try {
+        val clazz = Utils.classForName(name)
+        kryo.register(clazz)
+      } catch {
+        case NonFatal(_) => // do nothing
       }
     }
 
