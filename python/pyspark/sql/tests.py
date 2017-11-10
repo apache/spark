@@ -1765,6 +1765,13 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(first['date'], epoch)
         self.assertEqual(first['lit_date'], epoch)
 
+    def test_dayofweek(self):
+        from pyspark.sql.functions import dayofweek
+        dt = datetime.datetime(2017, 11, 6)
+        df = self.spark.createDataFrame([Row(date=dt)])
+        row = df.select(dayofweek(df.date)).first()
+        self.assertEqual(row[0], 2)
+
     def test_decimal(self):
         from decimal import Decimal
         schema = StructType([StructField("decimal", DecimalType(10, 5))])
@@ -2591,6 +2598,21 @@ class SQLTests(ReusedSQLTestCase):
         data = [Row(longarray=array.array('l', [-9223372036854775808, 0, 9223372036854775807]))]
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
+
+    @unittest.skipIf(not _have_pandas, "Pandas not installed")
+    def test_create_dataframe_from_pandas_with_timestamp(self):
+        import pandas as pd
+        from datetime import datetime
+        pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
+                            "d": [pd.Timestamp.now().date()]})
+        # test types are inferred correctly without specifying schema
+        df = self.spark.createDataFrame(pdf)
+        self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
+        self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
+        # test with schema will accept pdf as input
+        df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
+        self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
+        self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):

@@ -72,4 +72,52 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     registerFileSystemStat(scheme, "largeRead_ops", _.getLargeReadOps(), 0)
     registerFileSystemStat(scheme, "write_ops", _.getWriteOps(), 0)
   }
+
+  // Expose executor task metrics using the Dropwizard metrics system.
+  // The list is taken from TaskMetrics.scala
+  val METRIC_CPU_TIME = metricRegistry.counter(MetricRegistry.name("cpuTime"))
+  val METRIC_RUN_TIME = metricRegistry.counter(MetricRegistry.name("runTime"))
+  val METRIC_JVM_GC_TIME = metricRegistry.counter(MetricRegistry.name("jvmGCTime"))
+  val METRIC_DESERIALIZE_TIME =
+    metricRegistry.counter(MetricRegistry.name("deserializeTime"))
+  val METRIC_DESERIALIZE_CPU_TIME =
+    metricRegistry.counter(MetricRegistry.name("deserializeCpuTime"))
+  val METRIC_RESULT_SERIALIZE_TIME =
+    metricRegistry.counter(MetricRegistry.name("resultSerializationTime"))
+  val METRIC_SHUFFLE_FETCH_WAIT_TIME =
+    metricRegistry.counter(MetricRegistry.name("shuffleFetchWaitTime"))
+  val METRIC_SHUFFLE_WRITE_TIME =
+    metricRegistry.counter(MetricRegistry.name("shuffleWriteTime"))
+  val METRIC_SHUFFLE_TOTAL_BYTES_READ =
+    metricRegistry.counter(MetricRegistry.name("shuffleTotalBytesRead"))
+  val METRIC_SHUFFLE_REMOTE_BYTES_READ =
+    metricRegistry.counter(MetricRegistry.name("shuffleRemoteBytesRead"))
+  val METRIC_SHUFFLE_REMOTE_BYTES_READ_TO_DISK =
+    metricRegistry.counter(MetricRegistry.name("shuffleRemoteBytesReadToDisk"))
+  val METRIC_SHUFFLE_LOCAL_BYTES_READ =
+    metricRegistry.counter(MetricRegistry.name("shuffleLocalBytesRead"))
+  val METRIC_SHUFFLE_RECORDS_READ =
+    metricRegistry.counter(MetricRegistry.name("shuffleRecordsRead"))
+  val METRIC_SHUFFLE_REMOTE_BLOCKS_FETCHED =
+    metricRegistry.counter(MetricRegistry.name("shuffleRemoteBlocksFetched"))
+  val METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED =
+    metricRegistry.counter(MetricRegistry.name("shuffleLocalBlocksFetched"))
+  val METRIC_SHUFFLE_BYTES_WRITTEN =
+    metricRegistry.counter(MetricRegistry.name("shuffleBytesWritten"))
+  val METRIC_SHUFFLE_RECORDS_WRITTEN =
+    metricRegistry.counter(MetricRegistry.name("shuffleRecordsWritten"))
+  val METRIC_INPUT_BYTES_READ =
+    metricRegistry.counter(MetricRegistry.name("bytesRead"))
+  val METRIC_INPUT_RECORDS_READ =
+    metricRegistry.counter(MetricRegistry.name("recordsRead"))
+  val METRIC_OUTPUT_BYTES_WRITTEN =
+    metricRegistry.counter(MetricRegistry.name("bytesWritten"))
+  val METRIC_OUTPUT_RECORDS_WRITTEN =
+    metricRegistry.counter(MetricRegistry.name("recordsWritten"))
+  val METRIC_RESULT_SIZE =
+    metricRegistry.counter(MetricRegistry.name("resultSize"))
+  val METRIC_DISK_BYTES_SPILLED =
+    metricRegistry.counter(MetricRegistry.name("diskBytesSpilled"))
+  val METRIC_MEMORY_BYTES_SPILLED =
+    metricRegistry.counter(MetricRegistry.name("memoryBytesSpilled"))
 }

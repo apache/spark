@@ -155,10 +155,10 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
   test("Checks Hive version") {
     withJdbcStatement() { statement =>
-      val resultSet = statement.executeQuery("SET spark.sql.hive.version")
+      val resultSet = statement.executeQuery("SET spark.sql.hive.metastore.version")
       resultSet.next()
-      assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+      assert(resultSet.getString(1) === "spark.sql.hive.metastore.version")
+      assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
 
@@ -521,20 +521,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
-    }
-  }
-
-  test("Checks Hive version via SET") {
-    withJdbcStatement() { statement =>
-      val resultSet = statement.executeQuery("SET")
-
-      val conf = mutable.Map.empty[String, String]
-      while (resultSet.next()) {
-        conf += resultSet.getString(1) -> resultSet.getString(2)
-      }
-
-      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      assert(conf.get("spark.sql.hive.metastore.version") === Some("1.2.1"))
     }
   }
 
@@ -721,10 +708,10 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
 
   test("Checks Hive version") {
     withJdbcStatement() { statement =>
-      val resultSet = statement.executeQuery("SET spark.sql.hive.version")
+      val resultSet = statement.executeQuery("SET spark.sql.hive.metastore.version")
       resultSet.next()
-      assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+      assert(resultSet.getString(1) === "spark.sql.hive.metastore.version")
+      assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
 }
