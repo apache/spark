@@ -62,6 +62,8 @@ private class SamplePathFilter extends Configured with PathFilter {
   override def setConf(conf: Configuration): Unit = {
     if (conf != null) {
       sampleRatio = conf.getDouble(SamplePathFilter.ratioParam, 1)
+      val seed = conf.getLong(SamplePathFilter.seedParam, 0)
+      random.setSeed(seed)
     }
   }
 
@@ -73,6 +75,7 @@ private class SamplePathFilter extends Configured with PathFilter {
 
 private object SamplePathFilter {
   val ratioParam = "sampleRatio"
+  val seedParam = "seed"
 
   def isFile(path: Path): Boolean = FilenameUtils.getExtension(path.toString) != ""
 
@@ -82,21 +85,25 @@ private object SamplePathFilter {
    *
    * @param sampleRatio Fraction of the files that the filter picks
    * @param spark Existing Spark session
+   * @param seed Random number seed
    * @param f The function to evaluate after setting the flag
    * @return Returns the evaluation result T of the function
    */
   def withPathFilter[T](
       sampleRatio: Double,
-      spark: SparkSession)(f: => T): T = {
+      spark: SparkSession,
+      seed: Long)(f: => T): T = {
     val sampleImages = sampleRatio < 1
     if (sampleImages) {
       val flagName = FileInputFormat.PATHFILTER_CLASS
       val hadoopConf = spark.sparkContext.hadoopConfiguration
       val old = Option(hadoopConf.getClass(flagName, null))
       hadoopConf.setDouble(SamplePathFilter.ratioParam, sampleRatio)
+      hadoopConf.setLong(SamplePathFilter.seedParam, seed)
       hadoopConf.setClass(flagName, classOf[SamplePathFilter], classOf[PathFilter])
       try f finally {
         hadoopConf.unset(SamplePathFilter.ratioParam)
+        hadoopConf.unset(SamplePathFilter.seedParam)
         old match {
           case Some(v) => hadoopConf.setClass(flagName, v, classOf[PathFilter])
           case None => hadoopConf.unset(flagName)

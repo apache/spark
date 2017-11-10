@@ -18,16 +18,16 @@
 """
 .. attribute:: ImageSchema
 
-    A singleton-like attribute of :class:`_ImageSchema` in this module.
+    An attribute of :class:`_ImageSchema` in this module.
 
 .. autoclass:: _ImageSchema
    :members:
 """
 
+import numpy as np
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
 from pyspark.sql import DataFrame, SparkSession
-import numpy as np
 
 
 class _ImageSchema(object):
@@ -72,7 +72,7 @@ class _ImageSchema(object):
 
         if self._ocvTypes is None:
             ctx = SparkContext._active_spark_context
-            self._ocvTypes = dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema._ocvTypes())
+            self._ocvTypes = dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema.javaOcvTypes())
         return self._ocvTypes
 
     @property
@@ -125,10 +125,10 @@ class _ImageSchema(object):
 
     def toImage(self, array, origin=""):
         """
-        Converts a one-dimensional array to a two-dimensional image.
+        Converts an array with metadata to a two-dimensional image.
 
         :param array array: The array to convert to image
-        :param str origin: Path to the image
+        :param str origin: Path to the image, optional
         :rtype object: Two dimensional image
 
         .. versionadded:: 2.3.0
@@ -153,17 +153,21 @@ class _ImageSchema(object):
         return _create_row(self.imageFields,
                            [origin, height, width, nChannels, mode, data])
 
-    def readImages(self, path, recursive=False, numPartitions=0,
-                   dropImageFailures=False, sampleRatio=1.0):
+    def readImages(self, path, recursive=False, numPartitions=-1,
+                   dropImageFailures=False, sampleRatio=1.0, seed=0):
         """
         Reads the directory of images from the local or remote source.
 
+        WARNINGS:
+          - If multiple jobs are run in parallel with different sampleRatio or recursive flag,
+            there may be a race condition where one job overwrites the hadoop configs of another.
+
         :param str path: Path to the image directory
-        :param SparkSession spark: The current spark session
         :param bool recursive: Recursive search flag
         :param int numPartitions: Number of DataFrame partitions
         :param bool dropImageFailures: Drop the files that are not valid images
         :param float sampleRatio: Fraction of the images loaded
+        :param int seed: Random number seed
         :rtype DataFrame: DataFrame with a single column of "images",
                see ImageSchema for details
 
@@ -179,7 +183,7 @@ class _ImageSchema(object):
         image_schema = ctx._jvm.org.apache.spark.ml.image.ImageSchema
         jsession = spark._jsparkSession
         jresult = image_schema.readImages(path, jsession, recursive, numPartitions,
-                                          dropImageFailures, float(sampleRatio))
+                                          dropImageFailures, float(sampleRatio), seed)
         return DataFrame(jresult, spark._wrapped)
 
 

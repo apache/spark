@@ -29,13 +29,15 @@ import org.apache.spark.input.PortableDataStream
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.types._
 
+/**
+ * :: Experimental ::
+ * Defines the image schema and methods to read and manipulate images.
+ */
 @Experimental
 @Since("2.3.0")
 object ImageSchema {
 
   val undefinedImageType = "Undefined"
-
-  val imageFields: Array[String] = Array("origin", "height", "width", "nChannels", "mode", "data")
 
   val ocvTypes: Map[String, Int] = Map(
     undefinedImageType -> -1,
@@ -45,20 +47,22 @@ object ImageSchema {
   /**
    * Used for conversion to python
    */
-  val _ocvTypes: java.util.Map[String, Int] = ocvTypes.asJava
+  val javaOcvTypes: java.util.Map[String, Int] = ocvTypes.asJava
 
   /**
    * Schema for the image column: Row(String, Int, Int, Int, Int, Array[Byte])
    */
   val columnSchema = StructType(
-    StructField(imageFields(0), StringType, true) ::
-    StructField(imageFields(1), IntegerType, false) ::
-    StructField(imageFields(2), IntegerType, false) ::
-    StructField(imageFields(3), IntegerType, false) ::
+    StructField("origin", StringType, true) ::
+    StructField("height", IntegerType, false) ::
+    StructField("width", IntegerType, false) ::
+    StructField("nChannels", IntegerType, false) ::
     // OpenCV-compatible type: CV_8UC3 in most cases
-    StructField(imageFields(4), IntegerType, false) ::
+    StructField("mode", IntegerType, false) ::
     // Bytes in OpenCV-compatible order: row-wise BGR in most cases
-    StructField(imageFields(5), BinaryType, false) :: Nil)
+    StructField("data", BinaryType, false) :: Nil)
+
+  val imageFields: Array[String] = columnSchema.fieldNames
 
   /**
    * DataFrame with a single column of images named "image" (nullable)
@@ -66,7 +70,6 @@ object ImageSchema {
   val imageSchema = StructType(StructField("image", columnSchema, true) :: Nil)
 
   /**
-   * :: Experimental ::
    * Gets the origin of the image
    *
    * @return The origin of the image
@@ -74,7 +77,6 @@ object ImageSchema {
   def getOrigin(row: Row): String = row.getString(0)
 
   /**
-   * :: Experimental ::
    * Gets the height of the image
    *
    * @return The height of the image
@@ -82,7 +84,6 @@ object ImageSchema {
   def getHeight(row: Row): Int = row.getInt(1)
 
   /**
-   * :: Experimental ::
    * Gets the width of the image
    *
    * @return The width of the image
@@ -90,7 +91,6 @@ object ImageSchema {
   def getWidth(row: Row): Int = row.getInt(2)
 
   /**
-   * :: Experimental ::
    * Gets the number of channels in the image
    *
    * @return The number of channels in the image
@@ -98,7 +98,6 @@ object ImageSchema {
   def getNChannels(row: Row): Int = row.getInt(3)
 
   /**
-   * :: Experimental ::
    * Gets the OpenCV representation as an int
    *
    * @return The OpenCV representation as an int
@@ -106,7 +105,6 @@ object ImageSchema {
   def getMode(row: Row): Int = row.getInt(4)
 
   /**
-   * :: Experimental ::
    * Gets the image data
    *
    * @return The image data
@@ -119,7 +117,7 @@ object ImageSchema {
    * @param origin Origin of the invalid image
    * @return Row with the default values
    */
-  private def invalidImageRow(origin: String): Row =
+  private[spark] def invalidImageRow(origin: String): Row =
     Row(Row(origin, -1, -1, -1, ocvTypes(undefinedImageType), Array.ofDim[Byte](0)))
 
   /**
@@ -187,8 +185,11 @@ object ImageSchema {
   }
 
   /**
-   * :: Experimental ::
    * Read the directory of images from the local or remote source
+   *
+   * WARNINGS:
+   *  - If multiple jobs are run in parallel with different sampleRatio or recursive flag,
+   *    there may be a race condition where one job overwrites the hadoop configs of another.
    *
    * @param path Path to the image directory
    * @param sparkSession Spark Session, if omitted gets or creates the session
@@ -204,9 +205,10 @@ object ImageSchema {
       path: String,
       sparkSession: SparkSession = null,
       recursive: Boolean = false,
-      numPartitions: Int = 0,
+      numPartitions: Int = -1,
       dropImageFailures: Boolean = false,
-      sampleRatio: Double = 1.0): DataFrame = {
+      sampleRatio: Double = 1.0,
+      seed: Long = 0): DataFrame = {
     require(sampleRatio <= 1.0 && sampleRatio >= 0, "sampleRatio should be between 0 and 1")
 
     val session = if (sparkSession != null) sparkSession else SparkSession.builder().getOrCreate
@@ -218,8 +220,9 @@ object ImageSchema {
       }
 
     RecursiveFlag.withRecursiveFlag(recursive, session) {
-      SamplePathFilter.withPathFilter(sampleRatio, session) {
-        val streams = session.sparkContext.binaryFiles(path, partitions).repartition(partitions)
+      SamplePathFilter.withPathFilter(sampleRatio, session, seed) {
+        val binResult = session.sparkContext.binaryFiles(path, partitions)
+        val streams = if (numPartitions == -1) binResult else binResult.repartition(partitions)
         val convert = (origin: String, bytes: PortableDataStream) =>
           decode(origin, bytes.toArray())
         val images = if (dropImageFailures) {

@@ -1822,8 +1822,8 @@ class FPGrowthTests(SparkSessionTestCase):
 class ImageReaderTest(SparkSessionTestCase):
 
     def test_read_images(self):
-        data_path = 'python/test_support/image/kittens'
-        df = ImageSchema.readImages(data_path, recursive=True)
+        data_path = 'data/mllib/images/kittens'
+        df = ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
         self.assertEqual(df.count(), 4)
         first_row = df.take(1)[0][0]
         array = ImageSchema.toNDArray(first_row)
