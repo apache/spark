@@ -52,12 +52,13 @@ object InMemoryRelation {
 private[columnar]
 case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
-private[columnar] class CachedPartitionIterator(
+private[columnar] class CachedBatchIterator(
     rowIterator: Iterator[InternalRow],
     output: Seq[Attribute],
     batchSize: Int,
     useCompression: Boolean,
-    batchStats: LongAccumulator) extends Iterator[CachedBatch] {
+    batchStats: LongAccumulator,
+    singleBatchPerPartition: Boolean) extends Iterator[CachedBatch] {
 
   def next(): CachedBatch = {
     val columnBuilders = output.map { attribute =>
@@ -66,7 +67,17 @@ private[columnar] class CachedPartitionIterator(
 
     var rowCount = 0
     var totalSize = 0L
-    while (rowIterator.hasNext) {
+
+    val terminateLoop = (singleBatch: Boolean, rowIter: Iterator[InternalRow],
+      rowCount: Int, size: Long) => {
+      if (!singleBatch) {
+        rowIter.hasNext && rowCount < batchSize && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE
+      } else {
+        rowIter.hasNext
+      }
+    }
+
+    while (terminateLoop(singleBatchPerPartition, rowIterator, rowCount, totalSize)) {
       val row = rowIterator.next()
 
       // Added for SPARK-6082. This assertion can be useful for scenarios when something
@@ -88,74 +99,19 @@ private[columnar] class CachedPartitionIterator(
       }
       rowCount += 1
     }
+
     batchStats.add(totalSize)
 
     val statsInSeq = columnBuilders.flatMap(_.columnStats.collectedStatistics)
 
-    // scalastyle:off
-    println(s"generate stats ${statsInSeq.toSeq}")
-    // scalastyle:on
-
     val stats = InternalRow.fromSeq(statsInSeq)
 
     CachedBatch(rowCount, columnBuilders.map { builder =>
-      JavaUtils.bufferToArray(builder.build())}, stats)
+      JavaUtils.bufferToArray(builder.build())
+    }, stats)
   }
 
   def hasNext: Boolean = rowIterator.hasNext
-}
-
-private[columnar] class CachedBatchIterator(
-    rowIterator: Iterator[InternalRow],
-    output: Seq[Attribute],
-    batchSize: Int,
-    useCompression: Boolean,
-    batchStats: LongAccumulator) extends Iterator[CachedBatch] {
-
-  def next(): CachedBatch = {
-      val columnBuilders = output.map { attribute =>
-        ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
-      }.toArray
-
-      var rowCount = 0
-      var totalSize = 0L
-
-      while (rowIterator.hasNext && rowCount < batchSize
-        && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
-        val row = rowIterator.next()
-
-        // Added for SPARK-6082. This assertion can be useful for scenarios when something
-        // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
-        // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
-        // hard to decipher.
-        assert(
-          row.numFields == columnBuilders.length,
-          s"Row column number mismatch, expected ${output.size} columns, " +
-            s"but got ${row.numFields}." +
-            s"\nRow content: $row")
-
-        var i = 0
-        totalSize = 0
-        while (i < row.numFields) {
-          columnBuilders(i).appendFrom(row, i)
-          totalSize += columnBuilders(i).columnStats.sizeInBytes
-          i += 1
-        }
-        rowCount += 1
-      }
-
-      batchStats.add(totalSize)
-
-      val statsInSeq = columnBuilders.flatMap(_.columnStats.collectedStatistics)
-
-      val stats = InternalRow.fromSeq(statsInSeq)
-
-      CachedBatch(rowCount, columnBuilders.map { builder =>
-        JavaUtils.bufferToArray(builder.build())
-      }, stats)
-    }
-
-    def hasNext: Boolean = rowIterator.hasNext
 }
 
 case class InMemoryRelation(
@@ -198,11 +154,8 @@ case class InMemoryRelation(
 
     // TODO: need better abstraction for two iterators here
     val batchedRDD = child.execute().mapPartitionsInternal { rowIterator =>
-      if (!usePartitionLevelMetadata) {
-        new CachedBatchIterator(rowIterator, output, batchSize, useCompression, batchStats)
-      } else {
-        new CachedPartitionIterator(rowIterator, output, batchSize, useCompression, batchStats)
-      }
+      new CachedBatchIterator(rowIterator, output, batchSize, useCompression, batchStats,
+        usePartitionLevelMetadata)
     }
 
     val cached = new CachedColumnarRDD(batchedRDD.sparkContext, batchedRDD,
