@@ -66,6 +66,12 @@ private[spark] object HiveUtils extends Logging {
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
+  // A deprecated config which is only used to provide a default value, in case some existing
+  // applications depend on this config, e.g. Spark SQL ODBC driver.
+  val HIVE_EXECUTION_VERSION = buildConf("spark.sql.hive.version")
+    .stringConf
+    .createWithDefault(builtinHiveVersion)
+
   val HIVE_METASTORE_JARS = buildConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
