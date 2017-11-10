@@ -89,13 +89,12 @@ class ClusteringEvaluatorSuite
     486.3208393186
   */
   test("Calinski-Harabasz") {
-    val iris = ClusteringEvaluatorSuite.irisDataset(spark)
     val evaluator = new ClusteringEvaluator()
       .setFeaturesCol("features")
       .setPredictionCol("label")
       .setMetricName("calinski-harabasz")
 
-    assert(evaluator.evaluate(iris) ~== 486.3208393186 relTol 1e-5)
+    assert(evaluator.evaluate(irisDataset) ~== 486.3208393186 relTol 1e-5)
   }
 
 }
