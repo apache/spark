@@ -82,7 +82,7 @@ public class typed {
   }
 
   /**
-   * Min aggregate function for floating point (long, i.e. 64 bit integer) type.
+   * Min aggregate function for integral (long, i.e. 64 bit integer) type.
    *
    * @since 2.3.0
    */
@@ -100,7 +100,7 @@ public class typed {
   }
 
   /**
-   * Min aggregate function for floating point (long, i.e. 64 bit integer) type.
+   * Min aggregate function for integral (long, i.e. 64 bit integer) type.
    *
    * @since 2.3.0
    */

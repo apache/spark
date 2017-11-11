@@ -82,13 +82,13 @@ class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
   }
 }
 
-class TypedAverage[IN](val f: IN => Double)
-  extends Aggregator[IN, (Double, Long), Double] {
+class TypedAverage[IN](val f: IN => Double) extends Aggregator[IN, (Double, Long), Double] {
 
   override def zero: (Double, Long) = (0.0, 0L)
   override def reduce(b: (Double, Long), a: IN): (Double, Long) = (f(a) + b._1, 1 + b._2)
-  override def merge(b1: (Double, Long), b2: (Double, Long)): (Double, Long) =
+  override def merge(b1: (Double, Long), b2: (Double, Long)): (Double, Long) = {
     (b1._1 + b2._1, b1._2 + b2._2)
+  }
   override def finish(reduction: (Double, Long)): Double = reduction._1 / reduction._2
 
   override def bufferEncoder: Encoder[(Double, Long)] = ExpressionEncoder[(Double, Long)]()
@@ -102,8 +102,7 @@ class TypedAverage[IN](val f: IN => Double)
   }
 }
 
-class TypedMinDouble[IN](val f: IN => Double)
-  extends Aggregator[IN, Double, Double] {
+class TypedMinDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Double] {
 
   override def zero: Double = Double.PositiveInfinity
   override def reduce(b: Double, a: IN): Double = math.min(b, f(a))
@@ -127,8 +126,7 @@ class TypedMinDouble[IN](val f: IN => Double)
   }
 }
 
-class TypedMaxDouble[IN](val f: IN => Double)
-  extends Aggregator[IN, Double, Double] {
+class TypedMaxDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Double] {
 
   override def zero: Double = Double.NegativeInfinity
   override def reduce(b: Double, a: IN): Double = math.max(b, f(a))
