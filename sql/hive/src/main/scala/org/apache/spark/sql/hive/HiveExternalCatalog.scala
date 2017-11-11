@@ -1034,14 +1034,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       schema.fields.map(f => (f.name, f.dataType)).toMap
     stats.colStats.foreach { case (colName, colStat) =>
       colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
-        val statKey = columnStatKeyPropName(colName, k)
-        val threshold = conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
-        if (v.length > threshold) {
-          throw new AnalysisException(s"Cannot persist '$statKey' into hive metastore as " +
-            s"its value exceeds length threshold $threshold")
-        } else {
-          statsProperties += (statKey -> v)
-        }
+        statsProperties += (columnStatKeyPropName(colName, k) -> v)
       }
     }
 

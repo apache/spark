@@ -1135,23 +1135,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("fail to persist stat property due to length threshold") {
-    import testImplicits._
-
-    val df = (1 to 5000).toDF("cint")
-    val tableName = "long_histogram_test"
-
-    withTable(tableName) {
-      df.write.saveAsTable(tableName)
-      withSQLConf(
-        SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "1000") {
-        intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS cint")
-        }
-      }
-    }
-  }
-
   private def testUpdatingTableStats(tableDescription: String, createTableCmd: String): Unit = {
     test("test table-level statistics for " + tableDescription) {
       val parquetTable = "parquetTable"
