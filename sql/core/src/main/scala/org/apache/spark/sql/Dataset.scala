@@ -2579,10 +2579,8 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreach(f: T => Unit): Unit = {
-    withNewRDDExecutionId {
-      rdd.foreach(f)
-    }
+  def foreach(f: T => Unit): Unit = withNewRDDExecutionId {
+    rdd.foreach(f)
   }
 
   /**
@@ -2600,10 +2598,8 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreachPartition(f: Iterator[T] => Unit): Unit = {
-    withNewRDDExecutionId {
-      rdd.foreachPartition(f)
-    }
+  def foreachPartition(f: Iterator[T] => Unit): Unit = withNewRDDExecutionId {
+    rdd.foreachPartition(f)
   }
 
   /**
