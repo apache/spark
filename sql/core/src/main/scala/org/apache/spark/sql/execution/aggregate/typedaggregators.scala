@@ -26,8 +26,7 @@ import org.apache.spark.sql.expressions.Aggregator
 // This file defines internal implementations for aggregators.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TypedSumDouble[IN](val f: IN => Double)
-  extends Aggregator[IN, Double, Double] {
+class TypedSumDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Double] {
 
   override def zero: Double = 0.0
   override def reduce(b: Double, a: IN): Double = b + f(a)
@@ -106,14 +105,13 @@ class TypedAverage[IN](val f: IN => Double)
 class TypedMinDouble[IN](val f: IN => Double)
   extends Aggregator[IN, Double, Double] {
 
-  override def zero: Double = Double.MaxValue
+  override def zero: Double = Double.PositiveInfinity
   override def reduce(b: Double, a: IN): Double = math.min(b, f(a))
   override def merge(b1: Double, b2: Double): Double = math.min(b1, b2)
   override def finish(reduction: Double): Double = {
-    if (Double.MaxValue == reduction) {
+    if (Double.PositiveInfinity == reduction) {
       Double.NegativeInfinity
-    }
-    else {
+    } else {
       reduction
     }
   }
@@ -132,14 +130,13 @@ class TypedMinDouble[IN](val f: IN => Double)
 class TypedMaxDouble[IN](val f: IN => Double)
   extends Aggregator[IN, Double, Double] {
 
-  override def zero: Double = Double.MinValue
+  override def zero: Double = Double.NegativeInfinity
   override def reduce(b: Double, a: IN): Double = math.max(b, f(a))
   override def merge(b1: Double, b2: Double): Double = math.max(b1, b2)
   override def finish(reduction: Double): Double = {
-    if (Double.MinValue == reduction) {
+    if (Double.NegativeInfinity == reduction) {
       Double.PositiveInfinity
-    }
-    else {
+    } else {
       reduction
     }
   }
@@ -163,8 +160,7 @@ class TypedMinLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
   override def finish(reduction: Long): Long = {
     if (Long.MaxValue == reduction) {
       Long.MinValue
-    }
-    else {
+    } else {
       reduction
     }
   }
@@ -188,8 +184,7 @@ class TypedMaxLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
   override def finish(reduction: Long): Long = {
     if (Long.MinValue == reduction) {
       Long.MaxValue
-    }
-    else {
+    } else {
       reduction
     }
   }
