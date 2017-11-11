@@ -696,7 +696,7 @@ setMethod("hash",
 #'
 #' \dontrun{
 #' head(select(df, df$time, year(df$time), quarter(df$time), month(df$time),
-#'            dayofmonth(df$time), dayofyear(df$time), weekofyear(df$time)))
+#'             dayofmonth(df$time), dayofweek(df$time), dayofyear(df$time), weekofyear(df$time)))
 #' head(agg(groupBy(df, year(df$time)), count(df$y), avg(df$y)))
 #' head(agg(groupBy(df, month(df$time)), avg(df$y)))}
 #' @note dayofmonth since 1.5.0
@@ -704,6 +704,21 @@ setMethod("dayofmonth",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "dayofmonth", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{dayofweek}: Extracts the day of the week as an integer from a
+#' given date/timestamp/string.
+#'
+#' @rdname column_datetime_functions
+#' @aliases dayofweek dayofweek,Column-method
+#' @export
+#' @note dayofweek since 2.3.0
+setMethod("dayofweek",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "dayofweek", x@jc)
             column(jc)
           })
 
