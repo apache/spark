@@ -38,8 +38,17 @@ function makeIdNumeric(id) {
 }
 
 function formatDate(date) {
-  if (date <= 0) return "-";
-  else return date.split(".")[0].replace("T", " ");
+  if (date <= 0) {
+    return "-";
+  } else {
+    var dt = new Date(date);
+    return dt.getFullYear() + "-" +
+      ("0" + (dt.getMonth() + 1)).slice(-2) + "-" +
+      ("0" + dt.getDate()).slice(-2) + " " +
+      ("0" + dt.getHours()).slice(-2) + ":" +
+      ("0" + dt.getMinutes()).slice(-2) + ":" +
+      ("0" + dt.getSeconds()).slice(-2);
+  }
 }
 
 function getParameterByName(name, searchString) {
@@ -129,9 +138,9 @@ $(document).ready(function() {
         var num = app["attempts"].length;
         for (j in app["attempts"]) {
           var attempt = app["attempts"][j];
-          attempt["startTime"] = formatDate(attempt["startTime"]);
-          attempt["endTime"] = formatDate(attempt["endTime"]);
-          attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
+          attempt["startTime"] = formatDate(attempt["startTimeEpoch"]);
+          attempt["endTime"] = formatDate(attempt["endTimeEpoch"]);
+          attempt["lastUpdated"] = formatDate(attempt["lastUpdatedEpoch"]);
           attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
             (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
           attempt["durationMillisec"] = attempt["duration"];

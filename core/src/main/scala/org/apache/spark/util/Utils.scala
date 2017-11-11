@@ -26,7 +26,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.util.{Locale, Properties, Random, TimeZone, UUID}
+import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.GZIPInputStream
@@ -2741,9 +2741,6 @@ private[spark] object Utils extends Logging {
       }
     }
   }
-
-  def getHistoryServerTimeZone: TimeZone =
-    TimeZone.getTimeZone(SparkHadoopUtil.get.getHistoryServerTimeZone)
 
 }
 

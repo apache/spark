@@ -17,7 +17,6 @@
 
 package org.apache.spark.internal
 
-import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
@@ -226,11 +225,6 @@ package object config {
   // To limit how many applications are shown in the History Server summary ui
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
-
-  private[spark] val HISTORY_TIMEZONE = ConfigBuilder("spark.history.timeZone")
-    .doc("""The ID of history server timezone, e.g. "America/Los_Angeles", "Asia/Shanghai", etc.""")
-    .stringConf
-    .createWithDefault("GMT")
 
   private[spark] val UI_SHOW_CONSOLE_PROGRESS = ConfigBuilder("spark.ui.showConsoleProgress")
     .doc("When true, show the progress bar in the console.")
