@@ -345,6 +345,21 @@ class ALSModel private[ml] (
   }
 
   /**
+   * Returns top `numItems` items recommended for each user id in the input data set. Note that if
+   * there are duplicate ids in the input dataset, only one set of recommendations per unique id
+   * will be returned.
+   * @param dataset a Dataset containing a column of user ids. The column name must match `userCol`.
+   * @param numItems max number of recommendations for each user.
+   * @return a DataFrame of (userCol: Int, recommendations), where recommendations are
+   *         stored as an array of (itemCol: Int, rating: Float) Rows.
+   */
+  @Since("2.3.0")
+  def recommendForUserSubset(dataset: Dataset[_], numItems: Int): DataFrame = {
+    val srcFactorSubset = getSourceFactorSubset(dataset, userFactors, $(userCol))
+    recommendForAll(srcFactorSubset, itemFactors, $(userCol), $(itemCol), numItems)
+  }
+
+  /**
    * Returns top `numUsers` users recommended for each item, for all items.
    * @param numUsers max number of recommendations for each item
    * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
@@ -353,6 +368,39 @@ class ALSModel private[ml] (
   @Since("2.2.0")
   def recommendForAllItems(numUsers: Int): DataFrame = {
     recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers)
+  }
+
+  /**
+   * Returns top `numUsers` users recommended for each item id in the input data set. Note that if
+   * there are duplicate ids in the input dataset, only one set of recommendations per unique id
+   * will be returned.
+   * @param dataset a Dataset containing a column of item ids. The column name must match `itemCol`.
+   * @param numUsers max number of recommendations for each item.
+   * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
+   *         stored as an array of (userCol: Int, rating: Float) Rows.
+   */
+  @Since("2.3.0")
+  def recommendForItemSubset(dataset: Dataset[_], numUsers: Int): DataFrame = {
+    val srcFactorSubset = getSourceFactorSubset(dataset, itemFactors, $(itemCol))
+    recommendForAll(srcFactorSubset, userFactors, $(itemCol), $(userCol), numUsers)
+  }
+
+  /**
+   * Returns a subset of a factor DataFrame limited to only those unique ids contained
+   * in the input dataset.
+   * @param dataset input Dataset containing id column to user to filter factors.
+   * @param factors factor DataFrame to filter.
+   * @param column column name containing the ids in the input dataset.
+   * @return DataFrame containing factors only for those ids present in both the input dataset and
+   *         the factor DataFrame.
+   */
+  private def getSourceFactorSubset(
+      dataset: Dataset[_],
+      factors: DataFrame,
+      column: String): DataFrame = {
+    factors
+      .join(dataset.select(column), factors("id") === dataset(column), joinType = "left_semi")
+      .select(factors("id"), factors("features"))
   }
 
   /**
@@ -763,11 +811,15 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   /**
    * Representing a normal equation to solve the following weighted least squares problem:
    *
-   * minimize \sum,,i,, c,,i,, (a,,i,,^T^ x - b,,i,,)^2^ + lambda * x^T^ x.
+   * minimize \sum,,i,, c,,i,, (a,,i,,^T^ x - d,,i,,)^2^ + lambda * x^T^ x.
    *
    * Its normal equation is given by
    *
-   * \sum,,i,, c,,i,, (a,,i,, a,,i,,^T^ x - b,,i,, a,,i,,) + lambda * x = 0.
+   * \sum,,i,, c,,i,, (a,,i,, a,,i,,^T^ x - d,,i,, a,,i,,) + lambda * x = 0.
+   *
+   * Distributing and letting b,,i,, = c,,i,, * d,,i,,
+   *
+   * \sum,,i,, c,,i,, a,,i,, a,,i,,^T^ x - b,,i,, a,,i,, + lambda * x = 0.
    */
   private[recommendation] class NormalEquation(val k: Int) extends Serializable {
 
@@ -796,7 +848,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       copyToDouble(a)
       blas.dspr(upper, k, c, da, 1, ata)
       if (b != 0.0) {
-        blas.daxpy(k, c * b, da, 1, atb, 1)
+        blas.daxpy(k, b, da, 1, atb, 1)
       }
       this
     }
@@ -1624,15 +1676,15 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
             val srcFactor = sortedSrcFactors(blockId)(localIndex)
             val rating = ratings(i)
             if (implicitPrefs) {
-              // Extension to the original paper to handle b < 0. confidence is a function of |b|
-              // instead so that it is never negative. c1 is confidence - 1.0.
+              // Extension to the original paper to handle rating < 0. confidence is a function
+              // of |rating| instead so that it is never negative. c1 is confidence - 1.
               val c1 = alpha * math.abs(rating)
-              // For rating <= 0, the corresponding preference is 0. So the term below is only added
-              // for rating > 0. Because YtY is already added, we need to adjust the scaling here.
-              if (rating > 0) {
+              // For rating <= 0, the corresponding preference is 0. So the second argument of add
+              // is only there for rating > 0.
+              if (rating > 0.0) {
                 numExplicits += 1
-                ls.add(srcFactor, (c1 + 1.0) / c1, c1)
               }
+              ls.add(srcFactor, if (rating > 0.0) 1.0 + c1 else 0.0, c1)
             } else {
               ls.add(srcFactor, rating)
               numExplicits += 1

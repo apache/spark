@@ -163,9 +163,9 @@ private[spark] class CoarseGrainedExecutorBackend(
     if (notifyDriver && driver.nonEmpty) {
       driver.get.ask[Boolean](
         RemoveExecutor(executorId, new ExecutorLossReason(reason))
-      ).onFailure { case e =>
+      ).failed.foreach(e =>
         logWarning(s"Unable to notify the driver due to " + e.getMessage, e)
-      }(ThreadUtils.sameThread)
+      )(ThreadUtils.sameThread)
     }
 
     System.exit(code)
@@ -217,6 +217,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         logInfo("Will periodically update credentials from: " +
           driverConf.get("spark.yarn.credentials.file"))
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
+      }
+
+      cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
+        val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
+        SparkHadoopUtil.get.addCurrentUserCredentials(creds)
       }
 
       val env = SparkEnv.createExecutorEnv(

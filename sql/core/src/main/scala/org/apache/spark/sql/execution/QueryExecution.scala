@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.execution.joins.ReorderJoinPredicates
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
 import org.apache.spark.util.Utils
 
@@ -103,6 +104,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
     python.ExtractPythonUDFs,
     PlanSubqueries(sparkSession),
+    new ReorderJoinPredicates,
     EnsureRequirements(sparkSession.sessionState.conf),
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
@@ -113,7 +115,8 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
 
   /**
-   * Returns the result as a hive compatible sequence of strings. This is for testing only.
+   * Returns the result as a hive compatible sequence of strings. This is used in tests and
+   * `SparkSQLDriver` for CLI applications.
    */
   def hiveResultString(): Seq[String] = executedPlan match {
     case ExecutedCommandExec(desc: DescribeTableCommand) =>
@@ -154,7 +157,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     def toHiveStructString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -172,7 +175,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     a match {
       case (struct: Row, StructType(fields)) =>
         struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -199,11 +202,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       """.stripMargin.trim
   }
 
-  override def toString: String = completeString(appendStats = false)
-
-  def toStringWithStats: String = completeString(appendStats = true)
-
-  private def completeString(appendStats: Boolean): String = {
+  override def toString: String = {
     def output = Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(
@@ -211,22 +210,26 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       stringOrError(analyzed.treeString(verbose = true))
     ).filter(_.nonEmpty).mkString("\n")
 
-    val optimizedPlanString = if (appendStats) {
-      // trigger to compute stats for logical plans
-      optimizedPlan.stats(sparkSession.sessionState.conf)
-      optimizedPlan.treeString(verbose = true, addSuffix = true)
-    } else {
-      optimizedPlan.treeString(verbose = true)
-    }
-
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical.treeString(verbose = true))}
        |== Analyzed Logical Plan ==
        |$analyzedPlan
        |== Optimized Logical Plan ==
-       |${stringOrError(optimizedPlanString)}
+       |${stringOrError(optimizedPlan.treeString(verbose = true))}
        |== Physical Plan ==
        |${stringOrError(executedPlan.treeString(verbose = true))}
+    """.stripMargin.trim
+  }
+
+  def stringWithStats: String = {
+    // trigger to compute stats for logical plans
+    optimizedPlan.stats
+
+    // only show optimized logical plan and physical plan
+    s"""== Optimized Logical Plan ==
+        |${stringOrError(optimizedPlan.treeString(verbose = true, addSuffix = true))}
+        |== Physical Plan ==
+        |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim
   }
 
@@ -243,6 +246,15 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       // scalastyle:off println
       println(org.apache.spark.sql.execution.debug.codegenString(executedPlan))
       // scalastyle:on println
+    }
+
+    /**
+     * Get WholeStageCodegenExec subtrees and the codegen in a query plan
+     *
+     * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+     */
+    def codegenToSeq(): Seq[(String, String)] = {
+      org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
     }
   }
 }

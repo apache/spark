@@ -320,6 +320,7 @@ class LocalLDAModel private[spark] (
 
         docBound
       }.sum()
+    ElogbetaBc.destroy(blocking = false)
 
     // Bound component for prob(topic-term distributions):
     //   E[log p(beta | eta) - log q(beta | lambda)]
@@ -370,9 +371,8 @@ class LocalLDAModel private[spark] (
   /**
    * Get a method usable as a UDF for `topicDistributions()`
    */
-  private[spark] def getTopicDistributionMethod(sc: SparkContext): Vector => Vector = {
+  private[spark] def getTopicDistributionMethod: Vector => Vector = {
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
-    val expElogbetaBc = sc.broadcast(expElogbeta)
     val docConcentrationBrz = this.docConcentration.asBreeze
     val gammaShape = this.gammaShape
     val k = this.k
@@ -383,7 +383,7 @@ class LocalLDAModel private[spark] (
       } else {
         val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
-          expElogbetaBc.value,
+          expElogbeta,
           docConcentrationBrz,
           gammaShape,
           k)

@@ -21,14 +21,12 @@ import java.{ util => ju }
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.kafka.clients.consumer._
-import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
+import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -213,8 +211,10 @@ private[spark] class DirectKafkaInputDStream[K, V](
       val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
-    val rdd = new KafkaRDD[K, V](
-      context.sparkContext, executorKafkaParams, offsetRanges.toArray, getPreferredHosts, true)
+    val useConsumerCache = context.conf.getBoolean("spark.streaming.kafka.consumer.cache.enabled",
+      true)
+    val rdd = new KafkaRDD[K, V](context.sparkContext, executorKafkaParams, offsetRanges.toArray,
+      getPreferredHosts, useConsumerCache)
 
     // Report the record number and metadata of this batch interval to InputInfoTracker.
     val description = offsetRanges.filter { offsetRange =>
@@ -316,7 +316,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
            b.map(OffsetRange(_)),
            getPreferredHosts,
            // during restore, it's possible same partition will be consumed from multiple
-           // threads, so dont use cache
+           // threads, so do not use cache.
            false
          )
       }

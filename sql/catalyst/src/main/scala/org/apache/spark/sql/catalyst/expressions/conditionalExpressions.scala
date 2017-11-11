@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1 < 2, 'a', 'b');
        a
@@ -131,8 +131,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
          |  $globalValue = ${ev.value};
          |}
          """.stripMargin
-    ctx.addNewFunction(funcName, funcBody)
-    (funcName, globalIsNull, globalValue)
+    val fullFuncName = ctx.addNewFunction(funcName, funcBody)
+    (fullFuncName, globalIsNull, globalValue)
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
@@ -223,7 +223,22 @@ abstract class CaseWhenBase(
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END - When `expr1` = true, returns `expr2`; when `expr3` = true, return `expr4`; else return `expr5`.")
+  usage = "CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END - When `expr1` = true, returns `expr2`; else when `expr3` = true, returns `expr4`; else returns `expr5`.",
+  arguments = """
+    Arguments:
+      * expr1, expr3 - the branch condition expressions should all be boolean type.
+      * expr2, expr4, expr5 - the branch value expressions and else value expression should all be
+          same type or coercible to a common type.
+  """,
+  examples = """
+    Examples:
+      > SELECT CASE WHEN 1 > 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END;
+       1
+      > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END;
+       2
+      > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 < 0 THEN 2.0 ELSE null END;
+       NULL
+  """)
 // scalastyle:on line.size.limit
 case class CaseWhen(
     val branches: Seq[(Expression, Expression)],

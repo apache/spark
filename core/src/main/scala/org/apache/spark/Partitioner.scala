@@ -108,11 +108,21 @@ class HashPartitioner(partitions: Int) extends Partitioner {
 class RangePartitioner[K : Ordering : ClassTag, V](
     partitions: Int,
     rdd: RDD[_ <: Product2[K, V]],
-    private var ascending: Boolean = true)
+    private var ascending: Boolean = true,
+    val samplePointsPerPartitionHint: Int = 20)
   extends Partitioner {
+
+  // A constructor declared in order to maintain backward compatibility for Java, when we add the
+  // 4th constructor parameter samplePointsPerPartitionHint. See SPARK-22160.
+  // This is added to make sure from a bytecode point of view, there is still a 3-arg ctor.
+  def this(partitions: Int, rdd: RDD[_ <: Product2[K, V]], ascending: Boolean) = {
+    this(partitions, rdd, ascending, samplePointsPerPartitionHint = 20)
+  }
 
   // We allow partitions = 0, which happens when sorting an empty RDD under the default settings.
   require(partitions >= 0, s"Number of partitions cannot be negative but found $partitions.")
+  require(samplePointsPerPartitionHint > 0,
+    s"Sample points per partition must be greater than 0 but found $samplePointsPerPartitionHint")
 
   private var ordering = implicitly[Ordering[K]]
 
@@ -122,7 +132,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       Array.empty
     } else {
       // This is the sample size we need to have roughly balanced output partitions, capped at 1M.
-      val sampleSize = math.min(20.0 * partitions, 1e6)
+      // Cast to double to avoid overflowing ints or longs
+      val sampleSize = math.min(samplePointsPerPartitionHint.toDouble * partitions, 1e6)
       // Assume the input partitions are roughly balanced and over-sample a little bit.
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
       val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
@@ -153,7 +164,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
           val weight = (1.0 / fraction).toFloat
           candidates ++= reSampled.map(x => (x, weight))
         }
-        RangePartitioner.determineBounds(candidates, partitions)
+        RangePartitioner.determineBounds(candidates, math.min(partitions, candidates.size))
       }
     }
   }

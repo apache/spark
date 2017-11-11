@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.ExternalSorter
 
 /**
  * used to test close InputStream in UnsafeRowSerializer

@@ -85,7 +85,7 @@ case class CheckOverflow(child: Expression, dataType: DecimalType) extends Unary
   override def nullable: Boolean = true
 
   override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[Decimal].toPrecision(dataType.precision, dataType.scale).orNull
+    input.asInstanceOf[Decimal].toPrecision(dataType.precision, dataType.scale)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {

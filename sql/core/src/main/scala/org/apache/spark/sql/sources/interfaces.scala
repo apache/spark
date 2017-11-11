@@ -91,7 +91,7 @@ trait RelationProvider {
  *
  * The difference between a [[RelationProvider]] and a [[SchemaRelationProvider]] is that
  * users need to provide a schema when using a [[SchemaRelationProvider]].
- * A relation provider can inherits both [[RelationProvider]] and [[SchemaRelationProvider]]
+ * A relation provider can inherit both [[RelationProvider]] and [[SchemaRelationProvider]]
  * if it can support both schema inference and user-specified schemas.
  *
  * @since 1.3.0

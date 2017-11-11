@@ -97,7 +97,7 @@ class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
 
   // Java api support
   def this(f: MapFunction[IN, Object]) = this(x => f.call(x))
-
+  
   def toColumnJava: TypedColumn[IN, java.lang.Long] = {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
   }

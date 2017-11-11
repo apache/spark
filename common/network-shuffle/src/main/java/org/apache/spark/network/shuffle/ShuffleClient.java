@@ -18,7 +18,9 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.Closeable;
-import java.io.File;
+import java.util.Collections;
+
+import com.codahale.metrics.MetricSet;
 
 /** Provides an interface for reading shuffle files, either from an Executor or external service. */
 public abstract class ShuffleClient implements Closeable {
@@ -35,6 +37,16 @@ public abstract class ShuffleClient implements Closeable {
    * Note that this API takes a sequence so the implementation can batch requests, and does not
    * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
    * the data of a block is fetched, rather than waiting for all blocks to be fetched.
+   *
+   * @param host the host of the remote node.
+   * @param port the port of the remote node.
+   * @param execId the executor id.
+   * @param blockIds block ids to fetch.
+   * @param listener the listener to receive block fetching status.
+   * @param tempFileManager TempFileManager to create and clean temp files.
+   *                        If it's not <code>null</code>, the remote blocks will be streamed
+   *                        into temp shuffle files to reduce the memory usage, otherwise,
+   *                        they will be kept in memory.
    */
   public abstract void fetchBlocks(
       String host,
@@ -42,5 +54,14 @@ public abstract class ShuffleClient implements Closeable {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      File[] shuffleFiles);
+      TempFileManager tempFileManager);
+
+  /**
+   * Get the shuffle MetricsSet from ShuffleClient, this will be used in MetricsSystem to
+   * get the Shuffle related metrics.
+   */
+  public MetricSet shuffleMetrics() {
+    // Return an empty MetricSet by default.
+    return () -> Collections.emptyMap();
+  }
 }

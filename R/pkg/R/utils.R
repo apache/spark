@@ -625,7 +625,7 @@ appendPartitionLengths <- function(x, other) {
     x <- lapplyPartition(x, appendLength)
     other <- lapplyPartition(other, appendLength)
   }
-  list (x, other)
+  list(x, other)
 }
 
 # Perform zip or cartesian between elements from two RDDs in each partition
@@ -657,7 +657,7 @@ mergePartitions <- function(rdd, zip) {
           keys <- list()
         }
         if (lengthOfValues > 1) {
-          values <- part[ (lengthOfKeys + 1) : (len - 1) ]
+          values <- part[(lengthOfKeys + 1) : (len - 1)]
         } else {
           values <- list()
         }
@@ -908,10 +908,6 @@ isAtomicLengthOne <- function(x) {
   is.atomic(x) && length(x) == 1
 }
 
-is_cran <- function() {
-  !identical(Sys.getenv("NOT_CRAN"), "true")
-}
-
 is_windows <- function() {
   .Platform$OS.type == "windows"
 }
@@ -920,6 +916,6 @@ hadoop_home_set <- function() {
   !identical(Sys.getenv("HADOOP_HOME"), "")
 }
 
-not_cran_or_windows_with_hadoop <- function() {
-  !is_cran() && (!is_windows() || hadoop_home_set())
+windows_with_hadoop <- function() {
+  !is_windows() || hadoop_home_set()
 }
