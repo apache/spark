@@ -281,4 +281,32 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(null == spark.conf.get("spark.sql.nonexistent", null))
     assert("<undefined>" == spark.conf.get("spark.sql.nonexistent", "<undefined>"))
   }
+
+  test("SPARK-10365: PARQUET_OUTPUT_TIMESTAMP_TYPE") {
+    spark.sessionState.conf.clear()
+
+    // check default value
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.INT96)
+
+    // PARQUET_INT64_AS_TIMESTAMP_MILLIS should be respected.
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS, true)
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS)
+
+    // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority over PARQUET_INT64_AS_TIMESTAMP_MILLIS
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "timestamp_micros")
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "int96")
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.INT96)
+
+    // test invalid conf value
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "invalid")
+    }
+
+    spark.sessionState.conf.clear()
+  }
 }
