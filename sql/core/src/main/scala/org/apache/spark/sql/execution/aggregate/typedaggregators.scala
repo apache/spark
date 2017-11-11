@@ -29,7 +29,7 @@ import org.apache.spark.sql.expressions.Aggregator
 class TypedSumDouble[IN](val f: IN => Double)
   extends Aggregator[IN, java.lang.Double, java.lang.Double] {
 
-  override def zero: java.lang.Double = null
+  override def zero: java.lang.Double = 0.0
   override def reduce(b: java.lang.Double, a: IN): java.lang.Double =
     if (b == null) f(a) else b + f(a)
 
@@ -58,7 +58,7 @@ class TypedSumDouble[IN](val f: IN => Double)
 class TypedSumLong[IN](val f: IN => Long)
   extends Aggregator[IN, java.lang.Long, java.lang.Long] {
 
-  override def zero: java.lang.Long = null
+  override def zero: java.lang.Long = 0L
   override def reduce(b: java.lang.Long, a: IN): java.lang.Long =
     if (b == null) f(a) else b + f(a)
 
@@ -110,14 +110,13 @@ class TypedAverage[IN](val f: IN => Double)
   override def reduce(b: (Double, Long), a: IN): (Double, Long) = (f(a) + b._1, 1 + b._2)
   override def merge(b1: (Double, Long), b2: (Double, Long)): (Double, Long) =
     (b1._1 + b2._1, b1._2 + b2._2)
-  override def finish(reduction: (Double, Long)): java.lang.Double =
-    if (reduction._2 == 0) null else reduction._1 / reduction._2
+  override def finish(reduction: (Double, Long)): java.lang.Double = reduction._1 / reduction._2
 
   override def bufferEncoder: Encoder[(Double, Long)] = ExpressionEncoder[(Double, Long)]()
   override def outputEncoder: Encoder[java.lang.Double] = ExpressionEncoder[java.lang.Double]()
 
   // Java api support
-  def this(f: MapFunction[IN, java.lang.Double]) = this(x => f.call(x).asInstanceOf[Double])
+  def this(f: MapFunction[IN, java.lang.Double]) = this(x => f.call(x))
 
   def toColumnScala: TypedColumn[IN, Double] = {
     toColumn.asInstanceOf[TypedColumn[IN, Double]]
