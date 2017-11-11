@@ -94,11 +94,13 @@ public class VectorizedColumnReader {
   private final ColumnDescriptor descriptor;
   private final OriginalType originalType;
 
-  public VectorizedColumnReader(ColumnDescriptor descriptor, OriginalType t, PageReader pageReader)
-      throws IOException {
+  public VectorizedColumnReader(
+      ColumnDescriptor descriptor,
+      OriginalType originalType,
+      PageReader pageReader) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
-    this.originalType = t;
+    this.originalType = originalType;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
