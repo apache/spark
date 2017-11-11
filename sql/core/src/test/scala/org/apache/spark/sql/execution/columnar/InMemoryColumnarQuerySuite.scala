@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.RDDPartitionMetadataBlockId
+import org.apache.spark.storage.{RDDBlockId, RDDPartitionMetadataBlockId}
 import org.apache.spark.storage.StorageLevel._
 
 class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
@@ -486,7 +486,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("table cache can prune unnecessary partitions correctly") {
     var bytesReadWithoutPruning = 0L
     var bytesReadWithPruning = 0L
-    var inMemoryPartitionMetadata = false
+    @volatile var inMemoryPartitionMetadata = false
     sparkContext.addSparkListener(new SparkListener() {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
         val metrics = taskEnd.taskMetrics
@@ -549,6 +549,45 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
         assert(bytesReadWithMetadata > 0)
         assert(bytesReadWithoutMetadata > 0)
         assert(bytesReadWithoutMetadata > bytesReadWithMetadata * 3)
+      }
+    }
+  }
+
+  test("generate correct results when data block is removed") {
+    var bytesReadWithCachedBlock = 0L
+    var bytesReadWithoutCachedBlock = 0L
+    @volatile var removeCachedBlock = false
+    sparkContext.addSparkListener(new SparkListener() {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+        val metrics = taskEnd.taskMetrics
+        if (removeCachedBlock) {
+          bytesReadWithoutCachedBlock += metrics.inputMetrics.bytesRead
+        } else {
+          bytesReadWithCachedBlock += metrics.inputMetrics.bytesRead
+        }
+      }
+    })
+    Seq("true").foreach { enabled =>
+      withSQLConf(SQLConf.IN_MEMORY_PARTITION_METADATA.key -> enabled) {
+        removeCachedBlock = true
+        val df1 = (0 until 100000).toDF("value").repartition(4).cache()
+        val inMemoryRelation = df1.queryExecution.optimizedPlan.collect {
+          case m: InMemoryRelation => m
+        }
+        df1.where("value >= 99999").collect()
+        (0 until 4).foreach(partitionId => SparkEnv.get.blockManager.removeBlock(
+          RDDBlockId(inMemoryRelation.head.cachedColumnBuffers.id, partitionId)))
+        var resultArr = df1.where("value >= 99999").collect()
+        assert(resultArr.length === 1)
+        assert(resultArr.head.getInt(0) === 99999)
+        // scalastyle:off
+        removeCachedBlock = false
+        resultArr = df1.where("value >= 99999").collect()
+        assert(resultArr.length === 1)
+        assert(resultArr.head.getInt(0) === 99999)
+        df1.unpersist(blocking = true)
+        assert(bytesReadWithCachedBlock > 0)
+        assert(bytesReadWithoutCachedBlock == 0)
       }
     }
   }
