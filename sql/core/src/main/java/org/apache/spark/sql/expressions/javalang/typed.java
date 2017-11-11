@@ -42,7 +42,7 @@ public class typed {
    * @since 2.0.0
    */
   public static <T> TypedColumn<T, Double> avg(MapFunction<T, Double> f) {
-    return new TypedAverage<T>(f).toColumn();
+    return new TypedAverage<T>(f).toColumnJava();
   }
 
   /**
@@ -60,7 +60,7 @@ public class typed {
    * @since 2.0.0
    */
   public static <T> TypedColumn<T, Double> sum(MapFunction<T, Double> f) {
-    return new TypedSumDouble<T>(f).toColumn();
+    return new TypedSumDouble<T>(f).toColumnJava();
   }
 
   /**
@@ -69,7 +69,7 @@ public class typed {
    * @since 2.0.0
    */
   public static <T> TypedColumn<T, Long> sumLong(MapFunction<T, Long> f) {
-    return new TypedSumLong<T>(f).toColumn();
+    return new TypedSumLong<T>(f).toColumnJava();
   }
 
   /**
@@ -78,7 +78,7 @@ public class typed {
    * @since 2.3.0
    */
   public static <T> TypedColumn<T, Double> min(MapFunction<T, Double> f) {
-    return new TypedMinDouble<T>(f).toColumn();
+    return new TypedMinDouble<T>(f).toColumnJava();
   }
 
   /**
@@ -87,7 +87,7 @@ public class typed {
    * @since 2.3.0
    */
   public static <T> TypedColumn<T, Long> minLong(MapFunction<T, Long> f) {
-    return new TypedMinLong<T>(f).toColumn();
+    return new TypedMinLong<T>(f).toColumnJava();
   }
 
   /**
@@ -96,7 +96,7 @@ public class typed {
    * @since 2.3.0
    */
   public static <T> TypedColumn<T, Double> max(MapFunction<T, Double> f) {
-    return new TypedMaxDouble<T>(f).toColumn();
+    return new TypedMaxDouble<T>(f).toColumnJava();
   }
 
   /**
@@ -105,6 +105,6 @@ public class typed {
    * @since 2.3.0
    */
   public static <T> TypedColumn<T, Long> maxLong(MapFunction<T, Long> f) {
-    return new TypedMaxLong<T>(f).toColumn();
+    return new TypedMaxLong<T>(f).toColumnJava();
   }
 }
