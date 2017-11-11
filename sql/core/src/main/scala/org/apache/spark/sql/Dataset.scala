@@ -2594,7 +2594,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreach(f: T => Unit): Unit = withNewExecutionId {
+  def foreach(f: T => Unit): Unit = withNewRDDExecutionId {
     rdd.foreach(f)
   }
 
@@ -2613,7 +2613,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreachPartition(f: Iterator[T] => Unit): Unit = withNewExecutionId {
+  def foreachPartition(f: Iterator[T] => Unit): Unit = withNewRDDExecutionId {
     rdd.foreachPartition(f)
   }
 
@@ -2851,6 +2851,12 @@ class Dataset[T] private[sql](
    */
   def unpersist(): this.type = unpersist(blocking = false)
 
+  // Represents the `QueryExecution` used to produce the content of the Dataset as an `RDD`.
+  @transient private lazy val rddQueryExecution: QueryExecution = {
+    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    sparkSession.sessionState.executePlan(deserialized)
+  }
+
   /**
    * Represents the content of the Dataset as an `RDD` of `T`.
    *
@@ -2859,8 +2865,7 @@ class Dataset[T] private[sql](
    */
   lazy val rdd: RDD[T] = {
     val objectType = exprEnc.deserializer.dataType
-    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
-    sparkSession.sessionState.executePlan(deserialized).toRdd.mapPartitions { rows =>
+    rddQueryExecution.toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])
     }
   }
@@ -3111,6 +3116,20 @@ class Dataset[T] private[sql](
    */
   private def withNewExecutionId[U](body: => U): U = {
     SQLExecution.withNewExecutionId(sparkSession, queryExecution)(body)
+  }
+
+  /**
+   * Wrap an action of the Dataset's RDD to track all Spark jobs in the body so that we can connect
+   * them with an execution. Before performing the action, the metrics of the executed plan will be
+   * reset.
+   */
+  private def withNewRDDExecutionId[U](body: => U): U = {
+    SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
+      rddQueryExecution.executedPlan.foreach { plan =>
+        plan.resetMetrics()
+      }
+      body
+    }
   }
 
   /**
