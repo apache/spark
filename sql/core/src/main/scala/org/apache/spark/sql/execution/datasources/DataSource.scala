@@ -512,7 +512,8 @@ case class DataSource(
    * Returns a logical plan to write the given [[LogicalPlan]] out to this [[DataSource]].
    */
   def planForWriting(mode: SaveMode, data: LogicalPlan): LogicalPlan = {
-    if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
+    if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType]) &&
+      className.toLowerCase != "parquet") {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
 

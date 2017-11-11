@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -276,6 +277,9 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      case CalendarIntervalType =>
+        new ParquetDictionaryAwareIntervalConverter(updater)
+
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
@@ -341,6 +345,36 @@ private[parquet] class ParquetRowConverter(
       val offset = buffer.arrayOffset() + buffer.position()
       val numBytes = buffer.remaining()
       updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
+    }
+  }
+
+  /**
+   * Parquet converter for fixed-precision decimals.
+   */
+  private abstract class ParquetIntervalConverter(updater: ParentContainerUpdater)
+    extends ParquetPrimitiveConverter(updater) {
+
+    protected var expandedDictionary: Array[CalendarInterval] = _
+
+    override def hasDictionarySupport: Boolean = true
+
+    override def addValueFromDictionary(dictionaryId: Int): Unit = {
+      updater.set(expandedDictionary(dictionaryId))
+    }
+
+     // Converts decimals stored as either FIXED_LENGTH_BYTE_ARRAY or BINARY
+    override def addBinary(value: Binary): Unit = {
+      updater.set(ParquetRowConverter.binaryToInterval(value))
+    }
+  }
+
+  private class ParquetDictionaryAwareIntervalConverter(updater: ParentContainerUpdater)
+    extends ParquetIntervalConverter(updater) {
+
+    override def setDictionary(dictionary: Dictionary): Unit = {
+      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { id =>
+        ParquetRowConverter.binaryToInterval(dictionary.decodeToBinary(id))
+      }
     }
   }
 
@@ -680,5 +714,14 @@ private[parquet] object ParquetRowConverter {
     val timeOfDayNanos = buffer.getLong
     val julianDay = buffer.getInt
     DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+  }
+
+  def binaryToInterval(binary: Binary): CalendarInterval = {
+    assert(binary.length() == 12, s"Interval data are expected to be stored in" +
+      s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
+    val buf = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
+    val months = buf.getInt
+    val micros = buf.getInt * CalendarInterval.MICROS_PER_DAY + buf.getInt * 1000L
+    new CalendarInterval(months, micros)
   }
 }
