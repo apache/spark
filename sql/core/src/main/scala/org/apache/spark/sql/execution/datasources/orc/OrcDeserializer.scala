@@ -34,15 +34,35 @@ import org.apache.spark.unsafe.types.UTF8String
 private[orc] class OrcDeserializer(
     dataSchema: StructType,
     requiredSchema: StructType,
-    maybeMissingSchemaColumnNames: Option[Seq[String]]) {
+    missingColumnNames: Seq[String]) {
 
   private[this] val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
   private[this] val unwrappers = requiredSchema.fields.map(f => unwrapperFor(f.dataType))
 
-  def deserialize(writable: OrcStruct): InternalRow = {
-    convertOrcStructToInternalRow(writable, dataSchema, requiredSchema,
-      maybeMissingSchemaColumnNames, Some(unwrappers), Some(mutableRow))
+  def deserialize(orcStruct: OrcStruct): InternalRow = {
+    var i = 0
+    val len = requiredSchema.length
+    val names = orcStruct.getSchema.getFieldNames
+    while (i < len) {
+      val name = requiredSchema(i).name
+      val writable = if (missingColumnNames.contains(name)) {
+        null
+      } else {
+        if (names.contains(name)) {
+          orcStruct.getFieldValue(name)
+        } else {
+          orcStruct.getFieldValue("_col" + dataSchema.fieldIndex(name))
+        }
+      }
+      if (writable == null) {
+        mutableRow.setNullAt(i)
+      } else {
+        unwrappers(i)(writable, mutableRow, i)
+      }
+      i += 1
+    }
+    mutableRow
   }
 
   /**
@@ -52,26 +72,18 @@ private[orc] class OrcDeserializer(
   private[this] def convertOrcStructToInternalRow(
       orcStruct: OrcStruct,
       dataSchema: StructType,
-      requiredSchema: StructType,
-      missingColumnNames: Option[Seq[String]] = None,
-      valueUnwrappers: Option[Seq[(Any, InternalRow, Int) => Unit]] = None,
-      internalRow: Option[InternalRow] = None): InternalRow = {
-    val mutableRow = internalRow.getOrElse(new SpecificInternalRow(requiredSchema.map(_.dataType)))
-    val unwrappers =
-      valueUnwrappers.getOrElse(requiredSchema.fields.map(_.dataType).map(unwrapperFor).toSeq)
+      requiredSchema: StructType): InternalRow = {
+    val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
+    val unwrappers = requiredSchema.fields.map(_.dataType).map(unwrapperFor).toSeq
     var i = 0
     val len = requiredSchema.length
     val names = orcStruct.getSchema.getFieldNames
     while (i < len) {
       val name = requiredSchema(i).name
-      val writable = if (missingColumnNames.isEmpty || !missingColumnNames.contains(name)) {
-        if (names.contains(name)) {
-          orcStruct.getFieldValue(name)
-        } else {
-          orcStruct.getFieldValue("_col" + dataSchema.fieldIndex(name))
-        }
+      val writable = if (names.contains(name)) {
+        orcStruct.getFieldValue(name)
       } else {
-        null
+        orcStruct.getFieldValue("_col" + dataSchema.fieldIndex(name))
       }
       if (writable == null) {
         mutableRow.setNullAt(i)

@@ -169,7 +169,7 @@ class OrcFileFormat
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
 
         val unsafeProjection = UnsafeProjection.create(requiredSchema)
-        val deserializer = new OrcDeserializer(dataSchema, requiredSchema, maybeMissingColumnNames)
+        val deserializer = new OrcDeserializer(dataSchema, requiredSchema, missingColumnNames)
         iter.map(value => unsafeProjection(deserializer.deserialize(value)))
       }
     }
