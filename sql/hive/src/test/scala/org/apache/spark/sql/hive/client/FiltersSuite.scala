@@ -65,6 +65,10 @@ class FiltersSuite extends SparkFunSuite with Logging {
     (Literal("") === a("varchar", StringType)) :: Nil,
     "")
 
+  filterTest("null-safe equals",
+    (Literal("test") <=> a("stringcol", StringType)) :: Nil,
+    "")
+
   filterTest("SPARK-19912 String literals should be escaped for Hive metastore partition pruning",
     (a("stringcol", StringType) === Literal("p1\" and q=\"q1")) ::
       (Literal("p2\" and q=\"q2") === a("stringcol", StringType)) :: Nil,
