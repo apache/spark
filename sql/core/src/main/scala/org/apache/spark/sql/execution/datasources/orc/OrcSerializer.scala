@@ -23,7 +23,7 @@ import org.apache.orc.storage.common.`type`.HiveDecimal
 import org.apache.orc.storage.serde2.io.{DateWritable, HiveDecimalWritable}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
+import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.orc.OrcUtils.{getTypeDescription, withNullSafe}
 import org.apache.spark.sql.types._
@@ -31,14 +31,62 @@ import org.apache.spark.unsafe.types.UTF8String
 
 private[orc] class OrcSerializer(dataSchema: StructType) {
 
-  private[this] lazy val orcStruct: OrcStruct =
-    createOrcValue(dataSchema).asInstanceOf[OrcStruct]
+  private[this] lazy val orcStruct: OrcStruct = createOrcValue(dataSchema).asInstanceOf[OrcStruct]
 
-  private[this] val writableWrappers =
-    dataSchema.fields.map(f => getWritableWrapper(f.dataType))
+  private[this] lazy val length = dataSchema.length
+
+  private[this] val writers = dataSchema.map(_.dataType).map(makeWriter).toArray
 
   def serialize(row: InternalRow): OrcStruct = {
-    convertInternalRowToOrcStruct(row, dataSchema, Some(writableWrappers), Some(orcStruct))
+    var i = 0
+    while (i < length) {
+      if (row.isNullAt(i)) {
+        orcStruct.setFieldValue(i, null)
+      } else {
+        writers(i)(row, i)
+      }
+      i += 1
+    }
+    orcStruct
+  }
+
+  private[this] def makeWriter(dataType: DataType): (SpecializedGetters, Int) => Unit = {
+    dataType match {
+      case BooleanType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          orcStruct.setFieldValue(ordinal, new BooleanWritable(row.getBoolean(ordinal)))
+
+      case ByteType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          orcStruct.setFieldValue(ordinal, new ByteWritable(row.getByte(ordinal)))
+
+      case ShortType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          orcStruct.setFieldValue(ordinal, new ShortWritable(row.getShort(ordinal)))
+
+      case IntegerType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          orcStruct.setFieldValue(ordinal, new IntWritable(row.getInt(ordinal)))
+
+      case LongType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          orcStruct.setFieldValue(ordinal, new LongWritable(row.getLong(ordinal)))
+
+      case FloatType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          orcStruct.setFieldValue(ordinal, new FloatWritable(row.getFloat(ordinal)))
+
+      case DoubleType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          orcStruct.setFieldValue(ordinal, new DoubleWritable(row.getDouble(ordinal)))
+
+      case _ =>
+        val wrapper = getWritableWrapper(dataType)
+        (row: SpecializedGetters, ordinal: Int) => {
+          val value = wrapper(row.get(ordinal, dataType)).asInstanceOf[WritableComparable[_]]
+          orcStruct.setFieldValue(ordinal, value)
+        }
+    }
   }
 
   /**
@@ -50,24 +98,22 @@ private[orc] class OrcSerializer(dataSchema: StructType) {
   /**
    * Convert Apache Spark InternalRow to Apache ORC OrcStruct.
    */
-  private[this] def convertInternalRowToOrcStruct(
-      row: InternalRow,
-      schema: StructType,
-      valueWrappers: Option[Seq[Any => Any]] = None,
-      struct: Option[OrcStruct] = None): OrcStruct = {
-    val wrappers =
-      valueWrappers.getOrElse(schema.fields.map(_.dataType).map(getWritableWrapper).toSeq)
-    val orcStruct = struct.getOrElse(createOrcValue(schema).asInstanceOf[OrcStruct])
+  private[this] def convertInternalRowToOrcStruct(row: InternalRow, schema: StructType) = {
+    val wrappers = schema.map(_.dataType).map(getWritableWrapper).toArray
+    val orcStruct = createOrcValue(schema).asInstanceOf[OrcStruct]
 
-    for (schemaIndex <- 0 until schema.length) {
-      val fieldType = schema(schemaIndex).dataType
-      if (row.isNullAt(schemaIndex)) {
-        orcStruct.setFieldValue(schemaIndex, null)
+    var i = 0
+    val length = schema.length
+    while (i < length) {
+      val fieldType = schema(i).dataType
+      if (row.isNullAt(i)) {
+        orcStruct.setFieldValue(i, null)
       } else {
-        val field = row.get(schemaIndex, fieldType)
-        val fieldValue = wrappers(schemaIndex)(field).asInstanceOf[WritableComparable[_]]
-        orcStruct.setFieldValue(schemaIndex, fieldValue)
+        val field = row.get(i, fieldType)
+        val fieldValue = wrappers(i)(field).asInstanceOf[WritableComparable[_]]
+        orcStruct.setFieldValue(i, fieldValue)
       }
+      i += 1
     }
     orcStruct
   }

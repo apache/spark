@@ -38,13 +38,14 @@ private[orc] class OrcDeserializer(
 
   private[this] val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
-  private[this] val unwrappers = requiredSchema.fields.map(f => unwrapperFor(f.dataType))
+  private[this] val length = requiredSchema.length
+
+  private[this] val unwrappers = requiredSchema.map(_.dataType).map(unwrapperFor).toArray
 
   def deserialize(orcStruct: OrcStruct): InternalRow = {
     var i = 0
-    val len = requiredSchema.length
     val names = orcStruct.getSchema.getFieldNames
-    while (i < len) {
+    while (i < length) {
       val name = requiredSchema(i).name
       val writable = if (missingColumnNames.contains(name)) {
         null
@@ -64,6 +65,46 @@ private[orc] class OrcDeserializer(
     }
     mutableRow
   }
+
+  private[this] def unwrapperFor(dataType: DataType): (Any, InternalRow, Int) => Unit =
+    dataType match {
+      case NullType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setNullAt(ordinal)
+
+      case BooleanType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setBoolean(ordinal, value.asInstanceOf[BooleanWritable].get)
+
+      case ByteType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setByte(ordinal, value.asInstanceOf[ByteWritable].get)
+
+      case ShortType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setShort(ordinal, value.asInstanceOf[ShortWritable].get)
+
+      case IntegerType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setInt(ordinal, value.asInstanceOf[IntWritable].get)
+
+      case LongType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setLong(ordinal, value.asInstanceOf[LongWritable].get)
+
+      case FloatType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setFloat(ordinal, value.asInstanceOf[FloatWritable].get)
+
+      case DoubleType =>
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row.setDouble(ordinal, value.asInstanceOf[DoubleWritable].get)
+
+      case _ =>
+        val unwrapper = getValueUnwrapper(dataType)
+        (value: Any, row: InternalRow, ordinal: Int) =>
+          row(ordinal) = unwrapper(value)
+    }
 
   /**
    * Convert Apache ORC OrcStruct to Apache Spark InternalRow.
@@ -173,43 +214,4 @@ private[orc] class OrcDeserializer(
     case _ =>
       throw new UnsupportedOperationException(s"$dataType is not supported yet.")
   }
-
-  private[this] def unwrapperFor(dataType: DataType): (Any, InternalRow, Int) => Unit =
-    dataType match {
-      case NullType =>
-        (value: Any, row: InternalRow, ordinal: Int) => row.setNullAt(ordinal)
-
-      case BooleanType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setBoolean(ordinal, value.asInstanceOf[BooleanWritable].get)
-
-      case ByteType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setByte(ordinal, value.asInstanceOf[ByteWritable].get)
-
-      case ShortType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setShort(ordinal, value.asInstanceOf[ShortWritable].get)
-
-      case IntegerType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setInt(ordinal, value.asInstanceOf[IntWritable].get)
-
-      case LongType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setLong(ordinal, value.asInstanceOf[LongWritable].get)
-
-      case FloatType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setFloat(ordinal, value.asInstanceOf[FloatWritable].get)
-
-      case DoubleType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setDouble(ordinal, value.asInstanceOf[DoubleWritable].get)
-
-      case _ =>
-        val unwrapper = getValueUnwrapper(dataType)
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row(ordinal) = unwrapper(value)
-    }
 }
