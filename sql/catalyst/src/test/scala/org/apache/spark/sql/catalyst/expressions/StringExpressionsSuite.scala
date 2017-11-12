@@ -45,6 +45,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("SPARK-22498: Concat should not generate codes beyond 64KB") {
+    val N = 5000
+    val strs = (1 to N).map(x => s"x_$x")
+    checkEvaluation(Concat(strs.map(Literal.create(_, StringType))), strs.mkString, EmptyRow)
+  }
+
   test("concat_ws") {
     def testConcatWs(expected: String, sep: String, inputs: Any*): Unit = {
       val inputExprs = inputs.map {
@@ -72,6 +78,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testConcatWs("a哈哈b哈哈c", "哈哈", Seq("a", null, "b"), null, "c", Seq.empty[String])
     testConcatWs("a哈哈b哈哈c", "哈哈", Seq("a", null, "b"), null, "c", Seq[String](null))
     // scalastyle:on
+  }
+
+  test("SPARK-22498: ConcatWs should not generate codes beyond 64KB") {
+    val N = 5000
+    val sepExpr = Literal.create("#", StringType)
+    val strings1 = (1 to N).map(x => s"s$x")
+    val inputsExpr1 = strings1.map(Literal.create(_, StringType))
+    checkEvaluation(ConcatWs(sepExpr +: inputsExpr1), strings1.mkString("#"), EmptyRow)
+
+    val strings2 = (1 to N).map(x => Seq(s"s$x"))
+    val inputsExpr2 = strings2.map(Literal.create(_, ArrayType(StringType)))
+    checkEvaluation(
+      ConcatWs(sepExpr +: inputsExpr2), strings2.map(s => s(0)).mkString("#"), EmptyRow)
   }
 
   test("elt") {
