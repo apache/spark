@@ -72,11 +72,11 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
 
       val (condFuncName, condGlobalIsNull, condGlobalValue) =
-        createAndAddFunction(ctx, condEval, predicate.dataType, "evalIfCondExpr")
+        ctx.createAndAddFunction(condEval, predicate.dataType, "evalIfCondExpr")
       val (trueFuncName, trueGlobalIsNull, trueGlobalValue) =
-        createAndAddFunction(ctx, trueEval, trueValue.dataType, "evalIfTrueExpr")
+        ctx.createAndAddFunction(trueEval, trueValue.dataType, "evalIfTrueExpr")
       val (falseFuncName, falseGlobalIsNull, falseGlobalValue) =
-        createAndAddFunction(ctx, falseEval, falseValue.dataType, "evalIfFalseExpr")
+        ctx.createAndAddFunction(falseEval, falseValue.dataType, "evalIfFalseExpr")
       s"""
         $condFuncName(${ctx.INPUT_ROW});
         boolean ${ev.isNull} = false;
@@ -110,29 +110,6 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     }
 
     ev.copy(code = generatedCode)
-  }
-
-  private def createAndAddFunction(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      dataType: DataType,
-      baseFuncName: String): (String, String, String) = {
-    val globalIsNull = ctx.freshName("isNull")
-    ctx.addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
-    val globalValue = ctx.freshName("value")
-    ctx.addMutableState(ctx.javaType(dataType), globalValue,
-      s"$globalValue = ${ctx.defaultValue(dataType)};")
-    val funcName = ctx.freshName(baseFuncName)
-    val funcBody =
-      s"""
-         |private void $funcName(InternalRow ${ctx.INPUT_ROW}) {
-         |  ${ev.code.trim}
-         |  $globalIsNull = ${ev.isNull};
-         |  $globalValue = ${ev.value};
-         |}
-         """.stripMargin
-    val fullFuncName = ctx.addNewFunction(funcName, funcBody)
-    (fullFuncName, globalIsNull, globalValue)
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
