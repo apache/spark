@@ -25,7 +25,7 @@ import org.apache.orc.storage.serde2.io.{DateWritable, HiveDecimalWritable}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.datasources.orc.OrcUtils.getTypeDescription
+import org.apache.spark.sql.execution.datasources.orc.OrcUtils.{getTypeDescription, withNullSafe}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -70,10 +70,6 @@ private[orc] class OrcSerializer(dataSchema: StructType) {
       }
     }
     orcStruct
-  }
-
-  private[this] def withNullSafe(f: Any => Any): Any => Any = {
-    input => if (input == null) null else f(input)
   }
 
   /**

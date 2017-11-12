@@ -42,6 +42,10 @@ object OrcUtils extends Logging {
     "ZLIB" -> ".zlib",
     "LZO" -> ".lzo")
 
+  def withNullSafe(f: Any => Any): Any => Any = {
+    input => if (input == null) null else f(input)
+  }
+
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)

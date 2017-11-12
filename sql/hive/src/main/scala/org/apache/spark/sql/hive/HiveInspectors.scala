@@ -32,6 +32,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.orc.OrcUtils.withNullSafe
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -254,10 +255,6 @@ private[hive] trait HiveInspectors {
   private def isSubClassOf(t: Type, parent: Class[_]): Boolean = t match {
     case cls: Class[_] => parent.isAssignableFrom(cls)
     case _ => false
-  }
-
-  private def withNullSafe(f: Any => Any): Any => Any = {
-    input => if (input == null) null else f(input)
   }
 
   /**
