@@ -86,6 +86,12 @@ object Utils {
     captor.getValue.asScala.toList
   }
 
+  def verifyTaskNotLaunched(driver: SchedulerDriver, offerId: String): Unit = {
+    verify(driver, times(0)).launchTasks(
+      Matchers.eq(Collections.singleton(createOfferId(offerId))),
+      Matchers.any(classOf[java.util.Collection[TaskInfo]]))
+  }
+
   def createOfferId(offerId: String): OfferID = {
     OfferID.newBuilder().setValue(offerId).build()
   }
