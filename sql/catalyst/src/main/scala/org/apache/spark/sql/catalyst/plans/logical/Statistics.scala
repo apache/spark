@@ -335,6 +335,7 @@ object ColumnStat extends Logging {
  * This class is an implementation of equi-height histogram.
  * Equi-height histogram represents the distribution of a column's values by a sequence of bins.
  * Each bin has a value range and contains approximately the same number of rows.
+ *
  * @param height number of rows in each bin
  * @param bins equi-height histogram bins
  */
@@ -357,6 +358,7 @@ case class Histogram(height: Double, bins: Array[HistogramBin]) {
 
 /**
  * A bin in an equi-height histogram. We use double type for lower/higher bound for simplicity.
+ *
  * @param lo lower bound of the value range in this bin
  * @param hi higher bound of the value range in this bin
  * @param ndv approximate number of distinct values in this bin
