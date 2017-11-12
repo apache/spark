@@ -91,7 +91,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     ev.copy(code = s"""
       ${ev.isNull} = true;
       ${ev.value} = ${ctx.defaultValue(dataType)};
-      ${ctx.splitExpressions(ctx.INPUT_ROW, evals)}""")
+      ${ctx.splitExpressions(evals, "coalesce", Nil)}""")
   }
 }
 
@@ -383,7 +383,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       }
     }
 
-    val code = ctx.splitExpressions(ctx.INPUT_ROW, evals)
+    val code = ctx.splitExpressions(evals, "atLeastNNonNull", Nil)
 
     ev.copy(code = s"""
       $nonnull = 0;
