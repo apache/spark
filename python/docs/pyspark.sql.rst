@@ -7,6 +7,7 @@ Module Context
 .. automodule:: pyspark.sql
     :members:
     :undoc-members:
+    :exclude-members: builder
 
 pyspark.sql.types module
 ------------------------

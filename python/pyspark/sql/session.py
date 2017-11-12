@@ -72,6 +72,9 @@ class SparkSession(object):
     ...     .appName("Word Count") \\
     ...     .config("spark.some.config.option", "some-value") \\
     ...     .getOrCreate()
+
+    .. autoattribute:: builder
+       :annotation:
     """
 
     class Builder(object):
@@ -182,6 +185,7 @@ class SparkSession(object):
                     session.sparkContext._conf.set(key, value)
                 return session
 
+    #: class variable for :class:`Builder` shared by all :class:`SparkSession` instances
     builder = Builder()
 
     _instantiatedSession = None
