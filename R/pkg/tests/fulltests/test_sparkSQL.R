@@ -713,7 +713,7 @@ test_that("test cache, uncache and clearCache", {
   expect_true(dropTempView("table1"))
 
   expect_error(uncacheTable("foo"),
-      "Error in uncacheTable : no such table - Table or view 'foo' not found in database 'default'")
+      "Error in uncacheTable : analysis error - Table or view not found: foo")
 })
 
 test_that("insertInto() on a registered table", {
