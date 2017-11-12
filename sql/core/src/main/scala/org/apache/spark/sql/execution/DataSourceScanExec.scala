@@ -425,16 +425,17 @@ case class FileSourceScanExec(
       fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
 
+    // Ignore bytesPerCore when dynamic allocation is enabled. See SPARK-22411
     val maxSplitBytes =
       if (Utils.isDynamicAllocationEnabled(fsRelation.sparkSession.sparkContext.getConf)) {
-      defaultMaxSplitBytes
+        defaultMaxSplitBytes
     } else {
-      val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
-      val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
-      val bytesPerCore = totalBytes / defaultParallelism
-      val maxPartitionBytes =
-        Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
-      maxPartitionBytes
+        val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
+        val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+        val bytesPerCore = totalBytes / defaultParallelism
+        val maxPartitionBytes =
+          Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+        maxPartitionBytes
     }
     logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
