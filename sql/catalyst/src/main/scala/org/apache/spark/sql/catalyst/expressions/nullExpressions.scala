@@ -392,7 +392,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
         """
       },
       foldFunctions = { funcCalls =>
-        funcCalls.map { funcCall => s"$nonnull = $funcCall" }.mkString("", ";\n", ";")
+        funcCalls.map { funcCall => s"$nonnull = $funcCall;" }.mkString("\n")
       }
     )
 
