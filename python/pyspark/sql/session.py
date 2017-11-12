@@ -185,8 +185,8 @@ class SparkSession(object):
                     session.sparkContext._conf.set(key, value)
                 return session
 
-    #: class variable for :class:`Builder` shared by all :class:`SparkSession` instances
     builder = Builder()
+    """A class attribute having a :class:`Builder` for constructing :class:`SparkSession` instances"""
 
     _instantiatedSession = None
 
