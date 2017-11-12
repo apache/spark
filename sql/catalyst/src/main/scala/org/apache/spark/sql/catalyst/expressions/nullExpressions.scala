@@ -358,7 +358,6 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val nonnull = ctx.freshName("nonnull")
-    ctx.addMutableState("int", nonnull, s"")
     val evals = children.map { e =>
       val eval = e.genCode(ctx)
       e.dataType match {
@@ -383,10 +382,22 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       }
     }
 
-    val code = ctx.splitExpressions(ctx.INPUT_ROW, evals)
+    val code = ctx.splitExpressions(evals, "atLeastNNonNull",
+      ("InternalRow", ctx.INPUT_ROW) :: ("int", nonnull) :: Nil,
+      returnType = "int",
+      makeSplitFunction = { body =>
+        s"""
+          $body
+          return $nonnull;
+        """
+      },
+      foldFunctions = { funcCalls =>
+        funcCalls.map { funcCall => s"$nonnull = $funcCall" }.mkString("", ";\n", ";")
+      }
+    )
 
     ev.copy(code = s"""
-      $nonnull = 0;
+      int $nonnull = 0;
       $code
       boolean ${ev.value} = $nonnull >= $n;""", isNull = "false")
   }
