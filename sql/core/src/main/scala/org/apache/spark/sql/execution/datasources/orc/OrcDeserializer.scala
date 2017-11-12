@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String
 private[orc] class OrcDeserializer(
     dataSchema: StructType,
     requiredSchema: StructType,
-    maybeMissingSchema: Option[StructType]) {
+    maybeMissingSchemaColumnNames: Option[Seq[String]]) {
 
   private[this] val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
@@ -41,7 +41,7 @@ private[orc] class OrcDeserializer(
 
   def deserialize(writable: OrcStruct): InternalRow = {
     convertOrcStructToInternalRow(writable, dataSchema, requiredSchema,
-      maybeMissingSchema, Some(unwrappers), Some(mutableRow))
+      maybeMissingSchemaColumnNames, Some(unwrappers), Some(mutableRow))
   }
 
   /**
@@ -52,7 +52,7 @@ private[orc] class OrcDeserializer(
       orcStruct: OrcStruct,
       dataSchema: StructType,
       requiredSchema: StructType,
-      missingSchema: Option[StructType] = None,
+      missingColumnNames: Option[Seq[String]] = None,
       valueUnwrappers: Option[Seq[(Any, InternalRow, Int) => Unit]] = None,
       internalRow: Option[InternalRow] = None): InternalRow = {
     val mutableRow = internalRow.getOrElse(new SpecificInternalRow(requiredSchema.map(_.dataType)))
@@ -63,7 +63,7 @@ private[orc] class OrcDeserializer(
     val names = orcStruct.getSchema.getFieldNames
     while (i < len) {
       val name = requiredSchema(i).name
-      val writable = if (missingSchema.isEmpty || missingSchema.get.getFieldIndex(name).isEmpty) {
+      val writable = if (missingColumnNames.isEmpty || !missingColumnNames.contains(name)) {
         if (names.contains(name)) {
           orcStruct.getFieldValue(name)
         } else {

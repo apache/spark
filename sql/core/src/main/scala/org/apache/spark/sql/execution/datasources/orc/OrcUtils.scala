@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.IOException
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -88,14 +89,14 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Return a missing schema in a give ORC file.
+   * Return missing column names in a give ORC file.
    */
-  private[orc] def getMissingSchema(
+  private[orc] def getMissingColumnNames(
       isCaseSensitive: Boolean,
       dataSchema: StructType,
       partitionSchema: StructType,
       file: Path,
-      conf: Configuration): Option[StructType] = {
+      conf: Configuration): Option[Seq[String]] = {
     val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
     try {
       val fs = file.getFileSystem(conf)
@@ -116,15 +117,15 @@ object OrcUtils extends Logging {
           schema
         }
 
-        var missingSchema = new StructType
+        val missingColumnNames = new ArrayBuffer[String]
         if (dataSchema.length > orcSchema.getFieldNames.size) {
           dataSchema.filter(x => partitionSchema.getFieldIndex(x.name).isEmpty).foreach { f =>
             if (!orcSchema.getFieldNames.asScala.exists(resolver(_, f.name))) {
-              missingSchema = missingSchema.add(f)
+              missingColumnNames += f.name
             }
           }
         }
-        Some(missingSchema)
+        Some(missingColumnNames)
       }
     } catch {
       case _: IOException => None

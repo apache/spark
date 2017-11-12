@@ -147,14 +147,14 @@ class OrcFileFormat
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
 
-      val maybeMissingSchema = OrcUtils.getMissingSchema(
+      val maybeMissingColumnNames = OrcUtils.getMissingColumnNames(
         isCaseSensitive, dataSchema, partitionSchema, new Path(new URI(file.filePath)), conf)
-      if (maybeMissingSchema.isEmpty) {
+      if (maybeMissingColumnNames.isEmpty) {
         Iterator.empty
       } else {
-        val missingSchema = maybeMissingSchema.get
+        val missingColumnNames = maybeMissingColumnNames.get
         val columns = requiredSchema
-          .filter(f => missingSchema.getFieldIndex(f.name).isEmpty)
+          .filter(f => !missingColumnNames.contains(f.name))
           .map(f => dataSchema.fieldIndex(f.name)).mkString(",")
         conf.set(OrcConf.INCLUDE_COLUMNS.getAttribute, columns)
 
@@ -169,7 +169,7 @@ class OrcFileFormat
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
 
         val unsafeProjection = UnsafeProjection.create(requiredSchema)
-        val deserializer = new OrcDeserializer(dataSchema, requiredSchema, maybeMissingSchema)
+        val deserializer = new OrcDeserializer(dataSchema, requiredSchema, maybeMissingColumnNames)
         iter.map(value => unsafeProjection(deserializer.deserialize(value)))
       }
     }
