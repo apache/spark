@@ -72,8 +72,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.addMutableState("boolean", ev.isNull, s"")
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, s"")
+    ctx.addMutableState("boolean", ev.isNull, "")
+    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
 
     val evals = children.map { e =>
       val eval = e.genCode(ctx)
