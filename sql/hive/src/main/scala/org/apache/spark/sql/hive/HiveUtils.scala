@@ -58,28 +58,23 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /** The version of hive used internally by Spark SQL. */
-  val hiveExecutionVersion: String = "1.2.1"
+  val builtinHiveVersion: String = "1.2.1"
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
+        s"<code>0.12.0</code> through <code>2.1.1</code>.")
     .stringConf
-    .createWithDefault(hiveExecutionVersion)
-
-  val HIVE_EXECUTION_VERSION = buildConf("spark.sql.hive.version")
-    .doc("Version of Hive used internally by Spark SQL.")
-    .stringConf
-    .createWithDefault(hiveExecutionVersion)
+    .createWithDefault(builtinHiveVersion)
 
   val HIVE_METASTORE_JARS = buildConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
       | This property can be one of three options: "
       | 1. "builtin"
-      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly when
+      |   Use Hive ${builtinHiveVersion}, which is bundled with the Spark assembly when
       |   <code>-Phive</code> is enabled. When this option is chosen,
       |   <code>spark.sql.hive.metastore.version</code> must be either
-      |   <code>${hiveExecutionVersion}</code> or not defined.
+      |   <code>${builtinHiveVersion}</code> or not defined.
       | 2. "maven"
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. A classpath in the standard format for both Hive and Hadoop.
@@ -259,9 +254,9 @@ private[spark] object HiveUtils extends Logging {
   protected[hive] def newClientForExecution(
       conf: SparkConf,
       hadoopConf: Configuration): HiveClientImpl = {
-    logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
+    logInfo(s"Initializing execution hive, version $builtinHiveVersion")
     val loader = new IsolatedClientLoader(
-      version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
+      version = IsolatedClientLoader.hiveVersion(builtinHiveVersion),
       sparkConf = conf,
       execJars = Seq.empty,
       hadoopConf = hadoopConf,
@@ -297,12 +292,12 @@ private[spark] object HiveUtils extends Logging {
     val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
-      if (hiveExecutionVersion != hiveMetastoreVersion) {
+      if (builtinHiveVersion != hiveMetastoreVersion) {
         throw new IllegalArgumentException(
           "Builtin jars can only be used when hive execution version == hive metastore version. " +
-            s"Execution: $hiveExecutionVersion != Metastore: $hiveMetastoreVersion. " +
+            s"Execution: $builtinHiveVersion != Metastore: $hiveMetastoreVersion. " +
             "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
-            s"or change ${HIVE_METASTORE_VERSION.key} to $hiveExecutionVersion.")
+            s"or change ${HIVE_METASTORE_VERSION.key} to $builtinHiveVersion.")
       }
 
       // We recursively find all jars in the class loader chain,

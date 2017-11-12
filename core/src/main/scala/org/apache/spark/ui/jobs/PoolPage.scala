@@ -57,7 +57,7 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
 
       var content = <h4>Summary </h4> ++ poolTable.toNodeSeq
       if (shouldShowActiveStages) {
-        content ++= <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq
+        content ++= <h4>Active Stages ({activeStages.size})</h4> ++ activeStagesTable.toNodeSeq
       }
 
       UIUtils.headerSparkPage("Fair Scheduler Pool: " + poolName, content, parent)

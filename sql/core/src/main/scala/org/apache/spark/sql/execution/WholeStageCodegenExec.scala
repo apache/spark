@@ -213,19 +213,32 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-   * For optimization to suppress shouldStop() in a loop of WholeStageCodegen.
-   * Returning true means we need to insert shouldStop() into the loop producing rows, if any.
+   * Whether or not the result rows of this operator should be copied before putting into a buffer.
+   *
+   * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
+   * example, Join), this should be true.
+   *
+   * If an operator starts a new pipeline, this should be false.
    */
-  def isShouldStopRequired: Boolean = {
-    return shouldStopRequired && (this.parent == null || this.parent.isShouldStopRequired)
+  def needCopyResult: Boolean = {
+    if (children.isEmpty) {
+      false
+    } else if (children.length == 1) {
+      children.head.asInstanceOf[CodegenSupport].needCopyResult
+    } else {
+      throw new UnsupportedOperationException
+    }
   }
 
   /**
-   * Set to false if this plan consumes all rows produced by children but doesn't output row
-   * to buffer by calling append(), so the children don't require shouldStop()
-   * in the loop of producing rows.
+   * Whether or not the children of this operator should generate a stop check when consuming input
+   * rows. This is used to suppress shouldStop() in a loop of WholeStageCodegen.
+   *
+   * This should be false if an operator starts a new pipeline, which means it consumes all rows
+   * produced by children but doesn't output row to buffer by calling append(),  so the children
+   * don't require shouldStop() in the loop of producing rows.
    */
-  protected def shouldStopRequired: Boolean = true
+  def needStopCheck: Boolean = parent.needStopCheck
 }
 
 
@@ -278,10 +291,24 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "")
   }
+
+  override def needCopyResult: Boolean = false
 }
 
 object WholeStageCodegenExec {
   val PIPELINE_DURATION_METRIC = "duration"
+
+  private def numOfNestedFields(dataType: DataType): Int = dataType match {
+    case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
+    case m: MapType => numOfNestedFields(m.keyType) + numOfNestedFields(m.valueType)
+    case a: ArrayType => numOfNestedFields(a.elementType)
+    case u: UserDefinedType[_] => numOfNestedFields(u.sqlType)
+    case _ => 1
+  }
+
+  def isTooManyFields(conf: SQLConf, dataType: DataType): Boolean = {
+    numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
+  }
 }
 
 /**
@@ -455,7 +482,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val doCopy = if (ctx.copyResult) {
+    val doCopy = if (needCopyResult) {
       ".copy()"
     } else {
       ""
@@ -475,6 +502,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "*")
   }
+
+  override def needStopCheck: Boolean = true
 }
 
 
@@ -490,22 +519,14 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     case _ => true
   }
 
-  private def numOfNestedFields(dataType: DataType): Int = dataType match {
-    case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
-    case m: MapType => numOfNestedFields(m.keyType) + numOfNestedFields(m.valueType)
-    case a: ArrayType => numOfNestedFields(a.elementType)
-    case u: UserDefinedType[_] => numOfNestedFields(u.sqlType)
-    case _ => 1
-  }
-
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
       val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
       // the generated code will be huge if there are too many columns
       val hasTooManyOutputFields =
-        numOfNestedFields(plan.schema) > conf.wholeStageMaxNumFields
+        WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
       val hasTooManyInputFields =
-        plan.children.map(p => numOfNestedFields(p.schema)).exists(_ > conf.wholeStageMaxNumFields)
+        plan.children.exists(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema))
       !willFallback && !hasTooManyOutputFields && !hasTooManyInputFields
     case _ => false
   }
@@ -517,10 +538,9 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     case p if !supportCodegen(p) =>
       // collapse them recursively
       InputAdapter(insertWholeStageCodegen(p))
-    case j @ SortMergeJoinExec(_, _, _, _, left, right) =>
+    case j: SortMergeJoinExec =>
       // The children of SortMergeJoin should do codegen separately.
-      j.copy(left = InputAdapter(insertWholeStageCodegen(left)),
-        right = InputAdapter(insertWholeStageCodegen(right)))
+      j.withNewChildren(j.children.map(child => InputAdapter(insertWholeStageCodegen(child))))
     case p =>
       p.withNewChildren(p.children.map(insertInputAdapter))
   }

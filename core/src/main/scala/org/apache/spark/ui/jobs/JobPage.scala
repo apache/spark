@@ -27,6 +27,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler._
+import org.apache.spark.status.api.v1.ExecutorSummary
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 
 /** Page showing statistics and stage list for a given job */
@@ -92,55 +93,52 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     }
   }
 
-  def makeExecutorEvent(executorUIDatas: Seq[SparkListenerEvent]): Seq[String] = {
+  def makeExecutorEvent(executors: Seq[ExecutorSummary]): Seq[String] = {
     val events = ListBuffer[String]()
-    executorUIDatas.foreach {
-      case a: SparkListenerExecutorAdded =>
-        val addedEvent =
-          s"""
-             |{
-             |  'className': 'executor added',
-             |  'group': 'executors',
-             |  'start': new Date(${a.time}),
-             |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="bottom"' +
-             |    'data-title="Executor ${a.executorId}<br>' +
-             |    'Added at ${UIUtils.formatDate(new Date(a.time))}"' +
-             |    'data-html="true">Executor ${a.executorId} added</div>'
-             |}
-           """.stripMargin
-        events += addedEvent
+    executors.foreach { e =>
+      val addedEvent =
+        s"""
+           |{
+           |  'className': 'executor added',
+           |  'group': 'executors',
+           |  'start': new Date(${e.addTime.getTime()}),
+           |  'content': '<div class="executor-event-content"' +
+           |    'data-toggle="tooltip" data-placement="bottom"' +
+           |    'data-title="Executor ${e.id}<br>' +
+           |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
+           |    'data-html="true">Executor ${e.id} added</div>'
+           |}
+         """.stripMargin
+      events += addedEvent
 
-      case e: SparkListenerExecutorRemoved =>
+      e.removeTime.foreach { removeTime =>
         val removedEvent =
           s"""
              |{
              |  'className': 'executor removed',
              |  'group': 'executors',
-             |  'start': new Date(${e.time}),
+             |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
              |    'data-toggle="tooltip" data-placement="bottom"' +
-             |    'data-title="Executor ${e.executorId}<br>' +
-             |    'Removed at ${UIUtils.formatDate(new Date(e.time))}' +
+             |    'data-title="Executor ${e.id}<br>' +
+             |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
-                      if (e.reason != null) {
-                        s"""<br>Reason: ${e.reason.replace("\n", " ")}"""
-                      } else {
-                        ""
-                      }
+                      e.removeReason.map { reason =>
+                        s"""<br>Reason: ${reason.replace("\n", " ")}"""
+                      }.getOrElse("")
                    }"' +
-             |    'data-html="true">Executor ${e.executorId} removed</div>'
+             |    'data-html="true">Executor ${e.id} removed</div>'
              |}
            """.stripMargin
           events += removedEvent
-
+      }
     }
     events.toSeq
   }
 
   private def makeTimeline(
       stages: Seq[StageInfo],
-      executors: Seq[SparkListenerEvent],
+      executors: Seq[ExecutorSummary],
       appStartTime: Long): Seq[Node] = {
 
     val stageEventJsonAsStrSeq = makeStageEvent(stages)
@@ -322,11 +320,10 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
       var content = summary
       val appStartTime = listener.startTime
-      val executorListener = parent.executorListener
       val operationGraphListener = parent.operationGraphListener
 
       content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
-          executorListener.executorEvents, appStartTime)
+          parent.parent.store.executorList(false), appStartTime)
 
       content ++= UIUtils.showDagVizForJob(
         jobId, operationGraphListener.getOperationGraphForJob(jobId))

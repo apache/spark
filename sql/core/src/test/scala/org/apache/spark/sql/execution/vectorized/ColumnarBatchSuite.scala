@@ -1249,11 +1249,11 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
   test("create columnar batch from Arrow column vectors") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("int", 0, Long.MaxValue)
-    val vector1 = ArrowUtils.toArrowField("int1", IntegerType, nullable = true)
+    val vector1 = ArrowUtils.toArrowField("int1", IntegerType, nullable = true, null)
       .createVector(allocator).asInstanceOf[NullableIntVector]
     vector1.allocateNew()
     val mutator1 = vector1.getMutator()
-    val vector2 = ArrowUtils.toArrowField("int2", IntegerType, nullable = true)
+    val vector2 = ArrowUtils.toArrowField("int2", IntegerType, nullable = true, null)
       .createVector(allocator).asInstanceOf[NullableIntVector]
     vector2.allocateNew()
     val mutator2 = vector2.getMutator()

@@ -203,7 +203,7 @@ details and default values.
 
 Executors are brought up eagerly when the application starts, until
 `spark.cores.max` is reached.  If you don't set `spark.cores.max`, the
-Spark application will reserve all resources offered to it by Mesos,
+Spark application will consume all resources offered to it by Mesos,
 so we of course urge you to set this variable in any sort of
 multi-tenant cluster, including one which runs multiple concurrent
 Spark applications.
@@ -485,39 +485,106 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 
 <tr>
-  <td><code>spark.mesos.driver.secret.envkeys</code></td>
-  <td><code>(none)</code></td>
   <td>
-    A comma-separated list that, if set, the contents of the secret referenced
-    by spark.mesos.driver.secret.names or spark.mesos.driver.secret.values will be
-    set to the provided environment variable in the driver's process.
+    <code>spark.mesos.driver.secret.values</code>,
+    <code>spark.mesos.driver.secret.names</code>,
+    <code>spark.mesos.executor.secret.values</code>,
+    <code>spark.mesos.executor.secret.names</code>,
   </td>
-  </tr>
-  <tr>
-<td><code>spark.mesos.driver.secret.filenames</code></td>
   <td><code>(none)</code></td>
   <td>
-    A comma-separated list that, if set, the contents of the secret referenced by
-    spark.mesos.driver.secret.names or spark.mesos.driver.secret.values will be
-    written to the provided file. Paths are relative to the container's work
-    directory.  Absolute paths must already exist.  Consult the Mesos Secret
-    protobuf for more information.
+    <p>
+      A secret is specified by its contents and destination. These properties
+      specify a secret's contents. To specify a secret's destination, see the cell below.
+    </p>
+    <p>
+      You can specify a secret's contents either (1) by value or (2) by reference.
+    </p>
+    <p>
+      (1) To specify a secret by value, set the
+      <code>spark.mesos.[driver|executor].secret.values</code>
+      property, to make the secret available in the driver or executors.
+      For example, to make a secret password "guessme" available to the driver process, set:
+    
+      <pre>spark.mesos.driver.secret.values=guessme</pre>
+    </p>
+    <p>
+      (2) To specify a secret that has been placed in a secret store
+      by reference, specify its name within the secret store
+      by setting the <code>spark.mesos.[driver|executor].secret.names</code>
+      property. For example, to make a secret password named "password" in a secret store
+      available to the driver process, set:
+
+      <pre>spark.mesos.driver.secret.names=password</pre>
+    </p>
+    <p>
+      Note: To use a secret store, make sure one has been integrated with Mesos via a custom
+      <a href="http://mesos.apache.org/documentation/latest/secrets/">SecretResolver
+      module</a>.
+    </p>
+    <p>
+      To specify multiple secrets, provide a comma-separated list:
+
+      <pre>spark.mesos.driver.secret.values=guessme,passwd123</pre>
+
+      or
+
+      <pre>spark.mesos.driver.secret.names=password1,password2</pre>
+    </p>
   </td>
 </tr>
+
 <tr>
-  <td><code>spark.mesos.driver.secret.names</code></td>
-  <td><code>(none)</code></td>
   <td>
-    A comma-separated list of secret references. Consult the Mesos Secret
-    protobuf for more information.
+    <code>spark.mesos.driver.secret.envkeys</code>,
+    <code>spark.mesos.driver.secret.filenames</code>,
+    <code>spark.mesos.executor.secret.envkeys</code>,
+    <code>spark.mesos.executor.secret.filenames</code>,
   </td>
-</tr>
-<tr>
-  <td><code>spark.mesos.driver.secret.values</code></td>
   <td><code>(none)</code></td>
   <td>
-    A comma-separated list of secret values. Consult the Mesos Secret
-    protobuf for more information.
+    <p>
+      A secret is specified by its contents and destination. These properties
+      specify a secret's destination. To specify a secret's contents, see the cell above.
+    </p>
+    <p>
+      You can specify a secret's destination in the driver or
+      executors as either (1) an environment variable or (2) as a file.
+    </p>
+    <p>
+      (1) To make an environment-based secret, set the
+      <code>spark.mesos.[driver|executor].secret.envkeys</code> property.
+      The secret will appear as an environment variable with the
+      given name in the driver or executors. For example, to make a secret password available
+      to the driver process as $PASSWORD, set:
+
+      <pre>spark.mesos.driver.secret.envkeys=PASSWORD</pre>
+    </p>
+    <p>
+      (2) To make a file-based secret, set the
+      <code>spark.mesos.[driver|executor].secret.filenames</code> property.
+      The secret will appear in the contents of a file with the given file name in
+      the driver or executors. For example, to make a secret password available in a
+      file named "pwdfile" in the driver process, set:
+
+      <pre>spark.mesos.driver.secret.filenames=pwdfile</pre>
+    </p>
+    <p>
+      Paths are relative to the container's work directory. Absolute paths must
+      already exist. Note: File-based secrets require a custom
+      <a href="http://mesos.apache.org/documentation/latest/secrets/">SecretResolver
+      module</a>.
+    </p>
+    <p>
+      To specify env vars or file names corresponding to multiple secrets,
+      provide a comma-separated list:
+
+      <pre>spark.mesos.driver.secret.envkeys=PASSWORD1,PASSWORD2</pre>
+    
+      or
+    
+      <pre>spark.mesos.driver.secret.filenames=pwdfile1,pwdfile2</pre>
+    </p>
   </td>
 </tr>
 
@@ -611,6 +678,30 @@ See the [configuration page](configuration.html) for information on Spark config
     it tears down the driver framework by killing all its 
     executors. The default value is zero, meaning no timeout: if the 
     driver disconnects, the master immediately tears down the framework.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td><code>120s</code></td>
+  <td>
+    Time to consider unused resources refused, serves as a fallback of
+    `spark.mesos.rejectOfferDurationForUnmetConstraints`,
+    `spark.mesos.rejectOfferDurationForReachedMaxCores`
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForUnmetConstraints</code></td>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td>
+    Time to consider unused resources refused with unmet constraints
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForReachedMaxCores</code></td>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td>
+    Time to consider unused resources refused when maximum number of cores
+    <code>spark.cores.max</code> is reached
   </td>
 </tr>
 </table>

@@ -127,8 +127,19 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       // If there aren't any, we are done.
       plan
     } else {
+      val inputsForPlan = plan.references ++ plan.outputSet
+      val prunedChildren = plan.children.map { child =>
+        val allNeededOutput = inputsForPlan.intersect(child.outputSet).toSeq
+        if (allNeededOutput.length != child.output.length) {
+          ProjectExec(allNeededOutput, child)
+        } else {
+          child
+        }
+      }
+      val planWithNewChildren = plan.withNewChildren(prunedChildren)
+
       val attributeMap = mutable.HashMap[PythonUDF, Expression]()
-      val splitFilter = trySplitFilter(plan)
+      val splitFilter = trySplitFilter(planWithNewChildren)
       // Rewrite the child that has the input required for the UDF
       val newChildren = splitFilter.children.map { child =>
         // Pick the UDF we are going to evaluate
@@ -137,11 +148,15 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           udf.references.subsetOf(child.outputSet)
         }
         if (validUdfs.nonEmpty) {
+          if (validUdfs.exists(_.pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF)) {
+            throw new IllegalArgumentException("Can not use grouped vectorized UDFs")
+          }
+
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
 
-          val evaluation = validUdfs.partition(_.vectorized) match {
+          val evaluation = validUdfs.partition(_.pythonUdfType == PythonUdfType.PANDAS_UDF) match {
             case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
               ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
             case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>

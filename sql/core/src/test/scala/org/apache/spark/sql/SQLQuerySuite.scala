@@ -27,6 +27,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2713,6 +2714,47 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |WHERE t1.col1 = 1 AND 1 = t1.col2 AND t1.col1 = t2.col AND t1.col2 = t2.col
         """.stripMargin)
       checkAnswer(df, Row(1, 1, 1))
+    }
+  }
+
+  test("SRARK-22266: the same aggregate function was calculated multiple times") {
+    val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
+    val df = sql(query)
+    val physical = df.queryExecution.sparkPlan
+    val aggregateExpressions = physical.collectFirst {
+      case agg : HashAggregateExec => agg.aggregateExpressions
+      case agg : SortAggregateExec => agg.aggregateExpressions
+    }
+    assert (aggregateExpressions.isDefined)
+    assert (aggregateExpressions.get.size == 1)
+    checkAnswer(df, Row(1, 3, 4) :: Row(2, 3, 4) :: Row(3, 3, 4) :: Nil)
+  }
+
+  test("Non-deterministic aggregate functions should not be deduplicated") {
+    val query = "SELECT a, first_value(b), first_value(b) + 1 FROM testData2 GROUP BY a"
+    val df = sql(query)
+    val physical = df.queryExecution.sparkPlan
+    val aggregateExpressions = physical.collectFirst {
+      case agg : HashAggregateExec => agg.aggregateExpressions
+      case agg : SortAggregateExec => agg.aggregateExpressions
+    }
+    assert (aggregateExpressions.isDefined)
+    assert (aggregateExpressions.get.size == 2)
+  }
+
+  test("SPARK-22356: overlapped columns between data and partition schema in data source tables") {
+    withTempPath { path =>
+      Seq((1, 1, 1), (1, 2, 1)).toDF("i", "p", "j")
+        .write.mode("overwrite").parquet(new File(path, "p=1").getCanonicalPath)
+      withTable("t") {
+        sql(s"create table t using parquet options(path='${path.getCanonicalPath}')")
+        // We should respect the column order in data schema.
+        assert(spark.table("t").columns === Array("i", "p", "j"))
+        checkAnswer(spark.table("t"), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
+        // The DESC TABLE should report same schema as table scan.
+        assert(sql("desc t").select("col_name")
+          .as[String].collect().mkString(",").contains("i,p,j"))
+      }
     }
   }
 }

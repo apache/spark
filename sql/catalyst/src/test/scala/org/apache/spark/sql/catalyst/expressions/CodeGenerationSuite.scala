@@ -201,6 +201,23 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-22226: group splitted expressions into one method per nested class") {
+    val length = 10000
+    val expressions = Seq.fill(length) {
+      ToUTCTimestamp(
+        Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
+        Literal.create("PST", StringType))
+    }
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq.fill(length)(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2017-10-10 07:00:00")))
+
+    if (actual != expected) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
   test("test generated safe and unsafe projection") {
     val schema = new StructType(Array(
       StructField("a", StringType, true),

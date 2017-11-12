@@ -199,7 +199,7 @@ private[deploy] class Worker(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    shuffleService.startIfEnabled()
+    startExternalShuffleService()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
@@ -364,6 +364,16 @@ private[deploy] class Worker(
       case Some(_) =>
         logInfo("Not spawning another attempt to register with the master, since there is an" +
           " attempt scheduled already.")
+    }
+  }
+
+  private def startExternalShuffleService() {
+    try {
+      shuffleService.startIfEnabled()
+    } catch {
+      case e: Exception =>
+        logError("Failed to start external shuffle service", e)
+        System.exit(1)
     }
   }
 

@@ -445,9 +445,9 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
       "--class", mainClass,
       mainJar) ++ appArgs
     val args = new SparkSubmitArguments(commandLineArgs)
-    val (_, _, sparkProperties, _) = SparkSubmit.prepareSubmitEnvironment(args)
+    val (_, _, sparkConf, _) = SparkSubmit.prepareSubmitEnvironment(args)
     new RestSubmissionClient("spark://host:port").constructSubmitRequest(
-      mainJar, mainClass, appArgs, sparkProperties.toMap, Map.empty)
+      mainJar, mainClass, appArgs, sparkConf.getAll.toMap, Map.empty)
   }
 
   /** Return the response as a submit response, or fail with error otherwise. */

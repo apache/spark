@@ -28,9 +28,9 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, Unresolved
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.execution.python.PythonUDF
+import org.apache.spark.sql.execution.python.{PythonUDF, PythonUdfType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -85,7 +85,7 @@ class RelationalGroupedDataset protected[sql](
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
-    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
+    case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
@@ -321,10 +321,10 @@ class RelationalGroupedDataset protected[sql](
     // Get the distinct values of the column and sort them so its consistent
     val values = df.select(pivotColumn)
       .distinct()
+      .limit(maxValues + 1)
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
-      .rdd
+      .collect()
       .map(_.get(0))
-      .take(maxValues + 1)
       .toSeq
 
     if (values.length > maxValues) {
@@ -437,7 +437,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Applies a vectorized python user-defined function to each group of data.
+   * Applies a grouped vectorized python user-defined function to each group of data.
    * The user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`.
    * For each group, all elements in the group are passed as a `pandas.DataFrame` and the results
    * for all groups are combined into a new [[DataFrame]].
@@ -449,7 +449,8 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
-    require(expr.vectorized, "Must pass a vectorized python udf")
+    require(expr.pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF,
+      "Must pass a grouped vectorized python udf")
     require(expr.dataType.isInstanceOf[StructType],
       "The returnType of the vectorized python udf must be a StructType")
 

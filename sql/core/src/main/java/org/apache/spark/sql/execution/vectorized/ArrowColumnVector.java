@@ -320,6 +320,10 @@ public final class ArrowColumnVector extends ColumnVector {
       accessor = new StringAccessor((NullableVarCharVector) vector);
     } else if (vector instanceof NullableVarBinaryVector) {
       accessor = new BinaryAccessor((NullableVarBinaryVector) vector);
+    } else if (vector instanceof NullableDateDayVector) {
+      accessor = new DateAccessor((NullableDateDayVector) vector);
+    } else if (vector instanceof NullableTimeStampMicroTZVector) {
+      accessor = new TimestampAccessor((NullableTimeStampMicroTZVector) vector);
     } else if (vector instanceof ListVector) {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
@@ -572,6 +576,36 @@ public final class ArrowColumnVector extends ColumnVector {
     @Override
     final byte[] getBinary(int rowId) {
       return accessor.getObject(rowId);
+    }
+  }
+
+  private static class DateAccessor extends ArrowVectorAccessor {
+
+    private final NullableDateDayVector.Accessor accessor;
+
+    DateAccessor(NullableDateDayVector vector) {
+      super(vector);
+      this.accessor = vector.getAccessor();
+    }
+
+    @Override
+    final int getInt(int rowId) {
+      return accessor.get(rowId);
+    }
+  }
+
+  private static class TimestampAccessor extends ArrowVectorAccessor {
+
+    private final NullableTimeStampMicroTZVector.Accessor accessor;
+
+    TimestampAccessor(NullableTimeStampMicroTZVector vector) {
+      super(vector);
+      this.accessor = vector.getAccessor();
+    }
+
+    @Override
+    final long getLong(int rowId) {
+      return accessor.get(rowId);
     }
   }
 

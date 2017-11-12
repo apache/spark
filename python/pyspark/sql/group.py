@@ -19,6 +19,7 @@ from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.functions import PythonUdfType, UserDefinedFunction
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -235,11 +236,13 @@ class GroupedData(object):
         .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """
-        from pyspark.sql.functions import pandas_udf
+        import inspect
 
         # Columns are special because hasattr always return True
-        if isinstance(udf, Column) or not hasattr(udf, 'func') or not udf.vectorized:
-            raise ValueError("The argument to apply must be a pandas_udf")
+        if isinstance(udf, Column) or not hasattr(udf, 'func') \
+           or udf.pythonUdfType != PythonUdfType.PANDAS_UDF \
+           or len(inspect.getargspec(udf.func).args) != 1:
+            raise ValueError("The argument to apply must be a 1-arg pandas_udf")
         if not isinstance(udf.returnType, StructType):
             raise ValueError("The returnType of the pandas_udf must be a StructType")
 
@@ -268,8 +271,9 @@ class GroupedData(object):
             return [(result[result.columns[i]], arrow_type)
                     for i, arrow_type in enumerate(arrow_return_types)]
 
-        wrapped_udf_obj = pandas_udf(wrapped, returnType)
-        udf_column = wrapped_udf_obj(*[df[col] for col in df.columns])
+        udf_obj = UserDefinedFunction(
+            wrapped, returnType, name=udf.__name__, pythonUdfType=PythonUdfType.PANDAS_GROUPED_UDF)
+        udf_column = udf_obj(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
 

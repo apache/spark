@@ -402,6 +402,15 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.kerberos.relogin.period</code></td>
+  <td>1m</td>
+  <td>
+  How often to check whether the kerberos TGT should be renewed. This should be set to a value
+  that is shorter than the TGT renewal period (or the TGT lifetime if TGT renewal is not enabled).
+  The default value should be enough for most deployments.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.config.gatewayPath</code></td>
   <td>(none)</td>
   <td>

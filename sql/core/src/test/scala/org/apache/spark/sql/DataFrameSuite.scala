@@ -686,6 +686,34 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("withColumns: given metadata") {
+    def buildMetadata(num: Int): Seq[Metadata] = {
+      (0 until num).map { n =>
+        val builder = new MetadataBuilder
+        builder.putLong("key", n.toLong)
+        builder.build()
+      }
+    }
+
+    val df = testData.toDF().withColumns(
+      Seq("newCol1", "newCol2"),
+      Seq(col("key") + 1, col("key") + 2),
+      buildMetadata(2))
+
+    df.select("newCol1", "newCol2").schema.zipWithIndex.foreach { case (col, idx) =>
+      assert(col.metadata.getLong("key").toInt === idx)
+    }
+
+    val err = intercept[IllegalArgumentException] {
+      testData.toDF().withColumns(
+        Seq("newCol1", "newCol2"),
+        Seq(col("key") + 1, col("key") + 2),
+        buildMetadata(1))
+    }
+    assert(err.getMessage.contains(
+      "The size of column names: 2 isn't equal to the size of metadata elements: 1"))
+  }
+
   test("replace column using withColumn") {
     val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
@@ -2104,6 +2132,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
       Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
+  }
+
+  test("SPARK-22226: splitExpressions should not generate codes beyond 64KB") {
+    val colNumber = 10000
+    val input = spark.range(2).rdd.map(_ => Row(1 to colNumber: _*))
+    val df = sqlContext.createDataFrame(input, StructType(
+      (1 to colNumber).map(colIndex => StructField(s"_$colIndex", IntegerType, false))))
+    val newCols = (1 to colNumber).flatMap { colIndex =>
+      Seq(expr(s"if(1000 < _$colIndex, 1000, _$colIndex)"),
+        expr(s"sqrt(_$colIndex)"))
+    }
+    df.select(newCols: _*).collect()
   }
 
   test("SPARK-22271: mean overflows and returns null for some decimal variables") {

@@ -173,6 +173,13 @@ object SQLConf {
     .intConf
     .createWithDefault(4)
 
+  val ADVANCED_PARTITION_PREDICATE_PUSHDOWN =
+    buildConf("spark.sql.hive.advancedPartitionPredicatePushdown.enabled")
+      .internal()
+      .doc("When true, advanced partition predicate pushdown into Hive metastore is enabled.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
     buildConf("spark.sql.statistics.fallBackToHdfs")
     .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
@@ -278,8 +285,24 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  object ParquetOutputTimestampType extends Enumeration {
+    val INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
+  }
+
+  val PARQUET_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.parquet.outputTimestampType")
+    .doc("Sets which Parquet timestamp type to use when Spark writes data to Parquet files. " +
+      "INT96 is a non-standard but commonly used timestamp type in Parquet. TIMESTAMP_MICROS " +
+      "is a standard timestamp type in Parquet, which stores number of microseconds from the " +
+      "Unix epoch. TIMESTAMP_MILLIS is also standard, but with millisecond precision, which " +
+      "means Spark has to truncate the microsecond portion of its timestamp value.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(ParquetOutputTimestampType.values.map(_.toString))
+    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+
   val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
-    .doc("When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
+    .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
+      "When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
       "extended type. In this mode, the microsecond portion of the timestamp value will be" +
       "truncated.")
     .booleanConf
@@ -607,6 +630,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val IGNORE_MISSING_FILES = buildConf("spark.sql.files.ignoreMissingFiles")
+    .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
+      "encountering missing files and the contents that have been read will still be returned.")
+    .booleanConf
+    .createWithDefault(false)
+
   val MAX_RECORDS_PER_FILE = buildConf("spark.sql.files.maxRecordsPerFile")
     .doc("Maximum number of records to write out to a single file. " +
       "If this value is zero or negative, there is no limit.")
@@ -799,8 +828,8 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
-  val AUTO_UPDATE_SIZE =
-    buildConf("spark.sql.statistics.autoUpdate.size")
+  val AUTO_SIZE_UPDATE_ENABLED =
+    buildConf("spark.sql.statistics.size.autoUpdate.enabled")
       .doc("Enables automatic update for table size once table's data is changed. Note that if " +
         "the total number of files of the table is very large, this can be expensive and slow " +
         "down data change commands.")
@@ -871,7 +900,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of rows to be spilled by window operator")
       .intConf
-      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
@@ -886,7 +915,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of rows to be spilled by sort merge join operator")
       .intConf
-      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.cartesianProductExec.buffer.in.memory.threshold")
@@ -901,7 +930,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of rows to be spilled by cartesian product operator")
       .intConf
-      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
     .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
@@ -934,6 +963,19 @@ object SQLConf {
         "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
       .intConf
       .createWithDefault(10000)
+
+  val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
+    .internal()
+    .doc("When true, the apply function of the rule verifies whether the right node of the" +
+      " except operation is of type Filter or Project followed by Filter. If yes, the rule" +
+      " further verifies 1) Excluding the filter operations from the right (as well as the" +
+      " left node, if any) on the top, whether both the nodes evaluates to a same result." +
+      " 2) The left and right nodes don't contain any SubqueryExpressions. 3) The output" +
+      " column names of the left node are distinct. If all the conditions are met, the" +
+      " rule will replace the except operation with a Filter by flipping the filter" +
+      " condition(s) of the right node.")
+    .booleanConf
+    .createWithDefault(true)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1006,6 +1048,8 @@ class SQLConf extends Serializable with Logging {
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
+
+  def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
 
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
@@ -1092,6 +1136,9 @@ class SQLConf extends Serializable with Logging {
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
+  def advancedPartitionPredicatePushdownEnabled: Boolean =
+    getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
+
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
@@ -1111,6 +1158,18 @@ class SQLConf extends Serializable with Logging {
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
   def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
+
+  def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
+    val isOutputTimestampTypeSet = settings.containsKey(PARQUET_OUTPUT_TIMESTAMP_TYPE.key)
+    if (!isOutputTimestampTypeSet && isParquetINT64AsTimestampMillis) {
+      // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_INT64_AS_TIMESTAMP_MILLIS is set,
+      // respect PARQUET_INT64_AS_TIMESTAMP_MILLIS and use TIMESTAMP_MILLIS. Otherwise,
+      // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
+      ParquetOutputTimestampType.TIMESTAMP_MILLIS
+    } else {
+      ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
+    }
+  }
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
@@ -1175,7 +1234,7 @@ class SQLConf extends Serializable with Logging {
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
-  def autoUpdateSize: Boolean = getConf(SQLConf.AUTO_UPDATE_SIZE)
+  def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
 
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
@@ -1214,6 +1273,8 @@ class SQLConf extends Serializable with Logging {
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   /** ********************** SQLConf functionality methods ************ */
 

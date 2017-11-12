@@ -138,8 +138,8 @@ class TrainValidationSplitSuite
     cv.setParallelism(2)
     val cvParallelModel = cv.fit(dataset)
 
-    val serialMetrics = cvSerialModel.validationMetrics.sorted
-    val parallelMetrics = cvParallelModel.validationMetrics.sorted
+    val serialMetrics = cvSerialModel.validationMetrics
+    val parallelMetrics = cvParallelModel.validationMetrics
     assert(serialMetrics === parallelMetrics)
 
     val parentSerial = cvSerialModel.bestModel.parent.asInstanceOf[LogisticRegression]

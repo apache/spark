@@ -35,6 +35,9 @@ public interface ReadSupportWithSchema {
   /**
    * Create a {@link DataSourceV2Reader} to scan the data from this data source.
    *
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * submitted.
+   *
    * @param schema the full schema of this data source reader. Full schema usually maps to the
    *               physical schema of the underlying storage of this data source reader, e.g.
    *               CSV files, JSON files, etc, while this reader may not read data with full

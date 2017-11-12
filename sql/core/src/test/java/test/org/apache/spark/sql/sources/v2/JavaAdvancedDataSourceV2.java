@@ -100,7 +100,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<Row> createReader() {
+    public DataReader<Row> createDataReader() {
       return new JavaAdvancedReadTask(start - 1, end, requiredSchema);
     }
 
