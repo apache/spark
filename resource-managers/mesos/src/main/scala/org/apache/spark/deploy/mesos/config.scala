@@ -56,4 +56,10 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val DRIVER_CONSTRAINTS =
+    ConfigBuilder("spark.mesos.driver.constraints")
+      .doc("Attribute based constraints on mesos resource offers. Applied by the dispatcher " +
+        "when launching drivers. Default is to accept all offers with sufficient resources.")
+      .stringConf
+      .createWithDefault("")
 }
