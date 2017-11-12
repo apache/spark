@@ -66,9 +66,9 @@ private[spark] object HiveUtils extends Logging {
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
-  // A fake config which is only here for backward compatibility reasons. This config has no affect
+  // A fake config which is only here for backward compatibility reasons. This config has no effect
   // to Spark, just for reporting the builtin Hive version of Spark to existing applications that
-  // already reply on this config.
+  // already rely on this config.
   val FAKE_HIVE_VERSION = buildConf("spark.sql.hive.version")
     .doc(s"deprecated, please use ${HIVE_METASTORE_VERSION.key} to get the Hive version in Spark.")
     .stringConf
