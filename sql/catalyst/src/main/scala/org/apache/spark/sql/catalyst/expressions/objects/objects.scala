@@ -27,7 +27,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
+import org.apache.spark.sql.catalyst.ScalaReflection.universe.newTermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -190,7 +190,7 @@ case class Invoke(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  private lazy val encodedFunctionName = TermName(functionName).encodedName.toString
+  private lazy val encodedFunctionName = newTermName(functionName).encodedName.toString
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
