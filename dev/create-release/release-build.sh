@@ -265,6 +265,7 @@ if [[ "$1" == "package" ]]; then
   FLAGS="-Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos"
   make_binary_release "hadoop2.6" "-Phadoop-2.6 $FLAGS" "3035" "withr" &
   make_binary_release "hadoop2.7" "-Phadoop-2.7 $FLAGS" "3036" "withpip" &
+  make_binary_release "hadoop2.8" "-Phadoop-2.8 $FLAGS" "3037" "withpip" &
   make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn -Pmesos" "3038" &
   wait
   rm -rf spark-$SPARK_VERSION-bin-*/

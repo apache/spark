@@ -2525,6 +2525,13 @@
     </profile>
 
     <profile>
+      <id>hadoop-2.8</id>
+      <properties>
+        <hadoop.version>2.8.2</hadoop.version>
+      </properties>
+    </profile>
+
+    <profile>
       <id>yarn</id>
       <modules>
         <module>resource-managers/yarn</module>
