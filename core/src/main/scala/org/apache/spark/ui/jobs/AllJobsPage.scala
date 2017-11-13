@@ -275,22 +275,19 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val endTime = appInfo.attempts.head.endTime.getTime()
 
     val activeJobs = new ListBuffer[v1.JobData]()
-    val _completedJobs = new ListBuffer[v1.JobData]()
-    val _failedJobs = new ListBuffer[v1.JobData]()
+    val completedJobs = new ListBuffer[v1.JobData]()
+    val failedJobs = new ListBuffer[v1.JobData]()
 
     store.jobsList(null).foreach { job =>
       job.status match {
         case JobExecutionStatus.SUCCEEDED =>
-          _completedJobs += job
+          completedJobs += job
         case JobExecutionStatus.FAILED =>
-          _failedJobs += job
+          failedJobs += job
         case _ =>
           activeJobs += job
       }
     }
-
-    val completedJobs = _completedJobs.toSeq.reverse
-    val failedJobs = _failedJobs.toSeq.reverse
 
     val activeJobsTable =
       jobsTable(request, "active", "activeJob", activeJobs, killEnabled = parent.killEnabled)
@@ -465,6 +462,7 @@ private[ui] class JobDataSource(
   }
 
 }
+
 private[ui] class JobPagedTable(
     store: AppStatusStore,
     data: Seq[v1.JobData],
