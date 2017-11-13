@@ -1015,9 +1015,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     }
     val rowClass = classOf[GenericInternalRow].getName
     val result = ctx.freshName("result")
-    ctx.addMutableState(s"$rowClass", result, "")
     val tmpRow = ctx.freshName("tmpRow")
-    ctx.addMutableState("InternalRow", tmpRow, "")
 
     val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) =>
       val fromFieldPrim = ctx.freshName("ffp")
@@ -1042,12 +1040,17 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
        """
     }
-    val fieldsEvalCodes = ctx.splitExpressions(ctx.INPUT_ROW, fieldsEvalCode)
+    val fieldsEvalCodes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      ctx.splitExpressions(fieldsEvalCode, "castStruct",
+        ("InternalRow", ctx.INPUT_ROW) :: (rowClass, result) :: ("InternalRow", tmpRow) :: Nil)
+    } else {
+      fieldsEvalCode.mkString("\n")
+    }
 
     (c, evPrim, evNull) =>
       s"""
-        $result = new $rowClass(${fieldsCasts.length});
-        $tmpRow = $c;
+        $rowClass $result = new $rowClass(${fieldsCasts.length});
+        InternalRow $tmpRow = $c;
         $fieldsEvalCodes
         $evPrim = $result;
       """
