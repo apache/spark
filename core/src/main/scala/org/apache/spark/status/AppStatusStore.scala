@@ -33,6 +33,15 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
  */
 private[spark] class AppStatusStore(val store: KVStore) {
 
+  def applicationInfo(): v1.ApplicationInfo = {
+    store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
+  }
+
+  def environmentInfo(): v1.ApplicationEnvironmentInfo = {
+    val klass = classOf[ApplicationEnvironmentInfoWrapper]
+    store.read(klass, klass.getName()).info
+  }
+
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
     val it = store.view(classOf[JobDataWrapper]).asScala.map(_.info)
     if (!statuses.isEmpty()) {
@@ -47,8 +56,22 @@ private[spark] class AppStatusStore(val store: KVStore) {
   }
 
   def executorList(activeOnly: Boolean): Seq[v1.ExecutorSummary] = {
-    store.view(classOf[ExecutorSummaryWrapper]).index("active").reverse().first(true)
-      .last(true).asScala.map(_.info).toSeq
+    val base = store.view(classOf[ExecutorSummaryWrapper])
+    val filtered = if (activeOnly) {
+      base.index("active").reverse().first(true).last(true)
+    } else {
+      base
+    }
+    filtered.asScala.map(_.info).toSeq
+  }
+
+  def executorSummary(executorId: String): Option[v1.ExecutorSummary] = {
+    try {
+      Some(store.read(classOf[ExecutorSummaryWrapper], executorId).info)
+    } catch {
+      case _: NoSuchElementException =>
+        None
+    }
   }
 
   def stageList(statuses: JList[v1.StageStatus]): Seq[v1.StageData] = {
@@ -186,12 +209,18 @@ private[spark] class AppStatusStore(val store: KVStore) {
     indexed.skip(offset).max(length).asScala.map(_.info).toSeq
   }
 
-  def rddList(): Seq[v1.RDDStorageInfo] = {
-    store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).toSeq
+  def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
+    store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).filter { rdd =>
+      !cachedOnly || rdd.numCachedPartitions > 0
+    }.toSeq
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {
     store.read(classOf[RDDStorageInfoWrapper], rddId).info
+  }
+
+  def streamBlocksList(): Seq[StreamBlockData] = {
+    store.view(classOf[StreamBlockData]).asScala.toSeq
   }
 
   def close(): Unit = {

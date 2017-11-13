@@ -34,6 +34,17 @@ private[spark] class ApplicationInfoWrapper(val info: ApplicationInfo) {
 
 }
 
+private[spark] class ApplicationEnvironmentInfoWrapper(val info: ApplicationEnvironmentInfo) {
+
+  /**
+   * There's always a single ApplicationEnvironmentInfo object per application, so this
+   * ID doesn't need to be dynamic. But the KVStore API requires an ID.
+   */
+  @JsonIgnore @KVIndex
+  def id: String = classOf[ApplicationEnvironmentInfoWrapper].getName()
+
+}
+
 private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
 
   @JsonIgnore @KVIndex
@@ -118,5 +129,21 @@ private[spark] class ExecutorStageSummaryWrapper(
 
   @JsonIgnore @KVIndex("stage")
   private[this] val stage: Array[Int] = Array(stageId, stageAttemptId)
+
+}
+
+private[spark] class StreamBlockData(
+  val name: String,
+  val executorId: String,
+  val hostPort: String,
+  val storageLevel: String,
+  val useMemory: Boolean,
+  val useDisk: Boolean,
+  val deserialized: Boolean,
+  val memSize: Long,
+  val diskSize: Long) {
+
+  @JsonIgnore @KVIndex
+  def key: Array[String] = Array(name, executorId)
 
 }
