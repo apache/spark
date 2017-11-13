@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -228,14 +228,31 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value").createTempView("table1")
     spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value").createTempView("table2")
 
-    val bl = sql(s"SELECT /*+ MAPJOIN(t1) */ * FROM table1 t1 JOIN table2 t2 ON t1.key = t2.key")
-      .queryExecution
-      .executedPlan
-    assert(bl.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === BuildLeft)
+    def assertJoinBuildSide(pair: (String, BuildSide)): Any = {
+      val (sqlString, s) = pair
+      val df = sql(sqlString)
+      val physical = df.queryExecution.executedPlan
+      physical match {
+        case b: BroadcastNestedLoopJoinExec =>
+          assert(b.buildSide === s)
+        case h: WholeStageCodegenExec =>
+          assert(h.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === s)
+      }
+    }
 
-    val br = sql(s"SELECT /*+ MAPJOIN(t2) */ * FROM table1 t1 JOIN table2 t2 ON t1.key = t2.key")
-      .queryExecution
-      .executedPlan
-    assert(br.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === BuildRight)
+    Seq(
+      ("SELECT /*+ MAPJOIN(t1) */ * FROM table1 t1 JOIN table2 t2 ON t1.key = t2.key", BuildLeft),
+      ("SELECT /*+ MAPJOIN(t2) */ * FROM table1 t1 JOIN table2 t2 ON t1.key = t2.key", BuildRight)
+    ).foreach(assertJoinBuildSide)
+
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      Seq(
+        ("SELECT /*+ MAPJOIN(table1) */ * FROM table1 JOIN table2", BuildLeft),
+        ("SELECT /*+ MAPJOIN(table2) */ * FROM table1 JOIN table2", BuildRight),
+        ("SELECT /*+ MAPJOIN(table1) */ * FROM table1 FULL OUTER JOIN table2", BuildLeft),
+        ("SELECT /*+ MAPJOIN(table2) */ * FROM table1 FULL OUTER JOIN table2", BuildRight)
+      ).foreach(assertJoinBuildSide)
+    }
   }
 }

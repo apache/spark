@@ -223,7 +223,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
-          if (right.stats.sizeInBytes <= left.stats.sizeInBytes) {
+          if (right.stats.hints.broadcast) {
+            BuildRight
+          } else if (left.stats.hints.broadcast) {
+            BuildLeft
+          } else if (right.stats.sizeInBytes <= left.stats.sizeInBytes) {
             BuildRight
           } else {
             BuildLeft
