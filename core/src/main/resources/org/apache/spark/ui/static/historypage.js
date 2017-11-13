@@ -37,17 +37,21 @@ function makeIdNumeric(id) {
   return resl;
 }
 
+function padZeroes(num) {
+  return num.toString().padStart(2, "0");
+}
+
 function formatDate(date) {
   if (date <= 0) {
     return "-";
   } else {
     var dt = new Date(date);
     return dt.getFullYear() + "-" +
-      ("0" + (dt.getMonth() + 1)).slice(-2) + "-" +
-      ("0" + dt.getDate()).slice(-2) + " " +
-      ("0" + dt.getHours()).slice(-2) + ":" +
-      ("0" + dt.getMinutes()).slice(-2) + ":" +
-      ("0" + dt.getSeconds()).slice(-2);
+      padZeroes(dt.getMonth() + 1) + "-" +
+      padZeroes(dt.getDate()) + " " +
+      padZeroes(dt.getHours()) + ":" +
+      padZeroes(dt.getMinutes()) + ":" +
+      padZeroes(dt.getSeconds());
   }
 }
 
