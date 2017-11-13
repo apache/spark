@@ -67,7 +67,7 @@ private[spark] class AppStatusStore(store: KVStore) {
   }
 
   def executorSummary(executorId: String): v1.ExecutorSummary = {
-      store.read(classOf[ExecutorSummaryWrapper], executorId).info
+    store.read(classOf[ExecutorSummaryWrapper], executorId).info
   }
 
   def stageList(statuses: JList[v1.StageStatus]): Seq[v1.StageData] = {
