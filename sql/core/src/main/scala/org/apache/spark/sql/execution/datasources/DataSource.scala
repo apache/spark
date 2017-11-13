@@ -690,9 +690,9 @@ object DataSource extends Logging {
   }
 
   /**
-    * Return all paths represented by the wildcard string.
-    * Follow [[InMemoryFileIndex]].bulkListLeafFile and reuse the conf.
-    */
+   * Return all paths represented by the wildcard string.
+   * Follow [[InMemoryFileIndex]].bulkListLeafFile and reuse the conf.
+   */
   private def getGlobbedPaths(
       sparkSession: SparkSession,
       fs: FileSystem,

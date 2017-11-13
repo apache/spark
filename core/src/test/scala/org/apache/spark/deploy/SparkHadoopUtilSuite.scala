@@ -17,18 +17,21 @@
 
 package org.apache.spark.deploy
 
+import java.io.File
 import java.security.PrivilegedExceptionAction
 
 import scala.util.Random
 
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
 import org.apache.hadoop.security.UserGroupInformation
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{LocalSparkContext, SparkFunSuite}
+import org.apache.spark.util.Utils
 
-class SparkHadoopUtilSuite extends SparkFunSuite with Matchers {
+class SparkHadoopUtilSuite extends SparkFunSuite with Matchers with LocalSparkContext{
   test("check file permission") {
     import FsAction._
     val testUser = s"user-${Random.nextInt(100)}"
@@ -75,6 +78,44 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers {
         null
       }
     })
+  }
+
+  test("test expanding glob path") {
+    val tmpDir = Utils.createTempDir()
+    val rootDir = tmpDir.getCanonicalPath
+    try {
+      // Prepare nested dir env: /tmpPath/dir-${dirIndex}/part-${fileIndex}
+      for (i <- 1 to 10) {
+        val dirStr = new StringFormat(i.toString)
+        val curDir = rootDir + dirStr.formatted("/dir-%4s").replaceAll(" ", "0")
+        for (j <- 1 to 10) {
+          val fileStr = new StringFormat(j.toString)
+          val file = new File(curDir, fileStr.formatted("/part-%4s").replaceAll(" ", "0"))
+
+          file.getParentFile.exists() || file.getParentFile.mkdirs()
+          file.createNewFile()
+        }
+      }
+      val sparkHadoopUtil = new SparkHadoopUtil
+      val fs = FileSystem.getLocal(new Configuration())
+
+      // test partial match
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-000[1-5]/*")) should be(Seq(
+        s"file:${rootDir}/dir-0001/*",
+        s"file:${rootDir}/dir-0002/*",
+        s"file:${rootDir}/dir-0003/*",
+        s"file:${rootDir}/dir-0004/*",
+        s"file:${rootDir}/dir-0005/*"))
+      // test wild cast on the leaf files
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-0001/*")) should be(Seq(
+        s"${rootDir}/dir-0001/*"))
+      // test path is not globPath
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-0001/part-0001")) should be(Seq(
+        s"${rootDir}/dir-0001/part-0001"))
+      // test the wrong wild cast
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/000[1-5]/*")) should be(
+        Seq.empty[String])
+    } finally Utils.deleteRecursively(tmpDir)
   }
 
   private def fileStatus(
