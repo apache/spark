@@ -253,7 +253,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
        """)
     val listCodes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val args = ("InternalRow", ctx.INPUT_ROW) :: (ctx.javaType(value.dataType), valueArg) :: Nil
-      ctx.splitExpressions(listCode, "apply", args)
+      ctx.splitExpressions(listCode, "valueIn", args)
     } else {
       listCode.mkString("\n")
     }
