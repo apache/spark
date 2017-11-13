@@ -24,14 +24,12 @@ import org.mockito.Mockito.mock
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -483,48 +481,5 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExe
       sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
       metrics.values.toSeq)
     sc.emptyRDD
-  }
-}
-
-
-class SQLListenerMemoryLeakSuite extends SparkFunSuite {
-
-  test("no memory leak") {
-    quietly {
-      val conf = new SparkConf()
-        .setMaster("local")
-        .setAppName("test")
-        .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
-        .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
-      val sc = new SparkContext(conf)
-      try {
-        SparkSession.sqlListener.set(null)
-        val spark = new SparkSession(sc)
-        import spark.implicits._
-        // Run 100 successful executions and 100 failed executions.
-        // Each execution only has one job and one stage.
-        for (i <- 0 until 100) {
-          val df = Seq(
-            (1, 1),
-            (2, 2)
-          ).toDF()
-          df.collect()
-          try {
-            df.foreach(_ => throw new RuntimeException("Oops"))
-          } catch {
-            case e: SparkException => // This is expected for a failed job
-          }
-        }
-        sc.listenerBus.waitUntilEmpty(10000)
-        assert(spark.sharedState.listener.getCompletedExecutions.size <= 50)
-        assert(spark.sharedState.listener.getFailedExecutions.size <= 50)
-        // 50 for successful executions and 50 for failed executions
-        assert(spark.sharedState.listener.executionIdToData.size <= 100)
-        assert(spark.sharedState.listener.jobIdToExecutionId.size <= 100)
-        assert(spark.sharedState.listener.stageIdToStageMetrics.size <= 100)
-      } finally {
-        sc.stop()
-      }
-    }
   }
 }

@@ -101,6 +101,9 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
   private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
 
+  private val retainedStages = conf.getInt("spark.ui.retainedStages",
+    SparkUI.DEFAULT_RETAINED_STAGES)
+
   private val activeExecutions = mutable.HashMap[Long, SQLExecutionUIData]()
 
   // Old data in the following fields must be removed in "trimExecutionsIfNecessary".
@@ -113,7 +116,7 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
    */
   private val _jobIdToExecutionId = mutable.HashMap[Long, Long]()
 
-  private val _stageIdToStageMetrics = mutable.HashMap[Long, SQLStageMetrics]()
+  private val _stageIdToStageMetrics = mutable.LinkedHashMap[Long, SQLStageMetrics]()
 
   private val failedExecutions = mutable.ListBuffer[SQLExecutionUIData]()
 
@@ -204,6 +207,14 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
       // If a stage belongs to some SQL execution, its stageId will be put in "onJobStart".
       // Since "_stageIdToStageMetrics" doesn't contain it, it must not belong to any SQL execution.
       // So we can ignore it. Otherwise, this may lead to memory leaks (SPARK-11126).
+    }
+  }
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
+    val extraStages = _stageIdToStageMetrics.size - retainedStages
+    if (extraStages > 0) {
+      val toRemove = _stageIdToStageMetrics.take(extraStages).keys
+      _stageIdToStageMetrics --= toRemove
     }
   }
 
