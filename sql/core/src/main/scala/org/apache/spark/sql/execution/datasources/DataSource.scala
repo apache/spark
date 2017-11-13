@@ -543,7 +543,7 @@ case class DataSource(
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(hadoopConf)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      val globPath = dataSource.getGlobbedPaths(fs, qualified)
+      val globPath = DataSource.getGlobbedPaths(sparkSession, fs, hadoopConf, qualified)
 
       if (checkEmptyGlobPath && globPath.isEmpty) {
         throw new AnalysisException(s"Path does not exist: $qualified")
@@ -739,7 +739,11 @@ object DataSource extends Logging {
    * Return all paths represented by the wildcard string.
    * Follow [[InMemoryFileIndex]].bulkListLeafFile and reuse the conf.
    */
-  private def getGlobbedPaths(fs: FileSystem, qualified: Path): Seq[Path] = {
+  private def getGlobbedPaths(
+      sparkSession: SparkSession,
+      fs: FileSystem,
+      hadoopConf: SerializableConfiguration,
+      qualified: Path): Seq[Path] = {
     val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified)
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
