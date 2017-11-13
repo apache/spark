@@ -382,19 +382,23 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       }
     }
 
-    val code = ctx.splitExpressions(evals, "atLeastNNonNull",
-      ("InternalRow", ctx.INPUT_ROW) :: ("int", nonnull) :: Nil,
-      returnType = "int",
-      makeSplitFunction = { body =>
-        s"""
-          $body
-          return $nonnull;
-        """
-      },
-      foldFunctions = { funcCalls =>
-        funcCalls.map { funcCall => s"$nonnull = $funcCall;" }.mkString("\n")
-      }
-    )
+    val code = if (ctx.INPUT_ROW == null || ctx.currentVars == null) {
+      evals.mkString("\n")
+    } else {
+      ctx.splitExpressions(evals, "atLeastNNonNull",
+        ("InternalRow", ctx.INPUT_ROW) :: ("int", nonnull) :: Nil,
+        returnType = "int",
+        makeSplitFunction = { body =>
+          s"""
+            $body
+            return $nonnull;
+          """
+        },
+        foldFunctions = { funcCalls =>
+          funcCalls.map { funcCall => s"$nonnull = $funcCall;" }.mkString("\n")
+        }
+      )
+    }
 
     ev.copy(code = s"""
       int $nonnull = 0;
