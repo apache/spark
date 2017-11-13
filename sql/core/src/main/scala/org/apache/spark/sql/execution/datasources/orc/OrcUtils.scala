@@ -58,18 +58,14 @@ object OrcUtils extends Logging {
   }
 
   private[orc] def readSchema(file: Path, conf: Configuration): Option[TypeDescription] = {
-    try {
-      val fs = file.getFileSystem(conf)
-      val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val reader = OrcFile.createReader(file, readerOptions)
-      val schema = reader.getSchema
-      if (schema.getFieldNames.size == 0) {
-        None
-      } else {
-        Some(schema)
-      }
-    } catch {
-      case _: IOException => None
+    val fs = file.getFileSystem(conf)
+    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
+    val reader = OrcFile.createReader(file, readerOptions)
+    val schema = reader.getSchema
+    if (schema.getFieldNames.size == 0) {
+      None
+    } else {
+      Some(schema)
     }
   }
 
@@ -90,9 +86,8 @@ object OrcUtils extends Logging {
 
   /**
    * Return missing column names in a give ORC file or `None`.
-   * `None` is returned for the following cases. OrcFileFormat will handle as empty iterators.
-   * - Some old empty ORC files always have an empty schema stored in their footer. (SPARK-8501)
-   * - Other IOExceptions during reading schema.
+   * Some old empty ORC files always have an empty schema stored in their footer. (SPARK-8501)
+   * In that case, `None` is returned and OrcFileFormat will handle as empty iterators.
    */
   private[orc] def getMissingColumnNames(
       isCaseSensitive: Boolean,
@@ -101,37 +96,33 @@ object OrcUtils extends Logging {
       file: Path,
       conf: Configuration): Option[Seq[String]] = {
     val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
-    try {
-      val fs = file.getFileSystem(conf)
-      val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val reader = OrcFile.createReader(file, readerOptions)
-      val schema = reader.getSchema
-      if (schema.getFieldNames.size == 0) {
-        None
+    val fs = file.getFileSystem(conf)
+    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
+    val reader = OrcFile.createReader(file, readerOptions)
+    val schema = reader.getSchema
+    if (schema.getFieldNames.size == 0) {
+      None
+    } else {
+      val orcSchema = if (schema.getFieldNames.asScala.forall(_.startsWith("_col"))) {
+        logInfo("Recover ORC schema with data schema")
+        var schemaString = schema.toString
+        dataSchema.zipWithIndex.foreach { case (field: StructField, index: Int) =>
+          schemaString = schemaString.replace(s"_col$index:", s"${field.name}:")
+        }
+        TypeDescription.fromString(schemaString)
       } else {
-        val orcSchema = if (schema.getFieldNames.asScala.forall(_.startsWith("_col"))) {
-          logInfo("Recover ORC schema with data schema")
-          var schemaString = schema.toString
-          dataSchema.zipWithIndex.foreach { case (field: StructField, index: Int) =>
-            schemaString = schemaString.replace(s"_col$index:", s"${field.name}:")
-          }
-          TypeDescription.fromString(schemaString)
-        } else {
-          schema
-        }
-
-        val missingColumnNames = new ArrayBuffer[String]
-        if (dataSchema.length > orcSchema.getFieldNames.size) {
-          dataSchema.filter(x => partitionSchema.getFieldIndex(x.name).isEmpty).foreach { f =>
-            if (!orcSchema.getFieldNames.asScala.exists(resolver(_, f.name))) {
-              missingColumnNames += f.name
-            }
-          }
-        }
-        Some(missingColumnNames)
+        schema
       }
-    } catch {
-      case _: IOException => None
+
+      val missingColumnNames = new ArrayBuffer[String]
+      if (dataSchema.length > orcSchema.getFieldNames.size) {
+        dataSchema.filter(x => partitionSchema.getFieldIndex(x.name).isEmpty).foreach { f =>
+          if (!orcSchema.getFieldNames.asScala.exists(resolver(_, f.name))) {
+            missingColumnNames += f.name
+          }
+        }
+      }
+      Some(missingColumnNames)
     }
   }
 }
