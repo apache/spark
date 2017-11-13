@@ -108,7 +108,6 @@ private[orc] class OrcDeserializer(
 
   /**
    * Convert Apache ORC OrcStruct to Apache Spark InternalRow.
-   * If internalRow is not None, fill into it. Otherwise, create a SpecificInternalRow and use it.
    */
   private[this] def convertOrcStructToInternalRow(
       orcStruct: OrcStruct,

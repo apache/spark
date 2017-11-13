@@ -83,17 +83,16 @@ object OrcUtils extends Logging {
     }
   }
 
-  private[orc] def getSchemaString(schema: StructType): String = {
-    schema.fields.map(f => s"${f.name}:${f.dataType.catalogString}").mkString("struct<", ",", ">")
-  }
-
   private[orc] def getTypeDescription(dataType: DataType) = dataType match {
-    case st: StructType => TypeDescription.fromString(getSchemaString(st))
+    case st: StructType => TypeDescription.fromString(st.catalogString)
     case _ => TypeDescription.fromString(dataType.catalogString)
   }
 
   /**
-   * Return missing column names in a give ORC file.
+   * Return missing column names in a give ORC file or `None`.
+   * `None` is returned for the following cases. OrcFileFormat will handle as empty iterators.
+   * - Some old empty ORC files always have an empty schema stored in their footer. (SPARK-8501)
+   * - Other IOExceptions during reading schema.
    */
   private[orc] def getMissingColumnNames(
       isCaseSensitive: Boolean,

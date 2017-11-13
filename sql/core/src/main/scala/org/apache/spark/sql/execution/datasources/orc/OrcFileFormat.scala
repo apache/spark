@@ -93,7 +93,7 @@ class OrcFileFormat
 
     val conf = job.getConfiguration
 
-    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, OrcUtils.getSchemaString(dataSchema))
+    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, dataSchema.catalogString)
 
     conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
 
@@ -147,6 +147,8 @@ class OrcFileFormat
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
 
+      // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
+      // In this case, `getMissingColumnNames` returns `None` and we return an empty iterator.
       val maybeMissingColumnNames = OrcUtils.getMissingColumnNames(
         isCaseSensitive, dataSchema, partitionSchema, new Path(new URI(file.filePath)), conf)
       if (maybeMissingColumnNames.isEmpty) {
