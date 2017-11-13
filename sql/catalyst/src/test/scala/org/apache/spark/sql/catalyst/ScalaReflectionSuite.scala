@@ -23,7 +23,8 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -82,6 +83,8 @@ object GenericData {
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
+
+case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
 
 object TestingUDT {
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
@@ -353,5 +356,19 @@ class ScalaReflectionSuite extends SparkFunSuite {
   test("SPARK-22472: add null check for top-level primitive values") {
     assert(deserializerFor[Int].isInstanceOf[AssertNotNull])
     assert(!deserializerFor[String].isInstanceOf[AssertNotNull])
+  }
+
+  test("SPARK-22442: Generate correct field names for special characters") {
+    val serializer = serializerFor[SpecialCharAsFieldData](BoundReference(
+      0, ObjectType(classOf[SpecialCharAsFieldData]), nullable = false))
+    val deserializer = deserializerFor[SpecialCharAsFieldData]
+    assert(serializer.dataType(0).name == "field.1")
+    assert(serializer.dataType(1).name == "field 2")
+
+    val argumentsFields = deserializer.asInstanceOf[NewInstance].arguments.flatMap { _.collect {
+      case UpCast(u: UnresolvedAttribute, _, _) => u.nameParts
+    }}
+    assert(argumentsFields(0) == Seq("field.1"))
+    assert(argumentsFields(1) == Seq("field 2"))
   }
 }
