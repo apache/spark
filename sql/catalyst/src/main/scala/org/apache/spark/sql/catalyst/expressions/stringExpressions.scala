@@ -65,7 +65,6 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
     val evals = children.map(_.genCode(ctx))
     val argNums = evals.length
     val args = ctx.freshName("args")
-    ctx.addMutableState("UTF8String[]", args, "")
 
     val inputs = evals.zipWithIndex.map { case (eval, index) =>
       if (eval.isNull != "true") {
@@ -79,9 +78,14 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
         ""
       }
     }
-    val codes = ctx.splitExpressions(ctx.INPUT_ROW, inputs)
+    val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      ctx.splitExpressions(inputs, "valueConcat",
+        ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
+    } else {
+      inputs.mkString("\n")
+    }
     ev.copy(s"""
-      $args = new UTF8String[$argNums];
+      UTF8String[] $args = new UTF8String[$argNums];
       $codes
       UTF8String ${ev.value} = UTF8String.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
@@ -140,8 +144,7 @@ case class ConcatWs(children: Seq[Expression])
       val evals = children.map(_.genCode(ctx))
 
       val argNums = evals.length
-      val args = ctx.freshName("argLen")
-      ctx.addMutableState("UTF8String[]", args, "")
+      val args = ctx.freshName("args")
 
       val inputs = evals.tail.zipWithIndex.map { case (eval, index) =>
         if (eval.isNull != "true") {
@@ -155,9 +158,15 @@ case class ConcatWs(children: Seq[Expression])
           ""
         }
       }
-      val codes = s"${evals.head.code}\n" + ctx.splitExpressions(ctx.INPUT_ROW, inputs)
+      val codes = s"${evals.head.code}\n" +
+        (if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
+           ctx.splitExpressions(inputs, "valueConcatWs",
+             ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
+         } else {
+           inputs.mkString("\n")
+         })
       ev.copy(s"""
-        $args = new UTF8String[$argNums];
+        UTF8String[] $args = new UTF8String[$argNums];
         $codes
         UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $args);
         boolean ${ev.isNull} = ${ev.value} == null;
