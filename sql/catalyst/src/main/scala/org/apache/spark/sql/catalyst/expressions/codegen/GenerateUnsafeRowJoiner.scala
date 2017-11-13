@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
@@ -48,6 +51,27 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
   override protected def bind(in: (StructType, StructType), inputSchema: Seq[Attribute])
     : (StructType, StructType) = {
     in
+  }
+
+  private def splitPlatformCode(expressions: Seq[String]): Seq[String] = {
+    val blocks = new ArrayBuffer[String]()
+    val blockBuilder = new StringBuilder()
+    var length = 0
+    for (code <- expressions) {
+      // We can't know how many bytecode will be generated, so use the length of source code
+      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
+      // also not be too small, or it will have many function calls (for wide table), see the
+      // results in BenchmarkWideTable.
+      if (length > 4096) {
+        blocks += blockBuilder.toString()
+        blockBuilder.clear()
+        length = 0
+      }
+      blockBuilder.append(code)
+      length += CodeFormatter.stripExtraNewLinesAndComments(code).length
+    }
+    blocks += blockBuilder.toString()
+    blocks
   }
 
   def create(schema1: StructType, schema2: StructType): UnsafeRowJoiner = {
@@ -88,7 +112,20 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
           s"$getLong(obj2, offset2 + ${(i - bitset1Words) * 8})"
         }
       }
-      s"$putLong(buf, ${offset + i * 8}, $bits);"
+      s"$putLong(buf, ${offset + i * 8}, $bits);\n"
+    }
+
+    val functions = mutable.ArrayBuffer.empty[String]
+    val args = "java.lang.Object obj1, long offset1, java.lang.Object obj2, long offset2"
+    val copyBitsets = splitPlatformCode(copyBitset).zipWithIndex.map { case(body, index) =>
+      val funcName = s"copyBitsetFunc$index"
+      val function = s"""
+        private void $funcName($args) {
+          $body
+        }
+      """
+      functions += function
+      s"$funcName(obj1, offset1, obj2, offset2);"
     }.mkString("\n")
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
@@ -154,6 +191,17 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
            |$putLong(buf, $cursor, $getLong(buf, $cursor) + ($shift << 32));
          """.stripMargin
       }
+    }
+
+    val updateOffsets = splitPlatformCode(updateOffset).zipWithIndex.map { case(body, index) =>
+      val funcName = s"updateOffsetFunc$index"
+      val function = s"""
+        private void $funcName(long numBytesVariableRow1) {
+          $body
+        }
+       """
+      functions += function
+      s"$funcName(numBytesVariableRow1);"
     }.mkString("\n")
 
     // ------------------------ Finally, put everything together  --------------------------- //
@@ -165,6 +213,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
        |  private byte[] buf = new byte[64];
        |  private UnsafeRow out = new UnsafeRow(${schema1.size + schema2.size});
+       |
+       |  ${functions.mkString("\n")}
        |
        |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
@@ -180,12 +230,12 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    final java.lang.Object obj2 = row2.getBaseObject();
        |    final long offset2 = row2.getBaseOffset();
        |
-       |    $copyBitset
+       |    $copyBitsets
        |    $copyFixedLengthRow1
        |    $copyFixedLengthRow2
        |    $copyVariableLengthRow1
        |    $copyVariableLengthRow2
-       |    $updateOffset
+       |    $updateOffsets
        |
        |    out.pointTo(buf, sizeInBytes);
        |
