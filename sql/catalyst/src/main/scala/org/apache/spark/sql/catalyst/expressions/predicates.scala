@@ -236,24 +236,30 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
+    ctx.addMutableState("boolean", ev.value, "")
+    ctx.addMutableState("boolean", ev.isNull, "")
+    val valueArg = ctx.freshName("valueArg")
     val listCode = listGen.map(x =>
       s"""
         if (!${ev.value}) {
           ${x.code}
           if (${x.isNull}) {
             ${ev.isNull} = true;
-          } else if (${ctx.genEqual(value.dataType, valueGen.value, x.value)}) {
+          } else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
             ${ev.isNull} = false;
             ${ev.value} = true;
           }
         }
-       """).mkString("\n")
+       """)
+    val args = ("InternalRow", ctx.INPUT_ROW) :: (ctx.javaType(value.dataType), valueArg) :: Nil
+    val listCodes = ctx.splitExpressions(listCode, "apply", args)
     ev.copy(code = s"""
       ${valueGen.code}
-      boolean ${ev.value} = false;
-      boolean ${ev.isNull} = ${valueGen.isNull};
+      ${ev.value} = false;
+      ${ev.isNull} = ${valueGen.isNull};
       if (!${ev.isNull}) {
-        $listCode
+        ${ctx.javaType(value.dataType)} $valueArg = ${valueGen.value};
+        $listCodes
       }
     """)
   }
