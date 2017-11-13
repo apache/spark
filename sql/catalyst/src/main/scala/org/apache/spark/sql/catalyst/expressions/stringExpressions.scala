@@ -142,11 +142,12 @@ case class ConcatWs(children: Seq[Expression])
     if (children.forall(_.dataType == StringType)) {
       // All children are strings. In that case we can construct a fixed size array.
       val evals = children.map(_.genCode(ctx))
-
-      val argNums = evals.length
+      val separator = evals.head
+      val strings = evals.tail
+      val argNums = strings.length
       val args = ctx.freshName("args")
 
-      val inputs = evals.tail.zipWithIndex.map { case (eval, index) =>
+      val inputs = strings.zipWithIndex.map { case (eval, index) =>
         if (eval.isNull != "true") {
           s"""
              ${eval.code}
@@ -158,7 +159,7 @@ case class ConcatWs(children: Seq[Expression])
           ""
         }
       }
-      val codes = s"${evals.head.code}\n" +
+      val codes = s"${separator.code}\n" +
         (if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
            ctx.splitExpressions(inputs, "valueConcatWs",
              ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
@@ -168,7 +169,7 @@ case class ConcatWs(children: Seq[Expression])
       ev.copy(s"""
         UTF8String[] $args = new UTF8String[$argNums];
         $codes
-        UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $args);
+        UTF8String ${ev.value} = UTF8String.concatWs(${separator.value}, $args);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
     } else {
