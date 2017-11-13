@@ -186,7 +186,7 @@ class SparkSession(object):
                 return session
 
     builder = Builder()
-    """A class attribute having a :class:`Builder` for constructing :class:`SparkSession` instances"""
+    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
 
     _instantiatedSession = None
 
