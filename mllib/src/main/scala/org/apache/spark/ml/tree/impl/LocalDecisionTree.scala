@@ -149,8 +149,7 @@ private[ml] object LocalDecisionTree {
       from.until(to).foreach { idx =>
         val rowIndex = indices(idx)
         AggUpdateUtils.updateOrderedFeature(statsAggregator, col.values(idx), labels(rowIndex),
-          featureIndex = col.featureIndex, featureIndexIdx,
-          instanceWeight = instanceWeights(rowIndex))
+          featureIndexIdx, instanceWeight = instanceWeights(rowIndex))
       }
     }
   }

@@ -75,7 +75,6 @@ private[impl] object AggUpdateUtils {
       agg: DTStatsAggregator,
       featureValue: Int,
       label: Double,
-      featureIndex: Int,
       featureIndexIdx: Int,
       instanceWeight: Double): Unit = {
     // The bin index of an ordered feature is just the feature value itself

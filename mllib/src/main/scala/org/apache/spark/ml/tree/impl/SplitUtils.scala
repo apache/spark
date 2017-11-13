@@ -17,12 +17,13 @@
 
 package org.apache.spark.ml.tree.impl
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.tree.{CategoricalSplit, Split}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 
 /** Utility methods for choosing splits during local & distributed tree training. */
-private[impl] object SplitUtils {
+private[impl] object SplitUtils extends Logging {
 
   /** Sorts ordered feature categories by label centroid, returning an ordered list of categories */
   private def sortByCentroid(
@@ -44,12 +45,11 @@ private[impl] object SplitUtils {
       val centroid = ImpurityUtils.getCentroid(binAggregates.metadata, categoryStats)
       (featureValue, centroid)
     }
-    // TODO(smurching): How to handle logging statements like these?
-    // logDebug("Centroids for categorical variable: " + centroidForCategories.mkString(","))
+    logDebug("Centroids for categorical variable: " + centroidForCategories.mkString(","))
     // bins sorted by centroids
     val categoriesSortedByCentroid = centroidForCategories.toList.sortBy(_._2).map(_._1)
-    // logDebug("Sorted centroids for categorical variable = " +
-    //   categoriesSortedByCentroid.mkString(","))
+     logDebug("Sorted centroids for categorical variable = " +
+       categoriesSortedByCentroid.mkString(","))
     categoriesSortedByCentroid
   }
 
@@ -128,7 +128,6 @@ private[impl] object SplitUtils {
     // Cumulative sum (scanLeft) of bin statistics.
     // Afterwards, binAggregates for a bin is the sum of aggregates for
     // that bin + all preceding bins.
-    assert(!binAggregates.metadata.isUnordered(featureIndex))
     val numSplits = binAggregates.metadata.numSplits(featureIndex)
     val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)
     var splitIndex = 0
