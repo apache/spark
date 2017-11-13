@@ -382,7 +382,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       }
     }
 
-    val code = if (ctx.INPUT_ROW == null || ctx.currentVars == null) {
+    val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
       evals.mkString("\n")
     } else {
       ctx.splitExpressions(evals, "atLeastNNonNull",
