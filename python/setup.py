@@ -196,7 +196,10 @@ try:
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
-        install_requires=['py4j==0.10.6'],
+        install_requires=[
+            'py4j==0.10.6',
+            'enum34'
+        ],
         setup_requires=['pypandoc'],
         extras_require={
             'ml': ['numpy>=1.7'],
