@@ -2119,7 +2119,7 @@ def udf(f=None, returnType=StringType(), nullable=True):
 
 
 @since(2.3)
-def pandas_udf(f=None, returnType=None, functionType=None):
+def pandas_udf(f=None, returnType=None, functionType=None, nullable=True):
     """
     Creates a vectorized user defined function (UDF).
 
@@ -2230,9 +2230,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
                          "functionType must be one the values from PandasUDFType")
 
     if is_decorator:
-        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type)
+        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type, nullable=nullable)
     else:
-        return _create_udf(f=f, returnType=return_type, evalType=eval_type)
+        return _create_udf(f=f, returnType=return_type, evalType=eval_type, nullable=nullable)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
