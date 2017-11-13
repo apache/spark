@@ -535,7 +535,7 @@ class SQLTests(ReusedSQLTestCase):
                     return col + 4
 
         call = PlusFour()
-        pudf = UserDefinedFunction(call, LongType(), False)
+        pudf = UserDefinedFunction(call, LongType(), nullable=False)
         res = df.select(pudf(df['id']).alias('plus_four'))
         self.assertFalse(res.schema['plus_four'].nullable)
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
