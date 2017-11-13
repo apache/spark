@@ -71,7 +71,9 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       if (eval.isNull != "true") {
         s"""
           ${eval.code}
-          $args[$index] = ${eval.value};
+          if (!${eval.isNull}) {
+            $args[$index] = ${eval.value};
+          }
         """
       } else {
         ""
@@ -145,7 +147,9 @@ case class ConcatWs(children: Seq[Expression])
         if (eval.isNull != "true") {
           s"""
            ${eval.code}
-           $args[$index] = ${eval.value};
+           if (!${eval.isNull}) {
+             $args[$index] = ${eval.value};
+           }
          """
         } else {
           ""
@@ -190,7 +194,6 @@ case class ConcatWs(children: Seq[Expression])
         }
       }.unzip
 
-      // ev.copy(evals.map(_.code).mkString("\n") +
       val codes = ctx.splitExpressions(ctx.INPUT_ROW, evals.map(_.code))
       val varargCounts = ctx.splitExpressions(ctx.INPUT_ROW, varargCount)
       val varargBuilds = ctx.splitExpressions(ctx.INPUT_ROW, varargBuild)
