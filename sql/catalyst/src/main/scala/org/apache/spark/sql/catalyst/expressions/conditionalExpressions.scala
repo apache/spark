@@ -302,7 +302,7 @@ case class CaseWhenCodegen(
         val fullFuncName = ctx.addNewFunction(funcName, funcBody)
         isGlobalVariable = true
 
-        generatedCode = s"if ($funcName(${ctx.INPUT_ROW})) {\n// do nothing\n} else {\n"
+        generatedCode = s"if ($fullFuncName(${ctx.INPUT_ROW})) {\n// do nothing\n} else {\n"
         numIfthen = 1
       }
     }
