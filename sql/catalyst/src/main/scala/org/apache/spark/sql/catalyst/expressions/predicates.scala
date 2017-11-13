@@ -251,8 +251,16 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           }
         }
        """)
-    val args = ("InternalRow", ctx.INPUT_ROW) :: (ctx.javaType(value.dataType), valueArg) :: Nil
-    val listCodes = ctx.splitExpressions(listCode, "apply", args)
+    val listCodes = if (ctx.currentVars == null) {
+      val args = if (ctx.INPUT_ROW != null) {
+        ("InternalRow", ctx.INPUT_ROW) :: (ctx.javaType(value.dataType), valueArg) :: Nil
+      } else {
+        (ctx.javaType(value.dataType), valueArg) :: Nil
+      }
+      ctx.splitExpressions(listCode, "apply", args)
+    } else {
+      listCode.mkString("\n")
+    }
     ev.copy(code = s"""
       ${valueGen.code}
       ${ev.value} = false;
