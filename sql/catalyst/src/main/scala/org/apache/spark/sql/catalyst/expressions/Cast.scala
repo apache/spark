@@ -1049,8 +1049,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
     (c, evPrim, evNull) =>
       s"""
-        $rowClass $result = new $rowClass(${fieldsCasts.length});
-        InternalRow $tmpRow = $c;
+        final $rowClass $result = new $rowClass(${fieldsCasts.length});
+        final InternalRow $tmpRow = $c;
         $fieldsEvalCodes
         $evPrim = $result;
       """
