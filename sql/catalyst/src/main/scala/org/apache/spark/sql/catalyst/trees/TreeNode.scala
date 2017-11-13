@@ -450,6 +450,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case set: Set[_] => Utils.truncatedString(set.toSeq, "{", ", ", "}") :: Nil
     case array: Array[_] if array.isEmpty => Nil
     case array: Array[_] => Utils.truncatedString(array, "[", ", ", "]") :: Nil
+    case map: Map[String, String] if map.isEmpty => Nil
+    case map: Map[String, String] => Utils.redact(map).toMap :: Nil
     case null => Nil
     case None => Nil
     case Some(null) => Nil
