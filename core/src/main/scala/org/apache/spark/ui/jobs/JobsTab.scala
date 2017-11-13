@@ -34,14 +34,10 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
   val killEnabled = parent.killEnabled
 
   def isFairScheduler: Boolean = {
-    val configName = "spark.scheduler.mode"
-    val config = sc match {
-      case Some(_sc) =>
-        _sc.conf.getOption(configName)
-      case _ =>
-        store.environmentInfo().sparkProperties.toMap.get(configName)
-    }
-    config.map(SchedulingMode.withName) == Some(SchedulingMode.FAIR)
+    store.environmentInfo().sparkProperties.toMap
+      .get("spark.scheduler.mode")
+      .map { mode => mode == SchedulingMode.FAIR }
+      .getOrElse(false)
   }
 
   def getSparkUser: String = parent.getSparkUser

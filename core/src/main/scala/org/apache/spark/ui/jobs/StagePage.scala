@@ -842,7 +842,7 @@ private[ui] class TaskDataSource(
   import StagePage._
 
   // Keep an internal cache of executor log maps so that long task lists render faster.
-  private val executors = new HashMap[String, Map[String, String]]()
+  private val executorIdToLogs = new HashMap[String, Map[String, String]]()
 
   // Convert TaskData to TaskTableRowData which contains the final contents to show in the table
   // so that we can avoid creating duplicate contents during sorting the data
@@ -1006,7 +1006,7 @@ private[ui] class TaskDataSource(
   }
 
   private def executorLogs(id: String): Map[String, String] = {
-    executors.getOrElseUpdate(id,
+    executorIdToLogs.getOrElseUpdate(id,
       store.asOption(store.executorSummary(id)).map(_.executorLogs).getOrElse(Map.empty))
   }
 

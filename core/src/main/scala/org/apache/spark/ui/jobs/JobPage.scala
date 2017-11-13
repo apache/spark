@@ -334,7 +334,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     val appStartTime = store.applicationInfo().attempts.head.startTime.getTime()
 
     content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
-        store.executorList(false), appStartTime)
+      store.executorList(false), appStartTime)
 
     content ++= UIUtils.showDagVizForJob(
       jobId, store.operationGraphForJob(jobId))
