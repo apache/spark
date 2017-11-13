@@ -149,11 +149,11 @@ case class ConcatWs(children: Seq[Expression])
       val inputs = evals.tail.zipWithIndex.map { case (eval, index) =>
         if (eval.isNull != "true") {
           s"""
-           ${eval.code}
-           if (!${eval.isNull}) {
-             $args[$index] = ${eval.value};
-           }
-         """
+             ${eval.code}
+             if (!${eval.isNull}) {
+               $args[$index] = ${eval.value};
+             }
+           """
         } else {
           ""
         }
