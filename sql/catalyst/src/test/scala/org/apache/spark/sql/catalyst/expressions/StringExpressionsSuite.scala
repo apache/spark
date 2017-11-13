@@ -47,7 +47,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-22498: Concat should not generate codes beyond 64KB") {
     val N = 5000
-    val strs = (1 to N).map(x => s"x_$x")
+    val strs = (1 to N).map(x => s"s$x")
     checkEvaluation(Concat(strs.map(Literal.create(_, StringType))), strs.mkString, EmptyRow)
   }
 
@@ -114,6 +114,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Elt(Seq(Literal(1))).checkInputDataTypes().isFailure)
     assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
     assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes().isFailure)
+  }
+
+  test("SPARK-22498: Elt should not generate codes beyond 64KB") {
+    val N = 10000
+    val strings = (1 to N).map(x => s"s$x")
+    val args = Literal.create(N, IntegerType) +: strings.map(Literal.create(_, StringType))
+    checkEvaluation(Elt(args), s"s$N")
   }
 
   test("StringComparison") {
