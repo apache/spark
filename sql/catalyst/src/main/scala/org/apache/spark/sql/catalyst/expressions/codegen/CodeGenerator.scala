@@ -909,6 +909,36 @@ class CodegenContext {
   }
 
   /**
+   * Wrap the generated code of expression, which was created from a row object in INPUT_ROW,
+   * by a function. ev.isNull and ev.value are passed by global variables
+   *
+   * @param ev the code to evaluate expressions.
+   * @param dataType the data type of ev.value.
+   * @param baseFuncName the split function name base.
+   */
+  def createAndAddFunction(
+      ev: ExprCode,
+      dataType: DataType,
+      baseFuncName: String): (String, String, String) = {
+    val globalIsNull = freshName("isNull")
+    addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
+    val globalValue = freshName("value")
+    addMutableState(javaType(dataType), globalValue,
+      s"$globalValue = ${defaultValue(dataType)};")
+    val funcName = freshName(baseFuncName)
+    val funcBody =
+      s"""
+         |private void $funcName(InternalRow ${INPUT_ROW}) {
+         |  ${ev.code.trim}
+         |  $globalIsNull = ${ev.isNull};
+         |  $globalValue = ${ev.value};
+         |}
+         """.stripMargin
+    val fullFuncName = addNewFunction(funcName, funcBody)
+    (fullFuncName, globalIsNull, globalValue)
+  }
+
+  /**
    * Perform a function which generates a sequence of ExprCodes with a given mapping between
    * expressions and common expressions, instead of using the mapping in current context.
    */

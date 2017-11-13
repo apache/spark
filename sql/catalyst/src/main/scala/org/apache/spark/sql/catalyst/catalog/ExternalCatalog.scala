@@ -87,7 +87,14 @@ abstract class ExternalCatalog
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  def alterDatabase(dbDefinition: CatalogDatabase): Unit
+  final def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
+    val db = dbDefinition.name
+    postToAll(AlterDatabasePreEvent(db))
+    doAlterDatabase(dbDefinition)
+    postToAll(AlterDatabaseEvent(db))
+  }
+
+  protected def doAlterDatabase(dbDefinition: CatalogDatabase): Unit
 
   def getDatabase(db: String): CatalogDatabase
 
@@ -147,7 +154,15 @@ abstract class ExternalCatalog
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  def alterTable(tableDefinition: CatalogTable): Unit
+  final def alterTable(tableDefinition: CatalogTable): Unit = {
+    val db = tableDefinition.database
+    val name = tableDefinition.identifier.table
+    postToAll(AlterTablePreEvent(db, name, AlterTableKind.TABLE))
+    doAlterTable(tableDefinition)
+    postToAll(AlterTableEvent(db, name, AlterTableKind.TABLE))
+  }
+
+  protected def doAlterTable(tableDefinition: CatalogTable): Unit
 
   /**
    * Alter the data schema of a table identified by the provided database and table name. The new
@@ -158,10 +173,22 @@ abstract class ExternalCatalog
    * @param table Name of table to alter schema for
    * @param newDataSchema Updated data schema to be used for the table.
    */
-  def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
+  final def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit = {
+    postToAll(AlterTablePreEvent(db, table, AlterTableKind.DATASCHEMA))
+    doAlterTableDataSchema(db, table, newDataSchema)
+    postToAll(AlterTableEvent(db, table, AlterTableKind.DATASCHEMA))
+  }
+
+  protected def doAlterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
-  def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
+  final def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit = {
+    postToAll(AlterTablePreEvent(db, table, AlterTableKind.STATS))
+    doAlterTableStats(db, table, stats)
+    postToAll(AlterTableEvent(db, table, AlterTableKind.STATS))
+  }
+
+  protected def doAlterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
 
   def getTable(db: String, table: String): CatalogTable
 

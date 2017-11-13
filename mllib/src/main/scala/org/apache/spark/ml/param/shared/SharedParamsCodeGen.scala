@@ -60,6 +60,7 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
+      ParamDesc[Array[String]]("outputCols", "output column names"),
       ParamDesc[Int]("checkpointInterval", "set checkpoint interval (>= 1) or " +
         "disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed " +
         "every 10 iterations", isValid = "(interval: Int) => interval == -1 || interval >= 1"),

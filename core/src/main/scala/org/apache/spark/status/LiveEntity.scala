@@ -420,79 +420,101 @@ private class LiveStage extends LiveEntity {
 
 private class LiveRDDPartition(val blockName: String) {
 
-  var executors = Set[String]()
-  var storageLevel: String = null
-  var memoryUsed = 0L
-  var diskUsed = 0L
+  // Pointers used by RDDPartitionSeq.
+  @volatile var prev: LiveRDDPartition = null
+  @volatile var next: LiveRDDPartition = null
 
-  def toApi(): v1.RDDPartitionInfo = {
-    new v1.RDDPartitionInfo(
+  var value: v1.RDDPartitionInfo = null
+
+  def executors: Seq[String] = value.executors
+
+  def memoryUsed: Long = value.memoryUsed
+
+  def diskUsed: Long = value.diskUsed
+
+  def update(
+      executors: Seq[String],
+      storageLevel: String,
+      memoryUsed: Long,
+      diskUsed: Long): Unit = {
+    value = new v1.RDDPartitionInfo(
       blockName,
       storageLevel,
       memoryUsed,
       diskUsed,
-      executors.toSeq.sorted)
+      executors)
   }
 
 }
 
-private class LiveRDDDistribution(val exec: LiveExecutor) {
+private class LiveRDDDistribution(exec: LiveExecutor) {
 
-  var memoryRemaining = exec.maxMemory
+  val executorId = exec.executorId
   var memoryUsed = 0L
   var diskUsed = 0L
 
   var onHeapUsed = 0L
   var offHeapUsed = 0L
-  var onHeapRemaining = 0L
-  var offHeapRemaining = 0L
+
+  // Keep the last update handy. This avoids recomputing the API view when not needed.
+  var lastUpdate: v1.RDDDataDistribution = null
 
   def toApi(): v1.RDDDataDistribution = {
-    new v1.RDDDataDistribution(
-      exec.hostPort,
-      memoryUsed,
-      memoryRemaining,
-      diskUsed,
-      if (exec.hasMemoryInfo) Some(onHeapUsed) else None,
-      if (exec.hasMemoryInfo) Some(offHeapUsed) else None,
-      if (exec.hasMemoryInfo) Some(onHeapRemaining) else None,
-      if (exec.hasMemoryInfo) Some(offHeapRemaining) else None)
+    if (lastUpdate == null) {
+      lastUpdate = new v1.RDDDataDistribution(
+        exec.hostPort,
+        memoryUsed,
+        exec.maxMemory - exec.memoryUsed,
+        diskUsed,
+        if (exec.hasMemoryInfo) Some(onHeapUsed) else None,
+        if (exec.hasMemoryInfo) Some(offHeapUsed) else None,
+        if (exec.hasMemoryInfo) Some(exec.totalOnHeap - exec.usedOnHeap) else None,
+        if (exec.hasMemoryInfo) Some(exec.totalOffHeap - exec.usedOffHeap) else None)
+    }
+    lastUpdate
   }
 
 }
 
-private class LiveRDD(info: RDDInfo) extends LiveEntity {
+private class LiveRDD(val info: RDDInfo) extends LiveEntity {
 
   var storageLevel: String = info.storageLevel.description
   var memoryUsed = 0L
   var diskUsed = 0L
 
   private val partitions = new HashMap[String, LiveRDDPartition]()
+  private val partitionSeq = new RDDPartitionSeq()
+
   private val distributions = new HashMap[String, LiveRDDDistribution]()
 
   def partition(blockName: String): LiveRDDPartition = {
-    partitions.getOrElseUpdate(blockName, new LiveRDDPartition(blockName))
+    partitions.getOrElseUpdate(blockName, {
+      val part = new LiveRDDPartition(blockName)
+      part.update(Nil, storageLevel, 0L, 0L)
+      partitionSeq.addPartition(part)
+      part
+    })
   }
 
-  def removePartition(blockName: String): Unit = partitions.remove(blockName)
+  def removePartition(blockName: String): Unit = {
+    partitions.remove(blockName).foreach(partitionSeq.removePartition)
+  }
 
   def distribution(exec: LiveExecutor): LiveRDDDistribution = {
-    distributions.getOrElseUpdate(exec.hostPort, new LiveRDDDistribution(exec))
+    distributions.getOrElseUpdate(exec.executorId, new LiveRDDDistribution(exec))
   }
 
-  def removeDistribution(exec: LiveExecutor): Unit = {
-    distributions.remove(exec.hostPort)
+  def removeDistribution(exec: LiveExecutor): Boolean = {
+    distributions.remove(exec.executorId).isDefined
+  }
+
+  def distributionOpt(exec: LiveExecutor): Option[LiveRDDDistribution] = {
+    distributions.get(exec.executorId)
   }
 
   override protected def doUpdate(): Any = {
-    val parts = if (partitions.nonEmpty) {
-      Some(partitions.values.toList.sortBy(_.blockName).map(_.toApi()))
-    } else {
-      None
-    }
-
     val dists = if (distributions.nonEmpty) {
-      Some(distributions.values.toList.sortBy(_.exec.executorId).map(_.toApi()))
+      Some(distributions.values.map(_.toApi()).toSeq)
     } else {
       None
     }
@@ -506,7 +528,7 @@ private class LiveRDD(info: RDDInfo) extends LiveEntity {
       memoryUsed,
       diskUsed,
       dists,
-      parts)
+      Some(partitionSeq))
 
     new RDDStorageInfoWrapper(rdd)
   }
@@ -526,11 +548,89 @@ private object LiveEntityHelpers {
       .map { acc =>
         new v1.AccumulableInfo(
           acc.id,
-          acc.name.map(_.intern()).orNull,
+          acc.name.orNull,
           acc.update.map(_.toString()),
           acc.value.map(_.toString()).orNull)
       }
       .toSeq
+  }
+
+}
+
+/**
+ * A custom sequence of partitions based on a mutable linked list.
+ *
+ * The external interface is an immutable Seq, which is thread-safe for traversal. There are no
+ * guarantees about consistency though - iteration might return elements that have been removed
+ * or miss added elements.
+ *
+ * Internally, the sequence is mutable, and elements can modify the data they expose. Additions and
+ * removals are O(1). It is not safe to do multiple writes concurrently.
+ */
+private class RDDPartitionSeq extends Seq[v1.RDDPartitionInfo] {
+
+  @volatile private var _head: LiveRDDPartition = null
+  @volatile private var _tail: LiveRDDPartition = null
+  @volatile var count = 0
+
+  override def apply(idx: Int): v1.RDDPartitionInfo = {
+    var curr = 0
+    var e = _head
+    while (curr < idx && e != null) {
+      curr += 1
+      e = e.next
+    }
+    if (e != null) e.value else throw new IndexOutOfBoundsException(idx.toString)
+  }
+
+  override def iterator: Iterator[v1.RDDPartitionInfo] = {
+    new Iterator[v1.RDDPartitionInfo] {
+      var current = _head
+
+      override def hasNext: Boolean = current != null
+
+      override def next(): v1.RDDPartitionInfo = {
+        if (current != null) {
+          val tmp = current
+          current = tmp.next
+          tmp.value
+        } else {
+          throw new NoSuchElementException()
+        }
+      }
+    }
+  }
+
+  override def length: Int = count
+
+  def addPartition(part: LiveRDDPartition): Unit = {
+    part.prev = _tail
+    if (_tail != null) {
+      _tail.next = part
+    }
+    if (_head == null) {
+      _head = part
+    }
+    _tail = part
+    count += 1
+  }
+
+  def removePartition(part: LiveRDDPartition): Unit = {
+    count -= 1
+    // Remove the partition from the list, but leave the pointers unchanged. That ensures a best
+    // effort at returning existing elements when iterations still reference the removed partition.
+    if (part.prev != null) {
+      part.prev.next = part.next
+    }
+    if (part eq _head) {
+      _head = part.next
+    }
+    if (part.next != null) {
+      part.next.prev = part.prev
+    }
+    if (part eq _tail) {
+      _tail = part.prev
+    }
   }
 
 }

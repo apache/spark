@@ -1629,6 +1629,55 @@ def to_arrow_type(dt):
     return arrow_type
 
 
+def to_arrow_schema(schema):
+    """ Convert a schema from Spark to Arrow
+    """
+    import pyarrow as pa
+    fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+              for field in schema]
+    return pa.schema(fields)
+
+
+def from_arrow_type(at):
+    """ Convert pyarrow type to Spark data type.
+    """
+    # TODO: newer pyarrow has is_boolean(at) functions that would be better to check type
+    import pyarrow as pa
+    if at == pa.bool_():
+        spark_type = BooleanType()
+    elif at == pa.int8():
+        spark_type = ByteType()
+    elif at == pa.int16():
+        spark_type = ShortType()
+    elif at == pa.int32():
+        spark_type = IntegerType()
+    elif at == pa.int64():
+        spark_type = LongType()
+    elif at == pa.float32():
+        spark_type = FloatType()
+    elif at == pa.float64():
+        spark_type = DoubleType()
+    elif type(at) == pa.DecimalType:
+        spark_type = DecimalType(precision=at.precision, scale=at.scale)
+    elif at == pa.string():
+        spark_type = StringType()
+    elif at == pa.date32():
+        spark_type = DateType()
+    elif type(at) == pa.TimestampType:
+        spark_type = TimestampType()
+    else:
+        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+    return spark_type
+
+
+def from_arrow_schema(arrow_schema):
+    """ Convert schema from Arrow to Spark.
+    """
+    return StructType(
+        [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+         for field in arrow_schema])
+
+
 def _check_dataframe_localize_timestamps(pdf, timezone):
     """
     Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone

@@ -285,8 +285,24 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  object ParquetOutputTimestampType extends Enumeration {
+    val INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
+  }
+
+  val PARQUET_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.parquet.outputTimestampType")
+    .doc("Sets which Parquet timestamp type to use when Spark writes data to Parquet files. " +
+      "INT96 is a non-standard but commonly used timestamp type in Parquet. TIMESTAMP_MICROS " +
+      "is a standard timestamp type in Parquet, which stores number of microseconds from the " +
+      "Unix epoch. TIMESTAMP_MILLIS is also standard, but with millisecond precision, which " +
+      "means Spark has to truncate the microsecond portion of its timestamp value.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(ParquetOutputTimestampType.values.map(_.toString))
+    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+
   val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
-    .doc("When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
+    .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
+      "When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
       "extended type. In this mode, the microsecond portion of the timestamp value will be" +
       "truncated.")
     .booleanConf
@@ -1150,6 +1166,18 @@ class SQLConf extends Serializable with Logging {
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
   def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
+
+  def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
+    val isOutputTimestampTypeSet = settings.containsKey(PARQUET_OUTPUT_TIMESTAMP_TYPE.key)
+    if (!isOutputTimestampTypeSet && isParquetINT64AsTimestampMillis) {
+      // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_INT64_AS_TIMESTAMP_MILLIS is set,
+      // respect PARQUET_INT64_AS_TIMESTAMP_MILLIS and use TIMESTAMP_MILLIS. Otherwise,
+      // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
+      ParquetOutputTimestampType.TIMESTAMP_MILLIS
+    } else {
+      ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
+    }
+  }
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
