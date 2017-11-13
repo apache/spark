@@ -18,7 +18,7 @@
 """
 .. attribute:: ImageSchema
 
-    An attribute of :class:`_ImageSchema` in this module.
+    An attribute of this module that contains the instance of :class:`_ImageSchema`.
 
 .. autoclass:: _ImageSchema
    :members:
@@ -48,7 +48,7 @@ class _ImageSchema(object):
         """
         Returns the image schema.
 
-        :rtype StructType: a DataFrame with a single column of images
+        :return: StructType: a DataFrame with a single column of images
                named "image" (nullable)
 
         .. versionadded:: 2.3.0
@@ -65,7 +65,7 @@ class _ImageSchema(object):
         """
         Returns the OpenCV type mapping supported
 
-        :rtype dict: The OpenCV type mapping supported
+        :return: dict: The OpenCV type mapping supported
 
         .. versionadded:: 2.3.0
         """
@@ -80,7 +80,7 @@ class _ImageSchema(object):
         """
         Returns field names of image columns.
 
-        :rtype list: a list of field names.
+        :return: list: a list of field names.
 
         .. versionadded:: 2.3.0
         """
@@ -109,7 +109,7 @@ class _ImageSchema(object):
         Converts an image to a one-dimensional array.
 
         :param image: The image to be converted
-        :rtype array: The image as a one-dimensional array
+        :return: array: The image as a one-dimensional array
 
         .. versionadded:: 2.3.0
         """
@@ -129,7 +129,7 @@ class _ImageSchema(object):
 
         :param array array: The array to convert to image
         :param str origin: Path to the image, optional
-        :rtype object: Two dimensional image
+        :return: object: Two dimensional image
 
         .. versionadded:: 2.3.0
         """
@@ -158,8 +158,7 @@ class _ImageSchema(object):
         """
         Reads the directory of images from the local or remote source.
 
-        WARNINGS:
-          - If multiple jobs are run in parallel with different sampleRatio or recursive flag,
+        .. note:: If multiple jobs are run in parallel with different sampleRatio or recursive flag,
             there may be a race condition where one job overwrites the hadoop configs of another.
 
         :param str path: Path to the image directory
@@ -168,7 +167,7 @@ class _ImageSchema(object):
         :param bool dropImageFailures: Drop the files that are not valid images
         :param float sampleRatio: Fraction of the images loaded
         :param int seed: Random number seed
-        :rtype DataFrame: DataFrame with a single column of "images",
+        :return: DataFrame: DataFrame with a single column of "images",
                see ImageSchema for details
 
         >>> df = ImageSchema.readImages('python/test_support/image/kittens', recursive=True)

@@ -39,13 +39,16 @@ object ImageSchema {
 
   val undefinedImageType = "Undefined"
 
+  /**
+   * (Scala-specific) OpenCV type mapping supported
+   */
   val ocvTypes: Map[String, Int] = Map(
     undefinedImageType -> -1,
     "CV_8U" -> 0, "CV_8UC1" -> 0, "CV_8UC3" -> 16, "CV_8UC4" -> 24
   )
 
   /**
-   * Used for conversion to python
+   * (Java-specific) OpenCV type mapping supported
    */
   val javaOcvTypes: java.util.Map[String, Int] = ocvTypes.asJava
 
@@ -187,9 +190,20 @@ object ImageSchema {
   /**
    * Read the directory of images from the local or remote source
    *
-   * WARNINGS:
-   *  - If multiple jobs are run in parallel with different sampleRatio or recursive flag,
-   *    there may be a race condition where one job overwrites the hadoop configs of another.
+   * @note If multiple jobs are run in parallel with different sampleRatio or recursive flag,
+   * there may be a race condition where one job overwrites the hadoop configs of another.
+   *
+   * @param path Path to the image directory
+   * @return DataFrame with a single column "image" of images;
+   *         see ImageSchema for the details
+   */
+  def readImages(path: String): DataFrame = readImages(path, null, false, -1, false, 1.0, 0)
+
+  /**
+   * Read the directory of images from the local or remote source
+   *
+   * @note If multiple jobs are run in parallel with different sampleRatio or recursive flag,
+   * there may be a race condition where one job overwrites the hadoop configs of another.
    *
    * @param path Path to the image directory
    * @param sparkSession Spark Session, if omitted gets or creates the session
@@ -203,12 +217,12 @@ object ImageSchema {
    */
   def readImages(
       path: String,
-      sparkSession: SparkSession = null,
-      recursive: Boolean = false,
-      numPartitions: Int = -1,
-      dropImageFailures: Boolean = false,
-      sampleRatio: Double = 1.0,
-      seed: Long = 0): DataFrame = {
+      sparkSession: SparkSession,
+      recursive: Boolean,
+      numPartitions: Int,
+      dropImageFailures: Boolean,
+      sampleRatio: Double,
+      seed: Long): DataFrame = {
     require(sampleRatio <= 1.0 && sampleRatio >= 0, "sampleRatio should be between 0 and 1")
 
     val session = if (sparkSession != null) sparkSession else SparkSession.builder().getOrCreate

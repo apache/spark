@@ -49,31 +49,31 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("readImages count test") {
-    var df = readImages(imagePath, recursive = false)
+    var df = readImages(imagePath)
     assert(df.count === 1)
 
-    df = readImages(imagePath, recursive = true, dropImageFailures = false)
+    df = readImages(imagePath, null, true, -1, false, 1.0, 0)
     assert(df.count === 9)
 
-    df = readImages(imagePath, recursive = true, dropImageFailures = true)
+    df = readImages(imagePath, null, true, -1, true, 1.0, 0)
     val countTotal = df.count
     assert(countTotal === 7)
 
-    df = readImages(imagePath, recursive = true, sampleRatio = 0.5, dropImageFailures = true)
+    df = readImages(imagePath, null, true, -1, true, 0.5, 0)
     // Random number about half of the size of the original dataset
     val count50 = df.count
     assert(count50 > 0 && count50 < countTotal)
   }
 
   test("readImages partition test") {
-    val df = readImages(imagePath, recursive = true, dropImageFailures = true, numPartitions = 3)
+    val df = readImages(imagePath, null, true, 3, true, 1.0, 0)
     assert(df.rdd.getNumPartitions === 3)
   }
 
   // Images with the different number of channels
   test("readImages pixel values test") {
 
-    val images = readImages(imagePath + "/multi-channel/", recursive = false).collect
+    val images = readImages(imagePath + "/multi-channel/").collect
 
     images.foreach { rrow =>
       val row = rrow.getAs[Row](0)
