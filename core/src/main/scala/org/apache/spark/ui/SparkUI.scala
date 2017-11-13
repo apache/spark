@@ -25,15 +25,13 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
-  UIRoot}
-import org.apache.spark.storage.StorageStatusListener
+import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
-import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
+import org.apache.spark.ui.env.EnvironmentTab
+import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobProgressListener, JobsTab, StagesTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
-import org.apache.spark.ui.storage.{StorageListener, StorageTab}
+import org.apache.spark.ui.storage.StorageTab
 import org.apache.spark.util.Utils
 
 /**
@@ -44,11 +42,7 @@ private[spark] class SparkUI private (
     val sc: Option[SparkContext],
     val conf: SparkConf,
     securityManager: SecurityManager,
-    val environmentListener: EnvironmentListener,
-    val storageStatusListener: StorageStatusListener,
-    val executorsListener: ExecutorsListener,
     val jobProgressListener: JobProgressListener,
-    val storageListener: StorageListener,
     val operationGraphListener: RDDOperationGraphListener,
     var appName: String,
     val basePath: String,
@@ -70,10 +64,10 @@ private[spark] class SparkUI private (
   def initialize() {
     val jobsTab = new JobsTab(this)
     attachTab(jobsTab)
-    val stagesTab = new StagesTab(this)
+    val stagesTab = new StagesTab(this, store)
     attachTab(stagesTab)
-    attachTab(new StorageTab(this))
-    attachTab(new EnvironmentTab(this))
+    attachTab(new StorageTab(this, store))
+    attachTab(new EnvironmentTab(this, store))
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
@@ -88,9 +82,13 @@ private[spark] class SparkUI private (
   initialize()
 
   def getSparkUser: String = {
-    environmentListener.sparkUser
-      .orElse(environmentListener.systemProperties.toMap.get("user.name"))
-      .getOrElse("<unknown>")
+    try {
+      Option(store.applicationInfo().attempts.head.sparkUser)
+        .orElse(store.environmentInfo().systemProperties.toMap.get("user.name"))
+        .getOrElse("<unknown>")
+    } catch {
+      case _: NoSuchElementException => "<unknown>"
+    }
   }
 
   def getAppName: String = appName
@@ -143,6 +141,7 @@ private[spark] class SparkUI private (
   def setStreamingJobProgressListener(sparkListener: SparkListener): Unit = {
     streamingJobProgressListener = Option(sparkListener)
   }
+
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
@@ -184,20 +183,11 @@ private[spark] object SparkUI {
       addListenerFn(listener)
       listener
     }
-    val environmentListener = new EnvironmentListener
-    val storageStatusListener = new StorageStatusListener(conf)
-    val executorsListener = new ExecutorsListener(storageStatusListener, conf)
-    val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)
 
-    addListenerFn(environmentListener)
-    addListenerFn(storageStatusListener)
-    addListenerFn(executorsListener)
-    addListenerFn(storageListener)
     addListenerFn(operationGraphListener)
 
-    new SparkUI(store, sc, conf, securityManager, environmentListener, storageStatusListener,
-      executorsListener, jobProgressListener, storageListener, operationGraphListener,
+    new SparkUI(store, sc, conf, securityManager, jobProgressListener, operationGraphListener,
       appName, basePath, lastUpdateTime, startTime, appSparkVersion)
   }
 

@@ -85,6 +85,9 @@ class ExecutorSummary private[spark](
     val totalShuffleWrite: Long,
     val isBlacklisted: Boolean,
     val maxMemory: Long,
+    val addTime: Date,
+    val removeTime: Option[Date],
+    val removeReason: Option[String],
     val executorLogs: Map[String, String],
     val memoryMetrics: Option[MemoryMetrics])
 

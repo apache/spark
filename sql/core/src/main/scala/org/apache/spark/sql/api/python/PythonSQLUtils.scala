@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.api.python
 
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.DataType
 
 private[sql] object PythonSQLUtils {
@@ -28,5 +31,20 @@ private[sql] object PythonSQLUtils {
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
     FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
+  }
+
+  /**
+   * Python Callable function to convert ArrowPayloads into a [[DataFrame]].
+   *
+   * @param payloadRDD A JavaRDD of ArrowPayloads.
+   * @param schemaString JSON Formatted Schema for ArrowPayloads.
+   * @param sqlContext The active [[SQLContext]].
+   * @return The converted [[DataFrame]].
+   */
+  def arrowPayloadToDataFrame(
+      payloadRDD: JavaRDD[Array[Byte]],
+      schemaString: String,
+      sqlContext: SQLContext): DataFrame = {
+    ArrowConverters.toDataFrame(payloadRDD, schemaString, sqlContext)
   }
 }
