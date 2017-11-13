@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import java.util.{Date, Locale}
+import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{Buffer, ListBuffer}

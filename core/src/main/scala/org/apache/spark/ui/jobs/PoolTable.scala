@@ -19,12 +19,10 @@ package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
 
-import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.status.PoolData
-import org.apache.spark.status.api.v1.StageData
 import org.apache.spark.ui.UIUtils
 
 /** Table showing list of pools */

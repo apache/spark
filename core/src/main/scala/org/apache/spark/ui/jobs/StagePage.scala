@@ -28,7 +28,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
-import org.apache.spark.scheduler.{TaskInfo, TaskLocality}
+import org.apache.spark.scheduler.TaskLocality
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui._

@@ -22,8 +22,7 @@ import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap, ListBuffer}
-import scala.util.Try
+import scala.collection.mutable.ListBuffer
 import scala.xml._
 
 import org.apache.commons.lang3.StringEscapeUtils
@@ -33,7 +32,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
-import org.apache.spark.ui.jobs.UIData.{JobUIData, StageUIData}
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished jobs */

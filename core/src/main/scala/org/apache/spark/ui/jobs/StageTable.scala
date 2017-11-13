@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui.jobs
 
-import java.lang.{Long => JLong}
 import java.net.URLEncoder
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
@@ -27,12 +26,9 @@ import scala.xml._
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.status.{AppStatusStore, TaskDataWrapper}
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
-import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui._
-import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
 private[ui] class StageTableBase(
