@@ -3265,7 +3265,9 @@ class ArrowTests(ReusedSQLTestCase):
 
             self.assertNotEqual(result_ny, result_la)
 
-            result_la_corrected = [Row(*(r[0:6] + (r[6] - timedelta(hours=3),))) for r in result_la]
+            result_la_corrected = [Row(**{k: v - timedelta(hours=3) if k == '7_timestamp_t' else v
+                                          for k, v in row.asDict().items()})
+                                   for row in result_la]
             self.assertEqual(result_ny, result_la_corrected)
         finally:
             self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
