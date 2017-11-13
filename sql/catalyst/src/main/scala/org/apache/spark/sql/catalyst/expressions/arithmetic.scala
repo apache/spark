@@ -602,8 +602,6 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    val first = evalChildren(0)
-    val rest = evalChildren.drop(1)
     ctx.addMutableState("boolean", ev.isNull, "")
     ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
     def updateEval(eval: ExprCode): String = {
@@ -616,12 +614,11 @@ case class Least(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    val rests = ctx.splitExpressions(ctx.INPUT_ROW, rest.map(updateEval))
+    val codes = ctx.splitExpressions(ctx.INPUT_ROW, evalChildren.map(updateEval))
     ev.copy(code = s"""
-      ${first.code}
-      ${ev.isNull} = ${first.isNull};
-      ${ev.value} = ${first.value};
-      $rests""")
+      ${ev.isNull} = true;
+      ${ev.value} = ${ctx.defaultValue(dataType)};
+      $codes""")
   }
 }
 
@@ -671,8 +668,6 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    val first = evalChildren(0)
-    val rest = evalChildren.drop(1)
     ctx.addMutableState("boolean", ev.isNull, "")
     ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
     def updateEval(eval: ExprCode): String = {
@@ -685,11 +680,10 @@ case class Greatest(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    val rests = ctx.splitExpressions(ctx.INPUT_ROW, rest.map(updateEval))
+    val codes = ctx.splitExpressions(ctx.INPUT_ROW, evalChildren.map(updateEval))
     ev.copy(code = s"""
-      ${first.code}
-      ${ev.isNull} = ${first.isNull};
-      ${ev.value} = ${first.value};
-      $rests""")
+      ${ev.isNull} = true;
+      ${ev.value} = ${ctx.defaultValue(dataType)};
+      $codes""")
   }
 }
