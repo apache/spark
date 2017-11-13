@@ -64,7 +64,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
     val argNums = evals.length
-    val args = ctx.freshName("argLen")
+    val args = ctx.freshName("args")
     ctx.addMutableState("UTF8String[]", args, "")
 
     val inputs = evals.zipWithIndex.map { case (eval, index) =>
