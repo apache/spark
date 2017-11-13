@@ -43,10 +43,11 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
-   * Options are 'skip' (filter out rows with invalid data),
-   * 'error' (throw an error), or 'keep' (put invalid data in a special additional
-   * bucket, at index numLabels).
-   * Default: "error"
+   * Options are:
+   * 'skip': filter out rows with invalid data.
+   * 'error': throw an error.
+   * 'keep': put invalid data in a special additional bucket, at index numCategories.
+   * Default value: "error"
    * @group param
    */
   @Since("2.3.0")
