@@ -20,6 +20,16 @@ package org.apache.spark.deploy.k8s
 import org.apache.spark.SparkConf
 
 private[spark] object ConfigurationUtils {
+
+  /**
+   * Extract and parse Spark configuration properties with a given name prefix and
+   * return the result as a Map. Keys must not have more than one value.
+   *
+   * @param sparkConf Spark configuration
+   * @param prefix the given property name prefix
+   * @param configType a descriptive note on the type of entities of interest
+   * @return a Map storing the configuration property keys and values
+   */
   def parsePrefixedKeyValuePairs(
       sparkConf: SparkConf,
       prefix: String,
@@ -32,15 +42,6 @@ private[spark] object ConfigurationUtils {
             s" values $values")
     }
     fromPrefix.toMap
-  }
-
-  def requireSecondIfFirstIsDefined(
-      opt1: Option[_],
-      opt2: Option[_],
-      errMessageWhenSecondIsMissing: String): Unit = {
-    opt1.foreach { _ =>
-      require(opt2.isDefined, errMessageWhenSecondIsMissing)
-    }
   }
 
   def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {

@@ -20,7 +20,7 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants._
@@ -77,11 +77,8 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
   private val executorDockerImage = sparkConf.get(EXECUTOR_DOCKER_IMAGE)
   private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
   private val executorPort = sparkConf.getInt("spark.executor.port", DEFAULT_STATIC_PORT)
-  private val blockmanagerPort = sparkConf
+  private val blockManagerPort = sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
-  private val kubernetesDriverPodName = sparkConf
-    .get(KUBERNETES_DRIVER_POD_NAME)
-    .getOrElse(throw new SparkException("Must specify the driver pod name"))
 
   private val executorPodNamePrefix = sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
 
@@ -163,7 +160,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
     ) ++ executorExtraJavaOptionsEnv ++ executorExtraClasspathEnv.toSeq
     val requiredPorts = Seq(
       (EXECUTOR_PORT_NAME, executorPort),
-      (BLOCK_MANAGER_PORT_NAME, blockmanagerPort))
+      (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
       .map(port => {
         new ContainerPortBuilder()
           .withName(port._1)

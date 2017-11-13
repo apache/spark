@@ -87,14 +87,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
   private val podAllocationInterval = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
-  require(podAllocationInterval > 0, "Allocation batch delay " +
-    s"${KUBERNETES_ALLOCATION_BATCH_DELAY} " +
-    s"is ${podAllocationInterval}, should be a positive integer")
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
-  require(podAllocationSize > 0, "Allocation batch size " +
-    s"${KUBERNETES_ALLOCATION_BATCH_SIZE} " +
-    s"is ${podAllocationSize}, should be a positive integer")
 
   private val allocatorRunnable = new Runnable {
 
@@ -304,39 +298,40 @@ private[spark] class KubernetesClusterSchedulerBackend(
     private val DEFAULT_CONTAINER_FAILURE_EXIT_STATUS = -1
 
     override def eventReceived(action: Action, pod: Pod): Unit = {
-      if (action == Action.MODIFIED && pod.getStatus.getPhase == "Running"
-          && pod.getMetadata.getDeletionTimestamp == null) {
-        val podIP = pod.getStatus.getPodIP
-        val clusterNodeName = pod.getSpec.getNodeName
-        logInfo(s"Executor pod $pod ready, launched at $clusterNodeName as IP $podIP.")
-        executorPodsByIPs.put(podIP, pod)
-      } else if (action == Action.DELETED || action == Action.ERROR) {
-        val executorId = pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL)
-        require(executorId != null, "Unexpected pod metadata; expected all executor pods" +
-          s" to have label $SPARK_EXECUTOR_ID_LABEL.")
-        val podName = pod.getMetadata.getName
-        val podIP = pod.getStatus.getPodIP
-        logDebug(s"Executor pod $podName at IP $podIP was at $action.")
-        if (podIP != null) {
-          executorPodsByIPs.remove(podIP)
-        }
-        val executorExitReason = if (action == Action.ERROR) {
-          logWarning(s"Received pod $podName exited event. Reason: " + pod.getStatus.getReason)
-          executorExitReasonOnError(pod)
-        } else if (action == Action.DELETED) {
-          logWarning(s"Received delete pod $podName event. Reason: " + pod.getStatus.getReason)
-          executorExitReasonOnDelete(pod)
-        } else {
-          throw new IllegalStateException(
-            s"Unknown action that should only be DELETED or ERROR: $action")
-        }
-        podsWithKnownExitReasons.put(pod.getMetadata.getName, executorExitReason)
-        if (!disconnectedPodsByExecutorIdPendingRemoval.containsKey(executorId)) {
-          log.warn(s"Executor with id $executorId was not marked as disconnected, but the" +
-            s" watch received an event of type $action for this executor. The executor may" +
-            s" have failed to start in the first place and never registered with the driver.")
-        }
-        disconnectedPodsByExecutorIdPendingRemoval.put(executorId, pod)
+      action match {
+        case Action.MODIFIED if (pod.getStatus.getPhase == "Running"
+          && pod.getMetadata.getDeletionTimestamp == null) =>
+          val podIP = pod.getStatus.getPodIP
+          val clusterNodeName = pod.getSpec.getNodeName
+          logInfo(s"Executor pod $pod ready, launched at $clusterNodeName as IP $podIP.")
+          executorPodsByIPs.put(podIP, pod)
+        case Action.DELETED | Action.ERROR =>
+          val executorId = getExecutorId(pod)
+          val podName = pod.getMetadata.getName
+          val podIP = pod.getStatus.getPodIP
+          logDebug(s"Executor pod $podName at IP $podIP was at $action.")
+          if (podIP != null) {
+            executorPodsByIPs.remove(podIP)
+          }
+
+          val executorExitReason = if (action == Action.ERROR) {
+            logWarning(s"Received pod $podName exited event. Reason: " + pod.getStatus.getReason)
+            executorExitReasonOnError(pod)
+          } else if (action == Action.DELETED) {
+            logWarning(s"Received delete pod $podName event. Reason: " + pod.getStatus.getReason)
+            executorExitReasonOnDelete(pod)
+          } else {
+            throw new IllegalStateException(
+              s"Unknown action that should only be DELETED or ERROR: $action")
+          }
+          podsWithKnownExitReasons.put(pod.getMetadata.getName, executorExitReason)
+
+          if (!disconnectedPodsByExecutorIdPendingRemoval.containsKey(executorId)) {
+            log.warn(s"Executor with id $executorId was not marked as disconnected, but the" +
+              s" watch received an event of type $action for this executor. The executor may" +
+              s" have failed to start in the first place and never registered with the driver.")
+          }
+          disconnectedPodsByExecutorIdPendingRemoval.put(executorId, pod)
       }
     }
 
@@ -390,6 +385,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
       }
       ExecutorExited(
         getExecutorExitStatus(pod), exitCausedByApp = false, exitMessage)
+    }
+
+    def getExecutorId(pod: Pod): String = {
+      val executorId = pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL)
+      require(executorId != null, "Unexpected pod metadata; expected all executor pods " +
+        s"to have label $SPARK_EXECUTOR_ID_LABEL.")
+      executorId
     }
   }
 

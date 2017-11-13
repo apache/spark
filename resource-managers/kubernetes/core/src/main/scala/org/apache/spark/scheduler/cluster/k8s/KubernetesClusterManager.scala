@@ -36,8 +36,10 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     new TaskSchedulerImpl(sc)
   }
 
-  override def createSchedulerBackend(sc: SparkContext, masterURL: String, scheduler: TaskScheduler)
-      : SchedulerBackend = {
+  override def createSchedulerBackend(
+      sc: SparkContext,
+      masterURL: String,
+      scheduler: TaskScheduler): SchedulerBackend = {
     val sparkConf = sc.getConf
 
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(

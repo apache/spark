@@ -44,7 +44,6 @@ package object config extends Logging {
       .stringConf
       .createWithDefault("IfNotPresent")
 
-
   private[spark] val APISERVER_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
   private[spark] val APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
@@ -95,12 +94,14 @@ package object config extends Logging {
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
       .intConf
+      .checkValue(value => value > 0, "Allocation batch size should be a positive integer")
       .createWithDefault(5)
 
   private[spark] val KUBERNETES_ALLOCATION_BATCH_DELAY =
     ConfigBuilder("spark.kubernetes.allocation.batch.delay")
       .doc("Number of seconds to wait between each round of executor allocation.")
       .longConf
+      .checkValue(value => value > 0, s"Allocation batch delay should be a positive integer")
       .createWithDefault(1)
 
   private[spark] val KUBERNETES_EXECUTOR_LIMIT_CORES =

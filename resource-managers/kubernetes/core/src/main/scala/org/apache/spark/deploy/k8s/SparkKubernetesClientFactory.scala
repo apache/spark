@@ -51,8 +51,8 @@ private[spark] object SparkKubernetesClientFactory {
     ConfigurationUtils.requireNandDefined(
       oauthTokenFile,
       oauthTokenValue,
-      s"Cannot specify OAuth token through both a file $oauthTokenFileConf and a" +
-        s" value $oauthTokenConf.")
+      s"Cannot specify OAuth token through both a file $oauthTokenFileConf and a " +
+        s"value $oauthTokenConf.")
 
     val caCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CA_CERT_FILE_CONF_SUFFIX")
