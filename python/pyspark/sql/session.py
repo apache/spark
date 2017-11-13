@@ -592,9 +592,8 @@ class SparkSession(object):
 
         if isinstance(schema, basestring):
             schema = _parse_datatype_string(schema)
-
-        # If schema is a list of unicode strings, must change encoding
-        if isinstance(schema, (list, tuple)):
+        elif isinstance(schema, (list, tuple)):
+            # Must re-encode any unicode strings to be consistent with StructField names
             schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
 
         try:
