@@ -29,7 +29,7 @@
   <name>Spark Project Kubernetes</name>
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
-    <kubernetes.client.version>2.2.13</kubernetes.client.version>
+    <kubernetes.client.version>3.0.0</kubernetes.client.version>
   </properties>
 
   <dependencies>
