@@ -165,8 +165,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   // Columns 0,1: data columns
   // Column 2: partitionValues[0]
   // Column 3: partitionValues[1]
-  public void initBatch(MemoryMode memMode, StructType partitionColumns,
-                        InternalRow partitionValues) {
+  public void initBatch(
+      MemoryMode memMode,
+      StructType partitionColumns,
+      InternalRow partitionValues) {
     StructType batchSchema = new StructType();
     for (StructField f: sparkSchema.fields()) {
       batchSchema = batchSchema.add(f);
@@ -281,11 +283,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
           + rowsReturned + " out of " + totalRowCount);
     }
     List<ColumnDescriptor> columns = requestedSchema.getColumns();
+    List<Type> types = requestedSchema.asGroupType().getFields();
     columnReaders = new VectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
-      columnReaders[i] = new VectorizedColumnReader(columns.get(i),
-          pages.getPageReader(columns.get(i)));
+      columnReaders[i] = new VectorizedColumnReader(
+        columns.get(i), types.get(i).getOriginalType(), pages.getPageReader(columns.get(i)));
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

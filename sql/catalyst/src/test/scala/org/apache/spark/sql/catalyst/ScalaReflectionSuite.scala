@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow, UpCast}
-import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -350,5 +350,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
     }}
     assert(argumentsFields(0) == Seq("field.1"))
     assert(argumentsFields(1) == Seq("field 2"))
+  }
+
+  test("SPARK-22472: add null check for top-level primitive values") {
+    assert(deserializerFor[Int].isInstanceOf[AssertNotNull])
+    assert(!deserializerFor[String].isInstanceOf[AssertNotNull])
   }
 }

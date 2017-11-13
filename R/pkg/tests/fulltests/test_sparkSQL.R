@@ -733,7 +733,7 @@ test_that("test cache, uncache and clearCache", {
   expect_true(dropTempView("table1"))
 
   expect_error(uncacheTable("foo"),
-      "Error in uncacheTable : no such table - Table or view 'foo' not found in database 'default'")
+      "Error in uncacheTable : analysis error - Table or view not found: foo")
 })
 
 test_that("insertInto() on a registered table", {
@@ -1699,6 +1699,7 @@ test_that("date functions on a DataFrame", {
             list(a = 2L, b = as.Date("2013-12-14")),
             list(a = 3L, b = as.Date("2014-12-15")))
   df <- createDataFrame(l)
+  expect_equal(collect(select(df, dayofweek(df$b)))[, 1], c(5, 7, 2))
   expect_equal(collect(select(df, dayofmonth(df$b)))[, 1], c(13, 14, 15))
   expect_equal(collect(select(df, dayofyear(df$b)))[, 1], c(348, 348, 349))
   expect_equal(collect(select(df, weekofyear(df$b)))[, 1], c(50, 50, 51))

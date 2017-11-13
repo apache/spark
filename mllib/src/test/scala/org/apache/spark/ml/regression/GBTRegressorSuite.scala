@@ -166,6 +166,35 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   /////////////////////////////////////////////////////////////////////////////
+  // Tests of feature subset strategy
+  /////////////////////////////////////////////////////////////////////////////
+  test("Tests of feature subset strategy") {
+    val numClasses = 2
+    val gbt = new GBTRegressor()
+      .setMaxDepth(3)
+      .setMaxIter(5)
+      .setSeed(123)
+      .setFeatureSubsetStrategy("all")
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+
+    val importances = gbt.fit(df).featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
+
+    // GBT with different featureSubsetStrategy
+    val gbtWithFeatureSubset = gbt.setFeatureSubsetStrategy("1")
+    val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
+    val mostIF = importanceFeatures.argmax
+    assert(mostImportantFeature !== mostIF)
+  }
+
+
+
+  /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
