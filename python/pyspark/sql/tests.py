@@ -3225,6 +3225,16 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(pdf, schema=tuple('abcdefg'))
         self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
 
+    def test_createDataFrame_column_name_encoding(self):
+        import pandas as pd
+        pdf = pd.DataFrame({u'a': [1]})
+        columns = self.spark.createDataFrame(pdf).columns
+        self.assertTrue(isinstance(columns[0], str))
+        self.assertEquals(columns[0], 'a')
+        columns = self.spark.createDataFrame(pdf, [u'b']).columns
+        self.assertTrue(isinstance(columns[0], str))
+        self.assertEquals(columns[0], 'b')
+
     def test_createDataFrame_with_single_data_type(self):
         import pandas as pd
         with QuietTest(self.sc):

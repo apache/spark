@@ -593,6 +593,10 @@ class SparkSession(object):
         if isinstance(schema, basestring):
             schema = _parse_datatype_string(schema)
 
+        # If schema is a list of unicode strings, must change encoding
+        if isinstance(schema, (list, tuple)):
+            schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
+
         try:
             import pandas
             has_pandas = True
@@ -630,8 +634,6 @@ class SparkSession(object):
                 verify_func(obj)
                 return obj,
         else:
-            if isinstance(schema, (list, tuple)):
-                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):
