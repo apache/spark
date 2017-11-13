@@ -21,7 +21,6 @@ import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{Buffer, ListBuffer}
-import scala.util.Try
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
 import org.apache.commons.lang3.StringEscapeUtils
@@ -190,8 +189,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val jobId = parameterId.toInt
-    val jobDataOption = Try(store.job(jobId)).toOption
-    if (jobDataOption.isEmpty) {
+    val jobData = store.asOption(store.job(jobId)).getOrElse {
       val content =
         <div id="no-info">
           <p>No information to display for job {jobId}</p>
@@ -199,7 +197,6 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       return UIUtils.headerSparkPage(
         s"Details for Job $jobId", content, parent)
     }
-    val jobData = jobDataOption.get
     val isComplete = jobData.status != JobExecutionStatus.RUNNING
     val stages = jobData.stageIds.map { stageId =>
       // This could be empty if the listener hasn't received information about the

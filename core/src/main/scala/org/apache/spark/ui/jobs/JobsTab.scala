@@ -54,8 +54,7 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
       // stripXSS is called first to remove suspicious characters used in XSS attacks
       val jobId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
       jobId.foreach { id =>
-        try {
-          val job = store.job(id)
+        store.asOption(store.job(id)).foreach { job =>
           if (job.status == JobExecutionStatus.RUNNING) {
             sc.foreach(_.cancelJob(id))
             // Do a quick pause here to give Spark time to kill the job so it shows up as
@@ -63,8 +62,6 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
             // time should be limited in duration.
             Thread.sleep(100)
           }
-        } catch {
-          case _: NoSuchElementException =>
         }
       }
     }

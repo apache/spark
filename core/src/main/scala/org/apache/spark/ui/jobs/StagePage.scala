@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
-import java.util.{Date, NoSuchElementException}
+import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{HashMap, HashSet}
@@ -108,16 +108,15 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val stageAttemptId = parameterAttempt.toInt
 
     val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
-    val stageData = try {
-      parent.store.stageAttempt(stageId, stageAttemptId, details = true)
-    } catch {
-      case _: NoSuchElementException =>
+    val stageData = parent.store
+      .asOption(parent.store.stageAttempt(stageId, stageAttemptId, details = true))
+      .getOrElse {
         val content =
           <div id="no-info">
             <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
           </div>
         return UIUtils.headerSparkPage(stageHeader, content, parent)
-    }
+      }
 
     val tasks = stageData.tasks.getOrElse(Map.empty).values.toSeq
     if (tasks.isEmpty) {
@@ -258,11 +257,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         </div>
       </div>
 
-    val stageGraph = try {
-      Some(parent.store.operationGraphForStage(stageId))
-    } catch {
-      case _: NoSuchElementException => None
-    }
+    val stageGraph = parent.store.asOption(parent.store.operationGraphForStage(stageId))
     val dagViz = UIUtils.showDagVizForStage(stageId, stageGraph)
 
     val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
@@ -1012,7 +1007,7 @@ private[ui] class TaskDataSource(
 
   private def executorLogs(id: String): Map[String, String] = {
     executors.getOrElseUpdate(id,
-      store.executorSummary(id).map(_.executorLogs).getOrElse(Map.empty))
+      store.asOption(store.executorSummary(id)).map(_.executorLogs).getOrElse(Map.empty))
   }
 
   /**

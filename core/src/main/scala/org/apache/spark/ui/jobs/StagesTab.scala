@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui.jobs
 
-import java.util.NoSuchElementException
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.scheduler.SchedulingMode
@@ -49,8 +48,8 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
       // stripXSS is called first to remove suspicious characters used in XSS attacks
       val stageId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
       stageId.foreach { id =>
-        try {
-          val status = store.lastStageAttempt(id).status
+        store.asOption(store.lastStageAttempt(id)).foreach { stage =>
+          val status = stage.status
           if (status == StageStatus.ACTIVE || status == StageStatus.PENDING) {
             sc.foreach(_.cancelStage(id, "killed via the Web UI"))
             // Do a quick pause here to give Spark time to kill the stage so it shows up as
@@ -58,8 +57,6 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
             // time should be limited in duration.
             Thread.sleep(100)
           }
-        } catch {
-          case _: NoSuchElementException =>
         }
       }
     }

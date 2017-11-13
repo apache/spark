@@ -58,12 +58,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
 
     // For now, pool information is only accessible in live UIs
     val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable]).map { pool =>
-      val uiPool = try {
-        parent.store.pool(pool.name)
-      } catch {
-        case _: NoSuchElementException =>
-          new PoolData(pool.name, Set())
-      }
+      val uiPool = parent.store.asOption(parent.store.pool(pool.name)).getOrElse(
+        new PoolData(pool.name, Set()))
       pool -> uiPool
     }.toMap
     val poolTable = new PoolTable(pools, parent)

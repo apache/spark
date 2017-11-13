@@ -17,9 +17,6 @@
 
 package org.apache.spark.ui.jobs
 
-import java.util.NoSuchElementException
-
-import scala.collection.mutable
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.status.AppStatusStore
@@ -91,7 +88,7 @@ private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
 
   private def createExecutorTable(stage: StageData) : Seq[Node] = {
     stage.executorSummary.getOrElse(Map.empty).toSeq.sortBy(_._1).map { case (k, v) =>
-      val executor = store.executorSummary(k)
+      val executor = store.asOption(store.executorSummary(k))
       <tr>
         <td>
           <div style="float: left">{k}</div>

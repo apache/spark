@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui.jobs
 
-import java.util.NoSuchElementException
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -42,13 +41,8 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
       throw new IllegalArgumentException(s"Unknown pool: $poolName")
     }
 
-    val uiPool = try {
-      parent.store.pool(poolName)
-    } catch {
-      case _: NoSuchElementException =>
-        new PoolData(poolName, Set())
-    }
-
+    val uiPool = parent.store.asOption(parent.store.pool(poolName)).getOrElse(
+      new PoolData(poolName, Set()))
     val activeStages = uiPool.stageIds.toSeq.map(parent.store.lastStageAttempt(_))
     val activeStagesTable =
       new StageTableBase(parent.store, request, activeStages, "", "activeStage", parent.basePath,

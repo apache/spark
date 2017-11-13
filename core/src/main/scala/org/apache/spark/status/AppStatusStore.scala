@@ -66,13 +66,8 @@ private[spark] class AppStatusStore(store: KVStore) {
     filtered.asScala.map(_.info).toSeq
   }
 
-  def executorSummary(executorId: String): Option[v1.ExecutorSummary] = {
-    try {
-      Some(store.read(classOf[ExecutorSummaryWrapper], executorId).info)
-    } catch {
-      case _: NoSuchElementException =>
-        None
-    }
+  def executorSummary(executorId: String): v1.ExecutorSummary = {
+      store.read(classOf[ExecutorSummaryWrapper], executorId).info
   }
 
   def stageList(statuses: JList[v1.StageStatus]): Seq[v1.StageData] = {
@@ -234,6 +229,18 @@ private[spark] class AppStatusStore(store: KVStore) {
     store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).filter { rdd =>
       !cachedOnly || rdd.numCachedPartitions > 0
     }.toSeq
+  }
+
+  /**
+   * Calls a closure that may throw a NoSuchElementException and returns `None` when the exception
+   * is thrown.
+   */
+  def asOption[T](fn: => T): Option[T] = {
+    try {
+      Some(fn)
+    } catch {
+      case _: NoSuchElementException => None
+    }
   }
 
   private def stageWithDetails(stage: v1.StageData): v1.StageData = {
