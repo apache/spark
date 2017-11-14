@@ -111,6 +111,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
     ev.copy(code = generatedCode)
   }
+
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
 
   override def sql: String = s"(IF(${predicate.sql}, ${trueValue.sql}, ${falseValue.sql}))"
@@ -341,8 +342,7 @@ case class CaseWhenCodegen(
     val ev = expression.genCode(ctx)
     if (ev.code.length > 1024 && (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
       val (funcName, globalIsNull, globalValue) =
-        CondExpression.createAndAddFunction(ctx, ev, expression.dataType,
-          "caseWhenElseExpr")
+        ctx.createAndAddFunction(ev, expression.dataType, "caseWhenElseExpr")
       (s"$funcName(${ctx.INPUT_ROW});", globalIsNull, globalValue)
     } else {
       (ev.code, ev.isNull, ev.value)

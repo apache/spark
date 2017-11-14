@@ -342,7 +342,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     projection(row)
   }
 
-<<<<<<< HEAD
   test("SPARK-21720: split large predications into blocks due to JVM code size limit") {
     val length = 600
 
