@@ -279,33 +279,38 @@ case class CaseWhenCodegen(
       """
     }
 
-    var isGlobalVariable = false
-    var generatedCode = ""
     var numIfthen = 0
-    cases.foreach { ifthen =>
-      generatedCode += ifthen + "\nelse {\n"
-      numIfthen += 1
+    var isGlobalVariable = false
+    var generatedCode = if (cases.map(s => s.length).sum <= 1024) {
+      cases.mkString("\nelse {\n")
+    } else {
+      var code = ""
+      cases.foreach { ifthen =>
+        code += ifthen + "\nelse {\n"
+        numIfthen += 1
 
-      if (generatedCode.length > 1024 &&
-        // Split these expressions only if they are created from a row object
-        (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
-        val flag = "flag"
-        generatedCode += s" $flag = false;\n" + "}\n" * numIfthen
-        val funcName = ctx.freshName("caseWhenNestedIf")
-        val funcBody =
-          s"""
-           |private boolean $funcName(InternalRow ${ctx.INPUT_ROW}) {
-           |  boolean $flag = true;
-           |  $generatedCode
-           |  return $flag;
-           |}
-         """.stripMargin
-        val fullFuncName = ctx.addNewFunction(funcName, funcBody)
-        isGlobalVariable = true
+        if (code.length > 1024 &&
+          // Split these expressions only if they are created from a row object
+          (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+          val flag = "flag"
+          code += s" $flag = false;\n" + "}\n" * numIfthen
+          val funcName = ctx.freshName("caseWhenNestedIf")
+          val funcBody =
+            s"""
+             |private boolean $funcName(InternalRow ${ctx.INPUT_ROW}) {
+             |  boolean $flag = true;
+             |  $code
+             |  return $flag;
+             |}
+           """.stripMargin
+          val fullFuncName = ctx.addNewFunction(funcName, funcBody)
+          isGlobalVariable = true
 
-        generatedCode = s"if ($fullFuncName(${ctx.INPUT_ROW})) {\n// do nothing\n} else {\n"
-        numIfthen = 1
+          code = s"if ($fullFuncName(${ctx.INPUT_ROW})) {\n// do nothing\n} else {\n"
+          numIfthen = 1
+        }
       }
+      code
     }
 
     elseValue.foreach { elseExpr =>
