@@ -327,6 +327,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
+    .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
+      "filters. This configuration only has an effect when 'spark.sql.parquet.filterPushdown' " +
+      "is enabled.")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.parquet.output.committer.class")
     .doc("The output committer class used by Parquet. The specified class needs to be a " +
       "subclass of org.apache.hadoop.mapreduce.OutputCommitter. Typically, it's also a subclass " +
@@ -1172,6 +1179,8 @@ class SQLConf extends Serializable with Logging {
   }
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
+
+  def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
