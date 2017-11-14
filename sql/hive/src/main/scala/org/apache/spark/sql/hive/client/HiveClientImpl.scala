@@ -904,7 +904,7 @@ private[hive] object HiveClientImpl {
         CatalystSqlParser.parseDataType(typeString)
       } catch {
         case e: ParseException =>
-          throw new SparkException(s"Cannot recognize the data type $typeString", e)
+          throw new SparkException(s"Cannot recognize the data type: $typeString", e)
       }
     })
   }
