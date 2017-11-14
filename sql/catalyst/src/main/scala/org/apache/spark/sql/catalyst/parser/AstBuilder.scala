@@ -315,7 +315,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a partition specification map without optional values and a partition filter specification.
+   * Create a partition specification map without optional values
+   * and a partition filter specification.
    */
   protected def visitPartition(ctx: PartitionSpecContext): (Map[String, String], Expression) = {
     (visitNonOptionalPartitionSpec(ctx), visitPartitionFilterSpec(ctx))
