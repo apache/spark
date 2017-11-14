@@ -1492,9 +1492,9 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
   <tr>
     <td><code>spark.sql.typeCoercion.mode</code></td>
-    <td><code>legacy</code></td>
+    <td><code>default</code></td>
     <td>
-        The <code>legacy</code> type coercion mode was used in spark prior to 2.3, and so it continues to be the default to avoid breaking behavior. However, it has logical inconsistencies. The <code>hive</code> mode is preferred for most new applications, though it may require additional manual casting.
+        The <code>default</code> type coercion mode was used in spark prior to 2.3, and so it continues to be the default to avoid breaking behavior. However, it has logical inconsistencies. The <code>hive</code> mode is preferred for most new applications, though it may require additional manual casting.
     </td>
   </tr>
 </table>

@@ -950,15 +950,15 @@ object SQLConf {
 
   val typeCoercionMode =
     buildConf("spark.sql.typeCoercion.mode")
-      .doc("The 'legacy' typeCoercion mode was used in spark prior to 2.3, " +
+      .doc("The 'default' typeCoercion mode was used in spark prior to 2.3, " +
         "and so it continues to be the default to avoid breaking behavior. " +
         "However, it has logical inconsistencies. " +
         "The 'hive' mode is preferred for most new applications, " +
         "though it may require additional manual casting.")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
-      .checkValues(Set("legacy", "hive"))
-      .createWithDefault("legacy")
+      .checkValues(Set("default", "hive"))
+      .createWithDefault("default")
 
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()

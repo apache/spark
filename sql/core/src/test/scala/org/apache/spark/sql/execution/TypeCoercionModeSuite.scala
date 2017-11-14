@@ -95,7 +95,7 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
       checkAnswer(spark.sql(q4), Row(str4) :: Nil)
     }
 
-    withTypeCoercionMode("legacy") { spark =>
+    withTypeCoercionMode("default") { spark =>
       import spark.implicits._
       data.toDF("c1").createOrReplaceTempView("v")
       checkAnswer(spark.sql(q1), Row(str3) :: Nil)
@@ -123,7 +123,7 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
       checkAnswer(spark.sql(q3), Row(v1) :: Row(v2) :: Nil)
     }
 
-    withTypeCoercionMode("legacy") { spark =>
+    withTypeCoercionMode("default") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
       checkAnswer(spark.sql(q1), Nil)
@@ -151,7 +151,7 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
       checkAnswer(spark.sql(q3), Row(v2) :: Row(v3) :: Nil)
     }
 
-    withTypeCoercionMode("legacy") { spark =>
+    withTypeCoercionMode("default") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
       checkAnswer(spark.sql(q1), Nil)
@@ -176,7 +176,7 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
       checkAnswer(spark.sql(q2), Row(v2) :: Nil)
     }
 
-    withTypeCoercionMode("legacy") { spark =>
+    withTypeCoercionMode("default") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
       checkAnswer(spark.sql(q1), Row(v2) :: Nil)
@@ -204,7 +204,7 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
       checkAnswer(spark.sql(q4), Row(v2) :: Nil)
     }
 
-    withTypeCoercionMode("legacy") { spark =>
+    withTypeCoercionMode("default") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
       val e1 = intercept[AnalysisException] {
