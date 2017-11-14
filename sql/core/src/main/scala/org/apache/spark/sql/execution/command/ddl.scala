@@ -539,10 +539,12 @@ case class AlterTableDropPartitionCommand(
         if (partition._2 != null) {
           partition._2.references.foreach { attr =>
             if (!table.partitionColumnNames.exists(resolver(_, attr.name))) {
-              throw new AnalysisException(s"${attr.name} is not a valid partition column " + s"in table ${table.identifier.quotedString}.")
+              throw new AnalysisException(s"${attr.name} is not a valid partition column " +
+                s"in table ${table.identifier.quotedString}.")
             }
           }
-            val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(partition._2)).map(_.spec)
+            val partitions = catalog.listPartitionsByFilter(
+              table.identifier, Seq(partition._2)).map(_.spec)
             if (partitions.isEmpty && !ifExists) {
               throw new AnalysisException(s"There is no partition for ${partition._2.sql}")
             }
