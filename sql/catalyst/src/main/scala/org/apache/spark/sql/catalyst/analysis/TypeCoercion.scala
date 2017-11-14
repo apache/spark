@@ -137,8 +137,8 @@ object TypeCoercion {
     case (DateType, TimestampType) => Some(StringType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
-    case (n: NumericType, s: StringType) => Some(DoubleType)
-    case (s: StringType, n: NumericType) => Some(DoubleType)
+    case (n: DecimalType, s: StringType) => Some(DoubleType)
+    case (s: StringType, n: DecimalType) => Some(DoubleType)
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
     case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
     case (l, r) => None

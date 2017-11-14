@@ -21,7 +21,7 @@ true
 -- !query 2
 select 1.0 = '1'
 -- !query 2 schema
-struct<(1.0 = CAST(1 AS DECIMAL(2,1))):boolean>
+struct<(CAST(1.0 AS DOUBLE) = CAST(1 AS DOUBLE)):boolean>
 -- !query 2 output
 true
 
@@ -101,7 +101,7 @@ true
 -- !query 12
 select 2.0 >= '2.2'
 -- !query 12 schema
-struct<(2.0 >= CAST(2.2 AS DECIMAL(2,1))):boolean>
+struct<(CAST(2.0 AS DOUBLE) >= CAST(2.2 AS DOUBLE)):boolean>
 -- !query 12 output
 false
 
@@ -149,7 +149,7 @@ false
 -- !query 18
 select 2.0 < '2.2'
 -- !query 18 schema
-struct<(2.0 < CAST(2.2 AS DECIMAL(2,1))):boolean>
+struct<(CAST(2.0 AS DOUBLE) < CAST(2.2 AS DOUBLE)):boolean>
 -- !query 18 output
 true
 
@@ -197,7 +197,7 @@ true
 -- !query 24
 select 2.0 <= '2.2'
 -- !query 24 schema
-struct<(2.0 <= CAST(2.2 AS DECIMAL(2,1))):boolean>
+struct<(CAST(2.0 AS DOUBLE) <= CAST(2.2 AS DOUBLE)):boolean>
 -- !query 24 output
 true
 
