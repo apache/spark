@@ -100,18 +100,22 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers with LocalSparkCo
       val fs = FileSystem.getLocal(new Configuration())
 
       // test partial match
-      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-000[1-5]/*")) should be(Seq(
-        s"file:${rootDir}/dir-0001/*",
-        s"file:${rootDir}/dir-0002/*",
-        s"file:${rootDir}/dir-0003/*",
-        s"file:${rootDir}/dir-0004/*",
-        s"file:${rootDir}/dir-0005/*"))
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-000[1-5]/*"))
+        .sortWith(_.compareTo(_) < 0) should be(Seq(
+          s"file:${rootDir}/dir-0001/*",
+          s"file:${rootDir}/dir-0002/*",
+          s"file:${rootDir}/dir-0003/*",
+          s"file:${rootDir}/dir-0004/*",
+          s"file:${rootDir}/dir-0005/*"))
+
       // test wild cast on the leaf files
       sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-0001/*")) should be(Seq(
         s"${rootDir}/dir-0001/*"))
+
       // test path is not globPath
       sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-0001/part-0001")) should be(Seq(
         s"${rootDir}/dir-0001/part-0001"))
+
       // test the wrong wild cast
       sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/000[1-5]/*")) should be(
         Seq.empty[String])
