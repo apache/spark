@@ -332,7 +332,7 @@ object SQLConf {
       "filters. This configuration only has an effect when 'spark.sql.parquet.filterPushdown' " +
       "is enabled.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val PARQUET_OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.parquet.output.committer.class")
     .doc("The output committer class used by Parquet. The specified class needs to be a " +
