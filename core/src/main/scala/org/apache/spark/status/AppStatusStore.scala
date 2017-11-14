@@ -32,7 +32,7 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
  */
-private[spark] class AppStatusStore(store: KVStore) {
+private[spark] class AppStatusStore(val store: KVStore) {
 
   def applicationInfo(): v1.ApplicationInfo = {
     store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
@@ -338,9 +338,11 @@ private[spark] object AppStatusStore {
    */
   def createLiveStore(conf: SparkConf, addListenerFn: SparkListener => Unit): AppStatusStore = {
     val store = new InMemoryStore()
-    val stateStore = new AppStatusStore(store)
     addListenerFn(new AppStatusListener(store, conf, true))
-    stateStore
+    AppStatusPlugin.loadPlugins().foreach { p =>
+      p.setupListeners(conf, store, addListenerFn, true)
+    }
+    new AppStatusStore(store)
   }
 
 }
