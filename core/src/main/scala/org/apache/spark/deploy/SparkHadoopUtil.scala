@@ -450,8 +450,6 @@ object SparkHadoopUtil {
     case e: Exception => throw new SparkException("Unable to load YARN support", e)
   }
 
-  val TICKET_CACHE_ENVVAR = "KRB5CCNAME"
-
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
 
   val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
