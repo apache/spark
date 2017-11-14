@@ -500,13 +500,30 @@ class HiveDDLSuite
     withTable("sales") {
       sql("CREATE TABLE sales (id INT) PARTITIONED BY (country STRING, quarter STRING)")
 
-      for (country <- Seq("US", "CA", "KR")) {
-        for (quarter <- 1 to 4) {
+      for (country <- Seq("AU", "US", "CA", "KR")) {
+        for (quarter <- 1 to 5) {
           sql(s"ALTER TABLE sales ADD PARTITION (country = '$country', quarter = '$quarter')")
         }
       }
 
       sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter > '2')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=AU/quarter=1") ::
+        Row("country=AU/quarter=2") ::
+        Row("country=CA/quarter=1") ::
+        Row("country=CA/quarter=2") ::
+        Row("country=KR/quarter=1") ::
+        Row("country=KR/quarter=2") ::
+        Row("country=KR/quarter=3") ::
+        Row("country=KR/quarter=4") ::
+        Row("country=KR/quarter=5") ::
+        Row("country=US/quarter=1") ::
+        Row("country=US/quarter=2") ::
+        Row("country=US/quarter=3") ::
+        Row("country=US/quarter=4") ::
+        Row("country=US/quarter=5") :: Nil)
+
+      sql("ALTER TABLE sales DROP PARTITION (country < 'CA'), PARTITION (quarter = '5')")
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=CA/quarter=1") ::
         Row("country=CA/quarter=2") ::
@@ -536,13 +553,13 @@ class HiveDDLSuite
         Row("country=US/quarter=2") ::
         Row("country=US/quarter=4") :: Nil)
 
-      sql("ALTER TABLE sales DROP PARTITION (quarter <= 2), PARTITION (quarter >= '4')")
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= '2'), PARTITION (quarter >= '4')")
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") :: Nil)
 
       // According to the declarative partition spec definitions, this drops the union of target
       // partitions without exceptions. Hive raises exceptions because it handles them sequentially.
-      sql("ALTER TABLE sales DROP PARTITION (quarter <= 4), PARTITION (quarter <= '3')")
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= '4'), PARTITION (quarter <= '3')")
       checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
     }
   }

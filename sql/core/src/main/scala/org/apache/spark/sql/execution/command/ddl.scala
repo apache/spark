@@ -515,8 +515,7 @@ case class AlterTableRenamePartitionCommand(
  */
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
-    specs: Seq[TablePartitionSpec],
-    exprs: Seq[Expression] = Seq.empty[Expression],
+    partitions: Seq[(TablePartitionSpec, Expression)],
     ifExists: Boolean,
     purge: Boolean,
     retainData: Boolean)
@@ -529,39 +528,38 @@ case class AlterTableDropPartitionCommand(
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
-    exprs.foreach { expr =>
-      expr.references.foreach { attr =>
-        if (!table.partitionColumnNames.exists(resolver(_, attr.name))) {
-          throw new AnalysisException(s"${attr.name} is not a valid partition column " + s"in table ${table.identifier.quotedString}.")
+    val toDrop = partitions.flatMap { partition =>
+      val normalizedSpecs = PartitioningUtils.normalizePartitionSpec(
+            partition._1,
+            table.partitionColumnNames,
+            table.identifier.quotedString,
+            sparkSession.sessionState.conf.resolver)
+
+      val partitionSet = {
+        if (partition._2 != null) {
+          partition._2.references.foreach { attr =>
+            if (!table.partitionColumnNames.exists(resolver(_, attr.name))) {
+              throw new AnalysisException(s"${attr.name} is not a valid partition column " + s"in table ${table.identifier.quotedString}.")
+            }
+          }
+            val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(partition._2)).map(_.spec)
+            if (partitions.isEmpty && !ifExists) {
+              throw new AnalysisException(s"There is no partition for ${partition._2.sql}")
+            }
+            partitions
+        } else {
+          Seq.empty[TablePartitionSpec]
         }
-      }
-    }
+      }.distinct
 
-    val partitionSet = exprs.flatMap { expr =>
-      val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(expr)).map(_.spec)
-      if (partitions.isEmpty && !ifExists) {
-        throw new AnalysisException(s"There is no partition for ${expr.sql}")
-      }
-      partitions
-    }.distinct
-
-    val normalizedSpecs = specs.map { spec =>
-      PartitioningUtils.normalizePartitionSpec(
-        spec,
-        table.partitionColumnNames,
-        table.identifier.quotedString,
-        sparkSession.sessionState.conf.resolver)
-    }.filter(_.size != 0)
-
-    val toDrop = {
       if (normalizedSpecs.isEmpty && partitionSet.isEmpty) {
         Seq.empty[TablePartitionSpec]
       } else if (normalizedSpecs.isEmpty && !partitionSet.isEmpty) {
         partitionSet
       } else if (!normalizedSpecs.isEmpty && partitionSet.isEmpty) {
-        normalizedSpecs
+        Seq(normalizedSpecs)
       } else {
-        partitionSet.intersect(normalizedSpecs)
+        partitionSet.intersect(normalizedSpecs.toSeq)
       }
     }
 

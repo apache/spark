@@ -315,6 +315,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   *
+   */
+  protected def visitPartition(ctx: PartitionSpecContext): (Map[String, String], Expression) = {
+    (visitNonOptionalPartitionSpec(ctx), visitPartitionFilterSpec(ctx))
+  }
+
+  /**
    * Convert a constant of any type into a string. This is typically used in DDL commands, and its
    * main purpose is to prevent slight differences due to back to back conversions i.e.:
    * String -> Literal -> String.

@@ -25,7 +25,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.util.SchemaUtils
@@ -128,7 +128,7 @@ case class InsertIntoHadoopFsRelationCommand(
             val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
             if (deletedPartitions.nonEmpty) {
               AlterTableDropPartitionCommand(
-                catalogTable.get.identifier, deletedPartitions.toSeq,
+                catalogTable.get.identifier, deletedPartitions.map(x => (x, null)).toSeq,
                 ifExists = true, purge = false,
                 retainData = true /* already deleted */).run(sparkSession)
             }
