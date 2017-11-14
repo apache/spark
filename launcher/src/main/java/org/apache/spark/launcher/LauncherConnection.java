@@ -20,7 +20,6 @@ package org.apache.spark.launcher;
 import java.io.Closeable;
 import java.io.EOFException;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.logging.Level;
@@ -53,7 +52,7 @@ abstract class LauncherConnection implements Closeable, Runnable {
   @Override
   public void run() {
     try {
-      ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+      FilteredObjectInputStream in = new FilteredObjectInputStream(socket.getInputStream());
       while (!closed) {
         Message msg = (Message) in.readObject();
         handle(msg);

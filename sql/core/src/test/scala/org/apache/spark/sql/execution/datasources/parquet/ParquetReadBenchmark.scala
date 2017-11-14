@@ -22,8 +22,8 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{Benchmark, Utils}
 
 /**

@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.internal.SQLConf
 
 
-class AggregateEstimationSuite extends StatsEstimationTestBase {
+class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
 
   /** Columns for testing */
   private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
@@ -100,17 +101,19 @@ class AggregateEstimationSuite extends StatsEstimationTestBase {
       size = Some(4 * (8 + 4)),
       attributeStats = AttributeMap(Seq("key12").map(nameToColInfo)))
 
-    val noGroupAgg = Aggregate(groupingExpressions = Nil,
-      aggregateExpressions = Seq(Alias(Count(Literal(1)), "cnt")()), child)
-    assert(noGroupAgg.stats(conf.copy(SQLConf.CBO_ENABLED -> false)) ==
-      // overhead + count result size
-      Statistics(sizeInBytes = 8 + 8, rowCount = Some(1)))
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+      val noGroupAgg = Aggregate(groupingExpressions = Nil,
+        aggregateExpressions = Seq(Alias(Count(Literal(1)), "cnt")()), child)
+      assert(noGroupAgg.stats ==
+        // overhead + count result size
+        Statistics(sizeInBytes = 8 + 8, rowCount = Some(1)))
 
-    val hasGroupAgg = Aggregate(groupingExpressions = attributes,
-      aggregateExpressions = attributes :+ Alias(Count(Literal(1)), "cnt")(), child)
-    assert(hasGroupAgg.stats(conf.copy(SQLConf.CBO_ENABLED -> false)) ==
-      // From UnaryNode.computeStats, childSize * outputRowSize / childRowSize
-      Statistics(sizeInBytes = 48 * (8 + 4 + 8) / (8 + 4)))
+      val hasGroupAgg = Aggregate(groupingExpressions = attributes,
+        aggregateExpressions = attributes :+ Alias(Count(Literal(1)), "cnt")(), child)
+      assert(hasGroupAgg.stats ==
+        // From UnaryNode.computeStats, childSize * outputRowSize / childRowSize
+        Statistics(sizeInBytes = 48 * (8 + 4 + 8) / (8 + 4)))
+    }
   }
 
   private def checkAggStats(
@@ -134,6 +137,6 @@ class AggregateEstimationSuite extends StatsEstimationTestBase {
       rowCount = Some(expectedOutputRowCount),
       attributeStats = expectedAttrStats)
 
-    assert(testAgg.stats(conf) == expectedStats)
+    assert(testAgg.stats == expectedStats)
   }
 }

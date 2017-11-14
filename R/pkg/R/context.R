@@ -258,7 +258,7 @@ includePackage <- function(sc, pkg) {
 #'
 #' # Large Matrix object that we want to broadcast
 #' randomMat <- matrix(nrow=100, ncol=10, data=rnorm(1000))
-#' randomMatBr <- broadcast(sc, randomMat)
+#' randomMatBr <- broadcastRDD(sc, randomMat)
 #'
 #' # Use the broadcast variable inside the function
 #' useBroadcast <- function(x) {
@@ -266,7 +266,7 @@ includePackage <- function(sc, pkg) {
 #' }
 #' sumRDD <- lapply(rdd, useBroadcast)
 #'}
-broadcast <- function(sc, object) {
+broadcastRDD <- function(sc, object) {
   objName <- as.character(substitute(object))
   serializedObj <- serialize(object, connection = NULL)
 
@@ -329,7 +329,7 @@ spark.addFile <- function(path, recursive = FALSE) {
 #' spark.getSparkFilesRootDirectory()
 #'}
 #' @note spark.getSparkFilesRootDirectory since 2.1.0
-spark.getSparkFilesRootDirectory <- function() {
+spark.getSparkFilesRootDirectory <- function() { # nolint
   if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
     # Running on driver.
     callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")

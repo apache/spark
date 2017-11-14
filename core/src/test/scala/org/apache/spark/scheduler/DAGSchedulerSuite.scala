@@ -18,14 +18,14 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
@@ -98,7 +98,7 @@ class MyRDD(
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeouts {
+class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
 
   import DAGSchedulerSuite._
 
@@ -131,6 +131,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
+    override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
     override def applicationAttemptId(): Option[String] = None
   }
 
@@ -396,6 +397,73 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assertDataStructuresEmpty()
   }
 
+  test("All shuffle files on the slave should be cleaned up when slave lost") {
+    // reset the test context with the right shuffle service config
+    afterEach()
+    val conf = new SparkConf()
+    conf.set("spark.shuffle.service.enabled", "true")
+    conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
+    init(conf)
+    runEvent(ExecutorAdded("exec-hostA1", "hostA"))
+    runEvent(ExecutorAdded("exec-hostA2", "hostA"))
+    runEvent(ExecutorAdded("exec-hostB", "hostB"))
+    val firstRDD = new MyRDD(sc, 3, Nil)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(3))
+    val firstShuffleId = firstShuffleDep.shuffleId
+    val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
+    val secondShuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    submit(reduceRdd, Array(0))
+    // map stage1 completes successfully, with one task on each executor
+    complete(taskSets(0), Seq(
+      (Success,
+        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2))),
+      (Success,
+        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2))),
+      (Success, makeMapStatus("hostB", 1))
+    ))
+    // map stage2 completes successfully, with one task on each executor
+    complete(taskSets(1), Seq(
+      (Success,
+        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2))),
+      (Success,
+        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2))),
+      (Success, makeMapStatus("hostB", 1))
+    ))
+    // make sure our test setup is correct
+    val initialMapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
+    //  val initialMapStatus1 = mapOutputTracker.mapStatuses.get(0).get
+    assert(initialMapStatus1.count(_ != null) === 3)
+    assert(initialMapStatus1.map{_.location.executorId}.toSet ===
+      Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
+
+    val initialMapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
+    //  val initialMapStatus1 = mapOutputTracker.mapStatuses.get(0).get
+    assert(initialMapStatus2.count(_ != null) === 3)
+    assert(initialMapStatus2.map{_.location.executorId}.toSet ===
+      Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
+
+    // reduce stage fails with a fetch failure from one host
+    complete(taskSets(2), Seq(
+      (FetchFailed(BlockManagerId("exec-hostA2", "hostA", 12345), firstShuffleId, 0, 0, "ignored"),
+        null)
+    ))
+
+    // Here is the main assertion -- make sure that we de-register
+    // the map outputs for both map stage from both executors on hostA
+
+    val mapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
+    assert(mapStatus1.count(_ != null) === 1)
+    assert(mapStatus1(2).location.executorId === "exec-hostB")
+    assert(mapStatus1(2).location.host === "hostB")
+
+    val mapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
+    assert(mapStatus2.count(_ != null) === 1)
+    assert(mapStatus2(2).location.executorId === "exec-hostB")
+    assert(mapStatus2(2).location.host === "hostB")
+  }
+
   test("zero split job") {
     var numResults = 0
     var failureReason: Option[Exception] = None
@@ -565,6 +633,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
           blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
+      override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
       override def applicationAttemptId(): Option[String] = None
     }
     val noKillScheduler = new DAGScheduler(
@@ -682,7 +751,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   // Helper functions to extract commonly used code in Fetch Failure test cases
   private def setupStageAbortTest(sc: SparkContext) {
-    sc.listenerBus.addListener(new EndListener())
+    sc.listenerBus.addToSharedQueue(new EndListener())
     ended = false
     jobResult = null
   }
@@ -1277,10 +1346,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
    */
   test("don't submit stage until its dependencies map outputs are registered (SPARK-5259)") {
     val firstRDD = new MyRDD(sc, 3, Nil)
-    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(2))
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(3))
     val firstShuffleId = firstShuffleDep.shuffleId
     val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
     submit(reduceRdd, Array(0))
 
@@ -1583,7 +1652,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
    */
   test("run trivial shuffle with out-of-band executor failure and retry") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
@@ -1791,7 +1860,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   test("reduce tasks should be placed locally with map output") {
     // Create a shuffleMapRdd with 1 partition
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
@@ -2275,6 +2344,36 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     complete(taskSets(4), Seq(
       (Success, 1),
       (Success, 1)))
+  }
+
+  test("task end event should have updated accumulators (SPARK-20342)") {
+    val tasks = 10
+
+    val accumId = new AtomicLong()
+    val foundCount = new AtomicLong()
+    val listener = new SparkListener() {
+      override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+        event.taskInfo.accumulables.find(_.id == accumId.get).foreach { _ =>
+          foundCount.incrementAndGet()
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+
+    // Try a few times in a loop to make sure. This is not guaranteed to fail when the bug exists,
+    // but it should at least make the test flaky. If the bug is fixed, this should always pass.
+    (1 to 10).foreach { i =>
+      foundCount.set(0L)
+
+      val accum = sc.longAccumulator(s"accum$i")
+      accumId.set(accum.id)
+
+      sc.parallelize(1 to tasks, tasks).foreach { _ =>
+        accum.add(1L)
+      }
+      sc.listenerBus.waitUntilEmpty(1000)
+      assert(foundCount.get() === tasks)
+    }
   }
 
   /**

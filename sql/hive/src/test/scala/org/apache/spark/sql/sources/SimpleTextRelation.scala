@@ -103,7 +103,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
               // `Cast`ed values are always of internal types (e.g. UTF8String instead of String)
               Cast(Literal(value), dataType).eval()
           })
-        }.filter(predicate).map(projection)
+        }.filter(predicate.eval).map(projection)
 
       // Appends partition values
       val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes

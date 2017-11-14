@@ -111,7 +111,7 @@ def determine_modules_to_test(changed_modules):
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
     ['sql', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
-     'pyspark-sql', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
+     'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
     modules_to_test = set()
     for module in changed_modules:
@@ -276,9 +276,9 @@ def exec_sbt(sbt_args=()):
 
     sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
 
-    sbt_output_filter = re.compile("^.*[info].*Resolving" + "|" +
-                                   "^.*[warn].*Merging" + "|" +
-                                   "^.*[info].*Including")
+    sbt_output_filter = re.compile(b"^.*[info].*Resolving" + b"|" +
+                                   b"^.*[warn].*Merging" + b"|" +
+                                   b"^.*[info].*Including")
 
     # NOTE: echo "q" is needed because sbt on encountering a build file
     # with failure (either resolution or compilation) prompts the user for
@@ -289,7 +289,7 @@ def exec_sbt(sbt_args=()):
                                 stdin=echo_proc.stdout,
                                 stdout=subprocess.PIPE)
     echo_proc.wait()
-    for line in iter(sbt_proc.stdout.readline, ''):
+    for line in iter(sbt_proc.stdout.readline, b''):
         if not sbt_output_filter.match(line):
             print(line, end='')
     retcode = sbt_proc.wait()

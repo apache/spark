@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.util.UUID
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
@@ -29,16 +31,19 @@ import org.apache.spark.util.RpcUtils
 private sealed trait StateStoreCoordinatorMessage extends Serializable
 
 /** Classes representing messages */
-private case class ReportActiveInstance(storeId: StateStoreId, host: String, executorId: String)
+private case class ReportActiveInstance(
+    storeId: StateStoreProviderId,
+    host: String,
+    executorId: String)
   extends StateStoreCoordinatorMessage
 
-private case class VerifyIfInstanceActive(storeId: StateStoreId, executorId: String)
+private case class VerifyIfInstanceActive(storeId: StateStoreProviderId, executorId: String)
   extends StateStoreCoordinatorMessage
 
-private case class GetLocation(storeId: StateStoreId)
+private case class GetLocation(storeId: StateStoreProviderId)
   extends StateStoreCoordinatorMessage
 
-private case class DeactivateInstances(checkpointLocation: String)
+private case class DeactivateInstances(runId: UUID)
   extends StateStoreCoordinatorMessage
 
 private object StopCoordinator
@@ -79,26 +84,28 @@ object StateStoreCoordinatorRef extends Logging {
  */
 class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
 
-  private[state] def reportActiveInstance(
-      storeId: StateStoreId,
+  private[sql] def reportActiveInstance(
+      stateStoreProviderId: StateStoreProviderId,
       host: String,
       executorId: String): Unit = {
-    rpcEndpointRef.send(ReportActiveInstance(storeId, host, executorId))
+    rpcEndpointRef.send(ReportActiveInstance(stateStoreProviderId, host, executorId))
   }
 
   /** Verify whether the given executor has the active instance of a state store */
-  private[state] def verifyIfInstanceActive(storeId: StateStoreId, executorId: String): Boolean = {
-    rpcEndpointRef.askSync[Boolean](VerifyIfInstanceActive(storeId, executorId))
+  private[sql] def verifyIfInstanceActive(
+      stateStoreProviderId: StateStoreProviderId,
+      executorId: String): Boolean = {
+    rpcEndpointRef.askSync[Boolean](VerifyIfInstanceActive(stateStoreProviderId, executorId))
   }
 
   /** Get the location of the state store */
-  private[state] def getLocation(storeId: StateStoreId): Option[String] = {
-    rpcEndpointRef.askSync[Option[String]](GetLocation(storeId))
+  private[sql] def getLocation(stateStoreProviderId: StateStoreProviderId): Option[String] = {
+    rpcEndpointRef.askSync[Option[String]](GetLocation(stateStoreProviderId))
   }
 
-  /** Deactivate instances related to a set of operator */
-  private[state] def deactivateInstances(storeRootLocation: String): Unit = {
-    rpcEndpointRef.askSync[Boolean](DeactivateInstances(storeRootLocation))
+  /** Deactivate instances related to a query */
+  private[sql] def deactivateInstances(runId: UUID): Unit = {
+    rpcEndpointRef.askSync[Boolean](DeactivateInstances(runId))
   }
 
   private[state] def stop(): Unit = {
@@ -113,7 +120,7 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
  */
 private class StateStoreCoordinator(override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
-  private val instances = new mutable.HashMap[StateStoreId, ExecutorCacheTaskLocation]
+  private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
 
   override def receive: PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId) =>
@@ -135,11 +142,11 @@ private class StateStoreCoordinator(override val rpcEnv: RpcEnv)
       logDebug(s"Got location of the state store $id: $executorId")
       context.reply(executorId)
 
-    case DeactivateInstances(checkpointLocation) =>
+    case DeactivateInstances(runId) =>
       val storeIdsToRemove =
-        instances.keys.filter(_.checkpointLocation == checkpointLocation).toSeq
+        instances.keys.filter(_.queryRunId == runId).toSeq
       instances --= storeIdsToRemove
-      logDebug(s"Deactivating instances related to checkpoint location $checkpointLocation: " +
+      logDebug(s"Deactivating instances related to checkpoint location $runId: " +
         storeIdsToRemove.mkString(", "))
       context.reply(true)
 

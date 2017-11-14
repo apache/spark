@@ -29,8 +29,10 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 
 object TextSocketSource {
@@ -126,17 +128,10 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
       batches.slice(sliceStart, sliceEnd)
     }
 
-    import sqlContext.implicits._
-    val rawBatch = sqlContext.createDataset(rawList)
-
-    // Underlying MemoryStream has schema (String, Timestamp); strip out the timestamp
-    // if requested.
-    if (includeTimestamp) {
-      rawBatch.toDF("value", "timestamp")
-    } else {
-      // Strip out timestamp
-      rawBatch.select("_1").toDF("value")
-    }
+    val rdd = sqlContext.sparkContext
+      .parallelize(rawList)
+      .map { case (v, ts) => InternalRow(UTF8String.fromString(v), ts.getTime) }
+    sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
   }
 
   override def commit(end: Offset): Unit = synchronized {
@@ -195,13 +190,17 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
     if (!parameters.contains("port")) {
       throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
     }
-    val schema =
+    if (schema.nonEmpty) {
+      throw new AnalysisException("The socket source does not support a user-specified schema.")
+    }
+
+    val sourceSchema =
       if (parseIncludeTimestamp(parameters)) {
         TextSocketSource.SCHEMA_TIMESTAMP
       } else {
         TextSocketSource.SCHEMA_REGULAR
       }
-    ("textSocket", schema)
+    ("textSocket", sourceSchema)
   }
 
   override def createSource(

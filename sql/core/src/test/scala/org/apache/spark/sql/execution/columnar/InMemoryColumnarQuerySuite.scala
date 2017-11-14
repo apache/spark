@@ -21,8 +21,9 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.AttributeSet
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -126,7 +127,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       .toDF().createOrReplaceTempView("sizeTst")
     spark.catalog.cacheTable("sizeTst")
     assert(
-      spark.table("sizeTst").queryExecution.analyzed.stats(sqlConf).sizeInBytes >
+      spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
         spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
   }
 
@@ -427,6 +428,55 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       df3.cache()
       val agg_with_cache = df3.groupBy($"item").count()
       checkAnswer(agg_without_cache, agg_with_cache)
+    }
+  }
+
+  test("SPARK-22249: IN should work also with cached DataFrame") {
+    val df = spark.range(10).cache()
+    // with an empty list
+    assert(df.filter($"id".isin()).count() == 0)
+    // with a non-empty list
+    assert(df.filter($"id".isin(2)).count() == 1)
+    assert(df.filter($"id".isin(2, 3)).count() == 2)
+    df.unpersist()
+    val dfNulls = spark.range(10).selectExpr("null as id").cache()
+    // with null as value for the attribute
+    assert(dfNulls.filter($"id".isin()).count() == 0)
+    assert(dfNulls.filter($"id".isin(2, 3)).count() == 0)
+    dfNulls.unpersist()
+  }
+
+  test("SPARK-22249: buildFilter should not throw exception when In contains an empty list") {
+    val attribute = AttributeReference("a", IntegerType)()
+    val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY,
+      LocalTableScanExec(Seq(attribute), Nil), None)
+    val tableScanExec = InMemoryTableScanExec(Seq(attribute),
+      Seq(In(attribute, Nil)), testRelation)
+    assert(tableScanExec.partitionFilters.isEmpty)
+  }
+
+  test("SPARK-22348: table cache should do partition batch pruning") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enabled) {
+        val df1 = Seq((1, 1), (1, 1), (2, 2)).toDF("x", "y")
+        df1.unpersist()
+        df1.cache()
+
+        // Push predicate to the cached table.
+        val df2 = df1.where("y = 3")
+
+        val planBeforeFilter = df2.queryExecution.executedPlan.collect {
+          case f: FilterExec => f.child
+        }
+        assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
+
+        val execPlan = if (enabled == "true") {
+          WholeStageCodegenExec(planBeforeFilter.head)
+        } else {
+          planBeforeFilter.head
+        }
+        assert(execPlan.executeCollectPublic().length == 0)
+      }
     }
   }
 }

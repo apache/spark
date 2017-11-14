@@ -16,9 +16,11 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.lang.{Long => JLong}
 import java.util.Date
 
-import scala.collection.Map
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.JobExecutionStatus
 
@@ -31,6 +33,9 @@ class ApplicationInfo private[spark](
     val memoryPerExecutorMB: Option[Int],
     val attempts: Seq[ApplicationAttemptInfo])
 
+@JsonIgnoreProperties(
+  value = Array("startTimeEpoch", "endTimeEpoch", "lastUpdatedEpoch"),
+  allowGetters = true)
 class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
     val startTime: Date,
@@ -40,9 +45,13 @@ class ApplicationAttemptInfo private[spark](
     val sparkUser: String,
     val completed: Boolean = false,
     val appSparkVersion: String) {
-    def getStartTimeEpoch: Long = startTime.getTime
-    def getEndTimeEpoch: Long = endTime.getTime
-    def getLastUpdatedEpoch: Long = lastUpdated.getTime
+
+  def getStartTimeEpoch: Long = startTime.getTime
+
+  def getEndTimeEpoch: Long = endTime.getTime
+
+  def getLastUpdatedEpoch: Long = lastUpdated.getTime
+
 }
 
 class ExecutorStageSummary private[spark](
@@ -76,6 +85,9 @@ class ExecutorSummary private[spark](
     val totalShuffleWrite: Long,
     val isBlacklisted: Boolean,
     val maxMemory: Long,
+    val addTime: Date,
+    val removeTime: Option[Date],
+    val removeReason: Option[String],
     val executorLogs: Map[String, String],
     val memoryMetrics: Option[MemoryMetrics])
 
@@ -120,9 +132,13 @@ class RDDDataDistribution private[spark](
     val memoryUsed: Long,
     val memoryRemaining: Long,
     val diskUsed: Long,
+    @JsonDeserialize(contentAs = classOf[JLong])
     val onHeapMemoryUsed: Option[Long],
+    @JsonDeserialize(contentAs = classOf[JLong])
     val offHeapMemoryUsed: Option[Long],
+    @JsonDeserialize(contentAs = classOf[JLong])
     val onHeapMemoryRemaining: Option[Long],
+    @JsonDeserialize(contentAs = classOf[JLong])
     val offHeapMemoryRemaining: Option[Long])
 
 class RDDPartitionInfo private[spark](
@@ -170,7 +186,8 @@ class TaskData private[spark](
     val index: Int,
     val attempt: Int,
     val launchTime: Date,
-    val duration: Option[Long] = None,
+    @JsonDeserialize(contentAs = classOf[JLong])
+    val duration: Option[Long],
     val executorId: String,
     val host: String,
     val status: String,
@@ -208,6 +225,7 @@ class ShuffleReadMetrics private[spark](
     val localBlocksFetched: Long,
     val fetchWaitTime: Long,
     val remoteBytesRead: Long,
+    val remoteBytesReadToDisk: Long,
     val localBytesRead: Long,
     val recordsRead: Long)
 
@@ -249,6 +267,7 @@ class ShuffleReadMetricDistributions private[spark](
     val localBlocksFetched: IndexedSeq[Double],
     val fetchWaitTime: IndexedSeq[Double],
     val remoteBytesRead: IndexedSeq[Double],
+    val remoteBytesReadToDisk: IndexedSeq[Double],
     val totalBlocksFetched: IndexedSeq[Double])
 
 class ShuffleWriteMetricDistributions private[spark](

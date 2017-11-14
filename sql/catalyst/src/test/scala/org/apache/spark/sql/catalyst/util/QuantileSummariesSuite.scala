@@ -57,8 +57,14 @@ class QuantileSummariesSuite extends SparkFunSuite {
   private def checkQuantile(quant: Double, data: Seq[Double], summary: QuantileSummaries): Unit = {
     if (data.nonEmpty) {
       val approx = summary.query(quant).get
-      // The rank of the approximation.
-      val rank = data.count(_ < approx) // has to be <, not <= to be exact
+      // Get the rank of the approximation.
+      val rankOfValue = data.count(_ <= approx)
+      val rankOfPreValue = data.count(_ < approx)
+      // `rankOfValue` is the last position of the quantile value. If the input repeats the value
+      // chosen as the quantile, e.g. in (1,2,2,2,2,2,3), the 50% quantile is 2, then it's
+      // improper to choose the last position as its rank. Instead, we get the rank by averaging
+      // `rankOfValue` and `rankOfPreValue`.
+      val rank = math.ceil((rankOfValue + rankOfPreValue) / 2.0)
       val lower = math.floor((quant - summary.relativeError) * data.size)
       val upper = math.ceil((quant + summary.relativeError) * data.size)
       val msg =

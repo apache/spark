@@ -104,8 +104,8 @@ object JsonConstants {
   val submitDate = new Date(123456789)
   val appInfoJsonStr =
     """
-      |{"starttime":3,"id":"id","name":"name",
-      |"cores":4,"user":"%s",
+      |{"id":"id","starttime":3,"name":"name",
+      |"cores":0,"user":"%s",
       |"memoryperslave":1234,"submitdate":"%s",
       |"state":"WAITING","duration":%d}
     """.format(System.getProperty("user.name", "<unknown>"),
@@ -134,19 +134,24 @@ object JsonConstants {
 
   val driverInfoJsonStr =
     """
-      |{"id":"driver-3","starttime":"3","state":"SUBMITTED","cores":3,"memory":100}
-    """.stripMargin
+      |{"id":"driver-3","starttime":"3",
+      |"state":"SUBMITTED","cores":3,"memory":100,
+      |"submitdate":"%s","worker":"None",
+      |"mainclass":"mainClass"}
+    """.format(submitDate.toString).stripMargin
 
   val masterStateJsonStr =
     """
       |{"url":"spark://host:8080",
       |"workers":[%s,%s],
+      |"aliveworkers":2,
       |"cores":8,"coresused":0,"memory":2468,"memoryused":0,
       |"activeapps":[%s],"completedapps":[],
       |"activedrivers":[%s],
+      |"completeddrivers":[%s],
       |"status":"ALIVE"}
     """.format(workerInfoJsonStr, workerInfoJsonStr,
-        appInfoJsonStr, driverInfoJsonStr).stripMargin
+        appInfoJsonStr, driverInfoJsonStr, driverInfoJsonStr).stripMargin
 
   val workerStateJsonStr =
     """

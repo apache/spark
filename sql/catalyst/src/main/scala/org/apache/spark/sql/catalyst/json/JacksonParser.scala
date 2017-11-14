@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.io.ByteArrayOutputStream
-import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -126,16 +125,11 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase(Locale.ROOT)
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toFloat
-          } else {
-            throw new RuntimeException(s"Cannot parse $value as FloatType.")
+          parser.getText match {
+            case "NaN" => Float.NaN
+            case "Infinity" => Float.PositiveInfinity
+            case "-Infinity" => Float.NegativeInfinity
+            case other => throw new RuntimeException(s"Cannot parse $other as FloatType.")
           }
       }
 
@@ -146,16 +140,11 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase(Locale.ROOT)
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toDouble
-          } else {
-            throw new RuntimeException(s"Cannot parse $value as DoubleType.")
+          parser.getText match {
+            case "NaN" => Double.NaN
+            case "Infinity" => Double.PositiveInfinity
+            case "-Infinity" => Double.NegativeInfinity
+            case other => throw new RuntimeException(s"Cannot parse $other as DoubleType.")
           }
       }
 
@@ -289,7 +278,7 @@ class JacksonParser(
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
       throw new RuntimeException(
-        s"Failed to parse a value for data type $dataType (current token: $token).")
+        s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
   }
 
   /**

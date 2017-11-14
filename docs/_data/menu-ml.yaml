@@ -1,3 +1,5 @@
+- text: Basic statistics
+  url: ml-statistics.html
 - text: Pipelines
   url: ml-pipeline.html
 - text: Extracting, transforming and selecting features

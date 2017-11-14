@@ -187,7 +187,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
-            <version>3.0.0</version>
+            <version>3.1.0</version>
             <executions>
               <execution>
                 <id>dist</id>
@@ -218,6 +218,12 @@
       <id>hive-provided</id>
       <properties>
         <hive.deps.scope>provided</hive.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>orc-provided</id>
+      <properties>
+        <orc.deps.scope>provided</orc.deps.scope>
       </properties>
     </profile>
     <profile>

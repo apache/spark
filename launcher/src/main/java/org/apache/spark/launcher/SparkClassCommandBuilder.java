@@ -53,33 +53,41 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
       case "org.apache.spark.deploy.master.Master":
         javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
         javaOptsKeys.add("SPARK_MASTER_OPTS");
+        extraClassPath = getenv("SPARK_DAEMON_CLASSPATH");
         memKey = "SPARK_DAEMON_MEMORY";
         break;
       case "org.apache.spark.deploy.worker.Worker":
         javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
         javaOptsKeys.add("SPARK_WORKER_OPTS");
+        extraClassPath = getenv("SPARK_DAEMON_CLASSPATH");
         memKey = "SPARK_DAEMON_MEMORY";
         break;
       case "org.apache.spark.deploy.history.HistoryServer":
         javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
         javaOptsKeys.add("SPARK_HISTORY_OPTS");
+        extraClassPath = getenv("SPARK_DAEMON_CLASSPATH");
         memKey = "SPARK_DAEMON_MEMORY";
         break;
       case "org.apache.spark.executor.CoarseGrainedExecutorBackend":
         javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
         memKey = "SPARK_EXECUTOR_MEMORY";
+        extraClassPath = getenv("SPARK_EXECUTOR_CLASSPATH");
         break;
       case "org.apache.spark.executor.MesosExecutorBackend":
         javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
         memKey = "SPARK_EXECUTOR_MEMORY";
+        extraClassPath = getenv("SPARK_EXECUTOR_CLASSPATH");
         break;
       case "org.apache.spark.deploy.mesos.MesosClusterDispatcher":
         javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
+        extraClassPath = getenv("SPARK_DAEMON_CLASSPATH");
+        memKey = "SPARK_DAEMON_MEMORY";
         break;
       case "org.apache.spark.deploy.ExternalShuffleService":
       case "org.apache.spark.deploy.mesos.MesosExternalShuffleService":
         javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
         javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
+        extraClassPath = getenv("SPARK_DAEMON_CLASSPATH");
         memKey = "SPARK_DAEMON_MEMORY";
         break;
       default:

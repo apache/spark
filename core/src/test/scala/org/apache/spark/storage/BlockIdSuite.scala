@@ -35,13 +35,8 @@ class BlockIdSuite extends SparkFunSuite {
   }
 
   test("test-bad-deserialization") {
-    try {
-      // Try to deserialize an invalid block id.
+    intercept[UnrecognizedBlockId] {
       BlockId("myblock")
-      fail()
-    } catch {
-      case e: IllegalStateException => // OK
-      case _: Throwable => fail()
     }
   }
 
@@ -139,6 +134,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.id.getMostSignificantBits() === 5)
     assert(id.id.getLeastSignificantBits() === 2)
     assert(!id.isShuffle)
+    assertSame(id, BlockId(id.toString))
   }
 
   test("temp shuffle") {
@@ -151,6 +147,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.id.getMostSignificantBits() === 1)
     assert(id.id.getLeastSignificantBits() === 2)
     assert(!id.isShuffle)
+    assertSame(id, BlockId(id.toString))
   }
 
   test("test") {

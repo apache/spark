@@ -201,6 +201,23 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-22226: group splitted expressions into one method per nested class") {
+    val length = 10000
+    val expressions = Seq.fill(length) {
+      ToUTCTimestamp(
+        Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
+        Literal.create("PST", StringType))
+    }
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq.fill(length)(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2017-10-10 07:00:00")))
+
+    if (actual != expected) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
   test("test generated safe and unsafe projection") {
     val schema = new StructType(Array(
       StructField("a", StringType, true),
@@ -323,5 +340,44 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq(expr), subexpressionEliminationEnabled = true)
     // should not throw exception
     projection(row)
+  }
+
+  test("SPARK-21720: split large predications into blocks due to JVM code size limit") {
+    val length = 600
+
+    val input = new GenericInternalRow(length)
+    val utf8Str = UTF8String.fromString(s"abc")
+    for (i <- 0 until length) {
+      input.update(i, utf8Str)
+    }
+
+    var exprOr: Expression = Literal(false)
+    for (i <- 0 until length) {
+      exprOr = Or(EqualTo(BoundReference(i, StringType, true), Literal(s"c$i")), exprOr)
+    }
+
+    val planOr = GenerateMutableProjection.generate(Seq(exprOr))
+    val actualOr = planOr(input).toSeq(Seq(exprOr.dataType))
+    assert(actualOr.length == 1)
+    val expectedOr = false
+
+    if (!checkResult(actualOr.head, expectedOr, exprOr.dataType)) {
+      fail(s"Incorrect Evaluation: expressions: $exprOr, actual: $actualOr, expected: $expectedOr")
+    }
+
+    var exprAnd: Expression = Literal(true)
+    for (i <- 0 until length) {
+      exprAnd = And(EqualTo(BoundReference(i, StringType, true), Literal(s"c$i")), exprAnd)
+    }
+
+    val planAnd = GenerateMutableProjection.generate(Seq(exprAnd))
+    val actualAnd = planAnd(input).toSeq(Seq(exprAnd.dataType))
+    assert(actualAnd.length == 1)
+    val expectedAnd = false
+
+    if (!checkResult(actualAnd.head, expectedAnd, exprAnd.dataType)) {
+      fail(
+        s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
+    }
   }
 }

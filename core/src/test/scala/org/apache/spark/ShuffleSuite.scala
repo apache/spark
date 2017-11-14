@@ -28,7 +28,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
-import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId}
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
 import org.apache.spark.util.{MutablePair, Utils}
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -277,7 +277,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // Delete one of the local shuffle blocks.
     val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
     val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0))
-    assert(hashFile.exists() || sortFile.exists())
+    val indexFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleIndexBlockId(0, 0, 0))
+    assert(hashFile.exists() || (sortFile.exists() && indexFile.exists()))
 
     if (hashFile.exists()) {
       hashFile.delete()
@@ -285,9 +286,34 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     if (sortFile.exists()) {
       sortFile.delete()
     }
+    if (indexFile.exists()) {
+      indexFile.delete()
+    }
 
     // This count should retry the execution of the previous stage and rerun shuffle.
     rdd.count()
+  }
+
+  test("cannot find its local shuffle file if no execution of the stage and rerun shuffle") {
+    sc = new SparkContext("local", "test", conf.clone())
+    val rdd = sc.parallelize(1 to 10, 1).map((_, 1)).reduceByKey(_ + _)
+
+    // Cannot find one of the local shuffle blocks.
+    val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
+    val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0))
+    val indexFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleIndexBlockId(0, 0, 0))
+    assert(!hashFile.exists() && !sortFile.exists() && !indexFile.exists())
+
+    rdd.count()
+
+    // Can find one of the local shuffle blocks.
+    val hashExistsFile = sc.env.blockManager.diskBlockManager
+      .getFile(new ShuffleBlockId(0, 0, 0))
+    val sortExistsFile = sc.env.blockManager.diskBlockManager
+      .getFile(new ShuffleDataBlockId(0, 0, 0))
+    val indexExistsFile = sc.env.blockManager.diskBlockManager
+      .getFile(new ShuffleIndexBlockId(0, 0, 0))
+    assert(hashExistsFile.exists() || (sortExistsFile.exists() && indexExistsFile.exists()))
   }
 
   test("metrics for shuffle without aggregation") {
@@ -333,6 +359,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+    mapTrackerMaster.registerShuffle(0, 1)
 
     // first attempt -- its successful
     val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0,
@@ -367,7 +394,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     // register one of the map outputs -- doesn't matter which one
     mapOutput1.foreach { case mapStatus =>
-      mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))
+      mapTrackerMaster.registerMapOutput(0, 0, mapStatus)
     }
 
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1,

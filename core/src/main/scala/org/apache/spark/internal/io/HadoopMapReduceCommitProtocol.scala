@@ -20,6 +20,7 @@ package org.apache.spark.internal.io
 import java.util.{Date, UUID}
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.hadoop.conf.Configurable
 import org.apache.hadoop.fs.Path
@@ -35,6 +36,9 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  * (from the newer mapreduce API, not the old mapred API).
  *
  * Unlike Hadoop's OutputCommitter, this implementation is serializable.
+ *
+ * @param jobId the job's or stage's id
+ * @param path the job's output path, or null if committer acts as a noop
  */
 class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   extends FileCommitProtocol with Serializable with Logging {
@@ -43,6 +47,16 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
 
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
   @transient private var committer: OutputCommitter = _
+
+  /**
+   * Checks whether there are files to be committed to a valid output location.
+   *
+   * As committing and aborting a job occurs on driver, where `addedAbsPathFiles` is always null,
+   * it is necessary to check whether a valid output path is specified.
+   * [[HadoopMapReduceCommitProtocol#path]] need not be a valid [[org.apache.hadoop.fs.Path]] for
+   * committers not writing to distributed file systems.
+   */
+  private val hasValidPath = Try { new Path(path) }.isSuccess
 
   /**
    * Tracks files staged by this task for absolute output paths. These outputs are not managed by
@@ -73,7 +87,8 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
 
     val stagingDir: String = committer match {
       // For FileOutputCommitter it has its own staging path called "work path".
-      case f: FileOutputCommitter => Option(f.getWorkPath.toString).getOrElse(path)
+      case f: FileOutputCommitter =>
+        Option(f.getWorkPath).map(_.toString).getOrElse(path)
       case _ => path
     }
 
@@ -129,17 +144,21 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]])
       .foldLeft(Map[String, String]())(_ ++ _)
     logDebug(s"Committing files staged for absolute locations $filesToMove")
-    val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
-    for ((src, dst) <- filesToMove) {
-      fs.rename(new Path(src), new Path(dst))
+    if (hasValidPath) {
+      val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
+      for ((src, dst) <- filesToMove) {
+        fs.rename(new Path(src), new Path(dst))
+      }
+      fs.delete(absPathStagingDir, true)
     }
-    fs.delete(absPathStagingDir, true)
   }
 
   override def abortJob(jobContext: JobContext): Unit = {
     committer.abortJob(jobContext, JobStatus.State.FAILED)
-    val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
-    fs.delete(absPathStagingDir, true)
+    if (hasValidPath) {
+      val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
+      fs.delete(absPathStagingDir, true)
+    }
   }
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {

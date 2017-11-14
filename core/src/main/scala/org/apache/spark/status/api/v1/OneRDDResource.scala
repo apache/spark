@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util.NoSuchElementException
 import javax.ws.rs.{GET, PathParam, Produces}
 import javax.ws.rs.core.MediaType
 
@@ -26,9 +27,12 @@ private[v1] class OneRDDResource(ui: SparkUI) {
 
   @GET
   def rddData(@PathParam("rddId") rddId: Int): RDDStorageInfo = {
-    AllRDDResource.getRDDStorageInfo(rddId, ui.storageListener, true).getOrElse(
-      throw new NotFoundException(s"no rdd found w/ id $rddId")
-    )
+    try {
+      ui.store.rdd(rddId)
+    } catch {
+      case _: NoSuchElementException =>
+        throw new NotFoundException(s"no rdd found w/ id $rddId")
+    }
   }
 
 }

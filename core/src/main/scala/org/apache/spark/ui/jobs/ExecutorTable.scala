@@ -20,12 +20,17 @@ package org.apache.spark.ui.jobs
 import scala.collection.mutable
 import scala.xml.{Node, Unparsed}
 
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
 /** Stage summary grouped by executors. */
-private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: StagesTab) {
+private[ui] class ExecutorTable(
+    stageId: Int,
+    stageAttemptId: Int,
+    parent: StagesTab,
+    store: AppStatusStore) {
   private val listener = parent.progressListener
 
   def toNodeSeq: Seq[Node] = {
@@ -123,9 +128,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
               <div style="float: left">{k}</div>
               <div style="float: right">
               {
-                val logs = parent.executorsListener.executorToTaskSummary.get(k)
-                  .map(_.executorLogs).getOrElse(Map.empty)
-                logs.map {
+                store.executorSummary(k).map(_.executorLogs).getOrElse(Map.empty).map {
                   case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
                 }
               }

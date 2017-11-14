@@ -133,8 +133,8 @@ setMethod("summarize",
 # Aggregate Functions by name
 methods <- c("avg", "max", "mean", "min", "sum")
 
-# These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp", "stddev_pop",
-# "variance", "var_samp", "var_pop"
+# These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp",
+# "stddev_pop", "variance", "var_samp", "var_pop"
 
 #' Pivot a column of the GroupedData and perform the specified aggregation.
 #'
@@ -233,6 +233,9 @@ setMethod("gapplyCollect",
           })
 
 gapplyInternal <- function(x, func, schema) {
+  if (is.character(schema)) {
+    schema <- structType(schema)
+  }
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                        connection = NULL)
   broadcastArr <- lapply(ls(.broadcastNames),

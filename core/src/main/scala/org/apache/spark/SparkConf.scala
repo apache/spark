@@ -373,6 +373,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
   }
 
+  /** Get an optional value, applying variable substitution. */
+  private[spark] def getWithSubstitution(key: String): Option[String] = {
+    getOption(key).map(reader.substitute(_))
+  }
+
   /** Get all parameters as a list of pairs */
   def getAll: Array[(String, String)] = {
     settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
@@ -543,6 +548,17 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
+    if (contains("spark.cores.max") && contains("spark.executor.cores")) {
+      val totalCores = getInt("spark.cores.max", 1)
+      val executorCores = getInt("spark.executor.cores", 1)
+      val leftCores = totalCores % executorCores
+      if (leftCores != 0) {
+        logWarning(s"Total executor cores: ${totalCores} is not " +
+          s"divisible by cores per executor: ${executorCores}, " +
+          s"the left cores: ${leftCores} will not be allocated")
+      }
+    }
+
     val encryptionEnabled = get(NETWORK_ENCRYPTION_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
     require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
@@ -581,7 +597,9 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
         "Please use the new blacklisting options, spark.blacklist.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used any more"),
-      DeprecatedConfig("spark.executor.port", "2.0.0", "Not used any more")
+      DeprecatedConfig("spark.executor.port", "2.0.0", "Not used any more"),
+      DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
+        "Not used any more. Please use spark.shuffle.service.index.cache.size")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -592,6 +610,8 @@ private[spark] object SparkConf extends Logging {
    *
    * The alternates are used in the order defined in this map. If deprecated configs are
    * present in the user's configuration, a warning is logged.
+   *
+   * TODO: consolidate it with `ConfigBuilder.withAlternative`.
    */
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
     "spark.executor.userClassPathFirst" -> Seq(
@@ -642,7 +662,9 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
     "spark.yarn.access.hadoopFileSystems" -> Seq(
-      AlternateConfig("spark.yarn.access.namenodes", "2.2"))
+      AlternateConfig("spark.yarn.access.namenodes", "2.2")),
+    "spark.maxRemoteBlockSizeFetchToMem" -> Seq(
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3"))
   )
 
   /**

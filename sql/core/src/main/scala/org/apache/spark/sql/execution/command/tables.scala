@@ -20,28 +20,27 @@ package org.apache.spark.sql.execution.command
 import java.io.File
 import java.net.URI
 import java.nio.file.FileSystems
-import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
 import scala.util.Try
+import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -187,7 +186,7 @@ case class AlterTableRenameCommand(
 */
 case class AlterTableAddColumnsCommand(
     table: TableIdentifier,
-    columns: Seq[StructField]) extends RunnableCommand {
+    colsToAdd: Seq[StructField]) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(catalog, table)
@@ -200,11 +199,13 @@ case class AlterTableAddColumnsCommand(
     }
     catalog.refreshTable(table)
 
-    // make sure any partition columns are at the end of the fields
-    val reorderedSchema = catalogTable.dataSchema ++ columns ++ catalogTable.partitionSchema
-    catalog.alterTableSchema(
-      table, catalogTable.schema.copy(fields = reorderedSchema.toArray))
+    SchemaUtils.checkColumnNameDuplication(
+      (colsToAdd ++ catalogTable.schema).map(_.name),
+      "in the table definition of " + table.identifier,
+      conf.caseSensitiveAnalysis)
+    DDLUtils.checkDataColNames(catalogTable, colsToAdd.map(_.name))
 
+    catalog.alterTableDataSchema(table, StructType(catalogTable.dataSchema ++ colsToAdd))
     Seq.empty[Row]
   }
 
@@ -230,11 +231,10 @@ case class AlterTableAddColumnsCommand(
       DataSource.lookupDataSource(catalogTable.provider.get).newInstance() match {
         // For datasource table, this command can only support the following File format.
         // TextFileFormat only default to one column "value"
-        // OrcFileFormat can not handle difference between user-specified schema and
-        // inferred schema yet. TODO, once this issue is resolved , we can add Orc back.
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
         case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat =>
+        case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
         case s =>
           throw new AnalysisException(
             s"""
@@ -400,6 +400,7 @@ case class LoadDataCommand(
     // Refresh the metadata cache to ensure the data visible to the users
     catalog.refreshTable(targetTable.identifier)
 
+    CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
   }
 }
@@ -487,6 +488,12 @@ case class TruncateTableCommand(
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table $tableIdentWithDB", e)
     }
+
+    if (table.stats.nonEmpty) {
+      // empty table after truncation
+      val newStats = CatalogStatistics(sizeInBytes = 0, rowCount = Some(0))
+      catalog.alterTableStats(tableName, Some(newStats))
+    }
     Seq.empty[Row]
   }
 }
@@ -522,15 +529,15 @@ case class DescribeTableCommand(
         throw new AnalysisException(
           s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
       }
-      describeSchema(catalog.lookupRelation(table).schema, result)
+      describeSchema(catalog.lookupRelation(table).schema, result, header = false)
     } else {
       val metadata = catalog.getTableMetadata(table)
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
-        describeSchema(sparkSession.table(metadata.identifier).schema, result)
+        describeSchema(sparkSession.table(metadata.identifier).schema, result, header = false)
       } else {
-        describeSchema(metadata.schema, result)
+        describeSchema(metadata.schema, result, header = false)
       }
 
       describePartitionInfo(metadata, result)
@@ -550,7 +557,7 @@ case class DescribeTableCommand(
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (table.partitionColumnNames.nonEmpty) {
       append(buffer, "# Partition Information", "", "")
-      describeSchema(table.partitionSchema, buffer)
+      describeSchema(table.partitionSchema, buffer, header = true)
     }
   }
 
@@ -601,8 +608,13 @@ case class DescribeTableCommand(
     table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
   }
 
-  private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+  private def describeSchema(
+      schema: StructType,
+      buffer: ArrayBuffer[Row],
+      header: Boolean): Unit = {
+    if (header) {
+      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+    }
     schema.foreach { column =>
       append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
     }
@@ -614,6 +626,73 @@ case class DescribeTableCommand(
   }
 }
 
+/**
+ * A command to list the info for a column, including name, data type, comment and column stats.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name column_name;
+ * }}}
+ */
+case class DescribeColumnCommand(
+    table: TableIdentifier,
+    colNameParts: Seq[String],
+    isExtended: Boolean)
+  extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    Seq(
+      AttributeReference("info_name", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "name of the column info").build())(),
+      AttributeReference("info_value", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "value of the column info").build())()
+    )
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val resolver = sparkSession.sessionState.conf.resolver
+    val relation = sparkSession.table(table).queryExecution.analyzed
+
+    val colName = UnresolvedAttribute(colNameParts).name
+    val field = {
+      relation.resolve(colNameParts, resolver).getOrElse {
+        throw new AnalysisException(s"Column $colName does not exist")
+      }
+    }
+    if (!field.isInstanceOf[Attribute]) {
+      // If the field is not an attribute after `resolve`, then it's a nested field.
+      throw new AnalysisException(
+        s"DESC TABLE COLUMN command does not support nested data types: $colName")
+    }
+
+    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
+    val colStats = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
+    val cs = colStats.get(field.name)
+
+    val comment = if (field.metadata.contains("comment")) {
+      Option(field.metadata.getString("comment"))
+    } else {
+      None
+    }
+
+    val buffer = ArrayBuffer[Row](
+      Row("col_name", field.name),
+      Row("data_type", field.dataType.catalogString),
+      Row("comment", comment.getOrElse("NULL"))
+    )
+    if (isExtended) {
+      // Show column stats when EXTENDED or FORMATTED is specified.
+      buffer += Row("min", cs.flatMap(_.min.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("max", cs.flatMap(_.max.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("num_nulls", cs.map(_.nullCount.toString).getOrElse("NULL"))
+      buffer += Row("distinct_count", cs.map(_.distinctCount.toString).getOrElse("NULL"))
+      buffer += Row("avg_col_len", cs.map(_.avgLen.toString).getOrElse("NULL"))
+      buffer += Row("max_col_len", cs.map(_.maxLen.toString).getOrElse("NULL"))
+    }
+    buffer
+  }
+}
 
 /**
  * A command for users to get tables in the given database.
@@ -724,8 +803,7 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
 }
 
 /**
- * A command to list the column names for a table. This function creates a
- * [[ShowColumnsCommand]] logical plan.
+ * A command to list the column names for a table.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -763,8 +841,6 @@ case class ShowColumnsCommand(
  *
  * 1. If the command is called for a non partitioned table.
  * 2. If the partition spec refers to the columns that are not defined as partitioning columns.
- *
- * This function creates a [[ShowPartitionsCommand]] logical plan
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -903,8 +979,13 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }
 
     if (metadata.bucketSpec.isDefined) {
-      throw new UnsupportedOperationException(
-        "Creating Hive table with bucket spec is not supported yet.")
+      val bucketSpec = metadata.bucketSpec.get
+      builder ++= s"CLUSTERED BY (${bucketSpec.bucketColumnNames.mkString(",")})\n"
+
+      if (bucketSpec.sortColumnNames.nonEmpty) {
+        builder ++= s"SORTED BY (${bucketSpec.sortColumnNames.map(_ + " ASC").mkString(", ")})\n"
+      }
+      builder ++= s"INTO ${bucketSpec.numBuckets} BUCKETS\n"
     }
   }
 

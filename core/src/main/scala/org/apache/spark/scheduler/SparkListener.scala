@@ -53,6 +53,9 @@ case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: T
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerSpeculativeTaskSubmitted(stageId: Int) extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerTaskEnd(
     stageId: Int,
     stageAttemptId: Int,
@@ -291,6 +294,11 @@ private[spark] trait SparkListenerInterface {
   def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit
 
   /**
+   * Called when a speculative task is submitted
+   */
+  def onSpeculativeTaskSubmitted(speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit
+
+  /**
    * Called when other events like SQL-specific events are posted.
    */
   def onOtherEvent(event: SparkListenerEvent): Unit
@@ -353,6 +361,9 @@ abstract class SparkListener extends SparkListenerInterface {
       nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit = { }
 
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = { }
+
+  override def onSpeculativeTaskSubmitted(
+      speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
 }

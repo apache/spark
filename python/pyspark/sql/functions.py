@@ -21,6 +21,7 @@ A collections of builtin functions
 import math
 import sys
 import functools
+import warnings
 
 if sys.version < "3":
     from itertools import imap as map
@@ -42,6 +43,14 @@ def _create_function(name, doc=""):
     _.__name__ = name
     _.__doc__ = doc
     return _
+
+
+def _wrap_deprecated_function(func, message):
+    """ Wrap the deprecated function to print out deprecation warnings"""
+    def _(col):
+        warnings.warn(message, DeprecationWarning)
+        return func(col)
+    return functools.wraps(func)(_)
 
 
 def _create_binary_mathfunction(name, doc=""):
@@ -67,9 +76,14 @@ def _create_window_function(name, doc=''):
     _.__doc__ = 'Window function: ' + doc
     return _
 
+_lit_doc = """
+    Creates a :class:`Column` of literal value.
 
+    >>> df.select(lit(5).alias('height')).withColumn('spark_user', lit(True)).take(1)
+    [Row(height=5, spark_user=True)]
+    """
 _functions = {
-    'lit': 'Creates a :class:`Column` of literal value.',
+    'lit': _lit_doc,
     'col': 'Returns a :class:`Column` based on the given column name.',
     'column': 'Returns a :class:`Column` based on the given column name.',
     'asc': 'Returns a sort expression based on the ascending order of the given column name.',
@@ -95,10 +109,13 @@ _functions_1_4 = {
             '0.0 through pi.',
     'asin': 'Computes the sine inverse of the given value; the returned angle is in the range' +
             '-pi/2 through pi/2.',
-    'atan': 'Computes the tangent inverse of the given value.',
+    'atan': 'Computes the tangent inverse of the given value; the returned angle is in the range' +
+            '-pi/2 through pi/2',
     'cbrt': 'Computes the cube-root of the given value.',
     'ceil': 'Computes the ceiling of the given value.',
-    'cos': 'Computes the cosine of the given value.',
+    'cos': """Computes the cosine of the given value.
+
+           :param col: :class:`DoubleType` column, units in radians.""",
     'cosh': 'Computes the hyperbolic cosine of the given value.',
     'exp': 'Computes the exponential of the given value.',
     'expm1': 'Computes the exponential of the given value minus one.',
@@ -109,15 +126,33 @@ _functions_1_4 = {
     'rint': 'Returns the double value that is closest in value to the argument and' +
             ' is equal to a mathematical integer.',
     'signum': 'Computes the signum of the given value.',
-    'sin': 'Computes the sine of the given value.',
+    'sin': """Computes the sine of the given value.
+
+           :param col: :class:`DoubleType` column, units in radians.""",
     'sinh': 'Computes the hyperbolic sine of the given value.',
-    'tan': 'Computes the tangent of the given value.',
+    'tan': """Computes the tangent of the given value.
+
+           :param col: :class:`DoubleType` column, units in radians.""",
     'tanh': 'Computes the hyperbolic tangent of the given value.',
-    'toDegrees': '.. note:: Deprecated in 2.1, use degrees instead.',
-    'toRadians': '.. note:: Deprecated in 2.1, use radians instead.',
+    'toDegrees': '.. note:: Deprecated in 2.1, use :func:`degrees` instead.',
+    'toRadians': '.. note:: Deprecated in 2.1, use :func:`radians` instead.',
     'bitwiseNOT': 'Computes bitwise not.',
 }
 
+_collect_list_doc = """
+    Aggregate function: returns a list of objects with duplicates.
+
+    >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df2.agg(collect_list('age')).collect()
+    [Row(collect_list(age)=[2, 5, 5])]
+    """
+_collect_set_doc = """
+    Aggregate function: returns a set of objects with duplicate elements eliminated.
+
+    >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df2.agg(collect_set('age')).collect()
+    [Row(collect_set(age)=[5, 2])]
+    """
 _functions_1_6 = {
     # unary math functions
     'stddev': 'Aggregate function: returns the unbiased sample standard deviation of' +
@@ -131,9 +166,8 @@ _functions_1_6 = {
     'var_pop':  'Aggregate function: returns the population variance of the values in a group.',
     'skewness': 'Aggregate function: returns the skewness of the values in a group.',
     'kurtosis': 'Aggregate function: returns the kurtosis of the values in a group.',
-    'collect_list': 'Aggregate function: returns a list of objects with duplicates.',
-    'collect_set': 'Aggregate function: returns a set of objects with duplicate elements' +
-                   ' eliminated.',
+    'collect_list': _collect_list_doc,
+    'collect_set': _collect_set_doc
 }
 
 _functions_2_1 = {
@@ -147,7 +181,7 @@ _functions_2_1 = {
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
-             'polar coordinates (r, theta).',
+             'polar coordinates (r, theta). Units in radians.',
     'hypot': 'Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.',
     'pow': 'Returns the value of the first argument raised to the power of the second argument.',
 }
@@ -182,6 +216,12 @@ _window_functions = {
         """returns the relative rank (i.e. percentile) of rows within a window partition.""",
 }
 
+# Wraps deprecated functions (keys) with the messages (values).
+_functions_deprecated = {
+    'toDegrees': 'Deprecated in 2.1, use degrees instead.',
+    'toRadians': 'Deprecated in 2.1, use radians instead.',
+}
+
 for _name, _doc in _functions.items():
     globals()[_name] = since(1.3)(_create_function(_name, _doc))
 for _name, _doc in _functions_1_4.items():
@@ -194,23 +234,29 @@ for _name, _doc in _functions_1_6.items():
     globals()[_name] = since(1.6)(_create_function(_name, _doc))
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
+for _name, _message in _functions_deprecated.items():
+    globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
 del _name, _doc
 
 
 @since(1.3)
 def approxCountDistinct(col, rsd=None):
     """
-    .. note:: Deprecated in 2.1, use approx_count_distinct instead.
+    .. note:: Deprecated in 2.1, use :func:`approx_count_distinct` instead.
     """
+    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", DeprecationWarning)
     return approx_count_distinct(col, rsd)
 
 
 @since(2.1)
 def approx_count_distinct(col, rsd=None):
-    """Returns a new :class:`Column` for approximate distinct count of ``col``.
+    """Aggregate function: returns a new :class:`Column` for approximate distinct count of column `col`.
 
-    >>> df.agg(approx_count_distinct(df.age).alias('c')).collect()
-    [Row(c=2)]
+    :param rsd: maximum estimation error allowed (default = 0.05). For rsd < 0.01, it is more
+        efficient to use :func:`countDistinct`
+
+    >>> df.agg(approx_count_distinct(df.age).alias('distinct_ages')).collect()
+    [Row(distinct_ages=2)]
     """
     sc = SparkContext._active_spark_context
     if rsd is None:
@@ -267,8 +313,7 @@ def coalesce(*cols):
 
 @since(1.6)
 def corr(col1, col2):
-    """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1``
-    and ``col2``.
+    """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1`` and ``col2``.
 
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
@@ -282,8 +327,7 @@ def corr(col1, col2):
 
 @since(2.0)
 def covar_pop(col1, col2):
-    """Returns a new :class:`Column` for the population covariance of ``col1``
-    and ``col2``.
+    """Returns a new :class:`Column` for the population covariance of ``col1`` and ``col2``.
 
     >>> a = [1] * 10
     >>> b = [1] * 10
@@ -297,8 +341,7 @@ def covar_pop(col1, col2):
 
 @since(2.0)
 def covar_samp(col1, col2):
-    """Returns a new :class:`Column` for the sample covariance of ``col1``
-    and ``col2``.
+    """Returns a new :class:`Column` for the sample covariance of ``col1`` and ``col2``.
 
     >>> a = [1] * 10
     >>> b = [1] * 10
@@ -450,7 +493,7 @@ def monotonically_increasing_id():
 def nanvl(col1, col2):
     """Returns col1 if it is not NaN, or col2 if col1 is NaN.
 
-    Both inputs should be floating point columns (DoubleType or FloatType).
+    Both inputs should be floating point columns (:class:`DoubleType` or :class:`FloatType`).
 
     >>> df = spark.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
     >>> df.select(nanvl("a", "b").alias("r1"), nanvl(df.a, df.b).alias("r2")).collect()
@@ -460,10 +503,15 @@ def nanvl(col1, col2):
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
+@ignore_unicode_prefix
 @since(1.4)
 def rand(seed=None):
     """Generates a random column with independent and identically distributed (i.i.d.) samples
     from U[0.0, 1.0].
+
+    >>> df.withColumn('rand', rand(seed=42) * 3).collect()
+    [Row(age=2, name=u'Alice', rand=1.1568609015300986),
+     Row(age=5, name=u'Bob', rand=1.403379671529166)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -473,10 +521,15 @@ def rand(seed=None):
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(1.4)
 def randn(seed=None):
     """Generates a column with independent and identically distributed (i.i.d.) samples from
     the standard normal distribution.
+
+    >>> df.withColumn('randn', randn(seed=42)).collect()
+    [Row(age=2, name=u'Alice', randn=-0.7556247885860078),
+    Row(age=5, name=u'Bob', randn=-0.0861619008451133)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -760,7 +813,7 @@ def ntile(n):
 @since(1.5)
 def current_date():
     """
-    Returns the current date as a date column.
+    Returns the current date as a :class:`DateType` column.
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.current_date())
@@ -768,7 +821,7 @@ def current_date():
 
 def current_timestamp():
     """
-    Returns the current timestamp as a timestamp column.
+    Returns the current timestamp as a :class:`TimestampType` column.
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.current_timestamp())
@@ -787,8 +840,8 @@ def date_format(date, format):
     .. note:: Use when ever possible specialized functions like `year`. These benefit from a
         specialized implementation.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(date_format('a', 'MM/dd/yyy').alias('date')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(date_format('dt', 'MM/dd/yyy').alias('date')).collect()
     [Row(date=u'04/08/2015')]
     """
     sc = SparkContext._active_spark_context
@@ -800,8 +853,8 @@ def year(col):
     """
     Extract the year of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(year('a').alias('year')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(year('dt').alias('year')).collect()
     [Row(year=2015)]
     """
     sc = SparkContext._active_spark_context
@@ -813,8 +866,8 @@ def quarter(col):
     """
     Extract the quarter of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(quarter('a').alias('quarter')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(quarter('dt').alias('quarter')).collect()
     [Row(quarter=2)]
     """
     sc = SparkContext._active_spark_context
@@ -826,12 +879,25 @@ def month(col):
     """
     Extract the month of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(month('a').alias('month')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(month('dt').alias('month')).collect()
     [Row(month=4)]
    """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.month(_to_java_column(col)))
+
+
+@since(2.3)
+def dayofweek(col):
+    """
+    Extract the day of the week of a given date as integer.
+
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(dayofweek('dt').alias('day')).collect()
+    [Row(day=4)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.dayofweek(_to_java_column(col)))
 
 
 @since(1.5)
@@ -839,8 +905,8 @@ def dayofmonth(col):
     """
     Extract the day of the month of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(dayofmonth('a').alias('day')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(dayofmonth('dt').alias('day')).collect()
     [Row(day=8)]
     """
     sc = SparkContext._active_spark_context
@@ -852,8 +918,8 @@ def dayofyear(col):
     """
     Extract the day of the year of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(dayofyear('a').alias('day')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(dayofyear('dt').alias('day')).collect()
     [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
@@ -865,8 +931,8 @@ def hour(col):
     """
     Extract the hours of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
-    >>> df.select(hour('a').alias('hour')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
+    >>> df.select(hour('ts').alias('hour')).collect()
     [Row(hour=13)]
     """
     sc = SparkContext._active_spark_context
@@ -878,8 +944,8 @@ def minute(col):
     """
     Extract the minutes of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
-    >>> df.select(minute('a').alias('minute')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
+    >>> df.select(minute('ts').alias('minute')).collect()
     [Row(minute=8)]
     """
     sc = SparkContext._active_spark_context
@@ -891,8 +957,8 @@ def second(col):
     """
     Extract the seconds of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
-    >>> df.select(second('a').alias('second')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
+    >>> df.select(second('ts').alias('second')).collect()
     [Row(second=15)]
     """
     sc = SparkContext._active_spark_context
@@ -904,8 +970,8 @@ def weekofyear(col):
     """
     Extract the week number of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['a'])
-    >>> df.select(weekofyear(df.a).alias('week')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(weekofyear(df.dt).alias('week')).collect()
     [Row(week=15)]
     """
     sc = SparkContext._active_spark_context
@@ -917,9 +983,9 @@ def date_add(start, days):
     """
     Returns the date that is `days` days after `start`
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['d'])
-    >>> df.select(date_add(df.d, 1).alias('d')).collect()
-    [Row(d=datetime.date(2015, 4, 9))]
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(date_add(df.dt, 1).alias('next_date')).collect()
+    [Row(next_date=datetime.date(2015, 4, 9))]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.date_add(_to_java_column(start), days))
@@ -930,9 +996,9 @@ def date_sub(start, days):
     """
     Returns the date that is `days` days before `start`
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['d'])
-    >>> df.select(date_sub(df.d, 1).alias('d')).collect()
-    [Row(d=datetime.date(2015, 4, 7))]
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(date_sub(df.dt, 1).alias('prev_date')).collect()
+    [Row(prev_date=datetime.date(2015, 4, 7))]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.date_sub(_to_java_column(start), days))
@@ -956,9 +1022,9 @@ def add_months(start, months):
     """
     Returns the date that is `months` months after `start`
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['d'])
-    >>> df.select(add_months(df.d, 1).alias('d')).collect()
-    [Row(d=datetime.date(2015, 5, 8))]
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(add_months(df.dt, 1).alias('next_month')).collect()
+    [Row(next_month=datetime.date(2015, 5, 8))]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.add_months(_to_java_column(start), months))
@@ -969,8 +1035,8 @@ def months_between(date1, date2):
     """
     Returns the number of months between date1 and date2.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['t', 'd'])
-    >>> df.select(months_between(df.t, df.d).alias('months')).collect()
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['date1', 'date2'])
+    >>> df.select(months_between(df.date1, df.date2).alias('months')).collect()
     [Row(months=3.9495967...)]
     """
     sc = SparkContext._active_spark_context
@@ -1073,12 +1139,19 @@ def last_day(date):
     return Column(sc._jvm.functions.last_day(_to_java_column(date)))
 
 
+@ignore_unicode_prefix
 @since(1.5)
 def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     """
     Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
     representing the timestamp of that moment in the current system time zone in the given
     format.
+
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> time_df = spark.createDataFrame([(1428476400,)], ['unix_time'])
+    >>> time_df.select(from_unixtime('unix_time').alias('ts')).collect()
+    [Row(ts=u'2015-04-08 00:00:00')]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.from_unixtime(_to_java_column(timestamp), format))
@@ -1092,6 +1165,12 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
     locale, return null if fail.
 
     if `timestamp` is None, then it returns current timestamp.
+
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> time_df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> time_df.select(unix_timestamp('dt', 'yyyy-MM-dd').alias('unix_time')).collect()
+    [Row(unix_time=1428476400)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     sc = SparkContext._active_spark_context
     if timestamp is None:
@@ -1102,12 +1181,13 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 @since(1.5)
 def from_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
-    that corresponds to the same time of day in the given timezone.
+    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+    that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+    '2017-07-14 03:40:00.0'.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(from_utc_timestamp(df.t, "PST").alias('t')).collect()
-    [Row(t=datetime.datetime(1997, 2, 28, 2, 30))]
+    >>> df.select(from_utc_timestamp(df.t, "PST").alias('local_time')).collect()
+    [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.from_utc_timestamp(_to_java_column(timestamp), tz))
@@ -1116,12 +1196,13 @@ def from_utc_timestamp(timestamp, tz):
 @since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
-    another timestamp that corresponds to the same time of day in UTC.
+    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
+    zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+    '2017-07-14 01:40:00.0'.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(to_utc_timestamp(df.t, "PST").alias('t')).collect()
-    [Row(t=datetime.datetime(1997, 2, 28, 18, 30))]
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
+    [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
@@ -1376,7 +1457,9 @@ def substring(str, pos, len):
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
-    when str is Binary type
+    when str is Binary type.
+
+    .. note:: The position is not zero based, but 1 based index.
 
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
@@ -1727,6 +1810,71 @@ def posexplode(col):
     return Column(jc)
 
 
+@since(2.3)
+def explode_outer(col):
+    """Returns a new row for each element in the given array or map.
+    Unlike explode, if the array/map is null or empty then null is produced.
+
+    >>> df = spark.createDataFrame(
+    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
+    ...     ("id", "an_array", "a_map")
+    ... )
+    >>> df.select("id", "an_array", explode_outer("a_map")).show()
+    +---+----------+----+-----+
+    | id|  an_array| key|value|
+    +---+----------+----+-----+
+    |  1|[foo, bar]|   x|  1.0|
+    |  2|        []|null| null|
+    |  3|      null|null| null|
+    +---+----------+----+-----+
+
+    >>> df.select("id", "a_map", explode_outer("an_array")).show()
+    +---+-------------+----+
+    | id|        a_map| col|
+    +---+-------------+----+
+    |  1|Map(x -> 1.0)| foo|
+    |  1|Map(x -> 1.0)| bar|
+    |  2|        Map()|null|
+    |  3|         null|null|
+    +---+-------------+----+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.explode_outer(_to_java_column(col))
+    return Column(jc)
+
+
+@since(2.3)
+def posexplode_outer(col):
+    """Returns a new row for each element with position in the given array or map.
+    Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
+
+    >>> df = spark.createDataFrame(
+    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
+    ...     ("id", "an_array", "a_map")
+    ... )
+    >>> df.select("id", "an_array", posexplode_outer("a_map")).show()
+    +---+----------+----+----+-----+
+    | id|  an_array| pos| key|value|
+    +---+----------+----+----+-----+
+    |  1|[foo, bar]|   0|   x|  1.0|
+    |  2|        []|null|null| null|
+    |  3|      null|null|null| null|
+    +---+----------+----+----+-----+
+    >>> df.select("id", "a_map", posexplode_outer("an_array")).show()
+    +---+-------------+----+----+
+    | id|        a_map| pos| col|
+    +---+-------------+----+----+
+    |  1|Map(x -> 1.0)|   0| foo|
+    |  1|Map(x -> 1.0)|   1| bar|
+    |  2|        Map()|null|null|
+    |  3|         null|null|null|
+    +---+-------------+----+----+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.posexplode_outer(_to_java_column(col))
+    return Column(jc)
+
+
 @ignore_unicode_prefix
 @since(1.6)
 def get_json_object(col, path):
@@ -1769,19 +1917,24 @@ def json_tuple(col, *fields):
 @since(2.1)
 def from_json(col, schema, options={}):
     """
-    Parses a column containing a JSON string into a [[StructType]] or [[ArrayType]]
-    of [[StructType]]s with the specified schema. Returns `null`, in the case of an unparseable
-    string.
+    Parses a column containing a JSON string into a :class:`StructType` or :class:`ArrayType`
+    of :class:`StructType`\\s with the specified schema. Returns `null`, in the case of an
+    unparseable string.
 
     :param col: string column in json format
-    :param schema: a StructType or ArrayType of StructType to use when parsing the json column
+    :param schema: a StructType or ArrayType of StructType to use when parsing the json column.
     :param options: options to control parsing. accepts the same options as the json datasource
+
+    .. note:: Since Spark 2.3, the DDL-formatted string or a JSON format string is also
+              supported for ``schema``.
 
     >>> from pyspark.sql.types import *
     >>> data = [(1, '''{"a": 1}''')]
     >>> schema = StructType([StructField("a", IntegerType())])
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
+    >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
     [Row(json=Row(a=1))]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
@@ -1791,7 +1944,9 @@ def from_json(col, schema, options={}):
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.from_json(_to_java_column(col), schema.json(), options)
+    if isinstance(schema, DataType):
+        schema = schema.json()
+    jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
     return Column(jc)
 
 
@@ -1799,10 +1954,12 @@ def from_json(col, schema, options={}):
 @since(2.1)
 def to_json(col, options={}):
     """
-    Converts a column containing a [[StructType]] or [[ArrayType]] of [[StructType]]s into a
-    JSON string. Throws an exception, in the case of an unsupported type.
+    Converts a column containing a :class:`StructType`, :class:`ArrayType` of
+    :class:`StructType`\\s, a :class:`MapType` or :class:`ArrayType` of :class:`MapType`\\s
+    into a JSON string. Throws an exception, in the case of an unsupported type.
 
-    :param col: name of column containing the struct or array of the structs
+    :param col: name of column containing the struct, array of the structs, the map or
+        array of the maps.
     :param options: options to control converting. accepts the same options as the json datasource
 
     >>> from pyspark.sql import Row
@@ -1815,6 +1972,14 @@ def to_json(col, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
     [Row(json=u'[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]')]
+    >>> data = [(1, {"name": "Alice"})]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'{"name":"Alice"}')]
+    >>> data = [(1, [{"name": "Alice"}, {"name": "Bob"}])]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'[{"name":"Alice"},{"name":"Bob"}]')]
     """
 
     sc = SparkContext._active_spark_context
@@ -1855,6 +2020,46 @@ def sort_array(col, asc=True):
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
+@since(2.3)
+def map_keys(col):
+    """
+    Collection function: Returns an unordered array containing the keys of the map.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_keys
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_keys("data").alias("keys")).show()
+    +------+
+    |  keys|
+    +------+
+    |[1, 2]|
+    +------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_keys(_to_java_column(col)))
+
+
+@since(2.3)
+def map_values(col):
+    """
+    Collection function: Returns an unordered array containing the values of the map.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_values
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_values("data").alias("values")).show()
+    +------+
+    |values|
+    +------+
+    |[a, b]|
+    +------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_values(_to_java_column(col)))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 def _wrap_function(sc, func, returnType):
@@ -1864,27 +2069,47 @@ def _wrap_function(sc, func, returnType):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
+class PythonUdfType(object):
+    # row-at-a-time UDFs
+    NORMAL_UDF = 0
+    # scalar vectorized UDFs
+    PANDAS_UDF = 1
+    # grouped vectorized UDFs
+    PANDAS_GROUPED_UDF = 2
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType, name=None):
+    def __init__(self, func, returnType, name=None, pythonUdfType=PythonUdfType.NORMAL_UDF):
         if not callable(func):
             raise TypeError(
                 "Not a function or callable (__call__ is not defined): "
                 "{0}".format(type(func)))
 
         self.func = func
-        self.returnType = (
-            returnType if isinstance(returnType, DataType)
-            else _parse_datatype_string(returnType))
+        self._returnType = returnType
         # Stores UserDefinedPythonFunctions jobj, once initialized
+        self._returnType_placeholder = None
         self._judf_placeholder = None
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
+        self.pythonUdfType = pythonUdfType
+
+    @property
+    def returnType(self):
+        # This makes sure this is called after SparkContext is initialized.
+        # ``_parse_datatype_string`` accesses to JVM for parsing a DDL formatted string.
+        if self._returnType_placeholder is None:
+            if isinstance(self._returnType, DataType):
+                self._returnType_placeholder = self._returnType
+            else:
+                self._returnType_placeholder = _parse_datatype_string(self._returnType)
+        return self._returnType_placeholder
 
     @property
     def _judf(self):
@@ -1905,7 +2130,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt)
+            self._name, wrapped_func, jdt, self.pythonUdfType)
         return judf
 
     def __call__(self, *cols):
@@ -1917,23 +2142,68 @@ class UserDefinedFunction(object):
         """
         Wrap this udf with a function and attach docstring from func
         """
-        @functools.wraps(self.func)
+
+        # It is possible for a callable instance without __name__ attribute or/and
+        # __module__ attribute to be wrapped here. For example, functools.partial. In this case,
+        # we should avoid wrapping the attributes from the wrapped function to the wrapper
+        # function. So, we take out these attribute names from the default names to set and
+        # then manually assign it after being wrapped.
+        assignments = tuple(
+            a for a in functools.WRAPPER_ASSIGNMENTS if a != '__name__' and a != '__module__')
+
+        @functools.wraps(self.func, assigned=assignments)
         def wrapper(*args):
             return self(*args)
 
+        wrapper.__name__ = self._name
+        wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
+                              else self.func.__class__.__module__)
+
         wrapper.func = self.func
         wrapper.returnType = self.returnType
+        wrapper.pythonUdfType = self.pythonUdfType
 
         return wrapper
 
 
+def _create_udf(f, returnType, pythonUdfType):
+
+    def _udf(f, returnType=StringType(), pythonUdfType=pythonUdfType):
+        if pythonUdfType == PythonUdfType.PANDAS_UDF:
+            import inspect
+            argspec = inspect.getargspec(f)
+            if len(argspec.args) == 0 and argspec.varargs is None:
+                raise ValueError(
+                    "0-arg pandas_udfs are not supported. "
+                    "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
+                )
+        udf_obj = UserDefinedFunction(f, returnType, pythonUdfType=pythonUdfType)
+        return udf_obj._wrapped()
+
+    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(_udf, returnType=return_type, pythonUdfType=pythonUdfType)
+    else:
+        return _udf(f=f, returnType=returnType, pythonUdfType=pythonUdfType)
+
+
 @since(1.3)
 def udf(f=None, returnType=StringType()):
-    """Creates a :class:`Column` expression representing a user defined function (UDF).
+    """Creates a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
         duplicate invocations may be eliminated or the function may even be invoked more times than
         it is present in the query.
+
+    .. note:: The user-defined functions do not support conditional execution by using them with
+        SQL conditional expressions such as `when` or `if`. The functions still apply on all rows no
+        matter the conditions are met or not. So the output is correct if the functions can be
+        correctly run on all rows without failure. If the functions can cause runtime failure on the
+        rows that do not satisfy the conditions, the suggested workaround is to incorporate the
+        condition logic into the functions.
 
     :param f: python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
@@ -1958,18 +2228,85 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    def _udf(f, returnType=StringType()):
-        udf_obj = UserDefinedFunction(f, returnType)
-        return udf_obj._wrapped()
+    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.NORMAL_UDF)
 
-    # decorator @udf, @udf() or @udf(dataType())
-    if f is None or isinstance(f, (str, DataType)):
-        # If DataType has been passed as a positional argument
-        # for decorator use it as a returnType
-        return_type = f or returnType
-        return functools.partial(_udf, returnType=return_type)
-    else:
-        return _udf(f=f, returnType=returnType)
+
+@since(2.3)
+def pandas_udf(f=None, returnType=StringType()):
+    """
+    Creates a vectorized user defined function (UDF).
+
+    :param f: user-defined function. A python function if used as a standalone function
+    :param returnType: a :class:`pyspark.sql.types.DataType` object
+
+    The user-defined function can define one of the following transformations:
+
+    1. One or more `pandas.Series` -> A `pandas.Series`
+
+       This udf is used with :meth:`pyspark.sql.DataFrame.withColumn` and
+       :meth:`pyspark.sql.DataFrame.select`.
+       The returnType should be a primitive data type, e.g., `DoubleType()`.
+       The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
+
+       >>> from pyspark.sql.types import IntegerType, StringType
+       >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
+       >>> @pandas_udf(returnType=StringType())
+       ... def to_upper(s):
+       ...     return s.str.upper()
+       ...
+       >>> @pandas_udf(returnType="integer")
+       ... def add_one(x):
+       ...     return x + 1
+       ...
+       >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+       >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")) \\
+       ...     .show()  # doctest: +SKIP
+       +----------+--------------+------------+
+       |slen(name)|to_upper(name)|add_one(age)|
+       +----------+--------------+------------+
+       |         8|      JOHN DOE|          22|
+       +----------+--------------+------------+
+
+    2. A `pandas.DataFrame` -> A `pandas.DataFrame`
+
+       This udf is only used with :meth:`pyspark.sql.GroupedData.apply`.
+       The returnType should be a :class:`StructType` describing the schema of the returned
+       `pandas.DataFrame`.
+
+       >>> df = spark.createDataFrame(
+       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+       ...     ("id", "v"))
+       >>> @pandas_udf(returnType=df.schema)
+       ... def normalize(pdf):
+       ...     v = pdf.v
+       ...     return pdf.assign(v=(v - v.mean()) / v.std())
+       >>> df.groupby('id').apply(normalize).show()  # doctest: +SKIP
+       +---+-------------------+
+       | id|                  v|
+       +---+-------------------+
+       |  1|-0.7071067811865475|
+       |  1| 0.7071067811865475|
+       |  2|-0.8320502943378437|
+       |  2|-0.2773500981126146|
+       |  2| 1.1094003924504583|
+       +---+-------------------+
+
+       .. note:: This type of udf cannot be used with functions such as `withColumn` or `select`
+                 because it defines a `DataFrame` transformation rather than a `Column`
+                 transformation.
+
+       .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
+
+    .. note:: The user-defined function must be deterministic.
+
+    .. note:: The user-defined functions do not support conditional execution by using them with
+        SQL conditional expressions such as `when` or `if`. The functions still apply on all rows no
+        matter the conditions are met or not. So the output is correct if the functions can be
+        correctly run on all rows without failure. If the functions can cause runtime failure on the
+        rows that do not satisfy the conditions, the suggested workaround is to incorporate the
+        condition logic into the functions.
+    """
+    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.PANDAS_UDF)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
@@ -1990,7 +2327,7 @@ def _test():
     sc = spark.sparkContext
     globs['sc'] = sc
     globs['spark'] = spark
-    globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
+    globs['df'] = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)

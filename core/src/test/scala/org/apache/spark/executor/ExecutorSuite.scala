@@ -25,6 +25,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
@@ -32,7 +33,7 @@ import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -41,7 +42,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.{FakeTask, ResultTask, TaskDescription}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.UninterruptibleThread
@@ -233,6 +234,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val mockMemoryManager = mock[MemoryManager]
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.serializer).thenReturn(serializer)
+    when(mockEnv.serializerManager).thenReturn(mock[SerializerManager])
     when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
     when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
     when(mockEnv.memoryManager).thenReturn(mockMemoryManager)

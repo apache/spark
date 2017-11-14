@@ -29,12 +29,14 @@ import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
@@ -228,7 +230,6 @@ object JdbcUtils extends Logging {
       case java.sql.Types.TIMESTAMP     => TimestampType
       case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
                                         => TimestampType
-      case -101                         => TimestampType // Value for Timestamp with Time Zone in Oracle
       case java.sql.Types.TINYINT       => IntegerType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
@@ -266,10 +267,14 @@ object JdbcUtils extends Logging {
   /**
    * Takes a [[ResultSet]] and returns its Catalyst schema.
    *
+   * @param alwaysNullable If true, all the columns are nullable.
    * @return A [[StructType]] giving the Catalyst schema.
    * @throws SQLException if the schema contains an unsupported type.
    */
-  def getSchema(resultSet: ResultSet, dialect: JdbcDialect): StructType = {
+  def getSchema(
+      resultSet: ResultSet,
+      dialect: JdbcDialect,
+      alwaysNullable: Boolean = false): StructType = {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
@@ -290,14 +295,16 @@ object JdbcUtils extends Logging {
             rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" => true
         }
       }
-      val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
-      val metadata = new MetadataBuilder()
-        .putString("name", columnName)
-        .putLong("scale", fieldScale)
+      val nullable = if (alwaysNullable) {
+        true
+      } else {
+        rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+      }
+      val metadata = new MetadataBuilder().putLong("scale", fieldScale)
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-      fields(i) = StructField(columnName, columnType, nullable, metadata.build())
+      fields(i) = StructField(columnName, columnType, nullable)
       i = i + 1
     }
     new StructType(fields)
@@ -449,8 +456,9 @@ object JdbcUtils extends Logging {
 
         case StringType =>
           (array: Object) =>
-            array.asInstanceOf[Array[java.lang.String]]
-              .map(UTF8String.fromString)
+            // some underling types are not String such as uuid, inet, cidr, etc.
+            array.asInstanceOf[Array[java.lang.Object]]
+              .map(obj => if (obj == null) null else UTF8String.fromString(obj.toString))
 
         case DateType =>
           (array: Object) =>
@@ -741,14 +749,8 @@ object JdbcUtils extends Logging {
     val nameEquality = df.sparkSession.sessionState.conf.resolver
 
     // checks duplicate columns in the user specified column types.
-    userSchema.fieldNames.foreach { col =>
-      val duplicatesCols = userSchema.fieldNames.filter(nameEquality(_, col))
-      if (duplicatesCols.size >= 2) {
-        throw new AnalysisException(
-          "Found duplicate column(s) in createTableColumnTypes option value: " +
-            duplicatesCols.mkString(", "))
-      }
-    }
+    SchemaUtils.checkColumnNameDuplication(
+      userSchema.map(_.name), "in the createTableColumnTypes option value", nameEquality)
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
@@ -762,6 +764,33 @@ object JdbcUtils extends Logging {
     val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
     val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
     if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
+  }
+
+  /**
+   * Parses the user specified customSchema option value to DataFrame schema, and
+   * returns a schema that is replaced by the custom schema's dataType if column name is matched.
+   */
+  def getCustomSchema(
+      tableSchema: StructType,
+      customSchema: String,
+      nameEquality: Resolver): StructType = {
+    if (null != customSchema && customSchema.nonEmpty) {
+      val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
+
+      SchemaUtils.checkColumnNameDuplication(
+        userSchema.map(_.name), "in the customSchema option value", nameEquality)
+
+      // This is resolved by names, use the custom filed dataType to replace the default dataType.
+      val newSchema = tableSchema.map { col =>
+        userSchema.find(f => nameEquality(f.name, col.name)) match {
+          case Some(c) => col.copy(dataType = c.dataType)
+          case None => col
+        }
+      }
+      StructType(newSchema)
+    } else {
+      tableSchema
+    }
   }
 
   /**
@@ -788,7 +817,7 @@ object JdbcUtils extends Logging {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.foreachPartition(iterator => savePartition(
+    repartitionedDF.rdd.foreachPartition(iterator => savePartition(
       getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel)
     )
   }

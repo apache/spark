@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -89,7 +88,7 @@ case class ExternalRDD[T](
 
   override protected def stringArgs: Iterator[Any] = Iterator(output)
 
-  @transient override def computeStats(conf: SQLConf): Statistics = Statistics(
+  override def computeStats(): Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
@@ -126,7 +125,8 @@ case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     outputPartitioning: Partitioning = UnknownPartitioning(0),
-    outputOrdering: Seq[SortOrder] = Nil)(session: SparkSession)
+    outputOrdering: Seq[SortOrder] = Nil,
+    override val isStreaming: Boolean = false)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
@@ -151,13 +151,14 @@ case class LogicalRDD(
       output.map(rewrite),
       rdd,
       rewrittenPartitioning,
-      rewrittenOrdering
+      rewrittenOrdering,
+      isStreaming
     )(session).asInstanceOf[this.type]
   }
 
-  override protected def stringArgs: Iterator[Any] = Iterator(output)
+  override protected def stringArgs: Iterator[Any] = Iterator(output, isStreaming)
 
-  @transient override def computeStats(conf: SQLConf): Statistics = Statistics(
+  override def computeStats(): Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)

@@ -214,7 +214,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Pmod(left, right), convert(1))
       checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
-      checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
+      checkEvaluation(Pmod(left, Literal(convert(0))), null)  // mod by 0
     }
     checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
@@ -223,6 +223,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
+
+    // mod by 0
+    checkEvaluation(Pmod(Literal(-7), Literal(0)), null)
+    checkEvaluation(Pmod(Literal(7.2D), Literal(0D)), null)
+    checkEvaluation(Pmod(Literal(7.2F), Literal(0F)), null)
+    checkEvaluation(Pmod(Literal(2.toByte), Literal(0.toByte)), null)
+    checkEvaluation(Pmod(positiveShort, 0.toShort), null)
   }
 
   test("function least") {

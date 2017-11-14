@@ -22,8 +22,8 @@ import java.util.{List => JList}
 import java.util.NoSuchElementException
 
 import scala.annotation.varargs
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -486,6 +486,45 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
         values.map(DoubleParam.jValueDecode).toArray
       case _ =>
         throw new IllegalArgumentException(s"Cannot decode $json to Array[Double].")
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Specialized version of `Param[Array[Array[Double]]]` for Java.
+ */
+@DeveloperApi
+class DoubleArrayArrayParam(
+    parent: Params,
+    name: String,
+    doc: String,
+    isValid: Array[Array[Double]] => Boolean)
+  extends Param[Array[Array[Double]]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  /** Creates a param pair with a `java.util.List` of values (for Java and Python). */
+  def w(value: java.util.List[java.util.List[java.lang.Double]]): ParamPair[Array[Array[Double]]] =
+    w(value.asScala.map(_.asScala.map(_.asInstanceOf[Double]).toArray).toArray)
+
+  override def jsonEncode(value: Array[Array[Double]]): String = {
+    import org.json4s.JsonDSL._
+    compact(render(value.toSeq.map(_.toSeq.map(DoubleParam.jValueEncode))))
+  }
+
+  override def jsonDecode(json: String): Array[Array[Double]] = {
+    parse(json) match {
+      case JArray(values) =>
+        values.map {
+          case JArray(values) =>
+            values.map(DoubleParam.jValueDecode).toArray
+          case _ =>
+            throw new IllegalArgumentException(s"Cannot decode $json to Array[Array[Double]].")
+        }.toArray
+      case _ =>
+        throw new IllegalArgumentException(s"Cannot decode $json to Array[Array[Double]].")
     }
   }
 }

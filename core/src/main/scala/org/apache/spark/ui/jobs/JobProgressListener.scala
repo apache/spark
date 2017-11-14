@@ -329,13 +329,12 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val taskInfo = taskStart.taskInfo
     if (taskInfo != null) {
-      val metrics = TaskMetrics.empty
       val stageData = stageIdToData.getOrElseUpdate((taskStart.stageId, taskStart.stageAttemptId), {
         logWarning("Task start for unknown stage " + taskStart.stageId)
         new StageUIData
       })
       stageData.numActiveTasks += 1
-      stageData.taskData.put(taskInfo.taskId, TaskUIData(taskInfo, Some(metrics)))
+      stageData.taskData.put(taskInfo.taskId, TaskUIData(taskInfo))
     }
     for (
       activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskStart.stageId);
@@ -375,6 +374,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         case kill: TaskKilled =>
           execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
             kill.reason, execSummary.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
+        case commitDenied: TaskCommitDenied =>
+          execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
+            commitDenied.toErrorString, execSummary.reasonToNumKilled.getOrElse(
+              commitDenied.toErrorString, 0) + 1)
         case _ =>
           execSummary.failedTasks += 1
       }
@@ -391,6 +394,11 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             stageData.reasonToNumKilled = stageData.reasonToNumKilled.updated(
               kill.reason, stageData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
             Some(kill.toErrorString)
+          case commitDenied: TaskCommitDenied =>
+            stageData.reasonToNumKilled = stageData.reasonToNumKilled.updated(
+              commitDenied.toErrorString, stageData.reasonToNumKilled.getOrElse(
+                commitDenied.toErrorString, 0) + 1)
+            Some(commitDenied.toErrorString)
           case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
             Some(e.toErrorString)
@@ -405,7 +413,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         updateAggregateMetrics(stageData, info.executorId, m, oldMetrics)
       }
 
-      val taskData = stageData.taskData.getOrElseUpdate(info.taskId, TaskUIData(info, None))
+      val taskData = stageData.taskData.getOrElseUpdate(info.taskId, TaskUIData(info))
       taskData.updateTaskInfo(info)
       taskData.updateTaskMetrics(taskMetrics)
       taskData.errorMessage = errorMessage
@@ -424,10 +432,15 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         jobData.numActiveTasks -= 1
         taskEnd.reason match {
           case Success =>
+            jobData.completedIndices.add((taskEnd.stageId, info.index))
             jobData.numCompletedTasks += 1
           case kill: TaskKilled =>
             jobData.reasonToNumKilled = jobData.reasonToNumKilled.updated(
               kill.reason, jobData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
+          case commitDenied: TaskCommitDenied =>
+            jobData.reasonToNumKilled = jobData.reasonToNumKilled.updated(
+              commitDenied.toErrorString, jobData.reasonToNumKilled.getOrElse(
+                commitDenied.toErrorString, 0) + 1)
           case _ =>
             jobData.numFailedTasks += 1
         }

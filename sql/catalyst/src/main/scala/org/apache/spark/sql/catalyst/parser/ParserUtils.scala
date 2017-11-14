@@ -32,7 +32,7 @@ object ParserUtils {
   /** Get the command which created the token. */
   def command(ctx: ParserRuleContext): String = {
     val stream = ctx.getStart.getInputStream
-    stream.getText(Interval.of(0, stream.size()))
+    stream.getText(Interval.of(0, stream.size() - 1))
   }
 
   def operationNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
@@ -58,7 +58,7 @@ object ParserUtils {
   /** Get all the text which comes after the given token. */
   def remainder(token: Token): String = {
     val stream = token.getInputStream
-    val interval = Interval.of(token.getStopIndex + 1, stream.size())
+    val interval = Interval.of(token.getStopIndex + 1, stream.size() - 1)
     stream.getText(interval)
   }
 
@@ -176,6 +176,12 @@ object ParserUtils {
     }
     sb.toString()
   }
+
+  /** the column name pattern in quoted regex without qualifier */
+  val escapedIdentifier = "`(.+)`".r
+
+  /** the column name pattern in quoted regex with qualifier */
+  val qualifiedEscapedIdentifier = ("(.+)" + """.""" + "`(.+)`").r
 
   /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
   implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {

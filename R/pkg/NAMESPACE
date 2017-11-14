@@ -63,6 +63,7 @@ exportMethods("glm",
               "spark.als",
               "spark.kstest",
               "spark.logit",
+              "spark.decisionTree",
               "spark.randomForest",
               "spark.gbt",
               "spark.bisectingKmeans",
@@ -74,7 +75,8 @@ exportMethods("glm",
 # Job group lifecycle management methods
 export("setJobGroup",
        "clearJobGroup",
-       "cancelJobGroup")
+       "cancelJobGroup",
+       "setJobDescription")
 
 # Export Utility methods
 export("setLogLevel")
@@ -84,6 +86,7 @@ exportClasses("SparkDataFrame")
 exportMethods("arrange",
               "as.data.frame",
               "attach",
+              "broadcast",
               "cache",
               "checkpoint",
               "coalesce",
@@ -166,6 +169,7 @@ exportMethods("arrange",
               "transform",
               "union",
               "unionAll",
+              "unionByName",
               "unique",
               "unpersist",
               "where",
@@ -228,6 +232,7 @@ exportMethods("%<=>%",
               "date_sub",
               "datediff",
               "dayofmonth",
+              "dayofweek",
               "dayofyear",
               "decode",
               "dense_rank",
@@ -283,6 +288,8 @@ exportMethods("%<=>%",
               "lower",
               "lpad",
               "ltrim",
+              "map_keys",
+              "map_values",
               "max",
               "md5",
               "mean",
@@ -355,6 +362,7 @@ exportMethods("%<=>%",
               "to_utc_timestamp",
               "translate",
               "trim",
+              "trunc",
               "unbase64",
               "unhex",
               "unix_timestamp",
@@ -413,6 +421,8 @@ export("as.DataFrame",
        "print.summary.GeneralizedLinearRegressionModel",
        "read.ml",
        "print.summary.KSTest",
+       "print.summary.DecisionTreeRegressionModel",
+       "print.summary.DecisionTreeClassificationModel",
        "print.summary.RandomForestRegressionModel",
        "print.summary.RandomForestClassificationModel",
        "print.summary.GBTRegressionModel",
@@ -423,6 +433,7 @@ export("structField",
        "structField.character",
        "print.structField",
        "structType",
+       "structType.character",
        "structType.jobj",
        "structType.structField",
        "print.structType")
@@ -451,11 +462,14 @@ S3method(print, structField)
 S3method(print, structType)
 S3method(print, summary.GeneralizedLinearRegressionModel)
 S3method(print, summary.KSTest)
+S3method(print, summary.DecisionTreeRegressionModel)
+S3method(print, summary.DecisionTreeClassificationModel)
 S3method(print, summary.RandomForestRegressionModel)
 S3method(print, summary.RandomForestClassificationModel)
 S3method(print, summary.GBTRegressionModel)
 S3method(print, summary.GBTClassificationModel)
 S3method(structField, character)
 S3method(structField, jobj)
+S3method(structType, character)
 S3method(structType, jobj)
 S3method(structType, structField)

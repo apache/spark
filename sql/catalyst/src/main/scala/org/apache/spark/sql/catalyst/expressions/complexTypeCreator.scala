@@ -32,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
@@ -41,12 +41,13 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
+  }
 
   override def dataType: ArrayType = {
     ArrayType(
-      children.headOption.map(_.dataType).getOrElse(NullType),
+      children.headOption.map(_.dataType).getOrElse(StringType),
       containsNull = children.exists(_.nullable))
   }
 
@@ -93,7 +94,7 @@ private [sql] object GenArrayData {
     if (!ctx.isPrimitiveType(elementType)) {
       val genericArrayClass = classOf[GenericArrayData].getName
       ctx.addMutableState("Object[]", arrayName,
-        s"this.$arrayName = new Object[${numElements}];")
+        s"$arrayName = new Object[$numElements];")
 
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
@@ -119,7 +120,7 @@ private [sql] object GenArrayData {
         UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
-      ctx.addMutableState("UnsafeArrayData", arrayDataName, "");
+      ctx.addMutableState("UnsafeArrayData", arrayDataName, "")
 
       val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
@@ -156,7 +157,7 @@ private [sql] object GenArrayData {
  */
 @ExpressionDescription(
   usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
        {1.0:"2",3.0:"4"}
@@ -169,13 +170,16 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects a positive even number of arguments.")
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName expects a positive even number of arguments.")
     } else if (keys.map(_.dataType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure("The given keys of function map should all be the same " +
-        "type, but they are " + keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+      TypeCheckResult.TypeCheckFailure(
+        "The given keys of function map should all be the same type, but they are " +
+          keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
     } else if (values.map(_.dataType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure("The given values of function map should all be the same " +
-        "type, but they are " + values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+      TypeCheckResult.TypeCheckFailure(
+        "The given values of function map should all be the same type, but they are " +
+          values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -183,8 +187,8 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def dataType: DataType = {
     MapType(
-      keyType = keys.headOption.map(_.dataType).getOrElse(NullType),
-      valueType = values.headOption.map(_.dataType).getOrElse(NullType),
+      keyType = keys.headOption.map(_.dataType).getOrElse(StringType),
+      valueType = values.headOption.map(_.dataType).getOrElse(StringType),
       valueContainsNull = values.exists(_.nullable))
   }
 
@@ -260,6 +264,9 @@ object CreateStruct extends FunctionBuilder {
       null,
       "struct",
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
+      "",
+      "",
+      "",
       "")
     ("struct", (info, this))
   }
@@ -292,14 +299,17 @@ trait CreateNamedStructLike extends Expression {
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.size % 2 != 0) {
+    if (children.length < 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least one argument")
+    } else if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
     } else {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
       if (invalidNames.nonEmpty) {
         TypeCheckResult.TypeCheckFailure(
           "Only foldable StringType expressions are allowed to appear at odd position, got:" +
-          s" ${invalidNames.mkString(",")}")
+            s" ${invalidNames.mkString(",")}")
       } else if (!names.contains(null)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
@@ -329,7 +339,7 @@ trait CreateNamedStructLike extends Expression {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
        {"a":1,"b":2,"c":3}
@@ -340,7 +350,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+    ctx.addMutableState("Object[]", values, s"$values = null;")
 
     ev.copy(code = s"""
       $values = new Object[${valExprs.size}];""" +
@@ -357,7 +367,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
         }) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
+        $values = null;
       """, isNull = "false")
   }
 
@@ -386,7 +396,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateName
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
        map("a":"1","b":"2","c":"3")

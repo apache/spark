@@ -32,7 +32,8 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class SparkAppConfig(
       sparkProperties: Seq[(String, String)],
-      ioEncryptionKey: Option[Array[Byte]])
+      ioEncryptionKey: Option[Array[Byte]],
+      hadoopDelegationCreds: Option[Array[Byte]])
     extends CoarseGrainedClusterMessage
 
   case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
@@ -83,6 +84,9 @@ private[spark] object CoarseGrainedClusterMessages {
   case object StopExecutors extends CoarseGrainedClusterMessage
 
   case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
+    extends CoarseGrainedClusterMessage
+
+  case class RemoveWorker(workerId: String, host: String, message: String)
     extends CoarseGrainedClusterMessage
 
   case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage

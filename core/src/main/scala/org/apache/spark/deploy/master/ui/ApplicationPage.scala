@@ -100,11 +100,11 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
       <div class="row-fluid"> <!-- Executors -->
         <div class="span12">
-          <h4> Executor Summary </h4>
+          <h4> Executor Summary ({allExecutors.length}) </h4>
           {executorsTable}
           {
             if (removedExecutors.nonEmpty) {
-              <h4> Removed Executors </h4> ++
+              <h4> Removed Executors ({removedExecutors.length}) </h4> ++
               removedExecutorsTable
             }
           }
@@ -125,10 +125,10 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       <td>{executor.memory}</td>
       <td>{executor.state}</td>
       <td>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stdout</a>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stderr</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stderr"}>stderr</a>
       </td>
     </tr>
   }

@@ -17,15 +17,17 @@
 
 package org.apache.spark.mllib.linalg
 
+import scala.reflect.ClassTag
 import scala.util.Random
 
 import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
 import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.serializer.KryoSerializer
 
 class VectorsSuite extends SparkFunSuite with Logging {
 
@@ -33,6 +35,21 @@ class VectorsSuite extends SparkFunSuite with Logging {
   val n = 4
   val indices = Array(0, 2, 3)
   val values = Array(0.1, 0.3, 0.4)
+
+  test("kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
+    val ser = new KryoSerializer(conf).newInstance()
+    def check[T: ClassTag](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+
+    val desVec = Vectors.dense(arr).asInstanceOf[DenseVector]
+    val sparVec = Vectors.sparse(n, indices, values).asInstanceOf[SparseVector]
+    check(desVec)
+    check(sparVec)
+  }
 
   test("dense vector construction with varargs") {
     val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
@@ -351,11 +368,21 @@ class VectorsSuite extends SparkFunSuite with Logging {
     assert(dv0s.numActives === 2)
     assert(dv0s === dv0)
 
+    assert(dv0.toSparseWithSize(dv0.numNonzeros) === dv0)
+    val dv0s2 = dv0.toSparseWithSize(dv0.numNonzeros)
+    assert(dv0s2.numActives === 2)
+    assert(dv0s2 === dv0s)
+
     val sv0 = Vectors.sparse(4, Array(0, 1, 2), Array(0.0, 2.0, 3.0))
     assert(sv0.toDense === sv0)
     val sv0s = sv0.toSparse
     assert(sv0s.numActives === 2)
     assert(sv0s === sv0)
+
+    assert(sv0.toSparseWithSize(sv0.numNonzeros) === sv0)
+    val sv0s2 = sv0.toSparseWithSize(sv0.numNonzeros)
+    assert(sv0s2.numActives === 2)
+    assert(sv0s2 === sv0s)
   }
 
   test("Vector.compressed") {

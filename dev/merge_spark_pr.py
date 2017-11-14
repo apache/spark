@@ -17,10 +17,11 @@
 # limitations under the License.
 #
 
-# Utility for creating well-formed pull request merges and pushing them to Apache.
-#   usage: ./apache-pr-merge.py    (see config env vars below)
+# Utility for creating well-formed pull request merges and pushing them to Apache
+# Spark.
+#   usage: ./merge_spark_pr.py    (see config env vars below)
 #
-# This utility assumes you already have local a Spark git folder and that you
+# This utility assumes you already have a local Spark git folder and that you
 # have added remotes corresponding to both (i) the github apache Spark
 # mirror and (ii) the apache git repo.
 

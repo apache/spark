@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
+import org.apache.spark.sql.types.DataTypes
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -71,12 +74,21 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("error reporting for incorrect number of arguments") {
+  test("error reporting for incorrect number of arguments - builtin function") {
     val df = spark.emptyDataFrame
     val e = intercept[AnalysisException] {
       df.selectExpr("substr('abcd', 2, 3, 4)")
     }
-    assert(e.getMessage.contains("arguments"))
+    assert(e.getMessage.contains("Invalid number of arguments for function substr"))
+  }
+
+  test("error reporting for incorrect number of arguments - udf") {
+    val df = spark.emptyDataFrame
+    val e = intercept[AnalysisException] {
+      spark.udf.register("foo", (_: String).length)
+      df.selectExpr("foo(2, 3, 4)")
+    }
+    assert(e.getMessage.contains("Invalid number of arguments for function foo"))
   }
 
   test("error reporting for undefined functions") {
@@ -100,9 +112,22 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(sql("select foo(5)").head().getInt(0) == 6)
   }
 
-  test("ZeroArgument UDF") {
-    spark.udf.register("random0", () => { Math.random()})
-    assert(sql("SELECT random0()").head().getDouble(0) >= 0.0)
+  test("ZeroArgument non-deterministic UDF") {
+    val foo = udf(() => Math.random())
+    spark.udf.register("random0", foo.asNondeterministic())
+    val df = sql("SELECT random0()")
+    assert(df.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df.head().getDouble(0) >= 0.0)
+
+    val foo1 = foo.asNondeterministic()
+    val df1 = testData.select(foo1())
+    assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df1.head().getDouble(0) >= 0.0)
+
+    val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
+    val df2 = testData.select(bar())
+    assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df2.head().getDouble(0) >= 0.0)
   }
 
   test("TwoArgument UDF") {

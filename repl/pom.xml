@@ -32,8 +32,8 @@
 
   <properties>
     <sbt.project.name>repl</sbt.project.name>
-    <extra.source.dir>scala-2.10/src/main/scala</extra.source.dir>
-    <extra.testsource.dir>scala-2.10/src/test/scala</extra.testsource.dir>
+    <extra.source.dir>scala-2.11/src/main/scala</extra.source.dir>
+    <extra.testsource.dir>scala-2.11/src/test/scala</extra.testsource.dir>
   </properties>
 
   <dependencies>
@@ -69,10 +69,6 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-reflect</artifactId>
       <version>${scala.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>${jline.groupid}</groupId>
-      <artifactId>jline</artifactId>
     </dependency>
      <dependency>
       <groupId>org.slf4j</groupId>
@@ -170,23 +166,15 @@
       </plugin>
     </plugins>
   </build>
+  
   <profiles>
     <profile>
-      <id>scala-2.10</id>
-      <activation>
-        <property><name>scala-2.10</name></property>
-      </activation>
-    </profile>
-
-    <profile>
-      <id>scala-2.11</id>
-      <activation>
-        <property><name>!scala-2.10</name></property>
-      </activation>
+      <id>scala-2.12</id>
       <properties>
-        <extra.source.dir>scala-2.11/src/main/scala</extra.source.dir>
-        <extra.testsource.dir>scala-2.11/src/test/scala</extra.testsource.dir>
+        <extra.source.dir>scala-2.12/src/main/scala</extra.source.dir>
+        <extra.testsource.dir>scala-2.12/src/test/scala</extra.testsource.dir>
       </properties>
     </profile>
   </profiles>
+
 </project>

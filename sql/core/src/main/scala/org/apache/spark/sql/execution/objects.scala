@@ -23,19 +23,17 @@ import org.apache.spark.api.java.function.MapFunction
 import org.apache.spark.api.r._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.api.r.SQLUtils._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.catalyst.plans.logical.FunctionUtils
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, FunctionUtils, LogicalGroupState}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
+import org.apache.spark.sql.streaming.GroupStateTimeout
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
-
 
 /**
  * Physical version of `ObjectProducer`.
@@ -361,8 +359,15 @@ object MapGroupsExec {
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       outputObjAttr: Attribute,
+      timeoutConf: GroupStateTimeout,
       child: SparkPlan): MapGroupsExec = {
-    val f = (key: Any, values: Iterator[Any]) => func(key, values, new GroupStateImpl[Any](None))
+    val watermarkPresent = child.output.exists {
+      case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
+      case _ => false
+    }
+    val f = (key: Any, values: Iterator[Any]) => {
+      func(key, values, GroupStateImpl.createForBatch(timeoutConf, watermarkPresent))
+    }
     new MapGroupsExec(f, keyDeserializer, valueDeserializer,
       groupingAttributes, dataAttributes, outputObjAttr, child)
   }
@@ -393,14 +398,17 @@ case class FlatMapGroupsInRExec(
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(groupingAttributes) :: Nil
+    if (groupingAttributes.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(groupingAttributes) :: Nil
+    }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val isSerializedRData =
-      if (outputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
+    val isSerializedRData = outputSchema == SERIALIZED_R_DATA_SCHEMA
     val serializerForR = if (!isSerializedRData) {
       SerializationFormats.ROW
     } else {

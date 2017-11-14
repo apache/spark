@@ -253,6 +253,12 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
 
     // Add other tests here for classes that should be able to handle empty partitions correctly
   }
+
+  test("Number of elements in RDD is less than number of partitions") {
+    val rdd = sc.parallelize(1 to 3).map(x => (x, x))
+    val partitioner = new RangePartitioner(22, rdd)
+    assert(partitioner.numPartitions === 3)
+  }
 }
 
 

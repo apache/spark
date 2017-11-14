@@ -43,6 +43,10 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.selectExpr("stack(3, 1, 1.1, 'a', 2, 2.2, 'b', 3, 3.3, 'c')"),
       Row(1, 1.1, "a") :: Row(2, 2.2, "b") :: Row(3, 3.3, "c") :: Nil)
 
+    // Null values
+    checkAnswer(df.selectExpr("stack(3, 1, 1.1, null, 2, null, 'b', null, 3.3, 'c')"),
+      Row(1, 1.1, null) :: Row(2, null, "b") :: Row(null, 3.3, "c") :: Nil)
+
     // Repeat generation at every input row
     checkAnswer(spark.range(2).selectExpr("stack(2, 1, 2, 3)"),
       Row(1, 2) :: Row(3, null) :: Row(1, 2) :: Row(3, null) :: Nil)
@@ -297,7 +301,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("outer generator()") {
-    spark.sessionState.functionRegistry.registerFunction("empty_gen", _ => EmptyGenerator())
+    spark.sessionState.functionRegistry
+      .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator())
     checkAnswer(
       sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
       Row(1, null) :: Row(2, null) :: Nil)

@@ -69,22 +69,23 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   override protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
-      new FindDataSourceTable(session) +:
-      new ResolveSQLOnFile(session) +:
-      customResolutionRules
+        new FindDataSourceTable(session) +:
+        new ResolveSQLOnFile(session) +:
+        customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       new DetermineTableStats(session) +:
-      RelationConversions(conf, catalog) +:
-      PreprocessTableCreation(session) +:
-      PreprocessTableInsertion(conf) +:
-      DataSourceAnalysis(conf) +:
-      HiveAnalysis +:
-      customPostHocResolutionRules
+        RelationConversions(conf, catalog) +:
+        PreprocessTableCreation(session) +:
+        PreprocessTableInsertion(conf) +:
+        DataSourceAnalysis(conf) +:
+        HiveAnalysis +:
+        customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
-      customCheckRules
+        PreReadCheck +:
+        customCheckRules
   }
 
   /**

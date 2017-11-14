@@ -303,4 +303,36 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     mm.invokePrivate[Unit](assertInvariants())
   }
 
+  test("not enough free memory in the storage pool --OFF_HEAP") {
+    val conf = new SparkConf()
+      .set("spark.memory.offHeap.size", "1000")
+      .set("spark.testing.memory", "1000")
+      .set("spark.memory.offHeap.enabled", "true")
+    val taskAttemptId = 0L
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+    val ms = makeMemoryStore(mm)
+    val memoryMode = MemoryMode.OFF_HEAP
+
+    assert(mm.acquireExecutionMemory(400L, taskAttemptId, memoryMode) === 400L)
+    assert(mm.storageMemoryUsed === 0L)
+    assert(mm.executionMemoryUsed === 400L)
+
+    // Fail fast
+    assert(!mm.acquireStorageMemory(dummyBlock, 700L, memoryMode))
+    assert(mm.storageMemoryUsed === 0L)
+
+    assert(mm.acquireStorageMemory(dummyBlock, 100L, memoryMode))
+    assert(mm.storageMemoryUsed === 100L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
+
+    // Borrow 50 from execution memory
+    assert(mm.acquireStorageMemory(dummyBlock, 450L, memoryMode))
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
+    assert(mm.storageMemoryUsed === 550L)
+
+    // Borrow 50 from execution memory and evict 50 to free space
+    assert(mm.acquireStorageMemory(dummyBlock, 100L, memoryMode))
+    assertEvictBlocksToFreeSpaceCalled(ms, 50)
+    assert(mm.storageMemoryUsed === 600L)
+  }
 }

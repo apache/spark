@@ -30,14 +30,12 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
-import org.apache.spark.util.Utils
 
 
 private[sql] class HiveSessionCatalog(
@@ -58,54 +56,58 @@ private[sql] class HiveSessionCatalog(
       parser,
       functionResourceLoader) {
 
-  override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
-    makeFunctionBuilder(funcName, Utils.classForName(className))
-  }
-
   /**
-   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   * Constructs a [[Expression]] based on the provided class that represents a function.
+   *
+   * This performs reflection to decide what type of [[Expression]] to return in the builder.
    */
-  private def makeFunctionBuilder(name: String, clazz: Class[_]): FunctionBuilder = {
-    // When we instantiate hive UDF wrapper class, we may throw exception if the input
-    // expressions don't satisfy the hive UDF, such as type mismatch, input number
-    // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
-    (children: Seq[Expression]) => {
+  override def makeFunctionExpression(
+      name: String,
+      clazz: Class[_],
+      input: Seq[Expression]): Expression = {
+
+    Try(super.makeFunctionExpression(name, clazz, input)).getOrElse {
+      var udfExpr: Option[Expression] = None
       try {
+        // When we instantiate hive UDF wrapper class, we may throw exception if the input
+        // expressions don't satisfy the hive UDF, such as type mismatch, input number
+        // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
         if (classOf[UDF].isAssignableFrom(clazz)) {
-          val udf = HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udf.dataType // Force it to check input data types.
-          udf
+          udfExpr = Some(HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+          udfExpr.get.dataType // Force it to check input data types.
         } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
-          val udf = HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udf.dataType // Force it to check input data types.
-          udf
+          udfExpr = Some(HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+          udfExpr.get.dataType // Force it to check input data types.
         } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
-          val udaf = HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), children)
-          udaf.dataType // Force it to check input data types.
-          udaf
+          udfExpr = Some(HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), input))
+          udfExpr.get.dataType // Force it to check input data types.
         } else if (classOf[UDAF].isAssignableFrom(clazz)) {
-          val udaf = HiveUDAFFunction(
+          udfExpr = Some(HiveUDAFFunction(
             name,
             new HiveFunctionWrapper(clazz.getName),
-            children,
-            isUDAFBridgeRequired = true)
-          udaf.dataType  // Force it to check input data types.
-          udaf
+            input,
+            isUDAFBridgeRequired = true))
+          udfExpr.get.dataType // Force it to check input data types.
         } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-          val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udtf.elementSchema // Force it to check input data types.
-          udtf
-        } else {
-          throw new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}'")
+          udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
+          udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema // Force it to check data types.
         }
       } catch {
-        case ae: AnalysisException =>
-          throw ae
         case NonFatal(e) =>
-          val analysisException =
-            new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}': $e")
+          val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
+          val errorMsg =
+            if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+              s"$noHandlerMsg\nPlease make sure your function overrides " +
+                "`public StructObjectInspector initialize(ObjectInspector[] args)`."
+            } else {
+              noHandlerMsg
+            }
+          val analysisException = new AnalysisException(errorMsg)
           analysisException.setStackTrace(e.getStackTrace)
           throw analysisException
+      }
+      udfExpr.getOrElse {
+        throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
       }
     }
   }
@@ -129,7 +131,7 @@ private[sql] class HiveSessionCatalog(
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(funcName.unquotedString)) {
+        if (functionRegistry.functionExists(funcName)) {
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
           // We need to throw the original exception.
@@ -140,7 +142,7 @@ private[sql] class HiveSessionCatalog(
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
           if (!hiveFunctions.contains(functionName)) {
-            failFunctionLookup(funcName.unquotedString)
+            failFunctionLookup(funcName)
           }
 
           // TODO: Remove this fallback path once we implement the list of fallback functions
@@ -148,12 +150,12 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(funcName.unquotedString))
+                failFunctionLookup(funcName))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(funcName.unquotedString)
+              case NonFatal(e) => failFunctionLookup(funcName)
             }
           }
           val className = functionInfo.getFunctionClass.getName
@@ -161,9 +163,9 @@ private[sql] class HiveSessionCatalog(
             FunctionIdentifier(functionName.toLowerCase(Locale.ROOT), database)
           val func = CatalogFunction(functionIdentifier, className, Nil)
           // Put this Hive built-in function to our function registry.
-          registerFunction(func, ignoreIfExists = false)
+          registerFunction(func, overrideIfExists = false)
           // Now, we need to create the Expression.
-          functionRegistry.lookupFunction(functionName, children)
+          functionRegistry.lookupFunction(functionIdentifier, children)
         }
     }
   }

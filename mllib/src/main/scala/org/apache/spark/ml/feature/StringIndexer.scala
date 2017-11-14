@@ -26,7 +26,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
@@ -36,7 +36,8 @@ import org.apache.spark.util.collection.OpenHashMap
 /**
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
-private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
+private[feature] trait StringIndexerBase extends Params with HasHandleInvalid with HasInputCol
+  with HasOutputCol {
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
@@ -47,17 +48,13 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    * @group param
    */
   @Since("1.6.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
-    "invalid data (unseen labels or NULL values). " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "How to handle invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
     ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
 
   setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
-
-  /** @group getParam */
-  @Since("1.6.0")
-  def getHandleInvalid: String = $(handleInvalid)
 
   /**
    * Param for how to order labels of string column. The first label after ordering is assigned
@@ -73,7 +70,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    */
   @Since("2.3.0")
   final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
-    "how to order labels of string column. " +
+    "How to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
     ParamValidators.inArray(StringIndexer.supportedStringOrderType))
@@ -264,7 +261,7 @@ class StringIndexerModel (
             s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
         }
       }
-    }
+    }.asNondeterministic()
 
     filteredDataset.select(col("*"),
       indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))

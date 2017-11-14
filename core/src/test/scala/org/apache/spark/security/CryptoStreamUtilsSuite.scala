@@ -130,6 +130,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
     val conf = createConf()
     val key = createKey(conf)
     val file = Files.createTempFile("crypto", ".test").toFile()
+    file.deleteOnExit()
 
     val outStream = createCryptoOutputStream(new FileOutputStream(file), conf, key)
     try {

@@ -105,12 +105,22 @@ case class AggregateExpression(
   }
 
   // We compute the same thing regardless of our final result.
-  override lazy val canonicalized: Expression =
+  override lazy val canonicalized: Expression = {
+    val normalizedAggFunc = mode match {
+      // For PartialMerge or Final mode, the input to the `aggregateFunction` is aggregate buffers,
+      // and the actual children of `aggregateFunction` is not used, here we normalize the expr id.
+      case PartialMerge | Final => aggregateFunction.transform {
+        case a: AttributeReference => a.withExprId(ExprId(0))
+      }
+      case Partial | Complete => aggregateFunction
+    }
+
     AggregateExpression(
-      aggregateFunction.canonicalized.asInstanceOf[AggregateFunction],
+      normalizedAggFunc.canonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
       ExprId(0))
+  }
 
   override def children: Seq[Expression] = aggregateFunction :: Nil
   override def dataType: DataType = aggregateFunction.dataType
@@ -307,6 +317,9 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * Updates its aggregation buffer, located in `mutableAggBuffer`, based on the given `inputRow`.
    *
    * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
+   *
+   * Note that, the input row may be produced by unsafe projection and it may not be safe to cache
+   * some fields of the input row, as the values can be changed unexpectedly.
    */
   def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit
 
@@ -316,6 +329,9 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    *
    * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
    * Use `fieldNumber + inputAggBufferOffset` to access fields of `inputAggBuffer`.
+   *
+   * Note that, the input row may be produced by unsafe projection and it may not be safe to cache
+   * some fields of the input row, as the values can be changed unexpectedly.
    */
   def merge(mutableAggBuffer: InternalRow, inputAggBuffer: InternalRow): Unit
 }
@@ -494,6 +510,12 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   /**
    * Generates the final aggregation result value for current key group with the aggregation buffer
    * object.
+   *
+   * Developer note: the only return types accepted by Spark are:
+   *   - primitive types
+   *   - InternalRow and subclasses
+   *   - ArrayData
+   *   - MapData
    *
    * @param buffer aggregation buffer object.
    * @return The aggregation result of current key group

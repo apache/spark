@@ -93,7 +93,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     val table = UnresolvedInlineTable(Seq("c1"),
       Seq(Seq(Cast(lit("1991-12-06 00:00:00.0"), TimestampType))))
     val withTimeZone = ResolveTimeZone(conf).apply(table)
-    val LocalRelation(output, data) = ResolveInlineTables(conf).apply(withTimeZone)
+    val LocalRelation(output, data, _) = ResolveInlineTables(conf).apply(withTimeZone)
     val correct = Cast(lit("1991-12-06 00:00:00.0"), TimestampType)
       .withTimeZone(conf.sessionLocalTimeZone).eval().asInstanceOf[Long]
     assert(output.map(_.dataType) == Seq(TimestampType))

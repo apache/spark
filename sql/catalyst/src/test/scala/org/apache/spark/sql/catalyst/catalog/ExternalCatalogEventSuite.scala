@@ -75,6 +75,11 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     }
     checkEvents(CreateDatabasePreEvent("db5") :: Nil)
 
+    // ALTER
+    val newDbDefinition = dbDefinition.copy(description = "test")
+    catalog.alterDatabase(newDbDefinition)
+    checkEvents(AlterDatabasePreEvent("db5") :: AlterDatabaseEvent("db5") :: Nil)
+
     // DROP
     intercept[AnalysisException] {
       catalog.dropDatabase("db4", ignoreIfNotExists = false, cascade = false)
@@ -118,6 +123,23 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       catalog.createTable(tableDefinition, ignoreIfExists = false)
     }
     checkEvents(CreateTablePreEvent("db5", "tbl1") :: Nil)
+
+    // ALTER
+    val newTableDefinition = tableDefinition.copy(tableType = CatalogTableType.EXTERNAL)
+    catalog.alterTable(newTableDefinition)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.TABLE) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.TABLE) :: Nil)
+
+    // ALTER schema
+    val newSchema = new StructType().add("id", "long", nullable = false)
+    catalog.alterTableDataSchema("db5", "tbl1", newSchema)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.DATASCHEMA) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.DATASCHEMA) :: Nil)
+
+    // ALTER stats
+    catalog.alterTableStats("db5", "tbl1", None)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.STATS) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.STATS) :: Nil)
 
     // RENAME
     catalog.renameTable("db5", "tbl1", "tbl2")
@@ -175,6 +197,15 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       catalog.renameFunction("db5", "fn7", "fn4")
     }
     checkEvents(RenameFunctionPreEvent("db5", "fn7", "fn4") :: Nil)
+
+    // ALTER
+    val alteredFunctionDefinition = CatalogFunction(
+      identifier = FunctionIdentifier("fn4", Some("db5")),
+      className = "org.apache.spark.AlterFunction",
+      resources = Seq.empty)
+    catalog.alterFunction("db5", alteredFunctionDefinition)
+    checkEvents(
+      AlterFunctionPreEvent("db5", "fn4") :: AlterFunctionEvent("db5", "fn4") :: Nil)
 
     // DROP
     intercept[AnalysisException] {
