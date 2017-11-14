@@ -56,6 +56,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             }
 
             {
+            <p>Client local time zone: <span id="time-zone"></span></p>
+            }
+
+            {
             if (allAppsSize > 0) {
               <script src={UIUtils.prependBaseUri("/static/dataTables.rowsGroup.js")}></script> ++
                 <div id="history-summary" class="row-fluid"></div> ++

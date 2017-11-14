@@ -46,3 +46,25 @@ function formatBytes(bytes, type) {
     var i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
+
+function padZeroes(num) {
+  return num.toString().padStart(2, "0");
+}
+
+function formatTimeMillis(timeMillis) {
+  if (timeMillis <= 0) {
+    return "-";
+  } else {
+    var dt = new Date(timeMillis);
+    return dt.getFullYear() + "-" +
+      padZeroes(dt.getMonth() + 1) + "-" +
+      padZeroes(dt.getDate()) + " " +
+      padZeroes(dt.getHours()) + ":" +
+      padZeroes(dt.getMinutes()) + ":" +
+      padZeroes(dt.getSeconds());
+  }
+}
+
+function getTimeZone() {
+  return new Date().toString().match(/\(([A-Za-z\s].*)\)/)[1];
+}
