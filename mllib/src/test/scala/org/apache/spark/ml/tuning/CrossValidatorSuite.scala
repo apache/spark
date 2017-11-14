@@ -200,7 +200,6 @@ class CrossValidatorSuite
     val eval = new BinaryClassificationEvaluator
     val numFolds = 3
     val subPath = new File(tempDir, "testCrossValidatorSubModels")
-    val persistSubModelsPath = new File(subPath, "subModels").toString
 
     val cv = new CrossValidator()
       .setEstimator(lr)

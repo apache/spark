@@ -202,9 +202,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   }
 
   @Since("2.0.0")
-  override def write: TrainValidationSplit.TrainValidationSplitWriter = {
-    new TrainValidationSplit.TrainValidationSplitWriter(this)
-  }
+  override def write: MLWriter = new TrainValidationSplit.TrainValidationSplitWriter(this)
 }
 
 @Since("2.0.0")
@@ -311,7 +309,9 @@ class TrainValidationSplitModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def write: MLWriter = new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
+  override def write: TrainValidationSplitModel.TrainValidationSplitModelWriter = {
+    new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
+  }
 }
 
 @Since("2.0.0")
@@ -339,6 +339,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
    * If subModels are not available, then setting "persistSubModels" to "true" will cause
    * an exception.
    */
+  @Since("2.3.0")
   final class TrainValidationSplitModelWriter private[tuning] (
       instance: TrainValidationSplitModel) extends MLWriter {
 
@@ -385,9 +386,10 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
       val validationMetrics = (metadata.metadata \ "validationMetrics").extract[Seq[Double]].toArray
-      val shouldPersistSubModels = (metadata.metadata \ "persistSubModels").extract[Boolean]
+      val persistSubModels = (metadata.metadata \ "persistSubModels")
+        .extractOrElse[Boolean](false)
 
-      val subModels: Option[Array[Model[_]]] = if (shouldPersistSubModels) {
+      val subModels: Option[Array[Model[_]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
         val _subModels = Array.fill[Model[_]](estimatorParamMaps.length)(null)
         for (paramIndex <- 0 until estimatorParamMaps.length) {

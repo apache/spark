@@ -399,9 +399,10 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
       val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
-      val shouldPersistSubModels = (metadata.metadata \ "persistSubModels").extract[Boolean]
+      val persistSubModels = (metadata.metadata \ "persistSubModels")
+        .extractOrElse[Boolean](false)
 
-      val subModels: Option[Array[Array[Model[_]]]] = if (shouldPersistSubModels) {
+      val subModels: Option[Array[Array[Model[_]]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
         val _subModels = Array.fill(numFolds)(Array.fill[Model[_]](
           estimatorParamMaps.length)(null))
