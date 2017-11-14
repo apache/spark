@@ -138,8 +138,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) ::
-    Batch("OptimizeCodegen", Once,
-      OptimizeCodegen) ::
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       CollapseProject) :: Nil
