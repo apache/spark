@@ -40,6 +40,27 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   setupTestData()
 
+  test("SPARK-22431: table with nested type col with special char") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
+      assert(spark.sql("SELECT * FROM t").count() == 0L)
+    }
+  }
+
+  test("SPARK-22431: view with nested type col with special char") {
+    withView("t") {
+      spark.sql("CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      assert(spark.sql("SELECT * FROM t").count() == 1L)
+    }
+  }
+
+  test("SPARK-22431: view - nested type") {
+    withView("v") {
+      spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
+      assert(spark.sql("SELECT * FROM v").count() == 1L)
+    }
+  }
+
   test("SPARK-8010: promote numeric to string") {
     val df = Seq((1, 1)).toDF("key", "value")
     df.createOrReplaceTempView("src")

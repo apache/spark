@@ -488,6 +488,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
+    verifyColumnDataType(table.dataSchema)
     client.createTable(toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
@@ -507,6 +508,7 @@ private[hive] class HiveClientImpl(
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
+    verifyColumnDataType(table.dataSchema)
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
@@ -895,6 +897,18 @@ private[hive] object HiveClientImpl {
     Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 
+  private def verifyColumnDataType(schema: StructType): Unit = {
+    schema.map(col => {
+      val typeString = col.dataType.catalogString
+      try {
+        CatalystSqlParser.parseDataType(typeString)
+      } catch {
+        case e: ParseException =>
+          throw new SparkException(s"Cannot recognize the data type $typeString", e)
+      }
+    })
+  }
+
   private def toInputFormat(name: String) =
     Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
 
@@ -959,6 +973,7 @@ private[hive] object HiveClientImpl {
         }
       case _ =>
     }
+
 
     hiveTable
   }

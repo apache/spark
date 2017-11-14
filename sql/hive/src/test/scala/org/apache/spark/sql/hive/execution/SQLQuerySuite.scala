@@ -25,6 +25,7 @@ import java.util.{Locale, Set}
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.SparkException
 import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -67,6 +68,48 @@ case class Order(
 class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
+
+  test("SPARK-22431: table ctas - illegal nested type") {
+    val err = intercept[SparkException] {
+      spark.sql("CREATE TABLE t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+    }.getMessage
+    assert(err.contains("Cannot recognize the data type"))
+  }
+
+  test("SPARK-22431: table - illegal nested type") {
+    val err = intercept[SparkException] {
+      spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT)")
+    }.getMessage
+    assert(err.contains("Cannot recognize the data type"))
+  }
+
+  test("SPARK-22431: datasource table- parquet illegal nested type ") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
+      assert(spark.sql("SELECT * FROM t").count() == 0L)
+    }
+  }
+
+  test("SPARK-22431: view with illegal nested type ") {
+    val err = intercept[SparkException] {
+      spark.sql("CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+    }.getMessage
+    assert(err.contains("Cannot recognize the data type"))
+  }
+
+  test("SPARK-22431: view with nested type") {
+    withView("v") {
+      spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
+      assert(spark.sql("SELECT * FROM v").count() == 1L)
+    }
+  }
+
+  test("SPARK-22431: table with nested type") {
+    withTable("x") {
+      spark.sql("CREATE TABLE x (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      assert(spark.sql("SELECT * FROM x").count() == 0L)
+    }
+  }
 
   test("query global temp view") {
     val df = Seq(1).toDF("i1")
