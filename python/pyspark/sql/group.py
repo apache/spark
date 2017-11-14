@@ -218,7 +218,7 @@ class GroupedData(object):
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
-        >>> @pandas_udf(returnType=df.schema, functionType=PandasUDFType.GROUP_MAP)
+        >>> @pandas_udf(returnType="id long, v double", functionType=PandasUDFType.GROUP_MAP)
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
