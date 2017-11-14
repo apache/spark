@@ -2050,9 +2050,9 @@ def map_values(col):
 
 # ---------------------------- User Defined Function ----------------------------------
 
+@since(2.3)
 class PandasUDFType(object):
-    """Pandas UDF Types
-
+    """Pandas UDF Types. See :meth:`pyspark.sql.functions.pandas_udf`.
     """
     SCALAR = PythonEvalType.PANDAS_SCALAR_UDF
 
@@ -2109,16 +2109,19 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     :param f: user-defined function. A python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
-    :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUdfType`
+    :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUdfType`.
+                         Default: SCALAR.
 
-    The user-defined function can define one of the following transformations:
+    The function type of the UDF can be one of the following:
 
-    1. One or more `pandas.Series` -> A `pandas.Series`
+    1. SCALAR
 
-       This udf is used with :meth:`pyspark.sql.DataFrame.withColumn` and
-       :meth:`pyspark.sql.DataFrame.select`.
+       A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
        The returnType should be a primitive data type, e.g., `DoubleType()`.
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
+
+       Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
+       :meth:`pyspark.sql.DataFrame.select`.
 
        >>> from pyspark.sql.types import IntegerType, StringType
        >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
@@ -2139,16 +2142,20 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |         8|      JOHN DOE|          22|
        +----------+--------------+------------+
 
-    2. A `pandas.DataFrame` -> A `pandas.DataFrame`
+    2. GROUP_MAP
 
-       This udf is only used with :meth:`pyspark.sql.GroupedData.apply`.
+       A group map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
        The returnType should be a :class:`StructType` describing the schema of the returned
        `pandas.DataFrame`.
+       The length of the returned `pandas.DataFrame` can arbitrary.
 
+       Group map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
+
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> df = spark.createDataFrame(
        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
        ...     ("id", "v"))
-       >>> @pandas_udf(returnType=df.schema)
+       >>> @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)
        ... def normalize(pdf):
        ...     v = pdf.v
        ...     return pdf.assign(v=(v - v.mean()) / v.std())
@@ -2162,10 +2169,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  2|-0.2773500981126146|
        |  2| 1.1094003924504583|
        +---+-------------------+
-
-       .. note:: This type of udf cannot be used with functions such as `withColumn` or `select`
-                 because it defines a `DataFrame` transformation rather than a `Column`
-                 transformation.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 

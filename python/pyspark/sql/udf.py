@@ -22,7 +22,7 @@ import functools
 from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import StringType, DataType, _parse_datatype_string
+from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string
 
 
 def _wrap_function(sc, func, returnType):
@@ -33,14 +33,24 @@ def _wrap_function(sc, func, returnType):
 
 
 def _create_udf(f, returnType, evalType):
-    if evalType in (PythonEvalType.PANDAS_SCALAR_UDF, PythonEvalType.PANDAS_GROUP_MAP_UDF):
+    if evalType == PythonEvalType.PANDAS_SCALAR_UDF:
         import inspect
         argspec = inspect.getargspec(f)
         if len(argspec.args) == 0 and argspec.varargs is None:
             raise ValueError(
-                "0-arg pandas_udfs are not supported. "
+                "Invalid function: 0-arg pandas_udfs are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
+
+    elif evalType == PythonEvalType.PANDAS_GROUP_MAP_UDF:
+        import inspect
+        argspec = inspect.getargspec(f)
+        if len(argspec.args) != 1:
+            raise ValueError(
+                "Invalid function: pandas_udf with function type GROUP_MAP "
+                "must take a single arg that is a pandas DataFrame."
+            )
+
     udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, evalType=evalType)
     return udf_obj._wrapped()
 
@@ -82,6 +92,12 @@ class UserDefinedFunction(object):
                 self._returnType_placeholder = self._returnType
             else:
                 self._returnType_placeholder = _parse_datatype_string(self._returnType)
+
+        if self.evalType == PythonEvalType.PANDAS_GROUP_MAP_UDF \
+                and not isinstance(self._returnType_placeholder, StructType):
+            raise ValueError("Invalid returnType: returnType must be a StructType for "
+                             "pandas_udf with function type GROUP_MAP")
+
         return self._returnType_placeholder
 
     @property

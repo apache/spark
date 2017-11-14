@@ -241,9 +241,9 @@ class GroupedData(object):
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
            or udf.evalType != PythonEvalType.PANDAS_GROUP_MAP_UDF:
             raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "`GROUP_MAP`.")
+                             "GROUP_MAP.")
         if not isinstance(udf.returnType, StructType):
-            raise ValueError("Invalid returnType: The returnType of the udf must be a StructType")
+            raise ValueError("Invalid returnType: the returnType of the udf must be a StructType")
 
         df = self._df
         func = udf.func
