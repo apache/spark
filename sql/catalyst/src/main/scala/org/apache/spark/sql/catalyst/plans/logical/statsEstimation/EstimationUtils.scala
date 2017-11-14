@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
+import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
 
 
@@ -114,4 +115,165 @@ object EstimationUtils {
     }
   }
 
+  def getOverlappedRanges(
+      leftHistogram: Histogram,
+      rightHistogram: Histogram,
+      newMin: Double,
+      newMax: Double): Seq[OverlappedRange] = {
+    val overlappedRanges = new ArrayBuffer[OverlappedRange]()
+    // Only bins whose range intersect [newMin, newMax] have join possibility.
+    val leftBins = leftHistogram.bins
+      .filter(b => b.lo <= newMax && b.hi >= newMin)
+    val rightBins = rightHistogram.bins
+      .filter(b => b.lo <= newMax && b.hi >= newMin)
+
+    leftBins.foreach { lb =>
+      rightBins.foreach { rb =>
+        val (left, leftHeight) = trimBin(lb, leftHistogram.height, newMin, newMax)
+        val (right, rightHeight) = trimBin(rb, rightHistogram.height, newMin, newMax)
+        // Only collect overlapped ranges.
+        if (left.lo <= right.hi && left.hi >= right.lo) {
+          // Collect overlapping ranges.
+          val range = if (left.lo == left.hi) {
+            // Case1: the left bin has only one value
+            OverlappedRange(
+              lo = left.lo,
+              hi = left.lo,
+              minNdv = 1,
+              maxNdv = 1,
+              leftNumRows = leftHeight,
+              rightNumRows = rightHeight / right.ndv
+            )
+          } else if (right.lo == right.hi) {
+            // Case2: the right bin has only one value
+            OverlappedRange(
+              lo = right.lo,
+              hi = right.lo,
+              minNdv = 1,
+              maxNdv = 1,
+              leftNumRows = leftHeight / left.ndv,
+              rightNumRows = rightHeight
+            )
+          } else if (right.lo >= left.lo && right.hi >= left.hi) {
+            // Case3: the left bin is "smaller" than the right bin
+            //      left.lo            right.lo     left.hi          right.hi
+            // --------+------------------+------------+----------------+------->
+            val leftRatio = (left.hi - right.lo) / (left.hi - left.lo)
+            val rightRatio = (left.hi - right.lo) / (right.hi - right.lo)
+            if (leftRatio == 0) {
+              // The overlapping range has only one value.
+              OverlappedRange(
+                lo = right.lo,
+                hi = right.lo,
+                minNdv = 1,
+                maxNdv = 1,
+                leftNumRows = leftHeight / left.ndv,
+                rightNumRows = rightHeight / right.ndv
+              )
+            } else {
+              OverlappedRange(
+                lo = right.lo,
+                hi = left.hi,
+                minNdv = math.min(left.ndv * leftRatio, right.ndv * rightRatio),
+                maxNdv = math.max(left.ndv * leftRatio, right.ndv * rightRatio),
+                leftNumRows = leftHeight * leftRatio,
+                rightNumRows = rightHeight * rightRatio
+              )
+            }
+          } else if (right.lo <= left.lo && right.hi <= left.hi) {
+            // Case4: the left bin is "larger" than the right bin
+            //      right.lo           left.lo      right.hi         left.hi
+            // --------+------------------+------------+----------------+------->
+            val leftRatio = (right.hi - left.lo) / (left.hi - left.lo)
+            val rightRatio = (right.hi - left.lo) / (right.hi - right.lo)
+            if (leftRatio == 0) {
+              // The overlapping range has only one value.
+              OverlappedRange(
+                lo = right.hi,
+                hi = right.hi,
+                minNdv = 1,
+                maxNdv = 1,
+                leftNumRows = leftHeight / left.ndv,
+                rightNumRows = rightHeight / right.ndv
+              )
+            } else {
+              OverlappedRange(
+                lo = left.lo,
+                hi = right.hi,
+                minNdv = math.min(left.ndv * leftRatio, right.ndv * rightRatio),
+                maxNdv = math.max(left.ndv * leftRatio, right.ndv * rightRatio),
+                leftNumRows = leftHeight * leftRatio,
+                rightNumRows = rightHeight * rightRatio
+              )
+            }
+          } else if (right.lo >= left.lo && right.hi <= left.hi) {
+            // Case5: the left bin contains the right bin
+            //      left.lo            right.lo     right.hi         left.hi
+            // --------+------------------+------------+----------------+------->
+            val leftRatio = (right.hi - right.lo) / (left.hi - left.lo)
+            OverlappedRange(
+              lo = right.lo,
+              hi = right.hi,
+              minNdv = math.min(left.ndv * leftRatio, right.ndv),
+              maxNdv = math.max(left.ndv * leftRatio, right.ndv),
+              leftNumRows = leftHeight * leftRatio,
+              rightNumRows = rightHeight
+            )
+          } else {
+            assert(right.lo <= left.lo && right.hi >= left.hi)
+            // Case6: the right bin contains the left bin
+            //      right.lo           left.lo      left.hi          right.hi
+            // --------+------------------+------------+----------------+------->
+            val rightRatio = (left.hi - left.lo) / (right.hi - right.lo)
+            OverlappedRange(
+              lo = left.lo,
+              hi = left.hi,
+              minNdv = math.min(left.ndv, right.ndv * rightRatio),
+              maxNdv = math.max(left.ndv, right.ndv * rightRatio),
+              leftNumRows = leftHeight,
+              rightNumRows = rightHeight * rightRatio
+            )
+          }
+          overlappedRanges += range
+        }
+      }
+    }
+    overlappedRanges
+  }
+
+  def trimBin(bin: HistogramBin, height: Double, min: Double, max: Double)
+    : (HistogramBin, Double) = {
+    val (lo, hi) = if (bin.lo <= min && bin.hi >= max) {
+      //       bin.lo              min          max          bin.hi
+      // --------+------------------+------------+-------------+------->
+      (min, max)
+    } else if (bin.lo <= min && bin.hi >= min) {
+      //       bin.lo              min        bin.hi
+      // --------+------------------+-----------+------->
+      (min, bin.hi)
+    } else if (bin.lo <= max && bin.hi >= max) {
+      //        bin.lo             max        bin.hi
+      // --------+------------------+-----------+------->
+      (bin.lo, max)
+    } else {
+      (bin.lo, bin.hi)
+    }
+
+    if (bin.hi == bin.lo) {
+      (bin, height)
+    } else if (hi == lo) {
+      (HistogramBin(lo, hi, 1), height / bin.ndv)
+    } else {
+      val ratio = (hi - lo) / (bin.hi - bin.lo)
+      (HistogramBin(lo, hi, math.ceil(bin.ndv * ratio).toLong), height * ratio)
+    }
+  }
+
+  case class OverlappedRange(
+      lo: Double,
+      hi: Double,
+      minNdv: Double,
+      maxNdv: Double,
+      leftNumRows: Double,
+      rightNumRows: Double)
 }

@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 
 
@@ -191,8 +191,16 @@ case class JoinEstimation(join: Join) extends Logging {
       val rInterval = ValueInterval(rightKeyStat.min, rightKeyStat.max, rightKey.dataType)
       if (ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
-        val (card, joinStat) = computeByNdv(leftKey, rightKey, newMin, newMax)
-        keyStatsAfterJoin += (leftKey -> joinStat, rightKey -> joinStat)
+        val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
+          case (Some(l: Histogram), Some(r: Histogram)) =>
+            computeByEquiHeightHistogram(leftKey, rightKey, l, r, newMin, newMax)
+          case _ =>
+            computeByNdv(leftKey, rightKey, newMin, newMax)
+        }
+        keyStatsAfterJoin += (
+          leftKey -> joinStat.copy(histogram = leftKeyStat.histogram),
+          rightKey -> joinStat.copy(histogram = rightKeyStat.histogram)
+        )
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {
@@ -222,6 +230,43 @@ case class JoinEstimation(join: Join) extends Logging {
     val newAvgLen = (leftKeyStat.avgLen + rightKeyStat.avgLen) / 2
     val newStats = ColumnStat(newNdv, newMin, newMax, 0, newAvgLen, newMaxLen)
 
+    (ceil(card), newStats)
+  }
+
+  /** Compute join cardinality using equi-height histograms. */
+  private def computeByEquiHeightHistogram(
+      leftKey: AttributeReference,
+      rightKey: AttributeReference,
+      leftHistogram: Histogram,
+      rightHistogram: Histogram,
+      newMin: Option[Any],
+      newMax: Option[Any]): (BigInt, ColumnStat) = {
+    val overlappedRanges = getOverlappedRanges(
+      leftHistogram = leftHistogram,
+      rightHistogram = rightHistogram,
+      // Only numeric values have equi-height histograms.
+      newMin = newMin.get.toString.toDouble,
+      newMax = newMax.get.toString.toDouble)
+
+    var card: BigDecimal = 0
+    var totalNdv: Double = 0
+    for (i <- overlappedRanges.indices) {
+      val range = overlappedRanges(i)
+      if (i == 0 || range.hi != overlappedRanges(i - 1).hi) {
+        // If range.hi == overlappingRanges(i - 1).hi, that means the current range has only one
+        // value, and this value is already counted in the previous range. So there is no need to
+        // count it in this range.
+        totalNdv += range.minNdv
+      }
+      // Apply the formula in this overlapping range.
+      card += range.leftNumRows * range.rightNumRows / range.maxNdv
+    }
+
+    val leftKeyStat = leftStats.attributeStats(leftKey)
+    val rightKeyStat = rightStats.attributeStats(rightKey)
+    val newMaxLen = math.min(leftKeyStat.maxLen, rightKeyStat.maxLen)
+    val newAvgLen = (leftKeyStat.avgLen + rightKeyStat.avgLen) / 2
+    val newStats = ColumnStat(ceil(totalNdv), newMin, newMax, 0, newAvgLen, newMaxLen)
     (ceil(card), newStats)
   }
 
