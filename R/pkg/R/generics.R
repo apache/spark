@@ -1051,6 +1051,11 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @rdname column_datetime_functions
 #' @export
 #' @name NULL
+setGeneric("dayofweek", function(x) { standardGeneric("dayofweek") })
+
+#' @rdname column_datetime_functions
+#' @export
+#' @name NULL
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
 #' @rdname column_string_functions
