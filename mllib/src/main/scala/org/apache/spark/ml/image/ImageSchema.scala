@@ -192,6 +192,8 @@ object ImageSchema {
    *
    * @note If multiple jobs are run in parallel with different sampleRatio or recursive flag,
    * there may be a race condition where one job overwrites the hadoop configs of another.
+   * @note If sample ratio is less than 1, sampling uses a PathFilter that is efficient but
+   * potentially non-deterministic.
    *
    * @param path Path to the image directory
    * @return DataFrame with a single column "image" of images;
@@ -204,6 +206,8 @@ object ImageSchema {
    *
    * @note If multiple jobs are run in parallel with different sampleRatio or recursive flag,
    * there may be a race condition where one job overwrites the hadoop configs of another.
+   * @note If sample ratio is less than 1, sampling uses a PathFilter that is efficient but
+   * potentially non-deterministic.
    *
    * @param path Path to the image directory
    * @param sparkSession Spark Session, if omitted gets or creates the session
