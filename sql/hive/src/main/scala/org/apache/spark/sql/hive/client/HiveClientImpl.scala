@@ -973,7 +973,7 @@ private[hive] object HiveClientImpl {
         }
       case _ =>
     }
-    
+
     hiveTable
   }
 
