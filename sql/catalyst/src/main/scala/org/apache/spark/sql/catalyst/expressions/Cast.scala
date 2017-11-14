@@ -164,7 +164,7 @@ object Cast {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
        10
@@ -387,10 +387,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   /**
    * Create new `Decimal` with precision and scale given in `decimalType` (if any),
    * returning null if it overflows or creating a new `value` and returning it if successful.
-   *
    */
   private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =
-    value.toPrecision(decimalType.precision, decimalType.scale).orNull
+    value.toPrecision(decimalType.precision, decimalType.scale)
 
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
@@ -482,15 +481,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
-    val newRow = new GenericInternalRow(from.fields.length)
     buildCast[InternalRow](_, row => {
+      val newRow = new GenericInternalRow(from.fields.length)
       var i = 0
       while (i < row.numFields) {
         newRow.update(i,
           if (row.isNullAt(i)) null else castFuncs(i)(row.get(i, from.apply(i).dataType)))
         i += 1
       }
-      newRow.copy()
+      newRow
     })
   }
 
@@ -1047,7 +1046,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         final $rowClass $result = new $rowClass(${fieldsCasts.length});
         final InternalRow $tmpRow = $c;
         $fieldsEvalCode
-        $evPrim = $result.copy();
+        $evPrim = $result;
       """
   }
 

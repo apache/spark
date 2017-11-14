@@ -35,6 +35,10 @@
 
   <dependencies>
     <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
@@ -101,13 +105,7 @@
     <dependency>
       <groupId>org.jpmml</groupId>
       <artifactId>pmml-model</artifactId>
-      <version>1.2.15</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.jpmml</groupId>
-          <artifactId>pmml-agent</artifactId>
-        </exclusion>
-      </exclusions>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -139,8 +137,38 @@
       </dependencies>
     </profile>
   </profiles>
+
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <!-- When using SPARK_PREPEND_CLASSES Spark classes compiled locally don't use
+               shaded deps. So here we store jars in their original form which are added
+               when the classpath is computed. -->
+          <!-- See similar execution in core/pom.xml -->
+          <execution>
+            <id>copy-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}</outputDirectory>
+              <overWriteReleases>false</overWriteReleases>
+              <overWriteSnapshots>false</overWriteSnapshots>
+              <overWriteIfNewer>true</overWriteIfNewer>
+              <useSubDirectoryPerType>true</useSubDirectoryPerType>
+              <includeGroupIds>org.jpmml</includeGroupIds>
+              <silent>true</silent>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
   </build>
+
 </project>

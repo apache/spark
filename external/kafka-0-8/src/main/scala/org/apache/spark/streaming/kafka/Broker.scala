@@ -23,6 +23,7 @@ import org.apache.spark.annotation.Experimental
  * Represents the host and port info for a Kafka broker.
  * Differs from the Kafka project's internal kafka.cluster.Broker, which contains a server ID.
  */
+@deprecated("Update to Kafka 0.10 integration", "2.3.0")
 final class Broker private(
     /** Broker's hostname */
     val host: String,
@@ -49,6 +50,7 @@ final class Broker private(
  * Companion object that provides methods to create instances of [[Broker]].
  */
 @Experimental
+@deprecated("Update to Kafka 0.10 integration", "2.3.0")
 object Broker {
   def create(host: String, port: Int): Broker =
     new Broker(host, port)

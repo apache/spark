@@ -18,12 +18,14 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
  * Tests for the sameResult function for [[SparkPlan]]s.
  */
 class SameResultSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("FileSourceScanExec: different orders of data filters and partition filters") {
     withTempPath { path =>
@@ -45,5 +47,15 @@ class SameResultSuite extends QueryTest with SharedSQLContext {
   private def getFileSourceScanExec(df: DataFrame): FileSourceScanExec = {
     df.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
       .asInstanceOf[FileSourceScanExec]
+  }
+
+  test("SPARK-20725: partial aggregate should behave correctly for sameResult") {
+    val df1 = spark.range(10).agg(sum($"id"))
+    val df2 = spark.range(10).agg(sum($"id"))
+    assert(df1.queryExecution.executedPlan.sameResult(df2.queryExecution.executedPlan))
+
+    val df3 = spark.range(10).agg(sumDistinct($"id"))
+    val df4 = spark.range(10).agg(sumDistinct($"id"))
+    assert(df3.queryExecution.executedPlan.sameResult(df4.queryExecution.executedPlan))
   }
 }

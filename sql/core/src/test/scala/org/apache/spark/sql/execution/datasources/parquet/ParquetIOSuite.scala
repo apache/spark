@@ -110,12 +110,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |  required binary h(DECIMAL(32,0));
         |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
         |  required int64 j(TIMESTAMP_MILLIS);
+        |  required int64 k(TIMESTAMP_MICROS);
         |}
       """.stripMargin)
 
     val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
       DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0),
-      TimestampType)
+      TimestampType, TimestampType)
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
@@ -211,7 +212,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   testStandardAndLegacyModes("nested map with struct as value type") {
-    val data = (1 to 4).map(i => Tuple1(Map(i -> (i, s"val_$i"))))
+    val data = (1 to 4).map(i => Tuple1(Map(i -> ((i, s"val_$i")))))
     withParquetDataFrame(data) { df =>
       checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
@@ -380,7 +381,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
 
-      val expectedSchema = new ParquetSchemaConverter().convert(schema)
+      val expectedSchema = new SparkToParquetSchemaConverter().convert(schema)
       val actualSchema = readFooter(path, hadoopConf).getFileMetaData.getSchema
 
       actualSchema.checkContains(expectedSchema)

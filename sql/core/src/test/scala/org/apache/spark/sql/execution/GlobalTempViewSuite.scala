@@ -35,39 +35,53 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
   private var globalTempDB: String = _
 
   test("basic semantic") {
-    sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 'a'")
+    val expectedErrorMsg = "not found"
+    try {
+      sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 'a'")
 
-    // If there is no database in table name, we should try local temp view first, if not found,
-    // try table/view in current database, which is "default" in this case. So we expect
-    // NoSuchTableException here.
-    intercept[NoSuchTableException](spark.table("src"))
+      // If there is no database in table name, we should try local temp view first, if not found,
+      // try table/view in current database, which is "default" in this case. So we expect
+      // NoSuchTableException here.
+      var e = intercept[AnalysisException](spark.table("src")).getMessage
+      assert(e.contains(expectedErrorMsg))
 
-    // Use qualified name to refer to the global temp view explicitly.
-    checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
+      // Use qualified name to refer to the global temp view explicitly.
+      checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
 
-    // Table name without database will never refer to a global temp view.
-    intercept[NoSuchTableException](sql("DROP VIEW src"))
+      // Table name without database will never refer to a global temp view.
+      e = intercept[AnalysisException](sql("DROP VIEW src")).getMessage
+      assert(e.contains(expectedErrorMsg))
 
-    sql(s"DROP VIEW $globalTempDB.src")
-    // The global temp view should be dropped successfully.
-    intercept[NoSuchTableException](spark.table(s"$globalTempDB.src"))
+      sql(s"DROP VIEW $globalTempDB.src")
+      // The global temp view should be dropped successfully.
+      e = intercept[AnalysisException](spark.table(s"$globalTempDB.src")).getMessage
+      assert(e.contains(expectedErrorMsg))
 
-    // We can also use Dataset API to create global temp view
-    Seq(1 -> "a").toDF("i", "j").createGlobalTempView("src")
-    checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
+      // We can also use Dataset API to create global temp view
+      Seq(1 -> "a").toDF("i", "j").createGlobalTempView("src")
+      checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
 
-    // Use qualified name to rename a global temp view.
-    sql(s"ALTER VIEW $globalTempDB.src RENAME TO src2")
-    intercept[NoSuchTableException](spark.table(s"$globalTempDB.src"))
-    checkAnswer(spark.table(s"$globalTempDB.src2"), Row(1, "a"))
+      // Use qualified name to rename a global temp view.
+      sql(s"ALTER VIEW $globalTempDB.src RENAME TO src2")
+      e = intercept[AnalysisException](spark.table(s"$globalTempDB.src")).getMessage
+      assert(e.contains(expectedErrorMsg))
+      checkAnswer(spark.table(s"$globalTempDB.src2"), Row(1, "a"))
 
-    // Use qualified name to alter a global temp view.
-    sql(s"ALTER VIEW $globalTempDB.src2 AS SELECT 2, 'b'")
-    checkAnswer(spark.table(s"$globalTempDB.src2"), Row(2, "b"))
+      // Use qualified name to alter a global temp view.
+      sql(s"ALTER VIEW $globalTempDB.src2 AS SELECT 2, 'b'")
+      checkAnswer(spark.table(s"$globalTempDB.src2"), Row(2, "b"))
 
-    // We can also use Catalog API to drop global temp view
-    spark.catalog.dropGlobalTempView("src2")
-    intercept[NoSuchTableException](spark.table(s"$globalTempDB.src2"))
+      // We can also use Catalog API to drop global temp view
+      spark.catalog.dropGlobalTempView("src2")
+      e = intercept[AnalysisException](spark.table(s"$globalTempDB.src2")).getMessage
+      assert(e.contains(expectedErrorMsg))
+
+      // We can also use Dataset API to replace global temp view
+      Seq(2 -> "b").toDF("i", "j").createOrReplaceGlobalTempView("src")
+      checkAnswer(spark.table(s"$globalTempDB.src"), Row(2, "b"))
+    } finally {
+      spark.catalog.dropGlobalTempView("src")
+    }
   }
 
   test("global temp view is shared among all sessions") {
@@ -106,7 +120,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
   test("CREATE TABLE LIKE should work for global temp view") {
     try {
       sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
-      sql(s"CREATE TABLE cloned LIKE ${globalTempDB}.src")
+      sql(s"CREATE TABLE cloned LIKE $globalTempDB.src")
       val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier("cloned"))
       assert(tableMeta.schema == new StructType().add("a", "int", false).add("b", "string", false))
     } finally {

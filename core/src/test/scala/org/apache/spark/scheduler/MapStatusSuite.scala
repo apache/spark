@@ -17,12 +17,17 @@
 
 package org.apache.spark.scheduler
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+
 import scala.util.Random
 
+import org.mockito.Mockito._
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark.LocalSparkContext._
+import org.apache.spark.internal.config
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.storage.BlockManagerId
 
 class MapStatusSuite extends SparkFunSuite {
@@ -127,5 +132,38 @@ class MapStatusSuite extends SparkFunSuite {
     val size2 = r.getSizeInBytes
     assert(size1 === size2)
     assert(!success)
+  }
+
+  test("Blocks which are bigger than SHUFFLE_ACCURATE_BLOCK_THRESHOLD should not be " +
+    "underestimated.") {
+    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.key, "1000")
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+    // Value of element in sizes is equal to the corresponding index.
+    val sizes = (0L to 2000L).toArray
+    val status1 = MapStatus(BlockManagerId("exec-0", "host-0", 100), sizes)
+    val arrayStream = new ByteArrayOutputStream(102400)
+    val objectOutputStream = new ObjectOutputStream(arrayStream)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
+    objectOutputStream.writeObject(status1)
+    objectOutputStream.flush()
+    val array = arrayStream.toByteArray
+    val objectInput = new ObjectInputStream(new ByteArrayInputStream(array))
+    val status2 = objectInput.readObject().asInstanceOf[HighlyCompressedMapStatus]
+    (1001 to 2000).foreach {
+      case part => assert(status2.getSizeForBlock(part) >= sizes(part))
+    }
+  }
+
+  test("SPARK-21133 HighlyCompressedMapStatus#writeExternal throws NPE") {
+    val conf = new SparkConf()
+      .set("spark.serializer", classOf[KryoSerializer].getName)
+      .setMaster("local")
+      .setAppName("SPARK-21133")
+    withSpark(new SparkContext(conf)) { sc =>
+      val count = sc.parallelize(0 until 3000, 10).repartition(2001).collect().length
+      assert(count === 3000)
+    }
   }
 }

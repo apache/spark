@@ -364,7 +364,6 @@ class AFTSurvivalRegressionSuite
 
   test("should support all NumericType censors, and not support other types") {
     val df = spark.createDataFrame(Seq(
-      (0, Vectors.dense(0)),
       (1, Vectors.dense(1)),
       (2, Vectors.dense(2)),
       (3, Vectors.dense(3)),

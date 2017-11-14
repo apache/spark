@@ -17,13 +17,10 @@
 
 package org.apache.spark.streaming.kinesis
 
-import java.lang.IllegalArgumentException
-
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext, TestSuiteBase}
 

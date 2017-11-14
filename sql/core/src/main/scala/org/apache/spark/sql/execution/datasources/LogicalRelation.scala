@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.util.Utils
 
@@ -30,25 +30,19 @@ import org.apache.spark.util.Utils
 case class LogicalRelation(
     relation: BaseRelation,
     output: Seq[AttributeReference],
-    catalogTable: Option[CatalogTable])
+    catalogTable: Option[CatalogTable],
+    override val isStreaming: Boolean)
   extends LeafNode with MultiInstanceRelation {
 
-  // Logical Relations are distinct if they have different output for the sake of transformations.
-  override def equals(other: Any): Boolean = other match {
-    case l @ LogicalRelation(otherRelation, _, _) => relation == otherRelation && output == l.output
-    case _ => false
-  }
-
-  override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(relation, output)
-  }
-
   // Only care about relation when canonicalizing.
-  override def preCanonicalized: LogicalPlan = copy(catalogTable = None)
+  override def doCanonicalize(): LogicalPlan = copy(
+    output = output.map(QueryPlan.normalizeExprId(_, output)),
+    catalogTable = None)
 
-  @transient override def computeStats(conf: SQLConf): Statistics = {
-    catalogTable.flatMap(_.stats.map(_.toPlanStats(output))).getOrElse(
-      Statistics(sizeInBytes = relation.sizeInBytes))
+  override def computeStats(): Statistics = {
+    catalogTable
+      .flatMap(_.stats.map(_.toPlanStats(output)))
+      .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
   }
 
   /** Used to lookup original attribute capitalization */
@@ -73,9 +67,9 @@ case class LogicalRelation(
 }
 
 object LogicalRelation {
-  def apply(relation: BaseRelation): LogicalRelation =
-    LogicalRelation(relation, relation.schema.toAttributes, None)
+  def apply(relation: BaseRelation, isStreaming: Boolean = false): LogicalRelation =
+    LogicalRelation(relation, relation.schema.toAttributes, None, isStreaming)
 
   def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation =
-    LogicalRelation(relation, relation.schema.toAttributes, Some(table))
+    LogicalRelation(relation, relation.schema.toAttributes, Some(table), false)
 }

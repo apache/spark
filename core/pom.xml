@@ -69,6 +69,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kvstore_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-network-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -190,8 +195,12 @@
       <artifactId>snappy-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>net.jpountz.lz4</groupId>
-      <artifactId>lz4</artifactId>
+      <groupId>org.lz4</groupId>
+      <artifactId>lz4-java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.luben</groupId>
+      <artifactId>zstd-jni</artifactId>
     </dependency>
     <dependency>
       <groupId>org.roaringbitmap</groupId>
@@ -335,7 +344,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.4</version>
+      <version>0.10.6</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -357,6 +366,34 @@
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-crypto</artifactId>
     </dependency>
+
+    <!--
+     The following dependencies are depended upon in HiveCredentialProvider, but are only executed if Hive is enabled in
+     the user's Hadoop configuration.  So in order to prevent spark-core from depending on Hive, these deps have been
+     placed in the "provided" scope, rather than the "compile" scope, and NoClassDefFoundError exceptions are handled
+     when the user has not explicitly compiled with the Hive module.
+    -->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-exec</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-metastore</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libfb303</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -401,6 +438,7 @@
           <!-- When using SPARK_PREPEND_CLASSES Spark classes compiled locally don't use
                shaded deps. So here we store jars in their original form which are added
                when the classpath is computed. -->
+          <!-- See similar execution in mllib/pom.xml -->
           <execution>
             <id>copy-dependencies</id>
             <phase>package</phase>
@@ -454,6 +492,7 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
+            <version>1.6.0</version>
             <executions>
               <execution>
                 <id>sparkr-pkg</id>
@@ -464,7 +503,7 @@
               </execution>
             </executions>
             <configuration>
-              <executable>..${file.separator}R${file.separator}install-dev${script.extension}</executable>
+              <executable>${project.basedir}${file.separator}..${file.separator}R${file.separator}install-dev${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>

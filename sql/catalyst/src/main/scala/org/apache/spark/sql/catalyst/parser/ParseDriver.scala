@@ -18,7 +18,8 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.PredictionMode
-import org.antlr.v4.runtime.misc.ParseCancellationException
+import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
+import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -61,7 +62,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
    * definitions which will preserve the correct Hive metadata.
    */
   override def parseTableSchema(sqlText: String): StructType = parse(sqlText) { parser =>
-    StructType(astBuilder.visitColTypeList(parser.colTypeList()))
+    astBuilder.visitSingleTableSchema(parser.singleTableSchema())
   }
 
   /** Creates LogicalPlan for a given SQL string. */
@@ -78,9 +79,9 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   protected def astBuilder: AstBuilder
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    logInfo(s"Parsing command: $command")
+    logDebug(s"Parsing command: $command")
 
-    val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
+    val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
 
@@ -99,7 +100,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
       catch {
         case e: ParseCancellationException =>
           // if we fail, parse with LL mode
-          tokenStream.reset() // rewind input stream
+          tokenStream.seek(0) // rewind input stream
           parser.reset()
 
           // Try Again.
@@ -148,12 +149,33 @@ object CatalystSqlParser extends AbstractSqlParser {
  * the consume() function of the super class ANTLRStringStream. The LA() function is the lookahead
  * function and is purely used for matching lexical rules. This also means that the grammar will
  * only accept capitalized tokens in case it is run from other tools like antlrworks which do not
- * have the ANTLRNoCaseStringStream implementation.
+ * have the UpperCaseCharStream implementation.
  */
 
-private[parser] class ANTLRNoCaseStringStream(input: String) extends ANTLRInputStream(input) {
+private[parser] class UpperCaseCharStream(wrapped: CodePointCharStream) extends CharStream {
+  override def consume(): Unit = wrapped.consume
+  override def getSourceName(): String = wrapped.getSourceName
+  override def index(): Int = wrapped.index
+  override def mark(): Int = wrapped.mark
+  override def release(marker: Int): Unit = wrapped.release(marker)
+  override def seek(where: Int): Unit = wrapped.seek(where)
+  override def size(): Int = wrapped.size
+
+  override def getText(interval: Interval): String = {
+    // ANTLR 4.7's CodePointCharStream implementations have bugs when
+    // getText() is called with an empty stream, or intervals where
+    // the start > end. See
+    // https://github.com/antlr/antlr4/commit/ac9f7530 for one fix
+    // that is not yet in a released ANTLR artifact.
+    if (size() > 0 && (interval.b - interval.a >= 0)) {
+      wrapped.getText(interval)
+    } else {
+      ""
+    }
+  }
+
   override def LA(i: Int): Int = {
-    val la = super.LA(i)
+    val la = wrapped.LA(i)
     if (la == 0 || la == IntStream.EOF) la
     else Character.toUpperCase(la)
   }
@@ -244,11 +266,12 @@ case object PostProcessor extends SqlBaseBaseListener {
     val parent = ctx.getParent
     parent.removeLastChild()
     val token = ctx.getChild(0).getPayload.asInstanceOf[Token]
-    parent.addChild(f(new CommonToken(
+    val newToken = new CommonToken(
       new org.antlr.v4.runtime.misc.Pair(token.getTokenSource, token.getInputStream),
       SqlBaseParser.IDENTIFIER,
       token.getChannel,
       token.getStartIndex + stripMargins,
-      token.getStopIndex - stripMargins)))
+      token.getStopIndex - stripMargins)
+    parent.addChild(new TerminalNodeImpl(f(newToken)))
   }
 }

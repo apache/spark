@@ -66,6 +66,11 @@ res3: Long = 15
 
     ./bin/pyspark
 
+
+Or if PySpark is installed with pip in your current enviroment:
+
+    pyspark
+
 Spark's primary abstraction is a distributed collection of items called a Dataset. Datasets can be created from Hadoop InputFormats (such as HDFS files) or by transforming other Datasets. Due to Python's dynamic nature, we don't need the Dataset to be strongly-typed in Python. As a result, all Datasets in Python are Dataset[Row], and we call it `DataFrame` to be consistent with the data frame concept in Pandas and R. Let's make a new DataFrame from the text of the README file in the Spark source directory:
 
 {% highlight python %}
@@ -148,7 +153,7 @@ This first maps a line to an integer value and aliases it as "numWords", creatin
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight python %}
->>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).as("word")).groupBy("word").count()
+>>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
 {% endhighlight %}
 
 Here, we use the `explode` function in `select`, to transfrom a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
@@ -206,7 +211,7 @@ a cluster, as described in the [RDD programming guide](rdd-programming-guide.htm
 
 # Self-Contained Applications
 Suppose we wish to write a self-contained application using the Spark API. We will walk through a
-simple application in Scala (with sbt), Java (with Maven), and Python.
+simple application in Scala (with sbt), Java (with Maven), and Python (pip).
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -292,12 +297,13 @@ We'll create a very simple Spark application, `SimpleApp.java`:
 {% highlight java %}
 /* SimpleApp.java */
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.Dataset;
 
 public class SimpleApp {
   public static void main(String[] args) {
     String logFile = "YOUR_SPARK_HOME/README.md"; // Should be some file on your system
     SparkSession spark = SparkSession.builder().appName("Simple Application").getOrCreate();
-    Dataset<String> logData = spark.read.textFile(logFile).cache();
+    Dataset<String> logData = spark.read().textFile(logFile).cache();
 
     long numAs = logData.filter(s -> s.contains("a")).count();
     long numBs = logData.filter(s -> s.contains("b")).count();
@@ -367,6 +373,16 @@ Lines with a: 46, Lines with b: 23
 
 Now we will show how to write an application using the Python API (PySpark).
 
+
+If you are building a packaged PySpark application or library you can add it to your setup.py file as:
+
+{% highlight python %}
+    install_requires=[
+        'pyspark=={site.SPARK_VERSION}'
+    ]
+{% endhighlight %}
+
+
 As an example, we'll create a simple Spark application, `SimpleApp.py`:
 
 {% highlight python %}
@@ -374,7 +390,7 @@ As an example, we'll create a simple Spark application, `SimpleApp.py`:
 from pyspark.sql import SparkSession
 
 logFile = "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
-spark = SparkSession.builder().appName(appName).master(master).getOrCreate()
+spark = SparkSession.builder.appName("SimpleApp").getOrCreate()
 logData = spark.read.text(logFile).cache()
 
 numAs = logData.filter(logData.value.contains('a')).count()
@@ -402,6 +418,15 @@ We can run this application using the `bin/spark-submit` script:
 $ YOUR_SPARK_HOME/bin/spark-submit \
   --master local[4] \
   SimpleApp.py
+...
+Lines with a: 46, Lines with b: 23
+{% endhighlight %}
+
+If you have PySpark pip installed into your enviroment (e.g., `pip install pyspark`), you can run your application with the regular Python interpreter or use the provided 'spark-submit' as you prefer.
+
+{% highlight bash %}
+# Use the Python interpreter to run your application
+$ python SimpleApp.py
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}

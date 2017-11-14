@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -29,13 +29,11 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
 
 /**
- * :: Experimental ::
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
  * key-value stores, etc). Use `Dataset.writeStream` to access this.
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
@@ -269,12 +267,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         useTempCheckpointLocation = true,
         trigger = trigger)
     } else {
-      val (useTempCheckpointLocation, recoverFromCheckpointLocation) =
-        if (source == "console") {
-          (true, false)
-        } else {
-          (false, true)
-        }
       val dataSource =
         DataSource(
           df.sparkSession,
@@ -287,8 +279,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         df,
         dataSource.createSink(outputMode),
         outputMode,
-        useTempCheckpointLocation = useTempCheckpointLocation,
-        recoverFromCheckpointLocation = recoverFromCheckpointLocation,
+        useTempCheckpointLocation = source == "console",
+        recoverFromCheckpointLocation = true,
         trigger = trigger)
     }
   }

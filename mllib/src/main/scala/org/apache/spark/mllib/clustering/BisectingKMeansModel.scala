@@ -19,8 +19,8 @@ package org.apache.spark.mllib.clustering
 
 import org.json4s._
 import org.json4s.DefaultFormats
-import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since

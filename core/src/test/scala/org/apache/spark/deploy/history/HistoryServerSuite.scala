@@ -39,10 +39,11 @@ import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
+import org.apache.spark.deploy.history.config._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.util.{ResetSystemProperties, Utils}
@@ -64,16 +65,20 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   private val logDir = getTestResourcePath("spark-events")
   private val expRoot = getTestResourceFile("HistoryServerExpectations")
+  private val storeDir = Utils.createTempDir(namePrefix = "history")
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
   private var port: Int = -1
 
   def init(extraConf: (String, String)*): Unit = {
+    Utils.deleteRecursively(storeDir)
+    assert(storeDir.mkdir())
     val conf = new SparkConf()
       .set("spark.history.fs.logDirectory", logDir)
       .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
+      .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
     conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
@@ -87,14 +92,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   def stop(): Unit = {
     server.stop()
+    server = null
   }
 
   before {
-    init()
-  }
-
-  after{
-    stop()
+    if (server == null) {
+      init()
+    }
   }
 
   val cases = Seq(
@@ -154,7 +158,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
     "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors",
-    "executor memory usage" -> "applications/app-20161116163331-0000/executors"
+    "executor memory usage" -> "applications/app-20161116163331-0000/executors",
+
+    "app environment" -> "applications/app-20161116163331-0000/environment"
     // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
     // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
@@ -290,20 +296,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val uiRoot = "/testwebproxybase"
     System.setProperty("spark.ui.proxyBase", uiRoot)
 
-    server.stop()
-
-    val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir)
-      .set("spark.history.fs.update.interval", "0")
-      .set("spark.testing", "true")
-
-    provider = new FsHistoryProvider(conf)
-    provider.checkForLogs()
-    val securityManager = HistoryServer.createSecurityManager(conf)
-
-    server = new HistoryServer(conf, provider, securityManager, 18080)
-    server.initialize()
-    server.bind()
+    stop()
+    init()
 
     val port = server.boundPort
 
@@ -372,7 +366,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   }
 
   test("incomplete apps get refreshed") {
-
     implicit val webDriver: WebDriver = new HtmlUnitDriver
     implicit val formats = org.json4s.DefaultFormats
 
@@ -382,12 +375,14 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     // a new conf is used with the background thread set and running at its fastest
     // allowed refresh rate (1Hz)
+    stop()
     val myConf = new SparkConf()
       .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
       .set("spark.eventLog.dir", logDir.getAbsolutePath)
       .set("spark.history.fs.update.interval", "1s")
       .set("spark.eventLog.enabled", "true")
       .set("spark.history.cache.window", "250ms")
+      .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
     val securityManager = HistoryServer.createSecurityManager(myConf)
@@ -413,9 +408,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       }
     }
 
-    // stop the server with the old config, and start the new one
-    server.stop()
-    server = new HistoryServer(myConf, provider, securityManager, 18080)
+    server = new HistoryServer(myConf, provider, securityManager, 0)
     server.initialize()
     server.bind()
     val port = server.boundPort
@@ -461,7 +454,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     rootAppPage should not be empty
 
     def getAppUI: SparkUI = {
-      provider.getAppUI(appId, None).get.ui
+      server.withSparkUI(appId, None) { ui => ui }
     }
 
     // selenium isn't that useful on failures...add our own reporting
@@ -516,7 +509,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     getNumJobs("") should be (1)
     getNumJobs("/jobs") should be (1)
     getNumJobsRestful() should be (1)
-    assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
+    assert(metrics.lookupCount.getCount > 0, s"lookup count too low in $metrics")
 
     // dump state before the next bit of test, which is where update
     // checking really gets stressed

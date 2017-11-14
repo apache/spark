@@ -44,14 +44,15 @@ private[netty] class NettyRpcEnv(
     val conf: SparkConf,
     javaSerializerInstance: JavaSerializerInstance,
     host: String,
-    securityManager: SecurityManager) extends RpcEnv(conf) with Logging {
+    securityManager: SecurityManager,
+    numUsableCores: Int) extends RpcEnv(conf) with Logging {
 
   private[netty] val transportConf = SparkTransportConf.fromSparkConf(
     conf.clone.set("spark.rpc.io.numConnectionsPerPeer", "1"),
     "rpc",
     conf.getInt("spark.rpc.io.threads", 0))
 
-  private val dispatcher: Dispatcher = new Dispatcher(this)
+  private val dispatcher: Dispatcher = new Dispatcher(this, numUsableCores)
 
   private val streamManager = new NettyStreamManager(this)
 
@@ -185,7 +186,7 @@ private[netty] class NettyRpcEnv(
       try {
         dispatcher.postOneWayMessage(message)
       } catch {
-        case e: RpcEnvStoppedException => logWarning(e.getMessage)
+        case e: RpcEnvStoppedException => logDebug(e.getMessage)
       }
     } else {
       // Message to a remote RPC endpoint.
@@ -203,7 +204,10 @@ private[netty] class NettyRpcEnv(
 
     def onFailure(e: Throwable): Unit = {
       if (!promise.tryFailure(e)) {
-        logWarning(s"Ignored failure: $e")
+        e match {
+          case e : RpcEnvStoppedException => logDebug (s"Ignored failure: $e")
+          case _ => logWarning(s"Ignored failure: $e")
+        }
       }
     }
 
@@ -228,7 +232,7 @@ private[netty] class NettyRpcEnv(
           onFailure,
           (client, response) => onSuccess(deserialize[Any](client, response)))
         postToOutbox(message.receiver, rpcMessage)
-        promise.future.onFailure {
+        promise.future.failed.foreach {
           case _: TimeoutException => rpcMessage.onTimeout()
           case _ =>
         }(ThreadUtils.sameThread)
@@ -448,7 +452,7 @@ private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
       new JavaSerializer(sparkConf).newInstance().asInstanceOf[JavaSerializerInstance]
     val nettyEnv =
       new NettyRpcEnv(sparkConf, javaSerializerInstance, config.advertiseAddress,
-        config.securityManager)
+        config.securityManager, config.numUsableCores)
     if (!config.clientMode) {
       val startNettyRpcEnv: Int => (NettyRpcEnv, Int) = { actualPort =>
         nettyEnv.startServer(config.bindAddress, actualPort)

@@ -23,11 +23,11 @@ import java.util.{Locale, Map => JMap}
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -182,30 +182,6 @@ private[sql] object SQLUtils extends Logging {
       }
     }
     colArray
-  }
-
-  def saveMode(mode: String): SaveMode = {
-    mode match {
-      case "append" => SaveMode.Append
-      case "overwrite" => SaveMode.Overwrite
-      case "error" => SaveMode.ErrorIfExists
-      case "ignore" => SaveMode.Ignore
-    }
-  }
-
-  def loadDF(
-      sparkSession: SparkSession,
-      source: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.read.format(source).options(options).load()
-  }
-
-  def loadDF(
-      sparkSession: SparkSession,
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.read.format(source).schema(schema).options(options).load()
   }
 
   def readSqlObject(dis: DataInputStream, dataType: Char): Object = {

@@ -22,9 +22,9 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions
 import org.scalatest.exceptions.TestFailedException
 
@@ -96,6 +96,9 @@ class JsonProtocolSuite extends SparkFunSuite {
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)))
     }
+    val blockUpdated =
+      SparkListenerBlockUpdated(BlockUpdatedInfo(BlockManagerId("Stars",
+        "In your multitude...", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -120,6 +123,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(nodeBlacklisted, nodeBlacklistedJsonString)
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
+    testEvent(blockUpdated, blockUpdatedJsonString)
   }
 
   test("Dependent Classes") {
@@ -848,6 +852,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     } else {
       val sr = t.createTempShuffleReadMetrics()
       sr.incRemoteBytesRead(b + d)
+      sr.incRemoteBytesReadToDisk(b)
       sr.incLocalBlocksFetched(e)
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
@@ -1128,6 +1133,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
+      |      "Remote Bytes Read To Disk": 400,
       |      "Local Bytes Read": 1100,
       |      "Total Records Read": 10
       |    },
@@ -1228,6 +1234,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched" : 0,
       |      "Fetch Wait Time" : 0,
       |      "Remote Bytes Read" : 0,
+      |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0
       |    },
@@ -1328,10 +1335,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched" : 0,
       |      "Fetch Wait Time" : 0,
       |      "Remote Bytes Read" : 0,
+      |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0
       |    },
-      |    "Shuffle Write Metrics" : {
+      |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written" : 0,
       |      "Shuffle Write Time" : 0,
       |      "Shuffle Records Written" : 0
@@ -1915,76 +1923,83 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 14,
-      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
+      |          "Name": "${shuffleRead.REMOTE_BYTES_READ_TO_DISK}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 15,
-      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
+      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 16,
-      |          "Name": "${shuffleRead.RECORDS_READ}",
+      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 17,
-      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Name": "${shuffleRead.RECORDS_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 18,
-      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
+      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 19,
-      |          "Name": "${shuffleWrite.WRITE_TIME}",
+      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 20,
+      |          "Name": "${shuffleWrite.WRITE_TIME}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 21,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 21,
+      |          "ID": 22,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 22,
+      |          "ID": 23,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 23,
+      |          "ID": 24,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 24,
+      |          "ID": 25,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,
@@ -1993,6 +2008,29 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ]
       |    }
       |  ]
+      |}
+    """.stripMargin
+
+  private val blockUpdatedJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerBlockUpdated",
+      |  "Block Updated Info": {
+      |    "Block Manager ID": {
+      |      "Executor ID": "Stars",
+      |      "Host": "In your multitude...",
+      |      "Port": 300
+      |    },
+      |    "Block ID": "rdd_0_0",
+      |    "Storage Level": {
+      |      "Use Disk": false,
+      |      "Use Memory": true,
+      |      "Deserialized": true,
+      |      "Replication": 1
+      |    },
+      |    "Memory Size": 100,
+      |    "Disk Size": 0
+      |  }
       |}
     """.stripMargin
 

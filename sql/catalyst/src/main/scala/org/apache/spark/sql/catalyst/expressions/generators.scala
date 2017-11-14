@@ -127,7 +127,7 @@ case class UserDefinedGenerator(
  */
 @ExpressionDescription(
   usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(2, 1, 2, 3);
        1  2
@@ -137,6 +137,13 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
   private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
+
+  /**
+   * Return true iff the first child exists and has a foldable IntegerType.
+   */
+  def hasFoldableNumRows: Boolean = {
+    children.nonEmpty && children.head.dataType == IntegerType && children.head.foldable
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
@@ -154,6 +161,18 @@ case class Stack(children: Seq[Expression]) extends Generator {
       }
       TypeCheckResult.TypeCheckSuccess
     }
+  }
+
+  def findDataType(index: Int): DataType = {
+    // Find the first data type except NullType.
+    val firstDataIndex = ((index - 1) % numFields) + 1
+    for (i <- firstDataIndex until children.length by numFields) {
+      if (children(i).dataType != NullType) {
+        return children(i).dataType
+      }
+    }
+    // If all values of the column are NullType, use it.
+    NullType
   }
 
   override def elementSchema: StructType =
@@ -181,7 +200,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Rows - we write these into an array.
     val rowData = ctx.freshName("rows")
-    ctx.addMutableState("InternalRow[]", rowData, s"this.$rowData = new InternalRow[$numRows];")
+    ctx.addMutableState("InternalRow[]", rowData, s"$rowData = new InternalRow[$numRows];")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
     val code = ctx.splitExpressions(ctx.INPUT_ROW, Seq.tabulate(numRows) { row =>
@@ -190,7 +209,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
         if (index < values.length) values(index) else Literal(null, dataTypes(col))
       }
       val eval = CreateStruct(fields).genCode(ctx)
-      s"${eval.code}\nthis.$rowData[$row] = ${eval.value};"
+      s"${eval.code}\n$rowData[$row] = ${eval.value};"
     })
 
     // Create the collection.
@@ -198,7 +217,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
     ctx.addMutableState(
       s"$wrapperClass<InternalRow>",
       ev.value,
-      s"this.${ev.value} = $wrapperClass$$.MODULE$$.make(this.$rowData);")
+      s"${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);")
     ev.copy(code = code, isNull = "false")
   }
 }
@@ -305,7 +324,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(array(10, 20));
        10
@@ -328,7 +347,7 @@ case class Explode(child: Expression) extends ExplodeBase {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
        0  10
@@ -344,7 +363,7 @@ case class PosExplode(child: Expression) extends ExplodeBase {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Explodes an array of structs into a table.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
        1  a

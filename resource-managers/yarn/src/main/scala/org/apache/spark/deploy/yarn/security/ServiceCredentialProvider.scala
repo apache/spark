@@ -35,7 +35,7 @@ trait ServiceCredentialProvider {
   def serviceName: String
 
   /**
-   * To decide whether credential is required for this service. By default it based on whether
+   * Returns true if credentials are required by this service. By default, it is based on whether
    * Hadoop security is enabled.
    */
   def credentialsRequired(hadoopConf: Configuration): Boolean = {
@@ -44,6 +44,7 @@ trait ServiceCredentialProvider {
 
   /**
    * Obtain credentials for this service and get the time of the next renewal.
+   *
    * @param hadoopConf Configuration of current Hadoop Compatible system.
    * @param sparkConf Spark configuration.
    * @param creds Credentials to add tokens and security keys to.

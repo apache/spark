@@ -326,7 +326,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map((0, Map(
       (topNode.id, new RandomForest.NodeIndexInfo(0, None))
     )))
-    val nodeStack = new mutable.Stack[(Int, LearningNode)]
+    val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
       nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
 
@@ -368,7 +368,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map((0, Map(
       (topNode.id, new RandomForest.NodeIndexInfo(0, None))
     )))
-    val nodeStack = new mutable.Stack[(Int, LearningNode)]
+    val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
       nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
 
@@ -480,7 +480,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         val failString = s"Failed on test with:" +
           s"numTrees=$numTrees, featureSubsetStrategy=$featureSubsetStrategy," +
           s" numFeaturesPerNode=$numFeaturesPerNode, seed=$seed"
-        val nodeStack = new mutable.Stack[(Int, LearningNode)]
+        val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
         val topNodes: Array[LearningNode] = new Array[LearningNode](numTrees)
         Range(0, numTrees).foreach { treeIndex =>
           topNodes(treeIndex) = LearningNode.emptyNode(nodeIndex = 1)

@@ -35,7 +35,7 @@ Public classes:
   - :class:`StorageLevel`:
       Finer-grained cache persistence levels.
   - :class:`TaskContext`:
-      Information about the current running task, avaialble on the workers and experimental.
+      Information about the current running task, available on the workers and experimental.
 
 """
 

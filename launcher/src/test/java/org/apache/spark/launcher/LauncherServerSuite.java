@@ -19,8 +19,12 @@ package org.apache.spark.launcher;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.SocketException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
@@ -120,31 +124,7 @@ public class LauncherServerSuite extends BaseSuite {
       Socket s = new Socket(InetAddress.getLoopbackAddress(),
         LauncherServer.getServerInstance().getPort());
       client = new TestClient(s);
-
-      // Try a few times since the client-side socket may not reflect the server-side close
-      // immediately.
-      boolean helloSent = false;
-      int maxTries = 10;
-      for (int i = 0; i < maxTries; i++) {
-        try {
-          if (!helloSent) {
-            client.send(new Hello(handle.getSecret(), "1.4.0"));
-            helloSent = true;
-          } else {
-            client.send(new SetAppId("appId"));
-          }
-          fail("Expected exception caused by connection timeout.");
-        } catch (IllegalStateException | IOException e) {
-          // Expected.
-          break;
-        } catch (AssertionError e) {
-          if (i < maxTries - 1) {
-            Thread.sleep(100);
-          } else {
-            throw new AssertionError("Test failed after " + maxTries + " attempts.", e);
-          }
-        }
-      }
+      waitForError(client, handle.getSecret());
     } finally {
       SparkLauncher.launcherConfig.remove(SparkLauncher.CHILD_CONNECTION_TIMEOUT);
       kill(handle);
@@ -183,6 +163,33 @@ public class LauncherServerSuite extends BaseSuite {
     }
   }
 
+  @Test
+  public void testStreamFiltering() throws Exception {
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    TestClient client = null;
+    try {
+      Socket s = new Socket(InetAddress.getLoopbackAddress(),
+        LauncherServer.getServerInstance().getPort());
+
+      client = new TestClient(s);
+
+      try {
+        client.send(new EvilPayload());
+      } catch (SocketException se) {
+        // SPARK-21522: this can happen if the server closes the socket before the full message has
+        // been written, so it's expected. It may cause false positives though (socket errors
+        // happening for other reasons).
+      }
+
+      waitForError(client, handle.getSecret());
+      assertEquals(0, EvilPayload.EVIL_BIT);
+    } finally {
+      kill(handle);
+      close(client);
+      client.clientThread.join();
+    }
+  }
+
   private void kill(SparkAppHandle handle) {
     if (handle != null) {
       handle.kill();
@@ -195,6 +202,35 @@ public class LauncherServerSuite extends BaseSuite {
         c.close();
       } catch (Exception e) {
         // no-op.
+      }
+    }
+  }
+
+  /**
+   * Try a few times to get a client-side error, since the client-side socket may not reflect the
+   * server-side close immediately.
+   */
+  private void waitForError(TestClient client, String secret) throws Exception {
+    boolean helloSent = false;
+    int maxTries = 10;
+    for (int i = 0; i < maxTries; i++) {
+      try {
+        if (!helloSent) {
+          client.send(new Hello(secret, "1.4.0"));
+          helloSent = true;
+        } else {
+          client.send(new SetAppId("appId"));
+        }
+        fail("Expected error but message went through.");
+      } catch (IllegalStateException | IOException e) {
+        // Expected.
+        break;
+      } catch (AssertionError e) {
+        if (i < maxTries - 1) {
+          Thread.sleep(100);
+        } else {
+          throw new AssertionError("Test failed after " + maxTries + " attempts.", e);
+        }
       }
     }
   }
@@ -216,6 +252,21 @@ public class LauncherServerSuite extends BaseSuite {
     @Override
     protected void handle(Message msg) throws IOException {
       inbound.offer(msg);
+    }
+
+  }
+
+  private static class EvilPayload extends LauncherProtocol.Message {
+
+    static int EVIL_BIT = 0;
+
+    // This field should cause the launcher server to throw an error and not deserialize the
+    // message.
+    private List<String> notAllowedField = Arrays.asList("disallowed");
+
+    private void readObject(ObjectInputStream stream) throws IOException, ClassNotFoundException {
+      stream.defaultReadObject();
+      EVIL_BIT = 1;
     }
 
   }

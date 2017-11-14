@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Rand
+import org.apache.spark.sql.catalyst.expressions.{Alias, Rand}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.MetadataBuilder
 
 class CollapseProjectSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -118,5 +119,23 @@ class CollapseProjectSuite extends PlanTest {
     val correctAnswer = query.analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("preserve top-level alias metadata while collapsing projects") {
+    def hasMetadata(logicalPlan: LogicalPlan): Boolean = {
+      logicalPlan.asInstanceOf[Project].projectList.exists(_.metadata.contains("key"))
+    }
+
+    val metadata = new MetadataBuilder().putLong("key", 1).build()
+    val analyzed =
+      Project(Seq(Alias('a_with_metadata, "b")()),
+        Project(Seq(Alias('a, "a_with_metadata")(explicitMetadata = Some(metadata))),
+          testRelation.logicalPlan)).analyze
+    require(hasMetadata(analyzed))
+
+    val optimized = Optimize.execute(analyzed)
+    val projects = optimized.collect { case p: Project => p }
+    assert(projects.size === 1)
+    assert(hasMetadata(optimized))
   }
 }

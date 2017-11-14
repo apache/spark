@@ -216,15 +216,15 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
     // Before adding data, check output
     checkAnswer(sink.allData, Seq.empty)
-    assert(plan.stats(sqlConf).sizeInBytes === 0)
+    assert(plan.stats.sizeInBytes === 0)
 
     sink.addBatch(0, 1 to 3)
     plan.invalidateStatsCache()
-    assert(plan.stats(sqlConf).sizeInBytes === 12)
+    assert(plan.stats.sizeInBytes === 12)
 
     sink.addBatch(1, 4 to 6)
     plan.invalidateStatsCache()
-    assert(plan.stats(sqlConf).sizeInBytes === 24)
+    assert(plan.stats.sizeInBytes === 24)
   }
 
   ignore("stress test") {

@@ -112,6 +112,12 @@ class TaskMetrics private[spark] () extends Serializable {
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
+   *
+   * Tracking the _updatedBlockStatuses can use a lot of memory.
+   * It is not used anywhere inside of Spark so we would ideally remove it, but its exposed to
+   * the user in SparkListenerTaskEnd so the api is kept for compatibility.
+   * Tracking can be turned off to save memory via config
+   * TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES.
    */
   def updatedBlockStatuses: Seq[(BlockId, BlockStatus)] = {
     // This is called on driver. All accumulator updates have a fixed value. So it's safe to use
@@ -215,6 +221,7 @@ class TaskMetrics private[spark] () extends Serializable {
     shuffleRead.REMOTE_BLOCKS_FETCHED -> shuffleReadMetrics._remoteBlocksFetched,
     shuffleRead.LOCAL_BLOCKS_FETCHED -> shuffleReadMetrics._localBlocksFetched,
     shuffleRead.REMOTE_BYTES_READ -> shuffleReadMetrics._remoteBytesRead,
+    shuffleRead.REMOTE_BYTES_READ_TO_DISK -> shuffleReadMetrics._remoteBytesReadToDisk,
     shuffleRead.LOCAL_BYTES_READ -> shuffleReadMetrics._localBytesRead,
     shuffleRead.FETCH_WAIT_TIME -> shuffleReadMetrics._fetchWaitTime,
     shuffleRead.RECORDS_READ -> shuffleReadMetrics._recordsRead,

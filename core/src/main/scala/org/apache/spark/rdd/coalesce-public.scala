@@ -19,8 +19,8 @@ package org.apache.spark.rdd
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Partition
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * ::DeveloperApi::

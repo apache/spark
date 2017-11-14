@@ -128,14 +128,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4> Workers </h4>
+            <h4> Workers ({workers.length}) </h4>
             {workerTable}
           </div>
         </div>
 
         <div class="row-fluid">
           <div class="span12">
-            <h4 id="running-app"> Running Applications </h4>
+            <h4 id="running-app"> Running Applications ({activeApps.length}) </h4>
             {activeAppsTable}
           </div>
         </div>
@@ -144,7 +144,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           {if (hasDrivers) {
              <div class="row-fluid">
                <div class="span12">
-                 <h4> Running Drivers </h4>
+                 <h4> Running Drivers ({activeDrivers.length}) </h4>
                  {activeDriversTable}
                </div>
              </div>
@@ -154,7 +154,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4 id="completed-app"> Completed Applications </h4>
+            <h4 id="completed-app"> Completed Applications ({completedApps.length}) </h4>
             {completedAppsTable}
           </div>
         </div>
@@ -164,7 +164,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
             if (hasDrivers) {
               <div class="row-fluid">
                 <div class="span12">
-                  <h4> Completed Drivers </h4>
+                  <h4> Completed Drivers ({completedDrivers.length}) </h4>
                   {completedDriversTable}
                 </div>
               </div>

@@ -131,8 +131,9 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
         val outputAttrs = resolvedFunc.output
         // Checks if the number of the aliases is equal to expected one
         if (u.outputNames.size != outputAttrs.size) {
-          u.failAnalysis(s"expected ${outputAttrs.size} columns but " +
-            s"found ${u.outputNames.size} columns")
+          u.failAnalysis(s"Number of given aliases does not match number of output columns. " +
+            s"Function name: ${u.functionName}; number of aliases: " +
+            s"${u.outputNames.size}; number of output columns: ${outputAttrs.size}.")
         }
         val aliases = outputAttrs.zip(u.outputNames).map {
           case (attr, name) => Alias(attr, name)()

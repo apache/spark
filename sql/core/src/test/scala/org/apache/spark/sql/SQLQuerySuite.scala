@@ -27,6 +27,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -106,7 +107,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
-      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f)) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
       }
     }
@@ -521,14 +522,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("external sorting") {
     sortTest()
-  }
-
-  test("negative in LIMIT or TABLESAMPLE") {
-    val expected = "The limit expression must be equal to or greater than 0, but got -1"
-    var e = intercept[AnalysisException] {
-      sql("SELECT * FROM testData TABLESAMPLE (-1 rows)")
-    }.getMessage
-    assert(e.contains(expected))
   }
 
   test("CTE feature") {
@@ -1227,7 +1220,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-3483 Special chars in column names") {
     val data = Seq("""{"key?number1": "value1", "key.number2": "value2"}""").toDS()
     spark.read.json(data).createOrReplaceTempView("records")
-    sql("SELECT `key?number1`, `key.number2` FROM records")
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      sql("SELECT `key?number1`, `key.number2` FROM records")
+    }
   }
 
   test("SPARK-3814 Support Bitwise & operator") {
@@ -1347,7 +1342,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       .json(Seq("""{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""").toDS())
       .createOrReplaceTempView("t")
 
-    checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+    }
   }
 
   test("SPARK-6583 order by aggregated function") {
@@ -1550,10 +1547,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a + b"),
-      Seq(Row(BigDecimal(2.12321))))
+      Seq(Row(BigDecimal("2.12321"))))
     checkAnswer(
       df.selectExpr("b * a - b"),
-      Seq(Row(BigDecimal(0.12321))))
+      Seq(Row(BigDecimal("0.12321"))))
     checkAnswer(
       df.selectExpr("b * a * b"),
       Seq(Row(d)))
@@ -1843,25 +1840,28 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
 
     // Create paths with unusual characters
-    val specialCharacterPath = sql(
-      """
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      val specialCharacterPath = sql(
+        """
         | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
         |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
       """.stripMargin)
-    withTempView("specialCharacterTable") {
-      specialCharacterPath.createOrReplaceTempView("specialCharacterTable")
-      checkAnswer(
-        specialCharacterPath.select($"`r&&b.c`.*"),
-        nestedStructData.select($"record.*"))
-      checkAnswer(
-        sql("SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
+      withTempView("specialCharacterTable") {
+        specialCharacterPath.createOrReplaceTempView("specialCharacterTable")
+        checkAnswer(
+          specialCharacterPath.select($"`r&&b.c`.*"),
+          nestedStructData.select($"record.*"))
+        checkAnswer(
+        sql(
+          "SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
         nestedStructData.select($"record.r1"))
-      checkAnswer(
-        sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
-        nestedStructData.select($"record.r2"))
-      checkAnswer(
-        sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
-        nestedStructData.select($"record.r1.*"))
+        checkAnswer(
+          sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
+          nestedStructData.select($"record.r2"))
+        checkAnswer(
+          sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
+          nestedStructData.select($"record.r1.*"))
+      }
     }
 
     // Try star expanding a scalar. This should fail.
@@ -2623,5 +2623,138 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("RuntimeReplaceable functions should not take extra parameters") {
     val e = intercept[AnalysisException](sql("SELECT nvl(1, 2, 3)"))
     assert(e.message.contains("Invalid number of arguments"))
+  }
+
+  test("SPARK-21228: InSet incorrect handling of structs") {
+    withTempView("A") {
+      // reduce this from the default of 10 so the repro query text is not too long
+      withSQLConf((SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "3")) {
+        // a relation that has 1 column of struct type with values (1,1), ..., (9, 9)
+        spark.range(1, 10).selectExpr("named_struct('a', id, 'b', id) as a")
+          .createOrReplaceTempView("A")
+        val df = sql(
+          """
+            |SELECT * from
+            | (SELECT MIN(a) as minA FROM A) AA -- this Aggregate will return UnsafeRows
+            | -- the IN will become InSet with a Set of GenericInternalRows
+            | -- a GenericInternalRow is never equal to an UnsafeRow so the query would
+            | -- returns 0 results, which is incorrect
+            | WHERE minA IN (NAMED_STRUCT('a', 1L, 'b', 1L), NAMED_STRUCT('a', 2L, 'b', 2L),
+            |   NAMED_STRUCT('a', 3L, 'b', 3L))
+          """.stripMargin)
+        checkAnswer(df, Row(Row(1, 1)))
+      }
+    }
+  }
+
+  test("SPARK-21247: Allow case-insensitive type equality in Set operation") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
+      sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
+
+      withTable("t", "S") {
+        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
+        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
+        Seq(("c", "C"), ("C", "c"), ("c.f", "C.F"), ("C.F", "c.f")).foreach {
+          case (left, right) =>
+            checkAnswer(sql(s"SELECT * FROM t, S WHERE t.$left = S.$right"), Seq.empty)
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val m1 = intercept[AnalysisException] {
+        sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
+      }.message
+      assert(m1.contains("Union can only be performed on tables with the compatible column types"))
+
+      val m2 = intercept[AnalysisException] {
+        sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
+      }.message
+      assert(m2.contains("Except can only be performed on tables with the compatible column types"))
+
+      withTable("t", "S") {
+        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
+        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
+        checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
+        val m = intercept[AnalysisException] {
+          sql("SELECT * FROM t, S WHERE c = C")
+        }.message
+        assert(m.contains("cannot resolve '(t.`c` = S.`C`)' due to data type mismatch"))
+      }
+    }
+  }
+
+  test("SPARK-21335: support un-aliased subquery") {
+    withTempView("v") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
+      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
+
+      val e = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)"))
+      assert(e.message ==
+        "cannot resolve '`v.i`' given input columns: [__auto_generated_subquery_name.i]")
+
+      checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
+  }
+
+  test("SPARK-21743: top-most limit should not cause memory leak") {
+    // In unit test, Spark will fail the query if memory leak detected.
+    spark.range(100).groupBy("id").count().limit(1).collect()
+  }
+
+  test("SPARK-21652: rule confliction of InferFiltersFromConstraints and ConstantPropagation") {
+    withTempView("t1", "t2") {
+      Seq((1, 1)).toDF("col1", "col2").createOrReplaceTempView("t1")
+      Seq(1, 2).toDF("col").createOrReplaceTempView("t2")
+      val df = sql(
+        """
+          |SELECT *
+          |FROM t1, t2
+          |WHERE t1.col1 = 1 AND 1 = t1.col2 AND t1.col1 = t2.col AND t1.col2 = t2.col
+        """.stripMargin)
+      checkAnswer(df, Row(1, 1, 1))
+    }
+  }
+
+  test("SRARK-22266: the same aggregate function was calculated multiple times") {
+    val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
+    val df = sql(query)
+    val physical = df.queryExecution.sparkPlan
+    val aggregateExpressions = physical.collectFirst {
+      case agg : HashAggregateExec => agg.aggregateExpressions
+      case agg : SortAggregateExec => agg.aggregateExpressions
+    }
+    assert (aggregateExpressions.isDefined)
+    assert (aggregateExpressions.get.size == 1)
+    checkAnswer(df, Row(1, 3, 4) :: Row(2, 3, 4) :: Row(3, 3, 4) :: Nil)
+  }
+
+  test("Non-deterministic aggregate functions should not be deduplicated") {
+    val query = "SELECT a, first_value(b), first_value(b) + 1 FROM testData2 GROUP BY a"
+    val df = sql(query)
+    val physical = df.queryExecution.sparkPlan
+    val aggregateExpressions = physical.collectFirst {
+      case agg : HashAggregateExec => agg.aggregateExpressions
+      case agg : SortAggregateExec => agg.aggregateExpressions
+    }
+    assert (aggregateExpressions.isDefined)
+    assert (aggregateExpressions.get.size == 2)
+  }
+
+  test("SPARK-22356: overlapped columns between data and partition schema in data source tables") {
+    withTempPath { path =>
+      Seq((1, 1, 1), (1, 2, 1)).toDF("i", "p", "j")
+        .write.mode("overwrite").parquet(new File(path, "p=1").getCanonicalPath)
+      withTable("t") {
+        sql(s"create table t using parquet options(path='${path.getCanonicalPath}')")
+        // We should respect the column order in data schema.
+        assert(spark.table("t").columns === Array("i", "p", "j"))
+        checkAnswer(spark.table("t"), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
+        // The DESC TABLE should report same schema as table scan.
+        assert(sql("desc t").select("col_name")
+          .as[String].collect().mkString(",").contains("i,p,j"))
+      }
+    }
   }
 }

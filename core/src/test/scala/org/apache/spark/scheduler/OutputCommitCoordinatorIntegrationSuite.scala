@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import org.apache.hadoop.mapred.{FileOutputCommitter, TaskAttemptContext}
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TaskContext}
@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 class OutputCommitCoordinatorIntegrationSuite
   extends SparkFunSuite
   with LocalSparkContext
-  with Timeouts {
+  with TimeLimits {
 
   override def beforeAll(): Unit = {
     super.beforeAll()

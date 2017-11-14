@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution;
 import java.io.IOException;
 
 import org.apache.spark.SparkEnv;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
@@ -29,7 +30,6 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
-import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -63,8 +63,6 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   private final UnsafeRow currentAggregationBuffer;
 
-  private final boolean enablePerfMetrics;
-
   /**
    * @return true if UnsafeFixedWidthAggregationMap supports aggregation buffers with the given
    *         schema, false otherwise.
@@ -87,7 +85,6 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param taskMemoryManager the memory manager used to allocate our Unsafe memory structures.
    * @param initialCapacity the initial capacity of the map (a sizing hint to avoid re-hashing).
    * @param pageSizeBytes the data page size, in bytes; limits the maximum record size.
-   * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
    */
   public UnsafeFixedWidthAggregationMap(
       InternalRow emptyAggregationBuffer,
@@ -95,15 +92,13 @@ public final class UnsafeFixedWidthAggregationMap {
       StructType groupingKeySchema,
       TaskMemoryManager taskMemoryManager,
       int initialCapacity,
-      long pageSizeBytes,
-      boolean enablePerfMetrics) {
+      long pageSizeBytes) {
     this.aggregationBufferSchema = aggregationBufferSchema;
     this.currentAggregationBuffer = new UnsafeRow(aggregationBufferSchema.length());
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
     this.map =
-      new BytesToBytesMap(taskMemoryManager, initialCapacity, pageSizeBytes, enablePerfMetrics);
-    this.enablePerfMetrics = enablePerfMetrics;
+      new BytesToBytesMap(taskMemoryManager, initialCapacity, pageSizeBytes, true);
 
     // Initialize the buffer for aggregation value
     final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
@@ -223,15 +218,11 @@ public final class UnsafeFixedWidthAggregationMap {
     map.free();
   }
 
-  @SuppressWarnings("UseOfSystemOutOrSystemErr")
-  public void printPerfMetrics() {
-    if (!enablePerfMetrics) {
-      throw new IllegalStateException("Perf metrics not enabled");
-    }
-    System.out.println("Average probes per lookup: " + map.getAverageProbesPerLookup());
-    System.out.println("Number of hash collisions: " + map.getNumHashCollisions());
-    System.out.println("Time spent resizing (ns): " + map.getTimeSpentResizingNs());
-    System.out.println("Total memory consumption (bytes): " + map.getTotalMemoryConsumption());
+  /**
+   * Gets the average hash map probe per looking up for the underlying `BytesToBytesMap`.
+   */
+  public double getAverageProbesPerLookup() {
+    return map.getAverageProbesPerLookup();
   }
 
   /**
@@ -247,8 +238,8 @@ public final class UnsafeFixedWidthAggregationMap {
       SparkEnv.get().blockManager(),
       SparkEnv.get().serializerManager(),
       map.getPageSizeBytes(),
-      SparkEnv.get().conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
-        UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
+      (int) SparkEnv.get().conf().get(
+        package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD()),
       map);
   }
 }

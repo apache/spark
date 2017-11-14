@@ -135,7 +135,8 @@ createMethods()
 #' @aliases alias,Column-method
 #' @family colum_func
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(iris)
 #'
 #' head(select(
@@ -237,14 +238,17 @@ setMethod("between", signature(x = "Column"),
 #' @param x a Column.
 #' @param dataType a character object describing the target data type.
 #'        See
+# nolint start
 #'        \href{https://spark.apache.org/docs/latest/sparkr.html#data-type-mapping-between-r-and-spark}{
 #'        Spark Data Types} for available data types.
+# nolint end
 #' @rdname cast
 #' @name cast
 #' @family colum_func
 #' @aliases cast,Column-method
 #'
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   cast(df$age, "string")
 #' }
 #' @note cast since 1.4.0

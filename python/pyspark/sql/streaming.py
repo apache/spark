@@ -41,7 +41,7 @@ class StreamingQuery(object):
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
 
-    .. note:: Experimental
+    .. note:: Evolving
 
     .. versionadded:: 2.0
     """
@@ -197,7 +197,7 @@ class StreamingQuery(object):
 class StreamingQueryManager(object):
     """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
 
-    .. note:: Experimental
+    .. note:: Evolving
 
     .. versionadded:: 2.0
     """
@@ -283,7 +283,7 @@ class DataStreamReader(OptionUtils):
     (e.g. file systems, key-value stores, etc). Use :func:`spark.readStream`
     to access this.
 
-    .. note:: Experimental.
+    .. note:: Evolving.
 
     .. versionadded:: 2.0
     """
@@ -300,7 +300,7 @@ class DataStreamReader(OptionUtils):
     def format(self, source):
         """Specifies the input data source format.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param source: string, name of the data source, e.g. 'json', 'parquet'.
 
@@ -317,18 +317,23 @@ class DataStreamReader(OptionUtils):
         By specifying the schema here, the underlying data source can skip the schema
         inference step, and thus speed up data loading.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
-        :param schema: a :class:`pyspark.sql.types.StructType` object
+        :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
+                       (For example ``col0 INT, col1 DOUBLE``).
 
         >>> s = spark.readStream.schema(sdf_schema)
+        >>> s = spark.readStream.schema("col0 INT, col1 DOUBLE")
         """
         from pyspark.sql import SparkSession
-        if not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType")
         spark = SparkSession.builder.getOrCreate()
-        jschema = spark._jsparkSession.parseDataType(schema.json())
-        self._jreader = self._jreader.schema(jschema)
+        if isinstance(schema, StructType):
+            jschema = spark._jsparkSession.parseDataType(schema.json())
+            self._jreader = self._jreader.schema(jschema)
+        elif isinstance(schema, basestring):
+            self._jreader = self._jreader.schema(schema)
+        else:
+            raise TypeError("schema should be StructType or string")
         return self
 
     @since(2.0)
@@ -340,7 +345,7 @@ class DataStreamReader(OptionUtils):
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         >>> s = spark.readStream.option("x", 1)
         """
@@ -356,7 +361,7 @@ class DataStreamReader(OptionUtils):
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         >>> s = spark.readStream.options(x="1", y=2)
         """
@@ -368,11 +373,12 @@ class DataStreamReader(OptionUtils):
     def load(self, path=None, format=None, schema=None, **options):
         """Loads a data stream from a data source and returns it as a :class`DataFrame`.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param path: optional string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
-        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param options: all other string options
 
         >>> json_sdf = spark.readStream.format("json") \\
@@ -401,21 +407,22 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             wholeFile=None):
+             multiLine=None,  allowUnquotedControlChars=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
         `JSON Lines <http://jsonlines.org/>`_ (newline-delimited JSON) is supported by default.
-        For JSON (one record per file), set the ``wholeFile`` parameter to ``true``.
+        For JSON (one record per file), set the ``multiLine`` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -458,8 +465,11 @@ class DataStreamReader(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
-        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
+        :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
+        :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
+                                          characters (ASCII characters with value less than 32,
+                                          including tab and line feed characters) or not.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -473,7 +483,8 @@ class DataStreamReader(OptionUtils):
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat, wholeFile=wholeFile)
+            timestampFormat=timestampFormat, multiLine=multiLine,
+            allowUnquotedControlChars=allowUnquotedControlChars)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
@@ -488,7 +499,7 @@ class DataStreamReader(OptionUtils):
                 Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``. \
                 The default value is specified in ``spark.sql.parquet.mergeSchema``.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         >>> parquet_sdf = spark.readStream.schema(sdf_schema).parquet(tempfile.mkdtemp())
         >>> parquet_sdf.isStreaming
@@ -511,7 +522,7 @@ class DataStreamReader(OptionUtils):
 
         Each line in the text file is a new row in the resulting DataFrame.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param paths: string, or list of strings, for input path(s).
 
@@ -532,17 +543,18 @@ class DataStreamReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, wholeFile=None):
+            columnNameOfCorruptRecord=None, multiLine=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param path: string, or list of strings, for input path(s).
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param sep: sets the single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
@@ -607,7 +619,7 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
-        :param wholeFile: parse one record, which may span multiple lines. If None is
+        :param multiLine: parse one record, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
@@ -624,7 +636,7 @@ class DataStreamReader(OptionUtils):
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
@@ -637,7 +649,7 @@ class DataStreamWriter(object):
     (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.writeStream`
     to access this.
 
-    .. note:: Experimental.
+    .. note:: Evolving.
 
     .. versionadded:: 2.0
     """
@@ -665,7 +677,7 @@ class DataStreamWriter(object):
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
 
-       .. note:: Experimental.
+       .. note:: Evolving.
 
         >>> writer = sdf.writeStream.outputMode('append')
         """
@@ -678,7 +690,7 @@ class DataStreamWriter(object):
     def format(self, source):
         """Specifies the underlying output data source.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param source: string, name of the data source, which for now can be 'parquet'.
 
@@ -696,7 +708,7 @@ class DataStreamWriter(object):
                 timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
@@ -710,7 +722,7 @@ class DataStreamWriter(object):
                 timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
 
-       .. note:: Experimental.
+       .. note:: Evolving.
         """
         for k in options:
             self._jwrite = self._jwrite.option(k, to_str(options[k]))
@@ -723,7 +735,7 @@ class DataStreamWriter(object):
         If specified, the output is laid out on the file system similar
         to Hive's partitioning scheme.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param cols: name of columns
 
@@ -739,7 +751,7 @@ class DataStreamWriter(object):
         :func:`start`. This name must be unique among all the currently active queries
         in the associated SparkSession.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param queryName: unique name for the query
 
@@ -756,7 +768,7 @@ class DataStreamWriter(object):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
 
@@ -794,7 +806,7 @@ class DataStreamWriter(object):
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save

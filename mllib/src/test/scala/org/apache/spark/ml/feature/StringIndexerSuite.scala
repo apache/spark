@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
@@ -313,5 +313,22 @@ class StringIndexerSuite
       assert(output === expected(idx))
       idx += 1
     }
+  }
+
+  test("SPARK-22446: StringIndexerModel's indexer UDF should not apply on filtered data") {
+    val df = List(
+         ("A", "London", "StrA"),
+         ("B", "Bristol", null),
+         ("C", "New York", "StrC")).toDF("ID", "CITY", "CONTENT")
+
+    val dfNoBristol = df.filter($"CONTENT".isNotNull)
+
+    val model = new StringIndexer()
+      .setInputCol("CITY")
+      .setOutputCol("CITYIndexed")
+      .fit(dfNoBristol)
+
+    val dfWithIndex = model.transform(dfNoBristol)
+    assert(dfWithIndex.filter($"CITYIndexed" === 1.0).count == 1)
   }
 }

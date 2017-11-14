@@ -66,12 +66,24 @@ public class PlatformUtilSuite {
   public void memoryDebugFillEnabledInTest() {
     Assert.assertTrue(MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED);
     MemoryBlock onheap = MemoryAllocator.HEAP.allocate(1);
-    MemoryBlock offheap = MemoryAllocator.UNSAFE.allocate(1);
     Assert.assertEquals(
       Platform.getByte(onheap.getBaseObject(), onheap.getBaseOffset()),
       MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+
+    MemoryBlock onheap1 = MemoryAllocator.HEAP.allocate(1024 * 1024);
+    MemoryAllocator.HEAP.free(onheap1);
+    Assert.assertEquals(
+      Platform.getByte(onheap1.getBaseObject(), onheap1.getBaseOffset()),
+      MemoryAllocator.MEMORY_DEBUG_FILL_FREED_VALUE);
+    MemoryBlock onheap2 = MemoryAllocator.HEAP.allocate(1024 * 1024);
+    Assert.assertEquals(
+      Platform.getByte(onheap2.getBaseObject(), onheap2.getBaseOffset()),
+      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+
+    MemoryBlock offheap = MemoryAllocator.UNSAFE.allocate(1);
     Assert.assertEquals(
       Platform.getByte(offheap.getBaseObject(), offheap.getBaseOffset()),
       MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+    MemoryAllocator.UNSAFE.free(offheap);
   }
 }

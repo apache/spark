@@ -23,7 +23,6 @@ import java.net.URI
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.parallel.ForkJoinTaskSupport
-import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.{Failure, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -47,10 +46,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 class ParquetFileFormat
   extends FileFormat
@@ -85,7 +85,7 @@ class ParquetFileFormat
       conf.getClass(
         SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
         classOf[ParquetOutputCommitter],
-        classOf[ParquetOutputCommitter])
+        classOf[OutputCommitter])
 
     if (conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key) == null) {
       logInfo("Using default output committer for Parquet: " +
@@ -97,7 +97,7 @@ class ParquetFileFormat
     conf.setClass(
       SQLConf.OUTPUT_COMMITTER_CLASS.key,
       committerClass,
-      classOf[ParquetOutputCommitter])
+      classOf[OutputCommitter])
 
     // We're not really using `ParquetOutputFormat[Row]` for writing data here, because we override
     // it in `ParquetOutputWriter` to support appending and dynamic partitioning.  The reason why
@@ -111,23 +111,15 @@ class ParquetFileFormat
     // This metadata is only useful for detecting optional columns when pushdowning filters.
     ParquetWriteSupport.setSchema(dataSchema, conf)
 
-    // Sets flags for `CatalystSchemaConverter` (which converts Catalyst schema to Parquet schema)
-    // and `CatalystWriteSupport` (writing actual rows to Parquet files).
-    conf.set(
-      SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.sessionState.conf.isParquetBinaryAsString.toString)
-
-    conf.set(
-      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp.toString)
-
+    // Sets flags for `ParquetWriteSupport`, which converts Catalyst schema to Parquet
+    // schema and writes actual rows to Parquet files.
     conf.set(
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
       sparkSession.sessionState.conf.writeLegacyParquetFormat.toString)
 
     conf.set(
-      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
-      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis.toString)
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
+      sparkSession.sessionState.conf.parquetOutputTimestampType.toString)
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
@@ -135,6 +127,14 @@ class ParquetFileFormat
     // SPARK-15719: Disables writing Parquet summary files by default.
     if (conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
       conf.setBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+    }
+
+    if (conf.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+      && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
+      // output summary is requested, but the class is not a Parquet Committer
+      logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot" +
+        s" create job summaries. " +
+        s"Set Parquet option ${ParquetOutputFormat.ENABLE_JOB_SUMMARY} to false.")
     }
 
     new OutputWriterFactory {
@@ -220,7 +220,7 @@ class ParquetFileFormat
 
         val needMerged: Seq[FileStatus] =
           if (mergeRespectSummaries) {
-            Seq()
+            Seq.empty
           } else {
             filesByType.data
           }
@@ -272,6 +272,13 @@ class ParquetFileFormat
       schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
+  override def vectorTypes(
+      requiredSchema: StructType,
+      partitionSchema: StructType): Option[Seq[String]] = {
+    Option(Seq.fill(requiredSchema.fields.length + partitionSchema.fields.length)(
+      classOf[OnHeapColumnVector].getName))
+  }
+
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],
@@ -290,23 +297,20 @@ class ParquetFileFormat
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
       ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
+      requiredSchema.json)
     hadoopConf.set(
       ParquetWriteSupport.SPARK_ROW_SCHEMA,
-      ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
+      requiredSchema.json)
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
-    // Sets flags for `CatalystSchemaConverter`
+    // Sets flags for `ParquetToSparkSchemaConverter`
     hadoopConf.setBoolean(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
       sparkSession.sessionState.conf.isParquetBinaryAsString)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
-      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
 
     // Try to push down filters when filter push-down is enabled.
     val pushed =
@@ -413,15 +417,9 @@ object ParquetFileFormat extends Logging {
   private[parquet] def readSchema(
       footers: Seq[Footer], sparkSession: SparkSession): Option[StructType] = {
 
-    def parseParquetSchema(schema: MessageType): StructType = {
-      val converter = new ParquetSchemaConverter(
-        sparkSession.sessionState.conf.isParquetBinaryAsString,
-        sparkSession.sessionState.conf.isParquetBinaryAsString,
-        sparkSession.sessionState.conf.writeLegacyParquetFormat,
-        sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
-
-      converter.convert(schema)
-    }
+    val converter = new ParquetToSparkSchemaConverter(
+      sparkSession.sessionState.conf.isParquetBinaryAsString,
+      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -432,7 +430,7 @@ object ParquetFileFormat extends Logging {
         .get(ParquetReadSupport.SPARK_METADATA_KEY)
       if (serializedSchema.isEmpty) {
         // Falls back to Parquet schema if no Spark SQL schema found.
-        Some(parseParquetSchema(metadata.getSchema))
+        Some(converter.convert(metadata.getSchema))
       } else if (!seen.contains(serializedSchema.get)) {
         seen += serializedSchema.get
 
@@ -455,7 +453,7 @@ object ParquetFileFormat extends Logging {
           .map(_.asInstanceOf[StructType])
           .getOrElse {
             // Falls back to Parquet schema if Spark SQL schema can't be parsed.
-            parseParquetSchema(metadata.getSchema)
+            converter.convert(metadata.getSchema)
           })
       } else {
         None
@@ -479,24 +477,29 @@ object ParquetFileFormat extends Logging {
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean): Seq[Footer] = {
     val parFiles = partFiles.par
-    parFiles.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
-    parFiles.flatMap { currentFile =>
-      try {
-        // Skips row group information since we only need the schema.
-        // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
-        // when it can't read the footer.
-        Some(new Footer(currentFile.getPath(),
-          ParquetFileReader.readFooter(
-            conf, currentFile, SKIP_ROW_GROUPS)))
-      } catch { case e: RuntimeException =>
-        if (ignoreCorruptFiles) {
-          logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
-          None
-        } else {
-          throw new IOException(s"Could not read footer for file: $currentFile", e)
+    val pool = ThreadUtils.newForkJoinPool("readingParquetFooters", 8)
+    parFiles.tasksupport = new ForkJoinTaskSupport(pool)
+    try {
+      parFiles.flatMap { currentFile =>
+        try {
+          // Skips row group information since we only need the schema.
+          // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
+          // when it can't read the footer.
+          Some(new Footer(currentFile.getPath(),
+            ParquetFileReader.readFooter(
+              conf, currentFile, SKIP_ROW_GROUPS)))
+        } catch { case e: RuntimeException =>
+          if (ignoreCorruptFiles) {
+            logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
+            None
+          } else {
+            throw new IOException(s"Could not read footer for file: $currentFile", e)
+          }
         }
-      }
-    }.seq
+      }.seq
+    } finally {
+      pool.shutdown()
+    }
   }
 
   /**
@@ -518,8 +521,6 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
-    val writeTimestampInMillis = sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis
-    val writeLegacyParquetFormat = sparkSession.sessionState.conf.writeLegacyParquetFormat
     val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
     // !! HACK ALERT !!
@@ -559,13 +560,9 @@ object ParquetFileFormat extends Logging {
               serializedConf.value, fakeFileStatuses, ignoreCorruptFiles)
 
           // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
-          val converter =
-            new ParquetSchemaConverter(
-              assumeBinaryIsString = assumeBinaryIsString,
-              assumeInt96IsTimestamp = assumeInt96IsTimestamp,
-              writeLegacyParquetFormat = writeLegacyParquetFormat,
-              writeTimestampInMillis = writeTimestampInMillis)
-
+          val converter = new ParquetToSparkSchemaConverter(
+            assumeBinaryIsString = assumeBinaryIsString,
+            assumeInt96IsTimestamp = assumeInt96IsTimestamp)
           if (footers.isEmpty) {
             Iterator.empty
           } else {
@@ -605,7 +602,7 @@ object ParquetFileFormat extends Logging {
    * a [[StructType]] converted from the [[MessageType]] stored in this footer.
    */
   def readSchemaFromFooter(
-      footer: Footer, converter: ParquetSchemaConverter): StructType = {
+      footer: Footer, converter: ParquetToSparkSchemaConverter): StructType = {
     val fileMetaData = footer.getParquetMetadata.getFileMetaData
     fileMetaData
       .getKeyValueMetaData

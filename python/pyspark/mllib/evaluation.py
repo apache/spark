@@ -234,7 +234,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         if label is None:
             # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
+            warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
             return self.call("precision")
         else:
             return self.call("precision", float(label))
@@ -246,7 +246,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         if label is None:
             # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
+            warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
             return self.call("recall")
         else:
             return self.call("recall", float(label))
@@ -259,7 +259,7 @@ class MulticlassMetrics(JavaModelWrapper):
         if beta is None:
             if label is None:
                 # note:: Deprecated in 2.0.0. Use accuracy.
-                warnings.warn("Deprecated in 2.0.0. Use accuracy.")
+                warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
                 return self.call("fMeasure")
             else:
                 return self.call("fMeasure", label)

@@ -28,12 +28,12 @@ import org.apache.spark.sql.catalyst.rules._
 class OptimizeCodegenSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("OptimizeCodegen", Once, OptimizeCodegen(conf)) :: Nil
+    val batches = Batch("OptimizeCodegen", Once, OptimizeCodegen) :: Nil
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
-    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation).analyze
-    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation).analyze)
+    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
+    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
     comparePlans(actual, correctAnswer)
   }
 
@@ -43,28 +43,28 @@ class OptimizeCodegenSuite extends PlanTest {
       CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen())
 
     assertEquivalent(
-      CaseWhen(List.fill(100)(TrueLiteral, Literal(1)), Literal(2)),
-      CaseWhen(List.fill(100)(TrueLiteral, Literal(1)), Literal(2)))
+      CaseWhen(List.fill(100)((TrueLiteral, Literal(1))), Literal(2)),
+      CaseWhen(List.fill(100)((TrueLiteral, Literal(1))), Literal(2)))
   }
 
   test("Nested CaseWhen Codegen.") {
     assertEquivalent(
       CaseWhen(
-        Seq((CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)), Literal(3))),
+        Seq((CaseWhen(Seq((TrueLiteral, TrueLiteral)), FalseLiteral), Literal(3))),
         CaseWhen(Seq((TrueLiteral, Literal(4))), Literal(5))),
       CaseWhen(
-        Seq((CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(), Literal(3))),
+        Seq((CaseWhen(Seq((TrueLiteral, TrueLiteral)), FalseLiteral).toCodegen(), Literal(3))),
         CaseWhen(Seq((TrueLiteral, Literal(4))), Literal(5)).toCodegen()).toCodegen())
   }
 
   test("Multiple CaseWhen in one operator.") {
-    val plan = OneRowRelation
+    val plan = OneRowRelation()
       .select(
         CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)),
         CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)),
         CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)),
         CaseWhen(Seq((TrueLiteral, Literal(5))), Literal(6))).analyze
-    val correctAnswer = OneRowRelation
+    val correctAnswer = OneRowRelation()
       .select(
         CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(),
         CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)).toCodegen(),
@@ -75,7 +75,7 @@ class OptimizeCodegenSuite extends PlanTest {
   }
 
   test("Multiple CaseWhen in different operators") {
-    val plan = OneRowRelation
+    val plan = OneRowRelation()
       .select(
         CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)),
         CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)),
@@ -85,7 +85,7 @@ class OptimizeCodegenSuite extends PlanTest {
           CaseWhen(Seq((TrueLiteral, Literal(5))), Literal(6)),
           CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)))
       ).analyze
-    val correctAnswer = OneRowRelation
+    val correctAnswer = OneRowRelation()
       .select(
         CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(),
         CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)).toCodegen(),

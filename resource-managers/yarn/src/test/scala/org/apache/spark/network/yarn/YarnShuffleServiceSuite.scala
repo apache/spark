@@ -44,6 +44,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   private[yarn] var yarnConfig: YarnConfiguration = null
   private[yarn] val SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager"
 
+  private var recoveryLocalDir: File = _
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     yarnConfig = new YarnConfiguration()
@@ -54,6 +56,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     yarnConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
     val localDir = Utils.createTempDir()
     yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
+
+    recoveryLocalDir = Utils.createTempDir()
   }
 
   var s1: YarnShuffleService = null
@@ -81,6 +85,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
   test("executor state kept across NM restart") {
     s1 = new YarnShuffleService
+    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     // set auth to true to test the secrets recovery
     yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, true)
     s1.init(yarnConfig)
@@ -123,6 +128,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     // now we pretend the shuffle service goes down, and comes back up
     s1.stop()
     s2 = new YarnShuffleService
+    s2.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     s2.init(yarnConfig)
     s2.secretsFile should be (secretsFile)
     s2.registeredExecutorFile should be (execStateFile)
@@ -140,6 +146,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     // Act like the NM restarts one more time
     s2.stop()
     s3 = new YarnShuffleService
+    s3.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     s3.init(yarnConfig)
     s3.registeredExecutorFile should be (execStateFile)
     s3.secretsFile should be (secretsFile)
@@ -156,6 +163,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
   test("removed applications should not be in registered executor file") {
     s1 = new YarnShuffleService
+    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
     s1.init(yarnConfig)
     val secretsFile = s1.secretsFile
@@ -190,6 +198,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
   test("shuffle service should be robust to corrupt registered executor file") {
     s1 = new YarnShuffleService
+    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     s1.init(yarnConfig)
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Data = makeAppInfo("user", app1Id)
@@ -215,6 +224,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     out.close()
 
     s2 = new YarnShuffleService
+    s2.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     s2.init(yarnConfig)
     s2.registeredExecutorFile should be (execStateFile)
 
@@ -234,6 +244,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     // another stop & restart should be fine though (eg., we recover from previous corruption)
     s3 = new YarnShuffleService
+    s3.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     s3.init(yarnConfig)
     s3.registeredExecutorFile should be (execStateFile)
     val handler3 = s3.blockHandler
@@ -254,14 +265,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s1.init(yarnConfig)
     s1._recoveryPath should be (recoveryPath)
     s1.stop()
-
-    // Test recovery path is set inside the shuffle service, this will be happened when NM
-    // recovery is not enabled or there's no NM recovery (Hadoop 2.5-).
-    s2 = new YarnShuffleService
-    s2.init(yarnConfig)
-    s2._recoveryPath should be
-      (new Path(yarnConfig.getTrimmedStrings("yarn.nodemanager.local-dirs")(0)))
-    s2.stop()
   }
 
   test("moving recovery file from NM local dir to recovery path") {
@@ -271,6 +274,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     // Simulate s1 is running on old version of Hadoop in which recovery file is in the NM local
     // dir.
     s1 = new YarnShuffleService
+    s1.setRecoveryPath(new Path(yarnConfig.getTrimmedStrings(YarnConfiguration.NM_LOCAL_DIRS)(0)))
     // set auth to true to test the secrets recovery
     yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, true)
     s1.init(yarnConfig)
@@ -308,7 +312,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     // Simulate s2 is running on Hadoop 2.5+ with NM recovery is enabled.
     assert(execStateFile.exists())
-    val recoveryPath = new Path(Utils.createTempDir().toURI)
+    val recoveryPath = new Path(recoveryLocalDir.toURI)
     s2 = new YarnShuffleService
     s2.setRecoveryPath(recoveryPath)
     s2.init(yarnConfig)
@@ -347,10 +351,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     // Set up a read-only local dir.
     val roDir = Utils.createTempDir()
     Files.setPosixFilePermissions(roDir.toPath(), EnumSet.of(OWNER_READ, OWNER_EXECUTE))
-    yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, roDir.getAbsolutePath())
 
     // Try to start the shuffle service, it should fail.
     val service = new YarnShuffleService()
+    service.setRecoveryPath(new Path(roDir.toURI))
 
     try {
       val error = intercept[ServiceStateException] {
@@ -367,6 +371,14 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   private def makeAppInfo(user: String, appId: ApplicationId): ApplicationInitializationContext = {
     val secret = ByteBuffer.wrap(new Array[Byte](0))
     new ApplicationInitializationContext(user, appId, secret)
+  }
+
+  test("recovery db should not be created if NM recovery is not enabled") {
+    s1 = new YarnShuffleService
+    s1.init(yarnConfig)
+    s1._recoveryPath should be (null)
+    s1.registeredExecutorFile should be (null)
+    s1.secretsFile should be (null)
   }
 
 }

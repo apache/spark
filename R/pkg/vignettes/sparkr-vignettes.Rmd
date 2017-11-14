@@ -27,6 +27,23 @@ vignette: >
  limitations under the License.
 -->
 
+```{r setup, include=FALSE}
+library(knitr)
+opts_hooks$set(eval = function(options) {
+  # override eval to FALSE only on windows
+  if (.Platform$OS.type == "windows") {
+    options$eval = FALSE
+  }
+  options
+})
+r_tmp_dir <- tempdir()
+tmp_arg <- paste0("-Djava.io.tmpdir=", r_tmp_dir)
+sparkSessionConfig <- list(spark.driver.extraJavaOptions = tmp_arg,
+                           spark.executor.extraJavaOptions = tmp_arg)
+old_java_opt <- Sys.getenv("_JAVA_OPTIONS")
+Sys.setenv("_JAVA_OPTIONS" = paste("-XX:-UsePerfData", old_java_opt, sep = " "))
+```
+
 ## Overview
 
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark `r packageVersion("SparkR")`, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](http://spark.apache.org/mllib/).
@@ -46,7 +63,7 @@ We use default settings in which it runs in local mode. It auto downloads Spark 
 
 ```{r, include=FALSE}
 install.spark()
-sparkR.session(master = "local[1]")
+sparkR.session(master = "local[1]", sparkConfig = sparkSessionConfig, enableHiveSupport = FALSE)
 ```
 ```{r, eval=FALSE}
 sparkR.session()
@@ -503,6 +520,8 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Tree - Classification and Regression
 
+* Decision Tree
+
 * Gradient-Boosted Trees (GBT)
 
 * Random Forest
@@ -776,16 +795,32 @@ newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
 head(predict(isoregModel, newDF))
 ```
 
+#### Decision Tree
+
+`spark.decisionTree` fits a [decision tree](https://en.wikipedia.org/wiki/Decision_tree_learning) classification or regression model on a `SparkDataFrame`.
+Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
+
+We use the `Titanic` dataset to train a decision tree and make predictions:
+
+```{r}
+t <- as.data.frame(Titanic)
+df <- createDataFrame(t)
+dtModel <- spark.decisionTree(df, Survived ~ ., type = "classification", maxDepth = 2)
+summary(dtModel)
+predictions <- predict(dtModel, df)
+```
+
 #### Gradient-Boosted Trees
 
 `spark.gbt` fits a [gradient-boosted tree](https://en.wikipedia.org/wiki/Gradient_boosting) classification or regression model on a `SparkDataFrame`.
 Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
 
-We use the `longley` dataset to train a gradient-boosted tree and make predictions:
+We use the `Titanic` dataset to train a gradient-boosted tree and make predictions:
 
-```{r, warning=FALSE}
-df <- createDataFrame(longley)
-gbtModel <- spark.gbt(df, Employed ~ ., type = "regression", maxDepth = 2, maxIter = 2)
+```{r}
+t <- as.data.frame(Titanic)
+df <- createDataFrame(t)
+gbtModel <- spark.gbt(df, Survived ~ ., type = "classification", maxDepth = 2, maxIter = 2)
 summary(gbtModel)
 predictions <- predict(gbtModel, df)
 ```
@@ -795,11 +830,12 @@ predictions <- predict(gbtModel, df)
 `spark.randomForest` fits a [random forest](https://en.wikipedia.org/wiki/Random_forest) classification or regression model on a `SparkDataFrame`.
 Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
 
-In the following example, we use the `longley` dataset to train a random forest and make predictions:
+In the following example, we use the `Titanic` dataset to train a random forest and make predictions:
 
-```{r, warning=FALSE}
-df <- createDataFrame(longley)
-rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
+```{r}
+t <- as.data.frame(Titanic)
+df <- createDataFrame(t)
+rfModel <- spark.randomForest(df, Survived ~ ., type = "classification", maxDepth = 2, numTrees = 2)
 summary(rfModel)
 predictions <- predict(rfModel, df)
 ```
@@ -965,17 +1001,18 @@ Given a `SparkDataFrame`, the test compares continuous data in a given column `t
 specified by parameter `nullHypothesis`.
 Users can call `summary` to get a summary of the test results.
 
-In the following example, we test whether the `longley` dataset's `Armed_Forces` column
+In the following example, we test whether the `Titanic` dataset's `Freq` column
 follows a normal distribution.  We set the parameters of the normal distribution using
 the mean and standard deviation of the sample.
 
-```{r, warning=FALSE}
-df <- createDataFrame(longley)
-afStats <- head(select(df, mean(df$Armed_Forces), sd(df$Armed_Forces)))
-afMean <- afStats[1]
-afStd <- afStats[2]
+```{r}
+t <- as.data.frame(Titanic)
+df <- createDataFrame(t)
+freqStats <- head(select(df, mean(df$Freq), sd(df$Freq)))
+freqMean <- freqStats[1]
+freqStd <- freqStats[2]
 
-test <- spark.kstest(df, "Armed_Forces", "norm", c(afMean, afStd))
+test <- spark.kstest(df, "Freq", "norm", c(freqMean, freqStd))
 testSummary <- summary(test)
 testSummary
 ```
@@ -1145,4 +1182,8 @@ env | map
 
 ```{r, echo=FALSE}
 sparkR.session.stop()
+```
+
+```{r cleanup, include=FALSE}
+SparkR:::uninstallDownloadedSpark()
 ```

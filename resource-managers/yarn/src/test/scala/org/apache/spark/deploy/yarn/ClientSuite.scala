@@ -122,6 +122,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
         cp should not contain (uri.getPath())
       }
     })
+    cp should not contain ("local")
     cp should contain(PWD)
     cp should contain (s"$PWD${Path.SEPARATOR}${LOCALIZED_CONF_DIR}")
     cp should not contain (APP_JAR)

@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -650,7 +651,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
         case LogicalRelation(
-            HadoopFsRelation(location: PartitioningAwareFileIndex, _, _, _, _, _), _, _) =>
+            HadoopFsRelation(location: PartitioningAwareFileIndex, _, _, _, _, _), _, _, _) =>
           assert(location.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a matching HadoopFsRelation, but got:\n$queryExecution")
@@ -676,7 +677,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         1.5.toFloat,
         4.5,
         new java.math.BigDecimal(new BigInteger("212500"), 5),
-        new java.math.BigDecimal(2.125),
+        new java.math.BigDecimal("2.125"),
         java.sql.Date.valueOf("2015-05-23"),
         new Timestamp(0),
         "This is a string, /[]?=:",
@@ -1020,6 +1021,50 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         df.write.parquet(s"$path/a=1")
         checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1, 2.0)))
       }
+    }
+  }
+
+  test("SPARK-21463: MetadataLogFileIndex should respect userSpecifiedSchema for partition cols") {
+    withTempDir { tempDir =>
+      val output = new File(tempDir, "output").toString
+      val checkpoint = new File(tempDir, "chkpoint").toString
+      try {
+        val stream = MemoryStream[(String, Int)]
+        val df = stream.toDS().toDF("time", "value")
+        val sq = df.writeStream
+          .option("checkpointLocation", checkpoint)
+          .format("parquet")
+          .partitionBy("time")
+          .start(output)
+
+        stream.addData(("2017-01-01-00", 1), ("2017-01-01-01", 2))
+        sq.processAllAvailable()
+
+        val schema = new StructType()
+          .add("time", StringType)
+          .add("value", IntegerType)
+        val readBack = spark.read.schema(schema).parquet(output)
+        assert(readBack.schema.toSet === schema.toSet)
+
+        checkAnswer(
+          readBack,
+          Seq(Row("2017-01-01-00", 1), Row("2017-01-01-01", 2))
+        )
+      } finally {
+        spark.streams.active.foreach(_.stop())
+      }
+    }
+  }
+
+  test("SPARK-22109: Resolve type conflicts between strings and timestamps in partition column") {
+    val df = Seq(
+      (1, "2015-01-01 00:00:00"),
+      (2, "2014-01-01 00:00:00"),
+      (3, "blah")).toDF("i", "str")
+
+    withTempPath { path =>
+      df.write.format("parquet").partitionBy("str").save(path.getAbsolutePath)
+      checkAnswer(spark.read.load(path.getAbsolutePath), df)
     }
   }
 }
