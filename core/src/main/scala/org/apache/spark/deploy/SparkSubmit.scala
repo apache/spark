@@ -93,9 +93,10 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Following constants are visible for testing.
-  private[deploy] val YARN_SUBMIT_CLASS = "org.apache.spark.deploy.yarn.YarnClusterApplication"
-  private[deploy] val REST_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
-  private[deploy] val STANDALONE_SUBMIT_CLASS = classOf[ClientApp].getName()
+  private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =
+    "org.apache.spark.deploy.yarn.YarnClusterApplication"
+  private[deploy] val REST_CLUSTER_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
+  private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
 
   // scalastyle:off println
   private[spark] def printVersionAndExit(): Unit = {
@@ -286,7 +287,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }
 
       // Make sure YARN is included in our build if we're trying to use it
-      if (!Utils.classIsLoadable(YARN_SUBMIT_CLASS) && !Utils.isTesting) {
+      if (!Utils.classIsLoadable(YARN_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
         printErrorAndExit(
           "Could not load YARN classes. " +
           "This copy of Spark may not have been compiled with YARN support.")
@@ -634,11 +635,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // All Spark parameters are expected to be passed to the client through system properties.
     if (args.isStandaloneCluster) {
       if (args.useRest) {
-        childMainClass = REST_SUBMIT_CLASS
+        childMainClass = REST_CLUSTER_SUBMIT_CLASS
         childArgs += (args.primaryResource, args.mainClass)
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
-        childMainClass = STANDALONE_SUBMIT_CLASS
+        childMainClass = STANDALONE_CLUSTER_SUBMIT_CLASS
         if (args.supervise) { childArgs += "--supervise" }
         Option(args.driverMemory).foreach { m => childArgs += ("--memory", m) }
         Option(args.driverCores).foreach { c => childArgs += ("--cores", c) }
@@ -663,7 +664,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
-      childMainClass = YARN_SUBMIT_CLASS
+      childMainClass = YARN_CLUSTER_SUBMIT_CLASS
       if (args.isPython) {
         childArgs += ("--primary-py-file", args.primaryResource)
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
@@ -684,7 +685,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     if (isMesosCluster) {
       assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
-      childMainClass = REST_SUBMIT_CLASS
+      childMainClass = REST_CLUSTER_SUBMIT_CLASS
       if (args.isPython) {
         // Second argument is main class
         childArgs += (args.primaryResource, "")
