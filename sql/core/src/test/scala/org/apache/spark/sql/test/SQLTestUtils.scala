@@ -210,7 +210,7 @@ private[sql] trait SQLTestUtilsBase
    *
    * @todo Probably this method should be moved to a more general place
    */
-  protected def withTempDir(f: File => Unit): Unit = {
+  protected def withTempDir[A](f: File => A): A = {
     val dir = Utils.createTempDir().getCanonicalFile
     try f(dir) finally {
       // wait for all tasks to finish before deleting files
