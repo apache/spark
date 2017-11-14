@@ -180,7 +180,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     check[StageDataWrapper](key(stages.head)) { stage =>
       assert(stage.info.status === v1.StageStatus.ACTIVE)
       assert(stage.info.submissionTime === Some(new Date(stages.head.submissionTime.get)))
-      assert(stage.info.schedulingPool === "schedPool")
+      assert(stage.info.numTasks === stages.head.numTasks)
     }
 
     // Start tasks from stage 1
@@ -265,12 +265,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       "taskType", TaskResultLost, s1Tasks.head, null))
 
     time += 1
-    val reattempt = {
-      val orig = s1Tasks.head
-      // Task reattempts have a different ID, but the same index as the original.
-      new TaskInfo(nextTaskId(), orig.index, orig.attemptNumber + 1, time, orig.executorId,
-        s"${orig.executorId}.example.com", TaskLocality.PROCESS_LOCAL, orig.speculative)
-    }
+    val reattempt = newAttempt(s1Tasks.head, nextTaskId())
     listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId,
       reattempt))
 
@@ -288,7 +283,6 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     check[TaskDataWrapper](s1Tasks.head.taskId) { task =>
       assert(task.info.status === s1Tasks.head.status)
-      assert(task.info.duration === Some(s1Tasks.head.duration))
       assert(task.info.errorMessage == Some(TaskResultLost.toErrorString))
     }
 
@@ -297,8 +291,64 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(task.info.attempt === reattempt.attemptNumber)
     }
 
+    // Kill one task, restart it.
+    time += 1
+    val killed = s1Tasks.drop(1).head
+    killed.finishTime = time
+    killed.failed = true
+    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptId,
+      "taskType", TaskKilled("killed"), killed, null))
+
+    check[JobDataWrapper](1) { job =>
+      assert(job.info.numKilledTasks === 1)
+      assert(job.info.killedTasksSummary === Map("killed" -> 1))
+    }
+
+    check[StageDataWrapper](key(stages.head)) { stage =>
+      assert(stage.info.numKilledTasks === 1)
+      assert(stage.info.killedTasksSummary === Map("killed" -> 1))
+    }
+
+    check[TaskDataWrapper](killed.taskId) { task =>
+      assert(task.info.index === killed.index)
+      assert(task.info.errorMessage === Some("killed"))
+    }
+
+    // Start a new attempt and finish it with TaskCommitDenied, make sure it's handled like a kill.
+    time += 1
+    val denied = newAttempt(killed, nextTaskId())
+    val denyReason = TaskCommitDenied(1, 1, 1)
+    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId,
+      denied))
+
+    time += 1
+    denied.finishTime = time
+    denied.failed = true
+    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptId,
+      "taskType", denyReason, denied, null))
+
+    check[JobDataWrapper](1) { job =>
+      assert(job.info.numKilledTasks === 2)
+      assert(job.info.killedTasksSummary === Map("killed" -> 1, denyReason.toErrorString -> 1))
+    }
+
+    check[StageDataWrapper](key(stages.head)) { stage =>
+      assert(stage.info.numKilledTasks === 2)
+      assert(stage.info.killedTasksSummary === Map("killed" -> 1, denyReason.toErrorString -> 1))
+    }
+
+    check[TaskDataWrapper](denied.taskId) { task =>
+      assert(task.info.index === killed.index)
+      assert(task.info.errorMessage === Some(denyReason.toErrorString))
+    }
+
+    // Start a new attempt.
+    val reattempt2 = newAttempt(denied, nextTaskId())
+    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId,
+      reattempt2))
+
     // Succeed all tasks in stage 1.
-    val pending = s1Tasks.drop(1) ++ Seq(reattempt)
+    val pending = s1Tasks.drop(2) ++ Seq(reattempt, reattempt2)
 
     val s1Metrics = TaskMetrics.empty
     s1Metrics.setExecutorCpuTime(2L)
@@ -313,12 +363,14 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     check[JobDataWrapper](1) { job =>
       assert(job.info.numFailedTasks === 1)
+      assert(job.info.numKilledTasks === 2)
       assert(job.info.numActiveTasks === 0)
       assert(job.info.numCompletedTasks === pending.size)
     }
 
     check[StageDataWrapper](key(stages.head)) { stage =>
       assert(stage.info.numFailedTasks === 1)
+      assert(stage.info.numKilledTasks === 2)
       assert(stage.info.numActiveTasks === 0)
       assert(stage.info.numCompleteTasks === pending.size)
     }
@@ -328,10 +380,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(wrapper.info.errorMessage === None)
         assert(wrapper.info.taskMetrics.get.executorCpuTime === 2L)
         assert(wrapper.info.taskMetrics.get.executorRunTime === 4L)
+        assert(wrapper.info.duration === Some(task.duration))
       }
     }
 
-    assert(store.count(classOf[TaskDataWrapper]) === pending.size + 1)
+    assert(store.count(classOf[TaskDataWrapper]) === pending.size + 3)
 
     // End stage 1.
     time += 1
@@ -404,6 +457,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(stage.info.numFailedTasks === s2Tasks.size)
       assert(stage.info.numActiveTasks === 0)
       assert(stage.info.numCompleteTasks === 0)
+      assert(stage.info.failureReason === stages.last.failureReason)
     }
 
     // - Re-submit stage 2, all tasks, and succeed them and the stage.
@@ -802,6 +856,12 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   private def check[T: ClassTag](key: Any)(fn: T => Unit): Unit = {
     val value = store.read(classTag[T].runtimeClass, key).asInstanceOf[T]
     fn(value)
+  }
+
+  private def newAttempt(orig: TaskInfo, nextId: Long): TaskInfo = {
+    // Task reattempts have a different ID, but the same index as the original.
+    new TaskInfo(nextId, orig.index, orig.attemptNumber + 1, time, orig.executorId,
+      s"${orig.executorId}.example.com", TaskLocality.PROCESS_LOCAL, orig.speculative)
   }
 
   private case class RddBlock(

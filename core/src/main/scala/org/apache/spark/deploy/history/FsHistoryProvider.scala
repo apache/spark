@@ -316,7 +316,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val listener = if (needReplay) {
-      val _listener = new AppStatusListener(kvstore, conf, false)
+      val _listener = new AppStatusListener(kvstore, conf, false,
+        lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
       replayBus.addListener(_listener)
       AppStatusPlugin.loadPlugins().foreach { plugin =>
         plugin.setupListeners(conf, kvstore, l => replayBus.addListener(l), false)
@@ -327,13 +328,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val loadedUI = {
-      val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf,
-        l => replayBus.addListener(l),
-        secManager,
-        app.info.name,
+      val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf, secManager, app.info.name,
         HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
         attempt.info.startTime.getTime(),
-        appSparkVersion = attempt.info.appSparkVersion)
+        attempt.info.appSparkVersion)
       LoadedAppUI(ui)
     }
 
