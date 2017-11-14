@@ -16,14 +16,14 @@
  */
 package org.apache.spark.deploy.k8s
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion}
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 
-package object config extends Logging {
+private[spark] object config extends Logging {
 
-  private[spark] val KUBERNETES_NAMESPACE =
+  val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods. When using" +
         " spark-submit in cluster mode, this can also be passed to spark-submit via the" +
@@ -31,30 +31,30 @@ package object config extends Logging {
       .stringConf
       .createWithDefault("default")
 
-  private[spark] val EXECUTOR_DOCKER_IMAGE =
+  val EXECUTOR_DOCKER_IMAGE =
     ConfigBuilder("spark.kubernetes.executor.docker.image")
       .doc("Docker image to use for the executors. Specify this using the standard Docker tag" +
         " format.")
       .stringConf
-      .createWithDefault(s"spark-executor:$sparkVersion")
+      .createWithDefault(s"spark-executor:$SPARK_VERSION")
 
-  private[spark] val DOCKER_IMAGE_PULL_POLICY =
+  val DOCKER_IMAGE_PULL_POLICY =
     ConfigBuilder("spark.kubernetes.docker.image.pullPolicy")
       .doc("Docker image pull policy when pulling any docker image in Kubernetes integration")
       .stringConf
       .createWithDefault("IfNotPresent")
 
-  private[spark] val APISERVER_AUTH_DRIVER_CONF_PREFIX =
+  val APISERVER_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
-  private[spark] val APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
+  val APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver.mounted"
-  private[spark] val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
-  private[spark] val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
-  private[spark] val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
-  private[spark] val CLIENT_CERT_FILE_CONF_SUFFIX = "clientCertFile"
-  private[spark] val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
+  val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
+  val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
+  val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
+  val CLIENT_CERT_FILE_CONF_SUFFIX = "clientCertFile"
+  val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
 
-  private[spark] val KUBERNETES_SERVICE_ACCOUNT_NAME =
+  val KUBERNETES_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$APISERVER_AUTH_DRIVER_CONF_PREFIX.serviceAccountName")
       .doc("Service account that is used when running the driver pod. The driver pod uses" +
         " this service account when requesting executor pods from the API server. If specific" +
@@ -66,7 +66,7 @@ package object config extends Logging {
   // Note that while we set a default for this when we start up the
   // scheduler, the specific default value is dynamically determined
   // based on the executor memory.
-  private[spark] val KUBERNETES_EXECUTOR_MEMORY_OVERHEAD =
+  val KUBERNETES_EXECUTOR_MEMORY_OVERHEAD =
     ConfigBuilder("spark.kubernetes.executor.memoryOverhead")
       .doc("The amount of off-heap memory (in megabytes) to be allocated per executor. This" +
         " is memory that accounts for things like VM overheads, interned strings, other native" +
@@ -74,41 +74,41 @@ package object config extends Logging {
       .bytesConf(ByteUnit.MiB)
       .createOptional
 
-  private[spark] val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
-  private[spark] val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
+  val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
+  val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
 
-  private[spark] val KUBERNETES_DRIVER_POD_NAME =
+  val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")
       .doc("Name of the driver pod.")
       .stringConf
       .createOptional
 
-  private[spark] val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
+  val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names.")
       .internal()
       .stringConf
       .createWithDefault("spark")
 
-  private[spark] val KUBERNETES_ALLOCATION_BATCH_SIZE =
+  val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
       .intConf
       .checkValue(value => value > 0, "Allocation batch size should be a positive integer")
       .createWithDefault(5)
 
-  private[spark] val KUBERNETES_ALLOCATION_BATCH_DELAY =
+  val KUBERNETES_ALLOCATION_BATCH_DELAY =
     ConfigBuilder("spark.kubernetes.allocation.batch.delay")
       .doc("Number of seconds to wait between each round of executor allocation.")
       .longConf
       .checkValue(value => value > 0, s"Allocation batch delay should be a positive integer")
       .createWithDefault(1)
 
-  private[spark] val KUBERNETES_EXECUTOR_LIMIT_CORES =
+  val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
       .doc("Specify the hard cpu limit for a single executor pod")
       .stringConf
       .createOptional
 
-  private[spark] val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
+  val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
 }

@@ -40,13 +40,13 @@ private[spark] object SparkKubernetesClientFactory {
       namespace: Option[String],
       kubernetesAuthConfPrefix: String,
       sparkConf: SparkConf,
-      maybeServiceAccountToken: Option[File],
-      maybeServiceAccountCaCert: Option[File]): KubernetesClient = {
+      defaultServiceAccountToken: Option[File],
+      defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
     val oauthTokenFile = sparkConf.getOption(oauthTokenFileConf)
       .map(new File(_))
-      .orElse(maybeServiceAccountToken)
+      .orElse(defaultServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
     ConfigurationUtils.requireNandDefined(
       oauthTokenFile,
@@ -56,7 +56,7 @@ private[spark] object SparkKubernetesClientFactory {
 
     val caCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CA_CERT_FILE_CONF_SUFFIX")
-      .orElse(maybeServiceAccountCaCert.map(_.getAbsolutePath))
+      .orElse(defaultServiceAccountCaCert.map(_.getAbsolutePath))
     val clientKeyFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
     val clientCertFile = sparkConf

@@ -27,10 +27,13 @@ import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.util.Utils
 
 /**
- * Configures executor pods. Construct one of these with a SparkConf to set up properties that are
- * common across all executors. Then, pass in dynamic parameters into createExecutorPod.
+ * A factory class for configuring and creating executor pods.
  */
 private[spark] trait ExecutorPodFactory {
+
+  /**
+   * Configure and construct an executor pod with the given parameters.
+   */
   def createExecutorPod(
       executorId: String,
       applicationId: String,
@@ -161,12 +164,12 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
     val requiredPorts = Seq(
       (EXECUTOR_PORT_NAME, executorPort),
       (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
-      .map(port => {
+      .map { case (name, port) =>
         new ContainerPortBuilder()
-          .withName(port._1)
-          .withContainerPort(port._2)
+          .withName(name)
+          .withContainerPort(port)
           .build()
-      })
+      }
 
     val executorContainer = new ContainerBuilder()
       .withName(s"executor")
@@ -202,16 +205,15 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
         .endSpec()
       .build()
 
-    val containerWithExecutorLimitCores = executorLimitCores.map {
-      limitCores =>
-        val executorCpuLimitQuantity = new QuantityBuilder(false)
-          .withAmount(limitCores)
-          .build()
-        new ContainerBuilder(executorContainer)
-          .editResources()
-            .addToLimits("cpu", executorCpuLimitQuantity)
-            .endResources()
-          .build()
+    val containerWithExecutorLimitCores = executorLimitCores.map { limitCores =>
+      val executorCpuLimitQuantity = new QuantityBuilder(false)
+        .withAmount(limitCores)
+        .build()
+      new ContainerBuilder(executorContainer)
+        .editResources()
+        .addToLimits("cpu", executorCpuLimitQuantity)
+        .endResources()
+        .build()
     }.getOrElse(executorContainer)
 
     new PodBuilder(executorPod)
