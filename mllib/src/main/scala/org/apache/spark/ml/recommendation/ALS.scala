@@ -130,7 +130,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter with HasRegParam
-  with HasPredictionCol with HasCheckpointInterval with HasSeed with HasIntermediateStorageLevel{
+  with HasPredictionCol with HasCheckpointInterval with HasSeed with HasIntermediateStorageLevel {
 
   /**
    * Param for rank of the matrix factorization (positive).
