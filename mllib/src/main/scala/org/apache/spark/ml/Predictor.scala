@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -24,9 +26,10 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).
@@ -99,23 +102,43 @@ abstract class Predictor[
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
 
+    val cols = ArrayBuffer[Column]()
+    cols.append(col($(featuresCol)))
+
     // Cast LabelCol to DoubleType and keep the metadata.
     val labelMeta = dataset.schema($(labelCol)).metadata
-    val labelCasted = dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
+    cols.append(col($(labelCol)).cast(DoubleType).as($(labelCol), labelMeta))
 
     // Cast WeightCol to DoubleType and keep the metadata.
-    val casted = this match {
-      case p: HasWeightCol =>
-        if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
-          val weightMeta = dataset.schema($(p.weightCol)).metadata
-          labelCasted.withColumn($(p.weightCol), col($(p.weightCol)).cast(DoubleType), weightMeta)
-        } else {
-          labelCasted
-        }
-      case _ => labelCasted
+    this match {
+      case p: HasWeightCol if isDefined(p.weightCol) && $(p.weightCol).nonEmpty =>
+        val weightMeta = dataset.schema($(p.weightCol)).metadata
+        cols.append(col($(p.weightCol)).cast(DoubleType).as($(p.weightCol), weightMeta))
+      case _ =>
     }
 
-    copyValues(train(casted).setParent(this))
+    val selected = dataset.select(cols: _*)
+
+    this match {
+      case p: HasHandlePersistence =>
+        if (dataset.storageLevel == StorageLevel.NONE) {
+          if ($(p.handlePersistence)) {
+            selected.persist(StorageLevel.MEMORY_AND_DISK)
+          } else {
+            logWarning("The input dataset is uncached, which may hurt performance if its " +
+              "upstreams are also uncached.")
+          }
+        }
+      case _ =>
+    }
+
+    val model = copyValues(train(selected).setParent(this))
+
+    if (selected.storageLevel != StorageLevel.NONE) {
+      selected.unpersist(blocking = false)
+    }
+
+    model
   }
 
   override def copy(extra: ParamMap): Learner

@@ -83,7 +83,9 @@ private[shared] object SharedParamsCodeGen {
         "all instance weights as 1.0"),
       ParamDesc[String]("solver", "the solver algorithm for optimization", finalFields = false),
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
-        isValid = "ParamValidators.gtEq(2)", isExpertParam = true))
+        isValid = "ParamValidators.gtEq(2)", isExpertParam = true),
+      ParamDesc[Boolean]("handlePersistence", "whether to handle data persistence. If true, " +
+        "we will cache unpersisted input data before fitting estimator on it", Some("true")))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"

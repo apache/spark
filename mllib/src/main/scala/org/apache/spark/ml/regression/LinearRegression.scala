@@ -53,7 +53,7 @@ import org.apache.spark.storage.StorageLevel
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasAggregationDepth {
+    with HasAggregationDepth with HasHandlePersistence {
 
   import LinearRegression._
 
@@ -208,6 +208,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /**
+   * Sets whether to handle data persistence.
+   * @group setParam
+   */
+  @Since("2.3.0")
+  def setHandlePersistence(value: Boolean): this.type = set(handlePersistence, value)
+
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
@@ -232,6 +239,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         elasticNetParam = $(elasticNetParam), $(standardization), true,
         solverType = WeightedLeastSquares.Auto, maxIter = $(maxIter), tol = $(tol))
+
+      if (dataset.storageLevel != StorageLevel.NONE) dataset.unpersist(blocking = false)
+
       val model = optimizer.fit(instances)
       // When it is trained by WeightedLeastSquares, training summary does not
       // attach returned model.
@@ -250,9 +260,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       instr.logSuccess(lrModel)
       return lrModel
     }
-
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (featuresSummarizer, ySummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
@@ -285,7 +292,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
             s"zeros and the intercept will be the mean of the label; as a result, " +
             s"training is not needed.")
         }
-        if (handlePersistence) instances.unpersist()
         val coefficients = Vectors.sparse(numFeatures, Seq.empty)
         val intercept = yMean
 
@@ -421,8 +427,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     } else {
       0.0
     }
-
-    if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
     // Handle possible missing or invalid prediction columns

@@ -78,7 +78,12 @@ object MimaExcludes {
 
     // [SPARK-14280] Support Scala 2.12
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transformWith"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transform")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transform"),
+
+    // [SPARK-18608] Add Param HasHandlePersistence
+    ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasHandlePersistence.handlePersistence"),
+    ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasHandlePersistence.getHandlePersistence"),
+    ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasHandlePersistence.org$apache$spark$ml$param$shared$HasHandlePersistence$_setter_$handlePersistence_=")
   )
 
   // Exclude rules for 2.2.x

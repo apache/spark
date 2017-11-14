@@ -51,7 +51,8 @@ import org.apache.spark.util.VersionUtils
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth {
+  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth
+  with HasHandlePersistence {
 
   import org.apache.spark.ml.classification.LogisticRegression.supportedFamilyNames
 
@@ -431,6 +432,13 @@ class LogisticRegression @Since("1.2.0") (
   @Since("2.2.0")
   def setUpperBoundsOnIntercepts(value: Vector): this.type = set(upperBoundsOnIntercepts, value)
 
+  /**
+   * Sets whether to handle data persistence.
+   * @group setParam
+   */
+  @Since("2.3.0")
+  def setHandlePersistence(value: Boolean): this.type = set(handlePersistence, value)
+
   private def assertBoundConstrainedOptimizationParamsValid(
       numCoefficientSets: Int,
       numFeatures: Int): Unit = {
@@ -484,13 +492,6 @@ class LogisticRegression @Since("1.2.0") (
   }
 
   override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    train(dataset, handlePersistence)
-  }
-
-  protected[spark] def train(
-      dataset: Dataset[_],
-      handlePersistence: Boolean): LogisticRegressionModel = {
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
@@ -498,9 +499,7 @@ class LogisticRegression @Since("1.2.0") (
           Instance(label, weight, features)
       }
 
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
-
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(regParam, elasticNetParam, standardization, threshold,
       maxIter, tol, fitIntercept)
 
@@ -877,8 +876,6 @@ class LogisticRegression @Since("1.2.0") (
         (denseCoefficientMatrix.compressed, interceptVec.compressed, arrayBuilder.result())
       }
     }
-
-    if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LogisticRegressionModel(uid, coefficientMatrix, interceptVector,
       numClasses, isMultinomial))
