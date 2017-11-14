@@ -43,6 +43,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
+   * Note: this param only applies to categorical features, not continuous ones.
    * Options are:
    * 'skip': filter out rows with invalid data.
    * 'error': throw an error.

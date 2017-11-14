@@ -234,9 +234,9 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
   test("handle invalid") {
     for ((points, pointsTestInvalid) <- Seq((densePoints1, densePoints1TestInvalid),
       (sparsePoints1, sparsePoints1TestInvalid))) {
+      val vectorIndexer = getIndexer.setMaxCategories(4).setHandleInvalid("error")
+      val model = vectorIndexer.fit(points)
       intercept[SparkException] {
-        val vectorIndexer = getIndexer.setMaxCategories(4).setHandleInvalid("error")
-        val model = vectorIndexer.fit(points)
         model.transform(pointsTestInvalid).collect()
       }
       val vectorIndexer1 = getIndexer.setMaxCategories(4).setHandleInvalid("skip")
