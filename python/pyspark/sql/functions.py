@@ -18,7 +18,6 @@
 """
 A collections of builtin functions
 """
-import enum
 import math
 import sys
 import functools
@@ -2051,8 +2050,8 @@ def map_values(col):
 
 # ---------------------------- User Defined Function ----------------------------------
 
-class PandasUDFType(enum.Enum):
-    """Pandas UDF
+class PandasUDFType(object):
+    """Pandas UDF Types
 
     """
     SCALAR = PythonEvalType.PANDAS_SCALAR_UDF
@@ -2185,10 +2184,10 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         if functionType is not None:
             # @pandas_udf(dataType, functionType=functionType)
             # @pandas_udf(returnType=dataType, functionType=functionType)
-            eval_type = functionType.value
-        elif returnType is not None and isinstance(returnType, PandasUDFType):
+            eval_type = functionType
+        elif returnType is not None and isinstance(returnType, int):
             # @pandas_udf(dataType, functionType)
-            eval_type = returnType.value
+            eval_type = returnType
         else:
             # @pandas_udf(dataType) or @pandas_udf(returnType=dataType)
             eval_type = PythonEvalType.PANDAS_SCALAR_UDF
@@ -2199,7 +2198,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
             raise ValueError("Must specify return type.")
 
         if functionType is not None:
-            eval_type = functionType.value
+            eval_type = functionType
         else:
             eval_type = PythonEvalType.PANDAS_SCALAR_UDF
 
