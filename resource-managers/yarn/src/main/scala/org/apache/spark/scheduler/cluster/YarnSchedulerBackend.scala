@@ -268,8 +268,13 @@ private[spark] abstract class YarnSchedulerBackend(
         logWarning(reason.toString)
         driverEndpoint.ask[Boolean](r).onFailure {
           case e =>
-            logError("Error requesting driver to remove executor" +
-              s" $executorId for reason $reason", e)
+            if (stopped.get) {
+              logWarning(s"Couldn't send remove executor message for executor $executorId" +
+                " since the scheduler service has already stopped")
+            } else {
+              logError("Error requesting driver to remove executor" +
+                s" $executorId for reason $reason", e)
+            }
         }(ThreadUtils.sameThread)
     }
 

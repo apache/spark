@@ -105,6 +105,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Hadoop delegation tokens to be sent to the executors.
   val hadoopDelegationCreds: Option[Array[Byte]] = getHadoopDelegationCreds()
 
+  private val reviveThread =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
+
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -112,9 +115,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     protected val executorsPendingLossReason = new HashSet[String]
 
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
-
-    private val reviveThread =
-      ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
     override def onStart() {
       // Periodically revive offers to allow delay scheduling to work
@@ -378,10 +378,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       shouldDisable
     }
-
-    override def onStop() {
-      reviveThread.shutdownNow()
-    }
   }
 
   var driverEndpoint: RpcEndpointRef = null
@@ -422,6 +418,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def stop() {
+    reviveThread.shutdownNow()
     stopExecutors()
     try {
       if (driverEndpoint != null) {
