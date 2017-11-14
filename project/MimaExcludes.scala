@@ -1051,6 +1051,13 @@ object MimaExcludes {
       // [SPARK-21680][ML][MLLIB]optimzie Vector coompress
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.toSparseWithSize"),
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.toSparseWithSize")
+    ) ++ Seq(
+      // [SPARK-20723][ML]Add intermediate storage level to tree based classifiers
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasIntermediateStorageLevel.org$apache$spark$ml$param$shared$HasIntermediateStorageLevel$_setter_$intermediateStorageLevel_="),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasIntermediateStorageLevel.getIntermediateStorageLevel"),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasIntermediateStorageLevel.intermediateStorageLevel"),
+      ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel"),
+      ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel")
     )
   }
 
