@@ -283,8 +283,8 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * Returns the value for rowId.
    */
-  private ColumnVector.Array getByteArray(int rowId) {
-    ColumnVector.Array array = getArray(rowId);
+  private VectorBasedArray getByteArray(int rowId) {
+    VectorBasedArray array = getArray(rowId);
     array.data.loadBytes(array);
     return array;
   }
@@ -324,7 +324,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   @Override
   public UTF8String getUTF8String(int rowId) {
     if (dictionary == null) {
-      ColumnVector.Array a = getByteArray(rowId);
+      VectorBasedArray a = getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
     } else {
       byte[] bytes = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
@@ -338,7 +338,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   @Override
   public byte[] getBinary(int rowId) {
     if (dictionary == null) {
-      ColumnVector.Array array = getByteArray(rowId);
+      VectorBasedArray array = getByteArray(rowId);
       byte[] bytes = new byte[array.length];
       System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
       return bytes;
@@ -685,7 +685,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewColumn(childCapacity, childType);
-      this.resultArray = new ColumnVector.Array(this.childColumns[0]);
+      this.resultArray = new VectorBasedArray(this.childColumns[0]);
       this.resultStruct = null;
     } else if (type instanceof StructType) {
       StructType st = (StructType)type;
@@ -694,14 +694,14 @@ public abstract class WritableColumnVector extends ColumnVector {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
       this.resultArray = null;
-      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+      this.resultStruct = new VectorBasedRow(this.childColumns);
     } else if (type instanceof CalendarIntervalType) {
       // Two columns. Months as int. Microseconds as Long.
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
       this.resultArray = null;
-      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+      this.resultStruct = new VectorBasedRow(this.childColumns);
     } else {
       this.childColumns = null;
       this.resultArray = null;

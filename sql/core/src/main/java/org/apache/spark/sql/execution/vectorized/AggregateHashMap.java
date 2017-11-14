@@ -72,7 +72,7 @@ public class AggregateHashMap {
     this(schema, DEFAULT_CAPACITY, DEFAULT_LOAD_FACTOR, DEFAULT_MAX_STEPS);
   }
 
-  public ColumnarBatch.Row findOrInsert(long key) {
+  public VectorBasedRow findOrInsert(long key) {
     int idx = find(key);
     if (idx != -1 && buckets[idx] == -1) {
       columnVectors[0].putLong(numRows, key);

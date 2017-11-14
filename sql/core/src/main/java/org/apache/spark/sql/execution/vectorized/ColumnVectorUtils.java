@@ -98,7 +98,7 @@ public class ColumnVectorUtils {
    * For example, an array of IntegerType will return an int[].
    * Throws exceptions for unhandled schemas.
    */
-  public static Object toPrimitiveJavaArray(ColumnVector.Array array) {
+  public static Object toPrimitiveJavaArray(VectorBasedArray array) {
     DataType dt = array.data.dataType();
     if (dt instanceof IntegerType) {
       int[] result = new int[array.length];
