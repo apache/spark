@@ -283,7 +283,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a partition fileter specification.
+   * Create a partition filter specification.
    */
   def visitPartitionFilterSpec(ctx: PartitionSpecContext): Expression = withOrigin(ctx) {
     val parts = ctx.expression.asScala.map { pVal =>
@@ -315,7 +315,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   *
+   * Create a partition specification map without optional values and a partition filter specification.
    */
   protected def visitPartition(ctx: PartitionSpecContext): (Map[String, String], Expression) = {
     (visitNonOptionalPartitionSpec(ctx), visitPartitionFilterSpec(ctx))
