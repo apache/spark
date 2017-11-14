@@ -48,7 +48,7 @@ function formatBytes(bytes, type) {
 }
 
 function padZeroes(num) {
-  return num.toString().padStart(2, "0");
+  return ("0" + num).slice(-2);
 }
 
 function formatTimeMillis(timeMillis) {
