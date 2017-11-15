@@ -1669,12 +1669,22 @@ def from_arrow_type(at):
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type
 
+def from_arrow_field(field):
+    import pyarrow as pa
+    at = field.type
+    if type(at) == pa.ListType:
+        element_type = from_arrow_field(at.value_type)
+        element_nullable = field.nullable
+        return ArrayType(element_type, element_nullable)
+    else:
+        return from_arrow_type(at)
+
 
 def from_arrow_schema(arrow_schema):
     """ Convert schema from Arrow to Spark.
     """
     return StructType(
-        [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+        [StructField(field.name, from_arrow_field(field), nullable=field.nullable)
          for field in arrow_schema])
 
 
