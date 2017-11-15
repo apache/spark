@@ -20,7 +20,7 @@ package org.apache.spark.ml.clustering
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.EPSILON
@@ -28,9 +28,9 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
+import org.apache.spark.ml.summary.GaussianMixtureSummary
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
-  Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix, Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
@@ -670,34 +670,4 @@ private class ExpectationAggregator(
     }
     this
   }
-}
-
-/**
- * :: Experimental ::
- * Summary of GaussianMixture.
- *
- * @param predictions  `DataFrame` produced by `GaussianMixtureModel.transform()`.
- * @param predictionCol  Name for column of predicted clusters in `predictions`.
- * @param probabilityCol  Name for column of predicted probability of each cluster
- *                        in `predictions`.
- * @param featuresCol  Name for column of features in `predictions`.
- * @param k  Number of clusters.
- * @param logLikelihood  Total log-likelihood for this model on the given data.
- */
-@Since("2.0.0")
-@Experimental
-class GaussianMixtureSummary private[clustering] (
-    predictions: DataFrame,
-    predictionCol: String,
-    @Since("2.0.0") val probabilityCol: String,
-    featuresCol: String,
-    k: Int,
-    @Since("2.2.0") val logLikelihood: Double)
-  extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
-
-  /**
-   * Probability of each cluster.
-   */
-  @Since("2.0.0")
-  @transient lazy val probability: DataFrame = predictions.select(probabilityCol)
 }

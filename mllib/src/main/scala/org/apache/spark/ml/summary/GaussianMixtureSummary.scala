@@ -14,41 +14,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.ml.summary
 
-package org.apache.spark.ml.clustering
-
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.sql.DataFrame
 
 /**
  * :: Experimental ::
- * Summary of clustering algorithms.
+ * Summary of GaussianMixture.
  *
- * @param predictions  `DataFrame` produced by model.transform().
+ * @param predictions  `DataFrame` produced by `GaussianMixtureModel.transform()`.
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param probabilityCol  Name for column of predicted probability of each cluster
+ *                        in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param logLikelihood  Total log-likelihood for this model on the given data.
  */
+@Since("2.0.0")
 @Experimental
-class ClusteringSummary private[clustering] (
-    @transient val predictions: DataFrame,
-    val predictionCol: String,
-    val featuresCol: String,
-    val k: Int) extends Serializable {
+class GaussianMixtureSummary private[ml] (
+    predictions: DataFrame,
+    predictionCol: String,
+    @Since("2.0.0") val probabilityCol: String,
+    featuresCol: String,
+    k: Int,
+    @Since("2.2.0") val logLikelihood: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
 
   /**
-   * Cluster centers of the transformed data.
+   * Probability of each cluster.
    */
-  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
-
-  /**
-   * Size of (number of data points in) each cluster.
-   */
-  lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
-      case Row(cluster: Int, count: Long) => sizes(cluster) = count
-    }
-    sizes
-  }
+  @Since("2.0.0")
+  @transient lazy val probability: DataFrame = predictions.select(probabilityCol)
 }

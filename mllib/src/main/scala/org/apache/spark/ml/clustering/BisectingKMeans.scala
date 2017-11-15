@@ -25,6 +25,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.summary.BisectingKMeansSummary
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
@@ -285,21 +286,3 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
   @Since("2.0.0")
   override def load(path: String): BisectingKMeans = super.load(path)
 }
-
-
-/**
- * :: Experimental ::
- * Summary of BisectingKMeans.
- *
- * @param predictions  `DataFrame` produced by `BisectingKMeansModel.transform()`.
- * @param predictionCol  Name for column of predicted clusters in `predictions`.
- * @param featuresCol  Name for column of features in `predictions`.
- * @param k  Number of clusters.
- */
-@Since("2.1.0")
-@Experimental
-class BisectingKMeansSummary private[clustering] (
-    predictions: DataFrame,
-    predictionCol: String,
-    featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)

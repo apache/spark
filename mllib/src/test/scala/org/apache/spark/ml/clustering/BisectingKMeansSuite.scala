@@ -19,6 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.summary.BisectingKMeansSummary
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
