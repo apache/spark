@@ -54,7 +54,7 @@ private[spark] class SortShuffleWriter[K, V, C](
       new ExternalSorter[K, V, C](
         context, dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
     } else if (dep.keyOrdering.isDefined) {
-      new ExternalSorter[K, V, C](
+      new ExternalSorter[K, V, V](
         context, aggregator = None, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't

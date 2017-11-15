@@ -78,7 +78,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
    * A mapping from shuffle ids to the number of mappers producing output for those shuffles.
    */
   private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, Int]()
-  private[this] var canUseSortShuffleReader = false
 
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
@@ -116,7 +115,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       startPartition: Int,
       endPartition: Int,
       context: TaskContext): ShuffleReader[K, C] = {
-    if (canUseSortShuffleReader
+    if (!handle.isInstanceOf[SerializedShuffleHandle[K @unchecked, C @unchecked]]
+      && !handle.isInstanceOf[BypassMergeSortShuffleHandle[K @unchecked, C @unchecked]]
       && handle.asInstanceOf[BaseShuffleHandle[K, _, C]].dependency.keyOrdering.isDefined) {
       new SortShuffleReader(
         handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
@@ -154,7 +154,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           context,
           env.conf)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
-        canUseSortShuffleReader = true
         new SortShuffleWriter(shuffleBlockResolver, other, mapId, context)
     }
   }
