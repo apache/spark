@@ -74,7 +74,7 @@ def wrap_udf(f, return_type):
         return lambda *a: f(*a)
 
 
-def wrap_pandas_udf(f, return_type):
+def wrap_pandas_scalar_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
     def verify_result_length(*a):
@@ -90,6 +90,26 @@ def wrap_pandas_udf(f, return_type):
     return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 
+def wrap_pandas_group_map_udf(f, return_type):
+    def wrapped(*series):
+        import pandas as pd
+
+        result = f(pd.concat(series, axis=1))
+        if not isinstance(result, pd.DataFrame):
+            raise TypeError("Return type of the user-defined function should be "
+                            "pandas.DataFrame, but is {}".format(type(result)))
+        if not len(result.columns) == len(return_type):
+            raise RuntimeError(
+                "Number of columns of the returned pandas.DataFrame "
+                "doesn't match specified schema. "
+                "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
+        arrow_return_types = (to_arrow_type(field.dataType) for field in return_type)
+        return [(result[result.columns[i]], arrow_type)
+                for i, arrow_type in enumerate(arrow_return_types)]
+
+    return wrapped
+
+
 def read_single_udf(pickleSer, infile, eval_type):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
@@ -103,10 +123,9 @@ def read_single_udf(pickleSer, infile, eval_type):
 
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.PANDAS_SCALAR_UDF:
-        return arg_offsets, wrap_pandas_udf(row_func, return_type)
+        return arg_offsets, wrap_pandas_scalar_udf(row_func, return_type)
     elif eval_type == PythonEvalType.PANDAS_GROUP_MAP_UDF:
-        # a groupby apply udf has already been wrapped under apply()
-        return arg_offsets, row_func
+        return arg_offsets, wrap_pandas_group_map_udf(row_func, return_type)
     else:
         return arg_offsets, wrap_udf(row_func, return_type)
 

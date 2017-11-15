@@ -236,43 +236,13 @@ class GroupedData(object):
         .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """
-
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
            or udf.evalType != PythonEvalType.PANDAS_GROUP_MAP_UDF:
             raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
                              "GROUP_MAP.")
-        if not isinstance(udf.returnType, StructType):
-            raise ValueError("Invalid returnType: the returnType of the udf must be a StructType")
-
         df = self._df
-        func = udf.func
-        returnType = udf.returnType
-
-        # The python executors expects the function to use pd.Series as input and output
-        # So we to create a wrapper function that turns that to a pd.DataFrame before passing
-        # down to the user function, then turn the result pd.DataFrame back into pd.Series
-        columns = df.columns
-
-        def wrapped(*cols):
-            from pyspark.sql.types import to_arrow_type
-            import pandas as pd
-            result = func(pd.concat(cols, axis=1, keys=columns))
-            if not isinstance(result, pd.DataFrame):
-                raise TypeError("Return type of the user-defined function should be "
-                                "pandas.DataFrame, but is {}".format(type(result)))
-            if not len(result.columns) == len(returnType):
-                raise RuntimeError(
-                    "Number of columns of the returned pandas.DataFrame "
-                    "doesn't match specified schema. "
-                    "Expected: {} Actual: {}".format(len(returnType), len(result.columns)))
-            arrow_return_types = (to_arrow_type(field.dataType) for field in returnType)
-            return [(result[result.columns[i]], arrow_type)
-                    for i, arrow_type in enumerate(arrow_return_types)]
-
-        udf_obj = UserDefinedFunction(
-            wrapped, returnType=returnType, name=udf.__name__, evalType=udf.evalType)
-        udf_column = udf_obj(*[df[col] for col in df.columns])
+        udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
 
