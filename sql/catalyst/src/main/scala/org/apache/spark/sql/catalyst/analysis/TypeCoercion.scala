@@ -137,6 +137,13 @@ object TypeCoercion {
     case (DateType, TimestampType) => Some(StringType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
+
+    // There is no proper decimal type we can pick,
+    // using double type is the best we can do.
+    // See SPARK-22469 for details.
+    case (n: DecimalType, s: StringType) => Some(DoubleType)
+    case (s: StringType, n: DecimalType) => Some(DoubleType)
+
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
     case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
     case (l, r) => None
