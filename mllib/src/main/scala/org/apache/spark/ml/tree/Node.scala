@@ -399,5 +399,5 @@ private[tree] object LearningNode {
     }
     tmpNode
   }
-  
+
 }
