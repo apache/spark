@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -272,10 +272,23 @@ trait CheckAnalysis extends PredicateHelper {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
             val missingAttributes = o.missingInput.mkString(",")
             val input = o.inputSet.mkString(",")
+            val msgForMissingAttributes = s"Resolved attribute(s) $missingAttributes missing " +
+              s"from $input in operator ${operator.simpleString}."
 
-            failAnalysis(
-              s"resolved attribute(s) $missingAttributes missing from $input " +
-                s"in operator ${operator.simpleString}")
+            val resolver = plan.conf.resolver
+            val attrsWithSameName = o.missingInput.filter { missing =>
+              o.inputSet.exists(input => resolver(missing.name, input.name))
+            }
+
+            val msg = if (attrsWithSameName.nonEmpty) {
+              val sameNames = attrsWithSameName.map(_.name).mkString(",")
+              s"$msgForMissingAttributes Attribute(s) with the same name appear in the " +
+                s"operation: $sameNames. Please check if the right attribute(s) are used."
+            } else {
+              msgForMissingAttributes
+            }
+
+            failAnalysis(msg)
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(

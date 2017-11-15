@@ -19,9 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.{util => ju}
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Calendar, Date}
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -30,12 +30,49 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.OutputMode._
 
-class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
+class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matchers with Logging {
 
   import testImplicits._
 
   after {
     sqlContext.streams.active.foreach(_.stop())
+  }
+
+  test("EventTimeStats") {
+    val epsilon = 10E-6
+
+    val stats = EventTimeStats(max = 100, min = 10, avg = 20.0, count = 5)
+    stats.add(80L)
+    stats.max should be (100)
+    stats.min should be (10)
+    stats.avg should be (30.0 +- epsilon)
+    stats.count should be (6)
+
+    val stats2 = EventTimeStats(80L, 5L, 15.0, 4)
+    stats.merge(stats2)
+    stats.max should be (100)
+    stats.min should be (5)
+    stats.avg should be (24.0 +- epsilon)
+    stats.count should be (10)
+  }
+
+  test("EventTimeStats: avg on large values") {
+    val epsilon = 10E-6
+    val largeValue = 10000000000L // 10B
+    // Make sure `largeValue` will cause overflow if we use a Long sum to calc avg.
+    assert(largeValue * largeValue != BigInt(largeValue) * BigInt(largeValue))
+    val stats =
+      EventTimeStats(max = largeValue, min = largeValue, avg = largeValue, count = largeValue - 1)
+    stats.add(largeValue)
+    stats.avg should be (largeValue.toDouble +- epsilon)
+
+    val stats2 = EventTimeStats(
+      max = largeValue + 1,
+      min = largeValue,
+      avg = largeValue + 1,
+      count = largeValue)
+    stats.merge(stats2)
+    stats.avg should be ((largeValue + 0.5) +- epsilon)
   }
 
   test("error on bad column") {
@@ -181,7 +218,11 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       .agg(count("*") as 'count)
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    def monthsSinceEpoch(date: Date): Int = { date.getYear * 12 + date.getMonth }
+    def monthsSinceEpoch(date: Date): Int = {
+      val cal = Calendar.getInstance()
+      cal.setTime(date)
+      cal.get(Calendar.YEAR) * 12 + cal.get(Calendar.MONTH)
+    }
 
     testStream(aggWithWatermark)(
       AddData(input, currentTimeMs / 1000),
@@ -261,6 +302,84 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       AddData(inputData, 25),
       CheckAnswer((10, 3))        // Should not emit an incorrect partial result.
     )
+  }
+
+  test("watermark with 2 streams") {
+    import org.apache.spark.sql.functions.sum
+    val first = MemoryStream[Int]
+
+    val firstDf = first.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .select('value)
+
+    val second = MemoryStream[Int]
+
+    val secondDf = second.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "5 seconds")
+      .select('value)
+
+    withTempDir { checkpointDir =>
+      val unionWriter = firstDf.union(secondDf).agg(sum('value))
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .format("memory")
+        .outputMode("complete")
+        .queryName("test")
+
+      val union = unionWriter.start()
+
+      def getWatermarkAfterData(
+                                 firstData: Seq[Int] = Seq.empty,
+                                 secondData: Seq[Int] = Seq.empty,
+                                 query: StreamingQuery = union): Long = {
+        if (firstData.nonEmpty) first.addData(firstData)
+        if (secondData.nonEmpty) second.addData(secondData)
+        query.processAllAvailable()
+        // add a dummy batch so lastExecution has the new watermark
+        first.addData(0)
+        query.processAllAvailable()
+        // get last watermark
+        val lastExecution = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+        lastExecution.offsetSeqMetadata.batchWatermarkMs
+      }
+
+      // Global watermark starts at 0 until we get data from both sides
+      assert(getWatermarkAfterData(firstData = Seq(11)) == 0)
+      assert(getWatermarkAfterData(secondData = Seq(6)) == 1000)
+      // Global watermark stays at left watermark 1 when right watermark moves to 2
+      assert(getWatermarkAfterData(secondData = Seq(8)) == 1000)
+      // Global watermark switches to right side value 2 when left watermark goes higher
+      assert(getWatermarkAfterData(firstData = Seq(21)) == 3000)
+      // Global watermark goes back to left
+      assert(getWatermarkAfterData(secondData = Seq(17, 28, 39)) == 11000)
+      // Global watermark stays on left as long as it's below right
+      assert(getWatermarkAfterData(firstData = Seq(31)) == 21000)
+      assert(getWatermarkAfterData(firstData = Seq(41)) == 31000)
+      // Global watermark switches back to right again
+      assert(getWatermarkAfterData(firstData = Seq(51)) == 34000)
+
+      // Global watermark is updated correctly with simultaneous data from both sides
+      assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(100)) == 90000)
+      assert(getWatermarkAfterData(firstData = Seq(120), secondData = Seq(110)) == 105000)
+      assert(getWatermarkAfterData(firstData = Seq(130), secondData = Seq(125)) == 120000)
+
+      // Global watermark doesn't decrement with simultaneous data
+      assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(100)) == 120000)
+      assert(getWatermarkAfterData(firstData = Seq(140), secondData = Seq(100)) == 120000)
+      assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(135)) == 130000)
+
+      // Global watermark recovers after restart, but left side watermark ahead of it does not.
+      assert(getWatermarkAfterData(firstData = Seq(200), secondData = Seq(190)) == 185000)
+      union.stop()
+      val union2 = unionWriter.start()
+      assert(getWatermarkAfterData(query = union2) == 185000)
+      // Even though the left side was ahead of 185000 in the last execution, the watermark won't
+      // increment until it gets past it in this execution.
+      assert(getWatermarkAfterData(secondData = Seq(200), query = union2) == 185000)
+      assert(getWatermarkAfterData(firstData = Seq(200), query = union2) == 190000)
+    }
   }
 
   test("complete mode") {
@@ -352,6 +471,34 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       .as[Long]
 
     checkDataset[Long](df, 1L to 100L: _*)
+  }
+
+  test("SPARK-21565: watermark operator accepts attributes from replacement") {
+    withTempDir { dir =>
+      dir.delete()
+
+      val df = Seq(("a", 100.0, new java.sql.Timestamp(100L)))
+        .toDF("symbol", "price", "eventTime")
+      df.write.json(dir.getCanonicalPath)
+
+      val input = spark.readStream.schema(df.schema)
+        .json(dir.getCanonicalPath)
+
+      val groupEvents = input
+        .withWatermark("eventTime", "2 seconds")
+        .groupBy("symbol", "eventTime")
+        .agg(count("price") as 'count)
+        .select("symbol", "eventTime", "count")
+      val q = groupEvents.writeStream
+        .outputMode("append")
+        .format("console")
+        .start()
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+    }
   }
 
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>

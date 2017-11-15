@@ -24,8 +24,8 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
@@ -36,7 +36,7 @@ import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
 import org.apache.spark.util.Utils
 
 /** Testsuite for testing the network receiver behavior */
-class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
+class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
 
   test("receiver life cycle") {
 
@@ -60,6 +60,8 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
     // Verify that the receiver
     intercept[Exception] {
+      // Necessary to make failAfter interrupt awaitTermination() in ScalaTest 3.x
+      implicit val signaler: Signaler = ThreadSignaler
       failAfter(200 millis) {
         executingThread.join()
       }

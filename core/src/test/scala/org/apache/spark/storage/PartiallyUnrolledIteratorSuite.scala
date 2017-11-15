@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import org.mockito.Matchers
 import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode.ON_HEAP

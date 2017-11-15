@@ -511,6 +511,12 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    * Generates the final aggregation result value for current key group with the aggregation buffer
    * object.
    *
+   * Developer note: the only return types accepted by Spark are:
+   *   - primitive types
+   *   - InternalRow and subclasses
+   *   - ArrayData
+   *   - MapData
+   *
    * @param buffer aggregation buffer object.
    * @return The aggregation result of current key group
    */

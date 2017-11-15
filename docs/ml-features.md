@@ -53,9 +53,9 @@ are calculated based on the mapped indices. This approach avoids the need to com
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
 chance of collision, we can increase the target feature dimension, i.e. the number of buckets 
-of the hash table. Since a simple modulo is used to transform the hash function to a column index, 
-it is advisable to use a power of two as the feature dimension, otherwise the features will 
-not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`.
+of the hash table. Since a simple modulo on the hashed value is used to determine the vector index,
+it is advisable to use a power of two as the feature dimension, otherwise the features will not
+be mapped evenly to the vector indices. The default feature dimension is `$2^{18} = 262,144$`.
 An optional binary toggle parameter controls term frequency counts. When set to true all nonzero
 frequency counts are set to 1. This is especially useful for discrete probabilistic models that
 model binary, rather than integer, counts.
@@ -65,7 +65,7 @@ model binary, rather than integer, counts.
 
 **IDF**: `IDF` is an `Estimator` which is fit on a dataset and produces an `IDFModel`.  The 
 `IDFModel` takes feature vectors (generally created from `HashingTF` or `CountVectorizer`) and 
-scales each column. Intuitively, it down-weights columns which appear frequently in a corpus.
+scales each feature. Intuitively, it down-weights features which appear frequently in a corpus.
 
 **Note:** `spark.ml` doesn't provide tools for text segmentation.
 We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 
@@ -208,6 +208,89 @@ and the [CountVectorizerModel Python docs](api/python/pyspark.ml.html#pyspark.ml
 for more details on the API.
 
 {% include_example python/ml/count_vectorizer_example.py %}
+</div>
+</div>
+
+## FeatureHasher
+
+Feature hashing projects a set of categorical or numerical features into a feature vector of
+specified dimension (typically substantially smaller than that of the original feature
+space). This is done using the [hashing trick](https://en.wikipedia.org/wiki/Feature_hashing)
+to map features to indices in the feature vector.
+
+The `FeatureHasher` transformer operates on multiple columns. Each column may contain either
+numeric or categorical features. Behavior and handling of column data types is as follows:
+
+- Numeric columns: For numeric features, the hash value of the column name is used to map the
+feature value to its index in the feature vector. Numeric features are never treated as
+categorical, even when they are integers. You must explicitly convert numeric columns containing
+categorical features to strings first.
+- String columns: For categorical features, the hash value of the string "column_name=value"
+is used to map to the vector index, with an indicator value of `1.0`. Thus, categorical features
+are "one-hot" encoded (similarly to using [OneHotEncoder](ml-features.html#onehotencoder) with
+`dropLast=false`).
+- Boolean columns: Boolean values are treated in the same way as string columns. That is,
+boolean features are represented as "column_name=true" or "column_name=false", with an indicator
+value of `1.0`.
+
+Null (missing) values are ignored (implicitly zero in the resulting feature vector).
+
+The hash function used here is also the [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash)
+used in [HashingTF](ml-features.html#tf-idf). Since a simple modulo on the hashed value is used to
+determine the vector index, it is advisable to use a power of two as the numFeatures parameter;
+otherwise the features will not be mapped evenly to the vector indices.
+
+**Examples**
+
+Assume that we have a DataFrame with 4 input columns `real`, `bool`, `stringNum`, and `string`.
+These different data types as input will illustrate the behavior of the transform to produce a
+column of feature vectors.
+
+~~~~
+real| bool|stringNum|string
+----|-----|---------|------
+ 2.2| true|        1|   foo
+ 3.3|false|        2|   bar
+ 4.4|false|        3|   baz
+ 5.5|false|        4|   foo
+~~~~
+
+Then the output of `FeatureHasher.transform` on this DataFrame is:
+
+~~~~
+real|bool |stringNum|string|features
+----|-----|---------|------|-------------------------------------------------------
+2.2 |true |1        |foo   |(262144,[51871, 63643,174475,253195],[1.0,1.0,2.2,1.0])
+3.3 |false|2        |bar   |(262144,[6031,  80619,140467,174475],[1.0,1.0,1.0,3.3])
+4.4 |false|3        |baz   |(262144,[24279,140467,174475,196810],[1.0,1.0,4.4,1.0])
+5.5 |false|4        |foo   |(262144,[63643,140467,168512,174475],[1.0,1.0,1.0,5.5])
+~~~~
+
+The resulting feature vectors could then be passed to a learning algorithm.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [FeatureHasher Scala docs](api/scala/index.html#org.apache.spark.ml.feature.FeatureHasher)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/FeatureHasherExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [FeatureHasher Java docs](api/java/org/apache/spark/ml/feature/FeatureHasher.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaFeatureHasherExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [FeatureHasher Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.FeatureHasher)
+for more details on the API.
+
+{% include_example python/ml/feature_hasher_example.py %}
 </div>
 </div>
 
@@ -1290,7 +1373,9 @@ for more details on the API.
 The `Imputer` transformer completes missing values in a dataset, either using the mean or the 
 median of the columns in which the missing values are located. The input columns should be of
 `DoubleType` or `FloatType`. Currently `Imputer` does not support categorical features and possibly
-creates incorrect values for columns containing categorical features.
+creates incorrect values for columns containing categorical features. Imputer can impute custom values 
+other than 'NaN' by `.setMissingValue(custom_value)`. For example, `.setMissingValue(0)` will impute 
+all occurrences of (0).
 
 **Note** all `null` values in the input columns are treated as missing, and so are also imputed.
 

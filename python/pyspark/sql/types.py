@@ -440,6 +440,11 @@ class StructField(DataType):
     def fromInternal(self, obj):
         return self.dataType.fromInternal(obj)
 
+    def typeName(self):
+        raise TypeError(
+            "StructField does not have typeName. "
+            "Use typeName on its type explicitly instead.")
+
 
 class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
@@ -478,7 +483,9 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
+        self._needConversion = [f.needConversion() for f in self]
+        self._needSerializeAnyField = any(self._needConversion)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -523,7 +530,9 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
+        self._needConversion = [f.needConversion() for f in self]
+        self._needSerializeAnyField = any(self._needConversion)
         return self
 
     def __iter__(self):
@@ -585,13 +594,17 @@ class StructType(DataType):
             return
 
         if self._needSerializeAnyField:
+            # Only calling toInternal function for fields that need conversion
             if isinstance(obj, dict):
-                return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(obj.get(n)) if c else obj.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             elif isinstance(obj, (tuple, list)):
-                return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
+                return tuple(f.toInternal(v) if c else v
+                             for f, v, c in zip(self.fields, obj, self._needConversion))
             elif hasattr(obj, "__dict__"):
                 d = obj.__dict__
-                return tuple(f.toInternal(d.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(d.get(n)) if c else d.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
@@ -614,7 +627,9 @@ class StructType(DataType):
             # it's already converted by pickler
             return obj
         if self._needSerializeAnyField:
-            values = [f.fromInternal(v) for f, v in zip(self.fields, obj)]
+            # Only calling fromInternal function for fields that need conversion
+            values = [f.fromInternal(v) if c else v
+                      for f, v, c in zip(self.fields, obj, self._needConversion)]
         else:
             values = obj
         return _create_row(self.names, values)
@@ -1187,135 +1202,6 @@ def _create_converter(dataType):
     return convert_struct
 
 
-def _split_schema_abstract(s):
-    """
-    split the schema abstract into fields
-
-    >>> _split_schema_abstract("a b  c")
-    ['a', 'b', 'c']
-    >>> _split_schema_abstract("a(a b)")
-    ['a(a b)']
-    >>> _split_schema_abstract("a b[] c{a b}")
-    ['a', 'b[]', 'c{a b}']
-    >>> _split_schema_abstract(" ")
-    []
-    """
-
-    r = []
-    w = ''
-    brackets = []
-    for c in s:
-        if c == ' ' and not brackets:
-            if w:
-                r.append(w)
-            w = ''
-        else:
-            w += c
-            if c in _BRACKETS:
-                brackets.append(c)
-            elif c in _BRACKETS.values():
-                if not brackets or c != _BRACKETS[brackets.pop()]:
-                    raise ValueError("unexpected " + c)
-
-    if brackets:
-        raise ValueError("brackets not closed: %s" % brackets)
-    if w:
-        r.append(w)
-    return r
-
-
-def _parse_field_abstract(s):
-    """
-    Parse a field in schema abstract
-
-    >>> _parse_field_abstract("a")
-    StructField(a,NullType,true)
-    >>> _parse_field_abstract("b(c d)")
-    StructField(b,StructType(...c,NullType,true),StructField(d...
-    >>> _parse_field_abstract("a[]")
-    StructField(a,ArrayType(NullType,true),true)
-    >>> _parse_field_abstract("a{[]}")
-    StructField(a,MapType(NullType,ArrayType(NullType,true),true),true)
-    """
-    if set(_BRACKETS.keys()) & set(s):
-        idx = min((s.index(c) for c in _BRACKETS if c in s))
-        name = s[:idx]
-        return StructField(name, _parse_schema_abstract(s[idx:]), True)
-    else:
-        return StructField(s, NullType(), True)
-
-
-def _parse_schema_abstract(s):
-    """
-    parse abstract into schema
-
-    >>> _parse_schema_abstract("a b  c")
-    StructType...a...b...c...
-    >>> _parse_schema_abstract("a[b c] b{}")
-    StructType...a,ArrayType...b...c...b,MapType...
-    >>> _parse_schema_abstract("c{} d{a b}")
-    StructType...c,MapType...d,MapType...a...b...
-    >>> _parse_schema_abstract("a b(t)").fields[1]
-    StructField(b,StructType(List(StructField(t,NullType,true))),true)
-    """
-    s = s.strip()
-    if not s:
-        return NullType()
-
-    elif s.startswith('('):
-        return _parse_schema_abstract(s[1:-1])
-
-    elif s.startswith('['):
-        return ArrayType(_parse_schema_abstract(s[1:-1]), True)
-
-    elif s.startswith('{'):
-        return MapType(NullType(), _parse_schema_abstract(s[1:-1]))
-
-    parts = _split_schema_abstract(s)
-    fields = [_parse_field_abstract(p) for p in parts]
-    return StructType(fields)
-
-
-def _infer_schema_type(obj, dataType):
-    """
-    Fill the dataType with types inferred from obj
-
-    >>> schema = _parse_schema_abstract("a b c d")
-    >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
-    >>> _infer_schema_type(row, schema)
-    StructType...LongType...DoubleType...StringType...DateType...
-    >>> row = [[1], {"key": (1, 2.0)}]
-    >>> schema = _parse_schema_abstract("a[] b{c d}")
-    >>> _infer_schema_type(row, schema)
-    StructType...a,ArrayType...b,MapType(StringType,...c,LongType...
-    """
-    if isinstance(dataType, NullType):
-        return _infer_type(obj)
-
-    if not obj:
-        return NullType()
-
-    if isinstance(dataType, ArrayType):
-        eType = _infer_schema_type(obj[0], dataType.elementType)
-        return ArrayType(eType, True)
-
-    elif isinstance(dataType, MapType):
-        k, v = next(iter(obj.items()))
-        return MapType(_infer_schema_type(k, dataType.keyType),
-                       _infer_schema_type(v, dataType.valueType))
-
-    elif isinstance(dataType, StructType):
-        fs = dataType.fields
-        assert len(fs) == len(obj), \
-            "Obj(%s) have different length with fields(%s)" % (obj, fs)
-        fields = [StructField(f.name, _infer_schema_type(o, f.dataType), True)
-                  for o, f in zip(obj, fs)]
-        return StructType(fields)
-
-    else:
-        raise TypeError("Unexpected dataType: %s" % type(dataType))
-
-
 _acceptable_types = {
     BooleanType: (bool,),
     ByteType: (int, long),
@@ -1709,6 +1595,118 @@ class DatetimeConverter(object):
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
+
+
+def to_arrow_type(dt):
+    """ Convert Spark data type to pyarrow type
+    """
+    import pyarrow as pa
+    if type(dt) == BooleanType:
+        arrow_type = pa.bool_()
+    elif type(dt) == ByteType:
+        arrow_type = pa.int8()
+    elif type(dt) == ShortType:
+        arrow_type = pa.int16()
+    elif type(dt) == IntegerType:
+        arrow_type = pa.int32()
+    elif type(dt) == LongType:
+        arrow_type = pa.int64()
+    elif type(dt) == FloatType:
+        arrow_type = pa.float32()
+    elif type(dt) == DoubleType:
+        arrow_type = pa.float64()
+    elif type(dt) == DecimalType:
+        arrow_type = pa.decimal(dt.precision, dt.scale)
+    elif type(dt) == StringType:
+        arrow_type = pa.string()
+    elif type(dt) == DateType:
+        arrow_type = pa.date32()
+    elif type(dt) == TimestampType:
+        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
+        arrow_type = pa.timestamp('us', tz='UTC')
+    else:
+        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+    return arrow_type
+
+
+def to_arrow_schema(schema):
+    """ Convert a schema from Spark to Arrow
+    """
+    import pyarrow as pa
+    fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+              for field in schema]
+    return pa.schema(fields)
+
+
+def from_arrow_type(at):
+    """ Convert pyarrow type to Spark data type.
+    """
+    # TODO: newer pyarrow has is_boolean(at) functions that would be better to check type
+    import pyarrow as pa
+    if at == pa.bool_():
+        spark_type = BooleanType()
+    elif at == pa.int8():
+        spark_type = ByteType()
+    elif at == pa.int16():
+        spark_type = ShortType()
+    elif at == pa.int32():
+        spark_type = IntegerType()
+    elif at == pa.int64():
+        spark_type = LongType()
+    elif at == pa.float32():
+        spark_type = FloatType()
+    elif at == pa.float64():
+        spark_type = DoubleType()
+    elif type(at) == pa.DecimalType:
+        spark_type = DecimalType(precision=at.precision, scale=at.scale)
+    elif at == pa.string():
+        spark_type = StringType()
+    elif at == pa.date32():
+        spark_type = DateType()
+    elif type(at) == pa.TimestampType:
+        spark_type = TimestampType()
+    else:
+        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+    return spark_type
+
+
+def from_arrow_schema(arrow_schema):
+    """ Convert schema from Arrow to Spark.
+    """
+    return StructType(
+        [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+         for field in arrow_schema])
+
+
+def _check_dataframe_localize_timestamps(pdf):
+    """
+    Convert timezone aware timestamps to timezone-naive in local time
+
+    :param pdf: pandas.DataFrame
+    :return pandas.DataFrame where any timezone aware columns have be converted to tz-naive
+    """
+    from pandas.api.types import is_datetime64tz_dtype
+    for column, series in pdf.iteritems():
+        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+        if is_datetime64tz_dtype(series.dtype):
+            pdf[column] = series.dt.tz_convert('tzlocal()').dt.tz_localize(None)
+    return pdf
+
+
+def _check_series_convert_timestamps_internal(s):
+    """
+    Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
+    :param s: a pandas.Series
+    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
+    """
+    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64_dtype(s.dtype):
+        return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC')
+    elif is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert('UTC')
+    else:
+        return s
 
 
 def _test():

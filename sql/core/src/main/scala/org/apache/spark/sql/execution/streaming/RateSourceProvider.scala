@@ -200,7 +200,8 @@ class RateStreamSource(
       s"rangeStart: $rangeStart, rangeEnd: $rangeEnd")
 
     if (rangeStart == rangeEnd) {
-      return sqlContext.internalCreateDataFrame(sqlContext.sparkContext.emptyRDD, schema)
+      return sqlContext.internalCreateDataFrame(
+        sqlContext.sparkContext.emptyRDD, schema, isStreaming = true)
     }
 
     val localStartTimeMs = startTimeMs + TimeUnit.SECONDS.toMillis(startSeconds)
@@ -211,7 +212,7 @@ class RateStreamSource(
       val relative = math.round((v - rangeStart) * relativeMsPerValue)
       InternalRow(DateTimeUtils.fromMillis(relative + localStartTimeMs), v)
     }
-    sqlContext.internalCreateDataFrame(rdd, schema)
+    sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
   }
 
   override def stop(): Unit = {}

@@ -69,6 +69,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kvstore_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-network-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -190,8 +195,12 @@
       <artifactId>snappy-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>net.jpountz.lz4</groupId>
-      <artifactId>lz4</artifactId>
+      <groupId>org.lz4</groupId>
+      <artifactId>lz4-java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.luben</groupId>
+      <artifactId>zstd-jni</artifactId>
     </dependency>
     <dependency>
       <groupId>org.roaringbitmap</groupId>
@@ -483,6 +492,7 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
+            <version>1.6.0</version>
             <executions>
               <execution>
                 <id>sparkr-pkg</id>
@@ -493,7 +503,7 @@
               </execution>
             </executions>
             <configuration>
-              <executable>..${file.separator}R${file.separator}install-dev${script.extension}</executable>
+              <executable>${project.basedir}${file.separator}..${file.separator}R${file.separator}install-dev${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
-import org.apache.spark.sql.execution.command.DescribeTableCommand
+import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeTableCommand}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -214,11 +214,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   /** Executes a query and returns the result as (schema of the output, normalized output). */
   private def getNormalizedResult(session: SparkSession, sql: String): (StructType, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
-    def needSort(plan: LogicalPlan): Boolean = plan match {
+    def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case _: DescribeTableCommand => true
+      case _: DescribeTableCommand | _: DescribeColumnCommand => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
-      case _ => plan.children.iterator.exists(needSort)
+      case _ => plan.children.iterator.exists(isSorted)
     }
 
     try {
@@ -228,11 +228,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
       val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x")
         .replaceAll("Location.*/sql/core/", s"Location ${notIncludedMsg}sql/core/")
-        .replaceAll("Created.*", s"Created $notIncludedMsg")
+        .replaceAll("Created By.*", s"Created By $notIncludedMsg")
+        .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
         .replaceAll("Last Access.*", s"Last Access $notIncludedMsg"))
 
       // If the output is not pre-sorted, sort it.
-      if (needSort(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
+      if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
 
     } catch {
       case a: AnalysisException =>

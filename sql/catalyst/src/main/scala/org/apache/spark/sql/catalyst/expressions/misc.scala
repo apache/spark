@@ -50,7 +50,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(0 < 1);
        NULL
@@ -96,7 +96,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
  */
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current database.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_();
        default
@@ -111,7 +111,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_() - Returns an universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_();
        46707d92-02f4-4817-8116-a4c3b23e6266
@@ -119,7 +119,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
 // scalastyle:on line.size.limit
 case class Uuid() extends LeafExpression {
 
-  override def deterministic: Boolean = false
+  override lazy val deterministic: Boolean = false
 
   override def nullable: Boolean = false
 

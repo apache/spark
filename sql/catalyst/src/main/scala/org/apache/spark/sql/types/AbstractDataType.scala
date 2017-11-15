@@ -79,18 +79,6 @@ private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
 private[sql] object TypeCollection {
 
   /**
-   * Types that can be ordered/compared. In the long run we should probably make this a trait
-   * that can be mixed into each data type, and perhaps create an `AbstractDataType`.
-   */
-  // TODO: Should we consolidate this with RowOrdering.isOrderable?
-  val Ordered = TypeCollection(
-    BooleanType,
-    ByteType, ShortType, IntegerType, LongType,
-    FloatType, DoubleType, DecimalType,
-    TimestampType, DateType,
-    StringType, BinaryType)
-
-  /**
    * Types that include numeric types and interval type. They are only used in unary_minus,
    * unary_positive, add and subtract operations.
    */

@@ -55,6 +55,14 @@ private[spark] class HadoopDelegationTokenManager(
   logDebug(s"Using the following delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
+  /** Construct a [[HadoopDelegationTokenManager]] for the default Hadoop filesystem */
+  def this(sparkConf: SparkConf, hadoopConf: Configuration) = {
+    this(
+      sparkConf,
+      hadoopConf,
+      hadoopConf => Set(FileSystem.get(hadoopConf).getHomeDirectory.getFileSystem(hadoopConf)))
+  }
+
   private def getDelegationTokenProviders: Map[String, HadoopDelegationTokenProvider] = {
     val providers = List(new HadoopFSDelegationTokenProvider(fileSystems),
       new HiveDelegationTokenProvider,
@@ -107,8 +115,8 @@ private[spark] class HadoopDelegationTokenManager(
       hadoopConf: Configuration,
       creds: Credentials): Long = {
     delegationTokenProviders.values.flatMap { provider =>
-      if (provider.delegationTokensRequired(hadoopConf)) {
-        provider.obtainDelegationTokens(hadoopConf, creds)
+      if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
+        provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")

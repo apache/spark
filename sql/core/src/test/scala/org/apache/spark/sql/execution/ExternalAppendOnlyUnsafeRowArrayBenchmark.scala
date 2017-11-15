@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskContext}
+import org.apache.spark.internal.config
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.util.Benchmark
@@ -67,7 +68,10 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
     benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iterations) {
-        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold)
+        val array = new ExternalAppendOnlyUnsafeRowArray(
+          ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer,
+          numSpillThreshold)
+
         rows.foreach(x => array.add(x))
 
         val iterator = array.generateIterator()
@@ -143,7 +147,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
     benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iterations) {
-        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold)
+        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold, numSpillThreshold)
         rows.foreach(x => array.add(x))
 
         val iterator = array.generateIterator()
@@ -228,6 +232,6 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
     ExternalAppendOnlyUnsafeRowArray                 5 /    6         29.8          33.5       0.8X
     */
     testAgainstRawUnsafeExternalSorter(
-      UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt, 10 * 1000, 1 << 4)
+      config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get, 10 * 1000, 1 << 4)
   }
 }

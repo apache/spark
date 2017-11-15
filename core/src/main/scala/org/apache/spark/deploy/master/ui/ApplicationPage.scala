@@ -125,10 +125,10 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       <td>{executor.memory}</td>
       <td>{executor.state}</td>
       <td>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stdout</a>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stderr</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stderr"}>stderr</a>
       </td>
     </tr>
   }

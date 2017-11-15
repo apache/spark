@@ -39,6 +39,10 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-reflect</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -118,12 +122,7 @@
         <artifactId>maven-jar-plugin</artifactId>
         <executions>
           <execution>
-            <goals>
-              <goal>test-jar</goal>
-            </goals>
-          </execution>
-          <execution>
-            <id>test-jar-on-test-compile</id>
+            <id>prepare-test-jar</id>
             <phase>test-compile</phase>
             <goals>
               <goal>test-jar</goal>

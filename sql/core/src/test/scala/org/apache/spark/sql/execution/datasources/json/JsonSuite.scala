@@ -27,8 +27,8 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkException
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -2032,6 +2032,35 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         }
         assert(e.getMessage.contains("Cannot parse"))
       }
+    }
+  }
+
+  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
+    "from a file") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val data =
+        """{"field": 1}
+          |{"field": 2}
+          |{"field": "3"}""".stripMargin
+      Seq(data).toDF().repartition(1).write.text(path)
+      val schema = new StructType().add("field", ByteType).add("_corrupt_record", StringType)
+      // negative cases
+      val msg = intercept[AnalysisException] {
+        spark.read.schema(schema).json(path).select("_corrupt_record").collect()
+      }.getMessage
+      assert(msg.contains("only include the internal corrupt record column"))
+      intercept[catalyst.errors.TreeNodeException[_]] {
+        spark.read.schema(schema).json(path).filter($"_corrupt_record".isNotNull).count()
+      }
+      // workaround
+      val df = spark.read.schema(schema).json(path).cache()
+      assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
+      assert(df.filter($"_corrupt_record".isNull).count() == 2)
+      checkAnswer(
+        df.select("_corrupt_record"),
+        Row(null) :: Row(null) :: Row("{\"field\": \"3\"}") :: Nil
+      )
     }
   }
 }

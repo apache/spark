@@ -715,7 +715,7 @@ class LinearRegressionSuite
       assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
 
       // Residuals in [[LinearRegressionResults]] should equal those manually computed
-      val expectedResiduals = datasetWithDenseFeature.select("features", "label")
+      datasetWithDenseFeature.select("features", "label")
         .rdd
         .map { case Row(features: DenseVector, label: Double) =>
           val prediction =
@@ -764,6 +764,11 @@ class LinearRegressionSuite
           (Intercept) 6.3022157  0.0018600    3388   <2e-16 ***
           V2          4.6982442  0.0011805    3980   <2e-16 ***
           V3          7.1994344  0.0009044    7961   <2e-16 ***
+
+          # R code for r2adj
+          lm_fit <- lm(V1 ~ V2 + V3, data = d1)
+          summary(lm_fit)$adj.r.squared
+          [1] 0.9998736
           ---
 
           ....
@@ -771,6 +776,7 @@ class LinearRegressionSuite
       assert(model.summary.meanSquaredError ~== 0.00985449 relTol 1E-4)
       assert(model.summary.meanAbsoluteError ~== 0.07961668 relTol 1E-4)
       assert(model.summary.r2 ~== 0.9998737 relTol 1E-4)
+      assert(model.summary.r2adj ~== 0.9998736  relTol 1E-4)
 
       // Normal solver uses "WeightedLeastSquares". If no regularization is applied or only L2
       // regularization is applied, this algorithm uses a direct solver and does not generate an

@@ -24,7 +24,10 @@ import scala.util.Random
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.vectorized.ColumnVector
-import org.apache.spark.sql.types.{BinaryType, IntegerType}
+import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Benchmark
 import org.apache.spark.util.collection.BitSet
@@ -33,6 +36,14 @@ import org.apache.spark.util.collection.BitSet
  * Benchmark to low level memory access using different ways to manage buffers.
  */
 object ColumnarBatchBenchmark {
+
+  def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): WritableColumnVector = {
+    if (memMode == MemoryMode.OFF_HEAP) {
+      new OffHeapColumnVector(capacity, dt)
+    } else {
+      new OnHeapColumnVector(capacity, dt)
+    }
+  }
 
   // This benchmark reads and writes an array of ints.
   // TODO: there is a big (2x) penalty for a random access API for off heap.
@@ -140,7 +151,7 @@ object ColumnarBatchBenchmark {
 
     // Access through the column API with on heap memory
     val columnOnHeap = { i: Int =>
-      val col = ColumnVector.allocate(count, IntegerType, MemoryMode.ON_HEAP)
+      val col = allocate(count, IntegerType, MemoryMode.ON_HEAP)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0
@@ -159,7 +170,7 @@ object ColumnarBatchBenchmark {
 
     // Access through the column API with off heap memory
     def columnOffHeap = { i: Int => {
-      val col = ColumnVector.allocate(count, IntegerType, MemoryMode.OFF_HEAP)
+      val col = allocate(count, IntegerType, MemoryMode.OFF_HEAP)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0
@@ -178,7 +189,7 @@ object ColumnarBatchBenchmark {
 
     // Access by directly getting the buffer backing the column.
     val columnOffheapDirect = { i: Int =>
-      val col = ColumnVector.allocate(count, IntegerType, MemoryMode.OFF_HEAP)
+      val col = allocate(count, IntegerType, MemoryMode.OFF_HEAP)
       var sum = 0L
       for (n <- 0L until iters) {
         var addr = col.valuesNativeAddress()
@@ -244,7 +255,7 @@ object ColumnarBatchBenchmark {
 
     // Adding values by appending, instead of putting.
     val onHeapAppend = { i: Int =>
-      val col = ColumnVector.allocate(count, IntegerType, MemoryMode.ON_HEAP)
+      val col = allocate(count, IntegerType, MemoryMode.ON_HEAP)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0
@@ -362,7 +373,7 @@ object ColumnarBatchBenchmark {
       .map(_.getBytes(StandardCharsets.UTF_8)).toArray
 
     def column(memoryMode: MemoryMode) = { i: Int =>
-      val column = ColumnVector.allocate(count, BinaryType, memoryMode)
+      val column = allocate(count, BinaryType, memoryMode)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0

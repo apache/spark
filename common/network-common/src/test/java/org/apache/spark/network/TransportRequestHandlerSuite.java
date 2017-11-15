@@ -102,7 +102,7 @@ public class TransportRequestHandlerSuite {
 
   private class ExtendedChannelPromise extends DefaultChannelPromise {
 
-    private List<GenericFutureListener> listeners = new ArrayList<>();
+    private List<GenericFutureListener<Future<Void>>> listeners = new ArrayList<>();
     private boolean success;
 
     ExtendedChannelPromise(Channel channel) {
@@ -113,7 +113,10 @@ public class TransportRequestHandlerSuite {
     @Override
     public ChannelPromise addListener(
         GenericFutureListener<? extends Future<? super Void>> listener) {
-      listeners.add(listener);
+      @SuppressWarnings("unchecked")
+      GenericFutureListener<Future<Void>> gfListener =
+          (GenericFutureListener<Future<Void>>) listener;
+      listeners.add(gfListener);
       return super.addListener(listener);
     }
 

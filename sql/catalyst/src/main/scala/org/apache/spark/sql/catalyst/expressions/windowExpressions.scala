@@ -89,7 +89,11 @@ case class WindowSpecDefinition(
     elements.mkString("(", " ", ")")
   }
 
-  private def isValidFrameType(ft: DataType): Boolean = orderSpec.head.dataType == ft
+  private def isValidFrameType(ft: DataType): Boolean = (orderSpec.head.dataType, ft) match {
+    case (DateType, IntegerType) => true
+    case (TimestampType, CalendarIntervalType) => true
+    case (a, b) => a == b
+  }
 }
 
 /**
@@ -129,7 +133,7 @@ case object RowFrame extends FrameType {
  * of the current row.
  */
 case object RangeFrame extends FrameType {
-  override def inputType: AbstractDataType = NumericType
+  override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
   override def sql: String = "RANGE"
 }
 

@@ -106,8 +106,8 @@ class HistoryServer(
     }
   }
 
-  def getSparkUI(appKey: String): Option[SparkUI] = {
-    appCache.getSparkUI(appKey)
+  override def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T = {
+    appCache.withSparkUI(appId, attemptId)(fn)
   }
 
   initialize()
@@ -140,7 +140,6 @@ class HistoryServer(
   override def stop() {
     super.stop()
     provider.stop()
-    appCache.stop()
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
@@ -158,6 +157,7 @@ class HistoryServer(
   override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
+    provider.onUIDetached(appId, attemptId, ui)
   }
 
   /**
@@ -224,15 +224,13 @@ class HistoryServer(
    */
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
     try {
-      appCache.get(appId, attemptId)
+      appCache.withSparkUI(appId, attemptId) { _ =>
+        // Do nothing, just force the UI to load.
+      }
       true
     } catch {
-      case NonFatal(e) => e.getCause() match {
-        case nsee: NoSuchElementException =>
-          false
-
-        case cause: Exception => throw cause
-      }
+      case NonFatal(e: NoSuchElementException) =>
+        false
     }
   }
 

@@ -499,6 +499,12 @@ test_that("create DataFrame with different data types", {
   expect_equal(collect(df), data.frame(l, stringsAsFactors = FALSE))
 })
 
+test_that("SPARK-17902: collect() with stringsAsFactors enabled", {
+  df <- suppressWarnings(collect(createDataFrame(iris), stringsAsFactors = TRUE))
+  expect_equal(class(iris$Species), class(df$Species))
+  expect_equal(iris$Species, df$Species)
+})
+
 test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
   df <- data.frame(
     id = 1:2,
@@ -560,9 +566,9 @@ test_that("Collect DataFrame with complex types", {
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
   expect_equal(names(ldf), c("c1", "c2", "c3"))
-  expect_equal(ldf$c1, list(list(1, 2, 3), list(4, 5, 6), list (7, 8, 9)))
-  expect_equal(ldf$c2, list(list("a", "b", "c"), list("d", "e", "f"), list ("g", "h", "i")))
-  expect_equal(ldf$c3, list(list(1.0, 2.0, 3.0), list(4.0, 5.0, 6.0), list (7.0, 8.0, 9.0)))
+  expect_equal(ldf$c1, list(list(1, 2, 3), list(4, 5, 6), list(7, 8, 9)))
+  expect_equal(ldf$c2, list(list("a", "b", "c"), list("d", "e", "f"), list("g", "h", "i")))
+  expect_equal(ldf$c3, list(list(1.0, 2.0, 3.0), list(4.0, 5.0, 6.0), list(7.0, 8.0, 9.0)))
 
   # MapType
   schema <- structType(structField("name", "string"),
@@ -623,6 +629,10 @@ test_that("read/write json files", {
     # Test write.df
     jsonPath2 <- tempfile(pattern = "jsonPath2", fileext = ".json")
     write.df(df, jsonPath2, "json", mode = "overwrite")
+
+    # Test errorifexists
+    expect_error(write.df(df, jsonPath2, "json", mode = "errorifexists"),
+                 "analysis error - path file:.*already exists")
 
     # Test write.json
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
@@ -723,7 +733,7 @@ test_that("test cache, uncache and clearCache", {
   expect_true(dropTempView("table1"))
 
   expect_error(uncacheTable("foo"),
-      "Error in uncacheTable : no such table - Table or view 'foo' not found in database 'default'")
+      "Error in uncacheTable : analysis error - Table or view not found: foo")
 })
 
 test_that("insertInto() on a registered table", {
@@ -1116,6 +1126,20 @@ test_that("sample on a DataFrame", {
   sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
 
+  # Different arguments
+  df <- createDataFrame(as.list(seq(10)))
+  expect_equal(count(sample(df, fraction = 0.5, seed = 3)), 4)
+  expect_equal(count(sample(df, withReplacement = TRUE, fraction = 0.5, seed = 3)), 2)
+  expect_equal(count(sample(df, fraction = 1.0)), 10)
+  expect_equal(count(sample(df, fraction = 1L)), 10)
+  expect_equal(count(sample(df, FALSE, fraction = 1.0)), 10)
+
+  expect_error(sample(df, fraction = "a"), "fraction must be numeric")
+  expect_error(sample(df, "a", fraction = 0.1), "however, got character")
+  expect_error(sample(df, fraction = 1, seed = NA), "seed must not be NULL or NA; however, got NA")
+  expect_error(sample(df, fraction = -1.0),
+               "illegal argument - requirement failed: Sampling fraction \\(-1.0\\)")
+
   # nolint start
   # Test base::sample is working
   #expect_equal(length(sample(1:12)), 12)
@@ -1351,6 +1375,9 @@ test_that("test HiveContext", {
     expect_equal(count(df5), 3)
     unlink(parquetDataPath)
 
+    # Invalid mode
+    expect_error(saveAsTable(df, "parquetest", "parquet", mode = "abc", path = parquetDataPath),
+                 "illegal argument - Unknown save mode: abc")
     unsetHiveContext()
   }
 })
@@ -1436,6 +1463,14 @@ test_that("column functions", {
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
 
+  # Test map_keys() and map_values()
+  df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
+  result <- collect(select(df, map_keys(df$map)))[[1]]
+  expect_equal(result, list(list("x", "y")))
+
+  result <- collect(select(df, map_values(df$map)))[[1]]
+  expect_equal(result, list(list(1, 2)))
+
   # Test that stats::lag is working
   expect_equal(length(lag(ldeaths, 12)), 72)
 
@@ -1483,6 +1518,14 @@ test_that("column functions", {
   j <- collect(select(df, alias(to_json(df$people), "json")))
   expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
 
+  df <- sql("SELECT map('name', 'Bob') as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "{\"name\":\"Bob\"}")
+
+  df <- sql("SELECT array(map('name', 'Bob'), map('name', 'Alice')) as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
+
   df <- read.json(mapTypeJsonPath)
   j <- collect(select(df, alias(to_json(df$info), "json")))
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
@@ -1494,7 +1537,7 @@ test_that("column functions", {
     expect_equal(ncol(s), 1)
     expect_equal(nrow(s), 3)
     expect_is(s[[1]][[1]], "struct")
-    expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
+    expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 })))
   }
 
   # passing option
@@ -1656,6 +1699,7 @@ test_that("date functions on a DataFrame", {
             list(a = 2L, b = as.Date("2013-12-14")),
             list(a = 3L, b = as.Date("2014-12-15")))
   df <- createDataFrame(l)
+  expect_equal(collect(select(df, dayofweek(df$b)))[, 1], c(5, 7, 2))
   expect_equal(collect(select(df, dayofmonth(df$b)))[, 1], c(13, 14, 15))
   expect_equal(collect(select(df, dayofyear(df$b)))[, 1], c(348, 348, 349))
   expect_equal(collect(select(df, weekofyear(df$b)))[, 1], c(50, 50, 51))
@@ -2247,7 +2291,7 @@ test_that("isLocal()", {
   expect_false(isLocal(df))
 })
 
-test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
+test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataFrame", {
   df <- read.json(jsonPath)
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
@@ -2262,6 +2306,13 @@ test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
   expect_equal(count(arrange(suppressWarnings(unionAll(df, df2)), df$age)), 6)
+
+  df1 <- select(df2, "age", "name")
+  unioned1 <- arrange(unionByName(df1, df), df1$age)
+  expect_is(unioned, "SparkDataFrame")
+  expect_equal(count(unioned), 6)
+  # Here, we test if 'Michael' in df is correctly mapped to the same name.
+  expect_equal(first(unioned)$name, "Michael")
 
   unioned2 <- arrange(rbind(unioned, df, df2), df$age)
   expect_is(unioned2, "SparkDataFrame")
@@ -2489,7 +2540,7 @@ test_that("read/write text files - compression option", {
   unlink(textPath)
 })
 
-test_that("describe() and summarize() on a DataFrame", {
+test_that("describe() and summary() on a DataFrame", {
   df <- read.json(jsonPath)
   stats <- describe(df, "age")
   expect_equal(collect(stats)[1, "summary"], "count")
@@ -2500,8 +2551,15 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats)[5, "age"], "30")
 
   stats2 <- summary(df)
-  expect_equal(collect(stats2)[4, "summary"], "min")
-  expect_equal(collect(stats2)[5, "age"], "30")
+  expect_equal(collect(stats2)[5, "summary"], "25%")
+  expect_equal(collect(stats2)[5, "age"], "19")
+
+  stats3 <- summary(df, "min", "max", "55.1%")
+
+  expect_equal(collect(stats3)[1, "summary"], "min")
+  expect_equal(collect(stats3)[2, "summary"], "max")
+  expect_equal(collect(stats3)[3, "summary"], "55.1%")
+  expect_equal(collect(stats3)[3, "age"], "30")
 
   # SPARK-16425: SparkR summary() fails on column of type logical
   df <- withColumn(df, "boolean", df$age == 30)
@@ -2666,7 +2724,7 @@ test_that("freqItems() on a DataFrame", {
   input <- 1:1000
   rdf <- data.frame(numbers = input, letters = as.character(input),
                     negDoubles = input * -1.0, stringsAsFactors = F)
-  rdf[ input %% 3 == 0, ] <- c(1, "1", -1)
+  rdf[input %% 3 == 0, ] <- c(1, "1", -1)
   df <- createDataFrame(rdf)
   multiColResults <- freqItems(df, c("numbers", "letters"), support = 0.1)
   expect_true(1 %in% multiColResults$numbers[[1]])
@@ -2694,7 +2752,7 @@ test_that("sampleBy() on a DataFrame", {
 })
 
 test_that("approxQuantile() on a DataFrame", {
-  l <- lapply(c(0:99), function(i) { list(i, 99 - i) })
+  l <- lapply(c(0:100), function(i) { list(i, 100 - i) })
   df <- createDataFrame(l, list("a", "b"))
   quantiles <- approxQuantile(df, "a", c(0.5, 0.8), 0.0)
   expect_equal(quantiles, list(50, 80))
@@ -2705,8 +2763,8 @@ test_that("approxQuantile() on a DataFrame", {
   dfWithNA <- createDataFrame(data.frame(a = c(NA, 30, 19, 11, 28, 15),
                                          b = c(-30, -19, NA, -11, -28, -15)))
   quantiles3 <- approxQuantile(dfWithNA, c("a", "b"), c(0.5), 0.0)
-  expect_equal(quantiles3[[1]], list(28))
-  expect_equal(quantiles3[[2]], list(-15))
+  expect_equal(quantiles3[[1]], list(19))
+  expect_equal(quantiles3[[2]], list(-19))
 })
 
 test_that("SQL error message is returned from JVM", {
@@ -2734,15 +2792,15 @@ test_that("attach() on a DataFrame", {
   expected_age <- data.frame(age = c(NA, 30, 19))
   expect_equal(head(age), expected_age)
   stat <- summary(age)
-  expect_equal(collect(stat)[5, "age"], "30")
+  expect_equal(collect(stat)[8, "age"], "30")
   age <- age$age + 1
   expect_is(age, "Column")
   rm(age)
   stat2 <- summary(age)
-  expect_equal(collect(stat2)[5, "age"], "30")
+  expect_equal(collect(stat2)[8, "age"], "30")
   detach("df")
   stat3 <- summary(df[, "age", drop = F])
-  expect_equal(collect(stat3)[5, "age"], "30")
+  expect_equal(collect(stat3)[8, "age"], "30")
   expect_error(age)
 })
 
@@ -3020,7 +3078,7 @@ test_that("coalesce, repartition, numPartitions", {
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
-  df <- createDataFrame (
+  df <- createDataFrame(
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
   expected <- collect(df)
@@ -3030,6 +3088,11 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
 
   df1Collect <- gapplyCollect(df, list("a"), function(key, x) { x })
   expect_identical(df1Collect, expected)
+
+  # gapply on empty grouping columns.
+  df1 <- gapply(df, c(), function(key, x) { x }, schema(df))
+  actual <- collect(df1)
+  expect_identical(actual, expected)
 
   # Computes the sum of second column by grouping on the first and third columns
   # and checks if the sum is larger than 2
@@ -3091,7 +3154,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   actual <- df3Collect[order(df3Collect$a), ]
   expect_identical(actual$avg, expected$avg)
 
-  irisDF <- suppressWarnings(createDataFrame (iris))
+  irisDF <- suppressWarnings(createDataFrame(iris))
   schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
   # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
   df4 <- gapply(
@@ -3248,6 +3311,7 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
               "Error in orc : analysis error - path file:.*already exists")
   expect_error(write.parquet(df, jsonPath),
               "Error in parquet : analysis error - path file:.*already exists")
+  expect_error(write.parquet(df, jsonPath, mode = 123), "mode should be character or omitted.")
 
   # Arguments checking in R side.
   expect_error(write.df(df, "data.tmp", source = c(1, 2)),

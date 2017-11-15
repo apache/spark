@@ -207,11 +207,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       uriScheme match {
         case "file" =>
           try {
-            val jar = new JarFile(uri.getPath)
-            // Note that this might still return null if no main-class is set; we catch that later
-            mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
+            Utils.tryWithResource(new JarFile(uri.getPath)) { jar =>
+              // Note that this might still return null if no main-class is set; we catch that later
+              mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
+            }
           } catch {
-            case e: Exception =>
+            case _: Exception =>
               SparkSubmit.printErrorAndExit(s"Cannot load main class from JAR $primaryResource")
           }
         case _ =>

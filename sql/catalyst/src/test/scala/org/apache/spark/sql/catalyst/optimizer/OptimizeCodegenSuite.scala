@@ -32,8 +32,8 @@ class OptimizeCodegenSuite extends PlanTest {
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
-    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation).analyze
-    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation).analyze)
+    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
+    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
     comparePlans(actual, correctAnswer)
   }
 
@@ -58,13 +58,13 @@ class OptimizeCodegenSuite extends PlanTest {
   }
 
   test("Multiple CaseWhen in one operator.") {
-    val plan = OneRowRelation
+    val plan = OneRowRelation()
       .select(
         CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)),
         CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)),
         CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)),
         CaseWhen(Seq((TrueLiteral, Literal(5))), Literal(6))).analyze
-    val correctAnswer = OneRowRelation
+    val correctAnswer = OneRowRelation()
       .select(
         CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(),
         CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)).toCodegen(),
@@ -75,7 +75,7 @@ class OptimizeCodegenSuite extends PlanTest {
   }
 
   test("Multiple CaseWhen in different operators") {
-    val plan = OneRowRelation
+    val plan = OneRowRelation()
       .select(
         CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)),
         CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)),
@@ -85,7 +85,7 @@ class OptimizeCodegenSuite extends PlanTest {
           CaseWhen(Seq((TrueLiteral, Literal(5))), Literal(6)),
           CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)))
       ).analyze
-    val correctAnswer = OneRowRelation
+    val correctAnswer = OneRowRelation()
       .select(
         CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(),
         CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)).toCodegen(),

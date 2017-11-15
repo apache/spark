@@ -422,7 +422,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         v
       }
       withSQLConf(
-        (SQLConf.WHOLESTAGE_FALLBACK.key, codegenFallback.toString),
+        (SQLConf.CODEGEN_FALLBACK.key, codegenFallback.toString),
         (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString)) {
         val df = spark.range(0, 4, 1, 4).withColumn("c", c)
         val rows = df.collect()

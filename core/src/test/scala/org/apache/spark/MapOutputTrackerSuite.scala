@@ -22,8 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.mockito.Matchers.any
 import org.mockito.Mockito._
 
-import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
@@ -176,7 +176,8 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val masterTracker = newTrackerMaster(newConf)
     val rpcEnv = createRpcEnv("spark")
     val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
-    rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+    masterTracker.trackerEndpoint =
+      rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
 
     // Message size should be ~123B, and no exception should be thrown
     masterTracker.registerShuffle(10, 1)
@@ -191,7 +192,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     verify(rpcCallContext, timeout(30000)).reply(any())
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
-//    masterTracker.stop() // this throws an exception
+    masterTracker.stop()
     rpcEnv.shutdown()
   }
 

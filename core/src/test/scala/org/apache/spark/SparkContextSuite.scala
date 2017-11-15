@@ -30,8 +30,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.scalatest.concurrent.Eventually
 import org.scalatest.Matchers._
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -600,6 +600,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val fs = new DebugFilesystem()
     fs.initialize(new URI("file:///"), new Configuration())
     val file = File.createTempFile("SPARK19446", "temp")
+    file.deleteOnExit()
     Files.write(Array.ofDim[Byte](1000), file)
     val path = new Path("file:///" + file.getCanonicalPath)
     val stream = fs.open(path)

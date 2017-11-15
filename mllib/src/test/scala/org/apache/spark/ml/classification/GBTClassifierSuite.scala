@@ -83,6 +83,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(gbt.getPredictionCol === "prediction")
     assert(gbt.getRawPredictionCol === "rawPrediction")
     assert(gbt.getProbabilityCol === "probability")
+    assert(gbt.getFeatureSubsetStrategy === "all")
     val df = trainData.toDF()
     val model = gbt.fit(df)
     model.transform(df)
@@ -95,6 +96,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(model.getPredictionCol === "prediction")
     assert(model.getRawPredictionCol === "rawPrediction")
     assert(model.getProbabilityCol === "probability")
+    assert(model.getFeatureSubsetStrategy === "all")
     assert(model.hasParent)
 
     MLTestingUtils.checkCopyAndUids(gbt, model)
@@ -219,6 +221,9 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     resultsUsingPredict.zip(results.select(predictionCol).as[Double].collect()).foreach {
       case (pred1, pred2) => assert(pred1 === pred2)
     }
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, GBTClassificationModel](gbtModel, validationDataset)
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {
@@ -351,6 +356,33 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(mostImportantFeature === 1)
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests of feature subset  strategy
+  /////////////////////////////////////////////////////////////////////////////
+  test("Tests of feature subset strategy") {
+    val numClasses = 2
+    val gbt = new GBTClassifier()
+      .setSeed(123)
+      .setMaxDepth(3)
+      .setMaxIter(5)
+      .setFeatureSubsetStrategy("all")
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+
+    val importances = gbt.fit(df).featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
+
+    // GBT with different featureSubsetStrategy
+    val gbtWithFeatureSubset = gbt.setFeatureSubsetStrategy("1")
+    val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
+    val mostIF = importanceFeatures.argmax
+    assert(mostImportantFeature !== mostIF)
   }
 
   /////////////////////////////////////////////////////////////////////////////

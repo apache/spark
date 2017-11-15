@@ -24,8 +24,8 @@ import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, S
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
@@ -585,6 +585,48 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
    * Unsupported predicates are skipped.
    */
   def convertFilters(table: Table, filters: Seq[Expression]): String = {
+    if (SQLConf.get.advancedPartitionPredicatePushdownEnabled) {
+      convertComplexFilters(table, filters)
+    } else {
+      convertBasicFilters(table, filters)
+    }
+  }
+
+
+  /**
+   * An extractor that matches all binary comparison operators except null-safe equality.
+   *
+   * Null-safe equality is not supported by Hive metastore partition predicate pushdown
+   */
+  object SpecialBinaryComparison {
+    def unapply(e: BinaryComparison): Option[(Expression, Expression)] = e match {
+      case _: EqualNullSafe => None
+      case _ => Some((e.left, e.right))
+    }
+  }
+
+  private def convertBasicFilters(table: Table, filters: Seq[Expression]): String = {
+    // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
+    lazy val varcharKeys = table.getPartitionKeys.asScala
+      .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
+        col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
+      .map(col => col.getName).toSet
+
+    filters.collect {
+      case op @ SpecialBinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
+        s"${a.name} ${op.symbol} $v"
+      case op @ SpecialBinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
+        s"$v ${op.symbol} ${a.name}"
+      case op @ SpecialBinaryComparison(a: Attribute, Literal(v, _: StringType))
+        if !varcharKeys.contains(a.name) =>
+        s"""${a.name} ${op.symbol} ${quoteStringLiteral(v.toString)}"""
+      case op @ SpecialBinaryComparison(Literal(v, _: StringType), a: Attribute)
+        if !varcharKeys.contains(a.name) =>
+        s"""${quoteStringLiteral(v.toString)} ${op.symbol} ${a.name}"""
+    }.mkString(" and ")
+  }
+
+  private def convertComplexFilters(table: Table, filters: Seq[Expression]): String = {
     // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
     lazy val varcharKeys = table.getPartitionKeys.asScala
       .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
@@ -637,16 +679,16 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       case InSet(a: Attribute, ExtractableValues(values))
           if !varcharKeys.contains(a.name) && values.nonEmpty =>
         convertInToOr(a, values)
-      case op @ BinaryComparison(a: Attribute, ExtractableLiteral(value))
+      case op @ SpecialBinaryComparison(a: Attribute, ExtractableLiteral(value))
           if !varcharKeys.contains(a.name) =>
         s"${a.name} ${op.symbol} $value"
-      case op @ BinaryComparison(ExtractableLiteral(value), a: Attribute)
+      case op @ SpecialBinaryComparison(ExtractableLiteral(value), a: Attribute)
           if !varcharKeys.contains(a.name) =>
         s"$value ${op.symbol} ${a.name}"
-      case op @ And(expr1, expr2)
+      case And(expr1, expr2)
           if convert.isDefinedAt(expr1) || convert.isDefinedAt(expr2) =>
         (convert.lift(expr1) ++ convert.lift(expr2)).mkString("(", " and ", ")")
-      case op @ Or(expr1, expr2)
+      case Or(expr1, expr2)
           if convert.isDefinedAt(expr1) && convert.isDefinedAt(expr2) =>
         s"(${convert(expr1)} or ${convert(expr2)})"
     }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.rpc.netty
 
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.network.client.TransportClient

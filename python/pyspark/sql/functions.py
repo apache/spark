@@ -21,6 +21,7 @@ A collections of builtin functions
 import math
 import sys
 import functools
+import warnings
 
 if sys.version < "3":
     from itertools import imap as map
@@ -42,6 +43,14 @@ def _create_function(name, doc=""):
     _.__name__ = name
     _.__doc__ = doc
     return _
+
+
+def _wrap_deprecated_function(func, message):
+    """ Wrap the deprecated function to print out deprecation warnings"""
+    def _(col):
+        warnings.warn(message, DeprecationWarning)
+        return func(col)
+    return functools.wraps(func)(_)
 
 
 def _create_binary_mathfunction(name, doc=""):
@@ -207,6 +216,12 @@ _window_functions = {
         """returns the relative rank (i.e. percentile) of rows within a window partition.""",
 }
 
+# Wraps deprecated functions (keys) with the messages (values).
+_functions_deprecated = {
+    'toDegrees': 'Deprecated in 2.1, use degrees instead.',
+    'toRadians': 'Deprecated in 2.1, use radians instead.',
+}
+
 for _name, _doc in _functions.items():
     globals()[_name] = since(1.3)(_create_function(_name, _doc))
 for _name, _doc in _functions_1_4.items():
@@ -219,6 +234,8 @@ for _name, _doc in _functions_1_6.items():
     globals()[_name] = since(1.6)(_create_function(_name, _doc))
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
+for _name, _message in _functions_deprecated.items():
+    globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
 del _name, _doc
 
 
@@ -227,6 +244,7 @@ def approxCountDistinct(col, rsd=None):
     """
     .. note:: Deprecated in 2.1, use :func:`approx_count_distinct` instead.
     """
+    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", DeprecationWarning)
     return approx_count_distinct(col, rsd)
 
 
@@ -869,6 +887,19 @@ def month(col):
     return Column(sc._jvm.functions.month(_to_java_column(col)))
 
 
+@since(2.3)
+def dayofweek(col):
+    """
+    Extract the day of the week of a given date as integer.
+
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(dayofweek('dt').alias('day')).collect()
+    [Row(day=4)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.dayofweek(_to_java_column(col)))
+
+
 @since(1.5)
 def dayofmonth(col):
     """
@@ -1150,8 +1181,9 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 @since(1.5)
 def from_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
-    that corresponds to the same time of day in the given timezone.
+    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+    that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+    '2017-07-14 03:40:00.0'.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(from_utc_timestamp(df.t, "PST").alias('local_time')).collect()
@@ -1164,8 +1196,9 @@ def from_utc_timestamp(timestamp, tz):
 @since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
-    another timestamp that corresponds to the same time of day in UTC.
+    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
+    zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+    '2017-07-14 01:40:00.0'.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
@@ -1424,7 +1457,9 @@ def substring(str, pos, len):
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
-    when str is Binary type
+    when str is Binary type.
+
+    .. note:: The position is not zero based, but 1 based index.
 
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
@@ -1882,9 +1917,9 @@ def json_tuple(col, *fields):
 @since(2.1)
 def from_json(col, schema, options={}):
     """
-    Parses a column containing a JSON string into a [[StructType]] or [[ArrayType]]
-    of [[StructType]]s with the specified schema. Returns `null`, in the case of an unparseable
-    string.
+    Parses a column containing a JSON string into a :class:`StructType` or :class:`ArrayType`
+    of :class:`StructType`\\s with the specified schema. Returns `null`, in the case of an
+    unparseable string.
 
     :param col: string column in json format
     :param schema: a StructType or ArrayType of StructType to use when parsing the json column.
@@ -1919,10 +1954,12 @@ def from_json(col, schema, options={}):
 @since(2.1)
 def to_json(col, options={}):
     """
-    Converts a column containing a [[StructType]] or [[ArrayType]] of [[StructType]]s into a
-    JSON string. Throws an exception, in the case of an unsupported type.
+    Converts a column containing a :class:`StructType`, :class:`ArrayType` of
+    :class:`StructType`\\s, a :class:`MapType` or :class:`ArrayType` of :class:`MapType`\\s
+    into a JSON string. Throws an exception, in the case of an unsupported type.
 
-    :param col: name of column containing the struct or array of the structs
+    :param col: name of column containing the struct, array of the structs, the map or
+        array of the maps.
     :param options: options to control converting. accepts the same options as the json datasource
 
     >>> from pyspark.sql import Row
@@ -1935,6 +1972,14 @@ def to_json(col, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
     [Row(json=u'[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]')]
+    >>> data = [(1, {"name": "Alice"})]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'{"name":"Alice"}')]
+    >>> data = [(1, [{"name": "Alice"}, {"name": "Bob"}])]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'[{"name":"Alice"},{"name":"Bob"}]')]
     """
 
     sc = SparkContext._active_spark_context
@@ -2024,13 +2069,22 @@ def _wrap_function(sc, func, returnType):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
+class PythonUdfType(object):
+    # row-at-a-time UDFs
+    NORMAL_UDF = 0
+    # scalar vectorized UDFs
+    PANDAS_UDF = 1
+    # grouped vectorized UDFs
+    PANDAS_GROUPED_UDF = 2
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType, name=None):
+    def __init__(self, func, returnType, name=None, pythonUdfType=PythonUdfType.NORMAL_UDF):
         if not callable(func):
             raise TypeError(
                 "Not a function or callable (__call__ is not defined): "
@@ -2044,6 +2098,7 @@ class UserDefinedFunction(object):
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
+        self.pythonUdfType = pythonUdfType
 
     @property
     def returnType(self):
@@ -2075,7 +2130,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt)
+            self._name, wrapped_func, jdt, self.pythonUdfType)
         return judf
 
     def __call__(self, *cols):
@@ -2103,19 +2158,52 @@ class UserDefinedFunction(object):
         wrapper.__name__ = self._name
         wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
                               else self.func.__class__.__module__)
+
         wrapper.func = self.func
         wrapper.returnType = self.returnType
+        wrapper.pythonUdfType = self.pythonUdfType
 
         return wrapper
 
 
+def _create_udf(f, returnType, pythonUdfType):
+
+    def _udf(f, returnType=StringType(), pythonUdfType=pythonUdfType):
+        if pythonUdfType == PythonUdfType.PANDAS_UDF:
+            import inspect
+            argspec = inspect.getargspec(f)
+            if len(argspec.args) == 0 and argspec.varargs is None:
+                raise ValueError(
+                    "0-arg pandas_udfs are not supported. "
+                    "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
+                )
+        udf_obj = UserDefinedFunction(f, returnType, pythonUdfType=pythonUdfType)
+        return udf_obj._wrapped()
+
+    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(_udf, returnType=return_type, pythonUdfType=pythonUdfType)
+    else:
+        return _udf(f=f, returnType=returnType, pythonUdfType=pythonUdfType)
+
+
 @since(1.3)
 def udf(f=None, returnType=StringType()):
-    """Creates a :class:`Column` expression representing a user defined function (UDF).
+    """Creates a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
         duplicate invocations may be eliminated or the function may even be invoked more times than
         it is present in the query.
+
+    .. note:: The user-defined functions do not support conditional execution by using them with
+        SQL conditional expressions such as `when` or `if`. The functions still apply on all rows no
+        matter the conditions are met or not. So the output is correct if the functions can be
+        correctly run on all rows without failure. If the functions can cause runtime failure on the
+        rows that do not satisfy the conditions, the suggested workaround is to incorporate the
+        condition logic into the functions.
 
     :param f: python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
@@ -2140,18 +2228,85 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    def _udf(f, returnType=StringType()):
-        udf_obj = UserDefinedFunction(f, returnType)
-        return udf_obj._wrapped()
+    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.NORMAL_UDF)
 
-    # decorator @udf, @udf() or @udf(dataType())
-    if f is None or isinstance(f, (str, DataType)):
-        # If DataType has been passed as a positional argument
-        # for decorator use it as a returnType
-        return_type = f or returnType
-        return functools.partial(_udf, returnType=return_type)
-    else:
-        return _udf(f=f, returnType=returnType)
+
+@since(2.3)
+def pandas_udf(f=None, returnType=StringType()):
+    """
+    Creates a vectorized user defined function (UDF).
+
+    :param f: user-defined function. A python function if used as a standalone function
+    :param returnType: a :class:`pyspark.sql.types.DataType` object
+
+    The user-defined function can define one of the following transformations:
+
+    1. One or more `pandas.Series` -> A `pandas.Series`
+
+       This udf is used with :meth:`pyspark.sql.DataFrame.withColumn` and
+       :meth:`pyspark.sql.DataFrame.select`.
+       The returnType should be a primitive data type, e.g., `DoubleType()`.
+       The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
+
+       >>> from pyspark.sql.types import IntegerType, StringType
+       >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
+       >>> @pandas_udf(returnType=StringType())
+       ... def to_upper(s):
+       ...     return s.str.upper()
+       ...
+       >>> @pandas_udf(returnType="integer")
+       ... def add_one(x):
+       ...     return x + 1
+       ...
+       >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+       >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")) \\
+       ...     .show()  # doctest: +SKIP
+       +----------+--------------+------------+
+       |slen(name)|to_upper(name)|add_one(age)|
+       +----------+--------------+------------+
+       |         8|      JOHN DOE|          22|
+       +----------+--------------+------------+
+
+    2. A `pandas.DataFrame` -> A `pandas.DataFrame`
+
+       This udf is only used with :meth:`pyspark.sql.GroupedData.apply`.
+       The returnType should be a :class:`StructType` describing the schema of the returned
+       `pandas.DataFrame`.
+
+       >>> df = spark.createDataFrame(
+       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+       ...     ("id", "v"))
+       >>> @pandas_udf(returnType=df.schema)
+       ... def normalize(pdf):
+       ...     v = pdf.v
+       ...     return pdf.assign(v=(v - v.mean()) / v.std())
+       >>> df.groupby('id').apply(normalize).show()  # doctest: +SKIP
+       +---+-------------------+
+       | id|                  v|
+       +---+-------------------+
+       |  1|-0.7071067811865475|
+       |  1| 0.7071067811865475|
+       |  2|-0.8320502943378437|
+       |  2|-0.2773500981126146|
+       |  2| 1.1094003924504583|
+       +---+-------------------+
+
+       .. note:: This type of udf cannot be used with functions such as `withColumn` or `select`
+                 because it defines a `DataFrame` transformation rather than a `Column`
+                 transformation.
+
+       .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
+
+    .. note:: The user-defined function must be deterministic.
+
+    .. note:: The user-defined functions do not support conditional execution by using them with
+        SQL conditional expressions such as `when` or `if`. The functions still apply on all rows no
+        matter the conditions are met or not. So the output is correct if the functions can be
+        correctly run on all rows without failure. If the functions can cause runtime failure on the
+        rows that do not satisfy the conditions, the suggested workaround is to incorporate the
+        condition logic into the functions.
+    """
+    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.PANDAS_UDF)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']

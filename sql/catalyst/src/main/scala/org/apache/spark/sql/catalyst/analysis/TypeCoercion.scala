@@ -100,6 +100,16 @@ object TypeCoercion {
     case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
       Some(TimestampType)
 
+    case (t1 @ StructType(fields1), t2 @ StructType(fields2)) if t1.sameType(t2) =>
+      Some(StructType(fields1.zip(fields2).map { case (f1, f2) =>
+        // Since `t1.sameType(t2)` is true, two StructTypes have the same DataType
+        // except `name` (in case of `spark.sql.caseSensitive=false`) and `nullable`.
+        // - Different names: use f1.name
+        // - Different nullabilities: `nullable` is true iff one of them is nullable.
+        val dataType = findTightestCommonType(f1.dataType, f2.dataType).get
+        StructField(f1.name, dataType, nullable = f1.nullable || f2.nullable)
+      }))
+
     case _ => None
   }
 
@@ -127,6 +137,13 @@ object TypeCoercion {
     case (DateType, TimestampType) => Some(StringType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
+
+    // There is no proper decimal type we can pick,
+    // using double type is the best we can do.
+    // See SPARK-22469 for details.
+    case (n: DecimalType, s: StringType) => Some(DoubleType)
+    case (s: StringType, n: DecimalType) => Some(DoubleType)
+
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
     case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
     case (l, r) => None
@@ -402,7 +419,7 @@ object TypeCoercion {
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ In(a, Seq(ListQuery(sub, children, exprId)))
+      case i @ In(a, Seq(ListQuery(sub, children, exprId, _)))
         if !i.resolved && flattenExpr(a).length == sub.output.length =>
         // LHS is the value expression of IN subquery.
         val lhs = flattenExpr(a)
@@ -434,7 +451,8 @@ object TypeCoercion {
             case _ => CreateStruct(castedLhs)
           }
 
-          In(newLhs, Seq(ListQuery(Project(castedRhs, sub), children, exprId)))
+          val newSub = Project(castedRhs, sub)
+          In(newLhs, Seq(ListQuery(newSub, children, exprId, newSub.output)))
         } else {
           i
         }
@@ -821,9 +839,12 @@ object TypeCoercion {
     }
 
     private def createBoundaryCast(boundary: Expression, dt: DataType): Expression = {
-      boundary match {
-        case e: SpecialFrameBoundary => e
-        case e: Expression if e.dataType != dt && Cast.canCast(e.dataType, dt) => Cast(e, dt)
+      (boundary, dt) match {
+        case (e: SpecialFrameBoundary, _) => e
+        case (e, _: DateType) => e
+        case (e, _: TimestampType) => e
+        case (e: Expression, t) if e.dataType != t && Cast.canCast(e.dataType, t) =>
+          Cast(e, t)
         case _ => boundary
       }
     }

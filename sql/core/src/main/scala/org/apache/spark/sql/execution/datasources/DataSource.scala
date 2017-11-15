@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -150,7 +151,7 @@ case class DataSource(
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(qualified)
+        SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
@@ -379,22 +380,8 @@ case class DataSource(
       case (format: FileFormat, _) =>
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val hadoopConf = sparkSession.sessionState.newHadoopConf()
-        val globbedPaths = allPaths.flatMap { path =>
-          val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(hadoopConf)
-          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
-
-          if (globPath.isEmpty) {
-            throw new AnalysisException(s"Path does not exist: $qualified")
-          }
-          // Sufficient to check head of the globPath seq for non-glob scenario
-          // Don't need to check once again if files exist in streaming mode
-          if (checkFilesExist && !fs.exists(globPath.head)) {
-            throw new AnalysisException(s"Path does not exist: ${globPath.head}")
-          }
-          globPath
-        }.toArray
+        val globbedPaths = allPaths.flatMap(
+          DataSource.checkAndGlobPathIfNecessary(hadoopConf, _, checkFilesExist)).toArray
 
         val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
         val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, fileStatusCache)
@@ -466,9 +453,20 @@ case class DataSource(
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
 
+
+    // SPARK-17230: Resolve the partition columns so InsertIntoHadoopFsRelationCommand does
+    // not need to have the query as child, to avoid to analyze an optimized query,
+    // because InsertIntoHadoopFsRelationCommand will be optimized first.
+    val partitionAttributes = partitionColumns.map { name =>
+      data.output.find(a => equality(a.name, name)).getOrElse {
+        throw new AnalysisException(
+          s"Unable to resolve $name given [${data.output.map(_.name).mkString(", ")}]")
+      }
+    }
+
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
       sparkSession.table(tableIdent).queryExecution.analyzed.collect {
-        case LogicalRelation(t: HadoopFsRelation, _, _) => t.location
+        case LogicalRelation(t: HadoopFsRelation, _, _, _) => t.location
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
@@ -478,7 +476,7 @@ case class DataSource(
       outputPath = outputPath,
       staticPartitions = Map.empty,
       ifPartitionNotExists = false,
-      partitionColumns = partitionColumns.map(UnresolvedAttribute.quoted),
+      partitionColumns = partitionAttributes,
       bucketSpec = bucketSpec,
       fileFormat = format,
       options = options,
@@ -656,5 +654,29 @@ object DataSource extends Logging {
     val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
     CatalogStorageFormat.empty.copy(
       locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath)
+  }
+
+  /**
+   * If `path` is a file pattern, return all the files that match it. Otherwise, return itself.
+   * If `checkFilesExist` is `true`, also check the file existence.
+   */
+  private def checkAndGlobPathIfNecessary(
+      hadoopConf: Configuration,
+      path: String,
+      checkFilesExist: Boolean): Seq[Path] = {
+    val hdfsPath = new Path(path)
+    val fs = hdfsPath.getFileSystem(hadoopConf)
+    val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+
+    if (globPath.isEmpty) {
+      throw new AnalysisException(s"Path does not exist: $qualified")
+    }
+    // Sufficient to check head of the globPath seq for non-glob scenario
+    // Don't need to check once again if files exist in streaming mode
+    if (checkFilesExist && !fs.exists(globPath.head)) {
+      throw new AnalysisException(s"Path does not exist: ${globPath.head}")
+    }
+    globPath
   }
 }

@@ -24,7 +24,11 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -42,8 +46,8 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
-  extends ExecutorAllocationClient with SchedulerBackend with Logging
-{
+  extends ExecutorAllocationClient with SchedulerBackend with Logging {
+
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   protected val totalCoreCount = new AtomicInteger(0)
   // Total number of executors that are currently registered
@@ -94,6 +98,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
+
+  // hadoop token manager used by some sub-classes (e.g. Mesos)
+  def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
+
+  // Hadoop delegation tokens to be sent to the executors.
+  val hadoopDelegationCreds: Option[Array[Byte]] = getHadoopDelegationCreds()
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -223,8 +233,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         context.reply(true)
 
       case RetrieveSparkAppConfig =>
-        val reply = SparkAppConfig(sparkProperties,
-          SparkEnv.get.securityManager.getIOEncryptionKey())
+        val reply = SparkAppConfig(
+          sparkProperties,
+          SparkEnv.get.securityManager.getIOEncryptionKey(),
+          hadoopDelegationCreds)
         context.reply(reply)
     }
 
@@ -459,15 +471,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   protected def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     // Only log the failure since we don't care about the result.
-    driverEndpoint.ask[Boolean](RemoveExecutor(executorId, reason)).onFailure {
-      case t => logError(t.getMessage, t)
-    }(ThreadUtils.sameThread)
+    driverEndpoint.ask[Boolean](RemoveExecutor(executorId, reason)).failed.foreach(t =>
+      logError(t.getMessage, t))(ThreadUtils.sameThread)
   }
 
   protected def removeWorker(workerId: String, host: String, message: String): Unit = {
-    driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).onFailure {
-      case t => logError(t.getMessage, t)
-    }(ThreadUtils.sameThread)
+    driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).failed.foreach(t =>
+      logError(t.getMessage, t))(ThreadUtils.sameThread)
   }
 
   def sufficientResourcesRegistered(): Boolean = true
@@ -674,6 +684,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Kill all the executors on this host in an event loop to ensure serialization.
     driverEndpoint.send(KillExecutorsOnHost(host))
     true
+  }
+
+  protected def getHadoopDelegationCreds(): Option[Array[Byte]] = {
+    if (UserGroupInformation.isSecurityEnabled && hadoopDelegationTokenManager.isDefined) {
+      hadoopDelegationTokenManager.map { manager =>
+        val creds = UserGroupInformation.getCurrentUser.getCredentials
+        val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+        manager.obtainDelegationTokens(hadoopConf, creds)
+        SparkHadoopUtil.get.serialize(creds)
+      }
+    } else {
+      None
+    }
   }
 }
 

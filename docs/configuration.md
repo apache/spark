@@ -536,22 +536,25 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-    <td><code>spark.reducer.maxBlocksInFlightPerAddress</code></td>
-    <td>Int.MaxValue</td>
-    <td>
-      This configuration limits the number of remote blocks being fetched per reduce task from a
-      given host port. When a large number of blocks are being requested from a given address in a
-      single fetch or simultaneously, this could crash the serving executor or Node Manager. This
-      is especially useful to reduce the load on the Node Manager when external shuffle is enabled.
-      You can mitigate this issue by setting it to a lower value.
-    </td>
-  <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
+  <td><code>spark.reducer.maxBlocksInFlightPerAddress</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    This configuration limits the number of remote blocks being fetched per reduce task from a
+    given host port. When a large number of blocks are being requested from a given address in a
+    single fetch or simultaneously, this could crash the serving executor or Node Manager. This
+    is especially useful to reduce the load on the Node Manager when external shuffle is enabled.
+    You can mitigate this issue by setting it to a lower value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
   <td>Long.MaxValue</td>
   <td>
-    The blocks of a shuffle request will be fetched to disk when size of the request is above
-    this threshold. This is to avoid a giant request takes too much memory. We can enable this
-    config by setting a specific value(e.g. 200m). Note that this config can be enabled only when
-    the shuffle shuffle service is newer than Spark-2.2 or the shuffle service is disabled.
+    The remote block will be fetched to disk when size of the block is above this threshold.
+    This is to avoid a giant request takes too much memory. We can enable this config by setting
+    a specific value(e.g. 200m). Note this configuration will affect both shuffle fetch 
+    and block manager remote block fetch. For users who enabled external shuffle service,
+    this feature can only be worked when external shuffle service is newer than Spark 2.2.
   </td>
 </tr>
 <tr>
@@ -625,10 +628,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.service.index.cache.entries</code></td>
-  <td>1024</td>
+  <td><code>spark.shuffle.service.index.cache.size</code></td>
+  <td>100m</td>
   <td>
-    Max number of entries to keep in the index cache of the shuffle service.
+    Cache entries limited to the specified memory footprint.
   </td>
 </tr>
 <tr>
@@ -712,6 +715,14 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.eventLog.logBlockUpdates.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to log events for every block update, if <code>spark.eventLog.enabled</code> is true.
+    *Warning*: This will increase the size of the event log considerably.
+  </td>
+</tr>
+<tr>
   <td><code>spark.eventLog.compress</code></td>
   <td>false</td>
   <td>
@@ -735,6 +746,20 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to log Spark events, useful for reconstructing the Web UI after the application has
     finished.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.overwrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to overwrite any existing files.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.buffer.kb</code></td>
+  <td>100k</td>
+  <td>
+    Buffer size in KB to use when writing to output streams.
   </td>
 </tr>
 <tr>
@@ -864,7 +889,8 @@ Apart from these, the following properties are also available, and may be useful
     e.g.
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
-    and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>,
+    and <code>org.apache.spark.io.ZstdCompressionCodec</code>.
   </td>
 </tr>
 <tr>
@@ -881,6 +907,23 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Block size used in Snappy compression, in the case when Snappy compression codec
     is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.level</code></td>
+  <td>1</td>
+  <td>
+    Compression level for Zstd compression codec. Increasing the compression level will result in better
+    compression at the expense of more CPU and memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.bufferSize</code></td>
+  <td>32k</td>
+  <td>
+    Buffer size used in Zstd compression, in the case when Zstd compression codec
+    is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
+    might increase the compression cost because of excessive JNI call overhead.
   </td>
 </tr>
 <tr>
@@ -1013,7 +1056,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.5</td>
   <td>
     Amount of storage memory immune to eviction, expressed as a fraction of the size of the
-    region set aside by <code>s​park.memory.fraction</code>. The higher this is, the less
+    region set aside by <code>spark.memory.fraction</code>. The higher this is, the less
     working memory may be available to execution and tasks may spill to disk more often.
     Leaving this at the default value is recommended. For more detail, see
     <a href="tuning.html#memory-management-overview">this description</a>.
@@ -1039,7 +1082,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.useLegacyMode</code></td>
   <td>false</td>
   <td>
-    ​Whether to enable the legacy memory management mode used in Spark 1.5 and before.
+    Whether to enable the legacy memory management mode used in Spark 1.5 and before.
     The legacy mode rigidly partitions the heap space into fixed-size regions,
     potentially leading to excessive spilling if the application was not tuned.
     The following deprecated memory fraction configurations are not read unless this is enabled:
@@ -1081,7 +1124,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.replication.proactive<code></td>
+  <td><code>spark.storage.replication.proactive</code></td>
   <td>false</td>
   <td>
     Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
@@ -1113,11 +1156,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The number of cores to use on each executor.
 
-    In standalone and Mesos coarse-grained modes, setting this
-    parameter allows an application to run multiple executors on the
-    same worker, provided that there are enough cores on that
-    worker. Otherwise, only one executor per application will run on
-    each worker.
+    In standalone and Mesos coarse-grained modes, for more detail, see
+    <a href="spark-standalone.html#Executors Scheduling">this description</a>.
   </td>
 </tr>
 <tr>
@@ -2355,5 +2395,37 @@ The location of these configuration files varies across Hadoop versions, but
 a common location is inside of `/etc/hadoop/conf`. Some tools create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
-To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh`
+To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/conf/spark-env.sh`
 to a location containing the configuration files.
+
+# Custom Hadoop/Hive Configuration
+
+If your Spark application is interacting with Hadoop, Hive, or both, there are probably Hadoop/Hive
+configuration files in Spark's classpath.
+
+Multiple running applications might require different Hadoop/Hive client side configurations.
+You can copy and modify `hdfs-site.xml`, `core-site.xml`, `yarn-site.xml`, `hive-site.xml` in
+Spark's classpath for each application. In a Spark cluster running on YARN, these configuration
+files are set cluster-wide, and cannot safely be changed by the application.
+
+The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
+They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defalut.conf`
+
+In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
+instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
+
+{% highlight scala %}
+val conf = new SparkConf().set("spark.hadoop.abc.def","xyz")
+val sc = new SparkContext(conf)
+{% endhighlight %}
+
+Also, you can modify or add configurations at runtime:
+{% highlight bash %}
+./bin/spark-submit \ 
+  --name "My app" \ 
+  --master local[4] \  
+  --conf spark.eventLog.enabled=false \ 
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \ 
+  --conf spark.hadoop.abc.def=xyz \ 
+  myApp.jar
+{% endhighlight %}

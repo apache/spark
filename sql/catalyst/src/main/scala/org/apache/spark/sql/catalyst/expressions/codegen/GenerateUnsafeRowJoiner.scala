@@ -196,7 +196,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val code = CodeFormatter.stripOverlappingComments(new CodeAndComment(codeBody, Map.empty))
     logDebug(s"SpecificUnsafeRowJoiner($schema1, $schema2):\n${CodeFormatter.format(code)}")
 
-    val c = CodeGenerator.compile(code)
-    c.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
   }
 }

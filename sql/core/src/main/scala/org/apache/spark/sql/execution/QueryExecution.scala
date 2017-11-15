@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.execution.joins.ReorderJoinPredicates
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
 import org.apache.spark.util.Utils
 
@@ -103,6 +104,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
     python.ExtractPythonUDFs,
     PlanSubqueries(sparkSession),
+    new ReorderJoinPredicates,
     EnsureRequirements(sparkSession.sessionState.conf),
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
@@ -117,7 +119,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
    * `SparkSQLDriver` for CLI applications.
    */
   def hiveResultString(): Seq[String] = executedPlan match {
-    case ExecutedCommandExec(desc: DescribeTableCommand, _) =>
+    case ExecutedCommandExec(desc: DescribeTableCommand) =>
       // If it is a describe command for a Hive table, we want to have the output format
       // be similar with Hive.
       desc.run(sparkSession).map {
@@ -128,7 +130,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
             .mkString("\t")
       }
     // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
-    case command @ ExecutedCommandExec(s: ShowTablesCommand, _) if !s.isExtended =>
+    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
       command.executeCollect().map(_.getString(1))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq

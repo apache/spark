@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{InterruptedIOException, IOException}
+import java.io.{InterruptedIOException, IOException, UncheckedIOException}
+import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
@@ -27,6 +28,7 @@ import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
+import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
@@ -128,6 +130,16 @@ class StreamExecution(
   protected var offsetSeqMetadata = OffsetSeqMetadata(
     batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
 
+  /**
+   * A map of current watermarks, keyed by the position of the watermark operator in the
+   * physical plan.
+   *
+   * This state is 'soft state', which does not affect the correctness and semantics of watermarks
+   * and is not persisted across query restarts.
+   * The fault-tolerant watermark state is in offsetSeqMetadata.
+   */
+  protected val watermarkMsMap: MutableMap[Int, Long] = MutableMap()
+
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
   override val runId: UUID = UUID.randomUUID
@@ -164,7 +176,7 @@ class StreamExecution(
           nextSourceId += 1
           // We still need to use the previous `output` instead of `source.schema` as attributes in
           // "df.logicalPlan" has already used attributes of the previous `output`.
-          StreamingExecutionRelation(source, output)
+          StreamingExecutionRelation(source, output)(sparkSession)
         })
     }
     sources = _logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
@@ -285,6 +297,8 @@ class StreamExecution(
       val sparkSessionToRunBatches = sparkSession.cloneSession()
       // Adaptive execution can change num shuffle partitions, disallow
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+      // Disable cost-based join optimization as we do not want stateful operations to be rearranged
+      sparkSessionToRunBatches.conf.set(SQLConf.CBO_ENABLED.key, "false")
       offsetSeqMetadata = OffsetSeqMetadata(
         batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionToRunBatches.conf)
 
@@ -335,7 +349,7 @@ class StreamExecution(
         // `stop()` is already called. Let `finally` finish the cleanup.
       }
     } catch {
-      case _: InterruptedException | _: InterruptedIOException if state.get == TERMINATED =>
+      case e if isInterruptedByStop(e) =>
         // interrupted by stop()
         updateStatusMessage("Stopped")
       case e: IOException if e.getMessage != null
@@ -407,6 +421,32 @@ class StreamExecution(
     }
   }
 
+  private def isInterruptedByStop(e: Throwable): Boolean = {
+    if (state.get == TERMINATED) {
+      e match {
+        // InterruptedIOException - thrown when an I/O operation is interrupted
+        // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
+        case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
+          true
+        // The cause of the following exceptions may be one of the above exceptions:
+        //
+        // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
+        //                        BiFunction.apply
+        // ExecutionException - thrown by codes running in a thread pool and these codes throw an
+        //                      exception
+        // UncheckedExecutionException - thrown by codes that cannot throw a checked
+        //                               ExecutionException, such as BiFunction.apply
+        case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
+          if e2.getCause != null =>
+          isInterruptedByStop(e2.getCause)
+        case _ =>
+          false
+      }
+    } else {
+      false
+    }
+  }
+
   /**
    * Populate the start offsets to start the execution at the current offsets stored in the sink
    * (i.e. avoid reprocessing data that we have already processed). This function must be called
@@ -438,7 +478,10 @@ class StreamExecution(
         availableOffsets = nextOffsets.toStreamProgress(sources)
         /* Initialize committed offsets to a committed batch, which at this
          * is the second latest batch id in the offset log. */
-        offsetLog.get(latestBatchId - 1).foreach { secondLatestBatchId =>
+        if (latestBatchId != 0) {
+          val secondLatestBatchId = offsetLog.get(latestBatchId - 1).getOrElse {
+            throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
+          }
           committedOffsets = secondLatestBatchId.toStreamProgress(sources)
         }
 
@@ -529,13 +572,32 @@ class StreamExecution(
     }
     if (hasNewData) {
       var batchWatermarkMs = offsetSeqMetadata.batchWatermarkMs
-      // Update the eventTime watermark if we find one in the plan.
+      // Update the eventTime watermarks if we find any in the plan.
       if (lastExecution != null) {
         lastExecution.executedPlan.collect {
-          case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
-            logDebug(s"Observed event time stats: ${e.eventTimeStats.value}")
-            e.eventTimeStats.value.max - e.delayMs
-        }.headOption.foreach { newWatermarkMs =>
+          case e: EventTimeWatermarkExec => e
+        }.zipWithIndex.foreach {
+          case (e, index) if e.eventTimeStats.value.count > 0 =>
+            logDebug(s"Observed event time stats $index: ${e.eventTimeStats.value}")
+            val newWatermarkMs = e.eventTimeStats.value.max - e.delayMs
+            val prevWatermarkMs = watermarkMsMap.get(index)
+            if (prevWatermarkMs.isEmpty || newWatermarkMs > prevWatermarkMs.get) {
+              watermarkMsMap.put(index, newWatermarkMs)
+            }
+
+          // Populate 0 if we haven't seen any data yet for this watermark node.
+          case (_, index) =>
+            if (!watermarkMsMap.isDefinedAt(index)) {
+              watermarkMsMap.put(index, 0)
+            }
+        }
+
+        // Update the global watermark to the minimum of all watermark nodes.
+        // This is the safest option, because only the global watermark is fault-tolerant. Making
+        // it the minimum of all individual watermarks guarantees it will never advance past where
+        // any individual watermark operator would be if it were in a plan by itself.
+        if(!watermarkMsMap.isEmpty) {
+          val newWatermarkMs = watermarkMsMap.minBy(_._2)._2
           if (newWatermarkMs > batchWatermarkMs) {
             logInfo(s"Updating eventTime watermark to: $newWatermarkMs ms")
             batchWatermarkMs = newWatermarkMs
@@ -565,10 +627,14 @@ class StreamExecution(
 
         // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
         // sources to discard data from the previous batch.
-        val prevBatchOff = offsetLog.get(currentBatchId - 1)
-        if (prevBatchOff.isDefined) {
-          prevBatchOff.get.toStreamProgress(sources).foreach {
-            case (src, off) => src.commit(off)
+        if (currentBatchId != 0) {
+          val prevBatchOff = offsetLog.get(currentBatchId - 1)
+          if (prevBatchOff.isDefined) {
+            prevBatchOff.get.toStreamProgress(sources).foreach {
+              case (src, off) => src.commit(off)
+            }
+          } else {
+            throw new IllegalStateException(s"batch $currentBatchId doesn't exist")
           }
         }
 
@@ -602,6 +668,9 @@ class StreamExecution(
           if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
           val current = committedOffsets.get(source)
           val batch = source.getBatch(current, available)
+          assert(batch.isStreaming,
+            s"DataFrame returned by getBatch from $source did not have isStreaming=true\n" +
+              s"${batch.queryExecution.logical}")
           logDebug(s"Retrieving data from $source: $current -> $available")
           Some(source -> batch)
         case _ => None
@@ -621,14 +690,15 @@ class StreamExecution(
           replacements ++= output.zip(newPlan.output)
           newPlan
         }.getOrElse {
-          LocalRelation(output)
+          LocalRelation(output, isStreaming = true)
         }
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
     val replacementMap = AttributeMap(replacements)
     val triggerLogicalPlan = withNewSources transformAllExpressions {
-      case a: Attribute if replacementMap.contains(a) => replacementMap(a)
+      case a: Attribute if replacementMap.contains(a) =>
+        replacementMap(a).withMetadata(a.metadata)
       case ct: CurrentTimestamp =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           ct.dataType)
@@ -761,6 +831,7 @@ class StreamExecution(
     if (streamDeathCause != null) {
       throw streamDeathCause
     }
+    if (!isActive) return
     awaitBatchLock.lock()
     try {
       noNewData = false
@@ -769,7 +840,7 @@ class StreamExecution(
         if (streamDeathCause != null) {
           throw streamDeathCause
         }
-        if (noNewData) {
+        if (noNewData || !isActive) {
           return
         }
       }

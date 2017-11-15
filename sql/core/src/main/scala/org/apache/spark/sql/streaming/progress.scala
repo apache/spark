@@ -55,6 +55,8 @@ class StateOperatorProgress private[sql](
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
     ("memoryUsedBytes" -> JInt(memoryUsedBytes))
   }
+
+  override def toString: String = prettyJson
 }
 
 /**

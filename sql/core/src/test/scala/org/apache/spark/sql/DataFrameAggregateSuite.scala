@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql
 
+import scala.util.Random
+
+import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -183,6 +188,22 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         Row(null, 2012, 35000.0, 2, 1) ::
         Row(null, 2013, 78000.0, 2, 2) ::
         Row(null, null, 113000.0, 3, 1) :: Nil
+    )
+  }
+
+  test("SPARK-21980: References in grouping functions should be indexed with semanticEquals") {
+    checkAnswer(
+      courseSales.cube("course", "year")
+        .agg(grouping("CouRse"), grouping("year")),
+      Row("Java", 2012, 0, 0) ::
+        Row("Java", 2013, 0, 0) ::
+        Row("Java", null, 0, 1) ::
+        Row("dotNET", 2012, 0, 0) ::
+        Row("dotNET", 2013, 0, 0) ::
+        Row("dotNET", null, 0, 1) ::
+        Row(null, 2012, 1, 0) ::
+        Row(null, 2013, 1, 0) ::
+        Row(null, null, 1, 1) :: Nil
     )
   }
 
@@ -556,5 +577,93 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       testData.groupBy(sum($"key")).count()
     }
     assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
+  }
+
+  private def assertNoExceptions(c: Column): Unit = {
+    for ((wholeStage, useObjectHashAgg) <-
+         Seq((true, true), (true, false), (false, true), (false, false))) {
+      withSQLConf(
+        (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
+
+        val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
+
+        // test case for HashAggregate
+        val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        val hashAggPlan = hashAggDF.queryExecution.executedPlan
+        if (wholeStage) {
+          assert(hashAggPlan.find {
+            case WholeStageCodegenExec(_: HashAggregateExec) => true
+            case _ => false
+          }.isDefined)
+        } else {
+          assert(hashAggPlan.isInstanceOf[HashAggregateExec])
+        }
+        hashAggDF.collect()
+
+        // test case for ObjectHashAggregate and SortAggregate
+        val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
+        val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
+        if (useObjectHashAgg) {
+          assert(objHashAggOrSortAggPlan.isInstanceOf[ObjectHashAggregateExec])
+        } else {
+          assert(objHashAggOrSortAggPlan.isInstanceOf[SortAggregateExec])
+        }
+        objHashAggOrSortAggDF.collect()
+      }
+    }
+  }
+
+  test("SPARK-19471: AggregationIterator does not initialize the generated result projection" +
+    " before using it") {
+    Seq(
+      monotonically_increasing_id(), spark_partition_id(),
+      rand(Random.nextLong()), randn(Random.nextLong())
+    ).foreach(assertNoExceptions)
+  }
+
+  test("SPARK-21580 ints in aggregation expressions are taken as group-by ordinal.") {
+    checkAnswer(
+      testData2.groupBy(lit(3), lit(4)).agg(lit(6), lit(7), sum("b")),
+      Seq(Row(3, 4, 6, 7, 9)))
+    checkAnswer(
+      testData2.groupBy(lit(3), lit(4)).agg(lit(6), 'b, sum("b")),
+      Seq(Row(3, 4, 6, 1, 3), Row(3, 4, 6, 2, 6)))
+
+    checkAnswer(
+      spark.sql("SELECT 3, 4, SUM(b) FROM testData2 GROUP BY 1, 2"),
+      Seq(Row(3, 4, 9)))
+    checkAnswer(
+      spark.sql("SELECT 3 AS c, 4 AS d, SUM(b) FROM testData2 GROUP BY c, d"),
+      Seq(Row(3, 4, 9)))
+  }
+
+  test("SPARK-22223: ObjectHashAggregate should not introduce unnecessary shuffle") {
+    withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
+      val df = Seq(("1", "2", 1), ("1", "2", 2), ("2", "3", 3), ("2", "3", 4)).toDF("a", "b", "c")
+        .repartition(col("a"))
+
+      val objHashAggDF = df
+        .withColumn("d", expr("(a, b, c)"))
+        .groupBy("a", "b").agg(collect_list("d").as("e"))
+        .withColumn("f", expr("(b, e)"))
+        .groupBy("a").agg(collect_list("f").as("g"))
+      val aggPlan = objHashAggDF.queryExecution.executedPlan
+
+      val sortAggPlans = aggPlan.collect {
+        case sortAgg: SortAggregateExec => sortAgg
+      }
+      assert(sortAggPlans.isEmpty)
+
+      val objHashAggPlans = aggPlan.collect {
+        case objHashAgg: ObjectHashAggregateExec => objHashAgg
+      }
+      assert(objHashAggPlans.nonEmpty)
+
+      val exchangePlans = aggPlan.collect {
+        case shuffle: ShuffleExchangeExec => shuffle
+      }
+      assert(exchangePlans.length == 1)
+    }
   }
 }

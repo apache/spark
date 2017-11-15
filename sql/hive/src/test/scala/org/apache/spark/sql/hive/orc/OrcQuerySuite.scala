@@ -22,11 +22,12 @@ import java.sql.Timestamp
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.io.orc.{OrcStruct, SparkOrcNewRecordReader}
+import org.apache.orc.OrcConf.COMPRESS
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogRelation
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive._
@@ -176,11 +177,11 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("SPARK-16610: Respect orc.compress option when compression is unset") {
-    // Respect `orc.compress`.
+  test("SPARK-16610: Respect orc.compress (i.e., OrcConf.COMPRESS) when compression is unset") {
+    // Respect `orc.compress` (i.e., OrcConf.COMPRESS).
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "ZLIB")
+        .option(COMPRESS.getAttribute, "ZLIB")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -191,7 +192,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     withTempPath { file =>
       spark.range(0, 10).write
         .option("compression", "ZLIB")
-        .option("orc.compress", "SNAPPY")
+        .option(COMPRESS.getAttribute, "SNAPPY")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -475,7 +476,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                 }
               } else {
                 queryExecution.analyzed.collectFirst {
-                  case _: CatalogRelation => ()
+                  case _: HiveTableRelation => ()
                 }.getOrElse {
                   fail(s"Expecting no conversion from orc to data sources, " +
                     s"but got:\n$queryExecution")
@@ -598,7 +599,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val requestedSchema = StructType(Nil)
       val conf = new Configuration()
       val physicalSchema = OrcFileOperator.readSchema(Seq(path), Some(conf)).get
-      OrcRelation.setRequiredColumns(conf, physicalSchema, requestedSchema)
+      OrcFileFormat.setRequiredColumns(conf, physicalSchema, requestedSchema)
       val maybeOrcReader = OrcFileOperator.getFileReader(path, Some(conf))
       assert(maybeOrcReader.isDefined)
       val orcRecordReader = new SparkOrcNewRecordReader(
