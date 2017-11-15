@@ -1785,4 +1785,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val mean = result.select("DecimalCol").where($"summary" === "mean")
     assert(mean.collect().toSet === Set(Row("0.0345678900000000000000000000000000000")))
   }
+
+  test("SPARK-22469: compare string with decimal") {
+    checkAnswer(Seq("1.5").toDF("s").filter("s > 0.5"), Row("1.5"))
+  }
 }
