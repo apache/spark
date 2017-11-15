@@ -281,7 +281,7 @@ case class CaseWhenCodegen(
 
     var isGlobalVariable = false
     val (generatedIfThenElse, numBrankets) = if (cases.map(s => s.length).sum <= 1024) {
-      (cases.mkString("\nelse {\n"), cases.length - 1)
+      (cases.mkString("", "\nelse {\n", "\nelse {\n"), cases.length)
     } else {
       var numIfThen = 0
       var code = ""
