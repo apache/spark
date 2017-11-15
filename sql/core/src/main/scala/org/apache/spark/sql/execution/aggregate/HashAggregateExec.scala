@@ -149,6 +149,14 @@ case class HashAggregateExec(
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
+  // The result rows come from the aggregate buffer, or a single row(no grouping keys), so this
+  // operator doesn't need to copy its result even if its child does.
+  override def needCopyResult: Boolean = false
+
+  // Aggregate operator always consumes all the input rows before outputting any result, so we
+  // don't need a stop check before aggregating.
+  override def needStopCheck: Boolean = false
+
   protected override def doProduce(ctx: CodegenContext): String = {
     if (groupingExpressions.isEmpty) {
       doProduceWithoutKeys(ctx)
@@ -245,8 +253,6 @@ case class HashAggregateExec(
        | }
      """.stripMargin
   }
-
-  protected override val shouldStopRequired = false
 
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
@@ -650,10 +656,6 @@ case class HashAggregateExec(
     val bufferTerm = ctx.freshName("aggBuffer")
     val outputFunc = generateResultFunction(ctx)
     val numOutput = metricTerm(ctx, "numOutputRows")
-
-    // The child could change `copyResult` to true, but we had already consumed all the rows,
-    // so `copyResult` should be reset to `false`.
-    ctx.copyResult = false
 
     def outputFromGeneratedMap: String = {
       if (isFastHashMapEnabled) {

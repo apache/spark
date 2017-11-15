@@ -469,7 +469,7 @@ case class FileSourceScanExec(
       currentSize = 0
     }
 
-    // Assign files to partitions using "First Fit Decreasing" (FFD)
+    // Assign files to partitions using "Next Fit Decreasing"
     splitFiles.foreach { file =>
       if (currentSize + file.length > maxSplitBytes) {
         closePartition()

@@ -359,7 +359,7 @@ class StringIndexerModel (
                 s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
             }
           }
-        }
+        }.asNondeterministic()
 
         outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
           .as(outputColName, metadata)

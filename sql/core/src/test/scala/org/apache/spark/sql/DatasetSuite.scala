@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -1273,8 +1274,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(spark.range(1).map { x => scala.math.BigDecimal(1, 18) }.head ==
       scala.math.BigDecimal(1, 18))
 
-    assert(spark.range(1).map { x => new java.sql.Date(2016, 12, 12) }.head ==
-      new java.sql.Date(2016, 12, 12))
+    assert(spark.range(1).map { x => java.sql.Date.valueOf("2016-12-12") }.head ==
+      java.sql.Date.valueOf("2016-12-12"))
 
     assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
       new java.sql.Timestamp(100000))
@@ -1398,6 +1399,33 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val actual = kvDataset.toString
     assert(expected === actual)
   }
+
+  test("SPARK-22442: Generate correct field names for special characters") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val data = """{"field.1": 1, "field 2": 2}"""
+      Seq(data).toDF().repartition(1).write.text(path)
+      val ds = spark.read.json(path).as[SpecialCharClass]
+      checkDataset(ds, SpecialCharClass("1", "2"))
+    }
+  }
+
+  test("SPARK-22472: add null check for top-level primitive values") {
+    // If the primitive values are from Option, we need to do runtime null check.
+    val ds = Seq(Some(1), None).toDS().as[Int]
+    intercept[NullPointerException](ds.collect())
+    val e = intercept[SparkException](ds.map(_ * 2).collect())
+    assert(e.getCause.isInstanceOf[NullPointerException])
+
+    withTempPath { path =>
+      Seq(new Integer(1), null).toDF("i").write.parquet(path.getCanonicalPath)
+      // If the primitive values are from files, we need to do runtime null check.
+      val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
+      intercept[NullPointerException](ds.collect())
+      val e = intercept[SparkException](ds.map(_ * 2).collect())
+      assert(e.getCause.isInstanceOf[NullPointerException])
+    }
+  }
 }
 
 case class SingleData(id: Int)
@@ -1487,3 +1515,5 @@ case class CircularReferenceClassB(cls: CircularReferenceClassA)
 case class CircularReferenceClassC(ar: Array[CircularReferenceClassC])
 case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
+
+case class SpecialCharClass(`field.1`: String, `field 2`: String)

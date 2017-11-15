@@ -127,8 +127,19 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       // If there aren't any, we are done.
       plan
     } else {
+      val inputsForPlan = plan.references ++ plan.outputSet
+      val prunedChildren = plan.children.map { child =>
+        val allNeededOutput = inputsForPlan.intersect(child.outputSet).toSeq
+        if (allNeededOutput.length != child.output.length) {
+          ProjectExec(allNeededOutput, child)
+        } else {
+          child
+        }
+      }
+      val planWithNewChildren = plan.withNewChildren(prunedChildren)
+
       val attributeMap = mutable.HashMap[PythonUDF, Expression]()
-      val splitFilter = trySplitFilter(plan)
+      val splitFilter = trySplitFilter(planWithNewChildren)
       // Rewrite the child that has the input required for the UDF
       val newChildren = splitFilter.children.map { child =>
         // Pick the UDF we are going to evaluate

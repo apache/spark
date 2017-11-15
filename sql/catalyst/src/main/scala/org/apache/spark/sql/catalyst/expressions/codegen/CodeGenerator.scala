@@ -140,16 +140,6 @@ class CodegenContext {
   var currentVars: Seq[ExprCode] = null
 
   /**
-   * Whether should we copy the result rows or not.
-   *
-   * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
-   * example, Join), this should be true.
-   *
-   * If an operator starts a new pipeline, this should be reset to false before calling `consume()`.
-   */
-  var copyResult: Boolean = false
-
-  /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
    * 3-tuple: java type, variable name, code to init it.
    * As an example, ("int", "count", "count = 0;") will produce code:
@@ -916,6 +906,36 @@ class CodegenContext {
           orderedFunctions.map(f => s"$innerClassInstance.$f($argInvocationString)")
         }
     }
+  }
+
+  /**
+   * Wrap the generated code of expression, which was created from a row object in INPUT_ROW,
+   * by a function. ev.isNull and ev.value are passed by global variables
+   *
+   * @param ev the code to evaluate expressions.
+   * @param dataType the data type of ev.value.
+   * @param baseFuncName the split function name base.
+   */
+  def createAndAddFunction(
+      ev: ExprCode,
+      dataType: DataType,
+      baseFuncName: String): (String, String, String) = {
+    val globalIsNull = freshName("isNull")
+    addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
+    val globalValue = freshName("value")
+    addMutableState(javaType(dataType), globalValue,
+      s"$globalValue = ${defaultValue(dataType)};")
+    val funcName = freshName(baseFuncName)
+    val funcBody =
+      s"""
+         |private void $funcName(InternalRow ${INPUT_ROW}) {
+         |  ${ev.code.trim}
+         |  $globalIsNull = ${ev.isNull};
+         |  $globalValue = ${ev.value};
+         |}
+         """.stripMargin
+    val fullFuncName = addNewFunction(funcName, funcBody)
+    (fullFuncName, globalIsNull, globalValue)
   }
 
   /**
