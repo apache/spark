@@ -69,6 +69,8 @@ function getTimeZone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch(ex) {
+    // Get time zone from a string representing the date,
+    // eg. "Thu Nov 16 2017 01:13:32 GMT+0800 (CST)" -> "CST"
     return new Date().toString().match(/\((.*)\)/)[1];
   }
 }
