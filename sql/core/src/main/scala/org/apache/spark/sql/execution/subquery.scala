@@ -138,11 +138,15 @@ case class InSubquery(
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
+    val exprIdMap = mutable.HashMap[Long, Int]()
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
         val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
+        val exprId = subquery.exprId.id
+        val exprIdIndex = exprIdMap.getOrElse(exprId, 0)
+        exprIdMap.put(exprId, exprIdIndex + 1)
         ScalarSubquery(
-          SubqueryExec(s"subquery${subquery.exprId.id}", executedPlan),
+          SubqueryExec(s"subquery${subquery.exprId.id}-${exprIdIndex+1}", executedPlan),
           subquery.exprId)
     }
   }
