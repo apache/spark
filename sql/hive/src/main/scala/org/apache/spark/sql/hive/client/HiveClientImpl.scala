@@ -898,8 +898,8 @@ private[hive] object HiveClientImpl {
   }
 
   private def verifyColumnDataType(schema: StructType): Unit = {
-    schema.map(col => {
-      val typeString = col.dataType.catalogString
+    schema.foreach(field => {
+      val typeString = field.dataType.catalogString
       try {
         CatalystSqlParser.parseDataType(typeString)
       } catch {
