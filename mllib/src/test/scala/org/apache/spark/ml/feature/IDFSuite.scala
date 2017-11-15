@@ -22,8 +22,6 @@ import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.feature.{IDFModel => OldIDFModel}
-import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
@@ -46,7 +44,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   test("params") {
     ParamsSuite.checkParams(new IDF)
-    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0)))
+    val model = new IDFModel("idf", Vectors.dense(1.0))
     ParamsSuite.checkParams(model)
   }
 
@@ -114,7 +112,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("IDFModel read/write") {
-    val instance = new IDFModel("myIDFModel", new OldIDFModel(Vectors.dense(1.0, 2.0)))
+    val instance = new IDFModel("myIDFModel", Vectors.dense(1.0, 2.0))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
     val newInstance = testDefaultReadWrite(instance)
