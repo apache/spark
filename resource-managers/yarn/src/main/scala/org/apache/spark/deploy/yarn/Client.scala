@@ -742,17 +742,14 @@ private[spark] class Client(
       hadoopConf.writeXml(confStream)
       confStream.closeEntry()
 
-      // Save Spark configuration to a file in the archive.
+      // Save Spark configuration to a file in the archive, but filter out the app's secret.
       val props = new Properties()
-      sparkConf.getAll.foreach { case (k, v) => props.setProperty(k, v) }
+      sparkConf.getAll.foreach { case (k, v) if k != SecurityManager.SPARK_AUTH_SECRET_CONF =>
+        props.setProperty(k, v)
+      }
       // Override spark.yarn.key to point to the location in distributed cache which will be used
       // by AM.
-      Option(amKeytabFileName).foreach { k =>
-        // Do not propagate the app's secret using the config file.
-        if (k != SecurityManager.SPARK_AUTH_SECRET_CONF) {
-          props.setProperty(KEYTAB.key, k)
-        }
-      }
+      Option(amKeytabFileName).foreach { k => props.setProperty(KEYTAB.key, k) }
       confStream.putNextEntry(new ZipEntry(SPARK_CONF_FILE))
       val writer = new OutputStreamWriter(confStream, StandardCharsets.UTF_8)
       props.store(writer, "Spark configuration.")
