@@ -238,26 +238,6 @@ private[ml] object TreeTests extends SparkFunSuite {
   ))
 
   /**
-   * Create toy data that can be used for testing deep tree training; the generated data requires
-   * [[depth]] splits to split fully. Thus a tree fit on the generated data should have a depth of
-   * [[depth]] (unless splitting halts early due to other constraints e.g. max depth or min
-   * info gain).
-   */
-  def deepTreeData(sc: SparkContext, depth: Int): RDD[LabeledPoint] = {
-    // Create a dataset with [[depth]] binary features; a training point has a label of 1
-    // iff all features have a value of 1.
-    sc.parallelize(Range(0, depth + 1).map { idx =>
-      val features = Array.fill[Double](depth)(1)
-      if (idx == depth) {
-        LabeledPoint(1.0, Vectors.dense(features))
-      } else {
-        features(idx) = 0.0
-        LabeledPoint(0.0, Vectors.dense(features))
-      }
-    })
-  }
-
-  /**
    * Mapping from all Params to valid settings which differ from the defaults.
    * This is useful for tests which need to exercise all Params, such as save/load.
    * This excludes input columns to simplify some tests.
