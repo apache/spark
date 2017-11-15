@@ -375,6 +375,7 @@ if [[ "$1" == "publish-release" ]]; then
   find . -type f |grep -v \.jar |grep -v \.pom | xargs rm
 
   echo "Creating hash and signature files"
+  # this must have .asc, .md5 and .sha1 - it really doesn't like anything else there
   for file in $(find . -type f)
   do
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --output $file.asc \
@@ -387,7 +388,6 @@ if [[ "$1" == "publish-release" ]]; then
       md5sum $file | cut -f1 -d' ' > $file.md5
     fi
     sha1sum $file | cut -f1 -d' ' > $file.sha1
-    shasum --algorithm 512 $file | cut -f1 -d' ' > $file.sha512
   done
 
   nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
