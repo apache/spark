@@ -523,7 +523,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public void loadBytes(VectorBasedArray array) {
+  public void loadBytes(ColumnarArray array) {
     if (array.tmpByteArray.length < array.length) array.tmpByteArray = new byte[array.length];
     Platform.copyMemory(
         null, data + array.offset, array.tmpByteArray, Platform.BYTE_ARRAY_OFFSET, array.length);

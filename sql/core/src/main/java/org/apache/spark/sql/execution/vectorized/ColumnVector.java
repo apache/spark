@@ -164,7 +164,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns a utility object to get structs.
    */
-  public VectorBasedRow getStruct(int rowId) {
+  public ColumnarRow getStruct(int rowId) {
     resultStruct.rowId = rowId;
     return resultStruct;
   }
@@ -173,7 +173,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns a utility object to get structs.
    * provided to keep API compatibility with InternalRow for code generation
    */
-  public VectorBasedRow getStruct(int rowId, int size) {
+  public ColumnarRow getStruct(int rowId, int size) {
     resultStruct.rowId = rowId;
     return resultStruct;
   }
@@ -181,7 +181,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the array at rowid.
    */
-  public final VectorBasedArray getArray(int rowId) {
+  public final ColumnarArray getArray(int rowId) {
     resultArray.length = getArrayLength(rowId);
     resultArray.offset = getArrayOffset(rowId);
     return resultArray;
@@ -190,7 +190,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Loads the data into array.byteArray.
    */
-  public abstract void loadBytes(VectorBasedArray array);
+  public abstract void loadBytes(ColumnarArray array);
 
   /**
    * Returns the value for rowId.
@@ -237,12 +237,12 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Reusable Array holder for getArray().
    */
-  protected VectorBasedArray resultArray;
+  protected ColumnarArray resultArray;
 
   /**
    * Reusable Struct holder for getStruct().
    */
-  protected VectorBasedRow resultStruct;
+  protected ColumnarRow resultStruct;
 
   /**
    * The Dictionary for this column.

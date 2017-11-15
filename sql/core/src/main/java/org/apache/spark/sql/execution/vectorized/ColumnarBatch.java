@@ -52,7 +52,7 @@ public final class ColumnarBatch {
   private int numRowsFiltered = 0;
 
   // Staging row returned from getRow.
-  final VectorBasedRow row;
+  final ColumnarRow row;
 
   /**
    * Called to close all the columns in this batch. It is not valid to access the data after
@@ -67,10 +67,10 @@ public final class ColumnarBatch {
   /**
    * Returns an iterator over the rows in this batch. This skips rows that are filtered out.
    */
-  public Iterator<VectorBasedRow> rowIterator() {
+  public Iterator<ColumnarRow> rowIterator() {
     final int maxRows = ColumnarBatch.this.numRows();
-    final VectorBasedRow row = new VectorBasedRow(this);
-    return new Iterator<VectorBasedRow>() {
+    final ColumnarRow row = new ColumnarRow(this);
+    return new Iterator<ColumnarRow>() {
       int rowId = 0;
 
       @Override
@@ -82,7 +82,7 @@ public final class ColumnarBatch {
       }
 
       @Override
-      public VectorBasedRow next() {
+      public ColumnarRow next() {
         while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
           ++rowId;
         }
@@ -183,7 +183,7 @@ public final class ColumnarBatch {
   /**
    * Returns the row in this batch at `rowId`. Returned row is reused across calls.
    */
-  public VectorBasedRow getRow(int rowId) {
+  public ColumnarRow getRow(int rowId) {
     assert(rowId >= 0);
     assert(rowId < numRows);
     row.rowId = rowId;
@@ -214,6 +214,6 @@ public final class ColumnarBatch {
     this.capacity = capacity;
     this.nullFilteredColumns = new HashSet<>();
     this.filteredRows = new boolean[capacity];
-    this.row = new VectorBasedRow(this);
+    this.row = new ColumnarRow(this);
   }
 }

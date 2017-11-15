@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
@@ -27,7 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Array abstraction in {@link ColumnVector}. The instance of this class is intended
  * to be reused, callers should copy the data out if it needs to be stored.
  */
-public final class VectorBasedArray extends ArrayData {
+public final class ColumnarArray extends ArrayData {
   // The data for this array. This array contains elements from
   // data[offset] to data[offset + length).
   public final ColumnVector data;
@@ -42,7 +41,7 @@ public final class VectorBasedArray extends ArrayData {
   // Reused staging buffer, used for loading from offheap.
   protected byte[] tmpByteArray = new byte[1];
 
-  protected VectorBasedArray(ColumnVector data) {
+  protected ColumnarArray(ColumnVector data) {
     this.data = data;
   }
 
@@ -147,12 +146,12 @@ public final class VectorBasedArray extends ArrayData {
   }
 
   @Override
-  public VectorBasedRow getStruct(int ordinal, int numFields) {
+  public ColumnarRow getStruct(int ordinal, int numFields) {
     return data.getStruct(offset + ordinal);
   }
 
   @Override
-  public VectorBasedArray getArray(int ordinal) {
+  public ColumnarArray getArray(int ordinal) {
     return data.getArray(offset + ordinal);
   }
 

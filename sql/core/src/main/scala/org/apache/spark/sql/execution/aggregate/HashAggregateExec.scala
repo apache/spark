@@ -595,7 +595,7 @@ case class HashAggregateExec(
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName();")
         ctx.addMutableState(
-          "java.util.Iterator<org.apache.spark.sql.execution.vectorized.VectorBasedRow>",
+          "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarRow>",
           iterTermForFastHashMap, "")
       } else {
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
@@ -681,7 +681,7 @@ case class HashAggregateExec(
      """
     }
 
-    // Iterate over the aggregate rows and convert them from VectorBasedRow to UnsafeRow
+    // Iterate over the aggregate rows and convert them from ColumnarRow to UnsafeRow
     def outputFromVectorizedMap: String = {
         val row = ctx.freshName("fastHashMapRow")
         ctx.currentVars = null
@@ -697,8 +697,8 @@ case class HashAggregateExec(
         s"""
            | while ($iterTermForFastHashMap.hasNext()) {
            |   $numOutput.add(1);
-           |   org.apache.spark.sql.execution.vectorized.VectorBasedRow $row =
-           |     (org.apache.spark.sql.execution.vectorized.VectorBasedRow)
+           |   org.apache.spark.sql.execution.vectorized.ColumnarRow $row =
+           |     (org.apache.spark.sql.execution.vectorized.ColumnarRow)
            |     $iterTermForFastHashMap.next();
            |   ${generateKeyRow.code}
            |   ${generateBufferRow.code}
@@ -892,7 +892,7 @@ case class HashAggregateExec(
      ${
         if (isVectorizedHashMapEnabled) {
           s"""
-             | org.apache.spark.sql.execution.vectorized.VectorBasedRow $fastRowBuffer = null;
+             | org.apache.spark.sql.execution.vectorized.ColumnarRow $fastRowBuffer = null;
            """.stripMargin
         } else {
           s"""

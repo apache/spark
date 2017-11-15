@@ -21,7 +21,6 @@ import java.math.BigDecimal;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -31,7 +30,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Row abstraction in {@link ColumnVector}. The instance of this class is intended
  * to be reused, callers should copy the data out if it needs to be stored.
  */
-public final class VectorBasedRow extends InternalRow {
+public final class ColumnarRow extends InternalRow {
   protected int rowId;
   private final ColumnarBatch parent;
   private final int fixedLenRowSize;
@@ -39,7 +38,7 @@ public final class VectorBasedRow extends InternalRow {
   private final WritableColumnVector[] writableColumns;
 
   // Ctor used if this is a top level row.
-  VectorBasedRow(ColumnarBatch parent) {
+  ColumnarRow(ColumnarBatch parent) {
     this.parent = parent;
     this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(parent.numCols());
     this.columns = parent.columns;
@@ -52,7 +51,7 @@ public final class VectorBasedRow extends InternalRow {
   }
 
   // Ctor used if this is a struct.
-  VectorBasedRow(ColumnVector[] columns) {
+  ColumnarRow(ColumnVector[] columns) {
     this.parent = null;
     this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(columns.length);
     this.columns = columns;
@@ -177,13 +176,13 @@ public final class VectorBasedRow extends InternalRow {
   }
 
   @Override
-  public VectorBasedRow getStruct(int ordinal, int numFields) {
+  public ColumnarRow getStruct(int ordinal, int numFields) {
     if (columns[ordinal].isNullAt(rowId)) return null;
     return columns[ordinal].getStruct(rowId);
   }
 
   @Override
-  public VectorBasedArray getArray(int ordinal) {
+  public ColumnarArray getArray(int ordinal) {
     if (columns[ordinal].isNullAt(rowId)) return null;
     return columns[ordinal].getArray(rowId);
   }

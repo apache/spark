@@ -494,7 +494,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public void loadBytes(VectorBasedArray array) {
+  public void loadBytes(ColumnarArray array) {
     array.byteArray = byteData;
     array.byteArrayOffset = array.offset;
   }
