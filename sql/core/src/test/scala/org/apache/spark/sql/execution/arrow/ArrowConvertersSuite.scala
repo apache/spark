@@ -939,12 +939,12 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |      "name" : "NaN_f",
          |      "count" : 2,
          |      "VALIDITY" : [ 1, 1 ],
-         |      "DATA" : [ 1.2000000476837158, "NaN" ]
+         |      "DATA" : [ 1.2000000476837158, NaN ]
          |    }, {
          |      "name" : "NaN_d",
          |      "count" : 2,
          |      "VALIDITY" : [ 1, 1 ],
-         |      "DATA" : [ "NaN", 1.2 ]
+         |      "DATA" : [ NaN, 1.2 ]
          |    } ]
          |  } ]
          |}
