@@ -55,7 +55,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "How to handle invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), 'error' (throw an error), " +
-    "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
+    "or 'keep' (put invalid data in a special additional bucket, at index numCategories).",
     ParamValidators.inArray(VectorIndexer.supportedHandleInvalids))
 
   setDefault(handleInvalid, VectorIndexer.ERROR_INVALID)
