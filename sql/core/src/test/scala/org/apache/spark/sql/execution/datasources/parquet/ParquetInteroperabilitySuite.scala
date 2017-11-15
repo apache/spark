@@ -87,4 +87,13 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
           Row(Seq(2, 3))))
     }
   }
+
+  val ImpalaFile = "test-data/impala_timestamp.parq"
+  test("parquet timestamp conversion") {
+    // make a table with one parquet file written by impala, and one parquet file written by spark
+    // we should only adjust the timestamps in the impala file, and only if the conf is set
+    val impalaFile = Thread.currentThread().getContextClassLoader.getResource(ImpalaFile).toString()
+    spark.read.parquet(impalaFile).show()
+    pending
+  }
 }
