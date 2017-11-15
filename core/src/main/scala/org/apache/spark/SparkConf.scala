@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -24,6 +25,7 @@ import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
+import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.serializer.KryoSerializer
@@ -370,7 +372,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
+    Option(settings.get(key)).orElse(getDeprecatedConfig(key, settings))
   }
 
   /** Get an optional value, applying variable substitution. */
@@ -610,8 +612,6 @@ private[spark] object SparkConf extends Logging {
    *
    * The alternates are used in the order defined in this map. If deprecated configs are
    * present in the user's configuration, a warning is logged.
-   *
-   * TODO: consolidate it with `ConfigBuilder.withAlternative`.
    */
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
     "spark.executor.userClassPathFirst" -> Seq(
@@ -622,7 +622,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.history.updateInterval", "1.3")),
     "spark.history.fs.cleaner.interval" -> Seq(
       AlternateConfig("spark.history.fs.cleaner.interval.seconds", "1.4")),
-    "spark.history.fs.cleaner.maxAge" -> Seq(
+    MAX_LOG_AGE_S.key -> Seq(
       AlternateConfig("spark.history.fs.cleaner.maxAge.seconds", "1.4")),
     "spark.yarn.am.waitTime" -> Seq(
       AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
@@ -663,8 +663,10 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.jar", "2.0")),
     "spark.yarn.access.hadoopFileSystems" -> Seq(
       AlternateConfig("spark.yarn.access.namenodes", "2.2")),
-    "spark.maxRemoteBlockSizeFetchToMem" -> Seq(
-      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3"))
+    MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
+    LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
+      AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3"))
   )
 
   /**
@@ -704,9 +706,9 @@ private[spark] object SparkConf extends Logging {
    * Looks for available deprecated keys for the given config option, and return the first
    * value available.
    */
-  def getDeprecatedConfig(key: String, conf: SparkConf): Option[String] = {
+  def getDeprecatedConfig(key: String, conf: JMap[String, String]): Option[String] = {
     configsWithAlternatives.get(key).flatMap { alts =>
-      alts.collectFirst { case alt if conf.contains(alt.key) =>
+      alts.collectFirst { case alt if conf.containsKey(alt.key) =>
         val value = conf.get(alt.key)
         if (alt.translation != null) alt.translation(value) else value
       }
