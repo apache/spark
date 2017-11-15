@@ -47,6 +47,10 @@ case class ShuffleExchangeExec(
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"))
 
+  private[exchange] def withoutCoordinator(): ShuffleExchangeExec = {
+    ShuffleExchangeExec(newPartitioning, child, None)
+  }
+
   override def nodeName: String = {
     val extraInfo = coordinator match {
       case Some(exchangeCoordinator) =>

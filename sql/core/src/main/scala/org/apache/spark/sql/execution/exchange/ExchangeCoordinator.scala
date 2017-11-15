@@ -83,9 +83,9 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  *  - post-shuffle partition 3: pre-shuffle partition 3 and 4 (size 50 MB)
  */
 class ExchangeCoordinator(
-    numExchanges: Int,
-    advisoryTargetPostShuffleInputSize: Long,
-    minNumPostShufflePartitions: Option[Int] = None)
+    val numExchanges: Int,
+    val advisoryTargetPostShuffleInputSize: Long,
+    val minNumPostShufflePartitions: Option[Int] = None)
   extends Logging {
 
   // The registered Exchange operators.

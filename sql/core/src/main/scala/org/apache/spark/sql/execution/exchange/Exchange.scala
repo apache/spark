@@ -109,3 +109,67 @@ case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
     }
   }
 }
+
+/**
+ * Find out duplicated coordinated exchanges in the spark plan, then use the same exchange for all
+ * the references.
+ */
+case class ReuseExchangeWithCoordinator(conf: SQLConf) extends Rule[SparkPlan] {
+
+  // Returns true if a SparkPlan has coordinated ShuffleExchangeExec children.
+  private def hasCoordinatedExchanges(plan: SparkPlan): Boolean = {
+    plan.children.nonEmpty && plan.children.forall {
+      case ShuffleExchangeExec(_, _, Some(_)) => true
+      case _ => false
+    }
+  }
+
+  // Returns true if two sequences of exchanges are producing the same results.
+  private def hasExchangesWithSameResults(
+      source: Seq[ShuffleExchangeExec],
+      target: Seq[ShuffleExchangeExec]): Boolean = {
+    source.length == target.length &&
+      source.zip(target).forall(x => x._1.withoutCoordinator.sameResult(x._2.withoutCoordinator))
+  }
+
+  type CoordinatorSignature = (Int, Long, Option[Int])
+
+  def apply(plan: SparkPlan): SparkPlan = {
+    if (!conf.exchangeReuseEnabled) {
+      return plan
+    }
+
+    // Build a hash map using the properties of exchange coordinator to reduce the number of
+    // sameResult calls.
+    val exchangesMap =
+      mutable.HashMap[CoordinatorSignature, ArrayBuffer[Seq[ShuffleExchangeExec]]]()
+
+    plan.transformUp {
+      case parentPlan if hasCoordinatedExchanges(parentPlan) =>
+        val coordinator = parentPlan.children.collect {
+          case ShuffleExchangeExec(_, _, Some(coordinator)) => coordinator
+        }.head
+
+        val coordinatorSignature = (coordinator.numExchanges,
+          coordinator.advisoryTargetPostShuffleInputSize,
+          coordinator.minNumPostShufflePartitions)
+
+        val candidateExchanges = exchangesMap.getOrElseUpdate(coordinatorSignature,
+          ArrayBuffer[Seq[ShuffleExchangeExec]]())
+        val currentExchanges = parentPlan.children.asInstanceOf[Seq[ShuffleExchangeExec]]
+        val sameExchanges = candidateExchanges.find { exchanges =>
+          hasExchangesWithSameResults(currentExchanges, exchanges)
+        }
+        if (sameExchanges.isDefined) {
+          val reusedExchanges = sameExchanges.get
+          val newExchanges = parentPlan.children.zip(reusedExchanges).map {
+            case (exchange, reused) => ReusedExchangeExec(exchange.output, reused)
+          }
+          parentPlan.withNewChildren(newExchanges)
+        } else {
+          candidateExchanges += currentExchanges
+          parentPlan
+        }
+    }
+  }
+}
