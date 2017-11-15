@@ -150,7 +150,7 @@ class SparkHadoopUtil extends Logging {
    * Add or overwrite current user's credentials with serialized delegation tokens,
    * also confirms correct hadoop configuration is set.
    */
-  def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
+  private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
     UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
     val creds = deserialize(tokens)
     logInfo(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
@@ -481,7 +481,7 @@ object SparkHadoopUtil {
    * @param fraction fraction of the time until expiration return
    * @return Date when the fraction of the time until expiration has passed
    */
-  def getDateOfNextUpdate(expirationDate: Long, fraction: Double): Long = {
+  private[spark] def getDateOfNextUpdate(expirationDate: Long, fraction: Double): Long = {
     val ct = System.currentTimeMillis
     (ct + (fraction * (expirationDate - ct))).toLong
   }

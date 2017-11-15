@@ -99,8 +99,8 @@ private[spark] class MesosHadoopDelegationTokenManager(
       new Runnable {
         override def run(): Unit = {
           try {
-            val tokensBytes = getNewDelegationTokens()
-            broadcastDelegationTokens(tokensBytes)
+            getNewDelegationTokens()
+            broadcastDelegationTokens(tokens)
           } catch {
             case e: Exception =>
               // Log the error and try to write new tokens back in an hour
@@ -114,10 +114,9 @@ private[spark] class MesosHadoopDelegationTokenManager(
     scheduleRenewal(credentialRenewerRunnable)
   }
 
-  private def getNewDelegationTokens(): Array[Byte] = {
+  private def getNewDelegationTokens(): Unit = {
     logInfo(s"Attempting to login to KDC with principal ${principal}")
-    // Get new delegation tokens by logging in with a new UGI
-    // inspired by AMCredentialRenewer.scala:L174.
+    // Get new delegation tokens by logging in with a new UGI inspired by AMCredentialRenewer.scala
     // Don't protect against keytabFile being empty because it's guarded above.
     val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytabFile.get)
     logInfo("Successfully logged into KDC")
@@ -142,7 +141,8 @@ private[spark] class MesosHadoopDelegationTokenManager(
 
     // Add the temp credentials back to the original ones.
     UserGroupInformation.getCurrentUser.addCredentials(tempCreds)
-    SparkHadoopUtil.get.serialize(tempCreds)
+    // update tokens for late or dynamically added executors
+    tokens = SparkHadoopUtil.get.serialize(tempCreds)
   }
 
   private def broadcastDelegationTokens(tokens: Array[Byte]) = {
