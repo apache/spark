@@ -479,7 +479,7 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public void loadBytes(ColumnVector.Array array) {
+  public void loadBytes(ColumnarArray array) {
     throw new NotImplementedException();
   }
 
