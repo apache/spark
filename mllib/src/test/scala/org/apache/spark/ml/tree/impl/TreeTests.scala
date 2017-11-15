@@ -25,6 +25,7 @@ import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericA
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.tree._
+import org.apache.spark.mllib.tree.impurity.{Entropy, Impurity}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -99,6 +100,48 @@ private[ml] object TreeTests extends SparkFunSuite {
     }
     val labelMetadata = labelAttribute.toMetadata()
     data.select(data(featuresColName), data(labelColName).as(labelColName, labelMetadata))
+  }
+
+  /** Returns a DecisionTreeMetadata instance with hard-coded values for use in tests */
+  def getMetadata(
+      numExamples: Int,
+      numFeatures: Int,
+      numClasses: Int,
+      featureArity: Map[Int, Int],
+      impurity: Impurity = Entropy,
+      unorderedFeatures: Option[Set[Int]] = None): DecisionTreeMetadata = {
+    // By default, assume all categorical features within tests
+    // have small enough arity to be treated as unordered
+    val unordered = unorderedFeatures.getOrElse(featureArity.keys.toSet)
+
+    // Set numBins appropriately for categorical features
+    val maxBins = 4
+    val numBins: Array[Int] = 0.until(numFeatures).toArray.map { featureIndex =>
+      if (featureArity.contains(featureIndex) && featureArity(featureIndex) > 0) {
+        featureArity(featureIndex)
+      } else {
+        maxBins
+      }
+    }
+
+    new DecisionTreeMetadata(numFeatures = numFeatures, numExamples = numExamples,
+      numClasses = numClasses, maxBins = maxBins, minInfoGain = 0.0, featureArity = featureArity,
+      unorderedFeatures = unordered, numBins = numBins, impurity = impurity,
+      quantileStrategy = null, maxDepth = 5, minInstancesPerNode = 1, numTrees = 1,
+      numFeaturesPerNode = 2)
+  }
+
+  /**
+   * Returns an array of continuous splits for the feature with index featureIndex and the passed-in
+   * set of values. Creates one continuous split per value in values.
+   */
+  private[impl] def getContinuousSplits(
+      values: Array[Int],
+      featureIndex: Int): Array[Split] = {
+    val splits = values.sorted.map {
+      new ContinuousSplit(featureIndex, _).asInstanceOf[Split]
+    }
+    splits
   }
 
   /**
@@ -193,6 +236,26 @@ private[ml] object TreeTests extends SparkFunSuite {
     new LabeledPoint(12.0, Vectors.dense(Array(4.0))),
     new LabeledPoint(14.0, Vectors.dense(Array(5.0)))
   ))
+
+  /**
+   * Create toy data that can be used for testing deep tree training; the generated data requires
+   * [[depth]] splits to split fully. Thus a tree fit on the generated data should have a depth of
+   * [[depth]] (unless splitting halts early due to other constraints e.g. max depth or min
+   * info gain).
+   */
+  def deepTreeData(sc: SparkContext, depth: Int): RDD[LabeledPoint] = {
+    // Create a dataset with [[depth]] binary features; a training point has a label of 1
+    // iff all features have a value of 1.
+    sc.parallelize(Range(0, depth + 1).map { idx =>
+      val features = Array.fill[Double](depth)(1)
+      if (idx == depth) {
+        LabeledPoint(1.0, Vectors.dense(features))
+      } else {
+        features(idx) = 0.0
+        LabeledPoint(0.0, Vectors.dense(features))
+      }
+    })
+  }
 
   /**
    * Mapping from all Params to valid settings which differ from the defaults.
