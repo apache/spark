@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
 
 /**
@@ -142,14 +142,14 @@ class VectorizedHashMapGenerator(
 
   /**
    * Generates a method that returns a mutable
-   * [[org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row]] which keeps track of the
+   * [[org.apache.spark.sql.execution.vectorized.ColumnarRow]] which keeps track of the
    * aggregate value(s) for a given set of keys. If the corresponding row doesn't exist, the
    * generated method adds the corresponding row in the associated
    * [[org.apache.spark.sql.execution.vectorized.ColumnarBatch]]. For instance, if we
    * have 2 long group-by keys, the generated function would be of the form:
    *
    * {{{
-   * public org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row findOrInsert(
+   * public org.apache.spark.sql.execution.vectorized.ColumnarRow findOrInsert(
    *     long agg_key, long agg_key1) {
    *   long h = hash(agg_key, agg_key1);
    *   int step = 0;
@@ -189,7 +189,7 @@ class VectorizedHashMapGenerator(
     }
 
     s"""
-       |public org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row findOrInsert(${
+       |public org.apache.spark.sql.execution.vectorized.ColumnarRow findOrInsert(${
             groupingKeySignature}) {
        |  long h = hash(${groupingKeys.map(_.name).mkString(", ")});
        |  int step = 0;
@@ -229,7 +229,7 @@ class VectorizedHashMapGenerator(
 
   protected def generateRowIterator(): String = {
     s"""
-       |public java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>
+       |public java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarRow>
        |    rowIterator() {
        |  return batch.rowIterator();
        |}
