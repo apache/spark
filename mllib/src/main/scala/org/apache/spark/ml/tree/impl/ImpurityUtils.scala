@@ -48,7 +48,7 @@ private[impl] object ImpurityUtils {
    * Calculate the impurity statistics for a given (feature, split) based upon left/right
    * aggregates.
    *
-   * @param parentCalc Optional: an ImpurityCalculator containing the impurity stats
+   * @param parentImpurityCalculator An ImpurityCalculator containing the impurity stats
    *                                 of the node currently being split.
    * @param leftImpurityCalculator left node aggregates for this (feature, split)
    * @param rightImpurityCalculator right node aggregate for this (feature, split)
@@ -56,13 +56,11 @@ private[impl] object ImpurityUtils {
    * @return Impurity statistics for this (feature, split)
    */
   private[impl] def calculateImpurityStats(
-      parentCalc: Option[ImpurityCalculator],
+      parentImpurityCalculator: ImpurityCalculator,
       leftImpurityCalculator: ImpurityCalculator,
       rightImpurityCalculator: ImpurityCalculator,
       metadata: DecisionTreeMetadata): ImpurityStats = {
 
-    val parentImpurityCalculator
-      = parentCalc.getOrElse(leftImpurityCalculator.copy.add(rightImpurityCalculator))
     val impurity: Double = parentImpurityCalculator.calculate()
 
     val leftCount = leftImpurityCalculator.count

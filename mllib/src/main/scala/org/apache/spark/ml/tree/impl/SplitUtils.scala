@@ -75,7 +75,7 @@ private[impl] object SplitUtils extends Logging {
     // Unordered categorical feature
     val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)
     val numSplits = binAggregates.metadata.numSplits(featureIndex)
-    var parentCalc = parentCalculator
+    val parentCalc = parentCalculator.getOrElse(binAggregates.getParentImpurityCalculator())
     val (bestFeatureSplitIndex, bestFeatureGainStats) =
       Range(0, numSplits).map { splitIndex =>
         val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIndex)
@@ -83,10 +83,6 @@ private[impl] object SplitUtils extends Logging {
           .subtract(leftChildStats)
         val gainAndImpurityStats = ImpurityUtils.calculateImpurityStats(parentCalc,
           leftChildStats, rightChildStats, binAggregates.metadata)
-        // Compute parent stats once, when considering first split for current feature
-        if (parentCalc.isEmpty) {
-          parentCalc = Some(gainAndImpurityStats.impurityCalculator)
-        }
         (splitIndex, gainAndImpurityStats)
       }.maxBy(_._2.gain)
     (featureSplits(bestFeatureSplitIndex), bestFeatureGainStats)
@@ -141,7 +137,7 @@ private[impl] object SplitUtils extends Logging {
     val lastCategory = categoriesSortedByCentroid.last
 
     // Find best split.
-    var parentCalc = parentCalculator
+    val parentCalc = parentCalculator.getOrElse(binAggregates.getParentImpurityCalculator())
     Range(0, numSplits).map { splitIndex =>
       val featureValue = categoriesSortedByCentroid(splitIndex)
       val leftChildStats =
@@ -151,10 +147,6 @@ private[impl] object SplitUtils extends Logging {
       rightChildStats.subtract(leftChildStats)
       val gainAndImpurityStats = ImpurityUtils.calculateImpurityStats(parentCalc,
         leftChildStats, rightChildStats, binAggregates.metadata)
-      // Compute parent stats once, when considering first split for current feature
-      if (parentCalc.isEmpty) {
-        parentCalc = Some(gainAndImpurityStats.impurityCalculator)
-      }
       (splitIndex, gainAndImpurityStats)
     }.maxBy(_._2.gain)
   }
