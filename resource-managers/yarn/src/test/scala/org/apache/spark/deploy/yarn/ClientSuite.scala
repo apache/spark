@@ -24,7 +24,6 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
 
-import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
@@ -36,33 +35,17 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.Matchers.{eq => meq, _}
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
+import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
-class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
-  with ResetSystemProperties {
+class ClientSuite extends SparkFunSuite with Matchers {
 
   import Client._
 
   var oldSystemProperties: Properties = null
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    oldSystemProperties = SerializationUtils.clone(System.getProperties)
-    System.setProperty("SPARK_YARN_MODE", "true")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      System.setProperties(oldSystemProperties)
-      oldSystemProperties = null
-    } finally {
-      super.afterAll()
-    }
-  }
 
   test("default Yarn application classpath") {
     getDefaultYarnApplicationClasspath should be(Fixtures.knownDefYarnAppCP)

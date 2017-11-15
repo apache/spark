@@ -31,17 +31,8 @@ class YARNHadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers 
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
-    System.setProperty("SPARK_YARN_MODE", "true")
-
     sparkConf = new SparkConf()
     hadoopConf = new Configuration()
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-
-    System.clearProperty("SPARK_YARN_MODE")
   }
 
   test("Correctly loads credential providers") {
