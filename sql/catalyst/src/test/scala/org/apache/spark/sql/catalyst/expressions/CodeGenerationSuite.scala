@@ -430,5 +430,18 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     if (!checkResult(result3, expectedStr, expr3.dataType)) {
       fail(s"Incorrect Evaluation: expressions: $expr3, actual: $result3, expected: $expectedStr")
     }
+
+    // total code size is small
+    val cases4 = Seq((EqualTo(exprStr, Literal("def")), Literal("xyz")))
+    val expr4 = CaseWhen(cases4, exprStr).toCodegen()
+    val plan4 = GenerateMutableProjection.generate(Seq(expr4))
+    val row4 = new GenericInternalRow(Array[Any](1))
+    row4.update(0, expectedStr)
+    val actual4 = plan4(row4).toSeq(Seq(expr4.dataType))
+    assert(actual4.length == 1)
+    val result4 = actual4(0)
+    if (!checkResult(result4, expectedStr, expr4.dataType)) {
+      fail(s"Incorrect Evaluation: expressions: $expr4, actual: $result4, expected: $expectedStr")
+    }
   }
 }

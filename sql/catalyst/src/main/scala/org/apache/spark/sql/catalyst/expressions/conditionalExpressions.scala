@@ -279,21 +279,21 @@ case class CaseWhenCodegen(
       """
     }
 
-    var numIfthen = 0
     var isGlobalVariable = false
-    var generatedCode = if (cases.map(s => s.length).sum <= 1024) {
-      cases.mkString("\nelse {\n")
+    val (generatedIfThenElse, numBrankets) = if (cases.map(s => s.length).sum <= 1024) {
+      (cases.mkString("\nelse {\n"), cases.length - 1)
     } else {
+      var numIfThen = 0
       var code = ""
-      cases.foreach { ifthen =>
-        code += ifthen + "\nelse {\n"
-        numIfthen += 1
+      cases.foreach { ifThen =>
+        code += ifThen + "\nelse {\n"
+        numIfThen += 1
 
         if (code.length > 1024 &&
           // Split these expressions only if they are created from a row object
           (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
           val flag = "flag"
-          code += s" $flag = false;\n" + "}\n" * numIfthen
+          code += s" $flag = false;\n" + "}\n" * numIfThen
           val funcName = ctx.freshName("caseWhenNestedIf")
           val funcBody =
             s"""
@@ -307,12 +307,13 @@ case class CaseWhenCodegen(
           isGlobalVariable = true
 
           code = s"if ($fullFuncName(${ctx.INPUT_ROW})) {\n// do nothing\n} else {\n"
-          numIfthen = 1
+          numIfThen = 1
         }
       }
-      code
+      (code, numIfThen)
     }
 
+    var generatedCode = generatedIfThenElse
     elseValue.foreach { elseExpr =>
       val (resFunc, resIsNull, resValue) = genCodeForExpression(ctx, elseExpr)
       generatedCode += s"""
@@ -322,7 +323,7 @@ case class CaseWhenCodegen(
      """
     }
 
-    generatedCode += "}\n" * numIfthen
+    generatedCode += "}\n" * numBrankets
 
     if (!isGlobalVariable) {
       ev.copy(s"""
