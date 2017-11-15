@@ -29,35 +29,6 @@ class TreeSplitUtilsSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   /**
-   * Iterate over feature values and labels for a specific (node, feature), updating stats
-   * aggregator for the current node.
-   */
-  private[impl] def updateAggregator(
-      statsAggregator: DTStatsAggregator,
-      featureIndex: Int,
-      values: Array[Int],
-      indices: Array[Int],
-      instanceWeights: Array[Double],
-      labels: Array[Double],
-      from: Int,
-      to: Int,
-      featureIndexIdx: Int,
-      featureSplits: Array[Split]): Unit = {
-    val metadata = statsAggregator.metadata
-    from.until(to).foreach { idx =>
-      val rowIndex = indices(idx)
-      if (metadata.isUnordered(featureIndex)) {
-        AggUpdateUtils.updateUnorderedFeature(statsAggregator, values(idx), labels(rowIndex),
-          featureIndex = featureIndex, featureIndexIdx, featureSplits,
-          instanceWeight = instanceWeights(rowIndex))
-      } else {
-        AggUpdateUtils.updateOrderedFeature(statsAggregator, values(idx), labels(rowIndex),
-          featureIndexIdx, instanceWeight = instanceWeights(rowIndex))
-      }
-    }
-  }
-
-  /**
    * Get a DTStatsAggregator for sufficient stat collection/impurity calculation populated
    * with the data from the specified training points.
    */
@@ -71,11 +42,25 @@ class TreeSplitUtilsSuite
 
     val featureIndex = 0
     val statsAggregator = new DTStatsAggregator(metadata, featureSubset = None)
-    val instanceWeights = Array.fill[Double](values.length)(1.0)
     val indices = values.indices.toArray
+    val instanceWeights = Array.fill[Double](values.length)(1.0)
+    // Update parent impurity stats
     AggUpdateUtils.updateParentImpurity(statsAggregator, indices, from, to, instanceWeights, labels)
-    updateAggregator(statsAggregator, featureIndex = 0, values, indices, instanceWeights, labels,
-      from, to, featureIndex, featureSplits)
+    // Update current aggregator's impurity stats
+    from.until(to).foreach { idx =>
+      val rowIndex = indices(idx)
+      if (metadata.isUnordered(featureIndex)) {
+        AggUpdateUtils.updateUnorderedFeature(statsAggregator, values(idx), labels(rowIndex),
+          featureIndex = featureIndex, featureIndexIdx, featureSplits,
+          instanceWeight = 1.0)
+      } else {
+        AggUpdateUtils.updateOrderedFeature(statsAggregator, values(idx), labels(rowIndex),
+          featureIndexIdx, instanceWeight = 1.0)
+      }
+    }
+
+    updateAggregator(statsAggregator, featureIndex = 0, featureIndexIdx = 0, values, indices,
+      labels, from, to, featureSplits)
     statsAggregator
   }
 
