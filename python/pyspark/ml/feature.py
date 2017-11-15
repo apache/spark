@@ -2558,7 +2558,9 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     >>> loadedModel.categoryMaps == model.categoryMaps
     True
     >>> dfWithInvalid = spark.createDataFrame([(Vectors.dense([3.0, 1.0]),)], ["a"])
-    >>> model3 = indexer.setParams(handleInvalid="skip").fit(df)
+    >>> indexer.getHandleInvalid()
+    'error'
+    >>> model3 = indexer.setHandleInvalid("skip").fit(df)
     >>> model3.transform(dfWithInvalid).count()
     0
     >>> model4 = indexer.setParams(handleInvalid="keep", outputCol="indexed").fit(df)
