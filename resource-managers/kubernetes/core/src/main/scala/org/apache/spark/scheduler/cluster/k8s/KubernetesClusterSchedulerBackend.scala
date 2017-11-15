@@ -153,9 +153,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
           } { executorExited =>
             logWarning(s"Removing executor $executorId with loss reason " + executorExited.message)
             removeExecutor(executorId, executorExited)
-            // We keep around executors that have exit conditions caused by the application. This
-            // allows them to be debugged later on. Otherwise, mark them as to be deleted from the
-            // the API server.
+            // We don't delete the pod running the executor that has an exit condition caused by
+            // the application from the Kubernetes API server. This allows users to debug later on
+            // through commands such as "kubectl logs <pod name>" and
+            // "kubectl describe pod <pod name>". Note that exited containers have terminated and
+            // therefore won't take CPU and memory resources.
+            // Otherwise, the executor pod is marked to be deleted from the API server.
             if (executorExited.exitCausedByApp) {
               logInfo(s"Executor $executorId exited because of the application.")
               deleteExecutorFromDataStructures(executorId)
