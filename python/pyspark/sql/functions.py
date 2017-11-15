@@ -2050,7 +2050,6 @@ def map_values(col):
 
 # ---------------------------- User Defined Function ----------------------------------
 
-@since(2.3)
 class PandasUDFType(object):
     """Pandas UDF Types. See :meth:`pyspark.sql.functions.pandas_udf`.
     """
