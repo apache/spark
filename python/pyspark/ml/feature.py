@@ -2577,7 +2577,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
                           "(unseen labels or NULL values). Options are 'skip' (filter out " +
                           "rows with invalid data), 'error' (throw an error), or 'keep' (put " +
                           "invalid data in a special additional bucket, at index numCategories).",
-                      typeConverter=TypeConverters.toString)
+                          typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error"):
