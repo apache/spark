@@ -28,6 +28,7 @@ import org.apache.spark.status.api.v1
 import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.AccumulatorContext
+import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.kvstore.KVStore
 
 /**
@@ -64,6 +65,12 @@ private class LiveJob(
   var completedTasks = 0
   var failedTasks = 0
 
+  // Holds both the stage ID and the task index, packed into a single long value.
+  val completedIndices = new OpenHashSet[Long]()
+
+  var killedTasks = 0
+  var killedSummary: Map[String, Int] = Map()
+
   var skippedTasks = 0
   var skippedStages = Set[Int]()
 
@@ -89,19 +96,23 @@ private class LiveJob(
       completedTasks,
       skippedTasks,
       failedTasks,
+      killedTasks,
+      completedIndices.size,
       activeStages,
       completedStages.size,
       skippedStages.size,
-      failedStages)
+      failedStages,
+      killedSummary)
     new JobDataWrapper(info, skippedStages)
   }
 
 }
 
 private class LiveTask(
-    info: TaskInfo,
+    var info: TaskInfo,
     stageId: Int,
-    stageAttemptId: Int) extends LiveEntity {
+    stageAttemptId: Int,
+    lastUpdateTime: Option[Long]) extends LiveEntity {
 
   import LiveEntityHelpers._
 
@@ -126,6 +137,7 @@ private class LiveTask(
         metrics.resultSerializationTime,
         metrics.memoryBytesSpilled,
         metrics.diskBytesSpilled,
+        metrics.peakExecutionMemory,
         new v1.InputMetrics(
           metrics.inputMetrics.bytesRead,
           metrics.inputMetrics.recordsRead),
@@ -186,6 +198,7 @@ private class LiveTask(
       0L, 0L, 0L,
       metrics.memoryBytesSpilled - old.memoryBytesSpilled,
       metrics.diskBytesSpilled - old.diskBytesSpilled,
+      0L,
       inputDelta,
       outputDelta,
       shuffleReadDelta,
@@ -193,12 +206,19 @@ private class LiveTask(
   }
 
   override protected def doUpdate(): Any = {
+    val duration = if (info.finished) {
+      info.duration
+    } else {
+      info.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis()))
+    }
+
     val task = new v1.TaskData(
       info.taskId,
       info.index,
       info.attemptNumber,
       new Date(info.launchTime),
-      if (info.finished) Some(info.duration) else None,
+      if (info.gettingResult) Some(new Date(info.gettingResultTime)) else None,
+      Some(duration),
       info.executorId,
       info.host,
       info.status,
@@ -340,10 +360,15 @@ private class LiveExecutorStageSummary(
       taskTime,
       failedTasks,
       succeededTasks,
+      killedTasks,
       metrics.inputBytes,
+      metrics.inputRecords,
       metrics.outputBytes,
+      metrics.outputRecords,
       metrics.shuffleReadBytes,
+      metrics.shuffleReadRecords,
       metrics.shuffleWriteBytes,
+      metrics.shuffleWriteRecords,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
@@ -361,11 +386,16 @@ private class LiveStage extends LiveEntity {
   var info: StageInfo = null
   var status = v1.StageStatus.PENDING
 
+  var description: Option[String] = None
   var schedulingPool: String = SparkUI.DEFAULT_POOL_NAME
 
   var activeTasks = 0
   var completedTasks = 0
   var failedTasks = 0
+  val completedIndices = new OpenHashSet[Int]()
+
+  var killedTasks = 0
+  var killedSummary: Map[String, Int] = Map()
 
   var firstLaunchTime = Long.MaxValue
 
@@ -384,15 +414,19 @@ private class LiveStage extends LiveEntity {
       info.stageId,
       info.attemptId,
 
+      info.numTasks,
       activeTasks,
       completedTasks,
       failedTasks,
+      killedTasks,
+      completedIndices.size,
 
       metrics.executorRunTime,
       metrics.executorCpuTime,
       info.submissionTime.map(new Date(_)),
       if (firstLaunchTime < Long.MaxValue) Some(new Date(firstLaunchTime)) else None,
       info.completionTime.map(new Date(_)),
+      info.failureReason,
 
       metrics.inputBytes,
       metrics.inputRecords,
@@ -406,12 +440,15 @@ private class LiveStage extends LiveEntity {
       metrics.diskBytesSpilled,
 
       info.name,
+      description,
       info.details,
       schedulingPool,
 
+      info.rddInfos.map(_.id),
       newAccumulatorInfos(info.accumulables.values),
       None,
-      None)
+      None,
+      killedSummary)
 
     new StageDataWrapper(update, jobIds)
   }
@@ -531,6 +568,16 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
       Some(partitionSeq))
 
     new RDDStorageInfoWrapper(rdd)
+  }
+
+}
+
+private class SchedulerPool(name: String) extends LiveEntity {
+
+  var stageIds = Set[Int]()
+
+  override protected def doUpdate(): Any = {
+    new PoolData(name, stageIds)
   }
 
 }

@@ -73,7 +73,6 @@ trait SharedSparkSession
    * call 'beforeAll'.
    */
   protected def initializeSession(): Unit = {
-    SparkSession.sqlListener.set(null)
     if (_spark == null) {
       _spark = createSparkSession
     }
