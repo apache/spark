@@ -133,12 +133,12 @@ private[ml] object TreeTests extends SparkFunSuite {
 
   /**
    * Returns an array of continuous splits for the feature with index featureIndex and the passed-in
-   * set of values. Creates one continuous split per value in values.
+   * set of threshold. Creates one continuous split per threshold in thresholds.
    */
   private[impl] def getContinuousSplits(
-      values: Array[Int],
+      thresholds: Array[Int],
       featureIndex: Int): Array[Split] = {
-    val splits = values.sorted.map {
+    val splits = thresholds.sorted.map {
       new ContinuousSplit(featureIndex, _).asInstanceOf[Split]
     }
     splits
