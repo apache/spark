@@ -103,7 +103,6 @@ class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
 private[arrow] abstract class ArrowFieldWriter {
 
   def valueVector: ValueVector
-  def valueMutator: ValueVector.Mutator
 
   def name: String = valueVector.getField().getName()
   def dataType: DataType = ArrowUtils.fromArrowField(valueVector.getField())
@@ -124,161 +123,140 @@ private[arrow] abstract class ArrowFieldWriter {
   }
 
   def finish(): Unit = {
-    valueMutator.setValueCount(count)
+    valueVector.setValueCount(count)
   }
 
   def reset(): Unit = {
-    valueMutator.reset()
+    // TODO
+    //valueMutator.reset()
     count = 0
   }
 }
 
 private[arrow] class BooleanWriter(val valueVector: NullableBitVector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableBitVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setSafe(count, if (input.getBoolean(ordinal)) 1 else 0)
+    valueVector.setSafe(count, if (input.getBoolean(ordinal)) 1 else 0)
   }
 }
 
 private[arrow] class ByteWriter(val valueVector: NullableTinyIntVector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableTinyIntVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setSafe(count, input.getByte(ordinal))
+    valueVector.setSafe(count, input.getByte(ordinal))
   }
 }
 
 private[arrow] class ShortWriter(val valueVector: NullableSmallIntVector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableSmallIntVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setSafe(count, input.getShort(ordinal))
+    valueVector.setSafe(count, input.getShort(ordinal))
   }
 }
 
 private[arrow] class IntegerWriter(val valueVector: NullableIntVector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableIntVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setSafe(count, input.getInt(ordinal))
+    valueVector.setSafe(count, input.getInt(ordinal))
   }
 }
 
 private[arrow] class LongWriter(val valueVector: NullableBigIntVector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableBigIntVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setSafe(count, input.getLong(ordinal))
+    valueVector.setSafe(count, input.getLong(ordinal))
   }
 }
 
 private[arrow] class FloatWriter(val valueVector: NullableFloat4Vector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableFloat4Vector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setSafe(count, input.getFloat(ordinal))
+    valueVector.setSafe(count, input.getFloat(ordinal))
   }
 }
 
 private[arrow] class DoubleWriter(val valueVector: NullableFloat8Vector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableFloat8Vector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setSafe(count, input.getDouble(ordinal))
+    valueVector.setSafe(count, input.getDouble(ordinal))
   }
 }
 
 private[arrow] class StringWriter(val valueVector: NullableVarCharVector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableVarCharVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val utf8 = input.getUTF8String(ordinal)
     val utf8ByteBuffer = utf8.getByteBuffer
     // todo: for off-heap UTF8String, how to pass in to arrow without copy?
-    valueMutator.setSafe(count, utf8ByteBuffer, utf8ByteBuffer.position(), utf8.numBytes())
+    valueVector.setSafe(count, utf8ByteBuffer, utf8ByteBuffer.position(), utf8.numBytes())
   }
 }
 
 private[arrow] class BinaryWriter(
     val valueVector: NullableVarBinaryVector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableVarBinaryVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val bytes = input.getBinary(ordinal)
-    valueMutator.setSafe(count, bytes, 0, bytes.length)
+    valueVector.setSafe(count, bytes, 0, bytes.length)
   }
 }
 
 private[arrow] class DateWriter(val valueVector: NullableDateDayVector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableDateDayVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setSafe(count, input.getInt(ordinal))
+    valueVector.setSafe(count, input.getInt(ordinal))
   }
 }
 
 private[arrow] class TimestampWriter(
     val valueVector: NullableTimeStampMicroTZVector) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableTimeStampMicroTZVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setSafe(count, input.getLong(ordinal))
+    valueVector.setSafe(count, input.getLong(ordinal))
   }
 }
 
@@ -286,20 +264,18 @@ private[arrow] class ArrayWriter(
     val valueVector: ListVector,
     val elementWriter: ArrowFieldWriter) extends ArrowFieldWriter {
 
-  override def valueMutator: ListVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val array = input.getArray(ordinal)
     var i = 0
-    valueMutator.startNewValue(count)
+    valueVector.startNewValue(count)
     while (i < array.numElements()) {
       elementWriter.write(array, i)
       i += 1
     }
-    valueMutator.endValue(count, array.numElements())
+    valueVector.endValue(count, array.numElements())
   }
 
   override def finish(): Unit = {
@@ -317,8 +293,6 @@ private[arrow] class StructWriter(
     val valueVector: NullableMapVector,
     children: Array[ArrowFieldWriter]) extends ArrowFieldWriter {
 
-  override def valueMutator: NullableMapVector#Mutator = valueVector.getMutator()
-
   override def setNull(): Unit = {
     var i = 0
     while (i < children.length) {
@@ -326,7 +300,7 @@ private[arrow] class StructWriter(
       children(i).count += 1
       i += 1
     }
-    valueMutator.setNull(count)
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
@@ -336,7 +310,7 @@ private[arrow] class StructWriter(
       children(i).write(struct, i)
       i += 1
     }
-    valueMutator.setIndexDefined(count)
+    valueVector.setIndexDefined(count)
   }
 
   override def finish(): Unit = {
