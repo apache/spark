@@ -66,5 +66,9 @@ function formatTimeMillis(timeMillis) {
 }
 
 function getTimeZone() {
-  return new Date().toString().match(/\(([A-Za-z\s].*)\)/)[1];
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch(ex) {
+    return new Date().toString().match(/\((.*)\)/)[1];
+  }
 }
