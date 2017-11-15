@@ -193,14 +193,30 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 /**
  * A lazily generated row ordering comparator.
  */
-class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
+class LazilyGeneratedOrdering(
+    val ordering: Seq[SortOrder], secondOrdering: => Seq[SortOrder] = Seq.empty)
   extends Ordering[InternalRow] with KryoSerializable {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(ordering.map(BindReferences.bindReference(_, inputSchema)))
 
   @transient
-  private[this] var generatedOrdering = GenerateOrdering.generate(ordering)
+  private[this] var generatedOrdering = {
+    var generatedOrdering = GenerateOrdering.generate(ordering)
+    if (!secondOrdering.isEmpty) {
+      secondOrdering.foreach { order =>
+        try {
+          GenerateOrdering.generate(Seq(order))
+          ordering ++ Seq(order)
+        } catch {
+          // Ignore exception caused by second ordering
+          case _: IllegalArgumentException =>
+        }
+      }
+      generatedOrdering = GenerateOrdering.generate(ordering)
+    }
+    generatedOrdering
+  }
 
   def compare(a: InternalRow, b: InternalRow): Int = {
     generatedOrdering.compare(a, b)

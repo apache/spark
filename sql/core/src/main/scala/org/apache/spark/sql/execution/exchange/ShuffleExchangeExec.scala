@@ -25,7 +25,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BindReferences, SortOrder, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
@@ -218,7 +218,12 @@ object ShuffleExchangeExec {
           val mutablePair = new MutablePair[InternalRow, Null]()
           iter.map(row => mutablePair.update(row.copy(), null))
         }
-        implicit val ordering = new LazilyGeneratedOrdering(sortingExpressions, outputAttributes)
+        val firstOrder = sortingExpressions.map(BindReferences.bindReference(_, outputAttributes))
+        val attributeSet = sortingExpressions.map(_.child).toSet
+        val secondOrder = outputAttributes.filterNot(attributeSet.contains(_))
+          .map(SortOrder.apply(_, Ascending))
+          .map(BindReferences.bindReference(_, outputAttributes))
+        implicit val ordering = new LazilyGeneratedOrdering(firstOrder, secondOrder)
         new RangePartitioner(
           numPartitions,
           rddForSampling,
