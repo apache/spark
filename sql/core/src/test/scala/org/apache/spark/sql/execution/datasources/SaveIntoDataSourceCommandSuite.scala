@@ -26,7 +26,7 @@ class SaveIntoDataSourceCommandSuite extends SharedSQLContext {
   override protected def sparkConf: SparkConf = super.sparkConf
       .set("spark.redaction.regex", "(?i)password|url")
 
-  test("treeString is redacted") {
+  test("simpleString is redacted") {
     val URL = "connection.url"
     val PASS = "123"
     val DRIVER = "mydriver"
