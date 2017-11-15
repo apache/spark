@@ -345,6 +345,8 @@ class ParquetFileFormat
       resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
     val enableRecordFilter: Boolean =
       sparkSession.sessionState.conf.parquetRecordFilterEnabled
+    val timestampConversion =
+      sparkSession.sessionState.conf.getConf(SQLConf.PARQUET_SKIP_TIMESTAMP_CONVERSION)
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
 
@@ -362,6 +364,17 @@ class ParquetFileFormat
           fileSplit.getLength,
           fileSplit.getLocations,
           null)
+
+      val convertTimestamp =
+        if (timestampConversion) {
+          val footer =
+            ParquetFileReader.readFooter(broadcastedHadoopConf.value.value, fileSplit.getPath)
+          val cb = footer.getFileMetaData().getCreatedBy()
+          logWarning(s"${fileSplit.getPath}.cb = $cb")
+          cb.startsWith("parquet-mr")
+        } else {
+          false
+        }
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =

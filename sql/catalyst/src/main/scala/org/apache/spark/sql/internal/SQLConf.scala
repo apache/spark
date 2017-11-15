@@ -291,6 +291,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_SKIP_TIMESTAMP_CONVERSION = buildConf("spark.sql.parquet.skipTimestampConversion")
+    .doc("This controls whether timestamp adjustments should be applied to INT96 data when " +
+      "converting to timestamps, for data written by Impala.  This is necessary because Impala" +
+      "stores INT96 data with a different offset than Hive & Spark.")
+    .booleanConf
+    .createWithDefault(false)
+
   object ParquetOutputTimestampType extends Enumeration {
     val INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
   }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.io.api.{GroupConverter, RecordMaterializer}
 import org.apache.parquet.schema.MessageType
 
@@ -33,11 +34,12 @@ import org.apache.spark.sql.types.StructType
 private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,
     catalystSchema: StructType,
-    schemaConverter: ParquetToSparkSchemaConverter)
+    schemaConverter: ParquetToSparkSchemaConverter,
+    hadoopConf: Configuration)
   extends RecordMaterializer[UnsafeRow] {
 
   private val rootConverter =
-    new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, NoopUpdater)
+    new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, hadoopConf, NoopUpdater)
 
   override def getCurrentRecord: UnsafeRow = rootConverter.currentRecord
 

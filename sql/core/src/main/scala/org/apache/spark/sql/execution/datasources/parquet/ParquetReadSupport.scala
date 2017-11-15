@@ -95,7 +95,8 @@ private[parquet] class ParquetReadSupport extends ReadSupport[UnsafeRow] with Lo
     new ParquetRecordMaterializer(
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
-      new ParquetToSparkSchemaConverter(conf))
+      new ParquetToSparkSchemaConverter(conf),
+      conf)
   }
 }
 
