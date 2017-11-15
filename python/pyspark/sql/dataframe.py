@@ -130,6 +130,8 @@ class DataFrame(object):
 
         .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
         """
+        warnings.warn(
+            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
         self._jdf.createOrReplaceTempView(name)
 
     @since(2.0)
@@ -1038,9 +1040,9 @@ class DataFrame(object):
         |   mean|               3.5| null|
         | stddev|2.1213203435596424| null|
         |    min|                 2|Alice|
-        |    25%|               5.0| null|
-        |    50%|               5.0| null|
-        |    75%|               5.0| null|
+        |    25%|                 2| null|
+        |    50%|                 2| null|
+        |    75%|                 5| null|
         |    max|                 5|  Bob|
         +-------+------------------+-----+
 
@@ -1050,8 +1052,8 @@ class DataFrame(object):
         +-------+---+-----+
         |  count|  2|    2|
         |    min|  2|Alice|
-        |    25%|5.0| null|
-        |    75%|5.0| null|
+        |    25%|  2| null|
+        |    75%|  5| null|
         |    max|  5|  Bob|
         +-------+---+-----+
 
@@ -1227,7 +1229,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.4)
     def rollup(self, *cols):
@@ -1248,7 +1250,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.rollup(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.4)
     def cube(self, *cols):
@@ -1271,7 +1273,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.cube(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.3)
     def agg(self, *exprs):
@@ -1308,6 +1310,7 @@ class DataFrame(object):
 
         .. note:: Deprecated in 2.0, use :func:`union` instead.
         """
+        warnings.warn("Deprecated in 2.0, use union instead.", DeprecationWarning)
         return self.union(other)
 
     @since(2.3)
@@ -1878,18 +1881,20 @@ class DataFrame(object):
         1    5    Bob
         """
         import pandas as pd
-        if self.sql_ctx.getConf("spark.sql.execution.arrow.enable", "false").lower() == "true":
+        if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
+                from pyspark.sql.types import _check_dataframe_localize_timestamps
                 import pyarrow
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)
-                    return table.to_pandas()
+                    pdf = table.to_pandas()
+                    return _check_dataframe_localize_timestamps(pdf)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
             except ImportError as e:
                 msg = "note: pyarrow must be installed and available on calling Python process " \
-                      "if using spark.sql.execution.arrow.enable=true"
+                      "if using spark.sql.execution.arrow.enabled=true"
                 raise ImportError("%s\n%s" % (e.message, msg))
         else:
             pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
@@ -1952,6 +1957,7 @@ def _to_corrected_pandas_type(dt):
     """
     When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
     This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
+    NOTE: DateType is inferred incorrectly as 'object', TimestampType is correct with datetime64[ns]
     """
     import numpy as np
     if type(dt) == ByteType:
@@ -1962,6 +1968,8 @@ def _to_corrected_pandas_type(dt):
         return np.int32
     elif type(dt) == FloatType:
         return np.float32
+    elif type(dt) == DateType:
+        return 'datetime64[ns]'
     else:
         return None
 

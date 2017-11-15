@@ -38,7 +38,8 @@ NULL
 #'
 #' Date time functions defined for \code{Column}.
 #'
-#' @param x Column to compute on. In \code{window}, it must be a time Column of \code{TimestampType}.
+#' @param x Column to compute on. In \code{window}, it must be a time Column of
+#'          \code{TimestampType}.
 #' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
 #'               Column \code{x} to DateType or TimestampType. For \code{trunc}, it is the string
 #'               to use to specify the truncation method. For example, "year", "yyyy", "yy" for
@@ -90,8 +91,8 @@ NULL
 #'
 #' Math functions defined for \code{Column}.
 #'
-#' @param x Column to compute on. In \code{shiftLeft}, \code{shiftRight} and \code{shiftRightUnsigned},
-#'          this is the number of bits to shift.
+#' @param x Column to compute on. In \code{shiftLeft}, \code{shiftRight} and
+#'          \code{shiftRightUnsigned}, this is the number of bits to shift.
 #' @param y Column to compute on.
 #' @param ... additional argument(s).
 #' @name column_math_functions
@@ -480,7 +481,7 @@ setMethod("ceiling",
 setMethod("coalesce",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -676,7 +677,7 @@ setMethod("crc32",
 setMethod("hash",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -695,7 +696,7 @@ setMethod("hash",
 #'
 #' \dontrun{
 #' head(select(df, df$time, year(df$time), quarter(df$time), month(df$time),
-#'            dayofmonth(df$time), dayofyear(df$time), weekofyear(df$time)))
+#'             dayofmonth(df$time), dayofweek(df$time), dayofyear(df$time), weekofyear(df$time)))
 #' head(agg(groupBy(df, year(df$time)), count(df$y), avg(df$y)))
 #' head(agg(groupBy(df, month(df$time)), avg(df$y)))}
 #' @note dayofmonth since 1.5.0
@@ -703,6 +704,21 @@ setMethod("dayofmonth",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "dayofmonth", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{dayofweek}: Extracts the day of the week as an integer from a
+#' given date/timestamp/string.
+#'
+#' @rdname column_datetime_functions
+#' @aliases dayofweek dayofweek,Column-method
+#' @export
+#' @note dayofweek since 2.3.0
+setMethod("dayofweek",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "dayofweek", x@jc)
             column(jc)
           })
 
@@ -1310,9 +1326,9 @@ setMethod("round",
 #' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
 #' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
-#' @param scale round to \code{scale} digits to the right of the decimal point when \code{scale} > 0,
-#'        the nearest even number when \code{scale} = 0, and \code{scale} digits to the left
-#'        of the decimal point when \code{scale} < 0.
+#' @param scale round to \code{scale} digits to the right of the decimal point when
+#'        \code{scale} > 0, the nearest even number when \code{scale} = 0, and \code{scale} digits
+#'        to the left of the decimal point when \code{scale} < 0.
 #' @rdname column_math_functions
 #' @aliases bround bround,Column-method
 #' @export
@@ -2005,8 +2021,9 @@ setMethod("months_between", signature(y = "Column"),
           })
 
 #' @details
-#' \code{nanvl}: Returns the first column (\code{y}) if it is not NaN, or the second column (\code{x}) if
-#' the first column is NaN. Both inputs should be floating point columns (DoubleType or FloatType).
+#' \code{nanvl}: Returns the first column (\code{y}) if it is not NaN, or the second column
+#' (\code{x}) if the first column is NaN. Both inputs should be floating point columns
+#' (DoubleType or FloatType).
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases nanvl nanvl,Column-method
@@ -2061,7 +2078,7 @@ setMethod("approxCountDistinct",
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(...), function (x) {
+            jcols <- lapply(list(...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -2090,7 +2107,7 @@ setMethod("countDistinct",
 setMethod("concat",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -2110,7 +2127,7 @@ setMethod("greatest",
           signature(x = "Column"),
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -2130,7 +2147,7 @@ setMethod("least",
           signature(x = "Column"),
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -2406,8 +2423,8 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRight}: (Signed) shifts the given value numBits right. If the given value is a long value,
-#' it will return a long value else it will return an integer value.
+#' \code{shiftRight}: (Signed) shifts the given value numBits right. If the given value is a long
+#' value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
 #' @aliases shiftRight shiftRight,Column,numeric-method
@@ -2505,9 +2522,10 @@ setMethod("format_string", signature(format = "character", x = "Column"),
           })
 
 #' @details
-#' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a
-#' string representing the timestamp of that moment in the current system time zone in the JVM in the
-#' given format. See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC)
+#' to a string representing the timestamp of that moment in the current system time zone in the JVM
+#' in the given format.
+#' See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
 #' Customizing Formats} for available options.
 #'
 #' @rdname column_datetime_functions
@@ -2634,8 +2652,8 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
           })
 
 #' @details
-#' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.) samples
-#' from U[0.0, 1.0].
+#' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
+#' samples from U[0.0, 1.0].
 #'
 #' @rdname column_nonaggregate_functions
 #' @param seed a random seed. Can be missing.
@@ -2664,8 +2682,8 @@ setMethod("rand", signature(seed = "numeric"),
           })
 
 #' @details
-#' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples from
-#' the standard normal distribution.
+#' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples
+#' from the standard normal distribution.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases randn randn,missing-method
@@ -2831,8 +2849,8 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
           })
 
 #' @details
-#' \code{when}: Evaluates a list of conditions and returns one of multiple possible result expressions.
-#' For unmatched expressions null is returned.
+#' \code{when}: Evaluates a list of conditions and returns one of multiple possible result
+#' expressions. For unmatched expressions null is returned.
 #'
 #' @rdname column_nonaggregate_functions
 #' @param condition the condition to test on. Must be a Column expression.
@@ -2859,8 +2877,8 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
           })
 
 #' @details
-#' \code{ifelse}: Evaluates a list of conditions and returns \code{yes} if the conditions are satisfied.
-#' Otherwise \code{no} is returned for unmatched conditions.
+#' \code{ifelse}: Evaluates a list of conditions and returns \code{yes} if the conditions are
+#' satisfied. Otherwise \code{no} is returned for unmatched conditions.
 #'
 #' @rdname column_nonaggregate_functions
 #' @param test a Column expression that describes the condition.
@@ -2990,7 +3008,8 @@ setMethod("ntile",
           })
 
 #' @details
-#' \code{percent_rank}: Returns the relative rank (i.e. percentile) of rows within a window partition.
+#' \code{percent_rank}: Returns the relative rank (i.e. percentile) of rows within a window
+#' partition.
 #' This is computed by: (rank of row in its partition - 1) / (number of rows in the partition - 1).
 #' This is equivalent to the \code{PERCENT_RANK} function in SQL.
 #' The method should be used with no argument.
@@ -3160,7 +3179,8 @@ setMethod("posexplode",
           })
 
 #' @details
-#' \code{create_array}: Creates a new array column. The input columns must all have the same data type.
+#' \code{create_array}: Creates a new array column. The input columns must all have the same data
+#' type.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases create_array create_array,Column-method
@@ -3169,7 +3189,7 @@ setMethod("posexplode",
 setMethod("create_array",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -3178,8 +3198,8 @@ setMethod("create_array",
           })
 
 #' @details
-#' \code{create_map}: Creates a new map column. The input columns must be grouped as key-value pairs,
-#' e.g. (key1, value1, key2, value2, ...).
+#' \code{create_map}: Creates a new map column. The input columns must be grouped as key-value
+#' pairs, e.g. (key1, value1, key2, value2, ...).
 #' The key columns must all have the same data type, and can't be null.
 #' The value columns must all have the same data type.
 #'
@@ -3190,7 +3210,7 @@ setMethod("create_array",
 setMethod("create_map",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -3352,9 +3372,9 @@ setMethod("not",
           })
 
 #' @details
-#' \code{grouping_bit}: Indicates whether a specified column in a GROUP BY list is aggregated or not,
-#' returns 1 for aggregated or 0 for not aggregated in the result set. Same as \code{GROUPING} in SQL
-#' and \code{grouping} function in Scala.
+#' \code{grouping_bit}: Indicates whether a specified column in a GROUP BY list is aggregated or
+#' not, returns 1 for aggregated or 0 for not aggregated in the result set. Same as \code{GROUPING}
+#' in SQL and \code{grouping} function in Scala.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases grouping_bit grouping_bit,Column-method
@@ -3412,7 +3432,7 @@ setMethod("grouping_bit",
 setMethod("grouping_id",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })

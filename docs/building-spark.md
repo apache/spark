@@ -100,6 +100,13 @@ Note: Kafka 0.8 support is deprecated as of Spark 2.3.0.
 
 Kafka 0.10 support is still automatically built.
 
+## Building with Flume support
+
+Apache Flume support must be explicitly enabled with the `flume` profile.
+Note: Flume support is deprecated as of Spark 2.3.0.
+
+    ./build/mvn -Pflume -DskipTests clean package
+
 ## Building submodules individually
 
 It's possible to build Spark sub-modules using the `mvn -pl` option.

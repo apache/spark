@@ -625,7 +625,7 @@ public class SparkLauncher {
     @Override
     protected boolean handle(String opt, String value) {
       if (value == null && hasValue) {
-        throw new IllegalArgumentException(String.format("'%s' does not expect a value.", opt));
+        throw new IllegalArgumentException(String.format("'%s' expects a value.", opt));
       }
       return true;
     }

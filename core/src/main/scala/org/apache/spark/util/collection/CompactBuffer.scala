@@ -19,6 +19,8 @@ package org.apache.spark.util.collection
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.unsafe.array.ByteArrayMethods
+
 /**
  * An append-only buffer similar to ArrayBuffer, but more memory-efficient for small buffers.
  * ArrayBuffer always allocates an Object array to store the data, with 16 entries by default,
@@ -126,16 +128,16 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
 
   /** Increase our size to newSize and grow the backing array if needed. */
   private def growToSize(newSize: Int): Unit = {
-    // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat
-    // smaller. Be conservative and lower the cap a little.
-    val arrayMax = Int.MaxValue - 8
-    if (newSize < 0 || newSize - 2 > arrayMax) {
+    // since two fields are hold in element0 and element1, an array holds newSize - 2 elements
+    val newArraySize = newSize - 2
+    val arrayMax = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+    if (newSize < 0 || newArraySize > arrayMax) {
       throw new UnsupportedOperationException(s"Can't grow buffer past $arrayMax elements")
     }
-    val capacity = if (otherElements != null) otherElements.length + 2 else 2
-    if (newSize > capacity) {
+    val capacity = if (otherElements != null) otherElements.length else 0
+    if (newArraySize > capacity) {
       var newArrayLen = 8L
-      while (newSize - 2 > newArrayLen) {
+      while (newArraySize > newArrayLen) {
         newArrayLen *= 2
       }
       if (newArrayLen > arrayMax) {

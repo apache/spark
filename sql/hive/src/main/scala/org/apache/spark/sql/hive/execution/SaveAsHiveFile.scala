@@ -33,7 +33,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -47,7 +47,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
   protected def saveAsHiveFile(
       sparkSession: SparkSession,
-      plan: SparkPlan,
+      queryExecution: QueryExecution,
       hadoopConf: Configuration,
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
@@ -75,7 +75,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
     FileFormatWriter.write(
       sparkSession = sparkSession,
-      plan = plan,
+      queryExecution = queryExecution,
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
       outputSpec = FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations),

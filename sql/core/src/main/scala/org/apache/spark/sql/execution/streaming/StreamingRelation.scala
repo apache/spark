@@ -44,6 +44,14 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
   extends LeafNode {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
+
+  // There's no sensible value here. On the execution path, this relation will be
+  // swapped out with microbatches. But some dataframe operations (in particular explain) do lead
+  // to this node surviving analysis. So we satisfy the LeafNode contract with the session default
+  // value.
+  override def computeStats(): Statistics = Statistics(
+    sizeInBytes = BigInt(dataSource.sparkSession.sessionState.conf.defaultSizeInBytes)
+  )
 }
 
 /**

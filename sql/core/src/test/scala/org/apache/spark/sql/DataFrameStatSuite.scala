@@ -141,7 +141,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
   test("approximate quantile") {
     val n = 1000
-    val df = Seq.tabulate(n)(i => (i, 2.0 * i)).toDF("singles", "doubles")
+    val df = Seq.tabulate(n + 1)(i => (i, 2.0 * i)).toDF("singles", "doubles")
 
     val q1 = 0.5
     val q2 = 0.8

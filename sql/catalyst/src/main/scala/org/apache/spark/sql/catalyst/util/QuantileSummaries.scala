@@ -193,10 +193,10 @@ class QuantileSummaries(
 
     // Target rank
     val rank = math.ceil(quantile * count).toInt
-    val targetError = math.ceil(relativeError * count)
+    val targetError = relativeError * count
     // Minimum rank at current sample
     var minRank = 0
-    var i = 1
+    var i = 0
     while (i < sampled.length - 1) {
       val curSample = sampled(i)
       minRank += curSample.g

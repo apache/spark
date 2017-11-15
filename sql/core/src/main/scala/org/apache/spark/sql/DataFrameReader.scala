@@ -184,7 +184,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val cls = DataSource.lookupDataSource(source)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val dataSource = cls.newInstance()
       val options = new DataSourceV2Options(extraOptions.asJava)
 
       val reader = (cls.newInstance(), userSpecifiedSchema) match {
@@ -194,8 +193,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case (ds: ReadSupport, None) =>
           ds.createReader(options)
 
-        case (_: ReadSupportWithSchema, None) =>
-          throw new AnalysisException(s"A schema needs to be specified when using $dataSource.")
+        case (ds: ReadSupportWithSchema, None) =>
+          throw new AnalysisException(s"A schema needs to be specified when using $ds.")
 
         case (ds: ReadSupport, Some(schema)) =>
           val reader = ds.createReader(options)

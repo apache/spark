@@ -21,10 +21,14 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import scala.collection.JavaConverters._
+
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
@@ -771,6 +775,33 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "parquet", c0, c1, src)
           checkReadPartitionColumnDuplication("parquet", c0, c1, src)
+        }
+      }
+    }
+  }
+
+  test("use Spark jobs to list files") {
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
+      withTempDir { dir =>
+        val jobDescriptions = new ConcurrentLinkedQueue[String]()
+        val jobListener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobDescriptions.add(jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+          }
+        }
+        sparkContext.addSparkListener(jobListener)
+        try {
+          spark.range(0, 3).map(i => (i, i))
+            .write.partitionBy("_1").mode("overwrite").parquet(dir.getCanonicalPath)
+          // normal file paths
+          checkDatasetUnorderly(
+            spark.read.parquet(dir.getCanonicalPath).as[(Long, Long)],
+            0L -> 0L, 1L -> 1L, 2L -> 2L)
+          sparkContext.listenerBus.waitUntilEmpty(10000)
+          assert(jobDescriptions.asScala.toList.exists(
+            _.contains("Listing leaf files and directories for 3 paths")))
+        } finally {
+          sparkContext.removeSparkListener(jobListener)
         }
       }
     }

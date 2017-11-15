@@ -35,8 +35,7 @@ private[sql] object OrcFileFormat {
     }
   }
 
-  def checkFieldNames(schema: StructType): StructType = {
-    schema.fieldNames.foreach(checkFieldName)
-    schema
+  def checkFieldNames(names: Seq[String]): Unit = {
+    names.foreach(checkFieldName)
   }
 }

@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -57,6 +58,24 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNotNulls(0, capacity);
       anyNullsSet = false;
     }
+  }
+
+  @Override
+  public void close() {
+    if (childColumns != null) {
+      for (int i = 0; i < childColumns.length; i++) {
+        childColumns[i].close();
+        childColumns[i] = null;
+      }
+      childColumns = null;
+    }
+    if (dictionaryIds != null) {
+      dictionaryIds.close();
+      dictionaryIds = null;
+    }
+    dictionary = null;
+    resultStruct = null;
+    resultArray = null;
   }
 
   public void reserve(int requiredCapacity) {
@@ -95,138 +114,156 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected abstract void reserveInternal(int capacity);
 
   /**
-   * Sets the value at rowId to null/not null.
+   * Sets null/not null to the value at rowId.
    */
   public abstract void putNotNull(int rowId);
   public abstract void putNull(int rowId);
 
   /**
-   * Sets the values from [rowId, rowId + count) to null/not null.
+   * Sets null/not null to the values at [rowId, rowId + count).
    */
   public abstract void putNulls(int rowId, int count);
   public abstract void putNotNulls(int rowId, int count);
 
   /**
-   * Sets the value at rowId to `value`.
+   * Sets `value` to the value at rowId.
    */
   public abstract void putBoolean(int rowId, boolean value);
 
   /**
-   * Sets values from [rowId, rowId + count) to value.
+   * Sets value to [rowId, rowId + count).
    */
   public abstract void putBooleans(int rowId, int count, boolean value);
 
   /**
-   * Sets the value at rowId to `value`.
+   * Sets `value` to the value at rowId.
    */
   public abstract void putByte(int rowId, byte value);
 
   /**
-   * Sets values from [rowId, rowId + count) to value.
+   * Sets value to [rowId, rowId + count).
    */
   public abstract void putBytes(int rowId, int count, byte value);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
    */
   public abstract void putBytes(int rowId, int count, byte[] src, int srcIndex);
 
   /**
-   * Sets the value at rowId to `value`.
+   * Sets `value` to the value at rowId.
    */
   public abstract void putShort(int rowId, short value);
 
   /**
-   * Sets values from [rowId, rowId + count) to value.
+   * Sets value to [rowId, rowId + count).
    */
   public abstract void putShorts(int rowId, int count, short value);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
    */
   public abstract void putShorts(int rowId, int count, short[] src, int srcIndex);
 
   /**
-   * Sets the value at rowId to `value`.
+   * Sets values from [src[srcIndex], src[srcIndex + count * 2]) to [rowId, rowId + count)
+   * The data in src must be 2-byte platform native endian shorts.
+   */
+  public abstract void putShorts(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
+   * Sets `value` to the value at rowId.
    */
   public abstract void putInt(int rowId, int value);
 
   /**
-   * Sets values from [rowId, rowId + count) to value.
+   * Sets value to [rowId, rowId + count).
    */
   public abstract void putInts(int rowId, int count, int value);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
    */
   public abstract void putInts(int rowId, int count, int[] src, int srcIndex);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
+   * Sets values from [src[srcIndex], src[srcIndex + count * 4]) to [rowId, rowId + count)
+   * The data in src must be 4-byte platform native endian ints.
+   */
+  public abstract void putInts(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
+   * Sets values from [src[srcIndex], src[srcIndex + count * 4]) to [rowId, rowId + count)
    * The data in src must be 4-byte little endian ints.
    */
   public abstract void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex);
 
   /**
-   * Sets the value at rowId to `value`.
+   * Sets `value` to the value at rowId.
    */
   public abstract void putLong(int rowId, long value);
 
   /**
-   * Sets values from [rowId, rowId + count) to value.
+   * Sets value to [rowId, rowId + count).
    */
   public abstract void putLongs(int rowId, int count, long value);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
    */
   public abstract void putLongs(int rowId, int count, long[] src, int srcIndex);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
+   * Sets values from [src[srcIndex], src[srcIndex + count * 8]) to [rowId, rowId + count)
+   * The data in src must be 8-byte platform native endian longs.
+   */
+  public abstract void putLongs(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
+   * Sets values from [src + srcIndex, src + srcIndex + count * 8) to [rowId, rowId + count)
    * The data in src must be 8-byte little endian longs.
    */
   public abstract void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex);
 
   /**
-   * Sets the value at rowId to `value`.
+   * Sets `value` to the value at rowId.
    */
   public abstract void putFloat(int rowId, float value);
 
   /**
-   * Sets values from [rowId, rowId + count) to value.
+   * Sets value to [rowId, rowId + count).
    */
   public abstract void putFloats(int rowId, int count, float value);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
    */
   public abstract void putFloats(int rowId, int count, float[] src, int srcIndex);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
-   * The data in src must be ieee formatted floats.
+   * Sets values from [src[srcIndex], src[srcIndex + count * 4]) to [rowId, rowId + count)
+   * The data in src must be ieee formatted floats in platform native endian.
    */
   public abstract void putFloats(int rowId, int count, byte[] src, int srcIndex);
 
   /**
-   * Sets the value at rowId to `value`.
+   * Sets `value` to the value at rowId.
    */
   public abstract void putDouble(int rowId, double value);
 
   /**
-   * Sets values from [rowId, rowId + count) to value.
+   * Sets value to [rowId, rowId + count).
    */
   public abstract void putDoubles(int rowId, int count, double value);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
    */
   public abstract void putDoubles(int rowId, int count, double[] src, int srcIndex);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
-   * The data in src must be ieee formatted doubles.
+   * Sets values from [src[srcIndex], src[srcIndex + count * 8]) to [rowId, rowId + count)
+   * The data in src must be ieee formatted doubles in platform native endian.
    */
   public abstract void putDoubles(int rowId, int count, byte[] src, int srcIndex);
 
@@ -236,7 +273,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putArray(int rowId, int offset, int length);
 
   /**
-   * Sets the value at rowId to `value`.
+   * Sets values from [value + offset, value + offset + count) to the values at rowId.
    */
   public abstract int putByteArray(int rowId, byte[] value, int offset, int count);
   public final int putByteArray(int rowId, byte[] value) {
@@ -559,7 +596,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Upper limit for the maximum capacity for this column.
    */
   @VisibleForTesting
-  protected int MAX_CAPACITY = Integer.MAX_VALUE - 8;
+  protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.

@@ -59,6 +59,7 @@ object GradientBoostedTreeClassifierExample {
       .setLabelCol("indexedLabel")
       .setFeaturesCol("indexedFeatures")
       .setMaxIter(10)
+      .setFeatureSubsetStrategy("auto")
 
     // Convert indexed labels back to original labels.
     val labelConverter = new IndexToString()

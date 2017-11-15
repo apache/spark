@@ -74,7 +74,7 @@ GIT_REF=${GIT_REF:-master}
 # Destination directory parent on remote server
 REMOTE_PARENT_DIR=${REMOTE_PARENT_DIR:-/home/$ASF_USERNAME/public_html}
 
-GPG="gpg --no-tty --batch"
+GPG="gpg -u $GPG_KEY --no-tty --batch"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
@@ -84,9 +84,9 @@ MVN="build/mvn --force"
 # Hive-specific profiles for some builds
 HIVE_PROFILES="-Phive -Phive-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
-PUBLISH_PROFILES="-Pmesos -Pyarn $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
+PUBLISH_PROFILES="-Pmesos -Pyarn -Pflume $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
 # Profiles for building binary releases
-BASE_RELEASE_PROFILES="-Pmesos -Pyarn -Psparkr"
+BASE_RELEASE_PROFILES="-Pmesos -Pyarn -Pflume -Psparkr"
 # Scala 2.11 only profiles for some builds
 SCALA_2_11_PROFILES="-Pkafka-0-8"
 # Scala 2.12 only profiles for some builds
@@ -125,11 +125,18 @@ else
       echo "Please set JAVA_HOME correctly."
       exit 1
     else
-      JAVA_HOME="$JAVA_7_HOME"
+      export JAVA_HOME="$JAVA_7_HOME"
     fi
   fi
 fi
 
+# This is a band-aid fix to avoid the failure of Maven nightly snapshot in some Jenkins
+# machines by explicitly calling /usr/sbin/lsof. Please see SPARK-22377 and the discussion
+# in its pull request.
+LSOF=lsof
+if ! hash $LSOF 2>/dev/null; then
+  LSOF=/usr/sbin/lsof
+fi
 
 if [ -z "$SPARK_PACKAGE_VERSION" ]; then
   SPARK_PACKAGE_VERSION="${SPARK_VERSION}-$(date +%Y_%m_%d_%H_%M)-${git_hash}"
@@ -140,7 +147,7 @@ DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 function LFTP {
   SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
   COMMANDS=$(cat <<EOF
-     set net:max-retries 1 &&
+     set net:max-retries 2 &&
      set sftp:connect-program $SSH &&
      connect -u $ASF_USERNAME,p sftp://home.apache.org &&
      $@
@@ -345,7 +352,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   #  -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
 
   # Clean-up Zinc nailgun process
-  /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   rm $tmp_settings
   cd ..
@@ -353,8 +360,6 @@ if [[ "$1" == "publish-snapshot" ]]; then
 fi
 
 if [[ "$1" == "publish-release" ]]; then
-  SPARK_VERSION=$SPARK_PACKAGE_VERSION
-
   cd spark
   # Publish Spark to Maven release repo
   echo "Publishing Spark checkout at '$GIT_REF' ($git_hash)"
@@ -384,7 +389,7 @@ if [[ "$1" == "publish-release" ]]; then
   #  -DskipTests $SCALA_2_12_PROFILES §$PUBLISH_PROFILES clean install
 
   # Clean-up Zinc nailgun process
-  /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   #./dev/change-scala-version.sh 2.11
 

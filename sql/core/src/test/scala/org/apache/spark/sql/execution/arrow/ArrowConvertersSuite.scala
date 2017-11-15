@@ -32,6 +32,8 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -793,6 +795,103 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     collectAndValidate(df, json, "binaryData.json")
   }
 
+  test("date type conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "date",
+         |      "type" : {
+         |        "name" : "date",
+         |        "unit" : "DAY"
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        }, {
+         |          "type" : "DATA",
+         |          "typeBitWidth" : 32
+         |        } ]
+         |      }
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 4,
+         |    "columns" : [ {
+         |      "name" : "date",
+         |      "count" : 4,
+         |      "VALIDITY" : [ 1, 1, 1, 1 ],
+         |      "DATA" : [ -1, 0, 16533, 382607 ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val d1 = DateTimeUtils.toJavaDate(-1)  // "1969-12-31"
+    val d2 = DateTimeUtils.toJavaDate(0)  // "1970-01-01"
+    val d3 = Date.valueOf("2015-04-08")
+    val d4 = Date.valueOf("3017-07-18")
+
+    val df = Seq(d1, d2, d3, d4).toDF("date")
+
+    collectAndValidate(df, json, "dateData.json")
+  }
+
+  test("timestamp type conversion") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      val json =
+        s"""
+           |{
+           |  "schema" : {
+           |    "fields" : [ {
+           |      "name" : "timestamp",
+           |      "type" : {
+           |        "name" : "timestamp",
+           |        "unit" : "MICROSECOND",
+           |        "timezone" : "America/Los_Angeles"
+           |      },
+           |      "nullable" : true,
+           |      "children" : [ ],
+           |      "typeLayout" : {
+           |        "vectors" : [ {
+           |          "type" : "VALIDITY",
+           |          "typeBitWidth" : 1
+           |        }, {
+           |          "type" : "DATA",
+           |          "typeBitWidth" : 64
+           |        } ]
+           |      }
+           |    } ]
+           |  },
+           |  "batches" : [ {
+           |    "count" : 4,
+           |    "columns" : [ {
+           |      "name" : "timestamp",
+           |      "count" : 4,
+           |      "VALIDITY" : [ 1, 1, 1, 1 ],
+           |      "DATA" : [ -1234, 0, 1365383415567000, 33057298500000000 ]
+           |    } ]
+           |  } ]
+           |}
+         """.stripMargin
+
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
+      val ts1 = DateTimeUtils.toJavaTimestamp(-1234L)
+      val ts2 = DateTimeUtils.toJavaTimestamp(0L)
+      val ts3 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
+      val ts4 = new Timestamp(sdf.parse("3017-07-18 14:55:00.000 UTC").getTime)
+      val data = Seq(ts1, ts2, ts3, ts4)
+
+      val df = data.toDF("timestamp")
+
+      collectAndValidate(df, json, "timestampData.json", "America/Los_Angeles")
+    }
+  }
+
   test("floating-point NaN") {
     val json =
       s"""
@@ -1486,15 +1585,6 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     runUnsupported { decimalData.toArrowPayload.collect() }
     runUnsupported { mapData.toDF().toArrowPayload.collect() }
     runUnsupported { complexData.toArrowPayload.collect() }
-
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val d1 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
-    val d2 = new Date(sdf.parse("2016-05-09 13:10:15.000 UTC").getTime)
-    runUnsupported { Seq(d1, d2).toDF("date").toArrowPayload.collect() }
-
-    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
-    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
-    runUnsupported { Seq(ts1, ts2).toDF("timestamp").toArrowPayload.collect() }
   }
 
   test("test Arrow Validator") {
@@ -1638,7 +1728,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
 
     val ctx = TaskContext.empty()
-    val payloadIter = ArrowConverters.toPayloadIterator(inputRows.toIterator, schema, 0, ctx)
+    val payloadIter = ArrowConverters.toPayloadIterator(inputRows.toIterator, schema, 0, null, ctx)
     val outputRowIter = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
 
     assert(schema.equals(outputRowIter.schema))
@@ -1657,22 +1747,24 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   }
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
-  private def collectAndValidate(df: DataFrame, json: String, file: String): Unit = {
+  private def collectAndValidate(
+      df: DataFrame, json: String, file: String, timeZoneId: String = null): Unit = {
     // NOTE: coalesce to single partition because can only load 1 batch in validator
     val arrowPayload = df.coalesce(1).toArrowPayload.collect().head
     val tempFile = new File(tempDataPath, file)
     Files.write(json, tempFile, StandardCharsets.UTF_8)
-    validateConversion(df.schema, arrowPayload, tempFile)
+    validateConversion(df.schema, arrowPayload, tempFile, timeZoneId)
   }
 
   private def validateConversion(
       sparkSchema: StructType,
       arrowPayload: ArrowPayload,
-      jsonFile: File): Unit = {
+      jsonFile: File,
+      timeZoneId: String = null): Unit = {
     val allocator = new RootAllocator(Long.MaxValue)
     val jsonReader = new JsonFileReader(jsonFile, allocator)
 
-    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema)
+    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, timeZoneId)
     val jsonSchema = jsonReader.start()
     Validator.compareSchemas(arrowSchema, jsonSchema)
 

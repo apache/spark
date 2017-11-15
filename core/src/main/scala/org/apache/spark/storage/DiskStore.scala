@@ -47,9 +47,9 @@ private[spark] class DiskStore(
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
   private val maxMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests",
     Int.MaxValue.toString)
-  private val blockSizes = new ConcurrentHashMap[String, Long]()
+  private val blockSizes = new ConcurrentHashMap[BlockId, Long]()
 
-  def getSize(blockId: BlockId): Long = blockSizes.get(blockId.name)
+  def getSize(blockId: BlockId): Long = blockSizes.get(blockId)
 
   /**
    * Invokes the provided callback function to write the specific block.
@@ -67,7 +67,7 @@ private[spark] class DiskStore(
     var threwException: Boolean = true
     try {
       writeFunc(out)
-      blockSizes.put(blockId.name, out.getCount)
+      blockSizes.put(blockId, out.getCount)
       threwException = false
     } finally {
       try {
@@ -113,7 +113,7 @@ private[spark] class DiskStore(
   }
 
   def remove(blockId: BlockId): Boolean = {
-    blockSizes.remove(blockId.name)
+    blockSizes.remove(blockId)
     val file = diskManager.getFile(blockId.name)
     if (file.exists()) {
       val ret = file.delete()

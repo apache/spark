@@ -16,25 +16,22 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util.NoSuchElementException
 import javax.ws.rs.{GET, PathParam, Produces}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.ui.jobs.UIData.JobUIData
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class OneJobResource(ui: SparkUI) {
 
   @GET
   def oneJob(@PathParam("jobId") jobId: Int): JobData = {
-    val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
-      AllJobsResource.getStatusToJobs(ui)
-    val jobOpt = statusToJobs.flatMap(_._2).find { jobInfo => jobInfo.jobId == jobId}
-    jobOpt.map { job =>
-      AllJobsResource.convertJobData(job, ui.jobProgressListener, false)
-    }.getOrElse {
-      throw new NotFoundException("unknown job: " + jobId)
+    try {
+      ui.store.job(jobId)
+    } catch {
+      case _: NoSuchElementException =>
+        throw new NotFoundException("unknown job: " + jobId)
     }
   }
 

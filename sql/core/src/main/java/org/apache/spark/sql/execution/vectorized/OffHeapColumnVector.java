@@ -85,6 +85,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void close() {
+    super.close();
     Platform.freeMemory(nulls);
     Platform.freeMemory(data);
     Platform.freeMemory(lengthData);
@@ -228,6 +229,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  public void putShorts(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 2, count * 2);
+  }
+
+  @Override
   public short getShort(int rowId) {
     if (dictionary == null) {
       return Platform.getShort(null, data + 2 * rowId);
@@ -265,6 +272,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public void putInts(int rowId, int count, int[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.INT_ARRAY_OFFSET + srcIndex * 4,
         null, data + 4 * rowId, count * 4);
+  }
+
+  @Override
+  public void putInts(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 4, count * 4);
   }
 
   @Override
@@ -331,6 +344,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public void putLongs(int rowId, int count, long[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.LONG_ARRAY_OFFSET + srcIndex * 8,
         null, data + 8 * rowId, count * 8);
+  }
+
+  @Override
+  public void putLongs(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 8, count * 8);
   }
 
   @Override
