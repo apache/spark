@@ -179,7 +179,7 @@ private[ml] object LocalDecisionTree {
           // Get impurityCalculator containing label stats for all data points at the current node
           val parentImpurityCalc = ImpurityUtils.getParentImpurityCalculator(metadata,
             trainingInfo.indices, from, to, instanceWeights, labels)
-          val validFeatureSplits = RandomForest.getNonConstantFeatures(metadata,
+          val validFeatureSplits = RandomForest.getFeaturesWithSplits(metadata,
             featuresForNode = None)
           // Find the best split for each feature for the current node
           val splitsAndImpurityInfo = validFeatureSplits.map { case (_, featureIndex) =>

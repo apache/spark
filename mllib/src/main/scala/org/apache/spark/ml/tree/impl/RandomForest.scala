@@ -19,7 +19,7 @@ package org.apache.spark.ml.tree.impl
 
 import java.io.IOException
 
-import scala.collection.mutable
+import scala.collection.{mutable, SeqView}
 import scala.util.Random
 
 import org.apache.spark.internal.Logging
@@ -287,8 +287,7 @@ private[spark] object RandomForest extends Logging {
       } else {
         AggUpdateUtils.updateOrderedFeature(agg,
           featureValue = treePoint.binnedFeatures(featureIndex), label = treePoint.label,
-          featureIndex = featureIndex, featureIndexIdx = featureIndexIdx,
-          instanceWeight = instanceWeight)
+          featureIndexIdx = featureIndexIdx, instanceWeight = instanceWeight)
       }
       featureIndexIdx += 1
     }
@@ -623,15 +622,16 @@ private[spark] object RandomForest extends Logging {
   /**
    * Return a list of pairs (featureIndexIdx, featureIndex) where featureIndex is the global
    * (across all trees) index of a feature and featureIndexIdx is the index of a feature within the
-   * list of features for a given node. Filters out constant features (features with 0 splits)
+   * list of features for a given node. Filters out features known to be constant
+   * (features with 0 splits)
    */
-  private[impl] def getNonConstantFeatures(
+  private[impl] def getFeaturesWithSplits(
       metadata: DecisionTreeMetadata,
-      featuresForNode: Option[Array[Int]]): Seq[(Int, Int)] = {
-    Range(0, metadata.numFeaturesPerNode).map { featureIndexIdx =>
+      featuresForNode: Option[Array[Int]]): SeqView[(Int, Int), Seq[_]] = {
+    Range(0, metadata.numFeaturesPerNode).view.map { featureIndexIdx =>
       featuresForNode.map(features => (featureIndexIdx, features(featureIndexIdx)))
         .getOrElse((featureIndexIdx, featureIndexIdx))
-    }.filter { case (_, featureIndex) =>
+    }.withFilter { case (_, featureIndex) =>
       metadata.numSplits(featureIndex) != 0
     }
   }
@@ -672,7 +672,7 @@ private[spark] object RandomForest extends Logging {
       splits: Array[Array[Split]],
       featuresForNode: Option[Array[Int]],
       node: LearningNode): (Split, ImpurityStats) = {
-    val validFeatureSplits = getNonConstantFeatures(binAggregates.metadata, featuresForNode)
+    val validFeatureSplits = getFeaturesWithSplits(binAggregates.metadata, featuresForNode)
     // For each (feature, split), calculate the gain, and select the best (feature, split).
     val parentImpurityCalc = if (node.stats == null) None else Some(node.stats.impurityCalculator)
     val splitsAndImpurityInfo =
