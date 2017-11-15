@@ -29,6 +29,35 @@ class TreeSplitUtilsSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   /**
+   * Iterate over feature values and labels for a specific (node, feature), updating stats
+   * aggregator for the current node.
+   */
+  private[impl] def updateAggregator(
+      statsAggregator: DTStatsAggregator,
+      featureIndex: Int,
+      values: Array[Int],
+      indices: Array[Int],
+      instanceWeights: Array[Double],
+      labels: Array[Double],
+      from: Int,
+      to: Int,
+      featureIndexIdx: Int,
+      featureSplits: Array[Split]): Unit = {
+    val metadata = statsAggregator.metadata
+    from.until(to).foreach { idx =>
+      val rowIndex = indices(idx)
+      if (metadata.isUnordered(featureIndex)) {
+        AggUpdateUtils.updateUnorderedFeature(statsAggregator, values(idx), labels(rowIndex),
+          featureIndex = featureIndex, featureIndexIdx, featureSplits,
+          instanceWeight = instanceWeights(rowIndex))
+      } else {
+        AggUpdateUtils.updateOrderedFeature(statsAggregator, values(idx), labels(rowIndex),
+          featureIndexIdx, instanceWeight = instanceWeights(rowIndex))
+      }
+    }
+  }
+
+  /**
    * Get a DTStatsAggregator for sufficient stat collection/impurity calculation populated
    * with the data from the specified training points.
    */
@@ -40,12 +69,13 @@ class TreeSplitUtilsSuite
       labels: Array[Double],
       featureSplits: Array[Split]): DTStatsAggregator = {
 
+    val featureIndex = 0
     val statsAggregator = new DTStatsAggregator(metadata, featureSubset = None)
     val instanceWeights = Array.fill[Double](values.length)(1.0)
     val indices = values.indices.toArray
     AggUpdateUtils.updateParentImpurity(statsAggregator, indices, from, to, instanceWeights, labels)
-    LocalDecisionTree.updateAggregator(statsAggregator, col, indices, instanceWeights, labels,
-      from, to, col.featureIndex, featureSplits)
+    updateAggregator(statsAggregator, featureIndex = 0, values, indices, instanceWeights, labels,
+      from, to, featureIndex, featureSplits)
     statsAggregator
   }
 
@@ -73,34 +103,34 @@ class TreeSplitUtilsSuite
   test("chooseSplit: choose correct type of split (continuous split)") {
     // Construct (binned) continuous data
     val labels = Array(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0)
-    val col = FeatureColumn(featureIndex = 0, values = Array(8, 1, 1, 2, 3, 5, 6))
+    val values = Array(8, 1, 1, 2, 3, 5, 6)
+    val featureIndex = 0
     // Get an array of continuous splits corresponding to values in our binned data
     val splits = TreeTests.getContinuousSplits(1.to(8).toArray, featureIndex = 0)
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = 7,
       numFeatures = 1, numClasses = 2, Map.empty)
-    val statsAggregator = getAggregator(metadata, col, from = 1, to = 4, labels, splits)
+    val statsAggregator = getAggregator(metadata, values, from = 1, to = 4, labels, splits)
     // Choose split, check that it's a valid ContinuousSplit
-    val (split1, stats1) = SplitUtils.chooseSplit(statsAggregator, col.featureIndex,
-      col.featureIndex, splits)
+    val (split1, stats1) = SplitUtils.chooseSplit(statsAggregator, featureIndex, featureIndex,
+      splits)
     assert(stats1.valid && split1.isInstanceOf[ContinuousSplit])
   }
 
   test("chooseSplit: choose correct type of split (categorical split)") {
     // Construct categorical data
     val labels = Array(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0)
-    val featureIndex = 0
     val featureArity = 3
     val values = Array(0, 0, 1, 1, 1, 2, 2)
-    val col = FeatureColumn(featureIndex, values)
+    val featureIndex = 0
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = 7,
       numFeatures = 1, numClasses = 2, Map(featureIndex -> featureArity))
     val splits = RandomForest.findUnorderedSplits(metadata, featureIndex)
-    val statsAggregator = getAggregator(metadata, col, from = 1, to = 4, labels, splits)
+    val statsAggregator = getAggregator(metadata, values, from = 1, to = 4, labels, splits)
     // Choose split, check that it's a valid categorical split
     val (split2, stats2) = SplitUtils.chooseSplit(statsAggregator = statsAggregator,
-      featureIndex = col.featureIndex, featureIndexIdx = col.featureIndex,
+      featureIndex = featureIndex, featureIndexIdx = featureIndex,
       featureSplits = splits)
     assert(stats2.valid && split2.isInstanceOf[CategoricalSplit])
   }
@@ -117,16 +147,14 @@ class TreeSplitUtilsSuite
       // Construct FeatureVector to store categorical data
       val featureArity = values.max + 1
       val arityMap = Map[Int, Int](featureIndex -> featureArity)
-      val col = FeatureColumn(featureIndex = 0, values = values)
       // Construct DTStatsAggregator, compute sufficient stats
       val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
         numClasses = 2, arityMap, unorderedFeatures = Some(Set.empty))
-      val statsAggregator = getAggregator(metadata, col, from = 0, to = values.length,
+      val statsAggregator = getAggregator(metadata, values, from = 0, to = values.length,
         labels, featureSplits = Array.empty)
       // Choose split
       val (split, stats) =
-        SplitUtils.chooseOrderedCategoricalSplit(statsAggregator, col.featureIndex,
-          col.featureIndex)
+        SplitUtils.chooseOrderedCategoricalSplit(statsAggregator, featureIndex, featureIndex)
       // Verify that split has the expected left-side/right-side categories
       val expectedRightCategories = Range(0, featureArity)
         .filter(c => !expectedLeftCategories.contains(c)).map(_.toDouble).toArray
@@ -156,15 +184,14 @@ class TreeSplitUtilsSuite
     val values = Array(0, 0, 1, 2, 2, 2, 2)
     val featureArity = values.max + 1
     val labels = Array(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
-    val col = FeatureColumn(featureIndex, values)
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 2, Map(featureIndex -> featureArity), unorderedFeatures = Some(Set.empty))
-    val statsAggregator = getAggregator(metadata, col, from = 0, to = values.length,
+    val statsAggregator = getAggregator(metadata, values, from = 0, to = values.length,
       labels, featureSplits = Array.empty)
     // Choose split, verify that it's invalid
-    val (_, stats) = SplitUtils.chooseOrderedCategoricalSplit(statsAggregator, col.featureIndex,
-        col.featureIndex)
+    val (_, stats) = SplitUtils.chooseOrderedCategoricalSplit(statsAggregator, featureIndex,
+        featureIndex)
     assert(!stats.valid)
   }
 
@@ -177,17 +204,16 @@ class TreeSplitUtilsSuite
     val values = Array(1, 1, 0, 2, 2)
     val featureArity = values.max + 1
     val labels = Array(0.0, 0.0, 1.0, 1.0, 2.0)
-    val col = FeatureColumn(featureIndex, values)
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 3, Map(featureIndex -> featureArity))
     val splits = RandomForest.findUnorderedSplits(metadata, featureIndex)
-    val statsAggregator = getAggregator(metadata, col, from = 0, to = values.length,
+    val statsAggregator = getAggregator(metadata, values, from = 0, to = values.length,
       labels, splits)
     // Choose split
     val (split, stats) =
-      SplitUtils.chooseUnorderedCategoricalSplit(statsAggregator, col.featureIndex,
-        col.featureIndex, splits)
+      SplitUtils.chooseUnorderedCategoricalSplit(statsAggregator, featureIndex, featureIndex,
+        splits)
     // Verify that split has the expected left-side/right-side categories
     split match {
       case s: CategoricalSplit =>
@@ -208,12 +234,12 @@ class TreeSplitUtilsSuite
     val featureArity = 4
     val values = Array(3, 1, 0, 2, 2)
     val labels = Array(1.0, 1.0, 1.0, 1.0, 1.0)
-    val col = FeatureColumn(featureIndex, values)
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 2, Map(featureIndex -> featureArity))
     val splits = RandomForest.findUnorderedSplits(metadata, featureIndex)
-    val statsAggregator = getAggregator(metadata, col, from = 0, to = values.length, labels, splits)
+    val statsAggregator = getAggregator(metadata, values, from = 0, to = values.length, labels,
+      splits)
     // Choose split, verify that it's invalid
     val (_, stats) = SplitUtils.chooseUnorderedCategoricalSplit(statsAggregator, featureIndex,
       featureIndex, splits)
@@ -226,13 +252,12 @@ class TreeSplitUtilsSuite
     val thresholds = Array(0, 1, 2, 3)
     val values = thresholds.indices.toArray
     val labels = Array(0.0, 0.0, 1.0, 1.0)
-    val col = FeatureColumn(featureIndex = featureIndex, values = values)
-
     // Construct DTStatsAggregator, compute sufficient stats
     val splits = TreeTests.getContinuousSplits(thresholds, featureIndex)
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 2, Map.empty)
-    val statsAggregator = getAggregator(metadata, col, from = 0, to = values.length, labels, splits)
+    val statsAggregator = getAggregator(metadata, values, from = 0, to = values.length, labels,
+      splits)
 
     // Choose split, verify that it has expected threshold
     val (split, stats) = SplitUtils.chooseContinuousSplit(statsAggregator, featureIndex,
@@ -256,12 +281,12 @@ class TreeSplitUtilsSuite
     val thresholds = Array(0, 1, 2, 3)
     val values = thresholds.indices.toArray
     val labels = Array(0.0, 0.0, 0.0, 0.0, 0.0)
-    val col = FeatureColumn(featureIndex = featureIndex, values = values)
     // Construct DTStatsAggregator, compute sufficient stats
     val splits = TreeTests.getContinuousSplits(thresholds, featureIndex)
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 2, Map.empty[Int, Int])
-    val statsAggregator = getAggregator(metadata, col, from = 0, to = values.length, labels, splits)
+    val statsAggregator = getAggregator(metadata, values, from = 0, to = values.length, labels,
+      splits)
     // Choose split, verify that it's invalid
     val (split, stats) = SplitUtils.chooseContinuousSplit(statsAggregator, featureIndex,
       featureIndex, splits)
