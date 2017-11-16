@@ -327,4 +327,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
     }
   }
+
+  test("SPARK-22499: Least and greatest should not generate codes beyond 64KB") {
+    val N = 3000
+    val strings = (1 to N).map(x => "s" * x)
+    val inputsExpr = strings.map(Literal.create(_, StringType))
+
+    checkEvaluation(Least(inputsExpr), "s" * 1, EmptyRow)
+    checkEvaluation(Greatest(inputsExpr), "s" * N, EmptyRow)
+  }
 }
