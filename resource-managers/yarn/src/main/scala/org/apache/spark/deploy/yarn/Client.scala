@@ -744,8 +744,10 @@ private[spark] class Client(
 
       // Save Spark configuration to a file in the archive, but filter out the app's secret.
       val props = new Properties()
-      sparkConf.getAll.foreach { case (k, v) if k != SecurityManager.SPARK_AUTH_SECRET_CONF =>
-        props.setProperty(k, v)
+      sparkConf.getAll.foreach { case (k, v) =>
+        if (k != SecurityManager.SPARK_AUTH_SECRET_CONF) {
+          props.setProperty(k, v)
+        }
       }
       // Override spark.yarn.key to point to the location in distributed cache which will be used
       // by AM.

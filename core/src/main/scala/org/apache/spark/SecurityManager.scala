@@ -542,7 +542,6 @@ private[spark] class SecurityManager(
 
       val secret = HashCodes.fromBytes(secretBytes).toString()
       sparkConf.set(SPARK_AUTH_SECRET_CONF, secret)
-      sparkConf.setExecutorEnv(ENV_AUTH_SECRET, secret)
     }
   }
 

@@ -72,6 +72,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     securityMgr.initializeAuth()
   }
 
+  // If an auth secret is configured, propagate it to executors.
+  Option(securityMgr.getSecretKey()).foreach { secret =>
+    sparkConf.setExecutorEnv(SecurityManager.ENV_AUTH_SECRET, secret)
+  }
+
   // Set system properties for each config entry. This covers two use cases:
   // - The default configuration stored by the SparkHadoopUtil class
   // - The user application creating a new SparkConf in cluster mode
