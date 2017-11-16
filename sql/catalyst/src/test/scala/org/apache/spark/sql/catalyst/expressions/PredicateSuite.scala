@@ -174,6 +174,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-22501: In should not generate codes beyond 64KB") {
+    val N = 3000
+    val sets = (1 to N).map(i => Literal(i.toDouble))
+    checkEvaluation(In(Literal(1.0D), sets), true)
+  }
+
   test("INSET") {
     val hS = HashSet[Any]() + 1 + 2
     val nS = HashSet[Any]() + 1 + 2 + null
