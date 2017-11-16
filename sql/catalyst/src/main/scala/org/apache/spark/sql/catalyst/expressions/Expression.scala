@@ -105,6 +105,41 @@ abstract class Expression extends TreeNode[Expression] {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val ve = doGenCode(ctx, ExprCode("", isNull, value))
+
+      // TODO: support whole stage codegen too
+      if (ve.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+        val setIsNull = if (ve.isNull != "false" && ve.isNull != "true") {
+          val globalIsNull = ctx.freshName("globalIsNull")
+          ctx.addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
+          val localIsNull = ve.isNull
+          ve.isNull = globalIsNull
+          s"$globalIsNull = $localIsNull;"
+        } else {
+          ""
+        }
+
+        val setValue = {
+          val globalValue = ctx.freshName("globalValue")
+          ctx.addMutableState(
+            ctx.javaType(dataType), globalValue, s"$globalValue = ${ctx.defaultValue(dataType)};")
+          val localValue = ve.value
+          ve.value = globalValue
+          s"$globalValue = $localValue;"
+        }
+
+        val funcName = ctx.freshName(nodeName)
+        val funcFullName = ctx.addNewFunction(funcName,
+          s"""
+             |private void $funcName(InternalRow ${ctx.INPUT_ROW}) {
+             |  ${ve.code.trim}
+             |  $setValue
+             |  $setIsNull
+             |}
+           """.stripMargin)
+
+        ve.code = s"$funcFullName(${ctx.INPUT_ROW});"
+      }
+
       if (ve.code.nonEmpty) {
         // Add `this` in the comment.
         ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
