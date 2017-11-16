@@ -18,14 +18,13 @@
 package org.apache.spark
 
 import java.io._
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor}
+import java.util.concurrent.{ConcurrentHashMap, Future, LinkedBlockingQueue, ThreadPoolExecutor}
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
@@ -358,6 +357,10 @@ private[spark] class MapOutputTrackerMaster(
     pool
   }
 
+  private val parallelism = conf.getInt("spark.adaptive.map.statistics.cores", 8)
+  private val threadPoolMapStats =
+    ThreadUtils.newDaemonFixedThreadPool(parallelism, "adaptive-map-statistics")
+
   // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
   if (minSizeForBroadcast > maxRpcMessageSize) {
@@ -473,16 +476,41 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /**
+   * Try to equally divide Range(0, num) to divisor slices
+   */
+  def equallyDivide(num: Int, divisor: Int): Iterator[Seq[Int]] = {
+    assert(divisor > 0, "Divisor should be positive")
+    val (each, remain) = (num / divisor, num % divisor)
+    val (smaller, bigger) = (0 until num).splitAt((divisor-remain) * each)
+    if (each != 0) {
+      smaller.grouped(each) ++ bigger.grouped(each + 1)
+    } else {
+      bigger.grouped(each + 1)
+    }
+  }
+
+  /**
    * Return statistics about all of the outputs for a given shuffle.
    */
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
     shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
-      for (s <- statuses) {
-        for (i <- 0 until totalSizes.length) {
-          totalSizes(i) += s.getSizeForBlock(i)
-        }
+      val mapStatusSubmitTasks = ArrayBuffer[Future[_]]()
+      var taskSlices = parallelism
+
+      equallyDivide(totalSizes.length, taskSlices).foreach {
+        reduceIds =>
+          mapStatusSubmitTasks += threadPoolMapStats.submit(
+            new Runnable {
+              override def run(): Unit = {
+                for (s <- statuses; i <- reduceIds) {
+                  totalSizes(i) += s.getSizeForBlock(i)
+                }
+              }
+            }
+          )
       }
+      mapStatusSubmitTasks.foreach(_.get())
       new MapOutputStatistics(dep.shuffleId, totalSizes)
     }
   }
