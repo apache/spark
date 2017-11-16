@@ -98,7 +98,7 @@ class MapStatusSuite extends SparkFunSuite {
     }
   }
 
-  test("[SPARK-22540]: HighlyCompressedMapStatus's avgSize is incorrect") {
+  test("SPARK-22540: ensure HighlyCompressedMapStatus calculates correct avgSize") {
     val threshold = 1000
     val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.key, threshold.toString)
     val env = mock(classOf[SparkEnv])
