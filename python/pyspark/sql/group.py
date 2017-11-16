@@ -238,7 +238,7 @@ class GroupedData(object):
         """
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
-           or udf.evalType != PythonEvalType.PANDAS_GROUP_MAP_UDF:
+           or udf.evalType != PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
             raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
                              "GROUP_MAP.")
         df = self._df

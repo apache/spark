@@ -2053,9 +2053,9 @@ def map_values(col):
 class PandasUDFType(object):
     """Pandas UDF Types. See :meth:`pyspark.sql.functions.pandas_udf`.
     """
-    SCALAR = PythonEvalType.PANDAS_SCALAR_UDF
+    SCALAR = PythonEvalType.SQL_PANDAS_SCALAR_UDF
 
-    GROUP_MAP = PythonEvalType.PANDAS_GROUP_MAP_UDF
+    GROUP_MAP = PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF
 
 
 @since(1.3)
@@ -2192,7 +2192,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
             eval_type = returnType
         else:
             # @pandas_udf(dataType) or @pandas_udf(returnType=dataType)
-            eval_type = PythonEvalType.PANDAS_SCALAR_UDF
+            eval_type = PythonEvalType.SQL_PANDAS_SCALAR_UDF
 
         return functools.partial(_create_udf, returnType=return_type, evalType=eval_type)
     else:
@@ -2202,7 +2202,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         if functionType is not None:
             eval_type = functionType
         else:
-            eval_type = PythonEvalType.PANDAS_SCALAR_UDF
+            eval_type = PythonEvalType.SQL_PANDAS_SCALAR_UDF
 
         return _create_udf(f=f, returnType=returnType, evalType=eval_type)
 

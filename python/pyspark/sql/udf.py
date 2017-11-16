@@ -33,7 +33,7 @@ def _wrap_function(sc, func, returnType):
 
 
 def _create_udf(f, returnType, evalType):
-    if evalType == PythonEvalType.PANDAS_SCALAR_UDF:
+    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
         import inspect
         argspec = inspect.getargspec(f)
         if len(argspec.args) == 0 and argspec.varargs is None:
@@ -42,7 +42,7 @@ def _create_udf(f, returnType, evalType):
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-    elif evalType == PythonEvalType.PANDAS_GROUP_MAP_UDF:
+    elif evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         import inspect
         argspec = inspect.getargspec(f)
         if len(argspec.args) != 1:
@@ -93,7 +93,7 @@ class UserDefinedFunction(object):
             else:
                 self._returnType_placeholder = _parse_datatype_string(self._returnType)
 
-        if self.evalType == PythonEvalType.PANDAS_GROUP_MAP_UDF \
+        if self.evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF \
                 and not isinstance(self._returnType_placeholder, StructType):
             raise ValueError("Invalid returnType: returnType must be a StructType for "
                              "pandas_udf with function type GROUP_MAP")

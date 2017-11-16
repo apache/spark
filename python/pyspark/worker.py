@@ -122,9 +122,9 @@ def read_single_udf(pickleSer, infile, eval_type):
             row_func = chain(row_func, f)
 
     # the last returnType will be the return type of UDF
-    if eval_type == PythonEvalType.PANDAS_SCALAR_UDF:
+    if eval_type == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
         return arg_offsets, wrap_pandas_scalar_udf(row_func, return_type)
-    elif eval_type == PythonEvalType.PANDAS_GROUP_MAP_UDF:
+    elif eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         return arg_offsets, wrap_pandas_group_map_udf(row_func, return_type)
     else:
         return arg_offsets, wrap_udf(row_func, return_type)
@@ -148,8 +148,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
     func = lambda _, it: map(mapper, it)
 
-    if eval_type == PythonEvalType.PANDAS_SCALAR_UDF \
-       or eval_type == PythonEvalType.PANDAS_GROUP_MAP_UDF:
+    if eval_type == PythonEvalType.SQL_PANDAS_SCALAR_UDF \
+       or eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         ser = ArrowStreamPandasSerializer()
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
