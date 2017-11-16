@@ -70,6 +70,11 @@ class UserDefinedFunction(object):
                 "Not a function or callable (__call__ is not defined): "
                 "{0}".format(type(func)))
 
+        if not isinstance(returnType, (DataType, str)):
+            raise TypeError(
+                "Invalid returnType. returnType should be DataType or str "
+                "but is {}".format(returnType))
+
         if not isinstance(evalType, int):
             raise TypeError(
                 "Invalid evalType. evalType should be an int but is {}".format(evalType))

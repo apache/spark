@@ -3172,26 +3172,26 @@ class PandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         udf = pandas_udf(lambda x: x, DoubleType())
-        self.assertEquals(udf.returnType, DoubleType())
-        self.assertEquals(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(udf.returnType, DoubleType())
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
 
         udf = pandas_udf(lambda x: x, DoubleType(), PandasUDFType.SCALAR)
-        self.assertEquals(udf.returnType, DoubleType())
-        self.assertEquals(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(udf.returnType, DoubleType())
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
 
         udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUP_MAP)
-        self.assertEquals(udf.returnType, StructType([StructField("v", DoubleType())]))
-        self.assertEquals(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
 
         udf = pandas_udf(lambda x: x, 'v double',
                          functionType=PandasUDFType.GROUP_MAP)
-        self.assertEquals(udf.returnType, StructType([StructField("v", DoubleType())]))
-        self.assertEquals(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
 
         udf = pandas_udf(lambda x: x, returnType='v double',
                          functionType=PandasUDFType.GROUP_MAP)
-        self.assertEquals(udf.returnType, StructType([StructField("v", DoubleType())]))
-        self.assertEquals(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
 
     def test_pandas_udf_decorator(self):
         from pyspark.rdd import PythonEvalType
@@ -3201,34 +3201,34 @@ class PandasUDFTests(ReusedSQLTestCase):
         @pandas_udf(DoubleType())
         def foo(x):
             return x
-        self.assertEquals(foo.returnType, DoubleType())
-        self.assertEquals(foo.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(foo.returnType, DoubleType())
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
 
         @pandas_udf(returnType=DoubleType())
         def foo(x):
             return x
-        self.assertEquals(foo.returnType, DoubleType())
-        self.assertEquals(foo.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(foo.returnType, DoubleType())
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
 
         schema = StructType([StructField("v", DoubleType())])
 
         @pandas_udf(schema, PandasUDFType.GROUP_MAP)
         def foo(x):
             return x
-        self.assertEquals(foo.returnType, schema)
-        self.assertEquals(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(foo.returnType, schema)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
 
         @pandas_udf(schema, functionType=PandasUDFType.GROUP_MAP)
         def foo(x):
             return x
-        self.assertEquals(foo.returnType, schema)
-        self.assertEquals(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(foo.returnType, schema)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
 
         @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUP_MAP)
         def foo(x):
             return x
-        self.assertEquals(foo.returnType, schema)
-        self.assertEquals(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(foo.returnType, schema)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
 
     def test_udf_wrong_arg(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -3238,7 +3238,7 @@ class PandasUDFTests(ReusedSQLTestCase):
                 @pandas_udf(PandasUDFType.GROUP_MAP)
                 def foo(df):
                     return df
-            with self.assertRaisesRegexp(ValueError, 'return type'):
+            with self.assertRaisesRegexp(TypeError, 'Invalid returnType'):
                 @pandas_udf(returnType=PandasUDFType.GROUP_MAP)
                 def foo(df):
                     return df
@@ -3558,7 +3558,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
                 return x
 
             result = df.select(check_records_per_batch(col("id")))
-            self.assertEquals(df.collect(), result.collect())
+            self.assertEqual(df.collect(), result.collect())
         finally:
             if orig_value is None:
                 self.spark.conf.unset("spark.sql.execution.arrow.maxRecordsPerBatch")
