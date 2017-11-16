@@ -20,12 +20,11 @@ package org.apache.spark.memory
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
+import org.apache.spark.internal.config._
 import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
 
 class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
-  private val sc = new SparkConf()
   private val dummyBlock = TestBlockId("--")
 
   private val storageFraction: Double = 0.5
@@ -42,12 +41,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   override protected def createMemoryManager(
       maxOnHeapExecutionMemory: Long,
       maxOffHeapExecutionMemory: Long): UnifiedMemoryManager = {
-    val offHeapSize = sc.get(MEMORY_OFFHEAP_SIZE)
     val conf = new SparkConf()
       .set("spark.memory.fraction", "1")
       .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
-      .set("spark.memory.offHeap.size",
-        (if (offHeapSize > 0) offHeapSize else maxOffHeapExecutionMemory).toString)
+      .set(MEMORY_OFFHEAP_SIZE.key, maxOffHeapExecutionMemory.toString)
       .set("spark.memory.storageFraction", storageFraction.toString)
     UnifiedMemoryManager(conf, numCores = 1)
   }
@@ -309,9 +306,9 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   test("not enough free memory in the storage pool --OFF_HEAP") {
     val conf = new SparkConf()
-      .set("spark.memory.offHeap.size", "1000")
+      .set(MEMORY_OFFHEAP_SIZE.key, "1000")
       .set("spark.testing.memory", "1000")
-      .set("spark.memory.offHeap.enabled", "true")
+      .set(MEMORY_OFFHEAP_ENABLED.key, "true")
     val taskAttemptId = 0L
     val mm = UnifiedMemoryManager(conf, numCores = 1)
     val ms = makeMemoryStore(mm)

@@ -80,7 +80,17 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
+  private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
+    .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
+      "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive.")
+    .booleanConf
+    .createWithDefault(false)
+
   private[spark] val MEMORY_OFFHEAP_SIZE = ConfigBuilder("spark.memory.offHeap.size")
+    .doc("The absolute amount of memory in bytes which can be used for off-heap allocation. " +
+      "This setting has no impact on heap memory usage, so if your executors' total memory " +
+      "consumption must fit within some hard limit then be sure to shrink your JVM heap size " +
+      "accordingly. This must be set to a positive value when spark.memory.offHeap.enabled=true.")
     .bytesConf(ByteUnit.BYTE)
     .checkValue(_ >= 0, "The off-heap memory size must not be negative")
     .createWithDefault(0)

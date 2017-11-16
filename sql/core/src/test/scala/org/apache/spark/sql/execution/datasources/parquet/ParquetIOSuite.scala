@@ -653,10 +653,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       spark.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
       val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
       {
-        val reader = new VectorizedParquetRecordReader
+        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         try {
           reader.initialize(file, null)
-          reader.initBatch(null, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
           while (reader.nextKeyValue()) {
             val row = reader.getCurrentValue.asInstanceOf[InternalRow]
@@ -671,10 +670,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project just one column
       {
-        val reader = new VectorizedParquetRecordReader
+        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
-          reader.initBatch(null, null)
           val result = mutable.ArrayBuffer.empty[(String)]
           while (reader.nextKeyValue()) {
             val row = reader.getCurrentValue.asInstanceOf[InternalRow]
@@ -688,10 +686,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project columns in opposite order
       {
-        val reader = new VectorizedParquetRecordReader
+        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
-          reader.initBatch(null, null)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
           while (reader.nextKeyValue()) {
             val row = reader.getCurrentValue.asInstanceOf[InternalRow]
@@ -706,10 +703,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Empty projection
       {
-        val reader = new VectorizedParquetRecordReader
+        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         try {
           reader.initialize(file, List[String]().asJava)
-          reader.initBatch(null, null)
           var result = 0
           while (reader.nextKeyValue()) {
             result += 1
@@ -746,13 +742,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       dataTypes.zip(constantValues).foreach { case (dt, v) =>
         val schema = StructType(StructField("pcol", dt) :: Nil)
-        val vectorizedReader = new VectorizedParquetRecordReader
+        val vectorizedReader =
+          new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         val partitionValues = new GenericInternalRow(Array(v))
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
 
         try {
           vectorizedReader.initialize(file, null)
-          vectorizedReader.initBatch(schema, partitionValues, true)
+          vectorizedReader.initBatch(schema, partitionValues)
           vectorizedReader.nextKeyValue()
           val row = vectorizedReader.getCurrentValue.asInstanceOf[InternalRow]
 

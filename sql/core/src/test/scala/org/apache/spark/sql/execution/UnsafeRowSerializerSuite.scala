@@ -22,7 +22,7 @@ import java.util.Properties
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -121,7 +121,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
         partitioner = Some(new HashPartitioner(10)),
         serializer = new UnsafeRowSerializer(numFields = 1))
 
-      // Ensure we spilled something and have to merge them later when use ON_HEAP
+      // Ensure we spilled something and have to merge them later
       assert(sorter.numSpills === 0)
       sorter.insertAll(data)
       assert(sorter.numSpills > 0)

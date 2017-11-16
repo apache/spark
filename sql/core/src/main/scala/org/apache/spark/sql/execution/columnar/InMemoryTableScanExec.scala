@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.memory.MemoryMode
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -62,11 +61,9 @@ case class InMemoryTableScanExec(
 
   private lazy val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
 
-  private lazy val memoryMode = SparkEnv.get.memoryManager.tungstenMemoryMode
-
   private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
     val rowCount = cachedColumnarBatch.numRows
-    val columnVectors = if (memoryMode == MemoryMode.ON_HEAP) {
+    val columnVectors = if (!conf.offHeapColumnVectorEnabled) {
       OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
     } else {
       OffHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
@@ -81,6 +78,7 @@ case class InMemoryTableScanExec(
         columnarBatch.column(i).asInstanceOf[WritableColumnVector],
         columnarBatchSchema.fields(i).dataType, rowCount)
     }
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => columnarBatch.close()))
     columnarBatch
   }
 

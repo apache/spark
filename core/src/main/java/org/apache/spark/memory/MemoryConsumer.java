@@ -34,21 +34,14 @@ public abstract class MemoryConsumer {
   private final MemoryMode mode;
   protected long used;
 
-  /* it is used only for test to explicitly specify memory mode */
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize, MemoryMode mode) {
     this.taskMemoryManager = taskMemoryManager;
     this.pageSize = pageSize;
     this.mode = mode;
   }
 
-  protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize) {
-    this.taskMemoryManager = taskMemoryManager;
-    this.pageSize = pageSize;
-    this.mode = taskMemoryManager.getTungstenMemoryMode();
-  }
-
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager) {
-    this(taskMemoryManager, taskMemoryManager.pageSizeBytes());
+    this(taskMemoryManager, taskMemoryManager.pageSizeBytes(), MemoryMode.ON_HEAP);
   }
 
   /**

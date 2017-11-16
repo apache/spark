@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -42,6 +41,7 @@ import org.apache.spark.sql.types._
  * `BytesToBytesMap` to store them.
  */
 class VectorizedHashMapGenerator(
+    conf: SQLConf,
     ctx: CodegenContext,
     aggregateExpressions: Seq[AggregateExpression],
     generatedClassName: String,
@@ -77,14 +77,14 @@ class VectorizedHashMapGenerator(
           }
         }.mkString("\n").concat(";")
 
-    val columnVector = if (SparkEnv.get.memoryManager.tungstenMemoryMode == MemoryMode.ON_HEAP) {
+    val columnVector = if (!conf.offHeapColumnVectorEnabled) {
       "OnHeapColumnVector"
     } else {
       "OffHeapColumnVector"
     }
     s"""
-       |  private org.apache.spark.sql.execution.vectorized.WritableColumnVector[] batchVectors;
-       |  private org.apache.spark.sql.execution.vectorized.WritableColumnVector[] bufferVectors;
+       |  private org.apache.spark.sql.execution.vectorized.$columnVector[] batchVectors;
+       |  private org.apache.spark.sql.execution.vectorized.$columnVector[] bufferVectors;
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch aggregateBufferBatch;
        |  private int[] buckets;

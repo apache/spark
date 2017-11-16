@@ -27,7 +27,6 @@ import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.schema.Type;
 
-import org.apache.spark.SparkEnv;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
@@ -96,8 +95,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   private WritableColumnVector[] columnVectors;
 
-  private MemoryMode memoryMode = null;
-
   /**
    * If true, this class returns batches instead of rows.
    */
@@ -106,7 +103,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   /**
    * The default config on whether columnarBatch should be offheap.
    */
-  private static final MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
+  private final MemoryMode DEFAULT_MEMORY_MODE;
+
+  public VectorizedParquetRecordReader(boolean useOffHeap) {
+    DEFAULT_MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
+  }
 
   /**
    * Implementation of RecordReader API.
@@ -207,17 +208,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   public void initBatch() {
-    assert(memoryMode != null);
-    initBatch(memoryMode,null, null);
+    initBatch(DEFAULT_MEMORY_MODE, null, null);
   }
 
   public void initBatch(StructType partitionColumns, InternalRow partitionValues) {
-    initBatch(partitionColumns, partitionValues, false);
-  }
-
-  public void initBatch(StructType partitionColumns, InternalRow partitionValues, boolean forceUseOnHeap) {
-    memoryMode = (forceUseOnHeap) ? MemoryMode.ON_HEAP : SparkEnv.get().memoryManager().tungstenMemoryMode();
-    initBatch(memoryMode, partitionColumns, partitionValues);
+    initBatch(DEFAULT_MEMORY_MODE, partitionColumns, partitionValues);
   }
 
   /**
