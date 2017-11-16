@@ -24,11 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 
-import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -99,12 +95,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
-  // hadoop token manager used by some sub-classes (e.g. Mesos)
-  def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
-
-  // Hadoop delegation tokens to be sent to the executors.
-  val hadoopDelegationCreds: Option[Array[Byte]] = getHadoopDelegationCreds()
-
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
@@ -158,6 +148,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case KillExecutorsOnHost(host) =>
         scheduler.getExecutorsAliveOnHost(host).foreach { exec =>
           killExecutors(exec.toSeq, replace = true, force = true)
+        }
+
+      case UpdateDelegationTokens(newDelegationTokens) =>
+        executorDataMap.values.foreach { ed =>
+          ed.executorEndpoint.send(UpdateDelegationTokens(newDelegationTokens))
         }
     }
 
@@ -236,7 +231,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
-          hadoopDelegationCreds)
+          fetchHadoopDelegationTokens())
         context.reply(reply)
     }
 
@@ -683,18 +678,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     true
   }
 
-  protected def getHadoopDelegationCreds(): Option[Array[Byte]] = {
-    if (UserGroupInformation.isSecurityEnabled && hadoopDelegationTokenManager.isDefined) {
-      hadoopDelegationTokenManager.map { manager =>
-        val creds = UserGroupInformation.getCurrentUser.getCredentials
-        val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-        manager.obtainDelegationTokens(hadoopConf, creds)
-        SparkHadoopUtil.get.serialize(creds)
-      }
-    } else {
-      None
-    }
-  }
+  protected def fetchHadoopDelegationTokens(): Option[Array[Byte]] = { None }
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {

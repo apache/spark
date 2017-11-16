@@ -142,10 +142,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("column stats round trip serialization") {
     // Make sure we serialize and then deserialize and we will get the result data
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-    stats.zip(df.schema).foreach { case ((k, v), field) =>
-      withClue(s"column $k with type ${field.dataType}") {
-        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
-        assert(roundtrip == Some(v))
+    Seq(stats, statsWithHgms).foreach { s =>
+      s.zip(df.schema).foreach { case ((k, v), field) =>
+        withClue(s"column $k with type ${field.dataType}") {
+          val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
+          assert(roundtrip == Some(v))
+        }
       }
     }
   }
@@ -155,6 +157,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     assert(stats.size == data.head.productArity - 1)
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
     checkColStats(df, stats)
+
+    // test column stats with histograms
+    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
+      checkColStats(df, statsWithHgms)
+    }
   }
 
   test("column stats collection for null columns") {
