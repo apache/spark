@@ -107,6 +107,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     "; users with admin permissions: " + HISTORY_UI_ADMIN_ACLS.toString +
     "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
 
+  private val AGGRESSIVE_CLEANUP = conf.getBoolean("spark.history.fs.cleaner.aggressive", false)
+
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   private val fs = new Path(logDir).getFileSystem(hadoopConf)
 
@@ -494,7 +496,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  private def getNewLastScanTime(): Long = {
+  protected def getNewLastScanTime(): Long = {
     val fileName = "." + UUID.randomUUID().toString
     val path = new Path(logDir, fileName)
     val fos = fs.create(path)
@@ -587,17 +589,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       addListing(app)
     }
-    listing.write(new LogInfo(logPath.toString(), fileStatus.getLen()))
+
+    listing.write(new LogInfo(logPath.toString(), fileStatus.getLen(),
+      fileStatus.getModificationTime()))
   }
 
   /**
    * Delete event logs from the log directory according to the clean policy defined by the user.
    */
   private[history] def cleanLogs(): Unit = {
+    val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
+
     var iterator: Option[KVStoreIterator[ApplicationInfoWrapper]] = None
     try {
-      val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
-
       // Iterate descending over all applications whose oldest attempt happened before maxTime.
       iterator = Some(listing.view(classOf[ApplicationInfoWrapper])
         .index("oldestAttempt")
@@ -616,23 +620,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           listing.write(newApp)
         }
 
-        toDelete.foreach { attempt =>
-          val logPath = new Path(logDir, attempt.logPath)
-          try {
-            listing.delete(classOf[LogInfo], logPath.toString())
-          } catch {
-            case _: NoSuchElementException =>
-              logDebug(s"Log info entry for $logPath not found.")
-          }
-          try {
-            fs.delete(logPath, true)
-          } catch {
-            case e: AccessControlException =>
-              logInfo(s"No permission to delete ${attempt.logPath}, ignoring.")
-            case t: IOException =>
-              logError(s"IOException in cleaning ${attempt.logPath}", t)
-          }
-        }
+        toDelete
+          .map(attempt => new Path(logDir, attempt.logPath))
+          .foreach(logPath => deleteLogInfo(logPath))
 
         if (remaining.isEmpty) {
           listing.delete(app.getClass(), app.id)
@@ -642,6 +632,44 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case t: Exception => logError("Exception while cleaning logs", t)
     } finally {
       iterator.foreach(_.close())
+    }
+
+    // Clean corrupt or empty files that may have accumulated.
+    if (AGGRESSIVE_CLEANUP) {
+      var untracked: Option[KVStoreIterator[LogInfo]] = None
+      try {
+        untracked = Some(listing.view(classOf[LogInfo])
+          .index("lastModifiedTime")
+          .reverse()
+          .first(maxTime)
+          .closeableIterator())
+
+        untracked.get.asScala
+          .map(logInfo => new Path(logInfo.logPath))
+          .foreach(logPath => deleteLogInfo(logPath))
+      } catch {
+        case t: Exception => logError("Exception while cleaning logs", t)
+      } finally {
+        untracked.foreach(_.close())
+      }
+    }
+  }
+
+  private def deleteLogInfo(logPath: Path) = {
+    try {
+      listing.delete(classOf[LogInfo], logPath.toString)
+    } catch {
+      case _: NoSuchElementException =>
+        logDebug(s"Log info entry for $logPath not found.")
+    }
+
+    try {
+      fs.delete(logPath, true)
+    } catch {
+      case e: AccessControlException =>
+        logInfo(s"No permission to delete ${logPath}, ignoring.")
+      case t: IOException =>
+        logError(s"IOException in cleaning ${logPath}", t)
     }
   }
 
@@ -710,13 +738,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Return the last known size of the given event log, recorded the last time the file
-   * system scanner detected a change in the file.
+   * system scanner detected a change in the file.  If the file has never been scanned we
+   * return -1 for file size so it starts being tracked.
    */
   private def recordedFileSize(log: Path): Long = {
     try {
       listing.read(classOf[LogInfo], log.toString()).fileSize
     } catch {
-      case _: NoSuchElementException => 0L
+      case _: NoSuchElementException => -1L
     }
   }
 
@@ -795,7 +824,8 @@ private[history] case class FsHistoryProviderMetadata(
 
 private[history] case class LogInfo(
     @KVIndexParam logPath: String,
-    fileSize: Long)
+    fileSize: Long,
+    @JsonIgnore @KVIndexParam("lastModifiedTime") lastModifiedTime: Long)
 
 private[history] class AttemptInfoWrapper(
     val info: v1.ApplicationAttemptInfo,
