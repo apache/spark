@@ -443,10 +443,6 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     val mgr = new SecurityManager(conf)
     mgr.initializeAuth()
     assert(mgr.getSecretKey() != null)
-
-    val confVal = conf.get(SecurityManager.SPARK_AUTH_SECRET_CONF)
-    val envVal = conf.get("spark.executorEnv." + SecurityManager.ENV_AUTH_SECRET)
-    assert(confVal === envVal)
   }
 
 }
