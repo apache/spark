@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util.{List => JList}
 import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
@@ -27,27 +28,34 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.StageUIData
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class OneStageResource(ui: SparkUI) {
+private[v1] class StagesResource extends BaseAppResource {
 
   @GET
-  @Path("")
+  def stageList(@QueryParam("status") statuses: JList[StageStatus]): Seq[StageData] = {
+    withUI(_.store.stageList(statuses))
+  }
+
+  @GET
+  @Path("{stageId: \\d+}")
   def stageData(
       @PathParam("stageId") stageId: Int,
       @QueryParam("details") @DefaultValue("true") details: Boolean): Seq[StageData] = {
-    val ret = ui.store.stageData(stageId, details = details)
-    if (ret.nonEmpty) {
-      ret
-    } else {
-      throw new NotFoundException(s"unknown stage: $stageId")
+    withUI { ui =>
+      val ret = ui.store.stageData(stageId, details = details)
+      if (ret.nonEmpty) {
+        ret
+      } else {
+        throw new NotFoundException(s"unknown stage: $stageId")
+      }
     }
   }
 
   @GET
-  @Path("/{stageAttemptId: \\d+}")
+  @Path("{stageId: \\d+}/{stageAttemptId: \\d+}")
   def oneAttemptData(
       @PathParam("stageId") stageId: Int,
       @PathParam("stageAttemptId") stageAttemptId: Int,
-      @QueryParam("details") @DefaultValue("true") details: Boolean): StageData = {
+      @QueryParam("details") @DefaultValue("true") details: Boolean): StageData = withUI { ui =>
     try {
       ui.store.stageAttempt(stageId, stageAttemptId, details = details)
     } catch {
@@ -65,12 +73,12 @@ private[v1] class OneStageResource(ui: SparkUI) {
   }
 
   @GET
-  @Path("/{stageAttemptId: \\d+}/taskSummary")
+  @Path("{stageId: \\d+}/{stageAttemptId: \\d+}/taskSummary")
   def taskSummary(
       @PathParam("stageId") stageId: Int,
       @PathParam("stageAttemptId") stageAttemptId: Int,
       @DefaultValue("0.05,0.25,0.5,0.75,0.95") @QueryParam("quantiles") quantileString: String)
-  : TaskMetricDistributions = {
+  : TaskMetricDistributions = withUI { ui =>
     val quantiles = quantileString.split(",").map { s =>
       try {
         s.toDouble
@@ -84,14 +92,14 @@ private[v1] class OneStageResource(ui: SparkUI) {
   }
 
   @GET
-  @Path("/{stageAttemptId: \\d+}/taskList")
+  @Path("{stageId: \\d+}/{stageAttemptId: \\d+}/taskList")
   def taskList(
       @PathParam("stageId") stageId: Int,
       @PathParam("stageAttemptId") stageAttemptId: Int,
       @DefaultValue("0") @QueryParam("offset") offset: Int,
       @DefaultValue("20") @QueryParam("length") length: Int,
       @DefaultValue("ID") @QueryParam("sortBy") sortBy: TaskSorting): Seq[TaskData] = {
-    ui.store.taskList(stageId, stageAttemptId, offset, length, sortBy)
+    withUI(_.store.taskList(stageId, stageAttemptId, offset, length, sortBy))
   }
 
 }
