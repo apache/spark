@@ -83,6 +83,7 @@ package object config {
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
       "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive.")
+    .withAlternative("spark.unsafe.offHeap")
     .booleanConf
     .createWithDefault(false)
 
