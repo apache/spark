@@ -61,6 +61,8 @@ class PythonEvalType(object):
     Evaluation type of python rdd.
 
     These values are internal to PySpark.
+
+    These values should match values in org.apache.spark.api.python.PythonEvalType.
     """
     NON_UDF = 0
 

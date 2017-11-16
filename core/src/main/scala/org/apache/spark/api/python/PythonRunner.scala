@@ -37,8 +37,8 @@ private[spark] object PythonEvalType {
 
   val SQL_BATCHED_UDF = 100
 
-  val PANDAS_SCALAR_UDF = 200
-  val PANDAS_GROUP_MAP_UDF = 201
+  val SQL_PANDAS_SCALAR_UDF = 200
+  val SQL_PANDAS_GROUP_MAP_UDF = 201
 }
 
 /**

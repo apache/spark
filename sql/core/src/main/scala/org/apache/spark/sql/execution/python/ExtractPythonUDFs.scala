@@ -140,7 +140,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
         if (validUdfs.nonEmpty) {
           require(validUdfs.forall(udf =>
             udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
-            udf.evalType == PythonEvalType.PANDAS_SCALAR_UDF
+            udf.evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF
           ), "Can only extract scalar vectorized udf or sql batch udf")
 
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
@@ -148,7 +148,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           }
 
           val evaluation = validUdfs.partition(
-            _.evalType == PythonEvalType.PANDAS_SCALAR_UDF
+            _.evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF
           ) match {
             case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
               ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
