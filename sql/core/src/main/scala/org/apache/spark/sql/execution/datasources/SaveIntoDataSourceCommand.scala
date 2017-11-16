@@ -54,6 +54,6 @@ case class SaveIntoDataSourceCommand(
 
   override def simpleString: String = {
     val redacted = Utils.redact(SparkEnv.get.conf, options.toSeq).toMap
-    s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
+    s"SaveIntoDataSourceCommand ${provider}, ${partitionColumns}, ${redacted}, ${mode}"
   }
 }
