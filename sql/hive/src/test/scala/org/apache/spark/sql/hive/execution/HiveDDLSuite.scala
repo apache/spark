@@ -174,6 +174,87 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("alter datasource table add columns - partitioned - orc") {
     testAddColumnPartitioned("orc")
   }
+
+  test("SPARK-22431: illegal nested type") {
+    val queries = Seq(
+      "CREATE TABLE t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
+      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT)",
+      "CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+
+    queries.foreach(query => {
+      val err = intercept[AnalysisException] {
+        spark.sql(query)
+      }.getMessage
+      assert(err.contains("Cannot recognize the data type"))
+    })
+
+    withView("v") {
+      spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
+      assert(spark.sql("SELECT * FROM v").count() == 1L)
+
+      val err = intercept[AnalysisException] {
+        spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      }.getMessage
+      assert(err.contains("Cannot recognize the data type"))
+    }
+  }
+
+  test("SPARK-22431: table with nested type") {
+    withTable("t", "x") {
+      spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
+      assert(spark.sql("SELECT * FROM t").count() == 0L)
+      spark.sql("CREATE TABLE x (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      assert(spark.sql("SELECT * FROM x").count() == 0L)
+    }
+  }
+
+  test("SPARK-22431: view with nested type") {
+    withView("v") {
+      spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
+      assert(spark.sql("SELECT * FROM v").count() == 1L)
+
+      spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `b`, 1 AS b) q1")
+      val df = spark.sql("SELECT * FROM v")
+      assert("q1".equals(df.schema.fields(0).name))
+    }
+  }
+
+  test("SPARK-22431: alter table tests with nested types") {
+    withTable("t1", "t2", "t3") {
+      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`col1`:STRING, col2:Int>)")
+      val newcol = spark.sql("SELECT * FROM t1").schema.fields(2).name
+      assert("newcol1".equals(newcol))
+
+      spark.sql("CREATE TABLE t2(q STRUCT<`a`:INT, col2:STRING>, i1 INT) USING PARQUET")
+      spark.sql("ALTER TABLE t2 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
+      spark.sql("ALTER TABLE t2 ADD COLUMNS (newcol2 STRUCT<`col1`:STRING, col2:Int>)")
+
+      val df2 = spark.sql("SELECT * FROM t2")
+      assert(df2.count() == 0L)
+      assert("newcol1".equals(df2.schema.fields(2).name))
+      assert("newcol2".equals(df2.schema.fields(3).name))
+
+      spark.sql("CREATE TABLE t3(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
+      spark.sql("ALTER TABLE t3 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
+      spark.sql("ALTER TABLE t3 ADD COLUMNS (newcol2 STRUCT<`col1`:STRING, col2:Int>)")
+
+      val df3 = spark.sql("SELECT * FROM t3")
+      assert(df3.count() == 0L)
+      assert("newcol1".equals(df3.schema.fields(2).name))
+      assert("newcol2".equals(df3.schema.fields(3).name))
+    }
+  }
+
+  test("SPARK-22431: negative alter table tests with nested types") {
+    withTable("t1") {
+      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      val err = intercept[AnalysisException] {
+        spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
+      }.getMessage
+      assert(err.contains("Cannot recognize the data type:"))
+   }
+  }
 }
 
 class HiveDDLSuite

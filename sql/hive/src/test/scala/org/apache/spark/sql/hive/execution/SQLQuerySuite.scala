@@ -69,36 +69,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
 
-  test("SPARK-22431: illegal nested type") {
-    val queries = Seq(
-      "CREATE TABLE t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
-      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT)",
-      "CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
-
-    queries.foreach(query => {
-      val err = intercept[SparkException] {
-        spark.sql(query)
-      }.getMessage
-      assert(err.contains("Cannot recognize the data type"))
-    })
-  }
-
-  test("SPARK-22431: table with nested type") {
-    withTable("t", "x") {
-      spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
-      assert(spark.sql("SELECT * FROM t").count() == 0L)
-      spark.sql("CREATE TABLE x (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
-      assert(spark.sql("SELECT * FROM x").count() == 0L)
-    }
-  }
-
-  test("SPARK-22431: view with nested type") {
-    withView("v") {
-      spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
-      assert(spark.sql("SELECT * FROM v").count() == 1L)
-    }
-  }
-
   test("query global temp view") {
     val df = Seq(1).toDF("i1")
     df.createGlobalTempView("tbl1")

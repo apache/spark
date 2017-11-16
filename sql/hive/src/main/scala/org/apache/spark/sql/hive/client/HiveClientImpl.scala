@@ -522,6 +522,7 @@ private[hive] class HiveClientImpl(
       newDataSchema: StructType,
       schemaProps: Map[String, String]): Unit = withHiveState {
     val oldTable = client.getTable(dbName, tableName)
+    verifyColumnDataType(newDataSchema)
     val hiveCols = newDataSchema.map(toHiveColumn)
     oldTable.setFields(hiveCols.asJava)
 
@@ -904,7 +905,8 @@ private[hive] object HiveClientImpl {
         CatalystSqlParser.parseDataType(typeString)
       } catch {
         case e: ParseException =>
-          throw new SparkException(s"Cannot recognize the data type: $typeString", e)
+          throw new AnalysisException(s"Cannot recognize the data type: $typeString",
+            cause = Some(e))
       }
     })
   }
