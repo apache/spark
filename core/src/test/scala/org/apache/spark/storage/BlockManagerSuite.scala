@@ -1322,9 +1322,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("SPARK-20640: Shuffle registration timeout and maxAttempts conf are working") {
     val tryAgainMsg = "test_spark_20640_try_again"
-    val `timingoutExecutor` = "timingoutExecutor"
-    val `tryAgainExecutor` = "tryAgainExecutor"
-    val `succeedingExecutor` = "succeedingExecutor"
+    val timingoutExecutor = "timingoutExecutor"
+    val tryAgainExecutor = "tryAgainExecutor"
+    val succeedingExecutor = "succeedingExecutor"
 
     // a server which delays response 50ms and must try twice for success.
     def newShuffleServer(port: Int): (TransportServer, Int) = {
@@ -1342,23 +1342,23 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
           val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
           msgObj match {
 
-            case exec: RegisterExecutor if exec.execId == `timingoutExecutor` =>
+            case exec: RegisterExecutor if exec.execId == timingoutExecutor =>
               () // No reply to generate client-side timeout
 
             case exec: RegisterExecutor
-              if exec.execId == `tryAgainExecutor` && !secondExecutorFailedOnce =>
+              if exec.execId == tryAgainExecutor && !secondExecutorFailedOnce =>
               secondExecutorFailedOnce = true
               callback.onFailure(failure)
 
-            case exec: RegisterExecutor if exec.execId == `tryAgainExecutor` =>
+            case exec: RegisterExecutor if exec.execId == tryAgainExecutor =>
               callback.onSuccess(success)
 
             case exec: RegisterExecutor
-              if exec.execId == `succeedingExecutor` && !thirdExecutorFailedOnce =>
+              if exec.execId == succeedingExecutor && !thirdExecutorFailedOnce =>
               thirdExecutorFailedOnce = true
               callback.onFailure(failure)
 
-            case exec: RegisterExecutor if exec.execId == `succeedingExecutor` =>
+            case exec: RegisterExecutor if exec.execId == succeedingExecutor =>
               callback.onSuccess(success)
 
           }
@@ -1380,20 +1380,20 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
     var e = intercept[SparkException] {
-      makeBlockManager(8000, `timingoutExecutor`)
+      makeBlockManager(8000, timingoutExecutor)
     }.getMessage
     assert(e.contains("TimeoutException"))
 
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
     e = intercept[SparkException] {
-      makeBlockManager(8000, `tryAgainExecutor`)
+      makeBlockManager(8000, tryAgainExecutor)
     }.getMessage
     assert(e.contains(tryAgainMsg))
 
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "2")
-    makeBlockManager(8000, `succeedingExecutor`)
+    makeBlockManager(8000, succeedingExecutor)
     server.close()
   }
 
