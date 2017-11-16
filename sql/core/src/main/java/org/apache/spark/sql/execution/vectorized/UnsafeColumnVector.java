@@ -127,12 +127,12 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   public boolean[] getBooleans(int rowId, int count) {
     assert(dictionary == null);
     boolean[] array = unsafeArray.toBooleanArray();
-    if (array.length == count) {
+    if (rowId == 0 && array.length == count) {
       return array;
     } else {
       assert(count < array.length);
       boolean[] newArray = new boolean[count];
-      System.arraycopy(array, 0, newArray, 0, count);
+      System.arraycopy(array, rowId, newArray, 0, count);
       return newArray;
     }
   }
@@ -210,12 +210,12 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   public short[] getShorts(int rowId, int count) {
     assert(dictionary == null);
     short[] array = unsafeArray.toShortArray();
-    if (array.length == count) {
+    if (rowId == 0 && array.length == count) {
       return array;
     } else {
       assert(count < array.length);
       short[] newArray = new short[count];
-      System.arraycopy(array, 0, newArray, 0, count);
+      System.arraycopy(array, rowId, newArray, 0, count);
       return newArray;
     }
   }
@@ -259,12 +259,12 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   public int[] getInts(int rowId, int count) {
     assert(dictionary == null);
     int[] array = unsafeArray.toIntArray();
-    if (array.length == count) {
+    if (rowId == 0 && array.length == count) {
       return array;
     } else {
       assert(count < array.length);
       int[] newArray = new int[count];
-      System.arraycopy(array, 0, newArray, 0, count);
+      System.arraycopy(array, rowId, newArray, 0, count);
       return newArray;
     }
   }
@@ -312,12 +312,12 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   public long[] getLongs(int rowId, int count) {
     assert(dictionary == null);
     long[] array = unsafeArray.toLongArray();
-    if (array.length == count) {
+    if (rowId == 0 && array.length == count) {
       return array;
     } else {
       assert(count < array.length);
       long[] newArray = new long[count];
-      System.arraycopy(array, 0, newArray, 0, count);
+      System.arraycopy(array, rowId, newArray, 0, count);
       return newArray;
     }
   }
@@ -356,12 +356,12 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   public float[] getFloats(int rowId, int count) {
     assert(dictionary == null);
     float[] array = unsafeArray.toFloatArray();
-    if (array.length == count) {
+    if (rowId == 0 && array.length == count) {
       return array;
     } else {
       assert(count < array.length);
       float[] newArray = new float[count];
-      System.arraycopy(array, 0, newArray, 0, count);
+      System.arraycopy(array, rowId, newArray, 0, count);
       return newArray;
     }
   }
@@ -400,12 +400,12 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   public double[] getDoubles(int rowId, int count) {
     assert(dictionary == null);
     double[] array = unsafeArray.toDoubleArray();
-    if (array.length == count) {
+    if (rowId == 0 && array.length == count) {
       return array;
     } else {
       assert(count < array.length);
       double[] newArray = new double[count];
-      System.arraycopy(array, 0, newArray, 0, count);
+      System.arraycopy(array, rowId, newArray, 0, count);
       return newArray;
     }
   }
@@ -487,6 +487,9 @@ public final class UnsafeColumnVector extends WritableColumnVector {
   // APIs dealing with Byte Arrays
   //
 
+  // This method puts byte[] in value for the whole data, which is represented in
+  // UnsafeArrayData, into data without copying data to avoid inefficient copy.
+  // For UnsafeColumnVector, this method should be called only once at the beginning.
   @Override
   public int putByteArray(int rowId, byte[] value, int offset, int length) {
     assert(this.resultArray != null);

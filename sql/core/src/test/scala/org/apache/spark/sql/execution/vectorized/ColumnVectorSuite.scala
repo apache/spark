@@ -435,6 +435,12 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
           for (j <- 0 until data(i).length) {
             assert(testVector.getArray(i).getBoolean(j) == data(i)(j))
           }
+          if (data(i).length > 1) {
+            val subArray = testVector.getArray(i).getBooleans(1, data(i).length - 1)
+            for (j <- 1 until data(i).length) {
+              assert(subArray(j - 1)until === data(i)(1 + 0)
+            }
+          }
         }
       }
       for (i <- 0 to N / 3) {
