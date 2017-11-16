@@ -18,11 +18,13 @@
 package org.apache.spark
 
 import java.io._
-import java.util.concurrent.{ConcurrentHashMap, Future, LinkedBlockingQueue, ThreadPoolExecutor}
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor}
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.concurrent.Future
+import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -358,10 +360,6 @@ private[spark] class MapOutputTrackerMaster(
     pool
   }
 
-  private val parallelism = conf.getInt("spark.adaptive.map.statistics.cores", 8)
-  private val threadPoolMapStats =
-    ThreadUtils.newDaemonFixedThreadPool(parallelism, "adaptive-map-statistics")
-
   // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
   if (minSizeForBroadcast > maxRpcMessageSize) {
@@ -496,22 +494,16 @@ private[spark] class MapOutputTrackerMaster(
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
     shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
-      val mapStatusSubmitTasks = ArrayBuffer[Future[_]]()
-      var taskSlices = parallelism
+      val parallelism = conf.getInt("spark.adaptive.map.statistics.cores", 8)
 
-      equallyDivide(totalSizes.length, taskSlices).foreach {
-        reduceIds =>
-          mapStatusSubmitTasks += threadPoolMapStats.submit(
-            new Runnable {
-              override def run(): Unit = {
-                for (s <- statuses; i <- reduceIds) {
-                  totalSizes(i) += s.getSizeForBlock(i)
-                }
-              }
-            }
-          )
+      val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {
+        reduceIds => Future {
+          for (s <- statuses; i <- reduceIds) {
+            totalSizes(i) += s.getSizeForBlock(i)
+          }
+        }
       }
-      mapStatusSubmitTasks.foreach(_.get())
+      ThreadUtils.awaitResult(Future.sequence(mapStatusSubmitTasks), Duration.Inf)
       new MapOutputStatistics(dep.shuffleId, totalSizes)
     }
   }
