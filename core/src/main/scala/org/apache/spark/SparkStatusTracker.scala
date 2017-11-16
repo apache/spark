@@ -105,10 +105,14 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
         case Array(h, p) => (h, p.toInt)
         case Array(h) => (h, -1)
       }
+      val cachedMem = exec.memoryMetrics.map { mem =>
+        mem.usedOnHeapStorageMemory + mem.usedOffHeapStorageMemory
+      }.getOrElse(0L)
+
       new SparkExecutorInfoImpl(
         host,
         port,
-        exec.maxMemory,
+        cachedMem,
         exec.activeTasks)
     }.toArray
   }

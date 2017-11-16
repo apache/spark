@@ -294,8 +294,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       attempt.adminAclsGroups.getOrElse(""))
     secManager.setViewAclsGroups(attempt.viewAclsGroups.getOrElse(""))
 
-    val replayBus = new ReplayListenerBus()
-
     val uiStorePath = storePath.map { path => getStorePath(path, appId, attemptId) }
 
     val (kvstore, needReplay) = uiStorePath match {
