@@ -368,7 +368,46 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     val eval2 = right.genCode(ctx)
 
     // The result should be `false`, if any of them is `false` whenever the other is null or not.
-    if (!left.nullable && !right.nullable) {
+
+    // place generated code of eval1 and eval2 in separate methods if their code combined is large
+    val combinedLength = eval1.code.length + eval2.code.length
+    if (combinedLength > 1024 &&
+      // Split these expressions only if they are created from a row object
+      (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+
+      val (eval1FuncName, eval1GlobalIsNull, eval1GlobalValue) =
+        ctx.createAndAddFunction(eval1, BooleanType, "eval1Expr")
+      val (eval2FuncName, eval2GlobalIsNull, eval2GlobalValue) =
+        ctx.createAndAddFunction(eval2, BooleanType, "eval2Expr")
+      if (!left.nullable && !right.nullable) {
+        val generatedCode = s"""
+         $eval1FuncName(${ctx.INPUT_ROW});
+         boolean ${ev.value} = false;
+         if (${eval1GlobalValue}) {
+           $eval2FuncName(${ctx.INPUT_ROW});
+           ${ev.value} = ${eval2GlobalValue};
+         }
+       """
+        ev.copy(code = generatedCode, isNull = "false")
+      } else {
+        val generatedCode = s"""
+         $eval1FuncName(${ctx.INPUT_ROW});
+         boolean ${ev.isNull} = false;
+         boolean ${ev.value} = false;
+         if (!${eval1GlobalIsNull} && !${eval1GlobalValue}) {
+         } else {
+           $eval2FuncName(${ctx.INPUT_ROW});
+           if (!${eval2GlobalIsNull} && !${eval2GlobalValue}) {
+           } else if (!${eval1GlobalIsNull} && !${eval2GlobalIsNull}) {
+             ${ev.value} = true;
+           } else {
+             ${ev.isNull} = true;
+           }
+         }
+       """
+        ev.copy(code = generatedCode)
+      }
+    } else if (!left.nullable && !right.nullable) {
       ev.copy(code = s"""
         ${eval1.code}
         boolean ${ev.value} = false;
@@ -431,7 +470,46 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     val eval2 = right.genCode(ctx)
 
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
-    if (!left.nullable && !right.nullable) {
+
+    // place generated code of eval1 and eval2 in separate methods if their code combined is large
+    val combinedLength = eval1.code.length + eval2.code.length
+    if (combinedLength > 1024 &&
+      // Split these expressions only if they are created from a row object
+      (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+
+      val (eval1FuncName, eval1GlobalIsNull, eval1GlobalValue) =
+        ctx.createAndAddFunction(eval1, BooleanType, "eval1Expr")
+      val (eval2FuncName, eval2GlobalIsNull, eval2GlobalValue) =
+        ctx.createAndAddFunction(eval2, BooleanType, "eval2Expr")
+      if (!left.nullable && !right.nullable) {
+        val generatedCode = s"""
+         $eval1FuncName(${ctx.INPUT_ROW});
+         boolean ${ev.value} = true;
+         if (!${eval1GlobalValue}) {
+           $eval2FuncName(${ctx.INPUT_ROW});
+           ${ev.value} = ${eval2GlobalValue};
+         }
+       """
+        ev.copy(code = generatedCode, isNull = "false")
+      } else {
+        val generatedCode = s"""
+         $eval1FuncName(${ctx.INPUT_ROW});
+         boolean ${ev.isNull} = false;
+         boolean ${ev.value} = true;
+         if (!${eval1GlobalIsNull} && ${eval1GlobalValue}) {
+         } else {
+           $eval2FuncName(${ctx.INPUT_ROW});
+           if (!${eval2GlobalIsNull} && ${eval2GlobalValue}) {
+           } else if (!${eval1GlobalIsNull} && !${eval2GlobalIsNull}) {
+             ${ev.value} = false;
+           } else {
+             ${ev.isNull} = true;
+           }
+         }
+       """
+        ev.copy(code = generatedCode)
+      }
+    } else if (!left.nullable && !right.nullable) {
       ev.isNull = "false"
       ev.copy(code = s"""
         ${eval1.code}

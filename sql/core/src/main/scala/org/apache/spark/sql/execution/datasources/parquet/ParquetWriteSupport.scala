@@ -69,11 +69,16 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // Whether to write data in legacy Parquet format compatible with Spark 1.4 and prior versions
   private var writeLegacyParquetFormat: Boolean = _
 
+<<<<<<< HEAD
   // Whether to write timestamps as int96
   private var writeTimestampAsInt96: Boolean = _
 
   // Whether to write timestamp value with milliseconds precision.
   private var writeTimestampInMillis: Boolean = _
+=======
+  // Which parquet timestamp type to use when writing.
+  private var outputTimestampType: SQLConf.ParquetOutputTimestampType.Value = _
+>>>>>>> origin/master
 
   // Reusable byte array used to write decimal values
   private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
@@ -91,14 +96,15 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       configuration.get(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key).toBoolean
     }
 
-    this.writeTimestampInMillis = {
-      assert(configuration.get(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key) != null)
-      configuration.get(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key).toBoolean
+    this.outputTimestampType = {
+      val key = SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key
+      assert(configuration.get(key) != null)
+      SQLConf.ParquetOutputTimestampType.withName(configuration.get(key))
     }
 
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter).toArray[ValueWriter]
 
-    val messageType = new ParquetSchemaConverter(configuration).convert(schema)
+    val messageType = new SparkToParquetSchemaConverter(configuration).convert(schema)
     val metadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
 
     logInfo(
@@ -169,7 +175,28 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
           recordConsumer.addBinary(
             Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
 
+<<<<<<< HEAD
       case TimestampType => makeTimestampWriter()
+=======
+      case TimestampType =>
+        outputTimestampType match {
+          case SQLConf.ParquetOutputTimestampType.INT96 =>
+            (row: SpecializedGetters, ordinal: Int) =>
+              val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
+              val buf = ByteBuffer.wrap(timestampBuffer)
+              buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
+              recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
+
+          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
+            (row: SpecializedGetters, ordinal: Int) =>
+              recordConsumer.addLong(row.getLong(ordinal))
+
+          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
+            (row: SpecializedGetters, ordinal: Int) =>
+              val millis = DateTimeUtils.toMillis(row.getLong(ordinal))
+              recordConsumer.addLong(millis)
+        }
+>>>>>>> origin/master
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>

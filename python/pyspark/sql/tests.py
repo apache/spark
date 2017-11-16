@@ -3127,9 +3127,9 @@ class ArrowTests(ReusedSQLTestCase):
             StructField("5_double_t", DoubleType(), True),
             StructField("6_date_t", DateType(), True),
             StructField("7_timestamp_t", TimestampType(), True)])
-        cls.data = [("a", 1, 10, 0.2, 2.0, datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
-                    ("b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
-                    ("c", 3, 30, 0.8, 6.0, datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+        cls.data = [(u"a", 1, 10, 0.2, 2.0, datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+                    (u"b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                    (u"c", 3, 30, 0.8, 6.0, datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
 
     @classmethod
     def tearDownClass(cls):
@@ -3144,6 +3144,17 @@ class ArrowTests(ReusedSQLTestCase):
                ("\n\nWith Arrow:\n%s\n%s" % (df_with_arrow, df_with_arrow.dtypes)) +
                ("\n\nWithout:\n%s\n%s" % (df_without, df_without.dtypes)))
         self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
+
+    def create_pandas_data_frame(self):
+        import pandas as pd
+        import numpy as np
+        data_dict = {}
+        for j, name in enumerate(self.schema.names):
+            data_dict[name] = [self.data[i][j] for i in range(len(self.data))]
+        # need to convert these to numpy types first
+        data_dict["2_int_t"] = np.int32(data_dict["2_int_t"])
+        data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
+        return pd.DataFrame(data=data_dict)
 
     def test_unsupported_datatype(self):
         schema = StructType([StructField("decimal", DecimalType(), True)])
@@ -3161,21 +3172,15 @@ class ArrowTests(ReusedSQLTestCase):
     def test_toPandas_arrow_toggle(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
-        pdf = df.toPandas()
-        self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
+        try:
+            pdf = df.toPandas()
+        finally:
+            self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
         pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_pandas_round_trip(self):
-        import pandas as pd
-        import numpy as np
-        data_dict = {}
-        for j, name in enumerate(self.schema.names):
-            data_dict[name] = [self.data[i][j] for i in range(len(self.data))]
-        # need to convert these to numpy types first
-        data_dict["2_int_t"] = np.int32(data_dict["2_int_t"])
-        data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
-        pdf = pd.DataFrame(data=data_dict)
+        pdf = self.create_pandas_data_frame()
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
@@ -3186,6 +3191,72 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(len(pdf.columns), 1)
         self.assertEqual(pdf.columns[0], "i")
         self.assertTrue(pdf.empty)
+
+    def test_createDataFrame_toggle(self):
+        pdf = self.create_pandas_data_frame()
+        self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
+        try:
+            df_no_arrow = self.spark.createDataFrame(pdf)
+        finally:
+            self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
+        df_arrow = self.spark.createDataFrame(pdf)
+        self.assertEquals(df_no_arrow.collect(), df_arrow.collect())
+
+    def test_createDataFrame_with_schema(self):
+        pdf = self.create_pandas_data_frame()
+        df = self.spark.createDataFrame(pdf, schema=self.schema)
+        self.assertEquals(self.schema, df.schema)
+        pdf_arrow = df.toPandas()
+        self.assertFramesEqual(pdf_arrow, pdf)
+
+    def test_createDataFrame_with_incorrect_schema(self):
+        pdf = self.create_pandas_data_frame()
+        wrong_schema = StructType(list(reversed(self.schema)))
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(TypeError, ".*field.*can.not.accept.*type"):
+                self.spark.createDataFrame(pdf, schema=wrong_schema)
+
+    def test_createDataFrame_with_names(self):
+        pdf = self.create_pandas_data_frame()
+        # Test that schema as a list of column names gets applied
+        df = self.spark.createDataFrame(pdf, schema=list('abcdefg'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
+        # Test that schema as tuple of column names gets applied
+        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefg'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
+
+    def test_createDataFrame_column_name_encoding(self):
+        import pandas as pd
+        pdf = pd.DataFrame({u'a': [1]})
+        columns = self.spark.createDataFrame(pdf).columns
+        self.assertTrue(isinstance(columns[0], str))
+        self.assertEquals(columns[0], 'a')
+        columns = self.spark.createDataFrame(pdf, [u'b']).columns
+        self.assertTrue(isinstance(columns[0], str))
+        self.assertEquals(columns[0], 'b')
+
+    def test_createDataFrame_with_single_data_type(self):
+        import pandas as pd
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(TypeError, ".*IntegerType.*tuple"):
+                self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
+
+    def test_createDataFrame_does_not_modify_input(self):
+        # Some series get converted for Spark to consume, this makes sure input is unchanged
+        pdf = self.create_pandas_data_frame()
+        # Use a nanosecond value to make sure it is not truncated
+        pdf.ix[0, '7_timestamp_t'] = 1
+        # Integers with nulls will get NaNs filled with 0 and will be casted
+        pdf.ix[1, '2_int_t'] = None
+        pdf_copy = pdf.copy(deep=True)
+        self.spark.createDataFrame(pdf, schema=self.schema)
+        self.assertTrue(pdf.equals(pdf_copy))
+
+    def test_schema_conversion_roundtrip(self):
+        from pyspark.sql.types import from_arrow_schema, to_arrow_schema
+        arrow_schema = to_arrow_schema(self.schema)
+        schema_rt = from_arrow_schema(arrow_schema)
+        self.assertEquals(self.schema, schema_rt)
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")

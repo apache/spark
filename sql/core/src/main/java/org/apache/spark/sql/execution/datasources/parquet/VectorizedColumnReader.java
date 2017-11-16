@@ -95,12 +95,22 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
+<<<<<<< HEAD
   private final Type fullType;
 
   public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader, Type fullType)
       throws IOException {
+=======
+  private final OriginalType originalType;
+
+  public VectorizedColumnReader(
+      ColumnDescriptor descriptor,
+      OriginalType originalType,
+      PageReader pageReader) throws IOException {
+>>>>>>> origin/master
     this.descriptor = descriptor;
     this.pageReader = pageReader;
+    this.originalType = originalType;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
     this.fullType = fullType;
 
@@ -164,12 +174,17 @@ public class VectorizedColumnReader {
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
 
-        // Timestamp values encoded as INT64 can't be lazily decoded as we need to post process
+        // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
+<<<<<<< HEAD
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64 &&
                column.dataType() != DataTypes.TimestampType) ||
+=======
+            (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64  &&
+              originalType != OriginalType.TIMESTAMP_MILLIS) ||
+>>>>>>> origin/master
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.FLOAT ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.DOUBLE ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.BINARY))) {
@@ -259,24 +274,32 @@ public class VectorizedColumnReader {
 
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
+<<<<<<< HEAD
                 (column.dataType() == DataTypes.TimestampType
                         && fullType.getOriginalType() == OriginalType.TIMESTAMP_MICROS) ||
             DecimalType.is64BitDecimalType(column.dataType())) {
+=======
+            DecimalType.is64BitDecimalType(column.dataType()) ||
+            originalType == OriginalType.TIMESTAMP_MICROS) {
+>>>>>>> origin/master
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
             }
           }
+<<<<<<< HEAD
         } else if (column.dataType() == DataTypes.TimestampType &&
                 fullType.getOriginalType() == OriginalType.TIMESTAMP_MILLIS) {
+=======
+        } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
+>>>>>>> origin/master
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i,
                 DateTimeUtils.fromMillis(dictionary.decodeToLong(dictionaryIds.getDictId(i))));
             }
           }
-        }
-        else {
+        } else {
           throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
         }
         break;
@@ -386,6 +409,7 @@ public class VectorizedColumnReader {
   private void readLongBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     if (column.dataType() == DataTypes.LongType ||
+<<<<<<< HEAD
             (column.dataType() == DataTypes.TimestampType &&
             fullType.getOriginalType() == OriginalType.TIMESTAMP_MICROS)||
         DecimalType.is64BitDecimalType(column.dataType())) {
@@ -393,6 +417,13 @@ public class VectorizedColumnReader {
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.TimestampType &&
             fullType.getOriginalType() == OriginalType.TIMESTAMP_MILLIS) {
+=======
+        DecimalType.is64BitDecimalType(column.dataType()) ||
+        originalType == OriginalType.TIMESTAMP_MICROS) {
+      defColumn.readLongs(
+        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+    } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
+>>>>>>> origin/master
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i, DateTimeUtils.fromMillis(dataColumn.readLong()));
