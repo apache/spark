@@ -684,14 +684,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     * @param expectNonEmptyCorruptRemoved expect a non-empty corrupt complete file to be removed
     */
   private def createCleanAndCheckIncompleteLogFiles(
-                                                     maxAgeDays: Long,
-                                                     lastModifiedDaysAgo: Long,
-                                                     aggressiveCleanup: Boolean,
-                                                     expectEmptyInprogressRemoved: Boolean,
-                                                     expectEmptyCorruptRemoved: Boolean,
-                                                     expectNonEmptyInprogressRemoved: Boolean,
-                                                     expectNonEmptyCorruptRemoved: Boolean) = {
-
+      maxAgeDays: Long,
+      lastModifiedDaysAgo: Long,
+      aggressiveCleanup: Boolean,
+      expectEmptyInprogressRemoved: Boolean,
+      expectEmptyCorruptRemoved: Boolean,
+      expectNonEmptyInprogressRemoved: Boolean,
+      expectNonEmptyCorruptRemoved: Boolean) = {
     // Set current time as 2 * maximum retention period to allow for expired history files.
     val currentTimeMillis = MILLISECONDS.convert(maxAgeDays * 2, TimeUnit.DAYS)
     val clock = new ManualClock(currentTimeMillis)
