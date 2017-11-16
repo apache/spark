@@ -3238,14 +3238,18 @@ class PandasUDFTests(ReusedSQLTestCase):
                 @pandas_udf(PandasUDFType.GROUP_MAP)
                 def foo(df):
                     return df
+            with self.assertRaisesRegexp(ValueError, 'return type'):
+                @pandas_udf(returnType=PandasUDFType.GROUP_MAP)
+                def foo(df):
+                    return df
             with self.assertRaisesRegexp(ValueError, 'Invalid returnType'):
                 @pandas_udf(returnType='double', functionType=PandasUDFType.GROUP_MAP)
                 def foo(df):
                     return df
             with self.assertRaisesRegexp(ValueError, 'Invalid function'):
-                @pandas_udf(returnType='id int, v double', functionType=PandasUDFType.GROUP_MAP)
-                def foo(id, v):
-                    return id
+                @pandas_udf(returnType='k int, v double', functionType=PandasUDFType.GROUP_MAP)
+                def foo(k, v):
+                    return k
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")

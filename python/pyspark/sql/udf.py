@@ -51,6 +51,7 @@ def _create_udf(f, returnType, evalType):
                 "must take a single arg that is a pandas DataFrame."
             )
 
+    # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, evalType=evalType)
     return udf_obj._wrapped()
 

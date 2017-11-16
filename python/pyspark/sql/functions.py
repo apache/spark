@@ -2108,7 +2108,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     :param f: user-defined function. A python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
-    :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUdfType`.
+    :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
 
     The function type of the UDF can be one of the following:
@@ -2122,13 +2122,14 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
        :meth:`pyspark.sql.DataFrame.select`.
 
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> from pyspark.sql.types import IntegerType, StringType
        >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
-       >>> @pandas_udf(returnType=StringType())
+       >>> @pandas_udf(StringType())
        ... def to_upper(s):
        ...     return s.str.upper()
        ...
-       >>> @pandas_udf(returnType="integer")
+       >>> @pandas_udf("integer", PandasUDFType.SCALAR)
        ... def add_one(x):
        ...     return x + 1
        ...
