@@ -63,20 +63,16 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
-    val argNums = evals.length
+    val numArgs = evals.length
     val args = ctx.freshName("args")
 
     val inputs = evals.zipWithIndex.map { case (eval, index) =>
-      if (eval.isNull != "true") {
-        s"""
-          ${eval.code}
-          if (!${eval.isNull}) {
-            $args[$index] = ${eval.value};
-          }
-        """
-      } else {
-        ""
-      }
+      s"""
+        ${eval.code}
+        if (!${eval.isNull}) {
+          $args[$index] = ${eval.value};
+        }
+      """
     }
     val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
       ctx.splitExpressions(inputs, "valueConcat",
@@ -85,7 +81,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       inputs.mkString("\n")
     }
     ev.copy(s"""
-      UTF8String[] $args = new UTF8String[$argNums];
+      UTF8String[] $args = new UTF8String[$numArgs];
       $codes
       UTF8String ${ev.value} = UTF8String.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
