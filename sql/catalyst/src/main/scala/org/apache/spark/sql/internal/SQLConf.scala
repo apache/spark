@@ -291,7 +291,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PARQUET_SKIP_TIMESTAMP_CONVERSION = buildConf("spark.sql.parquet.skipTimestampConversion")
+  val PARQUET_INT96_TIMESTAMP_CONVERSION = buildConf("spark.sql.parquet.int96TimestampConversion")
     .doc("This controls whether timestamp adjustments should be applied to INT96 data when " +
       "converting to timestamps, for data written by Impala.  This is necessary because Impala" +
       "stores INT96 data with a different offset than Hive & Spark.")

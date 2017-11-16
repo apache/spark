@@ -161,7 +161,7 @@ private[parquet] class ParquetRowConverter(
    * is *not* the raw value in the sql conf -- we've already looked at the file metadata to decide
    * if conversion applies to this file by this point.
    */
-  val convertTs = hadoopConf.get(SQLConf.PARQUET_SKIP_TIMESTAMP_CONVERSION.key).toBoolean
+  val convertTs = hadoopConf.get(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key).toBoolean
   val sessionTz = TimeZone.getTimeZone(hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key))
   val UTC = TimeZone.getTimeZone("UTC")
 

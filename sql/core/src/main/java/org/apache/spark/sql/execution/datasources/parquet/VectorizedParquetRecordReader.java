@@ -122,8 +122,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       throws IOException, InterruptedException, UnsupportedOperationException {
     super.initialize(inputSplit, taskAttemptContext);
     Configuration hadoopConf = taskAttemptContext.getConfiguration();
+    // this is *not* the raw value in the sql conf -- we've already looked at the createdBy field
+    // for this particular file and adjusted that value accordingly by this point.
     boolean doTsConversion =
-        Boolean.valueOf(hadoopConf.get(SQLConf.PARQUET_SKIP_TIMESTAMP_CONVERSION().key()));
+        Boolean.valueOf(hadoopConf.get(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION().key()));
     if (doTsConversion) {
       convertTz = TimeZone.getTimeZone(hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE().key()));
     }

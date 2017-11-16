@@ -350,7 +350,7 @@ class ParquetFileFormat
     val enableRecordFilter: Boolean =
       sparkSession.sessionState.conf.parquetRecordFilterEnabled
     val timestampConversion =
-      sparkSession.sessionState.conf.getConf(SQLConf.PARQUET_SKIP_TIMESTAMP_CONVERSION)
+      sparkSession.sessionState.conf.getConf(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION)
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
 
@@ -369,20 +369,29 @@ class ParquetFileFormat
           fileSplit.getLocations,
           null)
 
-      val hadoopConf = broadcastedHadoopConf.value.value
-      val convertTimestamp =
+      // PARQUET_INT96_TIMESTAMP_CONVERSION says to apply timezone conversions to int96 timestamps'
+      // *only* if the file was created by something other than "parquet-mr", so check the actual
+      // writer here for this file.  We have to do this per-file, as each file in the table may
+      // have different writers.  Sadly, this also means we have to clone the hadoopConf, as
+      // different threads may want different values.  We have to use the hadoopConf as its
+      // our only way to pass value to ParquetReadSupport.init
+      val localHadoopConf =
         if (timestampConversion) {
-          val footer = ParquetFileReader.readFooter(hadoopConf, fileSplit.getPath, SKIP_ROW_GROUPS)
-          val cb = footer.getFileMetaData().getCreatedBy()
-          !cb.startsWith("parquet-mr")
+          val confCopy = new Configuration(broadcastedHadoopConf.value.value)
+          val footer =
+            ParquetFileReader.readFooter(confCopy, fileSplit.getPath, SKIP_ROW_GROUPS)
+          val doConversion = !footer.getFileMetaData().getCreatedBy().startsWith("parquet-mr")
+          confCopy.set(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, doConversion.toString())
+          confCopy
         } else {
-          false
+          // Doesn't matter what the parquet metadata says, no thread is going to do any conversion,
+          // so we don't need to make a copy of the conf here.
+          broadcastedHadoopConf.value.value
         }
-      hadoopConf.set(SQLConf.PARQUET_SKIP_TIMESTAMP_CONVERSION.key, convertTimestamp.toString)
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
-        new TaskAttemptContextImpl(hadoopConf, attemptId)
+        new TaskAttemptContextImpl(localHadoopConf, attemptId)
 
       // Try to push down filters when filter push-down is enabled.
       // Notice: This push-down is RowGroups level, not individual records.

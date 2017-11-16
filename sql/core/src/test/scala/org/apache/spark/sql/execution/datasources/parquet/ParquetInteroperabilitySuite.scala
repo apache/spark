@@ -21,6 +21,10 @@ import java.io.File
 import java.util.TimeZone
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
+import org.apache.parquet.hadoop.ParquetFileReader
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -124,7 +128,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       Seq(false, true).foreach { applyConversion =>
         Seq(false, true).foreach { vectorized =>
           withSQLConf(
-              (SQLConf.PARQUET_SKIP_TIMESTAMP_CONVERSION.key, applyConversion.toString()),
+              (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, applyConversion.toString()),
               (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
           ) {
             val read = spark.read.parquet(tableDir.getAbsolutePath).collect()
@@ -152,7 +156,50 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               assert(fullExpectations === actual)
 
               // TODO run query with a filter, make sure pushdown is OK
-      // https://github.com/apache/spark/pull/16781/files#diff-1e55698cc579cbae676f827a89c2dc2eR449
+              // Now test that the behavior is still correct even with a filter which could get
+              // pushed down into parquet.  We don't need extra handling for pushed down
+              // predicates because (a) in ParquetFilters, we ignore TimestampType and (b) parquet
+              // does not read statistics from int96 fields, as they are unsigned.  See
+              // scalastyle:off line.size.limit
+              // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L419
+              // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L348
+              // scalastyle:on line.size.limit
+              //
+              // Just to be defensive in case anything ever changes in parquet, this test checks
+              // the assumption on column stats, and also the end-to-end behavior.
+
+              val hadoopConf = sparkContext.hadoopConfiguration
+              val fs = FileSystem.get(hadoopConf)
+              val parts = fs.listStatus(new Path(tableDir.getAbsolutePath), new PathFilter {
+                override def accept(path: Path): Boolean = !path.getName.startsWith("_")
+              })
+              // grab the meta data from the parquet file.  The next section of asserts just make
+              // sure the test is configured correctly.
+              assert(parts.size == 2)
+              parts.map { part =>
+                val oneFooter =
+                  ParquetFileReader.readFooter(hadoopConf, part.getPath, NO_FILTER)
+                assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
+                assert(oneFooter.getFileMetaData.getSchema.getColumns.get(0).getType() ===
+                  PrimitiveTypeName.INT96)
+                val oneBlockMeta = oneFooter.getBlocks().get(0)
+                val oneBlockColumnMeta = oneBlockMeta.getColumns().get(0)
+                val columnStats = oneBlockColumnMeta.getStatistics
+                // This is the important assert.  Column stats are written, but they are ignored
+                // when the data is read back as mentioned above, b/c int96 is unsigned.  This
+                // assert makes sure this holds even if we change parquet versions (if eg. there
+                // were ever statistics even on unsigned columns).
+                assert(columnStats.isEmpty)
+              }
+
+              // These queries should return the entire dataset with the conversion applied,
+              // but if the predicates were applied to the raw values in parquet, they would
+              // incorrectly filter data out.
+              val query = spark.read.parquet(tableDir.getAbsolutePath)
+                .where(s"ts > '2001-01-01 01:00:00'")
+              val countWithFilter = query.count()
+              val exp = if (applyConversion) 6 else 5
+              assert(countWithFilter === exp, query)
             }
           }
         }
