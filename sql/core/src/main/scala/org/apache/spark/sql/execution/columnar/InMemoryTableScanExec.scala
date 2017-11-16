@@ -38,7 +38,13 @@ case class InMemoryTableScanExec(
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override def vectorTypes: Option[Seq[String]] =
-    Option(Seq.fill(attributes.length)(classOf[OnHeapColumnVector].getName))
+    Option(Seq.fill(attributes.length)(
+      if (!conf.offHeapColumnVectorEnabled) {
+        classOf[OnHeapColumnVector].getName
+      } else {
+        classOf[OffHeapColumnVector].getName
+      }
+    ))
 
   /**
    * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
