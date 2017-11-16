@@ -202,20 +202,15 @@ class LazilyGeneratedOrdering(
 
   @transient
   private[this] var generatedOrdering = {
-    var generatedOrdering = GenerateOrdering.generate(ordering)
-    if (!secondOrdering.isEmpty) {
-      secondOrdering.foreach { order =>
-        try {
-          GenerateOrdering.generate(Seq(order))
-          ordering ++ Seq(order)
-        } catch {
-          // Ignore exception caused by second ordering
-          case _: IllegalArgumentException =>
-        }
+    GenerateOrdering.generate(ordering ++ secondOrdering.filter( order => {
+      try {
+        GenerateOrdering.generate(Seq(order))
+        true
+      } catch {
+        // Ignore exception caused by second ordering
+        case _: IllegalArgumentException => false
       }
-      generatedOrdering = GenerateOrdering.generate(ordering)
-    }
-    generatedOrdering
+    }))
   }
 
   def compare(a: InternalRow, b: InternalRow): Int = {
