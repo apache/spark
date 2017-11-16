@@ -386,7 +386,9 @@ class ParquetFileFormat
         } else {
           // Doesn't matter what the parquet metadata says, no thread is going to do any conversion,
           // so we don't need to make a copy of the conf here.
-          broadcastedHadoopConf.value.value
+          val conf = broadcastedHadoopConf.value.value
+          conf.set(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, "false")
+          conf
         }
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)

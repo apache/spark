@@ -155,7 +155,6 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
             withClue(s"applyConversion = $applyConversion; vectorized = $vectorized") {
               assert(fullExpectations === actual)
 
-              // TODO run query with a filter, make sure pushdown is OK
               // Now test that the behavior is still correct even with a filter which could get
               // pushed down into parquet.  We don't need extra handling for pushed down
               // predicates because (a) in ParquetFilters, we ignore TimestampType and (b) parquet
