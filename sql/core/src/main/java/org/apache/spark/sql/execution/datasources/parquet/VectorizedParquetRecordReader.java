@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.TimeZone;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -34,6 +36,7 @@ import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
@@ -109,6 +112,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
   }
 
+  private TimeZone convertTz = null;
+
   /**
    * Implementation of RecordReader API.
    */
@@ -116,6 +121,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException, UnsupportedOperationException {
     super.initialize(inputSplit, taskAttemptContext);
+    Configuration hadoopConf = taskAttemptContext.getConfiguration();
+    boolean doTsConversion =
+        Boolean.valueOf(hadoopConf.get(SQLConf.PARQUET_SKIP_TIMESTAMP_CONVERSION().key()));
+    if (doTsConversion) {
+      convertTz = TimeZone.getTimeZone(hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE().key()));
+    }
     initializeInternal();
   }
 
@@ -291,8 +302,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     columnReaders = new VectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
-      columnReaders[i] = new VectorizedColumnReader(
-        columns.get(i), types.get(i).getOriginalType(), pages.getPageReader(columns.get(i)));
+      columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
+         pages.getPageReader(columns.get(i)), convertTz);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

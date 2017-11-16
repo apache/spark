@@ -121,7 +121,6 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       df.write.parquet(tableDir.getAbsolutePath)
       FileUtils.copyFile(new File(impalaFile), new File(tableDir, "part-00001.parq"))
 
-//      Seq(false).foreach { applyConversion =>
       Seq(false, true).foreach { applyConversion =>
         Seq(false, true).foreach { vectorized =>
           withSQLConf(

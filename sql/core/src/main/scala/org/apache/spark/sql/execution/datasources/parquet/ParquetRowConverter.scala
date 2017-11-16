@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
+import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -153,6 +155,15 @@ private[parquet] class ParquetRowConverter(
        |Catalyst form:
        |${catalystType.prettyJson}
      """.stripMargin)
+
+  /**
+   * If true, we adjust parsed timestamps based on the delta between UTC and the current TZ.  This
+   * is *not* the raw value in the sql conf -- we've already looked at the file metadata to decide
+   * if conversion applies to this file by this point.
+   */
+  val convertTs = hadoopConf.get(SQLConf.PARQUET_SKIP_TIMESTAMP_CONVERSION.key).toBoolean
+  val sessionTz = TimeZone.getTimeZone(hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key))
+  val UTC = TimeZone.getTimeZone("UTC")
 
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
@@ -282,7 +293,13 @@ private[parquet] class ParquetRowConverter(
             val buf = value.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
             val timeOfDayNanos = buf.getLong
             val julianDay = buf.getInt
-            updater.setLong(DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos))
+            val rawTime = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+            val adjTime = if (convertTs) {
+              DateTimeUtils.convertTz(rawTime, sessionTz, UTC)
+            } else {
+              rawTime
+            }
+            updater.setLong(adjTime)
           }
         }
 

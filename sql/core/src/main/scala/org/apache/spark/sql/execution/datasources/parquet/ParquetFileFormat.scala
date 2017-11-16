@@ -307,6 +307,10 @@ class ParquetFileFormat
     hadoopConf.set(
       ParquetWriteSupport.SPARK_ROW_SCHEMA,
       requiredSchema.json)
+    hadoopConf.set(
+      SQLConf.SESSION_LOCAL_TIMEZONE.key,
+      sparkSession.sessionState.conf.sessionLocalTimeZone
+    )
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
@@ -365,20 +369,20 @@ class ParquetFileFormat
           fileSplit.getLocations,
           null)
 
+      val hadoopConf = broadcastedHadoopConf.value.value
       val convertTimestamp =
         if (timestampConversion) {
-          val footer =
-            ParquetFileReader.readFooter(broadcastedHadoopConf.value.value, fileSplit.getPath)
+          val footer = ParquetFileReader.readFooter(hadoopConf, fileSplit.getPath, SKIP_ROW_GROUPS)
           val cb = footer.getFileMetaData().getCreatedBy()
-          logWarning(s"${fileSplit.getPath}.cb = $cb")
-          cb.startsWith("parquet-mr")
+          !cb.startsWith("parquet-mr")
         } else {
           false
         }
+      hadoopConf.set(SQLConf.PARQUET_SKIP_TIMESTAMP_CONVERSION.key, convertTimestamp.toString)
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
-        new TaskAttemptContextImpl(broadcastedHadoopConf.value.value, attemptId)
+        new TaskAttemptContextImpl(hadoopConf, attemptId)
 
       // Try to push down filters when filter push-down is enabled.
       // Notice: This push-down is RowGroups level, not individual records.

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.util.TimeZone;
 
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -93,13 +94,18 @@ public class VectorizedColumnReader {
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
   private final OriginalType originalType;
+  // The timezone conversion to apply to int96 timestamps.  Null if no conversion.
+  private final TimeZone convertTz;
+  private final static TimeZone UTC = TimeZone.getTimeZone("UTC");
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       OriginalType originalType,
-      PageReader pageReader) throws IOException {
+      PageReader pageReader,
+      TimeZone convertTz) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
+    this.convertTz = convertTz;
     this.originalType = originalType;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
@@ -298,7 +304,10 @@ public class VectorizedColumnReader {
             // TODO: Convert dictionary of Binaries to dictionary of Longs
             if (!column.isNullAt(i)) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
-              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
+              long rawTime = ParquetRowConverter.binaryToSQLTimestamp(v);
+              long adjTime =
+                  convertTz == null ? rawTime : DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+              column.putLong(i, adjTime);
             }
           }
         } else {
