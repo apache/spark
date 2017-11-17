@@ -393,7 +393,7 @@ class ParquetFileFormat
       // Try to push down filters when filter push-down is enabled.
       // Notice: This push-down is RowGroups level, not individual records.
       if (pushed.isDefined) {
-        ParquetInputFormat.setFilterPredicate(sharedConf, pushed.get)
+        ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
       }
       val taskContext = Option(TaskContext.get())
       val parquetReader = if (enableVectorizedReader) {
