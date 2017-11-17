@@ -63,7 +63,6 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
-    val numArgs = evals.length
     val args = ctx.freshName("args")
 
     val inputs = evals.zipWithIndex.map { case (eval, index) =>
@@ -81,7 +80,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       inputs.mkString("\n")
     }
     ev.copy(s"""
-      UTF8String[] $args = new UTF8String[$numArgs];
+      UTF8String[] $args = new UTF8String[${evals.length}];
       $codes
       UTF8String ${ev.value} = UTF8String.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
@@ -140,7 +139,7 @@ case class ConcatWs(children: Seq[Expression])
       val evals = children.map(_.genCode(ctx))
       val separator = evals.head
       val strings = evals.tail
-      val argNums = strings.length
+      val numArgs = strings.length
       val args = ctx.freshName("args")
 
       val inputs = strings.zipWithIndex.map { case (eval, index) =>
@@ -155,15 +154,15 @@ case class ConcatWs(children: Seq[Expression])
           ""
         }
       }
-      val codes = s"${separator.code}\n" +
-        (if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-           ctx.splitExpressions(inputs, "valueConcatWs",
-             ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
-         } else {
-           inputs.mkString("\n")
-         })
+      val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
+        ctx.splitExpressions(inputs, "valueConcatWs",
+          ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
+      } else {
+        inputs.mkString("\n")
+      }
       ev.copy(s"""
-        UTF8String[] $args = new UTF8String[$argNums];
+        UTF8String[] $args = new UTF8String[$numArgs];
+        ${separator.code}
         $codes
         UTF8String ${ev.value} = UTF8String.concatWs(${separator.value}, $args);
         boolean ${ev.isNull} = ${ev.value} == null;
