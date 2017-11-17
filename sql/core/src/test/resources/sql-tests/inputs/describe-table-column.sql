@@ -24,17 +24,18 @@ DESC EXTENDED desc_col_table key;
 
 DESC FORMATTED desc_col_table key;
 
+-- Test output for histogram statistics
 SET spark.sql.statistics.histogram.enabled=true;
 SET spark.sql.statistics.histogram.numBins=2;
 
-INSERT INTO desc_col_table values(1);
-INSERT INTO desc_col_table values(2);
-INSERT INTO desc_col_table values(3);
-INSERT INTO desc_col_table values(4);
+INSERT INTO desc_col_table values 1, 2, 3, 4;
 
 ANALYZE TABLE desc_col_table COMPUTE STATISTICS FOR COLUMNS key;
 
 DESC EXTENDED desc_col_table key;
+
+SET spark.sql.statistics.histogram.enabled=false;
+SET spark.sql.statistics.histogram.numBins=256;
 
 -- Test complex columns
 CREATE TABLE desc_complex_col_table (`a.b` int, col struct<x:int, y:string>) USING PARQUET;
