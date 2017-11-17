@@ -529,7 +529,6 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     // Create more than one rdd to mimic stageId not equal to rddId
     val pairs = sc.parallelize(Array((1, 2), (2, 3)), 2).
       map { p => (new Integer(p._1 + 1), new Integer(p._2 + 1)) }.filter { p => p._1 > 0 }
-    RDDID.rddid = pairs.id
     pairs.saveAsNewAPIHadoopFile[YetAnotherFakeFormat]("ignored")
   }
 
@@ -881,9 +880,8 @@ class YetAnotherFakeCommitter extends NewOutputCommitter with Assertions {
   def needsTaskCommit(t: NewTaskAttempContext): Boolean = false
 
   def setupTask(t: NewTaskAttempContext): Unit = {
-    val rddid = t.getTaskAttemptID().getJobID().getId
-    assert(rddid === RDDID.rddid )
-    assert(rddid === JobID.jobid)
+    val jobId = t.getTaskAttemptID().getJobID().getId
+    assert(jobId === JobID.jobid)
   }
 
   def commitTask(t: NewTaskAttempContext): Unit = {}
@@ -902,10 +900,6 @@ class YetAnotherFakeFormat() extends NewOutputFormat[Integer, Integer]() {
   def getOutputCommitter(t: NewTaskAttempContext): NewOutputCommitter = {
     new YetAnotherFakeCommitter()
   }
-}
-
-object RDDID {
-  var rddid = -1
 }
 
 object JobID {
