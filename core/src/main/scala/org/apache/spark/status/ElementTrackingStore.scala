@@ -111,7 +111,7 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
         doAsync {
           val count = store.count(value.getClass())
           list.foreach { t =>
-          if (count > t.threshold) {
+            if (count > t.threshold) {
               t.action(count)
             }
           }
