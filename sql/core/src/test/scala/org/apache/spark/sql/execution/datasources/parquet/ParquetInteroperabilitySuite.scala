@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
-import java.util.TimeZone
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
