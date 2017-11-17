@@ -350,14 +350,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         Thread.sleep(2000)
       }
       if (!context.isCompleted) {
-<<<<<<< HEAD
-        try {
-          logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-          env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, condaInstructions, worker)
-        } catch {
-          case e: Exception =>
-            logError("Exception when trying to kill worker", e)
-=======
         Thread.sleep(taskKillTimeout)
         if (!context.isCompleted) {
           try {
@@ -365,12 +357,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             val taskName = s"${context.partitionId}.${context.taskAttemptId} " +
               s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
             logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
-            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
+            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, condaInstructions, worker)
           } catch {
             case e: Exception =>
               logError("Exception when trying to kill worker", e)
           }
->>>>>>> origin/master
         }
       }
     }
