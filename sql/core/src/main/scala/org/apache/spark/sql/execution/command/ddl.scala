@@ -309,7 +309,7 @@ case class AlterTableChangeColumnCommand(
     columnName: String,
     newColumn: StructField) extends RunnableCommand {
 
-  // TODO: support change column name/dataType/metadata/position.
+  // TODO: support change column name/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
@@ -326,10 +326,18 @@ case class AlterTableChangeColumnCommand(
           s"'${newColumn.name}' with type '${newColumn.dataType}'")
     }
 
-    val newDataSchema = table.dataSchema.fields.map { field =>
+    val changeSchema = originColumn.dataType != newColumn.dataType
+    val newDataSchema = table.schema.fields.map { field =>
       if (field.name == originColumn.name) {
-        // Create a new column from the origin column with the new comment.
-        addComment(field, newColumn.getComment)
+        var newField = field
+        if (newColumn.getComment.isDefined) {
+          // Create a new column from the origin column with the new comment.
+          newField = addComment(field, newColumn.getComment)
+        }
+        if (changeSchema) {
+          newField = newField.copy(dataType = newColumn.dataType)
+        }
+        newField
       } else {
         field
       }
@@ -359,7 +367,7 @@ case class AlterTableChangeColumnCommand(
   // name(by resolver) and dataType.
   private def columnEqual(
       field: StructField, other: StructField, resolver: Resolver): Boolean = {
-    resolver(field.name, other.name) && field.dataType == other.dataType
+    resolver(field.name, other.name)
   }
 }
 

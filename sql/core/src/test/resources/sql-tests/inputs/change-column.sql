@@ -6,7 +6,7 @@ DESC test_change;
 ALTER TABLE test_change CHANGE a a1 INT;
 DESC test_change;
 
--- Change column dataType (not supported yet)
+-- Change column dataType
 ALTER TABLE test_change CHANGE a a STRING;
 DESC test_change;
 

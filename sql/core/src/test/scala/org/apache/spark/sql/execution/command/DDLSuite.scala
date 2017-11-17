@@ -1697,6 +1697,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
     assert(getMetadata("col1").getString("comment") == "this is col1")
+
+    // Ensure that change column type take effect
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 STRING")
+    val column = catalog.getTableMetadata(tableIdent).schema.fields.find(_.name == "col1")
+    assert(column.get.dataType == StringType)
   }
 
   test("drop build-in function") {
