@@ -689,6 +689,11 @@ case class DescribeColumnCommand(
       buffer += Row("distinct_count", cs.map(_.distinctCount.toString).getOrElse("NULL"))
       buffer += Row("avg_col_len", cs.map(_.avgLen.toString).getOrElse("NULL"))
       buffer += Row("max_col_len", cs.map(_.maxLen.toString).getOrElse("NULL"))
+      buffer ++= cs.flatMap(_.histogram.map { hist =>
+        val header = Row("histogram", s"height: ${hist.height}, num_of_bins: ${hist.bins.length}")
+        Seq(header) ++ hist.bins.map(bin => Row("",
+          s"lower_bound: ${bin.lo}, upper_bound: ${bin.hi}, distinct_count: ${bin.ndv}"))
+      }).getOrElse(Seq(Row("histogram", "NULL")))
     }
     buffer
   }
