@@ -41,7 +41,7 @@ public final class ColumnarArray extends ArrayData {
   // Reused staging buffer, used for loading from offheap.
   protected byte[] tmpByteArray = new byte[1];
 
-  protected ColumnarArray(ColumnVector data) {
+  ColumnarArray(ColumnVector data) {
     this.data = data;
   }
 
