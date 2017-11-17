@@ -22,7 +22,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.TimeZone;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -36,7 +35,6 @@ import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
-import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
@@ -80,6 +78,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private boolean[] missingColumns;
 
+  private TimeZone convertTz = null;
+
   /**
    * columnBatch object that is used for batch decoding. This is created on first use and triggers
    * batched decoding. It is not valid to interleave calls to the batched interface with the row
@@ -108,11 +108,18 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final MemoryMode MEMORY_MODE;
 
-  public VectorizedParquetRecordReader(boolean useOffHeap) {
+  public VectorizedParquetRecordReader(TimeZone convertTz, boolean useOffHeap) {
+    this.convertTz = convertTz;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
   }
 
-  private TimeZone convertTz = null;
+  public VectorizedParquetRecordReader(boolean useOffHeap) {
+    this(null, useOffHeap);
+  }
+
+  VectorizedParquetRecordReader() {
+    this(null, false);
+  }
 
   /**
    * Implementation of RecordReader API.
@@ -121,14 +128,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException, UnsupportedOperationException {
     super.initialize(inputSplit, taskAttemptContext);
-    Configuration hadoopConf = taskAttemptContext.getConfiguration();
-    // this is *not* the raw value in the sql conf -- we've already looked at the createdBy field
-    // for this particular file and adjusted that value accordingly by this point.
-    boolean doTsConversion =
-        Boolean.valueOf(hadoopConf.get(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION().key()));
-    if (doTsConversion) {
-      convertTz = TimeZone.getTimeZone(hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE().key()));
-    }
     initializeInternal();
   }
 
@@ -305,7 +304,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
       columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
-         pages.getPageReader(columns.get(i)), convertTz);
+        pages.getPageReader(columns.get(i)), convertTz);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

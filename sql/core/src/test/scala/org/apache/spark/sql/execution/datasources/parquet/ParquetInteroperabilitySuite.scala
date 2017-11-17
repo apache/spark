@@ -97,19 +97,19 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
     }
   }
 
-  val ImpalaFile = "test-data/impala_timestamp.parq"
   test("parquet timestamp conversion") {
     // Make a table with one parquet file written by impala, and one parquet file written by spark.
     // We should only adjust the timestamps in the impala file, and only if the conf is set
+    val impalaFile = "test-data/impala_timestamp.parq"
 
-    // here's the timestamps in the impala file, as they were saved by impala
+    // here are the timestamps in the impala file, as they were saved by impala
     val impalaFileData =
       Seq(
         "2001-01-01 01:01:01",
         "2002-02-02 02:02:02",
         "2003-03-03 03:03:03"
       ).map { s => java.sql.Timestamp.valueOf(s) }
-    val impalaFile = Thread.currentThread().getContextClassLoader.getResource(ImpalaFile)
+    val impalaPath = Thread.currentThread().getContextClassLoader.getResource(impalaFile)
       .toURI.getPath
     withTempPath { tableDir =>
       val ts = Seq(
@@ -117,42 +117,36 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
         "2005-05-05 05:05:05",
         "2006-06-06 06:06:06"
       ).map { s => java.sql.Timestamp.valueOf(s) }
-      val s = spark
-      import s.implicits._
+      import testImplicits._
       // match the column names of the file from impala
       val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
-      val schema = df.schema
       df.write.parquet(tableDir.getAbsolutePath)
-      FileUtils.copyFile(new File(impalaFile), new File(tableDir, "part-00001.parq"))
+      FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
-      Seq(false, true).foreach { applyConversion =>
+      Seq(false, true).foreach { int96TimestampConversion =>
         Seq(false, true).foreach { vectorized =>
           withSQLConf(
-              (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, applyConversion.toString()),
+              (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString()),
               (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
           ) {
-            val read = spark.read.parquet(tableDir.getAbsolutePath).collect()
-            assert(read.size === 6)
+            val readBack = spark.read.parquet(tableDir.getAbsolutePath).collect()
+            assert(readBack.size === 6)
             // if we apply the conversion, we'll get the "right" values, as saved by impala in the
             // original file.  Otherwise, they're off by the local timezone offset, set to
             // America/Los_Angeles in tests
-            val impalaExpectations = if (applyConversion) {
+            val impalaExpectations = if (int96TimestampConversion) {
               impalaFileData
             } else {
               impalaFileData.map { ts =>
                 DateTimeUtils.toJavaTimestamp(DateTimeUtils.convertTz(
                   DateTimeUtils.fromJavaTimestamp(ts),
-                  TimeZone.getTimeZone("UTC"),
-                  TimeZone.getDefault()))
+                  DateTimeUtils.TimeZoneUTC,
+                  DateTimeUtils.getTimeZone(conf.sessionLocalTimeZone)))
               }
             }
-            val fullExpectations = (ts ++ impalaExpectations).map {
-              _.toString()
-            }.sorted.toArray
-            val actual = read.map {
-              _.getTimestamp(0).toString()
-            }.sorted
-            withClue(s"applyConversion = $applyConversion; vectorized = $vectorized") {
+            val fullExpectations = (ts ++ impalaExpectations).map(_.toString).sorted.toArray
+            val actual = readBack.map(_.getTimestamp(0).toString).sorted
+            withClue(s"applyConversion = $int96TimestampConversion; vectorized = $vectorized") {
               assert(fullExpectations === actual)
 
               // Now test that the behavior is still correct even with a filter which could get
@@ -195,9 +189,9 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // but if the predicates were applied to the raw values in parquet, they would
               // incorrectly filter data out.
               val query = spark.read.parquet(tableDir.getAbsolutePath)
-                .where(s"ts > '2001-01-01 01:00:00'")
+                .where("ts > '2001-01-01 01:00:00'")
               val countWithFilter = query.count()
-              val exp = if (applyConversion) 6 else 5
+              val exp = if (int96TimestampConversion) 6 else 5
               assert(countWithFilter === exp, query)
             }
           }

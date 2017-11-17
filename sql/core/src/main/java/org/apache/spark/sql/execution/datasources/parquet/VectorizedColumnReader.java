@@ -96,7 +96,7 @@ public class VectorizedColumnReader {
   private final OriginalType originalType;
   // The timezone conversion to apply to int96 timestamps.  Null if no conversion.
   private final TimeZone convertTz;
-  private final static TimeZone UTC = TimeZone.getTimeZone("UTC");
+  private final static TimeZone UTC = DateTimeUtils.TimeZoneUTC();
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
@@ -439,9 +439,11 @@ public class VectorizedColumnReader {
     } else if (column.dataType() == DataTypes.TimestampType) {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
-          column.putLong(rowId + i,
-              // Read 12 bytes for INT96
-              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
+          // Read 12 bytes for INT96
+          long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
+          long adjTime =
+              convertTz == null ? rawTime : DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+          column.putLong(rowId + i, adjTime);
         } else {
           column.putNull(rowId + i);
         }

@@ -24,7 +24,6 @@ import java.util.TimeZone
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.{GroupType, MessageType, OriginalType, Type}
@@ -36,7 +35,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -120,14 +118,14 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
  *        types should have been expanded.
- * @param hadoopConf a hadoop Configuration for passing any extra parameters for parquet conversion
+ * @param convertTz the optional time zone to convert to for int96 data
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetToSparkSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
-    hadoopConf: Configuration,
+    convertTz: Option[TimeZone],
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -156,14 +154,7 @@ private[parquet] class ParquetRowConverter(
        |${catalystType.prettyJson}
      """.stripMargin)
 
-  /**
-   * If true, we adjust parsed timestamps based on the delta between UTC and the current TZ.  This
-   * is *not* the raw value in the sql conf -- we've already looked at the file metadata to decide
-   * if conversion applies to this file by this point.
-   */
-  val convertTs = hadoopConf.get(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key).toBoolean
-  val sessionTz = TimeZone.getTimeZone(hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key))
-  val UTC = TimeZone.getTimeZone("UTC")
+  val UTC = DateTimeUtils.TimeZoneUTC
 
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
@@ -294,11 +285,7 @@ private[parquet] class ParquetRowConverter(
             val timeOfDayNanos = buf.getLong
             val julianDay = buf.getInt
             val rawTime = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
-            val adjTime = if (convertTs) {
-              DateTimeUtils.convertTz(rawTime, sessionTz, UTC)
-            } else {
-              rawTime
-            }
+            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, UTC)).getOrElse(rawTime)
             updater.setLong(adjTime)
           }
         }
@@ -329,7 +316,7 @@ private[parquet] class ParquetRowConverter(
 
       case t: StructType =>
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, hadoopConf, new ParentContainerUpdater {
+          schemaConverter, parquetType.asGroupType(), t, convertTz, new ParentContainerUpdater {
             override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
           })
 

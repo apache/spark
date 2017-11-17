@@ -293,8 +293,8 @@ object SQLConf {
 
   val PARQUET_INT96_TIMESTAMP_CONVERSION = buildConf("spark.sql.parquet.int96TimestampConversion")
     .doc("This controls whether timestamp adjustments should be applied to INT96 data when " +
-      "converting to timestamps, for data written by Impala.  This is necessary because Impala" +
-      "stores INT96 data with a different offset than Hive & Spark.")
+      "converting to timestamps, for data written by Impala.  This is necessary because Impala " +
+      "stores INT96 data with a different timezone offset than Hive & Spark.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1212,6 +1212,8 @@ class SQLConf extends Serializable with Logging {
   def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
 
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
+
+  def isParquetINT96TimestampConversion: Boolean = getConf(PARQUET_INT96_TIMESTAMP_CONVERSION)
 
   def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
 

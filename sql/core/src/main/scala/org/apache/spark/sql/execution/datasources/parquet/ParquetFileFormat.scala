@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf
@@ -349,8 +350,8 @@ class ParquetFileFormat
       resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
     val enableRecordFilter: Boolean =
       sparkSession.sessionState.conf.parquetRecordFilterEnabled
-    val timestampConversion =
-      sparkSession.sessionState.conf.getConf(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION)
+    val timestampConversion: Boolean =
+      sparkSession.sessionState.conf.isParquetINT96TimestampConversion
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
 
@@ -369,41 +370,35 @@ class ParquetFileFormat
           fileSplit.getLocations,
           null)
 
+      val sharedConf = broadcastedHadoopConf.value.value
       // PARQUET_INT96_TIMESTAMP_CONVERSION says to apply timezone conversions to int96 timestamps'
       // *only* if the file was created by something other than "parquet-mr", so check the actual
       // writer here for this file.  We have to do this per-file, as each file in the table may
-      // have different writers.  Sadly, this also means we have to clone the hadoopConf, as
-      // different threads may want different values.  We have to use the hadoopConf as its
-      // our only way to pass value to ParquetReadSupport.init
-      val localHadoopConf =
-        if (timestampConversion) {
-          val confCopy = new Configuration(broadcastedHadoopConf.value.value)
-          val footer =
-            ParquetFileReader.readFooter(confCopy, fileSplit.getPath, SKIP_ROW_GROUPS)
-          val doConversion = !footer.getFileMetaData().getCreatedBy().startsWith("parquet-mr")
-          confCopy.set(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, doConversion.toString())
-          confCopy
+      // have different writers.
+      def isCreatedByParquetMr(): Boolean = {
+        val footer = ParquetFileReader.readFooter(sharedConf, fileSplit.getPath, SKIP_ROW_GROUPS)
+        footer.getFileMetaData().getCreatedBy().startsWith("parquet-mr")
+      }
+      val convertTz =
+        if (timestampConversion && !isCreatedByParquetMr()) {
+          Some(DateTimeUtils.getTimeZone(sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
         } else {
-          // Doesn't matter what the parquet metadata says, no thread is going to do any conversion,
-          // so we don't need to make a copy of the conf here.
-          val conf = broadcastedHadoopConf.value.value
-          conf.set(SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, "false")
-          conf
+          None
         }
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
-        new TaskAttemptContextImpl(localHadoopConf, attemptId)
+        new TaskAttemptContextImpl(sharedConf, attemptId)
 
       // Try to push down filters when filter push-down is enabled.
       // Notice: This push-down is RowGroups level, not individual records.
       if (pushed.isDefined) {
-        ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
+        ParquetInputFormat.setFilterPredicate(sharedConf, pushed.get)
       }
       val taskContext = Option(TaskContext.get())
       val parquetReader = if (enableVectorizedReader) {
         val vectorizedReader =
-          new VectorizedParquetRecordReader(enableOffHeapColumnVector && taskContext.isDefined)
+          new VectorizedParquetRecordReader(convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined)
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
@@ -416,9 +411,9 @@ class ParquetFileFormat
         // ParquetRecordReader returns UnsafeRow
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport, parquetFilter)
+          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz), parquetFilter)
         } else {
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport)
+          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz))
         }
         reader.initialize(split, hadoopAttemptContext)
         reader
