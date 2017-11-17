@@ -279,6 +279,17 @@ class CrossValidatorModel private[ml] (
     this
   }
 
+  // A Python-friendly auxiliary method
+  private[tuning] def setSubModels(subModels: JList[JList[Model[_]]])
+    : CrossValidatorModel = {
+    _subModels = if (subModels != null) {
+      Some(subModels.asScala.toArray.map(_.asScala.toArray))
+    } else {
+      None
+    }
+    this
+  }
+
   /**
    * @return submodels represented in two dimension array. The index of outer array is the
    *         fold index, and the index of inner array corresponds to the ordering of

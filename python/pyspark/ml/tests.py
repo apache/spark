@@ -874,11 +874,30 @@ class CrossValidatorTests(SparkSessionTestCase):
         numFolds = 3
         cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
                             numFolds=numFolds, collectSubModels=True)
+
+        def checkSubModels(subModels):
+            assert len(subModels) == numFolds
+            for i in range(numFolds):
+                assert len(subModels[i]) == len(grid)
+
         cvModel = cv.fit(dataset)
-        subModels = cvModel.subModels
-        assert len(subModels) == numFolds
+        checkSubModels(cvModel.subModels)
+
+        # Test the default value for option "persistSubModel" to be "true"
+        testSubPath = temp_path + "/testCrossValidatorSubModels"
+        savingPathWithSubModels = testSubPath + "cvModel3"
+        cvModel.save(savingPathWithSubModels)
+        cvModel3 = CrossValidatorModel.load(savingPathWithSubModels)
+        checkSubModels(cvModel3.subModels)
+
+        savingPathWithoutSubModels = testSubPath + "cvModel2"
+        cvModel.write().option("persistSubModels", "false").save(savingPathWithoutSubModels)
+        cvModel2 = CrossValidatorModel.load(savingPathWithoutSubModels)
+        assert cvModel2.subModels is None
+
         for i in range(numFolds):
-            assert len(subModels[i]) == 2
+            for j in range(len(grid)):
+                self.assertEqual(cvModel.subModels[i][j].uid, cvModel3.subModels[i][j].uid)
 
     def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
@@ -1063,9 +1082,22 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
                                    collectSubModels=True)
         tvsModel = tvs.fit(dataset)
-        subModels = tvsModel.subModels
-        assert len(subModels) == 2
+        assert len(tvsModel.subModels) == len(grid)
 
+        # Test the default value for option "persistSubModel" to be "true"
+        testSubPath = temp_path + "/testTrainValidationSplitSubModels"
+        savingPathWithSubModels = testSubPath + "cvModel3"
+        tvsModel.save(savingPathWithSubModels)
+        tvsModel3 = TrainValidationSplitModel.load(savingPathWithSubModels)
+        assert len(tvsModel3.subModels) == len(grid)
+
+        savingPathWithoutSubModels = testSubPath + "cvModel2"
+        tvsModel.write().option("persistSubModels", "false").save(savingPathWithoutSubModels)
+        tvsModel2 = TrainValidationSplitModel.load(savingPathWithoutSubModels)
+        assert tvsModel2.subModels is None
+
+        for i in range(len(grid)):
+            self.assertEqual(tvsModel.subModels[i].uid, tvsModel3.subModels[i].uid)
 
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.

@@ -418,12 +418,16 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         Given a Java CrossValidatorModel, create and return a Python wrapper of it.
         Used for ML persistence.
         """
-
         bestModel = JavaParams._from_java(java_stage.bestModel())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
         py_stage = cls(bestModel=bestModel).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
+
+        if java_stage.hasSubModels():
+            py_stage.subModels = [[JavaParams._from_java(sub_model)
+                                   for sub_model in fold_sub_models]
+                                  for fold_sub_models in java_stage.subModels()]
 
         py_stage._resetUid(java_stage.uid())
         return py_stage
@@ -446,6 +450,11 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         _java_obj.set("evaluator", evaluator)
         _java_obj.set("estimator", estimator)
         _java_obj.set("estimatorParamMaps", epms)
+
+        if self.subModels is not None:
+            java_sub_models = [[sub_model._to_java() for sub_model in fold_sub_models]
+                               for fold_sub_models in self.subModels]
+            _java_obj.setSubModels(java_sub_models)
         return _java_obj
 
 
@@ -623,7 +632,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         _java_obj.setTrainRatio(self.getTrainRatio())
         _java_obj.setSeed(self.getSeed())
         _java_obj.setParallelism(self.getParallelism())
-
         return _java_obj
 
 
@@ -693,6 +701,10 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         py_stage = cls(bestModel=bestModel).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
 
+        if java_stage.hasSubModels():
+            py_stage.subModels = [JavaParams._from_java(sub_model)
+                                  for sub_model in java_stage.subModels()]
+
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -714,6 +726,11 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         _java_obj.set("evaluator", evaluator)
         _java_obj.set("estimator", estimator)
         _java_obj.set("estimatorParamMaps", epms)
+
+        if self.subModels is not None:
+            java_sub_models = [sub_model._to_java() for sub_model in self.subModels]
+            _java_obj.setSubModels(java_sub_models)
+
         return _java_obj
 
 

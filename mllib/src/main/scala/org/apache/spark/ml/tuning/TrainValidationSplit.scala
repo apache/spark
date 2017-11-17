@@ -271,6 +271,17 @@ class TrainValidationSplitModel private[ml] (
     this
   }
 
+  // A Python-friendly auxiliary method
+  private[tuning] def setSubModels(subModels: JList[Model[_]])
+    : TrainValidationSplitModel = {
+    _subModels = if (subModels != null) {
+      Some(subModels.asScala.toArray)
+    } else {
+      None
+    }
+    this
+  }
+
   /**
    * @return submodels represented in array. The index of array corresponds to the ordering of
    *         estimatorParamMaps
