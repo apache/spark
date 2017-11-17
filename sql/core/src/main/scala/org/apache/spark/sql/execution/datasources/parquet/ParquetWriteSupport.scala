@@ -69,12 +69,6 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // Whether to write data in legacy Parquet format compatible with Spark 1.4 and prior versions
   private var writeLegacyParquetFormat: Boolean = _
 
-  // Whether to write timestamps as int96
-  private var writeTimestampAsInt96: Boolean = _
-
-  // Whether to write timestamp value with milliseconds precision.
-  private var writeTimestampInMillis: Boolean = _
-
   // Which parquet timestamp type to use when writing.
   private var outputTimestampType: SQLConf.ParquetOutputTimestampType.Value = _
 
@@ -89,11 +83,6 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       assert(configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key) != null)
       configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean
     }
-    this.writeTimestampAsInt96 = {
-      assert(configuration.get(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key) != null)
-      configuration.get(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key).toBoolean
-    }
-
     this.outputTimestampType = {
       val key = SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key
       assert(configuration.get(key) != null)

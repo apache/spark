@@ -1214,15 +1214,14 @@ class SQLConf extends Serializable with Logging {
       ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
     } else if (!isOutputTimestampTypeSet && isParquetINT64AsTimestampMillis) {
       // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_INT64_AS_TIMESTAMP_MILLIS is set,
-      // respect PARQUET_INT64_AS_TIMESTAMP_MILLIS and use TIMESTAMP_MILLIS. Otherwise,
-      // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
+      // respect PARQUET_INT64_AS_TIMESTAMP_MILLIS and use TIMESTAMP_MILLIS.
       ParquetOutputTimestampType.TIMESTAMP_MILLIS
     } else if (!isOutputTimestampTypeSet && isParquetTimestampAsINT96) {
       // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_TIMESTAMP_AS_INT96 is set,
-      // respect PARQUET_TIMESTAMP_AS_INT96 and use TIMESTAMP_MILLIS. Otherwise,
-      // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
+      // respect PARQUET_TIMESTAMP_AS_INT96 and use TIMESTAMP_MILLIS.
       ParquetOutputTimestampType.TIMESTAMP_MILLIS
     } else {
+      // Otherwise, PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
       ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
     }
   }
