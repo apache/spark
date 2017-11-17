@@ -40,11 +40,6 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
   test("MetricsSystem with default config") {
     val metricsSystem = MetricsSystem.createMetricsSystem("default", conf, securityMgr)
     metricsSystem.start()
-<<<<<<< HEAD
-=======
-    val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
-    val sinks = PrivateMethod[ArrayBuffer[Sink]]('sinks)
->>>>>>> origin/master
 
     assert(metricsSystem.getSources.length === StaticSources.allSources.length)
     assert(metricsSystem.getSinks.length === 0)
@@ -54,11 +49,6 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
   test("MetricsSystem with sources add") {
     val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
     metricsSystem.start()
-<<<<<<< HEAD
-=======
-    val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
-    val sinks = PrivateMethod[ArrayBuffer[Sink]]('sinks)
->>>>>>> origin/master
 
     assert(metricsSystem.getSources.length === StaticSources.allSources.length)
     assert(metricsSystem.getSinks.length === 1)
