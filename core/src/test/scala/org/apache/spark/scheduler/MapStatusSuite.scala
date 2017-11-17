@@ -97,6 +97,28 @@ class MapStatusSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-22540: ensure HighlyCompressedMapStatus calculates correct avgSize") {
+    val threshold = 1000
+    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.key, threshold.toString)
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+    val sizes = (0L to 3000L).toArray
+    val smallBlockSizes = sizes.filter(n => n > 0 && n < threshold)
+    val avg = smallBlockSizes.sum / smallBlockSizes.length
+    val loc = BlockManagerId("a", "b", 10)
+    val status = MapStatus(loc, sizes)
+    val status1 = compressAndDecompressMapStatus(status)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status1.location == loc)
+    for (i <- 0 until threshold) {
+      val estimate = status1.getSizeForBlock(i)
+      if (sizes(i) > 0) {
+        assert(estimate === avg)
+      }
+    }
+  }
+
   def compressAndDecompressMapStatus(status: MapStatus): MapStatus = {
     val ser = new JavaSerializer(new SparkConf)
     val buf = ser.newInstance().serialize(status)
