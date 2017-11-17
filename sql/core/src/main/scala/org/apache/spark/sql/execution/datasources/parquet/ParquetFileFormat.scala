@@ -125,17 +125,8 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.writeLegacyParquetFormat.toString)
 
     conf.set(
-<<<<<<< HEAD
-      SQLConf.PARQUET_TIMESTAMP_AS_INT96.key,
-      sparkSession.sessionState.conf.isParquetTimestampAsINT96.toString)
-
-    conf.set(
-      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
-      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis.toString)
-=======
       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
       sparkSession.sessionState.conf.parquetOutputTimestampType.toString)
->>>>>>> origin/master
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
@@ -383,17 +374,8 @@ class ParquetFileFormat
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
-<<<<<<< HEAD
     val int96AsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
-    // Sets flags for `CatalystSchemaConverter`
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.sessionState.conf.isParquetBinaryAsString)
-    hadoopConf.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key, int96AsTimestamp)
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
-      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
-=======
+
     // Sets flags for `ParquetToSparkSchemaConverter`
     hadoopConf.setBoolean(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
@@ -401,7 +383,6 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
->>>>>>> origin/master
 
     // By default, disable record level filtering.
     if (hadoopConf.get(ParquetInputFormat.RECORD_FILTERING_ENABLED) == null) {
@@ -530,22 +511,9 @@ object ParquetFileFormat extends Logging {
   private[parquet] def readSchema(
       footers: Seq[Footer], sparkSession: SparkSession): Option[StructType] = {
 
-<<<<<<< HEAD
-    def parseParquetSchema(schema: MessageType): StructType = {
-      val converter = new ParquetSchemaConverter(
-        sparkSession.sessionState.conf.isParquetBinaryAsString,
-        sparkSession.sessionState.conf.isParquetINT96AsTimestamp,
-        sparkSession.sessionState.conf.writeLegacyParquetFormat,
-        sparkSession.sessionState.conf.isParquetTimestampAsINT96,
-        sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
-
-      converter.convert(schema)
-    }
-=======
     val converter = new ParquetToSparkSchemaConverter(
       sparkSession.sessionState.conf.isParquetBinaryAsString,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
->>>>>>> origin/master
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -649,12 +617,6 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
-<<<<<<< HEAD
-    val writeTimestampInMillis = sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis
-    val writeLegacyParquetFormat = sparkSession.sessionState.conf.writeLegacyParquetFormat
-    val writeTimestampAsInt96 = sparkSession.sessionState.conf.isParquetTimestampAsINT96
-=======
->>>>>>> origin/master
     val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
     // !! HACK ALERT !!
@@ -694,20 +656,9 @@ object ParquetFileFormat extends Logging {
               serializedConf.value, fakeFileStatuses, ignoreCorruptFiles)
 
           // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
-<<<<<<< HEAD
-          val converter =
-            new ParquetSchemaConverter(
-              assumeBinaryIsString = assumeBinaryIsString,
-              assumeInt96IsTimestamp = assumeInt96IsTimestamp,
-              writeLegacyParquetFormat = writeLegacyParquetFormat,
-              writeTimestampAsInt96 = writeTimestampAsInt96,
-              writeTimestampInMillis = writeTimestampInMillis)
-
-=======
           val converter = new ParquetToSparkSchemaConverter(
             assumeBinaryIsString = assumeBinaryIsString,
             assumeInt96IsTimestamp = assumeInt96IsTimestamp)
->>>>>>> origin/master
           if (footers.isEmpty) {
             Iterator.empty
           } else {

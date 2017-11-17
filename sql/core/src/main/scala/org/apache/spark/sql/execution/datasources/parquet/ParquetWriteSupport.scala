@@ -69,16 +69,14 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // Whether to write data in legacy Parquet format compatible with Spark 1.4 and prior versions
   private var writeLegacyParquetFormat: Boolean = _
 
-<<<<<<< HEAD
   // Whether to write timestamps as int96
   private var writeTimestampAsInt96: Boolean = _
 
   // Whether to write timestamp value with milliseconds precision.
   private var writeTimestampInMillis: Boolean = _
-=======
+
   // Which parquet timestamp type to use when writing.
   private var outputTimestampType: SQLConf.ParquetOutputTimestampType.Value = _
->>>>>>> origin/master
 
   // Reusable byte array used to write decimal values
   private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
@@ -175,9 +173,6 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
           recordConsumer.addBinary(
             Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
 
-<<<<<<< HEAD
-      case TimestampType => makeTimestampWriter()
-=======
       case TimestampType =>
         outputTimestampType match {
           case SQLConf.ParquetOutputTimestampType.INT96 =>
@@ -196,7 +191,6 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
               val millis = DateTimeUtils.toMillis(row.getLong(ordinal))
               recordConsumer.addLong(millis)
         }
->>>>>>> origin/master
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
@@ -221,22 +215,6 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       // TODO Adds IntervalType support
       case _ => sys.error(s"Unsupported data type $dataType.")
     }
-  }
-
-  private def makeTimestampWriter(): ValueWriter = {
-    val millisWriter = (row: SpecializedGetters, ordinal: Int) => {
-      recordConsumer.addLong(DateTimeUtils.toMillis(row.getLong(ordinal)))
-    }
-    val int96Writer = (row: SpecializedGetters, ordinal: Int) => {
-      val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
-      val buf = ByteBuffer.wrap(timestampBuffer)
-      buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
-      recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
-    }
-    val longWriter = (row: SpecializedGetters, ordinal: Int) =>
-      recordConsumer.addLong(row.getLong(ordinal))
-    if (writeTimestampAsInt96) int96Writer else
-      if (writeTimestampInMillis) millisWriter else longWriter
   }
 
   private def makeDecimalWriter(precision: Int, scale: Int): ValueWriter = {
