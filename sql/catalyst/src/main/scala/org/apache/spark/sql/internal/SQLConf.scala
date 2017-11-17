@@ -284,12 +284,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PARQUET_TIMESTAMP_AS_INT96 = buildConf("spark.sql.parquet.timestampAsInt96")
-    .doc(s"(Deprecated, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key} instead). Write " +
-      "timestamps as int96 to maintain legacy compatibility")
-    .booleanConf
-    .createWithDefault(false)
-
   object ParquetOutputTimestampType extends Enumeration {
     val INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
   }
@@ -305,6 +299,12 @@ object SQLConf {
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
     .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
     // TODO(aash): ^ is TIMESTAMP_MICROS right for Palantir backcompat?
+
+  val PARQUET_TIMESTAMP_AS_INT96 = buildConf("spark.sql.parquet.timestampAsInt96")
+    .doc(s"(Deprecated, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key} instead). Write " +
+      "timestamps as int96 to maintain legacy compatibility")
+    .booleanConf
+    .createWithDefault(false)
 
   val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
     .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
