@@ -160,19 +160,26 @@ case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
       return plan
     }
     // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.
-    val subqueries = mutable.HashMap[StructType, ArrayBuffer[SubqueryExec]]()
+    val subqueries = mutable.HashMap[StructType, ArrayBuffer[ExecSubqueryExpression]]()
     plan transformAllExpressions {
       case sub: ExecSubqueryExpression =>
-        val sameSchema = subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[SubqueryExec]())
-        val sameResult = sameSchema.find(_.sameResult(sub.plan))
+        val sameSchema = subqueries.getOrElseUpdate(
+          sub.plan.schema, ArrayBuffer[ExecSubqueryExpression]())
+        val sameResult = sameSchema.find(_.plan.sameResult(sub.plan))
         if (sameResult.isDefined) {
-          val unreused = sameResult.get
-          val reused = unreused.copy(name = unreused.name.replace("unreused", "reused"))
-          sameSchema.clear()
-          sameSchema += reused
+          val original = sameResult.get.plan
+          val reused = if (original.name.contains("unreused")) {
+            val reused = original.copy(name = original.name.replace("unreused", "reused"))
+            sameResult.get.withNewPlan(reused)
+            reused
+          } else {
+            sameSchema += sub
+            original
+          }
           sub.withNewPlan(reused)
+          sub
         } else {
-          sameSchema += sub.plan
+          sameSchema += sub
           sub
         }
     }
