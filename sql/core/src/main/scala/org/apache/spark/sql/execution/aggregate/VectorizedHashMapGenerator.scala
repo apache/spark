@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -41,7 +40,6 @@ import org.apache.spark.sql.types._
  * `BytesToBytesMap` to store them.
  */
 class VectorizedHashMapGenerator(
-    conf: SQLConf,
     ctx: CodegenContext,
     aggregateExpressions: Seq[AggregateExpression],
     generatedClassName: String,
@@ -77,14 +75,9 @@ class VectorizedHashMapGenerator(
           }
         }.mkString("\n").concat(";")
 
-    val columnVector = if (!conf.offHeapColumnVectorEnabled) {
-      "OnHeapColumnVector"
-    } else {
-      "OffHeapColumnVector"
-    }
     s"""
-       |  private org.apache.spark.sql.execution.vectorized.$columnVector[] batchVectors;
-       |  private org.apache.spark.sql.execution.vectorized.$columnVector[] bufferVectors;
+       |  private org.apache.spark.sql.execution.vectorized.OnHeapColumnVector[] batchVectors;
+       |  private org.apache.spark.sql.execution.vectorized.OnHeapColumnVector[] bufferVectors;
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch aggregateBufferBatch;
        |  private int[] buckets;
@@ -99,12 +92,12 @@ class VectorizedHashMapGenerator(
        |
        |  public $generatedClassName() {
        |    batchVectors = org.apache.spark.sql.execution.vectorized
-       |      .$columnVector.allocateColumns(capacity, schema);
+       |      .OnHeapColumnVector.allocateColumns(capacity, schema);
        |    batch = new org.apache.spark.sql.execution.vectorized.ColumnarBatch(
        |      schema, batchVectors, capacity);
        |
        |    bufferVectors = new org.apache.spark.sql.execution.vectorized
-       |      .$columnVector[aggregateBufferSchema.fields().length];
+       |      .OnHeapColumnVector[aggregateBufferSchema.fields().length];
        |    for (int i = 0; i < aggregateBufferSchema.fields().length; i++) {
        |      bufferVectors[i] = batchVectors[i + ${groupingKeys.length}];
        |    }
@@ -239,15 +232,6 @@ class VectorizedHashMapGenerator(
        |public java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarRow>
        |    rowIterator() {
        |  return batch.rowIterator();
-       |}
-     """.stripMargin
-  }
-
-  protected final def generateClose(): String = {
-    s"""
-       |public void close() {
-       |  aggregateBufferBatch.close();
-       |  batch.close();
        |}
      """.stripMargin
   }

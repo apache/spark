@@ -140,12 +140,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val COLUMNVECTOR_OFFHEAP_ENABLED =
+  val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enable")
       .internal()
       .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
@@ -1217,7 +1217,7 @@ class SQLConf extends Serializable with Logging {
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
-  def offHeapColumnVectorEnabled: Boolean = getConf(COLUMNVECTOR_OFFHEAP_ENABLED)
+  def offHeapColumnVectorEnabled: Boolean = getConf(COLUMN_VECTOR_OFFHEAP_ENABLED)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 

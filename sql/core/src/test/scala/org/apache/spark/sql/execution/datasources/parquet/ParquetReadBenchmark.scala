@@ -75,7 +75,7 @@ object ParquetReadBenchmark {
 
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        val enableOffHeapColumnVector = spark.sqlContext.conf.offHeapColumnVectorEnabled
+        val enableOffHeapColumnVector = spark.sessionState.conf.offHeapColumnVectorEnabled
         spark.range(values).createOrReplaceTempView("t1")
         spark.sql("select cast(id as INT) as id from t1")
             .write.parquet(dir.getCanonicalPath)

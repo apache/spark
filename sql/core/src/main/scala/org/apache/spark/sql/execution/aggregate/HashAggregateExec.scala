@@ -579,7 +579,7 @@ case class HashAggregateExec(
     val fastHashMapClassName = ctx.freshName("FastHashMap")
     val fastHashMapGenerator =
       if (isVectorizedHashMapEnabled) {
-        new VectorizedHashMapGenerator(sqlContext.conf, ctx, aggregateExpressions,
+        new VectorizedHashMapGenerator(ctx, aggregateExpressions,
           fastHashMapClassName, groupingKeySchema, bufferSchema)
       } else {
         new RowBasedHashMapGenerator(ctx, aggregateExpressions,

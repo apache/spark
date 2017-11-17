@@ -101,12 +101,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private boolean returnColumnarBatch;
 
   /**
-   * The default config on whether columnarBatch should be offheap.
+   * The config on whether columnarBatch should be offheap.
    */
-  private final MemoryMode DEFAULT_MEMORY_MODE;
+  private final MemoryMode MEMORY_MODE;
 
   public VectorizedParquetRecordReader(boolean useOffHeap) {
-    DEFAULT_MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
+    MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
   }
 
   /**
@@ -208,11 +208,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   public void initBatch() {
-    initBatch(DEFAULT_MEMORY_MODE, null, null);
+    initBatch(MEMORY_MODE, null, null);
   }
 
   public void initBatch(StructType partitionColumns, InternalRow partitionValues) {
-    initBatch(DEFAULT_MEMORY_MODE, partitionColumns, partitionValues);
+    initBatch(MEMORY_MODE, partitionColumns, partitionValues);
   }
 
   /**
