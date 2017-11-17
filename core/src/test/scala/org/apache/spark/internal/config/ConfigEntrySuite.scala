@@ -262,4 +262,30 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(iConf) === 2)
   }
 
+  test("conf entry: alternative keys") {
+    val conf = new SparkConf()
+    val iConf = ConfigBuilder(testKey("a"))
+      .withAlternative(testKey("b"))
+      .withAlternative(testKey("c"))
+      .intConf.createWithDefault(0)
+
+    // no key is set, return default value.
+    assert(conf.get(iConf) === 0)
+
+    // the primary key is set, the alternative keys are not set, return the value of primary key.
+    conf.set(testKey("a"), "1")
+    assert(conf.get(iConf) === 1)
+
+    // the primary key and alternative keys are all set, return the value of primary key.
+    conf.set(testKey("b"), "2")
+    conf.set(testKey("c"), "3")
+    assert(conf.get(iConf) === 1)
+
+    // the primary key is not set, (some of) the alternative keys are set, return the value of the
+    // first alternative key that is set.
+    conf.remove(testKey("a"))
+    assert(conf.get(iConf) === 2)
+    conf.remove(testKey("b"))
+    assert(conf.get(iConf) === 3)
+  }
 }

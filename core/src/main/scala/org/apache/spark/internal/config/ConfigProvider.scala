@@ -19,8 +19,6 @@ package org.apache.spark.internal.config
 
 import java.util.{Map => JMap}
 
-import org.apache.spark.SparkConf
-
 /**
  * A source of configuration values.
  */
@@ -49,14 +47,13 @@ private[spark] class MapProvider(conf: JMap[String, String]) extends ConfigProvi
 }
 
 /**
- * A config provider that only reads Spark config keys, and consider deprecated aliases for the
- * key registered in SparkConf.
+ * A config provider that only reads Spark config keys.
  */
 private[spark] class SparkConfigProvider(conf: JMap[String, String]) extends ConfigProvider {
 
   override def get(key: String): Option[String] = {
     if (key.startsWith("spark.")) {
-      Option(conf.get(key)).orElse(SparkConf.getDeprecatedConfig(key, conf))
+      Option(conf.get(key))
     } else {
       None
     }
