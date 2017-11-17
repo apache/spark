@@ -2174,15 +2174,13 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     .. note:: The user-defined function must be deterministic.
     """
-    # decorator @pandas_udf(dataType(), functionType)
-    if f is None or isinstance(f, (str, DataType)):
+    # decorator @pandas_udf(returnType, functionType)
+    is_decorator = f is None or isinstance(f, (str, DataType))
+
+    if is_decorator:
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
-
         return_type = f or returnType
-
-        if return_type is None:
-            raise ValueError("Must specify return type.")
 
         if functionType is not None:
             # @pandas_udf(dataType, functionType=functionType)
@@ -2194,18 +2192,26 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         else:
             # @pandas_udf(dataType) or @pandas_udf(returnType=dataType)
             eval_type = PythonEvalType.SQL_PANDAS_SCALAR_UDF
-
-        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type)
     else:
-        if returnType is None:
-            raise ValueError("Must specify return type.")
+        return_type = returnType
 
         if functionType is not None:
             eval_type = functionType
         else:
             eval_type = PythonEvalType.SQL_PANDAS_SCALAR_UDF
 
-        return _create_udf(f=f, returnType=returnType, evalType=eval_type)
+    if return_type is None:
+        raise ValueError("Invalid returnType: returnType can not be None")
+
+    if eval_type not in [PythonEvalType.SQL_PANDAS_SCALAR_UDF,
+                         PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF]:
+        raise ValueError("Invalid functionType: "
+                         "functionType must be one the values from PandasUDFType")
+
+    if is_decorator:
+        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type)
+    else:
+        return _create_udf(f=f, returnType=return_type, evalType=eval_type)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']

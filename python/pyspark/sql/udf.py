@@ -47,7 +47,7 @@ def _create_udf(f, returnType, evalType):
         argspec = inspect.getargspec(f)
         if len(argspec.args) != 1:
             raise ValueError(
-                "Invalid function: pandas_udf with function type GROUP_MAP "
+                "Invalid function: pandas_udfs with function type GROUP_MAP "
                 "must take a single arg that is a pandas DataFrame."
             )
 
@@ -67,17 +67,17 @@ class UserDefinedFunction(object):
                  evalType=PythonEvalType.SQL_BATCHED_UDF):
         if not callable(func):
             raise TypeError(
-                "Not a function or callable (__call__ is not defined): "
+                "Invalid function: not a function or callable (__call__ is not defined): "
                 "{0}".format(type(func)))
 
         if not isinstance(returnType, (DataType, str)):
             raise TypeError(
-                "Invalid returnType. returnType should be DataType or str "
+                "Invalid returnType: returnType should be DataType or str "
                 "but is {}".format(returnType))
 
         if not isinstance(evalType, int):
             raise TypeError(
-                "Invalid evalType. evalType should be an int but is {}".format(evalType))
+                "Invalid evalType: evalType should be an int but is {}".format(evalType))
 
         self.func = func
         self._returnType = returnType

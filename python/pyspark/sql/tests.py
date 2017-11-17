@@ -3179,6 +3179,15 @@ class PandasUDFTests(ReusedSQLTestCase):
         self.assertEqual(udf.returnType, DoubleType())
         self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
 
+        udf = pandas_udf(lambda x: x, 'double', PandasUDFType.SCALAR)
+        self.assertEqual(udf.returnType, DoubleType())
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+
+        udf = pandas_udf(lambda x: x, StructType([StructField("v", DoubleType())]),
+                         PandasUDFType.GROUP_MAP)
+        self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+
         udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUP_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
         self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
@@ -3218,11 +3227,23 @@ class PandasUDFTests(ReusedSQLTestCase):
         self.assertEqual(foo.returnType, schema)
         self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
 
+        @pandas_udf('v double', PandasUDFType.GROUP_MAP)
+        def foo(x):
+            return x
+        self.assertEqual(foo.returnType, schema)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+
         @pandas_udf(schema, functionType=PandasUDFType.GROUP_MAP)
         def foo(x):
             return x
         self.assertEqual(foo.returnType, schema)
         self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+
+        @pandas_udf(returnType='v double', functionType=PandasUDFType.SCALAR)
+        def foo(x):
+            return x
+        self.assertEqual(foo.returnType, schema)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
 
         @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUP_MAP)
         def foo(x):
@@ -3234,10 +3255,26 @@ class PandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, 'return type'):
-                @pandas_udf(PandasUDFType.GROUP_MAP)
-                def foo(df):
-                    return df
+            with self.assertRaises(ParseException):
+                @pandas_udf('blah')
+                def foo(x):
+                    return x
+            with self.assertRaisesRegexp(ValueError, 'Invalid returnType.*None'):
+                @pandas_udf(functionType=PandasUDFType.SCALAR)
+                def foo(x):
+                    return x
+            with self.assertRaisesRegexp(ValueError, 'Invalid functionType'):
+                @pandas_udf('double', 100)
+                def foo(x):
+                    return x
+
+            with self.assertRaisesRegexp(ValueError, '0-arg pandas_udfs.*not.*supported'):
+                pandas_udf(lambda: 1, LongType(), PandasUDFType.SCALAR)
+            with self.assertRaisesRegexp(ValueError, '0-arg pandas_udfs.*not.*supported'):
+                @pandas_udf(LongType(), PandasUDFType.SCALAR)
+                def zero_with_type():
+                    return 1
+
             with self.assertRaisesRegexp(TypeError, 'Invalid returnType'):
                 @pandas_udf(returnType=PandasUDFType.GROUP_MAP)
                 def foo(df):
@@ -3347,18 +3384,6 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         str_f = pandas_udf(lambda x: x, StringType())
         res = df.select(str_f(col('str')))
         self.assertEquals(df.collect(), res.collect())
-
-    def test_vectorized_udf_zero_parameter(self):
-        from pyspark.sql.functions import pandas_udf
-        error_str = '0-arg pandas_udfs.*not.*supported'
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, error_str):
-                pandas_udf(lambda: 1, LongType())
-
-            with self.assertRaisesRegexp(ValueError, error_str):
-                @pandas_udf(LongType())
-                def zero_with_type():
-                    return 1
 
     def test_vectorized_udf_datatype_string(self):
         from pyspark.sql.functions import pandas_udf, col
