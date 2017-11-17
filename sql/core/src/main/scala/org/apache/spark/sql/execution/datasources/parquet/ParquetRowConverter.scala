@@ -154,7 +154,7 @@ private[parquet] class ParquetRowConverter(
        |${catalystType.prettyJson}
      """.stripMargin)
 
-  val UTC = DateTimeUtils.TimeZoneUTC
+  private val UTC = DateTimeUtils.TimeZoneUTC
 
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates

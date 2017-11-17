@@ -107,7 +107,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
         "2001-01-01 01:01:01",
         "2002-02-02 02:02:02",
         "2003-03-03 03:03:03"
-      ).map { s => java.sql.Timestamp.valueOf(s) }
+      ).map(java.sql.Timestamp.valueOf)
     val impalaPath = Thread.currentThread().getContextClassLoader.getResource(impalaFile)
       .toURI.getPath
     withTempPath { tableDir =>
@@ -125,6 +125,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       Seq(false, true).foreach { int96TimestampConversion =>
         Seq(false, true).foreach { vectorized =>
           withSQLConf(
+              (SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
+                SQLConf.ParquetOutputTimestampType.INT96.toString),
               (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString()),
               (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
           ) {
@@ -168,7 +170,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // grab the meta data from the parquet file.  The next section of asserts just make
               // sure the test is configured correctly.
               assert(parts.size == 2)
-              parts.map { part =>
+              parts.foreach { part =>
                 val oneFooter =
                   ParquetFileReader.readFooter(hadoopConf, part.getPath, NO_FILTER)
                 assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
