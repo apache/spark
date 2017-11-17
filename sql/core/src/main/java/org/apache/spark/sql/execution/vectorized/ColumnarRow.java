@@ -20,7 +20,6 @@ import java.math.BigDecimal;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -32,28 +31,11 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public final class ColumnarRow extends InternalRow {
   protected int rowId;
-  private final ColumnarBatch parent;
-  private final int fixedLenRowSize;
   private final ColumnVector[] columns;
   private final WritableColumnVector[] writableColumns;
 
-  // Ctor used if this is a top level row.
-  ColumnarRow(ColumnarBatch parent) {
-    this.parent = parent;
-    this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(parent.numCols());
-    this.columns = parent.columns;
-    this.writableColumns = new WritableColumnVector[this.columns.length];
-    for (int i = 0; i < this.columns.length; i++) {
-      if (this.columns[i] instanceof WritableColumnVector) {
-        this.writableColumns[i] = (WritableColumnVector) this.columns[i];
-      }
-    }
-  }
-
   // Ctor used if this is a struct.
   ColumnarRow(ColumnVector[] columns) {
-    this.parent = null;
-    this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(columns.length);
     this.columns = columns;
     this.writableColumns = new WritableColumnVector[this.columns.length];
     for (int i = 0; i < this.columns.length; i++) {
@@ -61,14 +43,6 @@ public final class ColumnarRow extends InternalRow {
         this.writableColumns[i] = (WritableColumnVector) this.columns[i];
       }
     }
-  }
-
-  /**
-   * Marks this row as being filtered out. This means a subsequent iteration over the rows
-   * in this batch will not include this row.
-   */
-  public void markFiltered() {
-    parent.markFiltered(rowId);
   }
 
   public ColumnVector[] columns() { return columns; }
