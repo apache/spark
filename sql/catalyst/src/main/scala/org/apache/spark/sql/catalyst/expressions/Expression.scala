@@ -118,26 +118,21 @@ abstract class Expression extends TreeNode[Expression] {
           ""
         }
 
-        val setValue = {
-          val globalValue = ctx.freshName("globalValue")
-          ctx.addMutableState(
-            ctx.javaType(dataType), globalValue, s"$globalValue = ${ctx.defaultValue(dataType)};")
-          val localValue = ve.value
-          ve.value = globalValue
-          s"$globalValue = $localValue;"
-        }
+        val javaType = ctx.javaType(dataType)
+        val newValue = ctx.freshName("value")
 
         val funcName = ctx.freshName(nodeName)
         val funcFullName = ctx.addNewFunction(funcName,
           s"""
-             |private void $funcName(InternalRow ${ctx.INPUT_ROW}) {
+             |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
              |  ${ve.code.trim}
-             |  $setValue
              |  $setIsNull
+             |  return ${ve.value};
              |}
            """.stripMargin)
 
-        ve.code = s"$funcFullName(${ctx.INPUT_ROW});"
+        ve.value = newValue
+        ve.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
       }
 
       if (ve.code.nonEmpty) {
