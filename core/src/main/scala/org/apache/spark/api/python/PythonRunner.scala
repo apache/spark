@@ -34,9 +34,11 @@ import org.apache.spark.util._
  */
 private[spark] object PythonEvalType {
   val NON_UDF = 0
-  val SQL_BATCHED_UDF = 1
-  val SQL_PANDAS_UDF = 2
-  val SQL_PANDAS_GROUPED_UDF = 3
+
+  val SQL_BATCHED_UDF = 100
+
+  val SQL_PANDAS_SCALAR_UDF = 200
+  val SQL_PANDAS_GROUP_MAP_UDF = 201
 }
 
 /**

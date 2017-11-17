@@ -27,11 +27,12 @@ if sys.version < "3":
     from itertools import imap as map
 
 from pyspark import since, SparkContext
-from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
+from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql.types import StringType, DataType, _parse_datatype_string
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.types import StringType, DataType
+from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
 
 def _create_function(name, doc=""):
@@ -2062,6 +2063,7 @@ def map_values(col):
 
 # ---------------------------- User Defined Function ----------------------------------
 
+<<<<<<< HEAD
 def _wrap_function(sc, func, returnType):
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
@@ -2189,6 +2191,14 @@ def _create_udf(f, returnType, pythonUdfType):
         return functools.partial(_udf, returnType=return_type, pythonUdfType=pythonUdfType)
     else:
         return _udf(f=f, returnType=returnType, pythonUdfType=pythonUdfType)
+=======
+class PandasUDFType(object):
+    """Pandas UDF Types. See :meth:`pyspark.sql.functions.pandas_udf`.
+    """
+    SCALAR = PythonEvalType.SQL_PANDAS_SCALAR_UDF
+
+    GROUP_MAP = PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF
+>>>>>>> origin/master
 
 
 @since(1.3)
@@ -2229,33 +2239,47 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.NORMAL_UDF)
+    # decorator @udf, @udf(), @udf(dataType())
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(_create_udf, returnType=return_type,
+                                 evalType=PythonEvalType.SQL_BATCHED_UDF)
+    else:
+        return _create_udf(f=f, returnType=returnType,
+                           evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
 @since(2.3)
-def pandas_udf(f=None, returnType=StringType()):
+def pandas_udf(f=None, returnType=None, functionType=None):
     """
     Creates a vectorized user defined function (UDF).
 
     :param f: user-defined function. A python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
+    :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
+                         Default: SCALAR.
 
-    The user-defined function can define one of the following transformations:
+    The function type of the UDF can be one of the following:
 
-    1. One or more `pandas.Series` -> A `pandas.Series`
+    1. SCALAR
 
-       This udf is used with :meth:`pyspark.sql.DataFrame.withColumn` and
-       :meth:`pyspark.sql.DataFrame.select`.
+       A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
        The returnType should be a primitive data type, e.g., `DoubleType()`.
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
 
+       Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
+       :meth:`pyspark.sql.DataFrame.select`.
+
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> from pyspark.sql.types import IntegerType, StringType
        >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
-       >>> @pandas_udf(returnType=StringType())
+       >>> @pandas_udf(StringType())
        ... def to_upper(s):
        ...     return s.str.upper()
        ...
-       >>> @pandas_udf(returnType="integer")
+       >>> @pandas_udf("integer", PandasUDFType.SCALAR)
        ... def add_one(x):
        ...     return x + 1
        ...
@@ -2268,20 +2292,24 @@ def pandas_udf(f=None, returnType=StringType()):
        |         8|      JOHN DOE|          22|
        +----------+--------------+------------+
 
-    2. A `pandas.DataFrame` -> A `pandas.DataFrame`
+    2. GROUP_MAP
 
-       This udf is only used with :meth:`pyspark.sql.GroupedData.apply`.
+       A group map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
        The returnType should be a :class:`StructType` describing the schema of the returned
        `pandas.DataFrame`.
+       The length of the returned `pandas.DataFrame` can be arbitrary.
 
+       Group map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
+
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> df = spark.createDataFrame(
        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
        ...     ("id", "v"))
-       >>> @pandas_udf(returnType=df.schema)
+       >>> @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)
        ... def normalize(pdf):
        ...     v = pdf.v
        ...     return pdf.assign(v=(v - v.mean()) / v.std())
-       >>> df.groupby('id').apply(normalize).show()  # doctest: +SKIP
+       >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
        +---+-------------------+
        | id|                  v|
        +---+-------------------+
@@ -2291,10 +2319,6 @@ def pandas_udf(f=None, returnType=StringType()):
        |  2|-0.2773500981126146|
        |  2| 1.1094003924504583|
        +---+-------------------+
-
-       .. note:: This type of udf cannot be used with functions such as `withColumn` or `select`
-                 because it defines a `DataFrame` transformation rather than a `Column`
-                 transformation.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 
@@ -2307,7 +2331,44 @@ def pandas_udf(f=None, returnType=StringType()):
         rows that do not satisfy the conditions, the suggested workaround is to incorporate the
         condition logic into the functions.
     """
-    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.PANDAS_UDF)
+    # decorator @pandas_udf(returnType, functionType)
+    is_decorator = f is None or isinstance(f, (str, DataType))
+
+    if is_decorator:
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+
+        if functionType is not None:
+            # @pandas_udf(dataType, functionType=functionType)
+            # @pandas_udf(returnType=dataType, functionType=functionType)
+            eval_type = functionType
+        elif returnType is not None and isinstance(returnType, int):
+            # @pandas_udf(dataType, functionType)
+            eval_type = returnType
+        else:
+            # @pandas_udf(dataType) or @pandas_udf(returnType=dataType)
+            eval_type = PythonEvalType.SQL_PANDAS_SCALAR_UDF
+    else:
+        return_type = returnType
+
+        if functionType is not None:
+            eval_type = functionType
+        else:
+            eval_type = PythonEvalType.SQL_PANDAS_SCALAR_UDF
+
+    if return_type is None:
+        raise ValueError("Invalid returnType: returnType can not be None")
+
+    if eval_type not in [PythonEvalType.SQL_PANDAS_SCALAR_UDF,
+                         PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF]:
+        raise ValueError("Invalid functionType: "
+                         "functionType must be one the values from PandasUDFType")
+
+    if is_decorator:
+        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type)
+    else:
+        return _create_udf(f=f, returnType=return_type, evalType=eval_type)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
