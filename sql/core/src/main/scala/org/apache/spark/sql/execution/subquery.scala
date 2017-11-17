@@ -138,15 +138,11 @@ case class InSubquery(
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
-    val exprIdMap = mutable.HashMap[Long, Int]()
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
         val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
-        val exprId = subquery.exprId.id
-        val exprIdIndex = exprIdMap.getOrElse(exprId, 0)
-        exprIdMap.put(exprId, exprIdIndex + 1)
         ScalarSubquery(
-          SubqueryExec(s"subquery${subquery.exprId.id}-${exprIdIndex+1}", executedPlan),
+          SubqueryExec(s"subquery${subquery.exprId.id}(unreused)", executedPlan),
           subquery.exprId)
     }
   }
@@ -170,7 +166,11 @@ case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
         val sameSchema = subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[SubqueryExec]())
         val sameResult = sameSchema.find(_.sameResult(sub.plan))
         if (sameResult.isDefined) {
-          sub.withNewPlan(sameResult.get)
+          val unreused = sameResult.get
+          val reused = unreused.copy(name = unreused.name.replace("unreused", "reused"))
+          sameSchema.clear()
+          sameSchema += reused
+          sub.withNewPlan(reused)
         } else {
           sameSchema += sub.plan
           sub
