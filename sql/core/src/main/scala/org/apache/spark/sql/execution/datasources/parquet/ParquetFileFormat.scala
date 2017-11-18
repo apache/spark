@@ -335,6 +335,8 @@ class ParquetFileFormat
     val enableVectorizedReader: Boolean =
       sparkSession.sessionState.conf.parquetVectorizedReaderEnabled &&
       resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
+    val enableRecordFilter: Boolean =
+      sparkSession.sessionState.conf.parquetRecordFilterEnabled
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
 
@@ -374,13 +376,11 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns UnsafeRow
-        val reader = pushed match {
-          case Some(filter) =>
-            new ParquetRecordReader[UnsafeRow](
-              new ParquetReadSupport,
-              FilterCompat.get(filter, null))
-          case _ =>
-            new ParquetRecordReader[UnsafeRow](new ParquetReadSupport)
+        val reader = if (pushed.isDefined && enableRecordFilter) {
+          val parquetFilter = FilterCompat.get(pushed.get, null)
+          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport, parquetFilter)
+        } else {
+          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport)
         }
         reader.initialize(split, hadoopAttemptContext)
         reader

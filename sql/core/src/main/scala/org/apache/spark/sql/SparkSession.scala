@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
@@ -957,7 +956,6 @@ object SparkSession {
         sparkContext.addSparkListener(new SparkListener {
           override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
             defaultSession.set(null)
-            sqlListener.set(null)
           }
         })
       }
@@ -1025,9 +1023,6 @@ object SparkSession {
    * @since 2.2.0
    */
   def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
-
-  /** A global SQL listener used for the SQL UI. */
-  private[sql] val sqlListener = new AtomicReference[SQLListener]()
 
   ////////////////////////////////////////////////////////////////////////////////////////
   // Private methods from now on
