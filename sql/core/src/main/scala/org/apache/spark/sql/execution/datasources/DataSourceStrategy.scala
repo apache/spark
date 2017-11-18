@@ -497,7 +497,10 @@ object DataSourceStrategy {
         Some(sources.IsNotNull(a.name))
 
       case expressions.And(left, right) =>
-        (translateFilter(left) ++ translateFilter(right)).reduceOption(sources.And)
+        for {
+          leftFilter <- translateFilter(left)
+          rightFilter <- translateFilter(right)
+        } yield sources.And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {
