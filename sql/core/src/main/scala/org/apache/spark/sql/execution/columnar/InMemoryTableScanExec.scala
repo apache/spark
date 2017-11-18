@@ -69,7 +69,8 @@ case class InMemoryTableScanExec(
 
   private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
     val rowCount = cachedColumnarBatch.numRows
-    val columnVectors = if (!conf.offHeapColumnVectorEnabled) {
+    val taskContext = Option(TaskContext.get())
+    val columnVectors = if (!conf.offHeapColumnVectorEnabled || taskContext.isEmpty) {
       OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
     } else {
       OffHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
@@ -84,7 +85,7 @@ case class InMemoryTableScanExec(
         columnarBatch.column(i).asInstanceOf[WritableColumnVector],
         columnarBatchSchema.fields(i).dataType, rowCount)
     }
-    Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => columnarBatch.close()))
+    taskContext.foreach(_.addTaskCompletionListener(_ => columnarBatch.close()))
     columnarBatch
   }
 

@@ -145,7 +145,7 @@ object SQLConf {
       .internal()
       .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()

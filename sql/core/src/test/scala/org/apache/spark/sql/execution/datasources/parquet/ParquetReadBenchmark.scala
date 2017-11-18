@@ -261,7 +261,7 @@ object ParquetReadBenchmark {
   def stringWithNullsScanBenchmark(values: Int, fractionOfNulls: Double): Unit = {
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        val enableOffHeapColumnVector = spark.sqlContext.conf.offHeapColumnVectorEnabled
+        val enableOffHeapColumnVector = spark.sessionState.conf.offHeapColumnVectorEnabled
         spark.range(values).createOrReplaceTempView("t1")
         spark.sql(s"select IF(rand(1) < $fractionOfNulls, NULL, cast(id as STRING)) as c1, " +
           s"IF(rand(2) < $fractionOfNulls, NULL, cast(id as STRING)) as c2 from t1")

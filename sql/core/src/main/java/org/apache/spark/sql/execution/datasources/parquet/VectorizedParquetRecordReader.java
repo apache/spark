@@ -101,7 +101,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private boolean returnColumnarBatch;
 
   /**
-   * The config on whether columnarBatch should be offheap.
+   * The memory mode of the columnarBatch
    */
   private final MemoryMode MEMORY_MODE;
 
