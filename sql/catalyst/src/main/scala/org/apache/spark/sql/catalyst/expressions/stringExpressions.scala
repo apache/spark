@@ -137,43 +137,19 @@ case class ConcatWs(children: Seq[Expression])
     if (children.forall(_.dataType == StringType)) {
       // All children are strings. In that case we can construct a fixed size array.
       val evals = children.map(_.genCode(ctx))
-      val separator = evals.head
-      val strings = evals.tail
-      val numArgs = strings.length
-      val args = ctx.freshName("args")
 
-      val inputs = strings.zipWithIndex.map { case (eval, index) =>
-        if (eval.isNull != "true") {
-          s"""
-             ${eval.code}
-             if (!${eval.isNull}) {
-               $args[$index] = ${eval.value};
-             }
-           """
-        } else {
-          ""
-        }
-      }
-      val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-        ctx.splitExpressions(inputs, "valueConcatWs",
-          ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
-      } else {
-        inputs.mkString("\n")
-      }
-      ev.copy(s"""
-        UTF8String[] $args = new UTF8String[$numArgs];
-        ${separator.code}
-        $codes
-        UTF8String ${ev.value} = UTF8String.concatWs(${separator.value}, $args);
+      val inputs = evals.map { eval =>
+        s"${eval.isNull} ? (UTF8String) null : ${eval.value}"
+      }.mkString(", ")
+
+      ev.copy(evals.map(_.code).mkString("\n") + s"""
+        UTF8String ${ev.value} = UTF8String.concatWs($inputs);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
     } else {
       val array = ctx.freshName("array")
-      ctx.addMutableState("UTF8String[]", array, "")
       val varargNum = ctx.freshName("varargNum")
-      ctx.addMutableState("int", varargNum, "")
       val idxInVararg = ctx.freshName("idxInVararg")
-      ctx.addMutableState("int", idxInVararg, "")
 
       val evals = children.map(_.genCode(ctx))
       val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
@@ -199,17 +175,13 @@ case class ConcatWs(children: Seq[Expression])
         }
       }.unzip
 
-      val codes = ctx.splitExpressions(ctx.INPUT_ROW, evals.map(_.code))
-      val varargCounts = ctx.splitExpressions(ctx.INPUT_ROW, varargCount)
-      val varargBuilds = ctx.splitExpressions(ctx.INPUT_ROW, varargBuild)
-      ev.copy(
+      ev.copy(evals.map(_.code).mkString("\n") +
       s"""
-        $codes
-        $varargNum = ${children.count(_.dataType == StringType) - 1};
-        $idxInVararg = 0;
-        $varargCounts
-        $array = new UTF8String[$varargNum];
-        $varargBuilds
+        int $varargNum = ${children.count(_.dataType == StringType) - 1};
+        int $idxInVararg = 0;
+        ${varargCount.mkString("\n")}
+        UTF8String[] $array = new UTF8String[$varargNum];
+        ${varargBuild.mkString("\n")}
         UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $array);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
@@ -264,55 +236,22 @@ case class Elt(children: Seq[Expression])
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = indexExpr.genCode(ctx)
     val strings = stringExprs.map(_.genCode(ctx))
-    val indexVal = ctx.freshName("index")
-    val stringVal = ctx.freshName("stringVal")
     val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
       s"""
         case ${index + 1}:
-          ${eval.code}
-          $stringVal = ${eval.isNull} ? null : ${eval.value};
+          ${ev.value} = ${eval.isNull} ? null : ${eval.value};
           break;
       """
-    }
+    }.mkString("\n")
+    val indexVal = ctx.freshName("index")
+    val stringArray = ctx.freshName("strings");
 
-    val cases = ctx.splitCodes(assignStringValue)
-    val codes = if (cases.length == 1) {
-      s"""
-       UTF8String $stringVal = null;
-       switch ($indexVal) {
-         ${cases.head}
-       }
-     """
-    } else {
-      var fullFuncName = ""
-      cases.reverse.zipWithIndex.map { case (s, index) =>
-        val prevFunc = if (index == 0) {
-          "null"
-        } else {
-          s"$fullFuncName(${ctx.INPUT_ROW}, $indexVal)"
-        }
-        val funcName = ctx.freshName("eltFunc")
-        val funcBody = s"""
-         private UTF8String $funcName(InternalRow ${ctx.INPUT_ROW}, int $indexVal) {
-           UTF8String $stringVal = null;
-           switch ($indexVal) {
-             $s
-             default:
-               return $prevFunc;
-           }
-           return $stringVal;
-         }
-        """
-        fullFuncName = ctx.addNewFunction(funcName, funcBody)
-      }
-      s"UTF8String $stringVal = $fullFuncName(${ctx.INPUT_ROW}, ${indexVal});"
-    }
-
-    ev.copy(index.code + "\n" +
-    s"""
+    ev.copy(index.code + "\n" + strings.map(_.code).mkString("\n") + s"""
       final int $indexVal = ${index.value};
-      $codes
-      UTF8String ${ev.value} = $stringVal;
+      UTF8String ${ev.value} = null;
+      switch ($indexVal) {
+        $assignStringValue
+      }
       final boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
