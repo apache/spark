@@ -224,22 +224,55 @@ case class Elt(children: Seq[Expression])
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = indexExpr.genCode(ctx)
     val strings = stringExprs.map(_.genCode(ctx))
+    val indexVal = ctx.freshName("index")
+    val stringVal = ctx.freshName("stringVal")
     val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
       s"""
         case ${index + 1}:
-          ${ev.value} = ${eval.isNull} ? null : ${eval.value};
+          ${eval.code}
+          $stringVal = ${eval.isNull} ? null : ${eval.value};
           break;
       """
-    }.mkString("\n")
-    val indexVal = ctx.freshName("index")
-    val stringArray = ctx.freshName("strings");
+    }
 
-    ev.copy(index.code + "\n" + strings.map(_.code).mkString("\n") + s"""
-      final int $indexVal = ${index.value};
-      UTF8String ${ev.value} = null;
-      switch ($indexVal) {
-        $assignStringValue
+    val cases = ctx.splitCodes(assignStringValue)
+    val codes = if (cases.length == 1) {
+      s"""
+        UTF8String $stringVal = null;
+        switch ($indexVal) {
+          ${cases.head}
+        }
+       """
+    } else {
+      var fullFuncName = ""
+      cases.reverse.zipWithIndex.map { case (s, index) =>
+        val prevFunc = if (index == 0) {
+          "null"
+        } else {
+          s"$fullFuncName(${ctx.INPUT_ROW}, $indexVal)"
+        }
+        val funcName = ctx.freshName("eltFunc")
+        val funcBody = s"""
+         private UTF8String $funcName(InternalRow ${ctx.INPUT_ROW}, int $indexVal) {
+           UTF8String $stringVal = null;
+           switch ($indexVal) {
+             $s
+             default:
+               return $prevFunc;
+           }
+           return $stringVal;
+         }
+        """
+        fullFuncName = ctx.addNewFunction(funcName, funcBody)
       }
+      s"UTF8String $stringVal = $fullFuncName(${ctx.INPUT_ROW}, ${indexVal});"
+    }
+
+    ev.copy(index.code + "\n" +
+      s"""
+      final int $indexVal = ${index.value};
+      $codes
+      UTF8String ${ev.value} = $stringVal;
       final boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
