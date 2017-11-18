@@ -97,7 +97,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes().isFailure)
   }
 
-  test("SPARK-22498: Elt should not generate codes beyond 64KB") {
+  test("SPARK-22550: Elt should not generate codes beyond 64KB") {
     val N = 10000
     val strings = (1 to N).map(x => s"s$x")
     val args = Literal.create(N, IntegerType) +: strings.map(Literal.create(_, StringType))
