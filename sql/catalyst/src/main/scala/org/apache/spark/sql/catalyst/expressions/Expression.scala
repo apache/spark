@@ -462,34 +462,9 @@ abstract class BinaryExpression extends Expression {
       ctx: CodegenContext,
       ev: ExprCode,
       f: (String, String) => String): ExprCode = {
-    val leftGen = left.genCode(ctx)
-    val rightGen = right.genCode(ctx)
-    val resultCode = f(leftGen.value, rightGen.value)
-
-    if (nullable) {
-      val nullSafeEval =
-        leftGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
-          rightGen.code + ctx.nullSafeExec(right.nullable, rightGen.isNull) {
-            s"""
-              ${ev.isNull} = false; // resultCode could change nullability.
-              $resultCode
-            """
-          }
-      }
-
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $nullSafeEval
-      """)
-    } else {
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = false;
-        ${leftGen.code}
-        ${rightGen.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
-    }
+    val (childrenEval, childrenGen) = ExprCodegen.genCodeWithChildren(ctx, this)
+    val resultCode = f(childrenGen(0).value, childrenGen(1).value)
+    ExprCodegen.nullSafeCodeGen(ctx, ev, this, childrenEval, resultCode)
   }
 }
 
@@ -583,9 +558,9 @@ abstract class TernaryExpression extends Expression {
    * @param f accepts three variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-    ctx: CodegenContext,
-    ev: ExprCode,
-    f: (String, String, String) => String): ExprCode = {
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: (String, String, String) => String): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
       s"${ev.value} = ${f(eval1, eval2, eval3)};"
     })
@@ -600,38 +575,113 @@ abstract class TernaryExpression extends Expression {
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
-    ctx: CodegenContext,
-    ev: ExprCode,
-    f: (String, String, String) => String): ExprCode = {
-    val leftGen = children(0).genCode(ctx)
-    val midGen = children(1).genCode(ctx)
-    val rightGen = children(2).genCode(ctx)
-    val resultCode = f(leftGen.value, midGen.value, rightGen.value)
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: (String, String, String) => String): ExprCode = {
+    val (childrenEval, childrenGen) = ExprCodegen.genCodeWithChildren(ctx, this)
+    val resultCode = f(childrenGen(0).value, childrenGen(1).value, childrenGen(2).value)
+    ExprCodegen.nullSafeCodeGen(ctx, ev, this, childrenEval, resultCode)
+  }
+}
 
-    if (nullable) {
-      val nullSafeEval =
-        leftGen.code + ctx.nullSafeExec(children(0).nullable, leftGen.isNull) {
-          midGen.code + ctx.nullSafeExec(children(1).nullable, midGen.isNull) {
-            rightGen.code + ctx.nullSafeExec(children(2).nullable, rightGen.isNull) {
-              s"""
-                ${ev.isNull} = false; // resultCode could change nullability.
-                $resultCode
-              """
-            }
-          }
+object ExprCodegen {
+
+  val placeHolderForResultCode = "__PLACEHOLDER__"
+
+  def isNotWholeStageCodegen(ctx: CodegenContext): Boolean =
+    ctx.INPUT_ROW != null && ctx.currentVars == null
+
+  // Moves generated codes for child expression into a function.
+  // Only supports non whole stage codegen case.
+  def genChildCodeInFunction(
+      ctx: CodegenContext,
+      child: Expression,
+      childExprCode: ExprCode): Unit = {
+    if (isNotWholeStageCodegen(ctx)) {
+      val setIsNull = if (childExprCode.isNull != "false" && childExprCode.isNull != "true") {
+        val globalIsNull = ctx.freshName("globalIsNull")
+        ctx.addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
+        val localIsNull = childExprCode.isNull
+        childExprCode.isNull = globalIsNull
+        s"$globalIsNull = $localIsNull;"
+      } else {
+        ""
       }
+
+      val javaType = ctx.javaType(child.dataType)
+      val newValue = ctx.freshName("value")
+
+      val funcName = ctx.freshName(child.nodeName)
+      val funcFullName = ctx.addNewFunction(funcName,
+        s"""
+           |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
+           |  ${childExprCode.code.trim}
+           |  $setIsNull
+           |  return ${childExprCode.value};
+           |}
+         """.stripMargin)
+
+      childExprCode.value = newValue
+      childExprCode.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
+    }
+  }
+
+  // Generates codes safe from 64k limit for children expressions.
+  def genCodeWithChildren(
+      ctx: CodegenContext,
+      expr: Expression): (String, Seq[ExprCode]) = {
+    val rawGenCode = expr.children.map(_.genCode(ctx))
+
+    val childrenEval = if (expr.nullable) {
+      var childIdx = expr.children.length - 1
+      rawGenCode.foldRight(placeHolderForResultCode) { case (childCode, curCode) =>
+        if (curCode.length + childCode.code.trim.length > 1024) {
+          genChildCodeInFunction(ctx, expr.children(childIdx), childCode)
+        }
+        val code = childCode.code +
+          ctx.nullSafeExec(expr.children(childIdx).nullable, childCode.isNull) {
+            curCode
+          }
+        childIdx -= 1
+        code
+      }
+    } else {
+      var childIdx = expr.children.length - 1
+      rawGenCode.foldRight("") { case (childCode, curCode) =>
+        if (curCode.length + childCode.code.trim.length > 1024) {
+          genChildCodeInFunction(ctx, expr.children(childIdx), childCode)
+        }
+        val code = childCode.code + "\n" + curCode
+        childIdx -= 1
+        code
+      }
+    }
+    (childrenEval, rawGenCode)
+  }
+
+  def nullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      expr: Expression,
+      childrenEval: String,
+      resultCode: String): ExprCode = {
+    if (expr.nullable) {
+      val insertCode = s"""
+          ${ev.isNull} = false; // resultCode could change nullability.
+          $resultCode
+        """
+      val nullSafeEval = childrenEval.replace(ExprCodegen.placeHolderForResultCode, insertCode)
 
       ev.copy(code = s"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $nullSafeEval""")
+        ${ctx.javaType(expr.dataType)} ${ev.value} = ${ctx.defaultValue(expr.dataType)};
+        $nullSafeEval
+      """)
     } else {
       ev.copy(code = s"""
         boolean ${ev.isNull} = false;
-        ${leftGen.code}
-        ${midGen.code}
-        ${rightGen.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $childrenEval
+        ${ctx.javaType(expr.dataType)} ${ev.value} = ${ctx.defaultValue(expr.dataType)};
         $resultCode""", isNull = "false")
     }
   }
