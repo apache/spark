@@ -505,5 +505,4 @@ private[ml] trait HasCollectSubModels extends Params {
   /** @group expertGetParam */
   final def getCollectSubModels: Boolean = $(collectSubModels)
 }
-/
 // scalastyle:on

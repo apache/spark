@@ -87,12 +87,12 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("intermediateStorageLevel", "Param for StorageLevel" +
         "for intermediate datasets", Some("\"MEMORY_AND_DISK\""),
            isValid = """(s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE"""",
+           isExpertParam = true),
       ParamDesc[Boolean]("collectSubModels", "If set to false, then only the single best " +
         "sub-model will be available after fitting. If set to true, then all sub-models will be " +
         "available. Warning: For large models, collecting all sub-models can cause OOMs on the " +
         "Spark driver.",
-        Some("false"), isExpertParam = true)
-            isExpertParam = true))
+        Some("false"), isExpertParam = true))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
