@@ -125,19 +125,43 @@ case class ConcatWs(children: Seq[Expression])
     if (children.forall(_.dataType == StringType)) {
       // All children are strings. In that case we can construct a fixed size array.
       val evals = children.map(_.genCode(ctx))
+      val separator = evals.head
+      val strings = evals.tail
+      val numArgs = strings.length
+      val args = ctx.freshName("args")
 
-      val inputs = evals.map { eval =>
-        s"${eval.isNull} ? (UTF8String) null : ${eval.value}"
-      }.mkString(", ")
-
-      ev.copy(evals.map(_.code).mkString("\n") + s"""
-        UTF8String ${ev.value} = UTF8String.concatWs($inputs);
+      val inputs = strings.zipWithIndex.map { case (eval, index) =>
+        if (eval.isNull != "true") {
+          s"""
+             ${eval.code}
+             if (!${eval.isNull}) {
+               $args[$index] = ${eval.value};
+             }
+           """
+        } else {
+          ""
+        }
+      }
+      val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
+        ctx.splitExpressions(inputs, "valueConcatWs",
+          ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
+      } else {
+        inputs.mkString("\n")
+      }
+      ev.copy(s"""
+        UTF8String[] $args = new UTF8String[$numArgs];
+        ${separator.code}
+        $codes
+        UTF8String ${ev.value} = UTF8String.concatWs(${separator.value}, $args);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
     } else {
       val array = ctx.freshName("array")
+      ctx.addMutableState("UTF8String[]", array, "")
       val varargNum = ctx.freshName("varargNum")
+      ctx.addMutableState("int", varargNum, "")
       val idxInVararg = ctx.freshName("idxInVararg")
+      ctx.addMutableState("int", idxInVararg, "")
 
       val evals = children.map(_.genCode(ctx))
       val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
@@ -163,13 +187,17 @@ case class ConcatWs(children: Seq[Expression])
         }
       }.unzip
 
-      ev.copy(evals.map(_.code).mkString("\n") +
-      s"""
-        int $varargNum = ${children.count(_.dataType == StringType) - 1};
-        int $idxInVararg = 0;
-        ${varargCount.mkString("\n")}
-        UTF8String[] $array = new UTF8String[$varargNum];
-        ${varargBuild.mkString("\n")}
+      val codes = ctx.splitExpressions(ctx.INPUT_ROW, evals.map(_.code))
+      val varargCounts = ctx.splitExpressions(ctx.INPUT_ROW, varargCount)
+      val varargBuilds = ctx.splitExpressions(ctx.INPUT_ROW, varargBuild)
+      ev.copy(
+        s"""
+        $codes
+        $varargNum = ${children.count(_.dataType == StringType) - 1};
+        $idxInVararg = 0;
+        $varargCounts
+        $array = new UTF8String[$varargNum];
+        $varargBuilds
         UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $array);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
