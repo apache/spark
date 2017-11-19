@@ -209,27 +209,38 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
       var bucketArray = Array.empty[Int]
       if (isSet(numBucketsArray)) {
         bucketArray = $(numBucketsArray)
-      }
-      else {
+      } else {
         bucketArray = Array($(numBuckets))
       }
+
       val probabilityArray = bucketArray.toSeq.flatMap { numOfBucket =>
         (0.0 to 1.0 by 1.0 / numOfBucket)
-      }
+      }.sorted.toArray.distinct
+
       val splitsArray = dataset.stat.approxQuantile($(inputCols),
-        probabilityArray.sorted.toArray.distinct, $(relativeError))
-      val distinctSplitsArray = splitsArray.toSeq.map { splits =>
-        getDistinctSplits(splits)
+        probabilityArray, $(relativeError))
+
+      var distinctSplitsArray = Seq.empty[Array[Double]]
+      if (bucketArray.length > 1) {
+        var idxForColumn = 0
+        distinctSplitsArray = bucketArray.toSeq.map { numOfBuckets =>
+          val splitArrayForEachColumn =
+            getSplitsForEachColumn(numOfBuckets, probabilityArray, splitsArray, idxForColumn)
+          idxForColumn += 1
+          splitArrayForEachColumn
+        }
+      } else {
+        distinctSplitsArray = splitsArray.toSeq.map { splits =>
+          getDistinctSplits(splits)
+        }
       }
       bucketizer.setSplitsArray(distinctSplitsArray.toArray)
-      copyValues(bucketizer.setParent(this))
-    }
-    else {
+    } else {
       val splits = dataset.stat.approxQuantile($(inputCol),
         (0.0 to 1.0 by 1.0 / $(numBuckets)).toArray, $(relativeError))
       bucketizer.setSplits(getDistinctSplits(splits))
-      copyValues(bucketizer.setParent(this))
     }
+    copyValues(bucketizer.setParent(this))
   }
 
   private def getDistinctSplits(splits: Array[Double]): Array[Double] = {
@@ -241,6 +252,19 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
         s" buckets as a result.")
     }
     distinctSplits.sorted
+  }
+
+  private def getSplitsForEachColumn(numOfBuckets: Int,
+                                     probabilityArray: Array[Double],
+                                     splitsArray: Array[Array[Double]],
+                                     idxForColumn: Int): Array[Double] = {
+    val probabilityArrayForEachColumn = (0.0 to 1.0 by 1.0 / numOfBuckets)
+    var splitsArrayForEachColumn = Array.empty[Double]
+    for (i <- 0 to probabilityArrayForEachColumn.length - 1) {
+      val index = probabilityArray.indexOf(probabilityArrayForEachColumn(i))
+      splitsArrayForEachColumn :+= splitsArray(idxForColumn)(index)
+    }
+    getDistinctSplits(splitsArrayForEachColumn)
   }
 
   @Since("1.6.0")

@@ -155,10 +155,7 @@ class QuantileDiscretizerSuite
     val numBuckets = 5
     val data1 = Array.range(1, 100001, 1).map(_.toDouble)
     val data2 = Array.range(1, 200000, 2).map(_.toDouble)
-    val data = (0 until 100000).map { idx =>
-      (data1(idx), data2(idx))
-    }
-    val df: DataFrame = data.toSeq.toDF("input1", "input2")
+    val df = data1.zip(data2).toSeq.toDF("input1", "input2")
 
     val discretizer = new QuantileDiscretizer()
       .setInputCols(Array("input1", "input2"))
@@ -191,10 +188,7 @@ class QuantileDiscretizerSuite
     val expectedNumBucket = 3
     val data1 = Array(1.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 2.0, 2.0, 2.0, 1.0, 3.0)
     val data2 = Array(1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0)
-    val data = (0 until data1.length).map { idx =>
-      (data1(idx), data2(idx))
-    }
-    val df: DataFrame = data.toSeq.toDF("input1", "input2")
+    val df = data1.zip(data2).toSeq.toDF("input1", "input2")
     val discretizer = new QuantileDiscretizer()
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("result1", "result2"))
@@ -222,7 +216,7 @@ class QuantileDiscretizerSuite
     val data = (0 until validData1.length).map { idx =>
       (validData1(idx), validData2(idx), expectedKeep1(idx), expectedKeep2(idx))
     }
-    val dataFrame: DataFrame = data.toSeq.toDF("input1", "input2", "expected1", "expected2")
+    val dataFrame = data.toSeq.toDF("input1", "input2", "expected1", "expected2")
 
     val discretizer = new QuantileDiscretizer()
       .setInputCols(Array("input1", "input2"))
@@ -263,18 +257,18 @@ class QuantileDiscretizerSuite
     val datasetSize = 20
     val numBucketsArray: Array[Int] = Array(2, 5, 10)
     val data1 = Array.range(1, 21, 1).map(_.toDouble)
-    val expected1 = Array (0.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 4.0, 4.0, 5.0,
-      5.0, 5.0, 6.0, 6.0, 7.0, 8.0, 8.0, 9.0, 9.0, 9.0)
+    val expected1 = Array (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+      1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
     val data2 = Array.range(1, 40, 2).map(_.toDouble)
-    val expected2 = Array (0.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 4.0, 4.0, 5.0,
-      5.0, 5.0, 6.0, 6.0, 7.0, 8.0, 8.0, 9.0, 9.0, 9.0)
+    val expected2 = Array (0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0,
+      2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0)
     val data3 = Array.range(1, 60, 3).map(_.toDouble)
     val expected3 = Array (0.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 4.0, 4.0, 5.0,
       5.0, 5.0, 6.0, 6.0, 7.0, 8.0, 8.0, 9.0, 9.0, 9.0)
     val data = (0 until 20).map { idx =>
       (data1(idx), data2(idx), data3(idx), expected1(idx), expected2(idx), expected3(idx))
     }
-    val df: DataFrame =
+    val df =
       data.toSeq.toDF("input1", "input2", "input3", "expected1", "expected2", "expected3")
 
     val discretizer = new QuantileDiscretizer()
