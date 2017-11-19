@@ -232,7 +232,7 @@ private[netty] class NettyRpcEnv(
           onFailure,
           (client, response) => onSuccess(deserialize[Any](client, response)))
         postToOutbox(message.receiver, rpcMessage)
-        promise.future.onFailure {
+        promise.future.failed.foreach {
           case _: TimeoutException => rpcMessage.onTimeout()
           case _ =>
         }(ThreadUtils.sameThread)

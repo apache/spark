@@ -26,6 +26,7 @@ import breeze.stats.distributions.{Gamma, RandBasis}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.PeriodicGraphCheckpointer
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -259,7 +260,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
  */
 @Since("1.4.0")
 @DeveloperApi
-final class OnlineLDAOptimizer extends LDAOptimizer {
+final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
 
   // LDA common parameters
   private var k: Int = 0
@@ -462,31 +463,61 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val expElogbetaBc = batch.sparkContext.broadcast(expElogbeta)
     val alpha = this.alpha.asBreeze
     val gammaShape = this.gammaShape
+    val optimizeDocConcentration = this.optimizeDocConcentration
+    // If and only if optimizeDocConcentration is set true,
+    // we calculate logphat in the same pass as other statistics.
+    // No calculation of loghat happens otherwise.
+    val logphatPartOptionBase = () => if (optimizeDocConcentration) {
+                                        Some(BDV.zeros[Double](k))
+                                      } else {
+                                        None
+                                      }
 
-    val stats: RDD[(BDM[Double], List[BDV[Double]])] = batch.mapPartitions { docs =>
+    val stats: RDD[(BDM[Double], Option[BDV[Double]], Long)] = batch.mapPartitions { docs =>
       val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
 
       val stat = BDM.zeros[Double](k, vocabSize)
-      var gammaPart = List[BDV[Double]]()
+      val logphatPartOption = logphatPartOptionBase()
+      var nonEmptyDocCount: Long = 0L
       nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
+        nonEmptyDocCount += 1
         val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts, expElogbetaBc.value, alpha, gammaShape, k)
-        stat(::, ids) := stat(::, ids).toDenseMatrix + sstats
-        gammaPart = gammad :: gammaPart
+        stat(::, ids) := stat(::, ids) + sstats
+        logphatPartOption.foreach(_ += LDAUtils.dirichletExpectation(gammad))
       }
-      Iterator((stat, gammaPart))
-    }.persist(StorageLevel.MEMORY_AND_DISK)
-    val statsSum: BDM[Double] = stats.map(_._1).treeAggregate(BDM.zeros[Double](k, vocabSize))(
-      _ += _, _ += _)
-    val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
-      stats.map(_._2).flatMap(list => list).collect().map(_.toDenseMatrix): _*)
-    stats.unpersist()
-    expElogbetaBc.destroy(false)
-    val batchResult = statsSum *:* expElogbeta.t
+      Iterator((stat, logphatPartOption, nonEmptyDocCount))
+    }
 
+    val elementWiseSum = (
+        u: (BDM[Double], Option[BDV[Double]], Long),
+        v: (BDM[Double], Option[BDV[Double]], Long)) => {
+      u._1 += v._1
+      u._2.foreach(_ += v._2.get)
+      (u._1, u._2, u._3 + v._3)
+    }
+
+    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], nonEmptyDocsN: Long) = stats
+      .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase(), 0L))(
+        elementWiseSum, elementWiseSum
+      )
+
+    expElogbetaBc.destroy(false)
+
+    if (nonEmptyDocsN == 0) {
+      logWarning("No non-empty documents were submitted in the batch.")
+      // Therefore, there is no need to update any of the model parameters
+      return this
+    }
+
+    val batchResult = statsSum *:* expElogbeta.t
     // Note that this is an optimization to avoid batch.count
-    updateLambda(batchResult, (miniBatchFraction * corpusSize).ceil.toInt)
-    if (optimizeDocConcentration) updateAlpha(gammat)
+    val batchSize = (miniBatchFraction * corpusSize).ceil.toInt
+    updateLambda(batchResult, batchSize)
+
+    logphatOption.foreach(_ /= nonEmptyDocsN.toDouble)
+    logphatOption.foreach(updateAlpha(_, nonEmptyDocsN))
+
     this
   }
 
@@ -503,21 +534,22 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * Update alpha based on `gammat`, the inferred topic distributions for documents in the
-   * current mini-batch. Uses Newton-Rhapson method.
+   * Update alpha based on `logphat`.
+   * Uses Newton-Rhapson method.
    * @see Section 3.3, Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
    *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
+   * @param logphat Expectation of estimated log-posterior distribution of
+   *                topics in a document averaged over the batch.
+   * @param nonEmptyDocsN number of non-empty documents
    */
-  private def updateAlpha(gammat: BDM[Double]): Unit = {
+  private def updateAlpha(logphat: BDV[Double], nonEmptyDocsN: Double): Unit = {
     val weight = rho()
-    val N = gammat.rows.toDouble
     val alpha = this.alpha.asBreeze.toDenseVector
-    val logphat: BDV[Double] =
-      sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)).t / N
-    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat)
 
-    val c = N * trigamma(sum(alpha))
-    val q = -N * trigamma(alpha)
+    val gradf = nonEmptyDocsN * (-LDAUtils.dirichletExpectation(alpha) + logphat)
+
+    val c = nonEmptyDocsN * trigamma(sum(alpha))
+    val q = -nonEmptyDocsN * trigamma(alpha)
     val b = sum(gradf / q) / (1D / c + sum(1D / q))
 
     val dalpha = -(gradf - b) / q

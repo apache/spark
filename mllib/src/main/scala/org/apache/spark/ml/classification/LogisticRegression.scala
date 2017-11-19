@@ -484,7 +484,7 @@ class LogisticRegression @Since("1.2.0") (
   }
 
   override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     train(dataset, handlePersistence)
   }
 
@@ -514,7 +514,7 @@ class LogisticRegression @Since("1.2.0") (
           (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
       instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultiClassSummarizer
+        (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
 

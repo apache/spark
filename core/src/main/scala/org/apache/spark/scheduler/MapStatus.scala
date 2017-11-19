@@ -197,7 +197,8 @@ private[spark] object HighlyCompressedMapStatus {
     // block as being non-empty (or vice-versa) when using the average block size.
     var i = 0
     var numNonEmptyBlocks: Int = 0
-    var totalSize: Long = 0
+    var numSmallBlocks: Int = 0
+    var totalSmallBlockSize: Long = 0
     // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
     // blocks. From a performance standpoint, we benefit from tracking empty blocks because
     // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
@@ -214,7 +215,8 @@ private[spark] object HighlyCompressedMapStatus {
         // Huge blocks are not included in the calculation for average size, thus size for smaller
         // blocks is more accurate.
         if (size < threshold) {
-          totalSize += size
+          totalSmallBlockSize += size
+          numSmallBlocks += 1
         } else {
           hugeBlockSizesArray += Tuple2(i, MapStatus.compressSize(uncompressedSizes(i)))
         }
@@ -223,8 +225,8 @@ private[spark] object HighlyCompressedMapStatus {
       }
       i += 1
     }
-    val avgSize = if (numNonEmptyBlocks > 0) {
-      totalSize / numNonEmptyBlocks
+    val avgSize = if (numSmallBlocks > 0) {
+      totalSmallBlockSize / numSmallBlocks
     } else {
       0
     }

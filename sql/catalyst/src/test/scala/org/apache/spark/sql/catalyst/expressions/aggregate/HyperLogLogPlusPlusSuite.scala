@@ -47,7 +47,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
   def evaluateEstimate(hll: HyperLogLogPlusPlus, buffer: InternalRow, cardinality: Int): Unit = {
     val estimate = hll.eval(buffer).asInstanceOf[Long].toDouble
     val error = math.abs((estimate / cardinality.toDouble) - 1.0d)
-    assert(error < hll.trueRsd * 3.0d, "Error should be within 3 std. errors.")
+    assert(error < hll.hllppHelper.trueRsd * 3.0d, "Error should be within 3 std. errors.")
   }
 
   test("test invalid parameter relativeSD") {
@@ -83,7 +83,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
         val estimate = hll.eval(buffer).asInstanceOf[Long].toDouble
         val cardinality = c(n)
         val error = math.abs((estimate / cardinality.toDouble) - 1.0d)
-        assert(error < hll.trueRsd * 3.0d, "Error should be within 3 std. errors.")
+        assert(error < hll.hllppHelper.trueRsd * 3.0d, "Error should be within 3 std. errors.")
     }
   }
 

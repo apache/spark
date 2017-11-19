@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
-import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   import spark.implicits._
@@ -65,6 +65,73 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
         case x @ SubqueryAlias("vw1", _) => x
       }
       assert(aliases.size == 1)
+    }
+  }
+
+  test("Validate catalog metadata for supported data types")  {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE t (
+          |c1 boolean,
+          |c2 tinyint,
+          |c3 smallint,
+          |c4 short,
+          |c5 bigint,
+          |c6 long,
+          |c7 float,
+          |c8 double,
+          |c9 date,
+          |c10 timestamp,
+          |c11 string,
+          |c12 char(10),
+          |c13 varchar(10),
+          |c14 binary,
+          |c15 decimal,
+          |c16 decimal(10),
+          |c17 decimal(10,2),
+          |c18 array<string>,
+          |c19 array<int>,
+          |c20 array<char(10)>,
+          |c21 map<int,int>,
+          |c22 map<int,char(10)>,
+          |c23 struct<a:int,b:int>,
+          |c24 struct<c:varchar(10),d:int>
+          |)
+        """.stripMargin)
+
+      val schema = hiveClient.getTable("default", "t").schema
+      val expectedSchema = new StructType()
+        .add("c1", "boolean")
+        .add("c2", "tinyint")
+        .add("c3", "smallint")
+        .add("c4", "short")
+        .add("c5", "bigint")
+        .add("c6", "long")
+        .add("c7", "float")
+        .add("c8", "double")
+        .add("c9", "date")
+        .add("c10", "timestamp")
+        .add("c11", "string")
+        .add("c12", "string", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "char(10)").build())
+        .add("c13", "string", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "varchar(10)").build())
+        .add("c14", "binary")
+        .add("c15", "decimal")
+        .add("c16", "decimal(10)")
+        .add("c17", "decimal(10,2)")
+        .add("c18", "array<string>")
+        .add("c19", "array<int>")
+        .add("c20", "array<string>", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "array<char(10)>").build())
+        .add("c21", "map<int,int>")
+        .add("c22", "map<int,string>", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "map<int,char(10)>").build())
+        .add("c23", "struct<a:int,b:int>")
+        .add("c24", "struct<c:string,d:int>", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "struct<c:varchar(10),d:int>").build())
+      assert(schema == expectedSchema)
     }
   }
 }
@@ -180,5 +247,6 @@ class DataSourceWithHiveMetastoreCatalogSuite
         }
       }
     }
+
   }
 }

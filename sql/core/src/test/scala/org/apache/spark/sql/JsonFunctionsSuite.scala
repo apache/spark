@@ -180,10 +180,26 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("to_json - array") {
     val df = Seq(Tuple1(Tuple1(1) :: Nil)).toDF("a")
+    val df2 = Seq(Tuple1(Map("a" -> 1) :: Nil)).toDF("a")
 
     checkAnswer(
       df.select(to_json($"a")),
       Row("""[{"_1":1}]""") :: Nil)
+    checkAnswer(
+      df2.select(to_json($"a")),
+      Row("""[{"a":1}]""") :: Nil)
+  }
+
+  test("to_json - map") {
+    val df1 = Seq(Map("a" -> Tuple1(1))).toDF("a")
+    val df2 = Seq(Map("a" -> 1)).toDF("a")
+
+    checkAnswer(
+      df1.select(to_json($"a")),
+      Row("""{"a":{"_1":1}}""") :: Nil)
+    checkAnswer(
+      df2.select(to_json($"a")),
+      Row("""{"a":1}""") :: Nil)
   }
 
   test("to_json with option") {

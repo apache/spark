@@ -340,7 +340,7 @@ case class ScalaUDAF(
 
   override def dataType: DataType = udaf.dataType
 
-  override def deterministic: Boolean = udaf.deterministic
+  override lazy val deterministic: Boolean = udaf.deterministic
 
   override val inputTypes: Seq[DataType] = udaf.inputSchema.map(_.dataType)
 

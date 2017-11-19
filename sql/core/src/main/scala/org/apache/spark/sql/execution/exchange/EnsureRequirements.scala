@@ -27,8 +27,8 @@ import org.apache.spark.sql.internal.SQLConf
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
  * of input data meets the
  * [[org.apache.spark.sql.catalyst.plans.physical.Distribution Distribution]] requirements for
- * each operator by inserting [[ShuffleExchange]] Operators where required.  Also ensure that the
- * input partition ordering requirements are met.
+ * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that
+ * the input partition ordering requirements are met.
  */
 case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
@@ -44,30 +44,33 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
   /**
    * Given a required distribution, returns a partitioning that satisfies that distribution.
+   * @param requiredDistribution The distribution that is required by the operator
+   * @param numPartitions Used when the distribution doesn't require a specific number of partitions
    */
   private def createPartitioning(
       requiredDistribution: Distribution,
       numPartitions: Int): Partitioning = {
     requiredDistribution match {
       case AllTuples => SinglePartition
-      case ClusteredDistribution(clustering) => HashPartitioning(clustering, numPartitions)
+      case ClusteredDistribution(clustering, desiredPartitions) =>
+        HashPartitioning(clustering, desiredPartitions.getOrElse(numPartitions))
       case OrderedDistribution(ordering) => RangePartitioning(ordering, numPartitions)
       case dist => sys.error(s"Do not know how to satisfy distribution $dist")
     }
   }
 
   /**
-   * Adds [[ExchangeCoordinator]] to [[ShuffleExchange]]s if adaptive query execution is enabled
-   * and partitioning schemes of these [[ShuffleExchange]]s support [[ExchangeCoordinator]].
+   * Adds [[ExchangeCoordinator]] to [[ShuffleExchangeExec]]s if adaptive query execution is enabled
+   * and partitioning schemes of these [[ShuffleExchangeExec]]s support [[ExchangeCoordinator]].
    */
   private def withExchangeCoordinator(
       children: Seq[SparkPlan],
       requiredChildDistributions: Seq[Distribution]): Seq[SparkPlan] = {
     val supportsCoordinator =
-      if (children.exists(_.isInstanceOf[ShuffleExchange])) {
+      if (children.exists(_.isInstanceOf[ShuffleExchangeExec])) {
         // Right now, ExchangeCoordinator only support HashPartitionings.
         children.forall {
-          case e @ ShuffleExchange(hash: HashPartitioning, _, _) => true
+          case e @ ShuffleExchangeExec(hash: HashPartitioning, _, _) => true
           case child =>
             child.outputPartitioning match {
               case hash: HashPartitioning => true
@@ -94,7 +97,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
             targetPostShuffleInputSize,
             minNumPostShufflePartitions)
         children.zip(requiredChildDistributions).map {
-          case (e: ShuffleExchange, _) =>
+          case (e: ShuffleExchangeExec, _) =>
             // This child is an Exchange, we need to add the coordinator.
             e.copy(coordinator = Some(coordinator))
           case (child, distribution) =>
@@ -138,7 +141,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
             val targetPartitioning =
               createPartitioning(distribution, defaultNumPreShufflePartitions)
             assert(targetPartitioning.isInstanceOf[HashPartitioning])
-            ShuffleExchange(targetPartitioning, child, Some(coordinator))
+            ShuffleExchangeExec(targetPartitioning, child, Some(coordinator))
         }
       } else {
         // If we do not need ExchangeCoordinator, the original children are returned.
@@ -162,7 +165,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
       case (child, distribution) =>
-        ShuffleExchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
+        ShuffleExchangeExec(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
     }
 
     // If the operator has multiple children and specifies child output distributions (e.g. join),
@@ -215,8 +218,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
               child match {
                 // If child is an exchange, we replace it with
                 // a new one having targetPartitioning.
-                case ShuffleExchange(_, c, _) => ShuffleExchange(targetPartitioning, c)
-                case _ => ShuffleExchange(targetPartitioning, child)
+                case ShuffleExchangeExec(_, c, _) => ShuffleExchangeExec(targetPartitioning, c)
+                case _ => ShuffleExchangeExec(targetPartitioning, child)
               }
           }
         }
@@ -234,24 +237,11 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
-      if (requiredOrdering.nonEmpty) {
-        // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
-        val orderingMatched = if (requiredOrdering.length > child.outputOrdering.length) {
-          false
-        } else {
-          requiredOrdering.zip(child.outputOrdering).forall {
-            case (requiredOrder, childOutputOrder) =>
-              childOutputOrder.satisfies(requiredOrder)
-          }
-        }
-
-        if (!orderingMatched) {
-          SortExec(requiredOrdering, global = false, child = child)
-        } else {
-          child
-        }
-      } else {
+      // If child.outputOrdering already satisfies the requiredOrdering, we do not need to sort.
+      if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
         child
+      } else {
+        SortExec(requiredOrdering, global = false, child = child)
       }
     }
 
@@ -259,9 +249,9 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case operator @ ShuffleExchange(partitioning, child, _) =>
+    case operator @ ShuffleExchangeExec(partitioning, child, _) =>
       child.children match {
-        case ShuffleExchange(childPartitioning, baseChild, _)::Nil =>
+        case ShuffleExchangeExec(childPartitioning, baseChild, _)::Nil =>
           if (childPartitioning.guarantees(partitioning)) child else operator
         case _ => operator
       }

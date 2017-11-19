@@ -71,7 +71,7 @@ class HiveSchemaInferenceSuite
         name = field,
         dataType = LongType,
         nullable = true,
-        metadata = new MetadataBuilder().putString(HIVE_TYPE_STRING, "bigint").build())
+        metadata = Metadata.empty)
     }
     // and all partition columns as ints
     val partitionStructFields = partitionCols.map { field =>
@@ -80,7 +80,7 @@ class HiveSchemaInferenceSuite
         name = field.toLowerCase,
         dataType = IntegerType,
         nullable = true,
-        metadata = new MetadataBuilder().putString(HIVE_TYPE_STRING, "int").build())
+        metadata = Metadata.empty)
     }
     val schema = StructType(structFields ++ partitionStructFields)
 

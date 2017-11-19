@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URI, URL}
+import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.collection.mutable.HashMap
@@ -28,6 +29,7 @@ import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -49,10 +51,7 @@ import org.apache.spark.util._
 /**
  * Common application master functionality for Spark on Yarn.
  */
-private[spark] class ApplicationMaster(
-    args: ApplicationMasterArguments,
-    client: YarnRMClient)
-  extends Logging {
+private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends Logging {
 
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
@@ -61,6 +60,44 @@ private[spark] class ApplicationMaster(
   private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
     .asInstanceOf[YarnConfiguration]
   private val isClusterMode = args.userClass != null
+
+  private val ugi = {
+    val original = UserGroupInformation.getCurrentUser()
+
+    // If a principal and keytab were provided, log in to kerberos, and set up a thread to
+    // renew the kerberos ticket when needed. Because the UGI API does not expose the TTL
+    // of the TGT, use a configuration to define how often to check that a relogin is necessary.
+    // checkTGTAndReloginFromKeytab() is a no-op if the relogin is not yet needed.
+    val principal = sparkConf.get(PRINCIPAL).orNull
+    val keytab = sparkConf.get(KEYTAB).orNull
+    if (principal != null && keytab != null) {
+      UserGroupInformation.loginUserFromKeytab(principal, keytab)
+
+      val renewer = new Thread() {
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          while (true) {
+            TimeUnit.SECONDS.sleep(sparkConf.get(KERBEROS_RELOGIN_PERIOD))
+            UserGroupInformation.getCurrentUser().checkTGTAndReloginFromKeytab()
+          }
+        }
+      }
+      renewer.setName("am-kerberos-renewer")
+      renewer.setDaemon(true)
+      renewer.start()
+
+      // Transfer the original user's tokens to the new user, since that's needed to connect to
+      // YARN. It also copies over any delegation tokens that might have been created by the
+      // client, which will then be transferred over when starting executors (until new ones
+      // are created by the periodic task).
+      val newUser = UserGroupInformation.getCurrentUser()
+      SparkHadoopUtil.get.transferCredentials(original, newUser)
+      newUser
+    } else {
+      SparkHadoopUtil.get.createSparkUser()
+    }
+  }
+
+  private val client = doAsUser { new YarnRMClient() }
 
   // Default to twice the number of executors (twice the maximum number of executors if dynamic
   // allocation is enabled), with a minimum of 3.
@@ -139,7 +176,7 @@ private[spark] class ApplicationMaster(
   // Load the list of localized files set by the client. This is used when launching executors,
   // and is loaded here so that these configs don't pollute the Web UI's environment page in
   // cluster mode.
-  private val localResources = {
+  private val localResources = doAsUser {
     logInfo("Preparing Local resources")
     val resources = HashMap[String, LocalResource]()
 
@@ -201,6 +238,13 @@ private[spark] class ApplicationMaster(
   }
 
   final def run(): Int = {
+    doAsUser {
+      runImpl()
+    }
+    exitCode
+  }
+
+  private def runImpl(): Unit = {
     try {
       val appAttemptId = client.getAttemptId()
 
@@ -254,11 +298,6 @@ private[spark] class ApplicationMaster(
         }
       }
 
-      // Call this to force generation of secret so it gets populated into the
-      // Hadoop UGI. This has to happen before the startUserApplication which does a
-      // doAs in order for the credentials to be passed on to the executor containers.
-      val securityMgr = new SecurityManager(sparkConf)
-
       // If the credentials file config is present, we must periodically renew tokens. So create
       // a new AMDelegationTokenRenewer
       if (sparkConf.contains(CREDENTIALS_FILE_PATH)) {
@@ -284,6 +323,9 @@ private[spark] class ApplicationMaster(
         credentialRenewerThread.join()
       }
 
+      // Call this to force generation of secret so it gets populated into the Hadoop UGI.
+      val securityMgr = new SecurityManager(sparkConf)
+
       if (isClusterMode) {
         runDriver(securityMgr)
       } else {
@@ -297,7 +339,6 @@ private[spark] class ApplicationMaster(
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + e)
     }
-    exitCode
   }
 
   /**
@@ -567,10 +608,6 @@ private[spark] class ApplicationMaster(
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       if (!preserveFiles) {
         stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
-        if (stagingDirPath == null) {
-          logError("Staging directory is null")
-          return
-        }
         logInfo("Deleting staging directory " + stagingDirPath)
         val fs = stagingDirPath.getFileSystem(yarnConf)
         fs.delete(stagingDirPath, true)
@@ -747,6 +784,12 @@ private[spark] class ApplicationMaster(
     }
   }
 
+  private def doAsUser[T](fn: => T): T = {
+    ugi.doAs(new PrivilegedExceptionAction[T]() {
+      override def run: T = fn
+    })
+  }
+
 }
 
 object ApplicationMaster extends Logging {
@@ -775,10 +818,8 @@ object ApplicationMaster extends Logging {
         sys.props(k) = v
       }
     }
-    SparkHadoopUtil.get.runAsSparkUser { () =>
-      master = new ApplicationMaster(amArgs, new YarnRMClient)
-      System.exit(master.run())
-    }
+    master = new ApplicationMaster(amArgs)
+    System.exit(master.run())
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {

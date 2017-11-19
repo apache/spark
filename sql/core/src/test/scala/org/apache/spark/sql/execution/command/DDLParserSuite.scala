@@ -525,6 +525,25 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     assert(e.message.contains("you can only specify one of them."))
   }
 
+  test("create table - byte length literal table name") {
+    val sql = "CREATE TABLE 1m.2g(a INT) USING parquet"
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("2g", Some("1m")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("a", IntegerType),
+      provider = Some("parquet"))
+
+    parser.parsePlan(sql) match {
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $sql")
+    }
+  }
+
   test("insert overwrite directory") {
     val v1 = "INSERT OVERWRITE DIRECTORY '/tmp/file' USING parquet SELECT 1 as a"
     parser.parsePlan(v1) match {

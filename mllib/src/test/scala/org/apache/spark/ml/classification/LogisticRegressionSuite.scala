@@ -2416,6 +2416,18 @@ class LogisticRegressionSuite
       blorSummary.recallByThreshold.collect() === sameBlorSummary.recallByThreshold.collect())
     assert(
       blorSummary.precisionByThreshold.collect() === sameBlorSummary.precisionByThreshold.collect())
+    assert(blorSummary.labels === sameBlorSummary.labels)
+    assert(blorSummary.truePositiveRateByLabel === sameBlorSummary.truePositiveRateByLabel)
+    assert(blorSummary.falsePositiveRateByLabel === sameBlorSummary.falsePositiveRateByLabel)
+    assert(blorSummary.precisionByLabel === sameBlorSummary.precisionByLabel)
+    assert(blorSummary.recallByLabel === sameBlorSummary.recallByLabel)
+    assert(blorSummary.fMeasureByLabel === sameBlorSummary.fMeasureByLabel)
+    assert(blorSummary.accuracy === sameBlorSummary.accuracy)
+    assert(blorSummary.weightedTruePositiveRate === sameBlorSummary.weightedTruePositiveRate)
+    assert(blorSummary.weightedFalsePositiveRate === sameBlorSummary.weightedFalsePositiveRate)
+    assert(blorSummary.weightedRecall === sameBlorSummary.weightedRecall)
+    assert(blorSummary.weightedPrecision === sameBlorSummary.weightedPrecision)
+    assert(blorSummary.weightedFMeasure === sameBlorSummary.weightedFMeasure)
 
     lr.setFamily("multinomial")
     val mlorModel = lr.fit(smallMultinomialDataset)

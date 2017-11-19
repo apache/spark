@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.api.python.PythonFunction
+import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
@@ -105,5 +105,8 @@ class DummyUDF extends PythonFunction(
   broadcastVars = null,
   accumulator = null)
 
-class MyDummyPythonUDF
-  extends UserDefinedPythonFunction(name = "dummyUDF", func = new DummyUDF, dataType = BooleanType)
+class MyDummyPythonUDF extends UserDefinedPythonFunction(
+  name = "dummyUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_BATCHED_UDF)

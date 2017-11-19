@@ -21,7 +21,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources._
 
 /**
@@ -45,10 +44,9 @@ case class InsertIntoDataSourceDirCommand(
     query: LogicalPlan,
     overwrite: Boolean) extends RunnableCommand {
 
-  override def children: Seq[LogicalPlan] = Seq(query)
+  override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
-  override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
-    assert(children.length == 1)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(storage.locationUri.nonEmpty, "Directory path is required")
     assert(provider.nonEmpty, "Data source is required")
 

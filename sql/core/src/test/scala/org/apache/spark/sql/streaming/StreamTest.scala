@@ -167,7 +167,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   case class StartStream(
       trigger: Trigger = Trigger.ProcessingTime(0),
       triggerClock: Clock = new SystemClock,
-      additionalConfs: Map[String, String] = Map.empty)
+      additionalConfs: Map[String, String] = Map.empty,
+      checkpointLocation: String = null)
     extends StreamAction
 
   /** Advance the trigger clock's time manually. */
@@ -349,13 +350,14 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
          """.stripMargin)
     }
 
-    val metadataRoot = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     var manualClockExpectedTime = -1L
+    val defaultCheckpointLocation =
+      Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     try {
       startedTest.foreach { action =>
         logInfo(s"Processing test stream action: $action")
         action match {
-          case StartStream(trigger, triggerClock, additionalConfs) =>
+          case StartStream(trigger, triggerClock, additionalConfs, checkpointLocation) =>
             verify(currentStream == null, "stream already running")
             verify(triggerClock.isInstanceOf[SystemClock]
               || triggerClock.isInstanceOf[StreamManualClock],
@@ -363,6 +365,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             if (triggerClock.isInstanceOf[StreamManualClock]) {
               manualClockExpectedTime = triggerClock.asInstanceOf[StreamManualClock].getTimeMillis()
             }
+            val metadataRoot = Option(checkpointLocation).getOrElse(defaultCheckpointLocation)
 
             additionalConfs.foreach(pair => {
               val value =
@@ -479,7 +482,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             verify(currentStream != null || lastStream != null,
               "cannot assert when no stream has been started")
             val streamToAssert = Option(currentStream).getOrElse(lastStream)
-            verify(a.condition(streamToAssert), s"Assert on query failed: ${a.message}")
+            try {
+              verify(a.condition(streamToAssert), s"Assert on query failed: ${a.message}")
+            } catch {
+              case NonFatal(e) =>
+                failTest(s"Assert on query failed: ${a.message}", e)
+            }
 
           case a: Assert =>
             val streamToAssert = Option(currentStream).getOrElse(lastStream)

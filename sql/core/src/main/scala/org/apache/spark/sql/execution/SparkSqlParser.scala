@@ -286,7 +286,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[ClearCacheCommand]] logical plan.
    */
   override def visitClearCache(ctx: ClearCacheContext): LogicalPlan = withOrigin(ctx) {
-    ClearCacheCommand
+    ClearCacheCommand()
   }
 
   /**
@@ -330,10 +330,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[DescribeTableCommand]] logical plan.
    */
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
-    // Describe column are not supported yet. Return null and let the parser decide
-    // what to do with this (create an exception or pass it on to a different system).
+    val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
     if (ctx.describeColName != null) {
-      null
+      if (ctx.partitionSpec != null) {
+        throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
+      } else {
+        DescribeColumnCommand(
+          visitTableIdentifier(ctx.tableIdentifier),
+          ctx.describeColName.nameParts.asScala.map(_.getText),
+          isExtended)
+      }
     } else {
       val partitionSpec = if (ctx.partitionSpec != null) {
         // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
@@ -348,7 +354,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       DescribeTableCommand(
         visitTableIdentifier(ctx.tableIdentifier),
         partitionSpec,
-        ctx.EXTENDED != null || ctx.FORMATTED != null)
+        isExtended)
     }
   }
 

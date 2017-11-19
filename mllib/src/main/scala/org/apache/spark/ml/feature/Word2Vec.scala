@@ -337,14 +337,17 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
 
       val wordVectors = instance.wordVectors.getVectors
-      val dataSeq = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }
       val dataPath = new Path(path, "data").toString
       val bufferSizeInBytes = Utils.byteStringAsBytes(
         sc.conf.get("spark.kryoserializer.buffer.max", "64m"))
       val numPartitions = Word2VecModelWriter.calculateNumberOfPartitions(
         bufferSizeInBytes, instance.wordVectors.wordIndex.size, instance.getVectorSize)
-      sparkSession.createDataFrame(dataSeq)
+      val spark = sparkSession
+      import spark.implicits._
+      spark.createDataset[(String, Array[Float])](wordVectors.toSeq)
         .repartition(numPartitions)
+        .map { case (word, vector) => Data(word, vector) }
+        .toDF()
         .write
         .parquet(dataPath)
     }

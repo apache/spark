@@ -22,7 +22,6 @@ import java.net.URI
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
-import org.json4s.jackson.Serialization.{read, write}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf

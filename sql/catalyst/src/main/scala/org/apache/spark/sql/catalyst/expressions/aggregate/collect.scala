@@ -44,7 +44,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
   // actual order of input rows.
-  override def deterministic: Boolean = false
+  override lazy val deterministic: Boolean = false
 
   override def update(buffer: T, input: InternalRow): T = {
     val value = child.eval(input)

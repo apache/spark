@@ -19,8 +19,6 @@ package org.apache.spark.deploy
 
 import java.io.File
 
-import scala.collection.mutable.HashMap
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -96,7 +94,7 @@ private[deploy] object DependencyUtils {
       hadoopConf: Configuration,
       secMgr: SecurityManager): String = {
     require(fileList != null, "fileList cannot be null.")
-    fileList.split(",")
+    Utils.stringToSeq(fileList)
       .map(downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr))
       .mkString(",")
   }
@@ -123,6 +121,11 @@ private[deploy] object DependencyUtils {
 
     uri.getScheme match {
       case "file" | "local" => path
+      case "http" | "https" | "ftp" if Utils.isTesting =>
+        // This is only used for SparkSubmitSuite unit test. Instead of downloading file remotely,
+        // return a dummy local path instead.
+        val file = new File(uri.getPath)
+        new File(targetDir, file.getName).toURI.toString
       case _ =>
         val fname = new Path(uri).getName()
         val localFile = Utils.doFetchFile(uri.toString(), targetDir, fname, sparkConf, secMgr,
@@ -133,7 +136,7 @@ private[deploy] object DependencyUtils {
 
   def resolveGlobPaths(paths: String, hadoopConf: Configuration): String = {
     require(paths != null, "paths cannot be null.")
-    paths.split(",").map(_.trim).filter(_.nonEmpty).flatMap { path =>
+    Utils.stringToSeq(paths).flatMap { path =>
       val uri = Utils.resolveURI(path)
       uri.getScheme match {
         case "local" | "http" | "https" | "ftp" => Array(path)

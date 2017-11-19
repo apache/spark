@@ -575,8 +575,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
 
   test("getActive and getActiveOrCreate") {
     require(StreamingContext.getActive().isEmpty, "context exists from before")
-    sc = new SparkContext(conf)
-
     var newContextCreated = false
 
     def creatingFunc(): StreamingContext = {
@@ -603,6 +601,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     // getActiveOrCreate should create new context and getActive should return it only
     // after starting the context
     testGetActiveOrCreate {
+      sc = new SparkContext(conf)
       ssc = StreamingContext.getActiveOrCreate(creatingFunc _)
       assert(ssc != null, "no context created")
       assert(newContextCreated === true, "new context not created")
@@ -622,6 +621,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
 
     // getActiveOrCreate and getActive should return independently created context after activating
     testGetActiveOrCreate {
+      sc = new SparkContext(conf)
       ssc = creatingFunc()  // Create
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")

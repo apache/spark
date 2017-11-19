@@ -236,24 +236,34 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
+    ctx.addMutableState("boolean", ev.value, "")
+    ctx.addMutableState("boolean", ev.isNull, "")
+    val valueArg = ctx.freshName("valueArg")
     val listCode = listGen.map(x =>
       s"""
         if (!${ev.value}) {
           ${x.code}
           if (${x.isNull}) {
             ${ev.isNull} = true;
-          } else if (${ctx.genEqual(value.dataType, valueGen.value, x.value)}) {
+          } else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
             ${ev.isNull} = false;
             ${ev.value} = true;
           }
         }
-       """).mkString("\n")
+       """)
+    val listCodes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      val args = ("InternalRow", ctx.INPUT_ROW) :: (ctx.javaType(value.dataType), valueArg) :: Nil
+      ctx.splitExpressions(listCode, "valueIn", args)
+    } else {
+      listCode.mkString("\n")
+    }
     ev.copy(code = s"""
       ${valueGen.code}
-      boolean ${ev.value} = false;
-      boolean ${ev.isNull} = ${valueGen.isNull};
+      ${ev.value} = false;
+      ${ev.isNull} = ${valueGen.isNull};
       if (!${ev.isNull}) {
-        $listCode
+        ${ctx.javaType(value.dataType)} $valueArg = ${valueGen.value};
+        $listCodes
       }
     """)
   }
@@ -368,7 +378,46 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     val eval2 = right.genCode(ctx)
 
     // The result should be `false`, if any of them is `false` whenever the other is null or not.
-    if (!left.nullable && !right.nullable) {
+
+    // place generated code of eval1 and eval2 in separate methods if their code combined is large
+    val combinedLength = eval1.code.length + eval2.code.length
+    if (combinedLength > 1024 &&
+      // Split these expressions only if they are created from a row object
+      (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+
+      val (eval1FuncName, eval1GlobalIsNull, eval1GlobalValue) =
+        ctx.createAndAddFunction(eval1, BooleanType, "eval1Expr")
+      val (eval2FuncName, eval2GlobalIsNull, eval2GlobalValue) =
+        ctx.createAndAddFunction(eval2, BooleanType, "eval2Expr")
+      if (!left.nullable && !right.nullable) {
+        val generatedCode = s"""
+         $eval1FuncName(${ctx.INPUT_ROW});
+         boolean ${ev.value} = false;
+         if (${eval1GlobalValue}) {
+           $eval2FuncName(${ctx.INPUT_ROW});
+           ${ev.value} = ${eval2GlobalValue};
+         }
+       """
+        ev.copy(code = generatedCode, isNull = "false")
+      } else {
+        val generatedCode = s"""
+         $eval1FuncName(${ctx.INPUT_ROW});
+         boolean ${ev.isNull} = false;
+         boolean ${ev.value} = false;
+         if (!${eval1GlobalIsNull} && !${eval1GlobalValue}) {
+         } else {
+           $eval2FuncName(${ctx.INPUT_ROW});
+           if (!${eval2GlobalIsNull} && !${eval2GlobalValue}) {
+           } else if (!${eval1GlobalIsNull} && !${eval2GlobalIsNull}) {
+             ${ev.value} = true;
+           } else {
+             ${ev.isNull} = true;
+           }
+         }
+       """
+        ev.copy(code = generatedCode)
+      }
+    } else if (!left.nullable && !right.nullable) {
       ev.copy(code = s"""
         ${eval1.code}
         boolean ${ev.value} = false;
@@ -431,7 +480,46 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     val eval2 = right.genCode(ctx)
 
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
-    if (!left.nullable && !right.nullable) {
+
+    // place generated code of eval1 and eval2 in separate methods if their code combined is large
+    val combinedLength = eval1.code.length + eval2.code.length
+    if (combinedLength > 1024 &&
+      // Split these expressions only if they are created from a row object
+      (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+
+      val (eval1FuncName, eval1GlobalIsNull, eval1GlobalValue) =
+        ctx.createAndAddFunction(eval1, BooleanType, "eval1Expr")
+      val (eval2FuncName, eval2GlobalIsNull, eval2GlobalValue) =
+        ctx.createAndAddFunction(eval2, BooleanType, "eval2Expr")
+      if (!left.nullable && !right.nullable) {
+        val generatedCode = s"""
+         $eval1FuncName(${ctx.INPUT_ROW});
+         boolean ${ev.value} = true;
+         if (!${eval1GlobalValue}) {
+           $eval2FuncName(${ctx.INPUT_ROW});
+           ${ev.value} = ${eval2GlobalValue};
+         }
+       """
+        ev.copy(code = generatedCode, isNull = "false")
+      } else {
+        val generatedCode = s"""
+         $eval1FuncName(${ctx.INPUT_ROW});
+         boolean ${ev.isNull} = false;
+         boolean ${ev.value} = true;
+         if (!${eval1GlobalIsNull} && ${eval1GlobalValue}) {
+         } else {
+           $eval2FuncName(${ctx.INPUT_ROW});
+           if (!${eval2GlobalIsNull} && ${eval2GlobalValue}) {
+           } else if (!${eval1GlobalIsNull} && !${eval2GlobalIsNull}) {
+             ${ev.value} = false;
+           } else {
+             ${ev.isNull} = true;
+           }
+         }
+       """
+        ev.copy(code = generatedCode)
+      }
+    } else if (!left.nullable && !right.nullable) {
       ev.isNull = "false"
       ev.copy(code = s"""
         ${eval1.code}

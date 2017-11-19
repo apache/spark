@@ -117,7 +117,7 @@ public class TransportServer implements Closeable {
 
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
-      protected void initChannel(SocketChannel ch) throws Exception {
+      protected void initChannel(SocketChannel ch) {
         RpcHandler rpcHandler = appRpcHandler;
         for (TransportServerBootstrap bootstrap : bootstraps) {
           rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);

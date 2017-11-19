@@ -30,6 +30,7 @@ import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
+@deprecated("Deprecated without replacement", "2.3.0")
 object FlumeUtils {
   private val DEFAULT_POLLING_PARALLELISM = 5
   private val DEFAULT_POLLING_BATCH_SIZE = 1000

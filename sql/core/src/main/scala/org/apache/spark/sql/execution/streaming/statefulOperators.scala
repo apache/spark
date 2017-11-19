@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -43,7 +43,13 @@ case class StatefulOperatorStateInfo(
     checkpointLocation: String,
     queryRunId: UUID,
     operatorId: Long,
-    storeVersion: Long)
+    storeVersion: Long,
+    numPartitions: Int) {
+  override def toString(): String = {
+    s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
+      s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions]"
+  }
+}
 
 /**
  * An operator that reads or writes state from the [[StateStore]].
@@ -133,26 +139,9 @@ trait WatermarkSupport extends UnaryExecNode {
 
   /** Generate an expression that matches data older than the watermark */
   lazy val watermarkExpression: Option[Expression] = {
-    val optionalWatermarkAttribute =
-      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
-
-    optionalWatermarkAttribute.map { watermarkAttribute =>
-      // If we are evicting based on a window, use the end of the window.  Otherwise just
-      // use the attribute itself.
-      val evictionExpression =
-        if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
-          LessThanOrEqual(
-            GetStructField(watermarkAttribute, 1),
-            Literal(eventTimeWatermark.get * 1000))
-        } else {
-          LessThanOrEqual(
-            watermarkAttribute,
-            Literal(eventTimeWatermark.get * 1000))
-        }
-
-      logInfo(s"Filtering state store on: $evictionExpression")
-      evictionExpression
-    }
+    WatermarkSupport.watermarkExpression(
+      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey)),
+      eventTimeWatermark)
   }
 
   /** Predicate based on keys that matches data older than the watermark */
@@ -179,6 +168,31 @@ trait WatermarkSupport extends UnaryExecNode {
   }
 }
 
+object WatermarkSupport {
+
+  /** Generate an expression on given attributes that matches data older than the watermark */
+  def watermarkExpression(
+      optionalWatermarkExpression: Option[Expression],
+      optionalWatermarkMs: Option[Long]): Option[Expression] = {
+    if (optionalWatermarkExpression.isEmpty || optionalWatermarkMs.isEmpty) return None
+
+    val watermarkAttribute = optionalWatermarkExpression.get
+    // If we are evicting based on a window, use the end of the window.  Otherwise just
+    // use the attribute itself.
+    val evictionExpression =
+      if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
+        LessThanOrEqual(
+          GetStructField(watermarkAttribute, 1),
+          Literal(optionalWatermarkMs.get * 1000))
+      } else {
+        LessThanOrEqual(
+          watermarkAttribute,
+          Literal(optionalWatermarkMs.get * 1000))
+      }
+    Some(evictionExpression)
+  }
+}
+
 /**
  * For each input tuple, the key is calculated and the value from the [[StateStore]] is added
  * to the stream (in addition to the input tuple) if present.
@@ -200,11 +214,20 @@ case class StateStoreRestoreExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-        iter.flatMap { row =>
-          val key = getKey(row)
-          val savedState = store.get(key)
-          numOutputRows += 1
-          row +: Option(savedState).toSeq
+        val hasInput = iter.hasNext
+        if (!hasInput && keyExpressions.isEmpty) {
+          // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
+          // the `HashAggregateExec` will output a 0 value for the partial merge. We need to
+          // restore the value, so that we don't overwrite our state with a 0 value, but rather
+          // merge the 0 with existing state.
+          store.iterator().map(_.value)
+        } else {
+          iter.flatMap { row =>
+            val key = getKey(row)
+            val savedState = store.get(key)
+            numOutputRows += 1
+            Option(savedState).toSeq :+ row
+          }
         }
     }
   }
@@ -212,6 +235,14 @@ case class StateStoreRestoreExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    if (keyExpressions.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    }
+  }
 }
 
 /**
@@ -351,6 +382,14 @@ case class StateStoreSaveExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    if (keyExpressions.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    }
+  }
 }
 
 /** Physical operator for executing streaming Deduplicate. */
@@ -363,7 +402,7 @@ case class StreamingDeduplicateExec(
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(keyExpressions) :: Nil
+    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver

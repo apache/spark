@@ -23,11 +23,8 @@ import java.util.{ArrayList, Collections}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
-
 
 private[spark] case class AccumulatorMetadata(
     id: Long,

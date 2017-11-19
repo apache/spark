@@ -49,7 +49,7 @@ case class ScalaUDF(
     udfDeterministic: Boolean = true)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression with UserDefinedExpression {
 
-  override def deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
+  override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def toString: String =
     s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"
