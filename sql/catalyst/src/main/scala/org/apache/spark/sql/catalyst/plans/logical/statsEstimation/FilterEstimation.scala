@@ -23,7 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.types._
 
@@ -332,8 +332,45 @@ case class FilterEstimation(plan: Filter) extends Logging {
         colStatsMap.update(attr, newStats)
       }
 
-      Some(1.0 / BigDecimal(ndv))
-    } else {
+      // We compute filter selectivity using Histogram information
+      attr.dataType match {
+        case StringType | BinaryType =>
+          Some(1.0 / BigDecimal(ndv))
+
+        case _ =>
+          // returns 1/ndv if there is no histogram
+          if (colStat.histogram.isEmpty) return Some(1.0 / BigDecimal(ndv))
+
+          // We traverse histogram bins to locate the literal value
+          val hgmBins = colStat.histogram.get.bins
+          val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
+          // find the interval where this datum locates
+          var lowerId, higherId = -1
+          for (i <- hgmBins.indices) {
+            // if datum > upperBound, just move to next bin
+            if (datum <= hgmBins(i).hi && lowerId < 0) lowerId = i
+            if (higherId < 0) {
+              if ((datum < hgmBins(i).hi || i == hgmBins.length - 1) ||
+                ((datum == hgmBins(i).hi) && (datum < hgmBins(i + 1).hi))) {
+                higherId = i
+              }
+            }
+          }
+          assert(lowerId <= higherId)
+          val lowerBinNdv = hgmBins(lowerId).ndv
+          val higherBinNdv = hgmBins(higherId).ndv
+          // assume uniform distribution in each bucket
+          val percent = if (lowerId == higherId) {
+            (1.0 / hgmBins.length) / math.max(lowerBinNdv, 1)
+          } else {
+            1.0 / hgmBins.length * (higherId - lowerId - 1) +
+              (1.0 / hgmBins.length) / math.max(lowerBinNdv, 1) +
+              (1.0 / hgmBins.length) / math.max(higherBinNdv, 1)
+          }
+          Some(percent)
+      }
+
+    } else {  // not in interval
       Some(0.0)
     }
 
@@ -471,37 +508,47 @@ case class FilterEstimation(plan: Filter) extends Logging {
       percent = 1.0
     } else {
       // This is the partial overlap case:
-      // Without advanced statistics like histogram, we assume uniform data distribution.
-      // We just prorate the adjusted range over the initial range to compute filter selectivity.
-      assert(max > min)
-      percent = op match {
-        case _: LessThan =>
-          if (numericLiteral == max) {
-            // If the literal value is right on the boundary, we can minus the part of the
-            // boundary value (1/ndv).
-            1.0 - 1.0 / ndv
-          } else {
-            (numericLiteral - min) / (max - min)
-          }
-        case _: LessThanOrEqual =>
-          if (numericLiteral == min) {
-            // The boundary value is the only satisfying value.
-            1.0 / ndv
-          } else {
-            (numericLiteral - min) / (max - min)
-          }
-        case _: GreaterThan =>
-          if (numericLiteral == min) {
-            1.0 - 1.0 / ndv
-          } else {
-            (max - numericLiteral) / (max - min)
-          }
-        case _: GreaterThanOrEqual =>
-          if (numericLiteral == max) {
-            1.0 / ndv
-          } else {
-            (max - numericLiteral) / (max - min)
-          }
+
+      if (colStat.histogram.isEmpty) {
+        // Without advanced statistics like histogram, we assume uniform data distribution.
+        // We just prorate the adjusted range over the initial range to compute filter selectivity.
+        assert(max > min)
+        percent = op match {
+          case _: LessThan =>
+            if (numericLiteral == max) {
+              // If the literal value is right on the boundary, we can minus the part of the
+              // boundary value (1/ndv).
+              1.0 - 1.0 / ndv
+            } else {
+              (numericLiteral - min) / (max - min)
+            }
+          case _: LessThanOrEqual =>
+            if (numericLiteral == min) {
+              // The boundary value is the only satisfying value.
+              1.0 / ndv
+            } else {
+              (numericLiteral - min) / (max - min)
+            }
+          case _: GreaterThan =>
+            if (numericLiteral == min) {
+              1.0 - 1.0 / ndv
+            } else {
+              (max - numericLiteral) / (max - min)
+            }
+          case _: GreaterThanOrEqual =>
+            if (numericLiteral == max) {
+              1.0 / ndv
+            } else {
+              (max - numericLiteral) / (max - min)
+            }
+        }
+      } else {
+        val numericHistogram = colStat.histogram.get
+        val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
+        val maxDouble = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
+        val minDouble = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
+        percent = computePercentForNumericEquiHeightHgm(op, numericHistogram, maxDouble, minDouble,
+          datum)
       }
 
       if (update) {
@@ -527,6 +574,55 @@ case class FilterEstimation(plan: Filter) extends Logging {
     }
 
     Some(percent)
+  }
+
+  /**
+   * Returns the selectivity percentage for a combined op-dataNumber in the column's
+   * current valid range [min, max]
+   *
+   * @param op a binary comparison operator
+   * @param histogram a numeric equi-height histogram
+   * @param max the upper bound of the current valid range for a given column
+   * @param min the lower bound of the current valid range for a given column
+   * @param datumNumber the numeric value of a literal
+   * @return the selectivity percentage for a condition in the current range.
+   */
+
+  def computePercentForNumericEquiHeightHgm(
+      op: BinaryComparison,
+      histogram: Histogram,
+      max: Double,
+      min: Double,
+      datumNumber: Double): Double = {
+    // find buckets where column's current min and max locate
+    val minBucketId = EstimationUtils.findFirstBucketForValue(min, histogram)
+    val maxBucketId = EstimationUtils.findLastBucketForValue(max, histogram)
+    assert(minBucketId <= maxBucketId)
+
+    // compute how many buckets the column's current valid range [min, max] occupies.
+    // Note that a column's [min, max] range may vary after we apply some filter conditions.
+    val minToMaxLength = EstimationUtils.getOccupationBuckets(maxBucketId, minBucketId, max,
+      min, histogram)
+
+    val datumInBucketId = op match {
+      case LessThan(_, _) | GreaterThanOrEqual(_, _) =>
+        EstimationUtils.findFirstBucketForValue(datumNumber, histogram)
+      case LessThanOrEqual(_, _) | GreaterThan(_, _) =>
+        EstimationUtils.findLastBucketForValue(datumNumber, histogram)
+    }
+
+    op match {
+      // LessThan and LessThanOrEqual share the same logic,
+      // but their datumInBucketId may be different
+      case LessThan(_, _) | LessThanOrEqual(_, _) =>
+        EstimationUtils.getOccupationBuckets(datumInBucketId, minBucketId, datumNumber, min,
+          histogram) / minToMaxLength
+      // GreaterThan and GreaterThanOrEqual share the same logic,
+      // but their datumInBucketId may be different
+      case GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
+        EstimationUtils.getOccupationBuckets(maxBucketId, datumInBucketId, max, datumNumber,
+          histogram) / minToMaxLength
+    }
   }
 
   /**
