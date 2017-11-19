@@ -170,7 +170,8 @@ class ValidatorParams(HasSeed):
         return java_estimator, java_epms, java_evaluator
 
 
-class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels, MLReadable, MLWritable):
+class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels,
+                     MLReadable, MLWritable):
     """
 
     K-fold cross validation performs model selection by splitting the dataset into a set of
@@ -260,7 +261,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
         subModels = None
         collectSubModelsParam = self.getCollectSubModels()
-        if (collectSubModelsParam == True):
+        if collectSubModelsParam:
             subModels = [[None for j in range(numModels)] for i in range(nFolds)]
 
         for i in range(nFolds):
@@ -273,7 +274,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
             def singleTrain(paramMapIndex):
                 paramMap = epm[paramMapIndex]
                 model = est.fit(train, paramMap)
-                if (collectSubModelsParam == True):
+                if collectSubModelsParam:
                     subModels[i][paramMapIndex] = model
                 # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, paramMap))
@@ -378,7 +379,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         #: CrossValidator.estimatorParamMaps, in the corresponding order.
         self.avgMetrics = avgMetrics
         #: sub model list from cross validation
-        self.subModels=subModels
+        self.subModels = subModels
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -545,13 +546,13 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
 
         subModels = None
         collectSubModelsParam = self.getCollectSubModels()
-        if (collectSubModelsParam == True):
+        if collectSubModelsParam:
             subModels = [None for i in range(numModels)]
 
         def singleTrain(paramMapIndex):
             paramMap = epm[paramMapIndex]
             model = est.fit(train, paramMap)
-            if (collectSubModelsParam):
+            if collectSubModelsParam:
                 subModels[paramMapIndex] = model
             metric = eva.evaluate(model.transform(validation, paramMap))
             return metric
