@@ -68,7 +68,7 @@ case class GenerateExec(
 
   private def projectedChildOutput = generator match {
     case g: UnaryExpression if omitGeneratorChild =>
-      (child.output diff Seq(g.child))
+      child.output diff Seq(g.child)
     case _ =>
       child.output
   }
@@ -76,8 +76,8 @@ case class GenerateExec(
   override def output: Seq[Attribute] = {
     if (join) {
       projectedChildOutput ++ generatorOutput
-      } else {
-        generatorOutput
+    } else {
+      generatorOutput
     }
   }
 
