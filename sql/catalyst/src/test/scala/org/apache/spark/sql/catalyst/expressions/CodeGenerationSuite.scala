@@ -380,4 +380,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
     }
   }
+
+  test("SPARK-22551: Prevent possible 64kb compile error for common expression types") {
+    val N = 1800
+    var addedExpr: Expression = Literal(1)
+    var expected = 1
+    for (i <- 0 until N) {
+      addedExpr = Add(Literal(i), addedExpr)
+      expected += i
+    }
+
+    checkEvaluation(Add(addedExpr, addedExpr), expected * 2, EmptyRow)
+  }
 }
