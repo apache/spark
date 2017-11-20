@@ -80,8 +80,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
                   case att => att
                 }
             val prunedRelation =
-              l.copy(relation = prunedParquetRelation, output = prunedRelationOutput,
-                catalogTable = None)
+              l.copy(relation = prunedParquetRelation, output = prunedRelationOutput)
 
             val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
 
