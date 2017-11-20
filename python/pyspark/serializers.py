@@ -82,13 +82,6 @@ class SpecialLengths(object):
     START_ARROW_STREAM = -6
 
 
-class PythonEvalType(object):
-    NON_UDF = 0
-    SQL_BATCHED_UDF = 1
-    SQL_PANDAS_UDF = 2
-    SQL_PANDAS_GROUPED_UDF = 3
-
-
 class Serializer(object):
 
     def dump_stream(self, iterator, stream):
@@ -214,6 +207,14 @@ class ArrowSerializer(FramedSerializer):
 
 
 def _create_batch(series):
+    """
+    Create an Arrow record batch from the given pandas.Series or list of Series, with optional type.
+
+    :param series: A single pandas.Series, list of Series, or list of (series, arrow_type)
+    :return: Arrow RecordBatch
+    """
+
+    from pyspark.sql.types import _check_series_convert_timestamps_internal
     import pyarrow as pa
     # Make input conform to [(series1, type1), (series2, type2), ...]
     if not isinstance(series, (list, tuple)) or \
@@ -224,12 +225,26 @@ def _create_batch(series):
     # If a nullable integer series has been promoted to floating point with NaNs, need to cast
     # NOTE: this is not necessary with Arrow >= 0.7
     def cast_series(s, t):
-        if t is None or s.dtype == t.to_pandas_dtype():
+        if type(t) == pa.TimestampType:
+            # NOTE: convert to 'us' with astype here, unit ignored in `from_pandas` see ARROW-1680
+            return _check_series_convert_timestamps_internal(s.fillna(0))\
+                .values.astype('datetime64[us]', copy=False)
+        # NOTE: can not compare None with pyarrow.DataType(), fixed with Arrow >= 0.7.1
+        elif t is not None and t == pa.date32():
+            # TODO: this converts the series to Python objects, possibly avoid with Arrow >= 0.8
+            return s.dt.date
+        elif t is None or s.dtype == t.to_pandas_dtype():
             return s
         else:
             return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
 
-    arrs = [pa.Array.from_pandas(cast_series(s, t), mask=s.isnull(), type=t) for s, t in series]
+    # Some object types don't support masks in Arrow, see ARROW-1721
+    def create_array(s, t):
+        casted = cast_series(s, t)
+        mask = None if casted.dtype == 'object' else s.isnull()
+        return pa.Array.from_pandas(casted, mask=mask, type=t)
+
+    arrs = [create_array(s, t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
 
 
@@ -260,11 +275,13 @@ class ArrowStreamPandasSerializer(Serializer):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
+        from pyspark.sql.types import _check_dataframe_localize_timestamps
         import pyarrow as pa
         reader = pa.open_stream(stream)
         for batch in reader:
-            table = pa.Table.from_batches([batch])
-            yield [c.to_pandas() for c in table.itercolumns()]
+            # NOTE: changed from pa.Columns.to_pandas, timezone issue in conversion fixed in 0.7.1
+            pdf = _check_dataframe_localize_timestamps(batch.to_pandas())
+            yield [c for _, c in pdf.iteritems()]
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"

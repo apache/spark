@@ -31,7 +31,6 @@ import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
-import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -285,8 +284,24 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  object ParquetOutputTimestampType extends Enumeration {
+    val INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
+  }
+
+  val PARQUET_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.parquet.outputTimestampType")
+    .doc("Sets which Parquet timestamp type to use when Spark writes data to Parquet files. " +
+      "INT96 is a non-standard but commonly used timestamp type in Parquet. TIMESTAMP_MICROS " +
+      "is a standard timestamp type in Parquet, which stores number of microseconds from the " +
+      "Unix epoch. TIMESTAMP_MILLIS is also standard, but with millisecond precision, which " +
+      "means Spark has to truncate the microsecond portion of its timestamp value.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(ParquetOutputTimestampType.values.map(_.toString))
+    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+
   val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
-    .doc("When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
+    .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
+      "When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
       "extended type. In this mode, the microsecond portion of the timestamp value will be" +
       "truncated.")
     .booleanConf
@@ -308,6 +323,13 @@ object SQLConf {
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("Whether to follow Parquet's format specification when converting Parquet schema to " +
       "Spark SQL schema and vice versa.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
+    .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
+      "filters. This configuration only has an effect when 'spark.sql.parquet.filterPushdown' " +
+      "is enabled.")
     .booleanConf
     .createWithDefault(false)
 
@@ -614,6 +636,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val IGNORE_MISSING_FILES = buildConf("spark.sql.files.ignoreMissingFiles")
+    .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
+      "encountering missing files and the contents that have been read will still be returned.")
+    .booleanConf
+    .createWithDefault(false)
+
   val MAX_RECORDS_PER_FILE = buildConf("spark.sql.files.maxRecordsPerFile")
     .doc("Maximum number of records to write out to a single file. " +
       "If this value is zero or negative, there is no limit.")
@@ -806,8 +834,35 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
-  val AUTO_UPDATE_SIZE =
-    buildConf("spark.sql.statistics.autoUpdate.size")
+  val HISTOGRAM_ENABLED =
+    buildConf("spark.sql.statistics.histogram.enabled")
+      .doc("Generates histograms when computing column statistics if enabled. Histograms can " +
+        "provide better estimation accuracy. Currently, Spark only supports equi-height " +
+        "histogram. Note that collecting histograms takes extra cost. For example, collecting " +
+        "column statistics usually takes only one table scan, but generating equi-height " +
+        "histogram will cause an extra table scan.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val HISTOGRAM_NUM_BINS =
+    buildConf("spark.sql.statistics.histogram.numBins")
+      .internal()
+      .doc("The number of bins when generating histograms.")
+      .intConf
+      .checkValue(num => num > 1, "The number of bins must be large than 1.")
+      .createWithDefault(254)
+
+  val PERCENTILE_ACCURACY =
+    buildConf("spark.sql.statistics.percentile.accuracy")
+      .internal()
+      .doc("Accuracy of percentile approximation when generating equi-height histograms. " +
+        "Larger value means better accuracy. The relative error can be deduced by " +
+        "1.0 / PERCENTILE_ACCURACY.")
+      .intConf
+      .createWithDefault(10000)
+
+  val AUTO_SIZE_UPDATE_ENABLED =
+    buildConf("spark.sql.statistics.size.autoUpdate.enabled")
       .doc("Enables automatic update for table size once table's data is changed. Note that if " +
         "the total number of files of the table is very large, this can be expensive and slow " +
         "down data change commands.")
@@ -878,7 +933,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of rows to be spilled by window operator")
       .intConf
-      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
@@ -893,7 +948,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of rows to be spilled by sort merge join operator")
       .intConf
-      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.cartesianProductExec.buffer.in.memory.threshold")
@@ -908,7 +963,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of rows to be spilled by cartesian product operator")
       .intConf
-      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
     .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
@@ -941,6 +996,19 @@ object SQLConf {
         "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
       .intConf
       .createWithDefault(10000)
+
+  val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
+    .internal()
+    .doc("When true, the apply function of the rule verifies whether the right node of the" +
+      " except operation is of type Filter or Project followed by Filter. If yes, the rule" +
+      " further verifies 1) Excluding the filter operations from the right (as well as the" +
+      " left node, if any) on the top, whether both the nodes evaluates to a same result." +
+      " 2) The left and right nodes don't contain any SubqueryExpressions. 3) The output" +
+      " column names of the left node are distinct. If all the conditions are met, the" +
+      " rule will replace the except operation with a Filter by flipping the filter" +
+      " condition(s) of the right node.")
+    .booleanConf
+    .createWithDefault(true)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1013,6 +1081,8 @@ class SQLConf extends Serializable with Logging {
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
+
+  def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
 
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
@@ -1122,7 +1192,21 @@ class SQLConf extends Serializable with Logging {
 
   def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
 
+  def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
+    val isOutputTimestampTypeSet = settings.containsKey(PARQUET_OUTPUT_TIMESTAMP_TYPE.key)
+    if (!isOutputTimestampTypeSet && isParquetINT64AsTimestampMillis) {
+      // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_INT64_AS_TIMESTAMP_MILLIS is set,
+      // respect PARQUET_INT64_AS_TIMESTAMP_MILLIS and use TIMESTAMP_MILLIS. Otherwise,
+      // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
+      ParquetOutputTimestampType.TIMESTAMP_MILLIS
+    } else {
+      ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
+    }
+  }
+
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
+
+  def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
@@ -1183,9 +1267,15 @@ class SQLConf extends Serializable with Logging {
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
+  def histogramEnabled: Boolean = getConf(HISTOGRAM_ENABLED)
+
+  def histogramNumBins: Int = getConf(HISTOGRAM_NUM_BINS)
+
+  def percentileAccuracy: Int = getConf(PERCENTILE_ACCURACY)
+
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
-  def autoUpdateSize: Boolean = getConf(SQLConf.AUTO_UPDATE_SIZE)
+  def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
 
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
@@ -1224,6 +1314,8 @@ class SQLConf extends Serializable with Logging {
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   /** ********************** SQLConf functionality methods ************ */
 

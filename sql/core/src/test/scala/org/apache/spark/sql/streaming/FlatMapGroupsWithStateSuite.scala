@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
-import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.MemoryStateStore
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -1201,7 +1200,7 @@ object FlatMapGroupsWithStateSuite {
     } catch {
       case u: UnsupportedOperationException =>
         return
-      case _ =>
+      case _: Throwable =>
         throw new TestFailedException("Unexpected exception when trying to get watermark", 20)
     }
     throw new TestFailedException("Could get watermark when not expected", 20)

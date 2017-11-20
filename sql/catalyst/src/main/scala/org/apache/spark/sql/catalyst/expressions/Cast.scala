@@ -387,10 +387,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   /**
    * Create new `Decimal` with precision and scale given in `decimalType` (if any),
    * returning null if it overflows or creating a new `value` and returning it if successful.
-   *
    */
   private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =
-    value.toPrecision(decimalType.precision, decimalType.scale).orNull
+    value.toPrecision(decimalType.precision, decimalType.scale)
 
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {

@@ -889,7 +889,8 @@ Apart from these, the following properties are also available, and may be useful
     e.g.
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
-    and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>,
+    and <code>org.apache.spark.io.ZstdCompressionCodec</code>.
   </td>
 </tr>
 <tr>
@@ -906,6 +907,23 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Block size used in Snappy compression, in the case when Snappy compression codec
     is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.level</code></td>
+  <td>1</td>
+  <td>
+    Compression level for Zstd compression codec. Increasing the compression level will result in better
+    compression at the expense of more CPU and memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.bufferSize</code></td>
+  <td>32k</td>
+  <td>
+    Buffer size used in Zstd compression, in the case when Zstd compression codec
+    is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
+    might increase the compression cost because of excessive JNI call overhead.
   </td>
 </tr>
 <tr>

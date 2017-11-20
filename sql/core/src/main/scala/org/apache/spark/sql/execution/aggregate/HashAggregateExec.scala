@@ -149,6 +149,14 @@ case class HashAggregateExec(
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
+  // The result rows come from the aggregate buffer, or a single row(no grouping keys), so this
+  // operator doesn't need to copy its result even if its child does.
+  override def needCopyResult: Boolean = false
+
+  // Aggregate operator always consumes all the input rows before outputting any result, so we
+  // don't need a stop check before aggregating.
+  override def needStopCheck: Boolean = false
+
   protected override def doProduce(ctx: CodegenContext): String = {
     if (groupingExpressions.isEmpty) {
       doProduceWithoutKeys(ctx)
@@ -245,8 +253,6 @@ case class HashAggregateExec(
        | }
      """.stripMargin
   }
-
-  protected override val shouldStopRequired = false
 
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
@@ -589,7 +595,7 @@ case class HashAggregateExec(
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName();")
         ctx.addMutableState(
-          "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>",
+          "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarRow>",
           iterTermForFastHashMap, "")
       } else {
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
@@ -651,10 +657,6 @@ case class HashAggregateExec(
     val outputFunc = generateResultFunction(ctx)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // The child could change `copyResult` to true, but we had already consumed all the rows,
-    // so `copyResult` should be reset to `false`.
-    ctx.copyResult = false
-
     def outputFromGeneratedMap: String = {
       if (isFastHashMapEnabled) {
         if (isVectorizedHashMapEnabled) {
@@ -679,7 +681,7 @@ case class HashAggregateExec(
      """
     }
 
-    // Iterate over the aggregate rows and convert them from ColumnarBatch.Row to UnsafeRow
+    // Iterate over the aggregate rows and convert them from ColumnarRow to UnsafeRow
     def outputFromVectorizedMap: String = {
         val row = ctx.freshName("fastHashMapRow")
         ctx.currentVars = null
@@ -695,8 +697,8 @@ case class HashAggregateExec(
         s"""
            | while ($iterTermForFastHashMap.hasNext()) {
            |   $numOutput.add(1);
-           |   org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $row =
-           |     (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row)
+           |   org.apache.spark.sql.execution.vectorized.ColumnarRow $row =
+           |     (org.apache.spark.sql.execution.vectorized.ColumnarRow)
            |     $iterTermForFastHashMap.next();
            |   ${generateKeyRow.code}
            |   ${generateBufferRow.code}
@@ -890,7 +892,7 @@ case class HashAggregateExec(
      ${
         if (isVectorizedHashMapEnabled) {
           s"""
-             | org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $fastRowBuffer = null;
+             | org.apache.spark.sql.execution.vectorized.ColumnarRow $fastRowBuffer = null;
            """.stripMargin
         } else {
           s"""

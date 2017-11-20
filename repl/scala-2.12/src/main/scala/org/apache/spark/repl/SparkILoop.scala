@@ -19,9 +19,6 @@ package org.apache.spark.repl
 
 import java.io.BufferedReader
 
-// scalastyle:off println
-import scala.Predef.{println => _, _}
-// scalastyle:on println
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{ILoop, JPrintWriter}
 import scala.tools.nsc.util.stringFromStream
@@ -37,7 +34,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
 
   def initializeSpark() {
     intp.beQuietDuring {
-      processLine("""
+      command("""
         @transient val spark = if (org.apache.spark.repl.Main.sparkSession != null) {
             org.apache.spark.repl.Main.sparkSession
           } else {
@@ -64,10 +61,10 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
           _sc
         }
         """)
-      processLine("import org.apache.spark.SparkContext._")
-      processLine("import spark.implicits._")
-      processLine("import spark.sql")
-      processLine("import org.apache.spark.sql.functions._")
+      command("import org.apache.spark.SparkContext._")
+      command("import spark.implicits._")
+      command("import spark.sql")
+      command("import org.apache.spark.sql.functions._")
     }
   }
 

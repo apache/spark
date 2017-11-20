@@ -278,7 +278,8 @@ class LinearRegressionWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
-        warnings.warn("Deprecated in 2.0.0. Use ml.regression.LinearRegression.")
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression.", DeprecationWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
@@ -421,7 +422,8 @@ class LassoWithSGD(object):
         """
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0. "
-            "Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.")
+            "Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.",
+            DeprecationWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
@@ -566,7 +568,7 @@ class RidgeRegressionWithSGD(object):
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0. "
             "Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for "
-            "LinearRegression.")
+            "LinearRegression.", DeprecationWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),

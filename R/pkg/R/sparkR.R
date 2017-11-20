@@ -420,6 +420,18 @@ sparkR.session <- function(
                                 enableHiveSupport)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
+
+  # Check if version number of SparkSession matches version number of SparkR package
+  jvmVersion <- callJMethod(sparkSession, "version")
+  # Remove -SNAPSHOT from jvm versions
+  jvmVersionStrip <- gsub("-SNAPSHOT", "", jvmVersion)
+  rPackageVersion <- paste0(packageVersion("SparkR"))
+
+  if (jvmVersionStrip != rPackageVersion) {
+    warning(paste("Version mismatch between Spark JVM and SparkR package. JVM version was",
+                  jvmVersion, ", while R package version was", rPackageVersion))
+  }
+
   sparkSession
 }
 

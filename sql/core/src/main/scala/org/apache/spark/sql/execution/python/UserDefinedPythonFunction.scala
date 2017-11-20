@@ -22,15 +22,6 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.DataType
 
-private[spark] object PythonUdfType {
-  // row-at-a-time UDFs
-  val NORMAL_UDF = 0
-  // scalar vectorized UDFs
-  val PANDAS_UDF = 1
-  // grouped vectorized UDFs
-  val PANDAS_GROUPED_UDF = 2
-}
-
 /**
  * A user-defined Python function. This is used by the Python API.
  */
@@ -38,10 +29,10 @@ case class UserDefinedPythonFunction(
     name: String,
     func: PythonFunction,
     dataType: DataType,
-    pythonUdfType: Int) {
+    pythonEvalType: Int) {
 
   def builder(e: Seq[Expression]): PythonUDF = {
-    PythonUDF(name, func, dataType, e, pythonUdfType)
+    PythonUDF(name, func, dataType, e, pythonEvalType)
   }
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */

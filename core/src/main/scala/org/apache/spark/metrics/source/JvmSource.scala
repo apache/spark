@@ -17,8 +17,10 @@
 
 package org.apache.spark.metrics.source
 
+import java.lang.management.ManagementFactory
+
 import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.jvm.{GarbageCollectorMetricSet, MemoryUsageGaugeSet}
+import com.codahale.metrics.jvm.{BufferPoolMetricSet, GarbageCollectorMetricSet, MemoryUsageGaugeSet}
 
 private[spark] class JvmSource extends Source {
   override val sourceName = "jvm"
@@ -26,4 +28,6 @@ private[spark] class JvmSource extends Source {
 
   metricRegistry.registerAll(new GarbageCollectorMetricSet)
   metricRegistry.registerAll(new MemoryUsageGaugeSet)
+  metricRegistry.registerAll(
+    new BufferPoolMetricSet(ManagementFactory.getPlatformMBeanServer))
 }

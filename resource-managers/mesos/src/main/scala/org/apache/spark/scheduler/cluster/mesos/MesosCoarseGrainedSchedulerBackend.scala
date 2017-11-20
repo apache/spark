@@ -22,15 +22,16 @@ import java.util.{Collections, List => JList}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.locks.ReentrantLock
 
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
-import org.apache.mesos.SchedulerDriver
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
+import org.apache.hadoop.security.UserGroupInformation
+import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.mesos.SchedulerDriver
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
@@ -58,8 +59,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
-  override def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] =
-    Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
+  private lazy val hadoopDelegationTokenManager: MesosHadoopDelegationTokenManager =
+    new MesosHadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint)
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
@@ -244,6 +245,17 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         .setValue(value)
         .build())
     }
+
+    MesosSchedulerBackendUtil.getSecretEnvVar(conf, executorSecretConfig).foreach { variable =>
+      if (variable.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName} " +
+          s"on file ${variable.getName}")
+      } else {
+        logInfo(s"Setting secret on environment variable name=${variable.getName}")
+      }
+      environment.addVariables(variable)
+    }
+
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
 
@@ -424,6 +436,22 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
+  private def getContainerInfo(conf: SparkConf): ContainerInfo.Builder = {
+    val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(conf)
+
+    MesosSchedulerBackendUtil.getSecretVolume(conf, executorSecretConfig).foreach { volume =>
+      if (volume.getSource.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName} " +
+          s"on file ${volume.getContainerPath}")
+      } else {
+        logInfo(s"Setting secret on file name=${volume.getContainerPath}")
+      }
+      containerInfo.addVolumes(volume)
+    }
+
+    containerInfo
+  }
+
   /**
    * Returns a map from OfferIDs to the tasks to launch on those offers.  In order to maximize
    * per-task memory and IO, tasks are round-robin assigned to offers.
@@ -475,7 +503,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .setName(s"${sc.appName} $taskId")
             .setLabels(MesosProtoUtils.mesosLabels(taskLabels))
             .addAllResources(resourcesToUse.asJava)
-            .setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
+            .setContainer(getContainerInfo(sc.conf))
 
           tasks(offer.getId) ::= taskBuilder.build()
           remainingResources(offerId) = resourcesLeft.asJava
@@ -743,6 +771,14 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       "0.0.0.0"
     } else {
       offer.getHostname
+    }
+  }
+
+  override def fetchHadoopDelegationTokens(): Option[Array[Byte]] = {
+    if (UserGroupInformation.isSecurityEnabled) {
+      Some(hadoopDelegationTokenManager.getTokens())
+    } else {
+      None
     }
   }
 }
