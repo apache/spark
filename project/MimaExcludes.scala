@@ -79,7 +79,7 @@ object MimaExcludes {
     // [SPARK-14280] Support Scala 2.12
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transformWith"),
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transform"),
-    
+
     // [SPARK-21087] CrossValidator, TrainValidationSplit expose sub models after fitting: Scala
     ProblemFilters.exclude[FinalClassProblem]("org.apache.spark.ml.tuning.CrossValidatorModel$CrossValidatorModelWriter"),
     ProblemFilters.exclude[FinalClassProblem]("org.apache.spark.ml.tuning.TrainValidationSplitModel$TrainValidationSplitModelWriter"),
