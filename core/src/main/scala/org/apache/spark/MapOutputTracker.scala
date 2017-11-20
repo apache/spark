@@ -476,16 +476,18 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /**
-   * Try to equally divide Range(0, num) to divisor slices
+   * To equally divide n elements into m buckets, basically each bucket should have n/m elements,
+   * for the remaining n%m elements, add one more element to the first n%m buckets each.
    */
-  def equallyDivide(num: Int, divisor: Int): Iterator[Seq[Int]] = {
-    assert(divisor > 0, "Divisor should be positive")
-    val (each, remain) = (num / divisor, num % divisor)
-    val (smaller, bigger) = (0 until num).splitAt((divisor-remain) * each)
-    if (each != 0) {
-      smaller.grouped(each) ++ bigger.grouped(each + 1)
+  def equallyDivide(numElements: Int, numBuckets: Int): Iterator[Seq[Int]] = {
+    val elementsPerBucket = numElements / numBuckets
+    val remaining = numElements % numBuckets
+    if (remaining == 0) {
+      0.until(numElements).grouped(elementsPerBucket)
     } else {
-      bigger.grouped(each + 1)
+      val splitPoint = (elementsPerBucket + 1) * remaining
+      0.to(splitPoint).grouped(elementsPerBucket + 1) ++
+        (splitPoint + 1).until(numElements).grouped(elementsPerBucket)
     }
   }
 
@@ -495,15 +497,16 @@ private[spark] class MapOutputTrackerMaster(
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
     shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
-      if (statuses.length * totalSizes.length <=
-        conf.get(SHUFFLE_MAP_OUTPUT_STATISTICS_PARALLEL_AGGREGATION_THRESHOLD)) {
+      val parallelAggThreshold = conf.get(
+        SHUFFLE_MAP_OUTPUT_STATISTICS_PARALLEL_AGGREGATION_THRESHOLD)
+      if (statuses.length * totalSizes.length < parallelAggThreshold) {
         for (s <- statuses) {
           for (i <- 0 until totalSizes.length) {
             totalSizes(i) += s.getSizeForBlock(i)
           }
         }
       } else {
-        val parallelism = conf.get(SHUFFLE_MAP_OUTPUT_STATISTICS_CORES)
+        val parallelism = conf.get(SHUFFLE_MAP_OUTPUT_STATISTICS_PARALLELISM)
         val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-statistics")
         val executionContext = ExecutionContext.fromExecutor(threadPool)
         val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {

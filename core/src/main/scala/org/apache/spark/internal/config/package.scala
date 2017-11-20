@@ -489,13 +489,13 @@ package object config {
   private[spark] val SHUFFLE_MAP_OUTPUT_STATISTICS_PARALLEL_AGGREGATION_THRESHOLD =
     ConfigBuilder("spark.shuffle.mapOutputStatistics.parallelAggregationThreshold")
       .internal()
-      .doc("Multi-thread is used when the number of mappers * shuffle partitions exceeds this " +
-        "threshold.")
+      .doc("Multi-thread is used when the number of mappers * shuffle partitions is greater than " +
+        "or equal to this threshold.")
       .intConf
       .createWithDefault(10000000)
 
-  private[spark] val SHUFFLE_MAP_OUTPUT_STATISTICS_CORES =
-    ConfigBuilder("spark.shuffle.mapOutputStatistics.cores")
+  private[spark] val SHUFFLE_MAP_OUTPUT_STATISTICS_PARALLELISM =
+    ConfigBuilder("spark.shuffle.mapOutputStatistics.parallelism")
       .internal()
       .doc("The cores will be used during map output statistics parallel aggregation.")
       .intConf
