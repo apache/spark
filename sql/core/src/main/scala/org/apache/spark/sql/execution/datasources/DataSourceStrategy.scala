@@ -497,6 +497,7 @@ object DataSourceStrategy {
         Some(sources.IsNotNull(a.name))
 
       case expressions.And(left, right) =>
+        // See SPARK-12218 and PR 10362 for detailed discussion
         for {
           leftFilter <- translateFilter(left)
           rightFilter <- translateFilter(right)
