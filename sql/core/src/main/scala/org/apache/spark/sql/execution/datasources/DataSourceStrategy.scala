@@ -497,7 +497,7 @@ object DataSourceStrategy {
         Some(sources.IsNotNull(a.name))
 
       case expressions.And(left, right) =>
-        // See SPARK-12218 and PR 10362 for detailed discussion
+        // See SPARK-12218 for detailed discussion
         // It is not safe to just convert one side if we do not understand the
         // other side. Here is an example used to explain the reason.
         // Let's say we have (a = 2 AND trim(b) = 'blah') OR (c > 0)
