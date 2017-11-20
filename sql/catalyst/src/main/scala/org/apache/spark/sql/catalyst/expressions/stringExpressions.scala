@@ -157,11 +157,8 @@ case class ConcatWs(children: Seq[Expression])
       """)
     } else {
       val array = ctx.freshName("array")
-      ctx.addMutableState("UTF8String[]", array, "")
       val varargNum = ctx.freshName("varargNum")
-      ctx.addMutableState("int", varargNum, "")
       val idxInVararg = ctx.freshName("idxInVararg")
-      ctx.addMutableState("int", idxInVararg, "")
 
       val evals = children.map(_.genCode(ctx))
       val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
@@ -188,15 +185,34 @@ case class ConcatWs(children: Seq[Expression])
       }.unzip
 
       val codes = ctx.splitExpressions(ctx.INPUT_ROW, evals.map(_.code))
-      val varargCounts = ctx.splitExpressions(ctx.INPUT_ROW, varargCount)
-      val varargBuilds = ctx.splitExpressions(ctx.INPUT_ROW, varargBuild)
+      val varargCounts = ctx.splitExpressions(varargCount, "varargCountsConcatWs",
+        ("InternalRow", ctx.INPUT_ROW) :: Nil,
+        "int",
+        { body =>
+          s"""
+           int $varargNum = 0;
+           $body
+           return $varargNum;
+         """
+        },
+        _.mkString(s"$varargNum += ", s";\n$varargNum += ", ";"))
+      val varargBuilds = ctx.splitExpressions(varargBuild, "varargBuildsConcatWs",
+        ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
+        "int",
+        { body =>
+          s"""
+           $body
+           return $idxInVararg;
+         """
+        },
+        _.mkString(s"$idxInVararg = ", s";\n$idxInVararg = ", ";"))
       ev.copy(
         s"""
         $codes
-        $varargNum = ${children.count(_.dataType == StringType) - 1};
-        $idxInVararg = 0;
+        int $varargNum = ${children.count(_.dataType == StringType) - 1};
+        int $idxInVararg = 0;
         $varargCounts
-        $array = new UTF8String[$varargNum];
+        UTF8String[] $array = new UTF8String[$varargNum];
         $varargBuilds
         UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $array);
         boolean ${ev.isNull} = ${ev.value} == null;
