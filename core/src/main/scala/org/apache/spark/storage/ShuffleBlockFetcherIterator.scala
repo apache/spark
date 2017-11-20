@@ -515,7 +515,7 @@ final class ShuffleBlockFetcherIterator(
 
   private def throwFetchFailedException(blockId: BlockId, address: BlockManagerId, e: Throwable) = {
     blockId match {
-      case ShuffleBlockId(shufId, mapId, reduceId) =>
+      case ShuffleBlockId(shufId, mapId, reduceId, n) =>
         throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, e)
       case _ =>
         throw new SparkException(

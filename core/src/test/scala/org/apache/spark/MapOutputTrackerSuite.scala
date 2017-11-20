@@ -275,4 +275,36 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     }
   }
 
+  test("fetch contiguous partitions") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    tracker.registerShuffle(10, 2)
+    assert(tracker.containsShuffle(10))
+    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
+    val size2000 = MapStatus.decompressSize(MapStatus.compressSize(2000L))
+    val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
+      Array(1000L, 10000L, 2000L)))
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(10000L, 2000L, 1000L)))
+    val statuses1 = tracker.getMapSizesByExecutorId(10, 0, 2)
+    assert(statuses1.toSet ===
+      Seq((BlockManagerId("a", "hostA", 1000),
+        ArrayBuffer((ShuffleBlockId(10, 0, 0, 2), size1000 + size10000))),
+        (BlockManagerId("b", "hostB", 1000),
+          ArrayBuffer((ShuffleBlockId(10, 1, 0, 2), size10000 + size2000))))
+        .toSet)
+    val statuses2 = tracker.getMapSizesByExecutorId(10, 2, 3)
+    assert(statuses2.toSet ===
+      Seq((BlockManagerId("a", "hostA", 1000),
+        ArrayBuffer((ShuffleBlockId(10, 0, 2, 1), size2000))),
+        (BlockManagerId("b", "hostB", 1000),
+          ArrayBuffer((ShuffleBlockId(10, 1, 2, 1), size1000))))
+        .toSet)
+    assert(0 == tracker.getNumCachedSerializedBroadcast)
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
 }
