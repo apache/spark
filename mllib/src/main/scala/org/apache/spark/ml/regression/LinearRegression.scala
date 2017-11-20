@@ -722,6 +722,21 @@ class LinearRegressionSummary private[regression] (
   @Since("1.5.0")
   val r2: Double = metrics.r2
 
+  /**
+   * Returns Adjusted R^2^, the adjusted coefficient of determination.
+   * Reference: <a href="https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2">
+   * Wikipedia coefficient of determination</a>
+   *
+   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
+   * This will change in later Spark versions.
+   */
+  @Since("2.3.0")
+  val r2adj: Double = {
+    val interceptDOF = if (privateModel.getFitIntercept) 1 else 0
+    1 - (1 - r2) * (numInstances - interceptDOF) /
+      (numInstances - privateModel.coefficients.size - interceptDOF)
+  }
+
   /** Residuals (label - predicted value) */
   @Since("1.5.0")
   @transient lazy val residuals: DataFrame = {

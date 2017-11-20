@@ -73,6 +73,9 @@ class SparkSession(object):
     ...     .appName("Word Count") \\
     ...     .config("spark.some.config.option", "some-value") \\
     ...     .getOrCreate()
+
+    .. autoattribute:: builder
+       :annotation:
     """
 
     class Builder(object):
@@ -184,6 +187,7 @@ class SparkSession(object):
                 return session
 
     builder = Builder()
+    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
 
     _instantiatedSession = None
 
@@ -612,6 +616,9 @@ class SparkSession(object):
 
         if isinstance(schema, basestring):
             schema = _parse_datatype_string(schema)
+        elif isinstance(schema, (list, tuple)):
+            # Must re-encode any unicode strings to be consistent with StructField names
+            schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
 
         try:
             import pandas
@@ -627,7 +634,7 @@ class SparkSession(object):
 
             # If no schema supplied by user then get the names of columns only
             if schema is None:
-                schema = [str(x) for x in data.columns]
+                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in data.columns]
 
             if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
                     and len(data) > 0:
@@ -655,8 +662,6 @@ class SparkSession(object):
                 verify_func(obj)
                 return obj,
         else:
-            if isinstance(schema, (list, tuple)):
-                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):

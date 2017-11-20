@@ -54,7 +54,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
-import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.{AppStatusPlugin, AppStatusStore}
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
@@ -246,6 +246,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def isStopped: Boolean = stopped.get()
 
+  private[spark] def statusStore: AppStatusStore = _statusStore
+
   // An asynchronous listener bus for Spark events
   private[spark] def listenerBus: LiveListenerBus = _listenerBus
 
@@ -426,7 +428,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Initialize the app status store and listener before SparkEnv is created so that it gets
     // all events.
-    _statusStore = AppStatusStore.createLiveStore(conf, listenerBus)
+    _statusStore = AppStatusStore.createLiveStore(conf, l => listenerBus.addToStatusQueue(l))
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
@@ -449,19 +451,20 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _ui =
       if (conf.getBoolean("spark.ui.enabled", true)) {
-        Some(SparkUI.create(Some(this), _statusStore, _conf,
-          l => listenerBus.addToStatusQueue(l),
-          _env.securityManager,
-          appName,
-          "",
+        Some(SparkUI.create(Some(this), _statusStore, _conf, _env.securityManager, appName, "",
           startTime))
       } else {
         // For tests, do not enable the UI
         None
       }
-    // Bind the UI before starting the task scheduler to communicate
-    // the bound port to the cluster manager properly
-    _ui.foreach(_.bind())
+    _ui.foreach { ui =>
+      // Load any plugins that might want to modify the UI.
+      AppStatusPlugin.loadPlugins().foreach(_.setupUI(ui))
+
+      // Bind the UI before starting the task scheduler to communicate
+      // the bound port to the cluster manager properly
+      ui.bind()
+    }
 
     _hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(_conf)
 
