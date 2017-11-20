@@ -39,47 +39,75 @@ class VectorSizeHintSuite
   test("Adding size to column of vectors.") {
 
     val size = 3
+    val vectorColName = "vector"
     val denseVector = Vectors.dense(1, 2, 3)
     val sparseVector = Vectors.sparse(size, Array(), Array())
 
     val data = Seq(denseVector, denseVector, sparseVector).map(Tuple1.apply)
-    val dataFrame = data.toDF("vector")
-
-    val transformer = new VectorSizeHint()
-      .setInputCol("vector")
-      .setSize(3)
-      .setHandleInvalid("error")
-    val withSize = transformer.transform(dataFrame)
+    val dataFrame = data.toDF(vectorColName)
     assert(
-      AttributeGroup.fromStructField(withSize.schema("vector")).size == size,
+      AttributeGroup.fromStructField(dataFrame.schema(vectorColName)).size == -1,
       "Transformer did not add expected size data.")
+
+    for (handleInvalid <- VectorSizeHint.supportedHandleInvalids) {
+      val transformer = new VectorSizeHint()
+        .setInputCol(vectorColName)
+        .setSize(size)
+        .setHandleInvalid(handleInvalid)
+      val withSize = transformer.transform(dataFrame)
+      assert(
+        AttributeGroup.fromStructField(withSize.schema(vectorColName)).size == size,
+        "Transformer did not add expected size data.")
+      withSize.collect
+    }
   }
 
   test("Size hint preserves attributes.") {
 
-    case class Foo(x: Double, y: Double, z: Double)
     val size = 3
+    val vectorColName = "vector"
     val data = Seq((1, 2, 3), (2, 3, 3))
-    val boo = data.toDF("x", "y", "z")
+    val dataFrame = data.toDF("x", "y", "z")
 
     val assembler = new VectorAssembler()
       .setInputCols(Array("x", "y", "z"))
-      .setOutputCol("vector")
-    val dataFrameWithMeatadata = assembler.transform(boo)
-    val group = AttributeGroup.fromStructField(dataFrameWithMeatadata.schema("vector"))
+      .setOutputCol(vectorColName)
+    val dataFrameWithMetadata = assembler.transform(dataFrame)
+    val group = AttributeGroup.fromStructField(dataFrameWithMetadata.schema(vectorColName))
 
-    for (handleInvalid <- Seq("error", "skip", "optimistic")) {
+    for (handleInvalid <- VectorSizeHint.supportedHandleInvalids) {
       val transformer = new VectorSizeHint()
-        .setInputCol("vector")
-        .setSize(3)
+        .setInputCol(vectorColName)
+        .setSize(size)
         .setHandleInvalid(handleInvalid)
-      val withSize = transformer.transform(dataFrameWithMeatadata)
+      val withSize = transformer.transform(dataFrameWithMetadata)
 
-      val newGroup = AttributeGroup.fromStructField(withSize.schema("vector"))
+      val newGroup = AttributeGroup.fromStructField(withSize.schema(vectorColName))
       assert(newGroup.size === size, "Transformer did not add expected size data.")
       assert(
         newGroup.attributes.get.deep === group.attributes.get.deep,
         "SizeHintTransformer did not preserve attributes.")
+      withSize.collect
+    }
+  }
+
+  test("Size miss-match between current and target size raises an error.") {
+    val size = 4
+    val vectorColName = "vector"
+    val data = Seq((1, 2, 3), (2, 3, 3))
+    val dataFrame = data.toDF("x", "y", "z")
+
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("x", "y", "z"))
+      .setOutputCol(vectorColName)
+    val dataFrameWithMetadata = assembler.transform(dataFrame)
+
+    for (handleInvalid <- VectorSizeHint.supportedHandleInvalids) {
+      val transformer = new VectorSizeHint()
+        .setInputCol(vectorColName)
+        .setSize(size)
+        .setHandleInvalid(handleInvalid)
+      intercept[SparkException](transformer.transform(dataFrameWithMetadata))
     }
   }
 

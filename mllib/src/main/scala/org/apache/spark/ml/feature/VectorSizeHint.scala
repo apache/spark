@@ -78,11 +78,13 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
     if (localHandleInvalid == VectorSizeHint.OPTIMISTIC_INVALID && group.size == localSize) {
       dataset.toDF
     } else {
-      val newGroup = if (group.size == localSize) {
-        // Pass along any existing metadata about vector.
-        group
-      } else {
-        new AttributeGroup(localInputCol, localSize)
+      val newGroup = group.size match {
+        case `localSize` => group
+        case -1 => new AttributeGroup(localInputCol, localSize)
+        case _ =>
+          val msg = s"Trying to set size of vectors in `$localInputCol` to $localSize but size " +
+            s"already set to ${group.size}."
+          throw new SparkException(msg)
       }
 
       val newCol: Column = localHandleInvalid match {
