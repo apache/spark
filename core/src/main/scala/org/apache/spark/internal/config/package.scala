@@ -485,4 +485,13 @@ package object config {
         "array in the sorter.")
       .intConf
       .createWithDefault(Integer.MAX_VALUE)
+
+  private[spark] val SHUFFLE_MAP_OUTPUT_STATISTICS_MULTITHREAD_THRESHOLD =
+    ConfigBuilder("spark.shuffle.mapOutputStatisticsMultithreadThreshold")
+      .internal()
+      .doc("Multi-thread is used when the number of mappers * shuffle patterns exceeds this " +
+        "threshold")
+      .intConf
+      .createWithDefault(100000000)
+
 }

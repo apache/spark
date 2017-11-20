@@ -23,13 +23,14 @@ import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
@@ -494,16 +495,26 @@ private[spark] class MapOutputTrackerMaster(
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
     shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
-      val parallelism = conf.getInt("spark.adaptive.map.statistics.cores", 8)
-
-      val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {
-        reduceIds => Future {
-          for (s <- statuses; i <- reduceIds) {
+      if (statuses.length * totalSizes.length <=
+        conf.get(SHUFFLE_MAP_OUTPUT_STATISTICS_MULTITHREAD_THRESHOLD)) {
+        for (s <- statuses) {
+          for (i <- 0 until totalSizes.length) {
             totalSizes(i) += s.getSizeForBlock(i)
           }
         }
+      } else {
+        val parallelism = conf.getInt("spark.adaptive.map.statistics.cores", 8)
+        val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-statistics")
+        val executionContext = ExecutionContext.fromExecutor(threadPool)
+        val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {
+          reduceIds => Future {
+            for (s <- statuses; i <- reduceIds) {
+              totalSizes(i) += s.getSizeForBlock(i)
+            }
+          } (executionContext)
+        }
+        ThreadUtils.awaitResult(Future.sequence(mapStatusSubmitTasks), Duration.Inf)
       }
-      ThreadUtils.awaitResult(Future.sequence(mapStatusSubmitTasks), Duration.Inf)
       new MapOutputStatistics(dep.shuffleId, totalSizes)
     }
   }
