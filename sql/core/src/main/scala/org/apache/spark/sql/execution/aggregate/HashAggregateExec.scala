@@ -149,11 +149,9 @@ case class HashAggregateExec(
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
-  private var _needCopyResult: Option[Boolean] = None
-
-  override def needCopyResult: Boolean = _needCopyResult.getOrElse {
-    child.asInstanceOf[CodegenSupport].needCopyResult
-  }
+  // The result rows come from the aggregate buffer, or a single row(no grouping keys), so this
+  // operator doesn't need to copy its result even if its child does.
+  override def needCopyResult: Boolean = false
 
   // Aggregate operator always consumes all the input rows before outputting any result, so we
   // don't need a stop check before aggregating.
@@ -236,10 +234,6 @@ case class HashAggregateExec(
          |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
          | }
        """.stripMargin)
-
-    // The child could change `needCopyResult` to true, but we had already consumed all the rows,
-    // so `needCopyResult` should be reset to `false`.
-    _needCopyResult = Some(false)
 
     val numOutput = metricTerm(ctx, "numOutputRows")
     val aggTime = metricTerm(ctx, "aggTime")
