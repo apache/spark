@@ -586,7 +586,7 @@ abstract class TernaryExpression extends Expression {
 
 object ExprCodegen {
 
-  val placeHolderForResultCode = "__PLACEHOLDER__"
+  private val placeHolderForResultCode = "__PLACEHOLDER__"
 
   def isNotWholeStageCodegen(ctx: CodegenContext): Boolean =
     ctx.INPUT_ROW != null && ctx.currentVars == null
@@ -626,39 +626,51 @@ object ExprCodegen {
     }
   }
 
-  // Generates codes safe from 64k limit for children expressions.
+  // Generating evaluation code for children expressions. We fold the code for each child
+  // expression from right to left. Once code length will be larger than the threshold, we
+  // put the code from next child expression into a method to prevent possible 64k limit.
   def genCodeWithChildren(
       ctx: CodegenContext,
       expr: Expression): (String, Seq[ExprCode]) = {
-    val rawGenCode = expr.children.map(_.genCode(ctx))
+    val genCodeForChildren = expr.children.map(_.genCode(ctx))
 
-    val childrenEval = if (expr.nullable) {
-      var childIdx = expr.children.length - 1
-      rawGenCode.foldRight(placeHolderForResultCode) { case (childCode, curCode) =>
-        if (curCode.length + childCode.code.trim.length > 1024) {
-          genChildCodeInFunction(ctx, expr.children(childIdx), childCode)
-        }
-        val code = childCode.code +
+    // For nullable expression, the code of children expression is wrapped in "if" blocks
+    // for null check. We leave a special placeholder string which will be replaced with
+    // evaluation code of this expression later.
+    val initCode = if (expr.nullable) {
+      placeHolderForResultCode
+    } else {
+      ""
+    }
+
+    var childIdx = expr.children.length - 1
+    val childrenEval = genCodeForChildren.foldRight(initCode) { case (childCode, curCode) =>
+      if (curCode.length + childCode.code.trim.length > 1024) {
+        genChildCodeInFunction(ctx, expr.children(childIdx), childCode)
+      }
+      val code = if (expr.nullable) {
+        childCode.code +
           ctx.nullSafeExec(expr.children(childIdx).nullable, childCode.isNull) {
             curCode
           }
-        childIdx -= 1
-        code
+      } else {
+        childCode.code + "\n" + curCode
       }
-    } else {
-      var childIdx = expr.children.length - 1
-      rawGenCode.foldRight("") { case (childCode, curCode) =>
-        if (curCode.length + childCode.code.trim.length > 1024) {
-          genChildCodeInFunction(ctx, expr.children(childIdx), childCode)
-        }
-        val code = childCode.code + "\n" + curCode
-        childIdx -= 1
-        code
-      }
+      childIdx -= 1
+      code
     }
-    (childrenEval, rawGenCode)
+    (childrenEval, genCodeForChildren)
   }
 
+  /**
+   * Generating evaluation code for binary and ternary expressions for now.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   *
+   * @param childrenEval Evaluation code for all sub-expressions.
+   * @param resultCode Evaluation code for the current expression. The evaluation is based on
+   *                   the values of `childrenEval`.
+   */
   def nullSafeCodeGen(
       ctx: CodegenContext,
       ev: ExprCode,
@@ -670,7 +682,7 @@ object ExprCodegen {
           ${ev.isNull} = false; // resultCode could change nullability.
           $resultCode
         """
-      val nullSafeEval = childrenEval.replace(ExprCodegen.placeHolderForResultCode, insertCode)
+      val nullSafeEval = childrenEval.replace(placeHolderForResultCode, insertCode)
 
       ev.copy(code = s"""
         boolean ${ev.isNull} = true;
