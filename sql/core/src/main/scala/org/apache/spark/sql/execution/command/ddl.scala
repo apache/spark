@@ -326,18 +326,16 @@ case class AlterTableChangeColumnCommand(
           s"'${newColumn.name}' with type '${newColumn.dataType}'")
     }
 
-    val changeSchema = originColumn.dataType != newColumn.dataType
-    val newDataSchema = table.schema.fields.map { field =>
+    val typeChanged = originColumn.dataType != newColumn.dataType
+    val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
-        var newField = field
-        if (newColumn.getComment.isDefined) {
-          // Create a new column from the origin column with the new comment.
-          newField = addComment(field, newColumn.getComment)
+        // Add the comment to a column, if comment is empty, return the original column.
+        val newField = newColumn.getComment.map(field.withComment(_)).getOrElse(field)
+        if (typeChanged) {
+          newField.copy(dataType = newColumn.dataType)
+        } else {
+          newField
         }
-        if (changeSchema) {
-          newField = newField.copy(dataType = newColumn.dataType)
-        }
-        newField
       } else {
         field
       }
@@ -356,11 +354,6 @@ case class AlterTableChangeColumnCommand(
     }.getOrElse(throw new AnalysisException(
       s"Can't find column `$name` given table data columns " +
         s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))
-  }
-
-  // Add the comment to a column, if comment is empty, return the original column.
-  private def addComment(column: StructField, comment: Option[String]): StructField = {
-    comment.map(column.withComment(_)).getOrElse(column)
   }
 
   // Compare a [[StructField]] to another, return true if they have the same column
