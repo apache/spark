@@ -209,7 +209,6 @@ package object config {
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
-      .withAlternative("spark.scheduler.listenerbus.eventqueue.size")
       .intConf
       .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
       .createWithDefault(10000)
@@ -404,7 +403,6 @@ package object config {
         "affect both shuffle fetch and block manager remote block fetch. For users who " +
         "enabled external shuffle service, this feature can only be worked when external shuffle" +
         " service is newer than Spark 2.2.")
-      .withAlternative("spark.reducer.maxReqSizeShuffleToMem")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(Long.MaxValue)
 
