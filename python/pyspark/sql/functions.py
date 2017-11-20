@@ -2205,6 +2205,10 @@ def udf(f=None, returnType=StringType()):
         rows that do not satisfy the conditions, the suggested workaround is to incorporate the
         condition logic into the functions.
 
+    .. note:: Users can't rely on short-curcuit evaluation of boolean expressions to execute
+        conditionally user-defined functions too. For example, the two functions in an expression
+        like udf1(x) && udf2(y) will be both executed on all rows.
+
     :param f: python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
 
