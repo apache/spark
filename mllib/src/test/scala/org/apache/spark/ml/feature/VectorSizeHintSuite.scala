@@ -32,8 +32,8 @@ class VectorSizeHintSuite
   import testImplicits._
 
   test("Test Param Validators") {
-    assertThrows[IllegalArgumentException] (new VectorSizeHint().setHandleInvalid("invalidValue"))
-    assertThrows[IllegalArgumentException] (new VectorSizeHint().setSize(-3))
+    intercept[IllegalArgumentException] (new VectorSizeHint().setHandleInvalid("invalidValue"))
+    intercept[IllegalArgumentException] (new VectorSizeHint().setSize(-3))
   }
 
   test("Adding size to column of vectors.") {
@@ -68,17 +68,19 @@ class VectorSizeHintSuite
     val dataFrameWithMeatadata = assembler.transform(boo)
     val group = AttributeGroup.fromStructField(dataFrameWithMeatadata.schema("vector"))
 
-    val transformer = new VectorSizeHint()
-      .setInputCol("vector")
-      .setSize(3)
-      .setHandleInvalid("error")
-    val withSize = transformer.transform(dataFrameWithMeatadata)
+    for (handleInvalid <- Seq("error", "skip", "optimistic")) {
+      val transformer = new VectorSizeHint()
+        .setInputCol("vector")
+        .setSize(3)
+        .setHandleInvalid(handleInvalid)
+      val withSize = transformer.transform(dataFrameWithMeatadata)
 
-    val newGroup = AttributeGroup.fromStructField(withSize.schema("vector"))
-    assert(newGroup.size == size, "Transformer did not add expected size data.")
-    assert(
-      newGroup.attributes.get.deep === group.attributes.get.deep,
-      "SizeHintTransformer did not preserve attributes.")
+      val newGroup = AttributeGroup.fromStructField(withSize.schema("vector"))
+      assert(newGroup.size === size, "Transformer did not add expected size data.")
+      assert(
+        newGroup.attributes.get.deep === group.attributes.get.deep,
+        "SizeHintTransformer did not preserve attributes.")
+    }
   }
 
   test("Handle invalid does the right thing.") {
@@ -93,12 +95,32 @@ class VectorSizeHintSuite
       .setHandleInvalid("error")
       .setSize(3)
 
-    assertThrows[SparkException](sizeHint.transform(dataWithNull).collect)
-    assertThrows[SparkException](sizeHint.transform(dataWithShort).collect)
+    intercept[SparkException](sizeHint.transform(dataWithNull).collect)
+    intercept[SparkException](sizeHint.transform(dataWithShort).collect)
 
     sizeHint.setHandleInvalid("skip")
     assert(sizeHint.transform(dataWithNull).count() === 1)
     assert(sizeHint.transform(dataWithShort).count() === 1)
+  }
+
+  test("Test correct behaviour for handleInvalid == optimistic") {
+    val vector = Vectors.dense(1, 2, 3)
+    val data = Seq(vector, vector).map(Tuple1.apply).toDF("vector")
+
+    val sizeHint = new VectorSizeHint()
+      .setInputCol("vector")
+      .setHandleInvalid("optimistic")
+      .setSize(3)
+
+    val transformed = sizeHint.transform(data)
+  }
+
+  test("read/write") {
+    val sizeHint = new VectorSizeHint()
+      .setInputCol("myInputCol")
+      .setSize(11)
+      .setHandleInvalid("skip")
+    testDefaultReadWrite(sizeHint)
   }
 }
 

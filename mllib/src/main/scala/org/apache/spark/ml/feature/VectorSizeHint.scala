@@ -17,11 +17,12 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
-import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
@@ -40,7 +41,7 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   def this() = this(Identifiable.randomUID("vectSizeHint"))
 
   @Since("2.3.0")
-  val size = new Param[Int](this, "size", "Size of vectors in column.", {s: Int => s >= 0})
+  val size = new IntParam(this, "size", "Size of vectors in column.", {s: Int => s >= 0})
 
   @Since("2.3.0")
   def getSize: Int = getOrDefault(size)
@@ -87,32 +88,32 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
       val newCol: Column = localHandleInvalid match {
         case VectorSizeHint.OPTIMISTIC_INVALID => col(localInputCol)
         case VectorSizeHint.ERROR_INVALID =>
-          val checkVectorSize = { vector: Vector =>
+          val checkVectorSizeUDF = udf { vector: Vector =>
             if (vector == null) {
-              throw new VectorSizeHint.InvalidEntryException(s"Got null vector in VectorSizeHint," +
-                s" set `handleInvalid` to 'skip' to filter invalid rows.")
+              throw new SparkException(s"Got null vector in VectorSizeHint, set `handleInvalid` " +
+                s"to 'skip' to filter invalid rows.")
             }
             if (vector.size != localSize) {
-              throw new VectorSizeHint.InvalidEntryException(s"VectorSizeHint Expecting a vector " +
-                s"of size $localSize but got ${vector.size}")
+              throw new SparkException(s"VectorSizeHint Expecting a vector of size $localSize but" +
+                s" got ${vector.size}")
             }
             vector
-          }
-          udf(checkVectorSize, new VectorUDT)(col(localInputCol))
+          }.asNondeterministic
+          checkVectorSizeUDF(col(localInputCol))
         case VectorSizeHint.SKIP_INVALID =>
-          val checkVectorSize = { vector: Vector =>
+          val checkVectorSizeUDF = udf { vector: Vector =>
             if (vector != null && vector.size == localSize) {
               vector
             } else {
               null
             }
           }
-          udf(checkVectorSize, new VectorUDT)(col(localInputCol))
+          checkVectorSizeUDF(col(localInputCol))
       }
 
       val res = dataset.withColumn(localInputCol, newCol.as(localInputCol, newGroup.toMetadata))
       if (localHandleInvalid == VectorSizeHint.SKIP_INVALID) {
-        res.filter(col(localInputCol).isNotNull)
+        res.na.drop(Array(localInputCol))
       } else {
         res
       }
@@ -130,7 +131,7 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   }
 
   @Since("2.3.0")
-  override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
+  override def copy(extra: ParamMap): this.type = defaultCopy(extra)
 }
 
 @Experimental
@@ -142,9 +143,6 @@ object VectorSizeHint extends DefaultParamsReadable[VectorSizeHint] {
   private[feature] val SKIP_INVALID = "skip"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(OPTIMISTIC_INVALID, ERROR_INVALID, SKIP_INVALID)
-
-  @Since("2.3.0")
-  class InvalidEntryException(msg: String) extends Exception(msg)
 
   @Since("2.3.0")
   override def load(path: String): VectorSizeHint = super.load(path)
