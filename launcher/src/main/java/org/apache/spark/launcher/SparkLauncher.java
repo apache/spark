@@ -605,7 +605,7 @@ public class SparkLauncher {
   }
 
   // Visible for testing.
-  String findSparkSubmit() throws IOException {
+  String findSparkSubmit() {
     String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
     return join(File.separator, builder.getSparkHome(), "bin", script);
   }
@@ -625,7 +625,7 @@ public class SparkLauncher {
     @Override
     protected boolean handle(String opt, String value) {
       if (value == null && hasValue) {
-        throw new IllegalArgumentException(String.format("'%s' does not expect a value.", opt));
+        throw new IllegalArgumentException(String.format("'%s' expects a value.", opt));
       }
       return true;
     }

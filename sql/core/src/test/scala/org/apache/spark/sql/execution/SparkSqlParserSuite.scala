@@ -249,8 +249,34 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("describe table formatted t",
       DescribeTableCommand(
         TableIdentifier("t"), Map.empty, isExtended = true))
+  }
 
-    intercept("explain describe tables x", "Unsupported SQL statement")
+  test("describe table column") {
+    assertEqual("DESCRIBE t col",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("col"), isExtended = false))
+    assertEqual("DESCRIBE t `abc.xyz`",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("abc.xyz"), isExtended = false))
+    assertEqual("DESCRIBE t abc.xyz",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("abc", "xyz"), isExtended = false))
+    assertEqual("DESCRIBE t `a.b`.`x.y`",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("a.b", "x.y"), isExtended = false))
+
+    assertEqual("DESCRIBE TABLE t col",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("col"), isExtended = false))
+    assertEqual("DESCRIBE TABLE EXTENDED t col",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("col"), isExtended = true))
+    assertEqual("DESCRIBE TABLE FORMATTED t col",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("col"), isExtended = true))
+
+    intercept("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col",
+      "DESC TABLE COLUMN for a specific partition is not supported")
   }
 
   test("analyze table statistics") {

@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, Project, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, ScriptTransformation}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -522,6 +523,74 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       parser.parsePlan(v2)
     }
     assert(e.message.contains("you can only specify one of them."))
+  }
+
+  test("create table - byte length literal table name") {
+    val sql = "CREATE TABLE 1m.2g(a INT) USING parquet"
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("2g", Some("1m")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("a", IntegerType),
+      provider = Some("parquet"))
+
+    parser.parsePlan(sql) match {
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $sql")
+    }
+  }
+
+  test("insert overwrite directory") {
+    val v1 = "INSERT OVERWRITE DIRECTORY '/tmp/file' USING parquet SELECT 1 as a"
+    parser.parsePlan(v1) match {
+      case InsertIntoDir(_, storage, provider, query, overwrite) =>
+        assert(storage.locationUri.isDefined && storage.locationUri.get.toString == "/tmp/file")
+      case other =>
+        fail(s"Expected to parse ${classOf[InsertIntoDataSourceDirCommand].getClass.getName}" +
+          " from query," + s" got ${other.getClass.getName}: $v1")
+    }
+
+    val v2 = "INSERT OVERWRITE DIRECTORY USING parquet SELECT 1 as a"
+    val e2 = intercept[ParseException] {
+      parser.parsePlan(v2)
+    }
+    assert(e2.message.contains(
+      "Directory path and 'path' in OPTIONS should be specified one, but not both"))
+
+    val v3 =
+      """
+        | INSERT OVERWRITE DIRECTORY USING json
+        | OPTIONS ('path' '/tmp/file', a 1, b 0.1, c TRUE)
+        | SELECT 1 as a
+      """.stripMargin
+    parser.parsePlan(v3) match {
+      case InsertIntoDir(_, storage, provider, query, overwrite) =>
+        assert(storage.locationUri.isDefined && provider == Some("json"))
+        assert(storage.properties.get("a") == Some("1"))
+        assert(storage.properties.get("b") == Some("0.1"))
+        assert(storage.properties.get("c") == Some("true"))
+        assert(!storage.properties.contains("abc"))
+        assert(!storage.properties.contains("path"))
+      case other =>
+        fail(s"Expected to parse ${classOf[InsertIntoDataSourceDirCommand].getClass.getName}" +
+          " from query," + s"got ${other.getClass.getName}: $v1")
+    }
+
+    val v4 =
+      """
+        | INSERT OVERWRITE DIRECTORY '/tmp/file' USING json
+        | OPTIONS ('path' '/tmp/file', a 1, b 0.1, c TRUE)
+        | SELECT 1 as a
+      """.stripMargin
+    val e4 = intercept[ParseException] {
+      parser.parsePlan(v4)
+    }
+    assert(e4.message.contains(
+      "Directory path and 'path' in OPTIONS should be specified one, but not both"))
   }
 
   // ALTER TABLE table_name RENAME TO new_table_name;

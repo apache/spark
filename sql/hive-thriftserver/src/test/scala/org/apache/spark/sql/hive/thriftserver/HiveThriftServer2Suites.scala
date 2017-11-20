@@ -158,7 +158,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
 
@@ -724,7 +724,7 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
 }

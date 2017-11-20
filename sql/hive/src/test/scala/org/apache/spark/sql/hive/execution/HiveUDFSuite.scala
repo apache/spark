@@ -74,26 +74,28 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("hive struct udf") {
-    sql(
-      """
-      |CREATE TABLE hiveUDFTestTable (
-      |   pair STRUCT<id: INT, value: INT>
-      |)
-      |PARTITIONED BY (partition STRING)
-      |ROW FORMAT SERDE '%s'
-      |STORED AS SEQUENCEFILE
-    """.
-        stripMargin.format(classOf[PairSerDe].getName))
+    withTable("hiveUDFTestTable") {
+      sql(
+          """
+          |CREATE TABLE hiveUDFTestTable (
+          |   pair STRUCT<id: INT, value: INT>
+          |)
+          |PARTITIONED BY (partition STRING)
+          |ROW FORMAT SERDE '%s'
+          |STORED AS SEQUENCEFILE
+        """.
+            stripMargin.format(classOf[PairSerDe].getName))
 
-    val location = Utils.getSparkClassLoader.getResource("data/files/testUDF").getFile
-    sql(s"""
-      ALTER TABLE hiveUDFTestTable
-      ADD IF NOT EXISTS PARTITION(partition='testUDF')
-      LOCATION '$location'""")
+      val location = Utils.getSparkClassLoader.getResource("data/files/testUDF").getFile
+      sql(s"""
+        ALTER TABLE hiveUDFTestTable
+        ADD IF NOT EXISTS PARTITION(partition='testUDF')
+        LOCATION '$location'""")
 
-    sql(s"CREATE TEMPORARY FUNCTION testUDF AS '${classOf[PairUDF].getName}'")
-    sql("SELECT testUDF(pair) FROM hiveUDFTestTable")
-    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDF")
+      sql(s"CREATE TEMPORARY FUNCTION testUDF AS '${classOf[PairUDF].getName}'")
+      sql("SELECT testUDF(pair) FROM hiveUDFTestTable")
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDF")
+    }
   }
 
   test("Max/Min on named_struct") {

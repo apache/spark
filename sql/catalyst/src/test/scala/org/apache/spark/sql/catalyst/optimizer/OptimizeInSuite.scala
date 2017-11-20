@@ -175,4 +175,20 @@ class OptimizeInSuite extends PlanTest {
       }
     }
   }
+
+  test("OptimizedIn test: In empty list gets transformed to FalseLiteral " +
+    "when value is not nullable") {
+    val originalQuery =
+      testRelation
+        .where(In(Literal("a"), Nil))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      testRelation
+        .where(Literal(false))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }

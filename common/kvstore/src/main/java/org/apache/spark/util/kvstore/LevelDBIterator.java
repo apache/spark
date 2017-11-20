@@ -191,6 +191,16 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     }
   }
 
+  /**
+   * Because it's tricky to expose closeable iterators through many internal APIs, especially
+   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
+   * the iterator will eventually be released.
+   */
+  @Override
+  protected void finalize() throws Throwable {
+    db.closeIterator(this);
+  }
+
   private byte[] loadNext() {
     if (count >= max) {
       return null;

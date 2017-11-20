@@ -328,6 +328,14 @@ export SPARK_MASTER_OPTS="-Dspark.deploy.defaultCores=<value>"
 This is useful on shared clusters where users might not have configured a maximum number of cores
 individually.
 
+# Executors Scheduling
+
+The number of cores assigned to each executor is configurable. When `spark.executor.cores` is
+explicitly set, multiple executors from the same application may be launched on the same worker
+if the worker has enough cores and memory. Otherwise, each executor grabs all the cores available
+on the worker by default, in which case only one executor per application may be launched on each
+worker during one single schedule iteration.
+
 # Monitoring and Logging
 
 Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.

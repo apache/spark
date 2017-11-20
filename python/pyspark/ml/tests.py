@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -352,6 +353,20 @@ class ParamTests(SparkSessionTestCase):
         testParams = TestParams()
         self.assertTrue(all([testParams.hasParam(p.name) for p in testParams.params]))
         self.assertFalse(testParams.hasParam("notAParameter"))
+        self.assertTrue(testParams.hasParam(u"maxIter"))
+
+    def test_resolveparam(self):
+        testParams = TestParams()
+        self.assertEqual(testParams._resolveParam(testParams.maxIter), testParams.maxIter)
+        self.assertEqual(testParams._resolveParam("maxIter"), testParams.maxIter)
+
+        self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
+        if sys.version_info[0] >= 3:
+            # In Python 3, it is allowed to get/set attributes with non-ascii characters.
+            e_cls = AttributeError
+        else:
+            e_cls = UnicodeEncodeError
+        self.assertRaises(e_cls, lambda: testParams._resolveParam(u"아"))
 
     def test_params(self):
         testParams = TestParams()
@@ -830,6 +845,27 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
+    def test_parallel_evaluation(self):
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 6]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        # test save/load of CrossValidator
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        cv.setParallelism(1)
+        cvSerialModel = cv.fit(dataset)
+        cv.setParallelism(2)
+        cvParallelModel = cv.fit(dataset)
+        self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
+
     def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
@@ -979,6 +1015,24 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+
+    def test_parallel_evaluation(self):
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 6]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        tvs.setParallelism(1)
+        tvsSerialModel = tvs.fit(dataset)
+        tvs.setParallelism(2)
+        tvsParallelModel = tvs.fit(dataset)
+        self.assertEqual(tvsSerialModel.validationMetrics, tvsParallelModel.validationMetrics)
 
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.
@@ -1445,7 +1499,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.deviance, s.deviance)
 
-    def test_logistic_regression_summary(self):
+    def test_binary_logistic_regression_summary(self):
         df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
                                          (0.0, 2.0, Vectors.sparse(1, [], []))],
                                         ["label", "weight", "features"])
@@ -1458,19 +1512,72 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.probabilityCol, "probability")
         self.assertEqual(s.labelCol, "label")
         self.assertEqual(s.featuresCol, "features")
+        self.assertEqual(s.predictionCol, "prediction")
         objHist = s.objectiveHistory
         self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
         self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.labels, list))
+        self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.precisionByLabel, list))
+        self.assertTrue(isinstance(s.recallByLabel, list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
         self.assertTrue(isinstance(s.roc, DataFrame))
         self.assertAlmostEqual(s.areaUnderROC, 1.0, 2)
         self.assertTrue(isinstance(s.pr, DataFrame))
         self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
         self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
         self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+        self.assertAlmostEqual(s.accuracy, 1.0, 2)
+        self.assertAlmostEqual(s.weightedTruePositiveRate, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
+        self.assertAlmostEqual(s.weightedRecall, 1.0, 2)
+        self.assertAlmostEqual(s.weightedPrecision, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 1.0, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(1.0), 1.0, 2)
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
+
+    def test_multiclass_logistic_regression_summary(self):
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], [])),
+                                         (2.0, 2.0, Vectors.dense(2.0)),
+                                         (2.0, 2.0, Vectors.dense(1.9))],
+                                        ["label", "weight", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
+        model = lr.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.probabilityCol, "probability")
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.featuresCol, "features")
+        self.assertEqual(s.predictionCol, "prediction")
+        objHist = s.objectiveHistory
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.labels, list))
+        self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.precisionByLabel, list))
+        self.assertTrue(isinstance(s.recallByLabel, list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
+        self.assertAlmostEqual(s.accuracy, 0.75, 2)
+        self.assertAlmostEqual(s.weightedTruePositiveRate, 0.75, 2)
+        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.25, 2)
+        self.assertAlmostEqual(s.weightedRecall, 0.75, 2)
+        self.assertAlmostEqual(s.weightedPrecision, 0.583, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 0.65, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(1.0), 0.65, 2)
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
 
     def test_gaussian_mixture_summary(self):
         data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
@@ -1542,10 +1649,24 @@ class OneVsRestTests(SparkSessionTestCase):
                                          (2.0, Vectors.dense(0.5, 0.5))],
                                         ["label", "features"])
         lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr)
+        ovr = OneVsRest(classifier=lr, parallelism=1)
         model = ovr.fit(df)
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
+
+    def test_parallelism_doesnt_change_output(self):
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        ovrPar1 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=1)
+        modelPar1 = ovrPar1.fit(df)
+        ovrPar2 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=2)
+        modelPar2 = ovrPar2.fit(df)
+        for i, model in enumerate(modelPar1.models):
+            self.assertTrue(np.allclose(model.coefficients.toArray(),
+                                        modelPar2.models[i].coefficients.toArray(), atol=1E-4))
+            self.assertTrue(np.allclose(model.intercept, modelPar2.models[i].intercept, atol=1E-4))
 
     def test_support_for_weightCol(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8), 1.0),
@@ -1647,6 +1768,26 @@ class LogisticRegressionTest(SparkSessionTestCase):
                 np.allclose(model.coefficientMatrix.toArray()[i], expected[i], atol=1E-4))
         self.assertTrue(
             np.allclose(model.interceptVector.toArray(), [-0.9057, -1.1392, -0.0033], atol=1E-4))
+
+
+class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
+
+    def test_raw_and_probability_prediction(self):
+
+        data_path = "data/mllib/sample_multiclass_classification_data.txt"
+        df = self.spark.read.format("libsvm").load(data_path)
+
+        mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[4, 5, 4, 3],
+                                             blockSize=128, seed=123)
+        model = mlp.fit(df)
+        test = self.sc.parallelize([Row(features=Vectors.dense(0.1, 0.1, 0.25, 0.25))]).toDF()
+        result = model.transform(test).head()
+        expected_prediction = 2.0
+        expected_probability = [0.0, 0.0, 1.0]
+        expected_rawPrediction = [57.3955, -124.5462, 67.9943]
+        self.assertTrue(result.prediction, expected_prediction)
+        self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
+        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1E-4))
 
 
 class FPGrowthTests(SparkSessionTestCase):

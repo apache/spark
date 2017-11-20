@@ -28,7 +28,8 @@ case class PythonUDF(
     name: String,
     func: PythonFunction,
     dataType: DataType,
-    children: Seq[Expression])
+    children: Seq[Expression],
+    evalType: Int)
   extends Expression with Unevaluable with NonSQLExpression with UserDefinedExpression {
 
   override def toString: String = s"$name(${children.mkString(", ")})"

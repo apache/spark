@@ -2334,6 +2334,15 @@ object functions {
   def ltrim(e: Column): Column = withExpr {StringTrimLeft(e.expr) }
 
   /**
+   * Trim the specified character string from left end for the specified string column.
+   * @group string_funcs
+   * @since 2.3.0
+   */
+  def ltrim(e: Column, trimString: String): Column = withExpr {
+    StringTrimLeft(e.expr, Literal(trimString))
+  }
+
+  /**
    * Extract a specific group matched by a Java regex, from the specified string column.
    * If the regex did not match, or the specified group did not match, an empty string is returned.
    *
@@ -2411,6 +2420,15 @@ object functions {
   def rtrim(e: Column): Column = withExpr { StringTrimRight(e.expr) }
 
   /**
+   * Trim the specified character string from right end for the specified string column.
+   * @group string_funcs
+   * @since 2.3.0
+   */
+  def rtrim(e: Column, trimString: String): Column = withExpr {
+    StringTrimRight(e.expr, Literal(trimString))
+  }
+
+  /**
    * Returns the soundex code for the specified expression.
    *
    * @group string_funcs
@@ -2476,6 +2494,15 @@ object functions {
    * @since 1.5.0
    */
   def trim(e: Column): Column = withExpr { StringTrim(e.expr) }
+
+  /**
+   * Trim the specified character from both ends for the specified string column.
+   * @group string_funcs
+   * @since 2.3.0
+   */
+  def trim(e: Column, trimString: String): Column = withExpr {
+    StringTrim(e.expr, Literal(trimString))
+  }
 
   /**
    * Converts a string column to upper case.
@@ -2573,6 +2600,13 @@ object functions {
    * @since 1.5.0
    */
   def month(e: Column): Column = withExpr { Month(e.expr) }
+
+  /**
+   * Extracts the day of the week as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 2.3.0
+   */
+  def dayofweek(e: Column): Column = withExpr { DayOfWeek(e.expr) }
 
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
@@ -2764,8 +2798,9 @@ object functions {
   }
 
   /**
-   * Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
-   * that corresponds to the same time of day in the given timezone.
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+   * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+   * '2017-07-14 03:40:00.0'.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2774,8 +2809,9 @@ object functions {
   }
 
   /**
-   * Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
-   * another timestamp that corresponds to the same time of day in UTC.
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
+   * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+   * '2017-07-14 01:40:00.0'.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3119,9 +3155,9 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Converts a column containing a `StructType` or `ArrayType` of `StructType`s
-   * into a JSON string with the specified schema. Throws an exception, in the case of an
-   * unsupported type.
+   * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
+   * a `MapType` or `ArrayType` of `MapType`s into a JSON string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
    *
    * @param e a column containing a struct or array of the structs.
    * @param options options to control how the struct column is converted into a json string.
@@ -3135,9 +3171,9 @@ object functions {
   }
 
   /**
-   * (Java-specific) Converts a column containing a `StructType` or `ArrayType` of `StructType`s
-   * into a JSON string with the specified schema. Throws an exception, in the case of an
-   * unsupported type.
+   * (Java-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
+   * a `MapType` or `ArrayType` of `MapType`s into a JSON string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
    *
    * @param e a column containing a struct or array of the structs.
    * @param options options to control how the struct column is converted into a json string.
@@ -3150,8 +3186,9 @@ object functions {
     to_json(e, options.asScala.toMap)
 
   /**
-   * Converts a column containing a `StructType` or `ArrayType` of `StructType`s into a JSON string
-   * with the specified schema. Throws an exception, in the case of an unsupported type.
+   * Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
+   * a `MapType` or `ArrayType` of `MapType`s into a JSON string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
    *
    * @param e a column containing a struct or array of the structs.
    *

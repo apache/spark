@@ -217,7 +217,7 @@ private[spark] class ExecutorAllocationManager(
    * the scheduling task.
    */
   def start(): Unit = {
-    listenerBus.addListener(listener)
+    listenerBus.addToManagementQueue(listener)
 
     val scheduleTask = new Runnable() {
       override def run(): Unit = {
@@ -265,6 +265,10 @@ private[spark] class ExecutorAllocationManager(
   private def maxNumExecutorsNeeded(): Int = {
     val numRunningOrPendingTasks = listener.totalPendingTasks + listener.totalRunningTasks
     (numRunningOrPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
+  }
+
+  private def totalRunningTasks(): Int = synchronized {
+    listener.totalRunningTasks
   }
 
   /**
@@ -602,12 +606,11 @@ private[spark] class ExecutorAllocationManager(
   private class ExecutorAllocationListener extends SparkListener {
 
     private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
+    // Number of running tasks per stage including speculative tasks.
+    // Should be 0 when no stages are active.
+    private val stageIdToNumRunningTask = new mutable.HashMap[Int, Int]
     private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
-    // Number of tasks currently running on the cluster including speculative tasks.
-    // Should be 0 when no stages are active.
-    private var numRunningTasks: Int = _
-
     // Number of speculative tasks to be scheduled in each stage
     private val stageIdToNumSpeculativeTasks = new mutable.HashMap[Int, Int]
     // The speculative tasks started in each stage
@@ -625,6 +628,7 @@ private[spark] class ExecutorAllocationManager(
       val numTasks = stageSubmitted.stageInfo.numTasks
       allocationManager.synchronized {
         stageIdToNumTasks(stageId) = numTasks
+        stageIdToNumRunningTask(stageId) = 0
         allocationManager.onSchedulerBacklogged()
 
         // Compute the number of tasks requested by the stage on each host
@@ -651,6 +655,7 @@ private[spark] class ExecutorAllocationManager(
       val stageId = stageCompleted.stageInfo.stageId
       allocationManager.synchronized {
         stageIdToNumTasks -= stageId
+        stageIdToNumRunningTask -= stageId
         stageIdToNumSpeculativeTasks -= stageId
         stageIdToTaskIndices -= stageId
         stageIdToSpeculativeTaskIndices -= stageId
@@ -663,10 +668,6 @@ private[spark] class ExecutorAllocationManager(
         // This is needed in case the stage is aborted for any reason
         if (stageIdToNumTasks.isEmpty && stageIdToNumSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
-          if (numRunningTasks != 0) {
-            logWarning("No stages are running, but numRunningTasks != 0")
-            numRunningTasks = 0
-          }
         }
       }
     }
@@ -678,7 +679,9 @@ private[spark] class ExecutorAllocationManager(
       val executorId = taskStart.taskInfo.executorId
 
       allocationManager.synchronized {
-        numRunningTasks += 1
+        if (stageIdToNumRunningTask.contains(stageId)) {
+          stageIdToNumRunningTask(stageId) += 1
+        }
         // This guards against the race condition in which the `SparkListenerTaskStart`
         // event is posted before the `SparkListenerBlockManagerAdded` event, which is
         // possible because these events are posted in different threads. (see SPARK-4951)
@@ -709,7 +712,9 @@ private[spark] class ExecutorAllocationManager(
       val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
       allocationManager.synchronized {
-        numRunningTasks -= 1
+        if (stageIdToNumRunningTask.contains(stageId)) {
+          stageIdToNumRunningTask(stageId) -= 1
+        }
         // If the executor is no longer running any scheduled tasks, mark it as idle
         if (executorIdToTaskIds.contains(executorId)) {
           executorIdToTaskIds(executorId) -= taskId
@@ -787,7 +792,9 @@ private[spark] class ExecutorAllocationManager(
     /**
      * The number of tasks currently running across all stages.
      */
-    def totalRunningTasks(): Int = numRunningTasks
+    def totalRunningTasks(): Int = {
+      stageIdToNumRunningTask.values.sum
+    }
 
     /**
      * Return true if an executor is not currently running a task, and false otherwise.

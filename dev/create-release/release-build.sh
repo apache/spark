@@ -31,8 +31,8 @@ Top level targets are
 All other inputs are environment variables
 
 GIT_REF - Release tag or commit to build from
-SPARK_VERSION - Release identifier used when publishing
-SPARK_PACKAGE_VERSION - Release identifier in top level package directory
+SPARK_VERSION - Version of Spark being built (e.g. 2.1.2)
+SPARK_PACKAGE_VERSION - Release identifier in top level package directory (e.g. 2.1.2-rc1)
 REMOTE_PARENT_DIR - Parent in which to create doc or release builds.
 REMOTE_PARENT_MAX_LENGTH - If set, parent directory will be cleaned to only
  have this number of subdirectories (by deleting old ones). WARNING: This deletes data.
@@ -74,14 +74,23 @@ GIT_REF=${GIT_REF:-master}
 # Destination directory parent on remote server
 REMOTE_PARENT_DIR=${REMOTE_PARENT_DIR:-/home/$ASF_USERNAME/public_html}
 
-GPG="gpg --no-tty --batch"
+GPG="gpg -u $GPG_KEY --no-tty --batch"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
 
 MVN="build/mvn --force"
-PUBLISH_PROFILES="-Pmesos -Pyarn -Phive -Phive-thriftserver"
-PUBLISH_PROFILES="$PUBLISH_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
+
+# Hive-specific profiles for some builds
+HIVE_PROFILES="-Phive -Phive-thriftserver"
+# Profiles for publishing snapshots and release to Maven Central
+PUBLISH_PROFILES="-Pmesos -Pyarn -Pflume $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
+# Profiles for building binary releases
+BASE_RELEASE_PROFILES="-Pmesos -Pyarn -Pflume -Psparkr"
+# Scala 2.11 only profiles for some builds
+SCALA_2_11_PROFILES="-Pkafka-0-8"
+# Scala 2.12 only profiles for some builds
+SCALA_2_12_PROFILES="-Pscala-2.12"
 
 rm -rf spark
 git clone https://git-wip-us.apache.org/repos/asf/spark.git
@@ -95,6 +104,40 @@ if [ -z "$SPARK_VERSION" ]; then
     | grep -v INFO | grep -v WARNING | grep -v Download)
 fi
 
+# Verify we have the right java version set
+if [ -z "$JAVA_HOME" ]; then
+  echo "Please set JAVA_HOME."
+  exit 1
+fi
+
+java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
+
+if [[ ! $SPARK_VERSION < "2.2." ]]; then
+  if [[ $java_version < "1.8." ]]; then
+    echo "Java version $java_version is less than required 1.8 for 2.2+"
+    echo "Please set JAVA_HOME correctly."
+    exit 1
+  fi
+else
+  if [[ $java_version > "1.7." ]]; then
+    if [ -z "$JAVA_7_HOME" ]; then
+      echo "Java version $java_version is higher than required 1.7 for pre-2.2"
+      echo "Please set JAVA_HOME correctly."
+      exit 1
+    else
+      export JAVA_HOME="$JAVA_7_HOME"
+    fi
+  fi
+fi
+
+# This is a band-aid fix to avoid the failure of Maven nightly snapshot in some Jenkins
+# machines by explicitly calling /usr/sbin/lsof. Please see SPARK-22377 and the discussion
+# in its pull request.
+LSOF=lsof
+if ! hash $LSOF 2>/dev/null; then
+  LSOF=/usr/sbin/lsof
+fi
+
 if [ -z "$SPARK_PACKAGE_VERSION" ]; then
   SPARK_PACKAGE_VERSION="${SPARK_VERSION}-$(date +%Y_%m_%d_%H_%M)-${git_hash}"
 fi
@@ -104,7 +147,7 @@ DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 function LFTP {
   SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
   COMMANDS=$(cat <<EOF
-     set net:max-retries 1 &&
+     set net:max-retries 2 &&
      set sftp:connect-program $SSH &&
      connect -u $ASF_USERNAME,p sftp://home.apache.org &&
      $@
@@ -235,10 +278,9 @@ if [[ "$1" == "package" ]]; then
 
   # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
   # share the same Zinc server.
-  FLAGS="-Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos"
-  make_binary_release "hadoop2.6" "-Phadoop-2.6 $FLAGS" "3035" "withr" &
-  make_binary_release "hadoop2.7" "-Phadoop-2.7 $FLAGS" "3036" "withpip" &
-  make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn -Pmesos" "3038" &
+  make_binary_release "hadoop2.6" "-Phadoop-2.6 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3035" "withr" &
+  make_binary_release "hadoop2.7" "-Phadoop-2.7 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3036" "withpip" &
+  make_binary_release "without-hadoop" "-Phadoop-provided $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3038" &
   wait
   rm -rf spark-$SPARK_VERSION-bin-*/
 
@@ -304,13 +346,13 @@ if [[ "$1" == "publish-snapshot" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES deploy
+  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_11_PROFILES $PUBLISH_PROFILES deploy
   #./dev/change-scala-version.sh 2.12
-  #$MVN -DzincPort=$ZINC_PORT -Pscala-2.12 --settings $tmp_settings \
-  #  -DskipTests $PUBLISH_PROFILES clean deploy
+  #$MVN -DzincPort=$ZINC_PORT --settings $tmp_settings \
+  #  -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
 
   # Clean-up Zinc nailgun process
-  /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   rm $tmp_settings
   cd ..
@@ -340,14 +382,14 @@ if [[ "$1" == "publish-release" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $PUBLISH_PROFILES clean install
+  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
 
   #./dev/change-scala-version.sh 2.12
-  #$MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Pscala-2.12 \
-  #  -DskipTests $PUBLISH_PROFILES clean install
+  #$MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo \
+  #  -DskipTests $SCALA_2_12_PROFILES §$PUBLISH_PROFILES clean install
 
   # Clean-up Zinc nailgun process
-  /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   #./dev/change-scala-version.sh 2.11
 

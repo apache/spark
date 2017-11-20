@@ -139,7 +139,7 @@ case class RowDataSourceScanExec(
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
-  override lazy val canonicalized: SparkPlan =
+  override def doCanonicalize(): SparkPlan =
     copy(
       fullOutput.map(QueryPlan.normalizeExprId(_, fullOutput)),
       rdd = null,
@@ -177,7 +177,8 @@ case class FileSourceScanExec(
   override def vectorTypes: Option[Seq[String]] =
     relation.fileFormat.vectorTypes(
       requiredSchema = requiredSchema,
-      partitionSchema = relation.partitionSchema)
+      partitionSchema = relation.partitionSchema,
+      relation.sparkSession.sessionState.conf)
 
   @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
@@ -469,7 +470,7 @@ case class FileSourceScanExec(
       currentSize = 0
     }
 
-    // Assign files to partitions using "First Fit Decreasing" (FFD)
+    // Assign files to partitions using "Next Fit Decreasing"
     splitFiles.foreach { file =>
       if (currentSize + file.length > maxSplitBytes) {
         closePartition()
@@ -522,7 +523,7 @@ case class FileSourceScanExec(
     }
   }
 
-  override lazy val canonicalized: FileSourceScanExec = {
+  override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
       output.map(QueryPlan.normalizeExprId(_, output)),

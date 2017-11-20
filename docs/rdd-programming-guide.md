@@ -604,7 +604,7 @@ before the `reduce`, which would cause `lineLengths` to be saved in memory after
 Spark's API relies heavily on passing functions in the driver program to run on the cluster.
 There are two recommended ways to do this:
 
-* [Anonymous function syntax](http://docs.scala-lang.org/tutorials/tour/anonymous-function-syntax.html),
+* [Anonymous function syntax](http://docs.scala-lang.org/tour/basics.html#functions),
   which can be used for short pieces of code.
 * Static methods in a global singleton object. For example, you can define `object MyFunctions` and then
   pass `MyFunctions.func1`, as follows:

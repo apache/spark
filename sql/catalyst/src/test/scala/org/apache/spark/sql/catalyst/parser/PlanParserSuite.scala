@@ -110,6 +110,7 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
     assertEqual("select from tbl", OneRowRelation().select('from.as("tbl")))
+    assertEqual("select a from 1k.2m", table("1k", "2m").select('a))
   }
 
   test("reverse select query") {
@@ -649,6 +650,24 @@ class PlanParserSuite extends AnalysisTest {
           )
         )
       )
+    )
+  }
+
+  test("TRIM function") {
+    intercept("select ltrim(both 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
+    intercept("select rtrim(trailing 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
+
+    assertEqual(
+      "SELECT TRIM(BOTH '@$%&( )abc' FROM '@ $ % & ()abc ' )",
+        OneRowRelation().select('TRIM.function("@$%&( )abc", "@ $ % & ()abc "))
+    )
+    assertEqual(
+      "SELECT TRIM(LEADING 'c []' FROM '[ ccccbcc ')",
+        OneRowRelation().select('ltrim.function("c []", "[ ccccbcc "))
+    )
+    assertEqual(
+      "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
+      OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
     )
   }
 }

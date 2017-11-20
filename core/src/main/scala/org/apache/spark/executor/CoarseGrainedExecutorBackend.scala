@@ -26,8 +26,6 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -125,6 +123,10 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
+
+    case UpdateDelegationTokens(tokenBytes) =>
+      logInfo(s"Received tokens of ${tokenBytes.length} bytes")
+      SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -165,9 +167,9 @@ private[spark] class CoarseGrainedExecutorBackend(
     if (notifyDriver && driver.nonEmpty) {
       driver.get.ask[Boolean](
         RemoveExecutor(executorId, new ExecutorLossReason(reason))
-      ).onFailure { case e =>
+      ).failed.foreach(e =>
         logWarning(s"Unable to notify the driver due to " + e.getMessage, e)
-      }(ThreadUtils.sameThread)
+      )(ThreadUtils.sameThread)
     }
 
     System.exit(code)
@@ -221,9 +223,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
-      cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
-        val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
-        SparkHadoopUtil.get.addCurrentUserCredentials(creds)
+      cfg.hadoopDelegationCreds.foreach { tokens =>
+        SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
 
       val env = SparkEnv.createExecutorEnv(

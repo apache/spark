@@ -73,7 +73,7 @@ setMethod("show", "WindowSpec",
 setMethod("partitionBy",
           signature(x = "WindowSpec"),
           function(x, col, ...) {
-            stopifnot (class(col) %in% c("character", "Column"))
+            stopifnot(class(col) %in% c("character", "Column"))
 
             if (class(col) == "character") {
               windowSpec(callJMethod(x@sws, "partitionBy", col, list(...)))

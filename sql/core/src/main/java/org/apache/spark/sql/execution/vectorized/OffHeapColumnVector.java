@@ -85,6 +85,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void close() {
+    super.close();
     Platform.freeMemory(nulls);
     Platform.freeMemory(data);
     Platform.freeMemory(lengthData);
@@ -228,6 +229,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  public void putShorts(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 2, count * 2);
+  }
+
+  @Override
   public short getShort(int rowId) {
     if (dictionary == null) {
       return Platform.getShort(null, data + 2 * rowId);
@@ -265,6 +272,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public void putInts(int rowId, int count, int[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.INT_ARRAY_OFFSET + srcIndex * 4,
         null, data + 4 * rowId, count * 4);
+  }
+
+  @Override
+  public void putInts(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 4, count * 4);
   }
 
   @Override
@@ -331,6 +344,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public void putLongs(int rowId, int count, long[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.LONG_ARRAY_OFFSET + srcIndex * 8,
         null, data + 8 * rowId, count * 8);
+  }
+
+  @Override
+  public void putLongs(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 8, count * 8);
   }
 
   @Override
@@ -504,7 +523,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public void loadBytes(ColumnVector.Array array) {
+  public void loadBytes(ColumnarArray array) {
     if (array.tmpByteArray.length < array.length) array.tmpByteArray = new byte[array.length];
     Platform.copyMemory(
         null, data + array.offset, array.tmpByteArray, Platform.BYTE_ARRAY_OFFSET, array.length);
@@ -515,7 +534,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   // Split out the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    int oldCapacity = (this.data == 0L) ? 0 : capacity;
+    int oldCapacity = (nulls == 0L) ? 0 : capacity;
     if (this.resultArray != null) {
       this.lengthData =
           Platform.reallocateMemory(lengthData, oldCapacity * 4, newCapacity * 4);

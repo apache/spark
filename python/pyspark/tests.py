@@ -644,6 +644,18 @@ class RDDTests(ReusedPySparkTestCase):
             set([(x, (y, y)) for x in range(10) for y in range(10)])
         )
 
+    def test_zip_chaining(self):
+        # Tests for SPARK-21985
+        rdd = self.sc.parallelize('abc', 2)
+        self.assertSetEqual(
+            set(rdd.zip(rdd).zip(rdd).collect()),
+            set([((x, x), x) for x in 'abc'])
+        )
+        self.assertSetEqual(
+            set(rdd.zip(rdd.zip(rdd)).collect()),
+            set([(x, (x, x)) for x in 'abc'])
+        )
+
     def test_deleting_input_files(self):
         # Regression test for SPARK-1025
         tempFile = tempfile.NamedTemporaryFile(delete=False)
@@ -1282,6 +1294,22 @@ class ProfilerTests(PySparkTestCase):
 
         rdd = self.sc.parallelize(range(100))
         rdd.foreach(heavy_foo)
+
+
+class ProfilerTests2(unittest.TestCase):
+    def test_profiler_disabled(self):
+        sc = SparkContext(conf=SparkConf().set("spark.python.profile", "false"))
+        try:
+            self.assertRaisesRegexp(
+                RuntimeError,
+                "'spark.python.profile' configuration must be set",
+                lambda: sc.show_profiles())
+            self.assertRaisesRegexp(
+                RuntimeError,
+                "'spark.python.profile' configuration must be set",
+                lambda: sc.dump_profiles("/tmp/abc"))
+        finally:
+            sc.stop()
 
 
 class InputFormatTests(ReusedPySparkTestCase):

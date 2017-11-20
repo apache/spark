@@ -639,6 +639,35 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(hiveHashPlan(wideRow).getInt(0) == hiveHashEval)
   }
 
+  test("SPARK-22284: Compute hash for nested structs") {
+    val M = 80
+    val N = 10
+    val L = M * N
+    val O = 50
+    val seed = 42
+
+    val wideRow = new GenericInternalRow(Seq.tabulate(O)(k =>
+      new GenericInternalRow(Seq.tabulate(M)(j =>
+        new GenericInternalRow(Seq.tabulate(N)(i =>
+          new GenericInternalRow(Array[Any](
+            UTF8String.fromString((k * L + j * N + i).toString))))
+          .toArray[Any])).toArray[Any])).toArray[Any])
+    val inner = new StructType(
+      (0 until N).map(_ => StructField("structOfString", structOfString)).toArray)
+    val outer = new StructType(
+      (0 until M).map(_ => StructField("structOfStructOfString", inner)).toArray)
+    val schema = new StructType(
+      (0 until O).map(_ => StructField("structOfStructOfStructOfString", outer)).toArray)
+    val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
+      BoundReference(i, f.dataType, true)
+    }
+    val murmur3HashExpr = Murmur3Hash(exprs, 42)
+    val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
+
+    val murmursHashEval = Murmur3Hash(exprs, 42).eval(wideRow)
+    assert(murmur3HashPlan(wideRow).getInt(0) == murmursHashEval)
+  }
+
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
     val encoder = RowEncoder(inputSchema)

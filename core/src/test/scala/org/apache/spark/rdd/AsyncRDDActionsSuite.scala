@@ -24,15 +24,18 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.util.ThreadUtils
 
-class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Timeouts {
+class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with TimeLimits {
 
   @transient private var sc: SparkContext = _
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   override def beforeAll() {
     super.beforeAll()
@@ -130,10 +133,10 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
         info("Should not have reached this code path (onComplete matching Failure)")
         throw new Exception("Task should succeed")
     }
-    f.onSuccess { case a: Any =>
+    f.foreach { a =>
       sem.release()
     }
-    f.onFailure { case t =>
+    f.failed.foreach { t =>
       info("Should not have reached this code path (onFailure)")
       throw new Exception("Task should succeed")
     }
@@ -164,11 +167,11 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       case scala.util.Failure(e) =>
         sem.release()
     }
-    f.onSuccess { case a: Any =>
+    f.foreach { a =>
       info("Should not have reached this code path (onSuccess)")
       throw new Exception("Task should fail")
     }
-    f.onFailure { case t =>
+    f.failed.foreach { t =>
       sem.release()
     }
     intercept[SparkException] {
