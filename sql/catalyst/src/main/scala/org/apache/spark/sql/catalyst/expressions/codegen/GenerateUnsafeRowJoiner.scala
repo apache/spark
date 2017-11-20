@@ -53,28 +53,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     in
   }
 
-  private def splitPlatformCode(expressions: Seq[String]): Seq[String] = {
-    val blocks = new ArrayBuffer[String]()
-    val blockBuilder = new StringBuilder()
-    var length = 0
-    for (code <- expressions) {
-      // We can't know how many bytecode will be generated, so use the length of source code
-      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
-      // also not be too small, or it will have many function calls (for wide table), see the
-      // results in BenchmarkWideTable.
-      if (length > 4096) {
-        blocks += blockBuilder.toString()
-        blockBuilder.clear()
-        length = 0
-      }
-      blockBuilder.append(code)
-      length += CodeFormatter.stripExtraNewLinesAndComments(code).length
-    }
-    blocks += blockBuilder.toString()
-    blocks
-  }
-
   def create(schema1: StructType, schema2: StructType): UnsafeRowJoiner = {
+    val ctx = new CodegenContext
     val offset = Platform.BYTE_ARRAY_OFFSET
     val getLong = "Platform.getLong"
     val putLong = "Platform.putLong"
@@ -117,16 +97,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     val functions = mutable.ArrayBuffer.empty[String]
     val args = "java.lang.Object obj1, long offset1, java.lang.Object obj2, long offset2"
-    val copyBitsets = splitPlatformCode(copyBitset).zipWithIndex.map { case(body, index) =>
-      val funcName = s"copyBitsetFunc$index"
-      val function = s"""
-        private void $funcName($args) {
-          $body
-        }
-      """
-      functions += function
-      s"$funcName(obj1, offset1, obj2, offset2);"
-    }.mkString("\n")
+    val copyBitsets = ctx.splitExpressions(copyBitset, "copyBitsetFunc",
+      ("java.lang.Object", "obj1") :: ("long", "offset1") ::
+      ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
     var cursor = offset + outputBitsetWords * 8
@@ -193,16 +166,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
       }
     }
 
-    val updateOffsets = splitPlatformCode(updateOffset).zipWithIndex.map { case(body, index) =>
-      val funcName = s"updateOffsetFunc$index"
-      val function = s"""
-        private void $funcName(long numBytesVariableRow1) {
-          $body
-        }
-       """
-      functions += function
-      s"$funcName(numBytesVariableRow1);"
-    }.mkString("\n")
+    val updateOffsets = ctx.splitExpressions(updateOffset, "copyBitsetFunc",
+      ("long", "numBytesVariableRow1") :: Nil)
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val codeBody = s"""
@@ -214,7 +179,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |  private byte[] buf = new byte[64];
        |  private UnsafeRow out = new UnsafeRow(${schema1.size + schema2.size});
        |
-       |  ${functions.mkString("\n")}
+       |  ${ctx.declareAddedFunctions()}
        |
        |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
