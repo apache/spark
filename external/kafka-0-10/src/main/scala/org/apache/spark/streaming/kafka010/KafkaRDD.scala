@@ -211,8 +211,8 @@ private[spark] class KafkaRDD[K, V](
     var requestOffset = part.fromOffset
 
     def closeIfNeeded(): Unit = {
-      if (!useConsumerCache && consumer != null) {
-        consumer.close
+      if (consumer != null) {
+          consumer.close()
       }
     }
 
