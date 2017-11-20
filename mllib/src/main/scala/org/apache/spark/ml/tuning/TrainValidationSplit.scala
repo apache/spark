@@ -146,7 +146,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     val metrics = new Array[Double](epm.length)
     est.fit(trainingDataset, epm, true, executionContext,
-      (model: Model[_], paramMap: ParamMap, paramMapIndex: Int) => {
+      (model: Model[_], paramMapIndex: Int) => {
+        val paramMap = epm(paramMapIndex)
         if (collectSubModelsParam) {
           subModels.get(paramMapIndex) = model
         }

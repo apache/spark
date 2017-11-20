@@ -22,6 +22,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.util.ThreadUtils
@@ -85,11 +86,13 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
     paramMaps.map(fit(dataset, _))
   }
 
+  /**
+   * (Java-specific)
+   */
   @Since("2.3.0")
   def fit(dataset: Dataset[_], paramMaps: Array[ParamMap],
     unpersistDatasetAfterFitting: Boolean, executionContext: ExecutionContext,
-    modelCallback: (Model[_], ParamMap, Int) => Unit
-    ): Unit = {
+    modelCallback: VoidFunction2[Model[_], Int]): Unit = {
     // Fit models in a Future for training in parallel
     val modelFutures = paramMaps.map { paramMap =>
       Future[Model[_]] {
@@ -100,16 +103,31 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
     if (unpersistDatasetAfterFitting) {
       // Unpersist training data only when all models have trained
       Future.sequence[Model[_], Iterable](modelFutures)(implicitly, executionContext)
-        .onComplete { _ => dataset.unpersist() }(executionContext)
+        .onComplete { _ => dataset.unpersist() } (executionContext)
     }
 
     val modelCallbackFutures = modelFutures.zipWithIndex.map {
       case (modelFuture, paramMapIndex) =>
         modelFuture.map { model =>
-          modelCallback(model, paramMaps(paramMapIndex), paramMapIndex)
-        }(executionContext)
+          modelCallback.call(model, paramMapIndex)
+        } (executionContext)
     }
     modelCallbackFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+  }
+
+  /**
+   * (Scala-specific)
+   */
+  @Since("2.3.0")
+  def fit(dataset: Dataset[_], paramMaps: Array[ParamMap],
+    unpersistDatasetAfterFitting: Boolean, executionContext: ExecutionContext,
+    modelCallback: (Model[_], Int) => Unit): Unit = {
+    fit(dataset, paramMaps, unpersistDatasetAfterFitting, executionContext,
+      new VoidFunction2[Model[_], Int] {
+        override def call(model: Model[_], paramMapIndex: Int): Unit = {
+          modelCallback(model, paramMapIndex)
+        }
+      })
   }
 
   override def copy(extra: ParamMap): Estimator[M]

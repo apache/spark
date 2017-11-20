@@ -148,7 +148,8 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
       val foldMetrics = new Array[Double](epm.length)
       est.fit(trainingDataset, epm, true, executionContext,
-        (model: Model[_], paramMap: ParamMap, paramMapIndex: Int) => {
+        (model: Model[_], paramMapIndex: Int) => {
+          val paramMap = epm(paramMapIndex)
           if (collectSubModelsParam) {
             subModels.get(splitIndex)(paramMapIndex) = model
           }
