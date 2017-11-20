@@ -132,7 +132,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       AppStatusStore.CURRENT_VERSION, logDir.toString())
 
     try {
-      open(new File(path, "listing.ldb"), metadata)
+      open(dbPath, metadata)
     } catch {
       // If there's an error, remove the listing database and any existing UI database
       // from the store directory, since it's extremely likely that they'll all contain
@@ -140,7 +140,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case _: UnsupportedStoreVersionException | _: MetadataMismatchException =>
         logInfo("Detected incompatible DB versions, deleting...")
         path.listFiles().foreach(Utils.deleteRecursively)
-        open(new File(path, "listing.ldb"), metadata)
+        open(dbPath, metadata)
+      case e: Exception =>
+        // Get rid of the old data and re-create it. The store is either old or corrupted.
+        logWarning(s"Failed to load disk store $path for app listing.", e)
+        Utils.deleteRecursively(dbPath)
+        open(dbPath, metadata)
     }
   }.getOrElse(new InMemoryStore())
 
