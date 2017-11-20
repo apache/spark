@@ -496,14 +496,14 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
       if (statuses.length * totalSizes.length <=
-        conf.get(SHUFFLE_MAP_OUTPUT_STATISTICS_MULTITHREAD_THRESHOLD)) {
+        conf.get(SHUFFLE_MAP_OUTPUT_STATISTICS_PARALLEL_AGGREGATION_THRESHOLD)) {
         for (s <- statuses) {
           for (i <- 0 until totalSizes.length) {
             totalSizes(i) += s.getSizeForBlock(i)
           }
         }
       } else {
-        val parallelism = conf.getInt("spark.adaptive.map.statistics.cores", 8)
+        val parallelism = conf.get(SHUFFLE_MAP_OUTPUT_STATISTICS_CORES)
         val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-statistics")
         val executionContext = ExecutionContext.fromExecutor(threadPool)
         val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {
