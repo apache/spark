@@ -244,32 +244,29 @@ case class Elt(children: Seq[Expression])
         }
        """
     } else {
-      var fullFuncName = ""
-      cases.reverse.zipWithIndex.map { case (s, index) =>
-        val prevFunc = if (index == 0) {
-          "null"
-        } else {
-          s"$fullFuncName(${ctx.INPUT_ROW}, $indexVal)"
-        }
+      var prevFunc = "null"
+      for (c <- cases.reverse) {
         val funcName = ctx.freshName("eltFunc")
         val funcBody = s"""
          private UTF8String $funcName(InternalRow ${ctx.INPUT_ROW}, int $indexVal) {
            UTF8String $stringVal = null;
            switch ($indexVal) {
-             $s
+             $c
              default:
                return $prevFunc;
            }
            return $stringVal;
          }
         """
-        fullFuncName = ctx.addNewFunction(funcName, funcBody)
+        val fullFuncName = ctx.addNewFunction(funcName, funcBody)
+        prevFunc = s"$fullFuncName(${ctx.INPUT_ROW}, $indexVal)"
       }
-      s"UTF8String $stringVal = $fullFuncName(${ctx.INPUT_ROW}, ${indexVal});"
+      s"UTF8String $stringVal = $prevFunc;"
     }
 
-    ev.copy(index.code + "\n" +
+    ev.copy(
       s"""
+      ${index.code}
       final int $indexVal = ${index.value};
       $codes
       UTF8String ${ev.value} = $stringVal;
