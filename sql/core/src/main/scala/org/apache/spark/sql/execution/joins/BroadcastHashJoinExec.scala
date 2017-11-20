@@ -91,8 +91,8 @@ case class BroadcastHashJoinExec(
   }
 
   override def needCopyResult: Boolean = checkNeedCopyResultFromJoinType ||
-    left.asInstanceOf[CodegenSupport].needCopyResult ||
-    right.asInstanceOf[CodegenSupport].needCopyResult
+    // Since the build side is broadcast, it's ok to check the streaming side only
+    streamedPlan.asInstanceOf[CodegenSupport].needCopyResult
 
   override def doProduce(ctx: CodegenContext): String = {
     streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
