@@ -64,6 +64,8 @@ object SparkHadoopWriter extends Logging {
     val sparkContext = rdd.context
     val stageInfo: StageInfo = new StageInfo
     stageInfo.rddConf = rdd.conf
+    stageInfo.isOutputSpecValidationEnabled = SparkHadoopWriterUtils.
+      isOutputSpecValidationEnabled(stageInfo.rddConf)
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       val ret = sparkContext.runJob(rdd, createConf( stageInfo, _, config),
@@ -108,8 +110,13 @@ object SparkHadoopWriter extends Logging {
     stageInfo.jobContext = jobContext
     config.initOutputFormat(jobContext)
 
-    // Assert the output format/key/value class is set in JobConf.
-    config.assertConf(stageInfo.jobContext, stageInfo.rddConf)
+    // Assert the output format/key/value class is set in JobConf. Since stageInfo.jobContext is,
+    // transient the check for the requirement of output spec validation(necessary for SPARK-4835)
+    // is done here using serializable stageInfo.isOutputSpecValidationEnabled.
+    // The check inside assertConf is not removed since assertConf can be used in other places.
+    if (stageInfo.isOutputSpecValidationEnabled) {
+      config.assertConf(stageInfo.jobContext, stageInfo.rddConf)
+    }
 
     val committer = config.createCommitter(stageId)
     stageInfo.committer = Some(committer)
@@ -416,4 +423,5 @@ class StageInfo extends Serializable {
   var stageId: Integer = 0
   var rddConf: SparkConf = null
   var jobTrackerId: String = ""
+  var isOutputSpecValidationEnabled: Boolean = false
 }
