@@ -47,7 +47,8 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
    * Options are:
    * 'skip': filter out rows with invalid data.
    * 'error': throw an error.
-   * 'keep': put invalid data in a special additional bucket, at index numCategories.
+   * 'keep': put invalid data in a special additional bucket, at index of the number of
+   * categories of the feature.
    * Default value: "error"
    * @group param
    */
@@ -55,7 +56,8 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "How to handle invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), 'error' (throw an error), " +
-    "or 'keep' (put invalid data in a special additional bucket, at index numCategories).",
+    "or 'keep' (put invalid data in a special additional bucket, at index of the " +
+    "number of categories of the feature).",
     ParamValidators.inArray(VectorIndexer.supportedHandleInvalids))
 
   setDefault(handleInvalid, VectorIndexer.ERROR_INVALID)
@@ -112,7 +114,6 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *  - Preserve metadata in transform; if a feature's metadata is already present, do not recompute.
  *  - Specify certain features to not index, either via a parameter or via existing metadata.
  *  - Add warning if a categorical feature has only 1 category.
- *  - Add option for allowing unknown categories.
  */
 @Since("1.4.0")
 class VectorIndexer @Since("1.4.0") (

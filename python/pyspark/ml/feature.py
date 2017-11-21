@@ -2526,7 +2526,6 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         do not recompute.
       - Specify certain features to not index, either via a parameter or via existing metadata.
       - Add warning if a categorical feature has only 1 category.
-      - Add option for allowing unknown categories.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
@@ -2578,7 +2577,8 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data " +
                           "(unseen labels or NULL values). Options are 'skip' (filter out " +
                           "rows with invalid data), 'error' (throw an error), or 'keep' (put " +
-                          "invalid data in a special additional bucket, at index numCategories).",
+                          "invalid data in a special additional bucket, at index of the number " +
+                          "of categories of the feature).",
                           typeConverter=TypeConverters.toString)
 
     @keyword_only
