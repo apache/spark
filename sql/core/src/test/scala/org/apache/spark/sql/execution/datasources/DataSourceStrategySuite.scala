@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{sources, QueryTest}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 
-class DataSourceStrategySuite extends QueryTest with SharedSQLContext {
+class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
 
   test("translate simple expression") {
     val attrInt = AttributeReference("cint", IntegerType)()
