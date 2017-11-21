@@ -235,7 +235,7 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 /**
  * Model fitted by [[StringIndexer]].
  *
- * @param labelsArray  Array of Ordered list of labels, corresponding to indices to be assigned
+ * @param labelsArray  Array of ordered list of labels, corresponding to indices to be assigned
  *                     for each input column.
  *
  * @note During transformation, if the input column does not exist,
@@ -365,8 +365,14 @@ class StringIndexerModel (
           .as(outputColName, metadata)
       }
     }
-    filteredDataset.withColumns(outputColNames.filter(_ != null),
-      outputColumns.filter(_ != null))
+    val filteredOutputColNames = outputColNames.filter(_ != null)
+    val filteredOutputColumns = outputColumns.filter(_ != null)
+
+    if (filteredOutputColNames.length > 0) {
+      filteredDataset.withColumns(filteredOutputColNames, filteredOutputColumns)
+    } else {
+      filteredDataset.toDF()
+    }
   }
 
   @Since("1.4.0")
