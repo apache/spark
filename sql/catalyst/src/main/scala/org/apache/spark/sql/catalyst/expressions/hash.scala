@@ -277,7 +277,7 @@ abstract class HashExpression[E] extends Expression {
       }
     })
 
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
+    ctx.addMutableState(ctx.javaType(dataType), ev.value)
     ev.copy(code = s"""
       ${ev.value} = $seed;
       $childrenHash""")
@@ -616,8 +616,8 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
         s"\n$childHash = 0;"
     })
 
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
-    ctx.addMutableState("int", childHash, s"$childHash = 0;")
+    ctx.addMutableState(ctx.javaType(dataType), ev.value)
+    ctx.addMutableState(ctx.JAVA_INT, childHash, s"$childHash = 0;")
     ev.copy(code = s"""
       ${ev.value} = $seed;
       $childrenHash""")

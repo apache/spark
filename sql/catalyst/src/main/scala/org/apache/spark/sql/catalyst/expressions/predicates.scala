@@ -236,8 +236,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
-    ctx.addMutableState("boolean", ev.value, "")
-    ctx.addMutableState("boolean", ev.isNull, "")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.value)
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
     val valueArg = ctx.freshName("valueArg")
     val listCode = listGen.map(x =>
       s"""
@@ -253,7 +253,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
        """)
     val listCodes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val args = ("InternalRow", ctx.INPUT_ROW) :: (ctx.javaType(value.dataType), valueArg) :: Nil
-      ctx.splitExpressions(listCode, "valueIn", args)
+      ctx.splitExpressions(expressions = listCode, funcName = "valueIn", arguments = args)
     } else {
       listCode.mkString("\n")
     }
