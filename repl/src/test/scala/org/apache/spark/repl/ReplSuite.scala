@@ -23,12 +23,13 @@ import java.net.URLClassLoader
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.log4j.{Level, LogManager}
+import org.scalatest.Matchers
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
-class ReplSuite extends SparkFunSuite {
+class ReplSuite extends SparkFunSuite with Matchers {
 
   def runInterpreter(master: String, input: String): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"
@@ -217,4 +218,13 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }
+
+  test(":replay should work correctly") {
+   runInterpreter("local",
+     """
+     |sc
+     |:replay
+     """.stripMargin) should not include "error: not found: value sc"
+  }
+
 }
