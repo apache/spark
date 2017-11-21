@@ -1042,7 +1042,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     }
     val fieldsEvalCodes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
       ctx.splitExpressions(fieldsEvalCode, "castStruct",
-        ("InternalRow", ctx.INPUT_ROW) :: (rowClass, result) :: ("InternalRow", tmpRow) :: Nil)
+        ("InternalRow", tmpRow) :: (rowClass, result) :: Nil)
     } else {
       fieldsEvalCode.mkString("\n")
     }

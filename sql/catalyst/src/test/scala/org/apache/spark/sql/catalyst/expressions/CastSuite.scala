@@ -830,6 +830,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-22500: cast for struct should not generate codes beyond 64KB") {
     val N = 1000
+    val M = 250
 
     val from1 = new StructType(
       (1 to N).map(i => StructField(s"s$i", StringType)).toArray)
@@ -856,5 +857,19 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val input3 = Row.fromSeq((1 to N).map(i => Row(i)))
     val output3 = Row.fromSeq((1 to N).map(i => Row(i.toLong)))
     checkEvaluation(cast(Literal.create(input3, from3), to3), output3)
+
+    val fromInner = new StructType(
+      (1 to M).map(i => StructField(s"s$i", DoubleType)).toArray)
+    val toInner = new StructType(
+      (1 to M).map(i => StructField(s"i$i", IntegerType)).toArray)
+    val inputInner = Row.fromSeq((1 to M).map(i => i + 0.5))
+    val outputInner = Row.fromSeq((1 to M))
+    val fromOuter = new StructType(
+      (1 to M).map(i => StructField(s"s$i", fromInner)).toArray)
+    val toOuter = new StructType(
+      (1 to M).map(i => StructField(s"s$i", toInner)).toArray)
+    val inputOuter = Row.fromSeq((1 to M).map(_ => inputInner))
+    val outputOuter = Row.fromSeq((1 to M).map(_ => outputInner))
+    checkEvaluation(cast(Literal.create(inputOuter, fromOuter), toOuter), outputOuter)
   }
 }
