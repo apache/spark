@@ -95,11 +95,11 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
       s"$putLong(buf, ${offset + i * 8}, $bits);\n"
     }
 
-    val functions = mutable.ArrayBuffer.empty[String]
-    val args = "java.lang.Object obj1, long offset1, java.lang.Object obj2, long offset2"
-    val copyBitsets = ctx.splitExpressions(copyBitset, "copyBitsetFunc",
-      ("java.lang.Object", "obj1") :: ("long", "offset1") ::
-      ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
+    val copyBitsets = ctx.splitExpressions(
+      expressions = copyBitset,
+      funcName = "copyBitsetFunc",
+      arguments = ("java.lang.Object", "obj1") :: ("long", "offset1") ::
+                  ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
     var cursor = offset + outputBitsetWords * 8
@@ -160,14 +160,14 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
             s"(${(outputBitsetWords - bitset2Words + schema1.size) * 8}L + numBytesVariableRow1)"
           }
         val cursor = offset + outputBitsetWords * 8 + i * 8
-        s"""
-           |$putLong(buf, $cursor, $getLong(buf, $cursor) + ($shift << 32));
-         """.stripMargin
+        s"$putLong(buf, $cursor, $getLong(buf, $cursor) + ($shift << 32));\n"
       }
     }
 
-    val updateOffsets = ctx.splitExpressions(updateOffset, "copyBitsetFunc",
-      ("long", "numBytesVariableRow1") :: Nil)
+    val updateOffsets = ctx.splitExpressions(
+      expressions = updateOffset,
+      funcName = "copyBitsetFunc",
+      arguments = ("long", "numBytesVariableRow1") :: Nil)
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val codeBody = s"""
