@@ -235,7 +235,7 @@ case class Elt(children: Seq[Expression])
       """
     }
 
-    val cases = ctx.groupCodes(assignStringValue)
+    val cases = ctx.buildCodeBlocks(assignStringValue)
     val codes = if (cases.length == 1) {
       s"""
         UTF8String $stringVal = null;
