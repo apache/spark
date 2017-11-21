@@ -2198,16 +2198,9 @@ def udf(f=None, returnType=StringType()):
         duplicate invocations may be eliminated or the function may even be invoked more times than
         it is present in the query.
 
-    .. note:: The user-defined functions do not support conditional execution by using them with
-        SQL conditional expressions such as `when` or `if`. The functions still apply on all rows no
-        matter the conditions are met or not. So the output is correct if the functions can be
-        correctly run on all rows without failure. If the functions can cause runtime failure on the
-        rows that do not satisfy the conditions, the suggested workaround is to incorporate the
-        condition logic into the functions.
-
-    .. note:: Users can't rely on short-curcuit evaluation of boolean expressions to execute
-        conditionally user-defined functions too. For example, the two functions in an expression
-        like udf1(x) && udf2(y) will be both executed on all rows.
+    .. note:: The user-defined functions do not support conditional expressions or short curcuiting
+        in boolean expressions and it ends up with being executed all internally. If the functions
+        can fail on special rows, the workaround is to incorporate the condition into the functions.
 
     :param f: python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
