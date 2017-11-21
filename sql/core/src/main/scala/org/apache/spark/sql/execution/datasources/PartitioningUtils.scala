@@ -310,7 +310,7 @@ object PartitioningUtils {
 
   /**
    * Resolves possible type conflicts between partitions by up-casting "lower" types using
-   * [[TypeCoercion.findWiderCommonType]]. See [[TypeCoercion.findWiderTypeForTwo]].
+   * [[findWiderTypeForPartitionColumn]].
    */
   def resolvePartitions(
       pathsWithPartitionValues: Seq[(Path, PartitionValues)],
@@ -367,11 +367,28 @@ object PartitioningUtils {
       suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
   }
 
+  // scalastyle:off line.size.limit
   /**
    * Converts a string to a [[Literal]] with automatic type inference. Currently only supports
    * [[NullType]], [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType]], [[DateType]]
    * [[TimestampType]], and [[StringType]].
+   *
+   * When resolving conflicts, it follows the table below:
+   *
+   * +-----------------+-----------------+-----------------+-----------------+-----------------+----------+-------------+-------------+----------+
+   * |InputA \ InputB  |NullType         |IntegerType      |LongType         |DecimalType(38,0)|DoubleType|DateType     |TimestampType|StringType|
+   * +-----------------+-----------------+-----------------+-----------------+-----------------+----------+-------------+-------------+----------+
+   * |NullType         |NullType         |IntegerType      |LongType         |DecimalType(38,0)|DoubleType|DateType     |TimestampType|StringType|
+   * |IntegerType      |IntegerType      |IntegerType      |LongType         |DecimalType(38,0)|DoubleType|StringType   |StringType   |StringType|
+   * |LongType         |LongType         |LongType         |LongType         |DecimalType(38,0)|StringType|StringType   |StringType   |StringType|
+   * |DecimalType(38,0)|DecimalType(38,0)|DecimalType(38,0)|DecimalType(38,0)|DecimalType(38,0)|StringType|StringType   |StringType   |StringType|
+   * |DoubleType       |DoubleType       |DoubleType       |StringType       |StringType       |DoubleType|StringType   |StringType   |StringType|
+   * |DateType         |DateType         |StringType       |StringType       |StringType       |StringType|DateType     |TimestampType|StringType|
+   * |TimestampType    |TimestampType    |StringType       |StringType       |StringType       |StringType|TimestampType|TimestampType|StringType|
+   * |StringType       |StringType       |StringType       |StringType       |StringType       |StringType|StringType   |StringType   |StringType|
+   * +-----------------+-----------------+-----------------+-----------------+-----------------+----------+-------------+-------------+----------+
    */
+  // scalastyle:on line.size.limit
   private[datasources] def inferPartitionColumnValue(
       raw: String,
       typeInference: Boolean,
@@ -461,19 +478,25 @@ object PartitioningUtils {
 
   /**
    * Given a collection of [[Literal]]s, resolves possible type conflicts by
-   * [[TypeCoercion.findWiderCommonType]]. See [[TypeCoercion.findWiderTypeForTwo]].
+   * [[findWiderTypeForPartitionColumn]].
    */
   private def resolveTypeConflicts(literals: Seq[Literal], timeZone: TimeZone): Seq[Literal] = {
-    // Falls back to string if all values of this column are null, or the common type could
-    // not be found.
-    val desiredType = TypeCoercion.findWiderCommonType(literals.map(_.dataType)) match {
-      case Some(NullType) => StringType
-      case Some(dt: DataType) => dt
-      case _ => StringType
-    }
+    val litTypes = literals.map(_.dataType)
+    val desiredType = litTypes.fold[DataType](NullType)(findWiderTypeForPartitionColumn)
 
     literals.map { case l @ Literal(_, dataType) =>
       Literal.create(Cast(l, desiredType, Some(timeZone.getID)).eval(), desiredType)
     }
+  }
+
+  /**
+   * Type widening rule for partition column types. It is similar to
+   * [[TypeCoercion.findWiderTypeForTwo]] but the main difference is that here we disallow
+   * precision loss when widening double/long and decimal, and fall back to string.
+   */
+  private val findWiderTypeForPartitionColumn: (DataType, DataType) => DataType = {
+    case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) => StringType
+    case (DoubleType, LongType) | (LongType, DoubleType) => StringType
+    case (t1, t2) => TypeCoercion.findWiderTypeForTwo(t1, t2).getOrElse(StringType)
   }
 }

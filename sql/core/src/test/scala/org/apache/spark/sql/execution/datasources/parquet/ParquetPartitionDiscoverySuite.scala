@@ -319,7 +319,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       PartitionSpec(
         StructType(Seq(
           StructField("a", DoubleType),
-          StructField("b", StringType))),
+          StructField("b", NullType))),
         Seq(
           Partition(InternalRow(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
           Partition(InternalRow(10.5, null),
@@ -426,7 +426,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       PartitionSpec(
         StructType(Seq(
           StructField("a", StringType),
-          StructField("b", StringType))),
+          StructField("b", NullType))),
         Seq(
           Partition(InternalRow(UTF8String.fromString("10"), null),
             s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
