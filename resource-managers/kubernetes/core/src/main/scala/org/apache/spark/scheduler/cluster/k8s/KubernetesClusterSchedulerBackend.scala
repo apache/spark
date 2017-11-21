@@ -330,7 +330,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
           if (!disconnectedPodsByExecutorIdPendingRemoval.containsKey(executorId)) {
             log.warn(s"Executor with id $executorId was not marked as disconnected, but the" +
               s" watch received an event of type $action for this executor. The executor may" +
-              s" have failed to start in the first place and never registered with the driver.")
+              " have failed to start in the first place and never registered with the driver.")
           }
           disconnectedPodsByExecutorIdPendingRemoval.put(executorId, pod)
 
@@ -354,7 +354,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     private def getExecutorExitStatus(containerStatus: ContainerStatus): Int = {
       Option(containerStatus.getState).map { containerState =>
-        Option(containerState.getTerminated).map {containerStateTerminated =>
+        Option(containerState.getTerminated).map { containerStateTerminated =>
           containerStateTerminated.getExitCode.intValue()
         }.getOrElse(UNKNOWN_EXIT_CODE)
       }.getOrElse(UNKNOWN_EXIT_CODE)
@@ -403,8 +403,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   private class KubernetesDriverEndpoint(
-    rpcEnv: RpcEnv,
-    sparkProperties: Seq[(String, String)])
+      rpcEnv: RpcEnv,
+      sparkProperties: Seq[(String, String)])
     extends DriverEndpoint(rpcEnv, sparkProperties) {
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
@@ -427,4 +427,3 @@ private object KubernetesClusterSchedulerBackend {
   // and assume the executor failed for good, and attribute it to a framework fault.
   val MAX_EXECUTOR_LOST_REASON_CHECKS = 10
 }
-

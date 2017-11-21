@@ -61,7 +61,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
   require(
     !executorLabels.contains(SPARK_EXECUTOR_ID_LABEL),
     s"Custom executor labels cannot contain $SPARK_EXECUTOR_ID_LABEL as it is reserved for" +
-      s" Spark.")
+      " Spark.")
   require(
     !executorLabels.contains(SPARK_ROLE_LABEL),
     s"Custom executor labels cannot contain $SPARK_ROLE_LABEL as it is reserved for Spark.")
@@ -172,7 +172,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
       }
 
     val executorContainer = new ContainerBuilder()
-      .withName(s"executor")
+      .withName("executor")
       .withImage(executorDockerImage)
       .withImagePullPolicy(dockerImagePullPolicy)
       .withNewResources()

@@ -39,8 +39,7 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{Register
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.ThreadUtils
 
-class KubernetesClusterSchedulerBackendSuite
-    extends SparkFunSuite with BeforeAndAfter {
+class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val APP_ID = "test-spark-app"
   private val DRIVER_POD_NAME = "spark-driver-pod"
@@ -49,7 +48,7 @@ class KubernetesClusterSchedulerBackendSuite
   private val SPARK_DRIVER_PORT = 7077
   private val POD_ALLOCATION_INTERVAL = 60L
   private val DRIVER_URL = RpcEndpointAddress(
-      SPARK_DRIVER_HOST, SPARK_DRIVER_PORT, CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+    SPARK_DRIVER_HOST, SPARK_DRIVER_PORT, CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
   private val FIRST_EXECUTOR_POD = new PodBuilder()
     .withNewMetadata()
       .withName("pod1")
@@ -75,9 +74,9 @@ class KubernetesClusterSchedulerBackendSuite
 
   private type PODS = MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
   private type LABELED_PODS = FilterWatchListDeletable[
-      Pod, PodList, java.lang.Boolean, Watch, Watcher[Pod]]
+    Pod, PodList, java.lang.Boolean, Watch, Watcher[Pod]]
   private type IN_NAMESPACE_PODS = NonNamespaceOperation[
-      Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
+    Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
 
   @Mock
   private var sparkContext: SparkContext = _

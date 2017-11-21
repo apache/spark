@@ -16,34 +16,35 @@
  */
 package org.apache.spark.deploy.k8s
 
-package object constants {
+private[spark] object constants {
+
   // Labels
-  private[spark] val SPARK_APP_ID_LABEL = "spark-app-selector"
-  private[spark] val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
-  private[spark] val SPARK_ROLE_LABEL = "spark-role"
-  private[spark] val SPARK_POD_DRIVER_ROLE = "driver"
-  private[spark] val SPARK_POD_EXECUTOR_ROLE = "executor"
+  val SPARK_APP_ID_LABEL = "spark-app-selector"
+  val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
+  val SPARK_ROLE_LABEL = "spark-role"
+  val SPARK_POD_DRIVER_ROLE = "driver"
+  val SPARK_POD_EXECUTOR_ROLE = "executor"
 
   // Default and fixed ports
-  private[spark] val DEFAULT_DRIVER_PORT = 7078
-  private[spark] val DEFAULT_BLOCKMANAGER_PORT = 7079
-  private[spark] val BLOCK_MANAGER_PORT_NAME = "blockmanager"
-  private[spark] val EXECUTOR_PORT_NAME = "executor"
+  val DEFAULT_DRIVER_PORT = 7078
+  val DEFAULT_BLOCKMANAGER_PORT = 7079
+  val BLOCK_MANAGER_PORT_NAME = "blockmanager"
+  val EXECUTOR_PORT_NAME = "executor"
 
   // Environment Variables
-  private[spark] val ENV_EXECUTOR_PORT = "SPARK_EXECUTOR_PORT"
-  private[spark] val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
-  private[spark] val ENV_EXECUTOR_CORES = "SPARK_EXECUTOR_CORES"
-  private[spark] val ENV_EXECUTOR_MEMORY = "SPARK_EXECUTOR_MEMORY"
-  private[spark] val ENV_APPLICATION_ID = "SPARK_APPLICATION_ID"
-  private[spark] val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
-  private[spark] val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
-  private[spark] val ENV_EXECUTOR_EXTRA_CLASSPATH = "SPARK_EXECUTOR_EXTRA_CLASSPATH"
-  private[spark] val ENV_MOUNTED_CLASSPATH = "SPARK_MOUNTED_CLASSPATH"
-  private[spark] val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
+  val ENV_EXECUTOR_PORT = "SPARK_EXECUTOR_PORT"
+  val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
+  val ENV_EXECUTOR_CORES = "SPARK_EXECUTOR_CORES"
+  val ENV_EXECUTOR_MEMORY = "SPARK_EXECUTOR_MEMORY"
+  val ENV_APPLICATION_ID = "SPARK_APPLICATION_ID"
+  val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
+  val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
+  val ENV_EXECUTOR_EXTRA_CLASSPATH = "SPARK_EXECUTOR_EXTRA_CLASSPATH"
+  val ENV_MOUNTED_CLASSPATH = "SPARK_MOUNTED_CLASSPATH"
+  val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
 
   // Miscellaneous
-  private[spark] val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
-  private[spark] val MEMORY_OVERHEAD_FACTOR = 0.10
-  private[spark] val MEMORY_OVERHEAD_MIN_MIB = 384L
+  val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
+  val MEMORY_OVERHEAD_FACTOR = 0.10
+  val MEMORY_OVERHEAD_MIN_MIB = 384L
 }
