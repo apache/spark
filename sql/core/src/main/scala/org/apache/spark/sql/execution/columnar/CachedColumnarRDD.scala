@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -29,12 +30,18 @@ import org.apache.spark.storage.{RDDPartitionMetadataBlockId, StorageLevel}
 private[columnar] class CachedColumnarRDD(
     @transient private var _sc: SparkContext,
     private var dataRDD: RDD[CachedBatch],
-    containsPartitionMetadata: Boolean,
+    private[columnar] val containsPartitionMetadata: Boolean,
     expectedStorageLevel: StorageLevel)
   extends RDD[CachedBatch](_sc, Seq(new OneToOneDependency(dataRDD))) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[CachedBatch] = {
     firstParent.iterator(split, context)
+  }
+
+  override def unpersist(blocking: Boolean = true): Unit = {
+    super.unpersist(blocking)
+    CachedColumnarRDD.allMetadataFetched.remove(id)
+    CachedColumnarRDD.rddIdToMetadata.remove(id)
   }
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
@@ -62,17 +69,33 @@ private[columnar] class CachedColumnarRDD(
 
 private[columnar] object CachedColumnarRDD {
 
-  private val rddIdToMetadata = new ConcurrentHashMap[Int, Seq[InternalRow]]()
+  private val rddIdToMetadata = new ConcurrentHashMap[Int, mutable.ArraySeq[Option[InternalRow]]]()
+  private val allMetadataFetched = new ConcurrentHashMap[Int, Boolean]()
 
-  def collectStats(rdd: RDD[CachedBatch]): Unit = {
-    val metadataBlocks = rdd.partitions.indices.map {
-      partitionId => SparkEnv.get.blockManager.getSingle[InternalRow](
-        RDDPartitionMetadataBlockId(rdd.id, partitionId)).get
+  def collectStats(rdd: RDD[CachedBatch]): IndexedSeq[Option[InternalRow]] = {
+    if (allMetadataFetched.contains(rdd.id)) {
+      rddIdToMetadata.get(rdd.id)
+    } else {
+      val updatedMetadataBlocks = rdd.partitions.indices.map {
+        partitionId => {
+          if (!rddIdToMetadata.contains(rdd.id)) {
+            rddIdToMetadata.put(rdd.id, new mutable.ArraySeq[Option[InternalRow]](
+              rdd.partitions.length))
+          }
+          rddIdToMetadata.get(rdd.id)(partitionId).orElse{
+            val metadata = SparkEnv.get.blockManager.getSingle[InternalRow](
+              RDDPartitionMetadataBlockId(rdd.id, partitionId))
+            rddIdToMetadata.get(rdd.id).update(partitionId, metadata)
+            metadata
+          }
+        }
+      }
+      if (updatedMetadataBlocks.forall(_.isDefined)) {
+        allMetadataFetched.put(rdd.id, true)
+      }
+      updatedMetadataBlocks
     }
-    rddIdToMetadata.put(rdd.id, metadataBlocks)
   }
-
-  def fetchMetadataForRDD(rddId: Int): Option[Seq[InternalRow]] = rddIdToMetadata.asScala.get(rddId)
 }
 
 private[columnar] class CachedColumnarIterator(

@@ -147,9 +147,6 @@ case class InMemoryRelation(
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
     buildBuffers()
-    if (usePartitionLevelMetadata) {
-      CachedColumnarRDD.collectStats(_cachedColumnBuffers)
-    }
   }
 
   private def buildBuffers(): Unit = {

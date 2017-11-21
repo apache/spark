@@ -229,18 +229,16 @@ case class InMemoryTableScanExec(
     val schema = relation.partitionStatistics.schema
     val buffers = relation.cachedColumnBuffers
 
-    val metadataOfValidPartitions = CachedColumnarRDD.fetchMetadataForRDD(buffers.id).map {
-      metadata =>
-        metadata.zipWithIndex.
-          filter { case (m, partitionIndex) =>
-            val partitionFilter = newPredicate(
-              partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-              schema)
-            partitionFilter.initialize(partitionIndex)
-            partitionFilter.eval(m)
-          }.map(_._2)
-    }.getOrElse(buffers.partitions.indices)
-
+    val metadataOfValidPartitions = CachedColumnarRDD.collectStats(buffers).zipWithIndex.filter {
+      case (partitionStatsOpt, partitionIndex) =>
+        partitionStatsOpt.forall { partitionStats =>
+          val partitionFilter = newPredicate(
+            partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+            schema)
+          partitionFilter.initialize(partitionIndex)
+          partitionFilter.eval(partitionStats)
+        }
+    }.map(_._2)
     new FilteredCachedColumnarRDD(buffers.sparkContext, buffers.asInstanceOf[CachedColumnarRDD],
       buildFilteredRDDPartitions(metadataOfValidPartitions))
   }
