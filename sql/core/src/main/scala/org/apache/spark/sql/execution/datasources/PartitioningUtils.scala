@@ -375,18 +375,18 @@ object PartitioningUtils {
    *
    * When resolving conflicts, it follows the table below:
    *
-   * +-----------------+-----------------+-----------------+-----------------+-----------------+----------+-------------+-------------+----------+
-   * |InputA \ InputB  |NullType         |IntegerType      |LongType         |DecimalType(38,0)|DoubleType|DateType     |TimestampType|StringType|
-   * +-----------------+-----------------+-----------------+-----------------+-----------------+----------+-------------+-------------+----------+
-   * |NullType         |NullType         |IntegerType      |LongType         |DecimalType(38,0)|DoubleType|DateType     |TimestampType|StringType|
-   * |IntegerType      |IntegerType      |IntegerType      |LongType         |DecimalType(38,0)|DoubleType|StringType   |StringType   |StringType|
-   * |LongType         |LongType         |LongType         |LongType         |DecimalType(38,0)|StringType|StringType   |StringType   |StringType|
-   * |DecimalType(38,0)|DecimalType(38,0)|DecimalType(38,0)|DecimalType(38,0)|DecimalType(38,0)|StringType|StringType   |StringType   |StringType|
-   * |DoubleType       |DoubleType       |DoubleType       |StringType       |StringType       |DoubleType|StringType   |StringType   |StringType|
-   * |DateType         |DateType         |StringType       |StringType       |StringType       |StringType|DateType     |TimestampType|StringType|
-   * |TimestampType    |TimestampType    |StringType       |StringType       |StringType       |StringType|TimestampType|TimestampType|StringType|
-   * |StringType       |StringType       |StringType       |StringType       |StringType       |StringType|StringType   |StringType   |StringType|
-   * +-----------------+-----------------+-----------------+-----------------+-----------------+----------+-------------+-------------+----------+
+   * +-------------------+-------------------+-------------------+-------------------+-------------------+------------+---------------+---------------+------------+
+   * | InputA \ InputB   | NullType          | IntegerType       | LongType          | DecimalType(38,0) | DoubleType | DateType      | TimestampType | StringType |
+   * +-------------------+-------------------+-------------------+-------------------+-------------------+------------+---------------+---------------+------------+
+   * | NullType          | NullType          | IntegerType       | LongType          | DecimalType(38,0) | DoubleType | DateType      | TimestampType | StringType |
+   * | IntegerType       | IntegerType       | IntegerType       | LongType          | DecimalType(38,0) | DoubleType | StringType    | StringType    | StringType |
+   * | LongType          | LongType          | LongType          | LongType          | DecimalType(38,0) | StringType | StringType    | StringType    | StringType |
+   * | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | StringType | StringType    | StringType    | StringType |
+   * | DoubleType        | DoubleType        | DoubleType        | StringType        | StringType        | DoubleType | StringType    | StringType    | StringType |
+   * | DateType          | DateType          | StringType        | StringType        | StringType        | StringType | DateType      | TimestampType | StringType |
+   * | TimestampType     | TimestampType     | StringType        | StringType        | StringType        | StringType | TimestampType | TimestampType | StringType |
+   * | StringType        | StringType        | StringType        | StringType        | StringType        | StringType | StringType    | StringType    | StringType |
+   * +-------------------+-------------------+-------------------+-------------------+-------------------+------------+---------------+---------------+------------+
    */
   // scalastyle:on line.size.limit
   private[datasources] def inferPartitionColumnValue(
@@ -482,7 +482,7 @@ object PartitioningUtils {
    */
   private def resolveTypeConflicts(literals: Seq[Literal], timeZone: TimeZone): Seq[Literal] = {
     val litTypes = literals.map(_.dataType)
-    val desiredType = litTypes.fold[DataType](NullType)(findWiderTypeForPartitionColumn)
+    val desiredType = litTypes.reduce(findWiderTypeForPartitionColumn)
 
     literals.map { case l @ Literal(_, dataType) =>
       Literal.create(Cast(l, desiredType, Some(timeZone.getID)).eval(), desiredType)
