@@ -39,9 +39,9 @@ private[columnar] class CachedColumnarRDD(
   }
 
   override def unpersist(blocking: Boolean = true): this.type = {
-    super.unpersist(blocking)
     CachedColumnarRDD.allMetadataFetched.remove(id)
     CachedColumnarRDD.rddIdToMetadata.remove(id)
+    super.unpersist(blocking)
   }
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
