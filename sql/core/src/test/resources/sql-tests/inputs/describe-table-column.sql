@@ -44,9 +44,6 @@ ANALYZE TABLE desc_col_table COMPUTE STATISTICS FOR COLUMNS key;
 
 DESC EXTENDED desc_col_table key;
 
-SET spark.sql.statistics.histogram.enabled=false;
-SET spark.sql.statistics.histogram.numBins=256;
-
 DROP VIEW desc_col_temp_view;
 
 DROP TABLE desc_col_table;
