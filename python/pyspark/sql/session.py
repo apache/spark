@@ -324,11 +324,12 @@ class SparkSession(object):
 
         return DataFrame(jdf, self._wrapped)
 
-    def _inferSchemaFromList(self, data):
+    def _inferSchemaFromList(self, data, names=None):
         """
         Infer schema from list of Row or tuple.
 
         :param data: list of Row or tuple
+        :param names: list of column names
         :return: :class:`pyspark.sql.types.StructType`
         """
         if not data:
@@ -337,7 +338,7 @@ class SparkSession(object):
         if type(first) is dict:
             warnings.warn("inferring schema from dict is deprecated,"
                           "please use pyspark.sql.Row instead")
-        schema = reduce(_merge_type, map(_infer_schema, data))
+        schema = reduce(_merge_type, [_infer_schema(row, names) for row in data])
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
         return schema
@@ -405,7 +406,7 @@ class SparkSession(object):
             data = list(data)
 
         if schema is None or isinstance(schema, (list, tuple)):
-            struct = self._inferSchemaFromList(data)
+            struct = self._inferSchemaFromList(data, names=schema)
             converter = _create_converter(struct)
             data = map(converter, data)
             if isinstance(schema, (list, tuple)):

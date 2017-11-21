@@ -1072,7 +1072,7 @@ def _infer_type(obj):
             raise TypeError("not supported type: %s" % type(obj))
 
 
-def _infer_schema(row):
+def _infer_schema(row, names=None):
     """Infer the schema from dict/namedtuple/object"""
     if isinstance(row, dict):
         items = sorted(row.items())
@@ -1083,7 +1083,8 @@ def _infer_schema(row):
         elif hasattr(row, "_fields"):  # namedtuple
             items = zip(row._fields, tuple(row))
         else:
-            names = ['_%d' % i for i in range(1, len(row) + 1)]
+            if names is None:
+                names = ['_%d' % i for i in range(1, len(row) + 1)]
             items = zip(names, row)
 
     elif hasattr(row, "__dict__"):  # object
@@ -1108,19 +1109,22 @@ def _has_nulltype(dt):
         return isinstance(dt, NullType)
 
 
-def _merge_type(a, b):
+def _merge_type(a, b, name=None):
     if isinstance(a, NullType):
         return b
     elif isinstance(b, NullType):
         return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
-        raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
+        if name is not None:
+            raise TypeError("Can not merge type %s and %s in column %s" % (type(a), type(b), name))
+        else:
+            raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
 
     # same type
     if isinstance(a, StructType):
         nfs = dict((f.name, f.dataType) for f in b.fields)
-        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType())))
+        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType()), f.name))
                   for f in a.fields]
         names = set([f.name for f in fields])
         for n in nfs:
