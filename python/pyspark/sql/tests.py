@@ -2587,6 +2587,7 @@ class SQLTests(ReusedSQLTestCase):
 
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas(self):
+        import numpy as np
         pdf = self._to_pandas()
         types = pdf.dtypes
         self.assertEquals(types[0], np.int32)
