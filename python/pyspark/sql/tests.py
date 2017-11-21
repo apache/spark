@@ -49,9 +49,14 @@ else:
     import unittest
 
 _have_pandas = False
+_have_old_pandas = False
 try:
     import pandas
-    _have_pandas = True
+    try:
+        import pandas.api
+        _have_pandas = True
+    except:
+        _have_old_pandas = True
 except:
     # No Pandas, but that's okay, we'll skip those tests
     pass
@@ -2565,8 +2570,7 @@ class SQLTests(ReusedSQLTestCase):
             .mode("overwrite").saveAsTable("pyspark_bucket"))
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
-    @unittest.skipIf(not _have_pandas, "Pandas not installed")
-    def test_to_pandas(self):
+    def _to_pandas(self):
         from datetime import datetime, date
         import numpy as np
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
@@ -2579,13 +2583,24 @@ class SQLTests(ReusedSQLTestCase):
             (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4)),
         ]
         df = self.spark.createDataFrame(data, schema)
-        types = df.toPandas().dtypes
+        return df.toPandas()
+
+    @unittest.skipIf(not _have_pandas, "Pandas not installed")
+    def test_to_pandas(self):
+        pdf = self._to_pandas()
+        types = pdf.dtypes
         self.assertEquals(types[0], np.int32)
         self.assertEquals(types[1], np.object)
         self.assertEquals(types[2], np.bool)
         self.assertEquals(types[3], np.float32)
         self.assertEquals(types[4], 'datetime64[ns]')
         self.assertEquals(types[5], 'datetime64[ns]')
+
+    @unittest.skipIf(not _have_old_pandas, "Old Pandas not installed")
+    def test_to_pandas_old(self):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(ImportError, 'Pandas \(.*\) must be installed'):
+                self._to_pandas()
 
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas_avoid_astype(self):
@@ -2619,6 +2634,16 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
+
+    @unittest.skipIf(not _have_old_pandas, "Old Pandas not installed")
+    def test_create_dataframe_from_old_pandas(self):
+        import pandas as pd
+        from datetime import datetime
+        pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
+                            "d": [pd.Timestamp.now().date()]})
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(ImportError, 'Pandas \(.*\) must be installed'):
+                self.spark.createDataFrame(pdf)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
@@ -3109,7 +3134,7 @@ class DataTypeVerificationTests(unittest.TestCase):
                 _make_type_verifier(data_type, nullable=False)(obj)
 
 
-@unittest.skipIf(not _have_arrow, "Arrow not installed")
+@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class ArrowTests(ReusedSQLTestCase):
 
     @classmethod
