@@ -74,8 +74,10 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       """
     }
     val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-      ctx.splitExpressions(inputs, "valueConcat",
-        ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
+      ctx.splitExpressions(
+        expressions = inputs,
+        funcName = "valueConcat",
+        arguments = ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
     } else {
       inputs.mkString("\n")
     }
@@ -155,8 +157,10 @@ case class ConcatWs(children: Seq[Expression])
         }
       }
       val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-        ctx.splitExpressions(inputs, "valueConcatWs",
-          ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
+        ctx.splitExpressions(
+          expressions = inputs,
+          funcName = "valueConcatWs",
+          arguments = ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
       } else {
         inputs.mkString("\n")
       }
@@ -205,27 +209,30 @@ case class ConcatWs(children: Seq[Expression])
       }.unzip
 
       val codes = ctx.splitExpressions(ctx.INPUT_ROW, evals.map(_.code))
-      val varargCounts = ctx.splitExpressions(varargCount, "varargCountsConcatWs",
-        ("InternalRow", ctx.INPUT_ROW) :: Nil,
-        "int",
-        { body =>
+      val varargCounts = ctx.splitExpressions(
+        expressions = varargCount,
+        funcName = "varargCountsConcatWs",
+        arguments = ("InternalRow", ctx.INPUT_ROW) :: Nil,
+        returnType = "int",
+        makeSplitFunction = body =>
           s"""
            int $varargNum = 0;
            $body
            return $varargNum;
-         """
-        },
-        _.mkString(s"$varargNum += ", s";\n$varargNum += ", ";"))
-      val varargBuilds = ctx.splitExpressions(varargBuild, "varargBuildsConcatWs",
-        ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
-        "int",
-        { body =>
+           """,
+        foldFunctions = _.mkString(s"$varargNum += ", s";\n$varargNum += ", ";"))
+      val varargBuilds = ctx.splitExpressions(
+        expressions = varargBuild,
+        funcName = "varargBuildsConcatWs",
+        arguments =
+          ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
+        returnType = "int",
+        makeSplitFunction = body =>
           s"""
            $body
            return $idxInVararg;
-         """
-        },
-        _.mkString(s"$idxInVararg = ", s";\n$idxInVararg = ", ";"))
+           """,
+        foldFunctions = _.mkString(s"$idxInVararg = ", s";\n$idxInVararg = ", ";"))
       ev.copy(
         s"""
         $codes
@@ -2029,7 +2036,7 @@ case class FormatNumber(x: Expression, d: Expression)
       val numberFormat = ctx.freshName("numberFormat")
       val i = ctx.freshName("i")
       val dFormat = ctx.freshName("dFormat")
-      ctx.addMutableState("int", lastDValue, s"$lastDValue = -100;")
+      ctx.addMutableState(ctx.JAVA_INT, lastDValue, s"$lastDValue = -100;")
       ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
       ctx.addMutableState(df, numberFormat,
       s"""$numberFormat = new $df("", new $dfs($l.$usLocale));""")
