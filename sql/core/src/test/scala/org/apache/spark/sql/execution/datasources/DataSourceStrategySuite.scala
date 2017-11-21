@@ -18,12 +18,10 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSQLContext
-
 
 class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
 
@@ -31,277 +29,203 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
     val attrInt = 'cint.int
     val attrStr = 'cstr.string
 
-    assertResult(Some(sources.EqualTo("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.EqualTo(attrInt, 1))
-    }
-    assertResult(Some(sources.EqualTo("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.EqualTo(1, attrInt))
-    }
+    testTranslateFilter(EqualTo(attrInt, 1), Some(sources.EqualTo("cint", 1)))
+    testTranslateFilter(EqualTo(1, attrInt), Some(sources.EqualTo("cint", 1)))
 
-    assertResult(Some(sources.EqualNullSafe("cstr", null))) {
-      DataSourceStrategy.translateFilter(
-        expressions.EqualNullSafe(attrStr, Literal(null)))
-    }
-    assertResult(Some(sources.EqualNullSafe("cstr", null))) {
-      DataSourceStrategy.translateFilter(
-        expressions.EqualNullSafe(Literal(null), attrStr))
-    }
+    testTranslateFilter(EqualNullSafe(attrStr, Literal(null)),
+      Some(sources.EqualNullSafe("cstr", null)))
+    testTranslateFilter(EqualNullSafe(Literal(null), attrStr),
+      Some(sources.EqualNullSafe("cstr", null)))
 
-    assertResult(Some(sources.GreaterThan("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.GreaterThan(attrInt, 1))
-    }
-    assertResult(Some(sources.GreaterThan("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.LessThan(1, attrInt))
-    }
+    testTranslateFilter(GreaterThan(attrInt, 1), Some(sources.GreaterThan("cint", 1)))
+    testTranslateFilter(GreaterThan(1, attrInt), Some(sources.LessThan("cint", 1)))
 
-    assertResult(Some(sources.LessThan("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.LessThan(attrInt, 1))
-    }
-    assertResult(Some(sources.LessThan("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.GreaterThan(1, attrInt))
-    }
+    testTranslateFilter(LessThan(attrInt, 1), Some(sources.LessThan("cint", 1)))
+    testTranslateFilter(LessThan(1, attrInt), Some(sources.GreaterThan("cint", 1)))
 
-    assertResult(Some(sources.GreaterThanOrEqual("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.GreaterThanOrEqual(attrInt, 1))
-    }
-    assertResult(Some(sources.GreaterThanOrEqual("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.LessThanOrEqual(1, attrInt))
-    }
+    testTranslateFilter(GreaterThanOrEqual(attrInt, 1), Some(sources.GreaterThanOrEqual("cint", 1)))
+    testTranslateFilter(GreaterThanOrEqual(1, attrInt), Some(sources.LessThanOrEqual("cint", 1)))
 
-    assertResult(Some(sources.LessThanOrEqual("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.LessThanOrEqual(attrInt, 1))
-    }
-    assertResult(Some(sources.LessThanOrEqual("cint", 1))) {
-      DataSourceStrategy.translateFilter(
-        expressions.GreaterThanOrEqual(1, attrInt))
-    }
+    testTranslateFilter(LessThanOrEqual(attrInt, 1), Some(sources.LessThanOrEqual("cint", 1)))
+    testTranslateFilter(LessThanOrEqual(1, attrInt), Some(sources.GreaterThanOrEqual("cint", 1)))
 
-    assertResult(Some(sources.In("cint", Array(1, 2, 3)))) {
-      DataSourceStrategy.translateFilter(
-        expressions.InSet(attrInt, Set(1, 2, 3)))
-    }
+    testTranslateFilter(InSet(attrInt, Set(1, 2, 3)), Some(sources.In("cint", Array(1, 2, 3))))
 
-    assertResult(Some(sources.In("cint", Array(1, 2, 3)))) {
-      DataSourceStrategy.translateFilter(
-        expressions.In(attrInt, Seq(1, 2, 3)))
-    }
+    testTranslateFilter(In(attrInt, Seq(1, 2, 3)), Some(sources.In("cint", Array(1, 2, 3))))
 
-    assertResult(Some(sources.IsNull("cint"))) {
-      DataSourceStrategy.translateFilter(
-        expressions.IsNull(attrInt))
-    }
-    assertResult(Some(sources.IsNotNull("cint"))) {
-      DataSourceStrategy.translateFilter(
-        expressions.IsNotNull(attrInt))
-    }
+    testTranslateFilter(IsNull(attrInt), Some(sources.IsNull("cint")))
+    testTranslateFilter(IsNotNull(attrInt), Some(sources.IsNotNull("cint")))
 
-    assertResult(Some(sources.And(
-      sources.GreaterThan("cint", 1),
-      sources.LessThan("cint", 10)))) {
-      DataSourceStrategy.translateFilter(expressions.And(
-        expressions.GreaterThan(attrInt, 1),
-        expressions.LessThan(attrInt, 10)
-      ))
-    }
+    // cint > 1 AND cint < 10
+    testTranslateFilter(And(
+      GreaterThan(attrInt, 1),
+      LessThan(attrInt, 10)),
+      Some(sources.And(
+        sources.GreaterThan("cint", 1),
+        sources.LessThan("cint", 10))))
 
-    assertResult(Some(sources.Or(
-      sources.GreaterThanOrEqual("cint", 8),
-      sources.LessThanOrEqual("cint", 2)))) {
-      DataSourceStrategy.translateFilter(expressions.Or(
-        expressions.GreaterThanOrEqual(attrInt, 8),
-        expressions.LessThanOrEqual(attrInt, 2)
-      ))
-    }
+    // cint >= 8 OR cint <= 2
+    testTranslateFilter(Or(
+      GreaterThanOrEqual(attrInt, 8),
+      LessThanOrEqual(attrInt, 2)),
+      Some(sources.Or(
+        sources.GreaterThanOrEqual("cint", 8),
+        sources.LessThanOrEqual("cint", 2))))
 
-    assertResult(Some(sources.Not(
-      sources.GreaterThanOrEqual("cint", 8)))) {
-      DataSourceStrategy.translateFilter(
-        expressions.Not(expressions.GreaterThanOrEqual(attrInt, 8)
-        ))
-    }
+    testTranslateFilter(Not(GreaterThanOrEqual(attrInt, 8)),
+      Some(sources.Not(sources.GreaterThanOrEqual("cint", 8))))
 
-    assertResult(Some(sources.StringStartsWith("cstr", "a"))) {
-      DataSourceStrategy.translateFilter(
-        expressions.StartsWith(attrStr, "a"
-        ))
-    }
+    testTranslateFilter(StartsWith(attrStr, "a"), Some(sources.StringStartsWith("cstr", "a")))
 
-    assertResult(Some(sources.StringEndsWith("cstr", "a"))) {
-      DataSourceStrategy.translateFilter(
-        expressions.EndsWith(attrStr, "a"
-        ))
-    }
+    testTranslateFilter(EndsWith(attrStr, "a"), Some(sources.StringEndsWith("cstr", "a")))
 
-    assertResult(Some(sources.StringContains("cstr", "a"))) {
-      DataSourceStrategy.translateFilter(
-        expressions.Contains(attrStr, "a"
-        ))
-    }
+    testTranslateFilter(Contains(attrStr, "a"), Some(sources.StringContains("cstr", "a")))
   }
 
   test("translate complex expression") {
     val attrInt = 'cint.int
-    // Functions such as 'Abs' are not supported
-    assertResult(None) {
-      DataSourceStrategy.translateFilter(
-        expressions.LessThanOrEqual(
-          expressions.Subtract(expressions.Abs(attrInt), 2), 1))
-    }
 
-    assertResult(Some(sources.Or(
-      sources.And(
-        sources.GreaterThan("cint", 1),
-        sources.LessThan("cint", 10)),
-      sources.And(
-        sources.GreaterThan("cint", 50),
-        sources.LessThan("cint", 100))))) {
-      DataSourceStrategy.translateFilter(expressions.Or(
-        expressions.And(
-          expressions.GreaterThan(attrInt, 1),
-          expressions.LessThan(attrInt, 10)
-        ),
-        expressions.And(
-          expressions.GreaterThan(attrInt, 50),
-          expressions.LessThan(attrInt, 100)
-        )
-      ))
-    }
+    // ABS(cint) - 2 = 1
+    testTranslateFilter(LessThanOrEqual(
+      // Expressions are not supported
+      // Functions such as 'Abs' are not supported
+      Subtract(Abs(attrInt), 2), 1), None)
+
+    // (cin1 > 1 AND cint < 10) OR (cint > 50 AND cint > 100)
+    testTranslateFilter(Or(
+      And(
+        GreaterThan(attrInt, 1),
+        LessThan(attrInt, 10)
+      ),
+      And(
+        GreaterThan(attrInt, 50),
+        LessThan(attrInt, 100))),
+      Some(sources.Or(
+        sources.And(
+          sources.GreaterThan("cint", 1),
+          sources.LessThan("cint", 10)),
+        sources.And(
+          sources.GreaterThan("cint", 50),
+          sources.LessThan("cint", 100)))))
+
     // SPARK-22548 Incorrect nested AND expression pushed down to JDBC data source
-    // Functions such as 'Abs' are not supported
-    assertResult(None) {
-      DataSourceStrategy.translateFilter(expressions.Or(
-        expressions.And(
-          expressions.GreaterThan(attrInt, 1),
-          expressions.LessThan(
-            expressions.Abs(attrInt), 10)
-        ),
-        expressions.And(
-          expressions.GreaterThan(attrInt, 50),
-          expressions.LessThan(attrInt, 100)
-        )
-      ))
-    }
-    // Functions such as 'Abs' are not supported
-    assertResult(None) {
-      DataSourceStrategy.translateFilter(
-        expressions.Not(expressions.And(
-          expressions.Or(
-            expressions.LessThanOrEqual(attrInt, 1),
-            expressions.GreaterThanOrEqual(
-              expressions.Abs(attrInt),
-              10)
-          ),
-          expressions.Or(
-            expressions.LessThanOrEqual(attrInt, 50),
-            expressions.GreaterThanOrEqual(attrInt, 100)
-          )
-        )))
-    }
+    // (cint > 1 AND ABS(cint) < 10) OR (cint < 50 AND cint > 100)
+    testTranslateFilter(Or(
+      And(
+        GreaterThan(attrInt, 1),
+        // Functions such as 'Abs' are not supported
+        LessThan(Abs(attrInt), 10)
+      ),
+      And(
+        GreaterThan(attrInt, 50),
+        LessThan(attrInt, 100))), None)
 
-    assertResult(Some(sources.Or(
-      sources.Or(
-        sources.EqualTo("cint", 1),
-        sources.EqualTo("cint", 10)),
-      sources.Or(
-        sources.GreaterThan("cint", 0),
-        sources.LessThan("cint", -10))))) {
-      DataSourceStrategy.translateFilter(expressions.Or(
-        expressions.Or(
-          expressions.EqualTo(attrInt, 1),
-          expressions.EqualTo(attrInt, 10)
-        ),
-        expressions.Or(
-          expressions.GreaterThan(attrInt, 0),
-          expressions.LessThan(attrInt, -10)
-        )
-      ))
-    }
-    // Functions such as 'Abs' are not supported
-    assertResult(None) {
-      DataSourceStrategy.translateFilter(expressions.Or(
-        expressions.Or(
-          expressions.EqualTo(attrInt, 1),
-          expressions.EqualTo(
-            expressions.Abs(attrInt), 10)
-        ),
-        expressions.Or(
-          expressions.GreaterThan(attrInt, 0),
-          expressions.LessThan(attrInt, -10)
-        )
-      ))
-    }
+    // NOT ((cint <= 1 OR ABS(cint) >= 10) AND (cint <= 50 OR cint >= 100))
+    testTranslateFilter(Not(And(
+      Or(
+        LessThanOrEqual(attrInt, 1),
+        // Functions such as 'Abs' are not supported
+        GreaterThanOrEqual(Abs(attrInt), 10)
+      ),
+      Or(
+        LessThanOrEqual(attrInt, 50),
+        GreaterThanOrEqual(attrInt, 100)))), None)
 
-    assertResult(Some(sources.And(
-      sources.And(
-        sources.GreaterThan("cint", 1),
-        sources.LessThan("cint", 10)),
-      sources.And(
-        sources.EqualTo("cint", 6),
-        sources.IsNotNull("cint"))))) {
-      DataSourceStrategy.translateFilter(expressions.And(
-        expressions.And(
-          expressions.GreaterThan(attrInt, 1),
-          expressions.LessThan(attrInt, 10)
-        ),
-        expressions.And(
-          expressions.EqualTo(attrInt, 6),
-          expressions.IsNotNull(attrInt)
-        )
-      ))
-    }
-    // Functions such as 'Abs' are not supported
-    assertResult(None) {
-      DataSourceStrategy.translateFilter(expressions.And(
-        expressions.And(
-          expressions.GreaterThan(attrInt, 1),
-          expressions.LessThan(attrInt, 10)
-        ),
-        expressions.And(
-          expressions.EqualTo(expressions.Abs(attrInt), 6),
-          expressions.IsNotNull(attrInt)
-        )
-      ))
-    }
+    // (cint = 1 OR cint = 10) OR (cint > 0 OR cint < -10)
+    testTranslateFilter(Or(
+      Or(
+        EqualTo(attrInt, 1),
+        EqualTo(attrInt, 10)
+      ),
+      Or(
+        GreaterThan(attrInt, 0),
+        LessThan(attrInt, -10))),
+      Some(sources.Or(
+        sources.Or(
+          sources.EqualTo("cint", 1),
+          sources.EqualTo("cint", 10)),
+        sources.Or(
+          sources.GreaterThan("cint", 0),
+          sources.LessThan("cint", -10)))))
 
-    assertResult(Some(sources.And(
-      sources.Or(
-        sources.GreaterThan("cint", 1),
-        sources.LessThan("cint", 10)),
-      sources.Or(
-        sources.EqualTo("cint", 6),
-        sources.IsNotNull("cint"))))) {
-      DataSourceStrategy.translateFilter(expressions.And(
-        expressions.Or(
-          expressions.GreaterThan(attrInt, 1),
-          expressions.LessThan(attrInt, 10)
-        ),
-        expressions.Or(
-          expressions.EqualTo(attrInt, 6),
-          expressions.IsNotNull(attrInt)
-        )
-      ))
-    }
-    // Functions such as 'Abs' are not supported
-    assertResult(None) {
-      DataSourceStrategy.translateFilter(expressions.And(
-        expressions.Or(
-          expressions.GreaterThan(attrInt, 1),
-          expressions.LessThan(attrInt, 10)
-        ),
-        expressions.Or(
-          expressions.EqualTo(expressions.Abs(attrInt), 6),
-          expressions.IsNotNull(attrInt)
-        )
-      ))
+    // (cint = 1 OR ABS(cint) = 10) OR (cint > 0 OR cint < -10)
+    testTranslateFilter(Or(
+      Or(
+        EqualTo(attrInt, 1),
+        // Functions such as 'Abs' are not supported
+        EqualTo(Abs(attrInt), 10)
+      ),
+      Or(
+        GreaterThan(attrInt, 0),
+        LessThan(attrInt, -10))), None)
+
+    // In end-to-end testing, conjunctive predicate should has been split
+    // before reaching DataSourceStrategy.translateFilter.
+    // This is for UT purpose to test each [[case]].
+    // (cint > 1 AND cint < 10) AND (cint = 6 AND cint IS NOT NULL)
+    testTranslateFilter(And(
+      And(
+        GreaterThan(attrInt, 1),
+        LessThan(attrInt, 10)
+      ),
+      And(
+        EqualTo(attrInt, 6),
+        IsNotNull(attrInt))),
+      Some(sources.And(
+        sources.And(
+          sources.GreaterThan("cint", 1),
+          sources.LessThan("cint", 10)),
+        sources.And(
+          sources.EqualTo("cint", 6),
+          sources.IsNotNull("cint")))))
+
+    // (cint > 1 AND cint < 10) AND (ABS(cint) = 6 AND cint IS NOT NULL)
+    testTranslateFilter(And(
+      And(
+        GreaterThan(attrInt, 1),
+        LessThan(attrInt, 10)
+      ),
+      And(
+        // Functions such as 'Abs' are not supported
+        EqualTo(Abs(attrInt), 6),
+        IsNotNull(attrInt))), None)
+
+    // (cint > 1 OR cint < 10) AND (cint = 6 OR cint IS NOT NULL)
+    testTranslateFilter(And(
+      Or(
+        GreaterThan(attrInt, 1),
+        LessThan(attrInt, 10)
+      ),
+      Or(
+        EqualTo(attrInt, 6),
+        IsNotNull(attrInt))),
+      Some(sources.And(
+        sources.Or(
+          sources.GreaterThan("cint", 1),
+          sources.LessThan("cint", 10)),
+        sources.Or(
+          sources.EqualTo("cint", 6),
+          sources.IsNotNull("cint")))))
+
+    // (cint > 1 OR cint < 10) AND (cint = 6 OR cint IS NOT NULL)
+    testTranslateFilter(And(
+      Or(
+        GreaterThan(attrInt, 1),
+        LessThan(attrInt, 10)
+      ),
+      Or(
+        // Functions such as 'Abs' are not supported
+        EqualTo(Abs(attrInt), 6),
+        IsNotNull(attrInt))), None)
+  }
+
+  /**
+   * Translate the given Catalyst [[Expression]] into data source [[sources.Filter]]
+   * then verify against the given [[sources.Filter]].
+   */
+  def testTranslateFilter(catalystFilter: Expression, result: Option[sources.Filter]): Unit = {
+    assertResult(result) {
+      DataSourceStrategy.translateFilter(catalystFilter)
     }
   }
 }
