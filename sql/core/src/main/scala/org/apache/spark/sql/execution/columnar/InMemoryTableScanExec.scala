@@ -37,15 +37,6 @@ case class InMemoryTableScanExec(
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
-  override def vectorTypes: Option[Seq[String]] =
-    Option(Seq.fill(attributes.length)(
-      if (!conf.offHeapColumnVectorEnabled) {
-        classOf[OnHeapColumnVector].getName
-      } else {
-        classOf[OffHeapColumnVector].getName
-      }
-    ))
-
   /**
    * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
    * If false, get data from UnsafeRow build from ColumnVector
@@ -74,31 +65,27 @@ case class InMemoryTableScanExec(
     Option((0 until fields.length).map { i =>
       if (fields(i).dataType.isInstanceOf[ArrayType]) {
         classOf[UnsafeColumnVector].getName
-      } else {
+      } else if (!conf.offHeapColumnVectorEnabled) {
         classOf[OnHeapColumnVector].getName
+      } else {
+        classOf[OffHeapColumnVector].getName
       }
     })
   }
 
   private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
-    val rowCount = cachedColumnarBatch.numRows
-<<<<<<< HEAD
-    val taskContext = Option(TaskContext.get())
-    val columnVectors = if (!conf.offHeapColumnVectorEnabled || taskContext.isEmpty) {
-      OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
-    } else {
-      OffHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
-    }
-=======
     val fields = columnarBatchSchema.fields
+    val rowCount = cachedColumnarBatch.numRows
+    val taskContext = Option(TaskContext.get())
     val columnVectors = (0 until fields.length).map { i =>
       if (fields(i).dataType.isInstanceOf[ArrayType]) {
         new UnsafeColumnVector(rowCount, fields(i).dataType)
-      } else {
+      } else if (!conf.offHeapColumnVectorEnabled || taskContext.isEmpty) {
         new OnHeapColumnVector(rowCount, fields(i).dataType)
+      } else {
+        new OffHeapColumnVector(rowCount, fields(i).dataType)
       }
     }.toArray
->>>>>>> add UnsafeColumnVector to support array for table cache
     val columnarBatch = new ColumnarBatch(
       columnarBatchSchema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
     columnarBatch.setNumRows(rowCount)
