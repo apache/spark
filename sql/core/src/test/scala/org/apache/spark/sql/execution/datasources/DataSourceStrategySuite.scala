@@ -85,7 +85,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
   test("translate complex expression") {
     val attrInt = 'cint.int
 
-    // ABS(cint) - 2 = 1
+    // ABS(cint) - 2 <= 1
     testTranslateFilter(LessThanOrEqual(
       // Expressions are not supported
       // Functions such as 'Abs' are not supported
