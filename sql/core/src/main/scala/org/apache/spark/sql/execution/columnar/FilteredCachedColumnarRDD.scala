@@ -22,7 +22,7 @@ import org.apache.spark.rdd.RDD
 
 private[columnar] class FilteredCachedColumnarPartition(
     val partitionIndex: Int,
-    val parentPartitionIndex: Int) extends Partition {
+    val parentPartition: Partition) extends Partition {
 
   override def index: Int = partitionIndex
 }
@@ -31,20 +31,23 @@ private class PartialDependency[T](rdd: RDD[T], partitions: Array[Partition])
   extends NarrowDependency[T](rdd) {
 
   override def getParents(partitionId: Int): Seq[Int] = {
-    List(partitions(partitionId).asInstanceOf[FilteredCachedColumnarPartition].parentPartitionIndex)
+    List(partitions(partitionId).asInstanceOf[FilteredCachedColumnarPartition].
+      parentPartition.index)
   }
 }
 
 private[columnar] class FilteredCachedColumnarRDD (
     @transient private var _sc: SparkContext,
     private var cachedColumnarRDD: CachedColumnarRDD,
-    partitions: Seq[Partition])
-  extends RDD[CachedBatch](_sc, Seq(new PartialDependency(cachedColumnarRDD, partitions.toArray))) {
+    acceptedPartitions: Seq[Partition])
+  extends RDD[CachedBatch](
+    _sc, Seq(new PartialDependency(cachedColumnarRDD, acceptedPartitions.toArray))) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[CachedBatch] = {
-    firstParent.iterator(split, context)
+    val filteredCachedColumnarPartition = split.asInstanceOf[FilteredCachedColumnarPartition]
+    firstParent.iterator(filteredCachedColumnarPartition.parentPartition, context)
   }
 
-  override protected def getPartitions: Array[Partition] = cachedColumnarRDD.partitions
+  override protected def getPartitions: Array[Partition] = acceptedPartitions.toArray
 
 }

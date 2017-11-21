@@ -216,10 +216,10 @@ case class InMemoryTableScanExec(
     }
   }
 
-  private def buildFilteredRDDPartitions(metadataPartitionIds: Seq[Int]): Seq[Partition] = {
+  private def buildFilteredRDDPartitions(metadataPartitionIds: Seq[Partition]): Seq[Partition] = {
     metadataPartitionIds.zipWithIndex.map {
-      case (parentPartitionIdx, newPartitionIdx) =>
-        new FilteredCachedColumnarPartition(newPartitionIdx, parentPartitionIdx)
+      case (parentPartition, newPartitionIdx) =>
+        new FilteredCachedColumnarPartition(newPartitionIdx, parentPartition)
     }
   }
 
@@ -238,7 +238,7 @@ case class InMemoryTableScanExec(
           partitionFilter.initialize(partitionIndex)
           partitionFilter.eval(partitionStats)
         }
-    }.map(_._2)
+    }.map(_._2).map(partitionIndex => buffers.partitions(partitionIndex))
     new FilteredCachedColumnarRDD(buffers.sparkContext, buffers.asInstanceOf[CachedColumnarRDD],
       buildFilteredRDDPartitions(metadataOfValidPartitions))
   }
