@@ -282,10 +282,10 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Seq(0, 0, 0, 0, 0),
       Seq(1, 1, 1, 1, 0),
       Seq(3, 3, 3, 3, 3),
-      Seq(3, 3, 3, 3, 4),
-      Seq(3, 3, 3, 4, 4),
-      Seq(3, 3, 4, 4, 4),
-      Seq(3, 4, 4, 4, 4),
+      Seq(4, 3, 3, 3, 3),
+      Seq(4, 4, 3, 3, 3),
+      Seq(4, 4, 4, 3, 3),
+      Seq(4, 4, 4, 4, 3),
       Seq(4, 4, 4, 4, 4))
     cases.zip(expects).foreach { case ((num, divisor), expect) =>
       val answer = func(num, divisor).toSeq

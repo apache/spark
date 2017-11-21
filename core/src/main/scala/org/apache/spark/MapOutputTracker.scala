@@ -476,18 +476,31 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /**
+   * Grouped function of Range, this is to avoid traverse of all elements of Range using
+   * IterableLike's grouped function.
+   */
+  def rangeGrouped(range: Range, size: Int): Seq[Range] = {
+    val start = range.start
+    val step = range.step
+    val end = range.end
+    for (i <- start.until(end, size * step)) yield {
+      i.until(i + size * step, step)
+    }
+  }
+
+  /**
    * To equally divide n elements into m buckets, basically each bucket should have n/m elements,
    * for the remaining n%m elements, add one more element to the first n%m buckets each.
    */
-  def equallyDivide(numElements: Int, numBuckets: Int): Iterator[Seq[Int]] = {
+  def equallyDivide(numElements: Int, numBuckets: Int): Seq[Seq[Int]] = {
     val elementsPerBucket = numElements / numBuckets
     val remaining = numElements % numBuckets
-    if (remaining == 0) {
-      0.until(numElements).grouped(elementsPerBucket)
+    val splitPoint = (elementsPerBucket + 1) * remaining
+    if (elementsPerBucket == 0) {
+      rangeGrouped(0.until(splitPoint), elementsPerBucket + 1)
     } else {
-      val splitPoint = (elementsPerBucket + 1) * remaining
-      0.to(splitPoint).grouped(elementsPerBucket + 1) ++
-        (splitPoint + 1).until(numElements).grouped(elementsPerBucket)
+      rangeGrouped(0.until(splitPoint), elementsPerBucket + 1) ++
+        rangeGrouped(splitPoint.until(numElements), elementsPerBucket)
     }
   }
 
@@ -498,25 +511,31 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
       val parallelAggThreshold = conf.get(
-        SHUFFLE_MAP_OUTPUT_STATISTICS_PARALLEL_AGGREGATION_THRESHOLD)
-      if (statuses.length * totalSizes.length < parallelAggThreshold) {
+        SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD)
+      val parallelism = math.min(
+        Runtime.getRuntime.availableProcessors(),
+        statuses.length * totalSizes.length / parallelAggThreshold + 1)
+      if (parallelism <= 1) {
         for (s <- statuses) {
           for (i <- 0 until totalSizes.length) {
             totalSizes(i) += s.getSizeForBlock(i)
           }
         }
       } else {
-        val parallelism = conf.get(SHUFFLE_MAP_OUTPUT_STATISTICS_PARALLELISM)
-        val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-statistics")
-        val executionContext = ExecutionContext.fromExecutor(threadPool)
-        val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {
-          reduceIds => Future {
-            for (s <- statuses; i <- reduceIds) {
-              totalSizes(i) += s.getSizeForBlock(i)
+        try {
+          val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-aggregate")
+          implicit val executionContext = ExecutionContext.fromExecutor(threadPool)
+          val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {
+            reduceIds => Future {
+              for (s <- statuses; i <- reduceIds) {
+                totalSizes(i) += s.getSizeForBlock(i)
+              }
             }
-          } (executionContext)
+          }
+          ThreadUtils.awaitResult(Future.sequence(mapStatusSubmitTasks), Duration.Inf)
+        } finally {
+          threadpool.shutdown()
         }
-        ThreadUtils.awaitResult(Future.sequence(mapStatusSubmitTasks), Duration.Inf)
       }
       new MapOutputStatistics(dep.shuffleId, totalSizes)
     }
