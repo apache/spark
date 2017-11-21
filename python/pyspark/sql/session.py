@@ -455,6 +455,7 @@ class SparkSession(object):
             copied = False
             if isinstance(schema, StructType):
                 for field in schema:
+                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
                     if isinstance(field.dataType, TimestampType):
                         s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
                         if not copied and s is not pdf[field.name]:

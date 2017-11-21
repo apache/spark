@@ -1926,6 +1926,7 @@ class DataFrame(object):
             else:
                 from pyspark.sql.types import _check_series_convert_timestamps_local_tz
                 for field in self.schema:
+                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
                     if isinstance(field.dataType, TimestampType):
                         pdf[field.name] = \
                             _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
