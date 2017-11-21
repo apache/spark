@@ -24,6 +24,16 @@ DESC EXTENDED desc_col_table key;
 
 DESC FORMATTED desc_col_table key;
 
+-- Test complex columns
+CREATE TABLE desc_complex_col_table (`a.b` int, col struct<x:int, y:string>) USING PARQUET;
+
+DESC FORMATTED desc_complex_col_table `a.b`;
+
+DESC FORMATTED desc_complex_col_table col;
+
+-- Describe a nested column
+DESC FORMATTED desc_complex_col_table col.x;
+
 -- Test output for histogram statistics
 SET spark.sql.statistics.histogram.enabled=true;
 SET spark.sql.statistics.histogram.numBins=2;
@@ -36,16 +46,6 @@ DESC EXTENDED desc_col_table key;
 
 SET spark.sql.statistics.histogram.enabled=false;
 SET spark.sql.statistics.histogram.numBins=256;
-
--- Test complex columns
-CREATE TABLE desc_complex_col_table (`a.b` int, col struct<x:int, y:string>) USING PARQUET;
-
-DESC FORMATTED desc_complex_col_table `a.b`;
-
-DESC FORMATTED desc_complex_col_table col;
-
--- Describe a nested column
-DESC FORMATTED desc_complex_col_table col.x;
 
 DROP VIEW desc_col_temp_view;
 

@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.Histogram
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -689,13 +690,24 @@ case class DescribeColumnCommand(
       buffer += Row("distinct_count", cs.map(_.distinctCount.toString).getOrElse("NULL"))
       buffer += Row("avg_col_len", cs.map(_.avgLen.toString).getOrElse("NULL"))
       buffer += Row("max_col_len", cs.map(_.maxLen.toString).getOrElse("NULL"))
-      buffer ++= cs.flatMap(_.histogram.map { hist =>
-        val header = Row("histogram", s"height: ${hist.height}, num_of_bins: ${hist.bins.length}")
-        Seq(header) ++ hist.bins.map(bin =>
-          Row("", s"lower_bound: ${bin.lo}, upper_bound: ${bin.hi}, distinct_count: ${bin.ndv}"))
-      }).getOrElse(Seq(Row("histogram", "NULL")))
+      val histDesc = for {
+        c <- cs
+        hist <- c.histogram
+      } yield histogramDescription(hist)
+      buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
     }
     buffer
+  }
+
+  private def histogramDescription(histogram: Histogram): Seq[Row] = {
+    val header = Row("histogram",
+      s"height: ${histogram.height}, num_of_bins: ${histogram.bins.length}")
+    val bins = histogram.bins.zipWithIndex.map {
+      case (bin, index) =>
+        Row(s"bin_$index",
+          s"lower_bound: ${bin.lo}, upper_bound: ${bin.hi}, distinct_count: ${bin.ndv}")
+    }
+    header +: bins
   }
 }
 
