@@ -489,8 +489,12 @@ class SparkSession(object):
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
         from pyspark.serializers import ArrowSerializer, _create_batch
-        from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
-        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+        from pyspark.sql.types import from_arrow_schema, to_arrow_type, \
+            _old_pandas_exception_message, TimestampType
+        try:
+            from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+        except ImportError as e:
+            raise ImportError(_old_pandas_exception_message(e))
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
