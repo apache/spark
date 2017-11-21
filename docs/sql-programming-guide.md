@@ -1594,7 +1594,7 @@ options.
           <b>LongType</b>
         </th>
         <th>
-          <b>DecimalType(38,0)</b>
+          <b>DecimalType(38,0)*</b>
         </th>
         <th>
           <b>DoubleType</b>
@@ -1650,7 +1650,7 @@ options.
       </tr>
       <tr>
         <td>
-          <b>DecimalType(38,0)</b>
+          <b>DecimalType(38,0)*</b>
         </td>
         <td>DecimalType(38,0)</td>
         <td>DecimalType(38,0)</td>
@@ -1714,6 +1714,8 @@ options.
         <td>StringType</td>
       </tr>
     </table>
+
+    Note that, for <b>DecimalType(38,0)*</b>, the table above intentionally does not cover all other combinations of scales and precisions because currently we only infer decimal type like `BigInteger`/`BigInt`. For example, 1.1 is inferred as double type.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 

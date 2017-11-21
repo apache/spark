@@ -375,18 +375,21 @@ object PartitioningUtils {
    *
    * When resolving conflicts, it follows the table below:
    *
-   * +-------------------+-------------------+-------------------+-------------------+-------------------+------------+---------------+---------------+------------+
-   * | InputA \ InputB   | NullType          | IntegerType       | LongType          | DecimalType(38,0) | DoubleType | DateType      | TimestampType | StringType |
-   * +-------------------+-------------------+-------------------+-------------------+-------------------+------------+---------------+---------------+------------+
-   * | NullType          | NullType          | IntegerType       | LongType          | DecimalType(38,0) | DoubleType | DateType      | TimestampType | StringType |
-   * | IntegerType       | IntegerType       | IntegerType       | LongType          | DecimalType(38,0) | DoubleType | StringType    | StringType    | StringType |
-   * | LongType          | LongType          | LongType          | LongType          | DecimalType(38,0) | StringType | StringType    | StringType    | StringType |
-   * | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | StringType | StringType    | StringType    | StringType |
-   * | DoubleType        | DoubleType        | DoubleType        | StringType        | StringType        | DoubleType | StringType    | StringType    | StringType |
-   * | DateType          | DateType          | StringType        | StringType        | StringType        | StringType | DateType      | TimestampType | StringType |
-   * | TimestampType     | TimestampType     | StringType        | StringType        | StringType        | StringType | TimestampType | TimestampType | StringType |
-   * | StringType        | StringType        | StringType        | StringType        | StringType        | StringType | StringType    | StringType    | StringType |
-   * +-------------------+-------------------+-------------------+-------------------+-------------------+------------+---------------+---------------+------------+
+   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+
+   * | InputA \ InputB    | NullType          | IntegerType       | LongType          | DecimalType(38,0)* | DoubleType | DateType      | TimestampType | StringType |
+   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+
+   * | NullType           | NullType          | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | DateType      | TimestampType | StringType |
+   * | IntegerType        | IntegerType       | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | StringType    | StringType    | StringType |
+   * | LongType           | LongType          | LongType          | LongType          | DecimalType(38,0)  | StringType | StringType    | StringType    | StringType |
+   * | DecimalType(38,0)* | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0)  | StringType | StringType    | StringType    | StringType |
+   * | DoubleType         | DoubleType        | DoubleType        | StringType        | StringType         | DoubleType | StringType    | StringType    | StringType |
+   * | DateType           | DateType          | StringType        | StringType        | StringType         | StringType | DateType      | TimestampType | StringType |
+   * | TimestampType      | TimestampType     | StringType        | StringType        | StringType         | StringType | TimestampType | TimestampType | StringType |
+   * | StringType         | StringType        | StringType        | StringType        | StringType         | StringType | StringType    | StringType    | StringType |
+   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+
+   * Note that, for DecimalType(38,0)*, the table above intentionally does not cover all other
+   * combinations of scales and precisions because currently we only infer decimal type like
+   * `BigInteger`/`BigInt`. For example, 1.1 is inferred as double type.
    */
   // scalastyle:on line.size.limit
   private[datasources] def inferPartitionColumnValue(
