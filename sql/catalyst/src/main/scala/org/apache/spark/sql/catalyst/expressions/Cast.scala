@@ -1039,13 +1039,21 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           }
         }
        """
-    }.mkString("\n")
+    }
+    val fieldsEvalCodes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      ctx.splitExpressions(
+        expressions = fieldsEvalCode,
+        funcName = "castStruct",
+        arguments = ("InternalRow", tmpRow) :: (rowClass, result) :: Nil)
+    } else {
+      fieldsEvalCode.mkString("\n")
+    }
 
     (c, evPrim, evNull) =>
       s"""
         final $rowClass $result = new $rowClass(${fieldsCasts.length});
         final InternalRow $tmpRow = $c;
-        $fieldsEvalCode
+        $fieldsEvalCodes
         $evPrim = $result.copy();
       """
   }
