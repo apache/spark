@@ -288,22 +288,52 @@ case class Elt(children: Seq[Expression])
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = indexExpr.genCode(ctx)
     val strings = stringExprs.map(_.genCode(ctx))
+    val indexVal = ctx.freshName("index")
+    val stringVal = ctx.freshName("stringVal")
     val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
       s"""
         case ${index + 1}:
-          ${ev.value} = ${eval.isNull} ? null : ${eval.value};
+          ${eval.code}
+          $stringVal = ${eval.isNull} ? null : ${eval.value};
           break;
       """
-    }.mkString("\n")
-    val indexVal = ctx.freshName("index")
-    val stringArray = ctx.freshName("strings");
+    }
 
-    ev.copy(index.code + "\n" + strings.map(_.code).mkString("\n") + s"""
-      final int $indexVal = ${index.value};
-      UTF8String ${ev.value} = null;
-      switch ($indexVal) {
-        $assignStringValue
+    val cases = ctx.buildCodeBlocks(assignStringValue)
+    val codes = if (cases.length == 1) {
+      s"""
+        UTF8String $stringVal = null;
+        switch ($indexVal) {
+          ${cases.head}
+        }
+       """
+    } else {
+      var prevFunc = "null"
+      for (c <- cases.reverse) {
+        val funcName = ctx.freshName("eltFunc")
+        val funcBody = s"""
+         private UTF8String $funcName(InternalRow ${ctx.INPUT_ROW}, int $indexVal) {
+           UTF8String $stringVal = null;
+           switch ($indexVal) {
+             $c
+             default:
+               return $prevFunc;
+           }
+           return $stringVal;
+         }
+        """
+        val fullFuncName = ctx.addNewFunction(funcName, funcBody)
+        prevFunc = s"$fullFuncName(${ctx.INPUT_ROW}, $indexVal)"
       }
+      s"UTF8String $stringVal = $prevFunc;"
+    }
+
+    ev.copy(
+      s"""
+      ${index.code}
+      final int $indexVal = ${index.value};
+      $codes
+      UTF8String ${ev.value} = $stringVal;
       final boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
