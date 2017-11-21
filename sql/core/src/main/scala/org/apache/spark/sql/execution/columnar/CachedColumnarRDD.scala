@@ -73,12 +73,12 @@ private[columnar] object CachedColumnarRDD {
   private val allMetadataFetched = new ConcurrentHashMap[Int, Boolean]()
 
   def collectStats(rdd: RDD[CachedBatch]): IndexedSeq[Option[InternalRow]] = {
-    if (allMetadataFetched.contains(rdd.id)) {
+    if (allMetadataFetched.containsKey(rdd.id)) {
       rddIdToMetadata.get(rdd.id)
     } else {
       val updatedMetadataBlocks = rdd.partitions.indices.map {
         partitionId => {
-          if (!rddIdToMetadata.contains(rdd.id)) {
+          if (!rddIdToMetadata.containsKey(rdd.id)) {
             rddIdToMetadata.put(rdd.id, new mutable.ArraySeq[Option[InternalRow]](
               rdd.partitions.length))
           }
