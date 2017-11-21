@@ -35,6 +35,7 @@ from py4j.java_gateway import JavaClass
 
 from pyspark import SparkContext
 from pyspark.serializers import CloudPickleSerializer
+from pyspark.util import _exception_message
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -1682,7 +1683,7 @@ def _old_pandas_exception_message(e):
     """ Create an error message for importing old Pandas.
     """
     msg = "note: Pandas (>=0.19.2) must be installed and available on calling Python process"
-    return "%s\n%s" % (e.message, msg)
+    return "%s\n%s" % (_exception_message(e), msg)
 
 
 def _check_dataframe_localize_timestamps(pdf, timezone):

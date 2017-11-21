@@ -39,6 +39,7 @@ from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import IntegralType
 from pyspark.sql.types import *
+from pyspark.util import _exception_message
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
@@ -1902,7 +1903,7 @@ class DataFrame(object):
             except ImportError as e:
                 msg = "note: pyarrow must be installed and available on calling Python process " \
                       "if using spark.sql.execution.arrow.enabled=true"
-                raise ImportError("%s\n%s" % (e.message, msg))
+                raise ImportError("%s\n%s" % (_exception_message(e), msg))
         else:
             pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
