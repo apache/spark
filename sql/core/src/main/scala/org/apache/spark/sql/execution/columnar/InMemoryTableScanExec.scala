@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import org.apache.spark.{InterruptibleIterator, SparkEnv}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkEnv}
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -216,30 +216,33 @@ case class InMemoryTableScanExec(
     }
   }
 
+  private def buildFilteredRDDPartitions(metadataPartitionIds: Seq[Int]): Seq[Partition] = {
+    metadataPartitionIds.zipWithIndex.map {
+      case (parentPartitionIdx, newPartitionIdx) =>
+        new FilteredCachedColumnarPartition(newPartitionIdx, parentPartitionIdx)
+    }
+  }
+
   private def filteredCachedBatches(): RDD[CachedBatch] = {
     // Using these variables here to avoid serialization of entire objects (if referenced directly)
     // within the map Partitions closure.
     val schema = relation.partitionStatistics.schema
     val buffers = relation.cachedColumnBuffers
 
-    buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
+    val metadataOfValidPartitions = CachedColumnarRDD.fetchMetadataForRDD(buffers.id).map {
+      metadata =>
+        metadata.zipWithIndex.
+          filter { case (m, partitionIndex) =>
+            val partitionFilter = newPredicate(
+              partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+              schema)
+            partitionFilter.initialize(partitionIndex)
+            partitionFilter.eval(m)
+          }.map(_._2)
+    }.getOrElse(buffers.partitions.indices)
 
-      val partitionFilter = newPredicate(
-        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-        schema)
-      partitionFilter.initialize(index)
-
-      cachedBatchIterator.asInstanceOf[InterruptibleIterator[_]].delegate match {
-        case cachedIter: CachedColumnarIterator
-          if !partitionFilter.eval(cachedIter.partitionStats) =>
-          // scalastyle:off
-          println(s"skipped partition $index")
-          Iterator()
-        case _ =>
-          doFilterCachedBatches(cachedBatchIterator, schema, partitionFilter)
-          // scalastyle:on
-      }
-    }
+    new FilteredCachedColumnarRDD(buffers.sparkContext, buffers.asInstanceOf[CachedColumnarRDD],
+      buildFilteredRDDPartitions(metadataOfValidPartitions))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

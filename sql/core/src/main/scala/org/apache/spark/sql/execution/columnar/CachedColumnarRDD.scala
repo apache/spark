@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.storage.{RDDPartitionMetadataBlockId, StorageLevel}
 
-class CachedColumnarRDD(
+private[columnar] class CachedColumnarRDD(
     @transient private var _sc: SparkContext,
     private var dataRDD: RDD[CachedBatch],
     containsPartitionMetadata: Boolean,
@@ -54,6 +58,21 @@ class CachedColumnarRDD(
       }
     }
   }
+}
+
+private[columnar] object CachedColumnarRDD {
+
+  private val rddIdToMetadata = new ConcurrentHashMap[Int, Seq[InternalRow]]()
+
+  def collectStats(rdd: RDD[CachedBatch]): Unit = {
+    val metadataBlocks = rdd.partitions.indices.map {
+      partitionId => SparkEnv.get.blockManager.getSingle[InternalRow](
+        RDDPartitionMetadataBlockId(rdd.id, partitionId)).get
+    }
+    rddIdToMetadata.put(rdd.id, metadataBlocks)
+  }
+
+  def fetchMetadataForRDD(rddId: Int): Option[Seq[InternalRow]] = rddIdToMetadata.asScala.get(rddId)
 }
 
 private[columnar] class CachedColumnarIterator(
