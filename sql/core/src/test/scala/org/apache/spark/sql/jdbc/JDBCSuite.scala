@@ -296,33 +296,14 @@ class JDBCSuite extends SparkFunSuite
     // The older versions of spark have this kind of bugs in parquet data source.
     val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2 AND NAME != 'mary')")
     val df2 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
-    val df3 = sql("SELECT * FROM foobar WHERE (THEID > 0 AND NAME = 'mary') OR (NAME = 'fred')")
-    val df4 = sql("SELECT * FROM foobar " +
-      "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
-    val df5 = sql("SELECT * FROM foobar " +
-      "WHERE THEID > 0 AND TRIM(NAME) = 'mary' AND LENGTH(NAME) > 3")
-    val df6 = sql("SELECT * FROM foobar " +
-      "WHERE THEID < 0 OR NAME = 'mary' OR NAME = 'fred'")
-    val df7 = sql("SELECT * FROM foobar " +
-      "WHERE THEID < 0 OR TRIM(NAME) = 'mary' OR NAME = 'fred'")
-    val df8 = sql("SELECT * FROM foobar " +
-      "WHERE NOT((THEID < 0 OR NAME != 'mary') AND (THEID != 1 OR NAME != 'fred'))")
-    val df9 = sql("SELECT * FROM foobar " +
-      "WHERE NOT((THEID < 0 OR NAME != 'mary') AND (THEID != 1 OR TRIM(NAME) != 'fred'))")
-    val df10 = sql("SELECT * FROM foobar " +
-      "WHERE (NOT(THEID < 0 OR TRIM(NAME) != 'mary')) OR (THEID = 1 AND NAME = 'fred')")
 
     assert(df1.collect.toSet === Set(Row("mary", 2)))
     assert(df2.collect.toSet === Set(Row("mary", 2)))
-    assert(df3.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
-    assert(df4.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
-    assert(df5.collect.toSet === Set(Row("mary", 2)))
-    assert(df6.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
-    assert(df7.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
-    assert(df8.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
-    assert(df9.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
-    assert(df10.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
 
+    // SPARK-22548: Incorrect nested AND expression pushed down to JDBC data source
+    val df3 = sql("SELECT * FROM foobar " +
+      "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
+    assert(df3.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
 
     def checkNotPushdown(df: DataFrame): DataFrame = {
       val parentPlan = df.queryExecution.executedPlan

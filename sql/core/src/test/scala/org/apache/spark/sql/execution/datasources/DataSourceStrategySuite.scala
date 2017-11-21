@@ -150,7 +150,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
 
   test("translate complex expression") {
     val attrInt = 'cint.int
-
+    // Functions such as 'Abs' are not supported
     assertResult(None) {
       DataSourceStrategy.translateFilter(
         expressions.LessThanOrEqual(
@@ -176,6 +176,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
       ))
     }
     // SPARK-22548 Incorrect nested AND expression pushed down to JDBC data source
+    // Functions such as 'Abs' are not supported
     assertResult(None) {
       DataSourceStrategy.translateFilter(expressions.Or(
         expressions.And(
@@ -189,6 +190,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         )
       ))
     }
+    // Functions such as 'Abs' are not supported
     assertResult(None) {
       DataSourceStrategy.translateFilter(
         expressions.Not(expressions.And(
@@ -223,6 +225,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         )
       ))
     }
+    // Functions such as 'Abs' are not supported
     assertResult(None) {
       DataSourceStrategy.translateFilter(expressions.Or(
         expressions.Or(
@@ -255,6 +258,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         )
       ))
     }
+    // Functions such as 'Abs' are not supported
     assertResult(None) {
       DataSourceStrategy.translateFilter(expressions.And(
         expressions.And(
@@ -286,6 +290,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         )
       ))
     }
+    // Functions such as 'Abs' are not supported
     assertResult(None) {
       DataSourceStrategy.translateFilter(expressions.And(
         expressions.Or(
