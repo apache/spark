@@ -79,8 +79,9 @@ private[columnar] object CachedColumnarRDD {
       val updatedMetadataBlocks = rdd.partitions.indices.map {
         partitionId => {
           if (!rddIdToMetadata.containsKey(rdd.id)) {
-            rddIdToMetadata.put(rdd.id, new mutable.ArraySeq[Option[InternalRow]](
-              rdd.partitions.length))
+            val initSeq = new mutable.ArraySeq[Option[InternalRow]](rdd.partitions.length)
+            initSeq.indices.foreach(idx => initSeq(idx) = None)
+            rddIdToMetadata.put(rdd.id, initSeq)
           }
           rddIdToMetadata.get(rdd.id)(partitionId).orElse{
             val metadata = SparkEnv.get.blockManager.getSingle[InternalRow](
