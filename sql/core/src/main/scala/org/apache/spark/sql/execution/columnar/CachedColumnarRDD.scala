@@ -38,7 +38,7 @@ private[columnar] class CachedColumnarRDD(
     firstParent.iterator(split, context)
   }
 
-  override def unpersist(blocking: Boolean = true): Unit = {
+  override def unpersist(blocking: Boolean = true): this.type = {
     super.unpersist(blocking)
     CachedColumnarRDD.allMetadataFetched.remove(id)
     CachedColumnarRDD.rddIdToMetadata.remove(id)
