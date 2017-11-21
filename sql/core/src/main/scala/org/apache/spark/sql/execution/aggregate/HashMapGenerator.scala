@@ -48,8 +48,8 @@ abstract class HashMapGenerator(
     initExpr.map { e =>
       val isNull = ctx.freshName("bufIsNull")
       val value = ctx.freshName("bufValue")
-      ctx.addMutableState("boolean", isNull, "")
-      ctx.addMutableState(ctx.javaType(e.dataType), value, "")
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
+      ctx.addMutableState(ctx.javaType(e.dataType), value)
       val ev = e.genCode(ctx)
       val initVars =
         s"""
