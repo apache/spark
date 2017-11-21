@@ -131,18 +131,6 @@ class VectorSizeHintSuite
     assert(sizeHint.transform(dataWithShort).count() === 1)
   }
 
-  test("Test correct behaviour for handleInvalid == optimistic") {
-    val vector = Vectors.dense(1, 2, 3)
-    val data = Seq(vector, vector).map(Tuple1.apply).toDF("vector")
-
-    val sizeHint = new VectorSizeHint()
-      .setInputCol("vector")
-      .setHandleInvalid("optimistic")
-      .setSize(3)
-
-    val transformed = sizeHint.transform(data)
-  }
-
   test("read/write") {
     val sizeHint = new VectorSizeHint()
       .setInputCol("myInputCol")
