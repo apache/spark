@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -76,6 +76,8 @@ case class CreateTableLikeCommand(
     // If the location is specified, we create an external table internally.
     // Otherwise create a managed table.
     val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
+    val properties =
+      sourceTableDesc.properties.filterKeys(_ == DateTimeUtils.TIMEZONE_PROPERTY)
 
     val newTableDesc =
       CatalogTable(
@@ -86,7 +88,8 @@ case class CreateTableLikeCommand(
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
-        bucketSpec = sourceTableDesc.bucketSpec)
+        bucketSpec = sourceTableDesc.bucketSpec,
+        properties = properties)
 
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
@@ -126,6 +129,8 @@ case class CreateTableCommand(
     sparkSession.sessionState.catalog.createTable(table, ignoreIfExists)
     Seq.empty[Row]
   }
+
+  DateTimeUtils.checkTableTz(table.identifier, table.properties)
 }
 
 

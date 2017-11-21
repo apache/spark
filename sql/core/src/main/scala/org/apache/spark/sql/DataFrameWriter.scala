@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
@@ -233,6 +234,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     assertNotBucketed("save")
+    val dest = extraOptions.get("path") match {
+      case Some(path) => s"for path $path"
+      case _ => s"with format $source"
+    }
+    DateTimeUtils.checkTableTz(dest, extraOptions.toMap)
 
     val cls = DataSource.lookupDataSource(source)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
@@ -290,6 +296,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
+    extraOptions.get(DateTimeUtils.TIMEZONE_PROPERTY).foreach { tz =>
+      throw new AnalysisException("Cannot provide a table timezone on insert; tried to insert " +
+        s"$tableName with ${DateTimeUtils.TIMEZONE_PROPERTY}=$tz")
+    }
     insertInto(df.sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
@@ -430,6 +440,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     } else {
       CatalogTableType.MANAGED
     }
+    val props = extraOptions.filterKeys(_ == DateTimeUtils.TIMEZONE_PROPERTY).toMap
+    DateTimeUtils.checkTableTz(tableIdent, props)
 
     val tableDesc = CatalogTable(
       identifier = tableIdent,
@@ -438,7 +450,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       schema = new StructType,
       provider = Some(source),
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
-      bucketSpec = getBucketSpec)
+      bucketSpec = getBucketSpec,
+      properties = props)
 
     runCommand(df.sparkSession, "saveAsTable")(CreateTable(tableDesc, mode, Some(df.logicalPlan)))
   }
