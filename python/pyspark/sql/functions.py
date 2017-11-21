@@ -2296,12 +2296,9 @@ def pandas_udf(f=None, returnType=StringType()):
 
     .. note:: The user-defined function must be deterministic.
 
-    .. note:: The user-defined functions do not support conditional execution by using them with
-        SQL conditional expressions such as `when` or `if`. The functions still apply on all rows no
-        matter the conditions are met or not. So the output is correct if the functions can be
-        correctly run on all rows without failure. If the functions can cause runtime failure on the
-        rows that do not satisfy the conditions, the suggested workaround is to incorporate the
-        condition logic into the functions.
+    .. note:: The user-defined functions do not support conditional expressions or short curcuiting
+        in boolean expressions and it ends up with being executed all internally. If the functions
+        can fail on special rows, the workaround is to incorporate the condition into the functions.
     """
     return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.PANDAS_UDF)
 
