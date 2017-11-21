@@ -34,10 +34,10 @@ import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
+import org.fusesource.leveldbjni.internal.NativeDB
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -141,9 +141,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logInfo("Detected incompatible DB versions, deleting...")
         path.listFiles().foreach(Utils.deleteRecursively)
         open(dbPath, metadata)
-      case e: Exception =>
-        // Get rid of the old data and re-create it. The store is either old or corrupted.
-        logWarning(s"Failed to load disk store $path for app listing.", e)
+      case dbExc: NativeDB.DBException =>
+        // Get rid of the corrupted listing.ldb and re-create it.
+        logWarning(s"Failed to load disk store $dbPath :", dbExc)
         Utils.deleteRecursively(dbPath)
         open(dbPath, metadata)
     }
@@ -575,7 +575,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val logPath = fileStatus.getPath()
-    logInfo(s"Replaying log path: $logPath")
 
     val bus = new ReplayListenerBus()
     val listener = new AppListingListener(fileStatus, clock)
