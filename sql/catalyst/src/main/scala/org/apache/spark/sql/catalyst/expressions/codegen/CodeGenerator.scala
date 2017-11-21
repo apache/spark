@@ -790,7 +790,7 @@ class CodegenContext {
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
       foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
-    val blocks = splitCodes(expressions)
+    val blocks = groupCodes(expressions)
 
     if (blocks.length == 1) {
       // inline execution if only one block
@@ -825,7 +825,7 @@ class CodegenContext {
     }
   }
 
-  def splitCodes(expressions: Seq[String]): Seq[String] = {
+  def groupCodes(expressions: Seq[String]): Seq[String] = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     var length = 0
