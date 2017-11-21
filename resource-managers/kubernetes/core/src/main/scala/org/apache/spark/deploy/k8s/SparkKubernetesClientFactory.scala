@@ -25,7 +25,7 @@ import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import okhttp3.Dispatcher
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.config._
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.util.ThreadUtils
 
 /**

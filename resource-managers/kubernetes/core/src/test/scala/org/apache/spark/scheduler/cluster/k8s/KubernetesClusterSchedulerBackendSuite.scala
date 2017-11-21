@@ -26,13 +26,13 @@ import org.mockito.{AdditionalAnswers, ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Matchers.{any, eq => mockitoEq}
 import org.mockito.Mockito.{doNothing, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
-import org.scalatest.mock.MockitoSugar._
+import org.scalatest.mockito.MockitoSugar._
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.deploy.k8s.config._
-import org.apache.spark.deploy.k8s.constants._
+import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorExited, LiveListenerBus, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor}

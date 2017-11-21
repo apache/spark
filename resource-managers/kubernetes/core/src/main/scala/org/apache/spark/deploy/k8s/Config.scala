@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 
-private[spark] object config extends Logging {
+private[spark] object Config extends Logging {
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")

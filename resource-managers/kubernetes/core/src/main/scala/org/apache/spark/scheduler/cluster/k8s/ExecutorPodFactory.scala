@@ -21,9 +21,9 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.ConfigurationUtils
-import org.apache.spark.deploy.k8s.config._
-import org.apache.spark.deploy.k8s.constants._
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.Utils
 
 /**

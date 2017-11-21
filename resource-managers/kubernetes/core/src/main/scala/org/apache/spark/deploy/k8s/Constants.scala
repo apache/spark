@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-private[spark] object constants {
+private[spark] object Constants {
 
   // Labels
   val SPARK_APP_ID_LABEL = "spark-app-selector"

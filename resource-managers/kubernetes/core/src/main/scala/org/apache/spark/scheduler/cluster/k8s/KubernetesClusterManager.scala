@@ -21,9 +21,9 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
-import org.apache.spark.deploy.k8s.config._
-import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.util.ThreadUtils

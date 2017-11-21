@@ -19,18 +19,16 @@ package org.apache.spark.scheduler.cluster.k8s
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{Pod, _}
-import io.fabric8.kubernetes.client.KubernetesClient
 import org.mockito.MockitoAnnotations
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.config._
-import org.apache.spark.deploy.k8s.constants._
+import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants._
 
 class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterEach {
   private val driverPodName: String = "driver-pod"
   private val driverPodUid: String = "driver-uid"
-  private val driverUrl: String = "driver-url"
   private val executorPrefix: String = "base"
   private val executorImage: String = "executor-image"
   private val driverPod = new PodBuilder()
@@ -54,7 +52,6 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, executorPrefix)
       .set(EXECUTOR_DOCKER_IMAGE, executorImage)
   }
-  private var kubernetesClient: KubernetesClient = _
 
   test("basic executor pod has reasonable defaults") {
     val factory = new ExecutorPodFactoryImpl(baseConf)
@@ -130,7 +127,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       ENV_EXECUTOR_PORT -> "10000") ++ additionalEnvVars
 
     assert(executor.getSpec.getContainers.size() === 1)
-    assert(executor.getSpec.getContainers.get(0).getEnv().size() === defaultEnvs.size)
+    assert(executor.getSpec.getContainers.get(0).getEnv.size() === defaultEnvs.size)
     val mapEnvs = executor.getSpec.getContainers.get(0).getEnv.asScala.map {
       x => (x.getName, x.getValue)
     }.toMap

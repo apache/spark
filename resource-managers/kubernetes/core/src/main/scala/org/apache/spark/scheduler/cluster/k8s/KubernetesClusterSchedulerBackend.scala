@@ -30,8 +30,8 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.k8s.config._
-import org.apache.spark.deploy.k8s.constants._
+import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointAddress, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorExited, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
