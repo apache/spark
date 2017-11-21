@@ -45,6 +45,6 @@ private[columnar] class FilteredCachedColumnarRDD (
     firstParent.iterator(split, context)
   }
 
-  override protected def getPartitions: Array[Partition] = partitions.toArray
+  override protected def getPartitions: Array[Partition] = cachedColumnarRDD.partitions
 
 }
