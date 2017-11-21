@@ -17,27 +17,27 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types._
 
 
 class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
 
   test("translate simple expression") {
-    val attrInt = AttributeReference("cint", IntegerType)()
-    val attrStr = AttributeReference("cstr", StringType)()
+    val attrInt = 'cint.int
+    val attrStr = 'cstr.string
 
     assertResult(Some(sources.EqualTo("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.EqualTo(attrInt, Literal(1)))
+        expressions.EqualTo(attrInt, 1))
     }
     assertResult(Some(sources.EqualTo("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.EqualTo(Literal(1), attrInt))
+        expressions.EqualTo(1, attrInt))
     }
 
     assertResult(Some(sources.EqualNullSafe("cstr", null))) {
@@ -51,38 +51,38 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
 
     assertResult(Some(sources.GreaterThan("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.GreaterThan(attrInt, Literal(1)))
+        expressions.GreaterThan(attrInt, 1))
     }
     assertResult(Some(sources.GreaterThan("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.LessThan(Literal(1), attrInt))
+        expressions.LessThan(1, attrInt))
     }
 
     assertResult(Some(sources.LessThan("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.LessThan(attrInt, Literal(1)))
+        expressions.LessThan(attrInt, 1))
     }
     assertResult(Some(sources.LessThan("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.GreaterThan(Literal(1), attrInt))
+        expressions.GreaterThan(1, attrInt))
     }
 
     assertResult(Some(sources.GreaterThanOrEqual("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.GreaterThanOrEqual(attrInt, Literal(1)))
+        expressions.GreaterThanOrEqual(attrInt, 1))
     }
     assertResult(Some(sources.GreaterThanOrEqual("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.LessThanOrEqual(Literal(1), attrInt))
+        expressions.LessThanOrEqual(1, attrInt))
     }
 
     assertResult(Some(sources.LessThanOrEqual("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.LessThanOrEqual(attrInt, Literal(1)))
+        expressions.LessThanOrEqual(attrInt, 1))
     }
     assertResult(Some(sources.LessThanOrEqual("cint", 1))) {
       DataSourceStrategy.translateFilter(
-        expressions.GreaterThanOrEqual(Literal(1), attrInt))
+        expressions.GreaterThanOrEqual(1, attrInt))
     }
 
     assertResult(Some(sources.In("cint", Array(1, 2, 3)))) {
@@ -92,7 +92,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
 
     assertResult(Some(sources.In("cint", Array(1, 2, 3)))) {
       DataSourceStrategy.translateFilter(
-        expressions.In(attrInt, Seq(Literal(1), Literal(2), Literal(3))))
+        expressions.In(attrInt, Seq(1, 2, 3)))
     }
 
     assertResult(Some(sources.IsNull("cint"))) {
@@ -108,8 +108,8 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
       sources.GreaterThan("cint", 1),
       sources.LessThan("cint", 10)))) {
       DataSourceStrategy.translateFilter(expressions.And(
-        expressions.GreaterThan(attrInt, Literal(1)),
-        expressions.LessThan(attrInt, Literal(10))
+        expressions.GreaterThan(attrInt, 1),
+        expressions.LessThan(attrInt, 10)
       ))
     }
 
@@ -117,44 +117,44 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
       sources.GreaterThanOrEqual("cint", 8),
       sources.LessThanOrEqual("cint", 2)))) {
       DataSourceStrategy.translateFilter(expressions.Or(
-        expressions.GreaterThanOrEqual(attrInt, Literal(8)),
-        expressions.LessThanOrEqual(attrInt, Literal(2))
+        expressions.GreaterThanOrEqual(attrInt, 8),
+        expressions.LessThanOrEqual(attrInt, 2)
       ))
     }
 
     assertResult(Some(sources.Not(
       sources.GreaterThanOrEqual("cint", 8)))) {
       DataSourceStrategy.translateFilter(
-        expressions.Not(expressions.GreaterThanOrEqual(attrInt, Literal(8))
+        expressions.Not(expressions.GreaterThanOrEqual(attrInt, 8)
         ))
     }
 
     assertResult(Some(sources.StringStartsWith("cstr", "a"))) {
       DataSourceStrategy.translateFilter(
-        expressions.StartsWith(attrStr, Literal("a")
+        expressions.StartsWith(attrStr, "a"
         ))
     }
 
     assertResult(Some(sources.StringEndsWith("cstr", "a"))) {
       DataSourceStrategy.translateFilter(
-        expressions.EndsWith(attrStr, Literal("a")
+        expressions.EndsWith(attrStr, "a"
         ))
     }
 
     assertResult(Some(sources.StringContains("cstr", "a"))) {
       DataSourceStrategy.translateFilter(
-        expressions.Contains(attrStr, Literal("a")
+        expressions.Contains(attrStr, "a"
         ))
     }
   }
 
   test("translate complex expression") {
-    val attrInt = AttributeReference("cint", IntegerType)()
+    val attrInt = 'cint.int
 
     assertResult(None) {
       DataSourceStrategy.translateFilter(
         expressions.LessThanOrEqual(
-          expressions.Subtract(expressions.Abs(attrInt), Literal(2)), Literal(1)))
+          expressions.Subtract(expressions.Abs(attrInt), 2), 1))
     }
 
     assertResult(Some(sources.Or(
@@ -166,12 +166,12 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         sources.LessThan("cint", 100))))) {
       DataSourceStrategy.translateFilter(expressions.Or(
         expressions.And(
-          expressions.GreaterThan(attrInt, Literal(1)),
-          expressions.LessThan(attrInt, Literal(10))
+          expressions.GreaterThan(attrInt, 1),
+          expressions.LessThan(attrInt, 10)
         ),
         expressions.And(
-          expressions.GreaterThan(attrInt, Literal(50)),
-          expressions.LessThan(attrInt, Literal(100))
+          expressions.GreaterThan(attrInt, 50),
+          expressions.LessThan(attrInt, 100)
         )
       ))
     }
@@ -179,14 +179,13 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
     assertResult(None) {
       DataSourceStrategy.translateFilter(expressions.Or(
         expressions.And(
-          expressions.GreaterThan(attrInt, Literal(1)),
+          expressions.GreaterThan(attrInt, 1),
           expressions.LessThan(
-            expressions.Abs(attrInt),
-            Literal(10))
+            expressions.Abs(attrInt), 10)
         ),
         expressions.And(
-          expressions.GreaterThan(attrInt, Literal(50)),
-          expressions.LessThan(attrInt, Literal(100))
+          expressions.GreaterThan(attrInt, 50),
+          expressions.LessThan(attrInt, 100)
         )
       ))
     }
@@ -194,14 +193,14 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
       DataSourceStrategy.translateFilter(
         expressions.Not(expressions.And(
           expressions.Or(
-            expressions.LessThanOrEqual(attrInt, Literal(1)),
+            expressions.LessThanOrEqual(attrInt, 1),
             expressions.GreaterThanOrEqual(
               expressions.Abs(attrInt),
-              Literal(10))
+              10)
           ),
           expressions.Or(
-            expressions.LessThanOrEqual(attrInt, Literal(50)),
-            expressions.GreaterThanOrEqual(attrInt, Literal(100))
+            expressions.LessThanOrEqual(attrInt, 50),
+            expressions.GreaterThanOrEqual(attrInt, 100)
           )
         )))
     }
@@ -215,26 +214,25 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         sources.LessThan("cint", -10))))) {
       DataSourceStrategy.translateFilter(expressions.Or(
         expressions.Or(
-          expressions.EqualTo(attrInt, Literal(1)),
-          expressions.EqualTo(attrInt, Literal(10))
+          expressions.EqualTo(attrInt, 1),
+          expressions.EqualTo(attrInt, 10)
         ),
         expressions.Or(
-          expressions.GreaterThan(attrInt, Literal(0)),
-          expressions.LessThan(attrInt, Literal(-10))
+          expressions.GreaterThan(attrInt, 0),
+          expressions.LessThan(attrInt, -10)
         )
       ))
     }
     assertResult(None) {
       DataSourceStrategy.translateFilter(expressions.Or(
         expressions.Or(
-          expressions.EqualTo(attrInt, Literal(1)),
+          expressions.EqualTo(attrInt, 1),
           expressions.EqualTo(
-            expressions.Abs(attrInt),
-            Literal(10))
+            expressions.Abs(attrInt), 10)
         ),
         expressions.Or(
-          expressions.GreaterThan(attrInt, Literal(0)),
-          expressions.LessThan(attrInt, Literal(-10))
+          expressions.GreaterThan(attrInt, 0),
+          expressions.LessThan(attrInt, -10)
         )
       ))
     }
@@ -248,11 +246,11 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         sources.IsNotNull("cint"))))) {
       DataSourceStrategy.translateFilter(expressions.And(
         expressions.And(
-          expressions.GreaterThan(attrInt, Literal(1)),
-          expressions.LessThan(attrInt, Literal(10))
+          expressions.GreaterThan(attrInt, 1),
+          expressions.LessThan(attrInt, 10)
         ),
         expressions.And(
-          expressions.EqualTo(attrInt, Literal(6)),
+          expressions.EqualTo(attrInt, 6),
           expressions.IsNotNull(attrInt)
         )
       ))
@@ -260,12 +258,11 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
     assertResult(None) {
       DataSourceStrategy.translateFilter(expressions.And(
         expressions.And(
-          expressions.GreaterThan(attrInt, Literal(1)),
-          expressions.LessThan(attrInt, Literal(10))
+          expressions.GreaterThan(attrInt, 1),
+          expressions.LessThan(attrInt, 10)
         ),
         expressions.And(
-          expressions.EqualTo(expressions.Abs(attrInt),
-            Literal(6)),
+          expressions.EqualTo(expressions.Abs(attrInt), 6),
           expressions.IsNotNull(attrInt)
         )
       ))
@@ -280,11 +277,11 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         sources.IsNotNull("cint"))))) {
       DataSourceStrategy.translateFilter(expressions.And(
         expressions.Or(
-          expressions.GreaterThan(attrInt, Literal(1)),
-          expressions.LessThan(attrInt, Literal(10))
+          expressions.GreaterThan(attrInt, 1),
+          expressions.LessThan(attrInt, 10)
         ),
         expressions.Or(
-          expressions.EqualTo(attrInt, Literal(6)),
+          expressions.EqualTo(attrInt, 6),
           expressions.IsNotNull(attrInt)
         )
       ))
@@ -292,12 +289,11 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
     assertResult(None) {
       DataSourceStrategy.translateFilter(expressions.And(
         expressions.Or(
-          expressions.GreaterThan(attrInt, Literal(1)),
-          expressions.LessThan(attrInt, Literal(10))
+          expressions.GreaterThan(attrInt, 1),
+          expressions.LessThan(attrInt, 10)
         ),
         expressions.Or(
-          expressions.EqualTo(expressions.Abs(attrInt),
-            Literal(6)),
+          expressions.EqualTo(expressions.Abs(attrInt), 6),
           expressions.IsNotNull(attrInt)
         )
       ))
