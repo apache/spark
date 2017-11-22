@@ -97,7 +97,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual(0) == cases)
   }
 
-  test("SPARK-18091: split large if expressions into blocks due to JVM code size limit") {
+  test("SPARK-22543: split large if expressions into blocks due to JVM code size limit") {
     var strExpr: Expression = Literal("abc")
     for (_ <- 1 to 150) {
       strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
@@ -342,7 +342,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     projection(row)
   }
 
-  test("SPARK-21720: split large predications into blocks due to JVM code size limit") {
+  test("SPARK-22543: split large predicates into blocks due to JVM code size limit") {
     val length = 600
 
     val input = new GenericInternalRow(length)
