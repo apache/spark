@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator, CodegenContext}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
@@ -176,6 +177,29 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
     checkEvaluation(nonNullExpr, "num-num", row1)
+  }
+
+  test("SPARK-22570: should not create a lot of instance variables") {
+    val expr = RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num"))
+    val ctx = new CodegenContext
+    val codes = (1 to 16000).map(_ => expr.genCode(ctx).code)
+    val eval = ctx.splitExpressions(ctx.INPUT_ROW, codes)
+    val codeBody = s"""
+      public RegexpExpressionsTest generate(Object[] references) {
+        return new RegexpExpressionsTest(references);
+      }
+      class RegexpExpressionsTest {
+        Object[] references;
+        ${ctx.declareMutableStates()}
+        public RegexpExpressionsTest(Object[] references) {
+          ${ctx.initMutableStates()}
+        }
+        public void apply(InternalRow ${ctx.INPUT_ROW}) {
+          ${eval}
+        }
+       ${ctx.declareAddedFunctions()}
+     }"""
+    CodeGenerator.compile(new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
   }
 
   test("RegexExtract") {
