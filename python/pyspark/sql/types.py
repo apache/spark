@@ -1116,10 +1116,10 @@ def _merge_type(a, b, name=None):
         return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
-        if name is not None:
-            raise TypeError("Can not merge type %s and %s in column %s" % (type(a), type(b), name))
-        else:
+        if name is None:
             raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
+        else:
+            raise TypeError("Can not merge type %s and %s in column %s" % (type(a), type(b), name))
 
     # same type
     if isinstance(a, StructType):
