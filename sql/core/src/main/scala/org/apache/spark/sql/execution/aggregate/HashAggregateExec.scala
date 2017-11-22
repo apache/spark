@@ -179,6 +179,8 @@ case class HashAggregateExec(
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState(ctx.JAVA_BOOLEAN, initAgg, s"$initAgg = false;")
+    // The generated function doesn't have input row in the code context.
+    ctx.INPUT_ROW = null
 
     // generate variables for aggregation buffer
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
