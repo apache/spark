@@ -104,43 +104,45 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val ve = doGenCode(ctx, ExprCode("", isNull, value))
+      val eval = doGenCode(ctx, ExprCode("", isNull, value))
+      reduceCodeSize(ctx, eval)
+      if (eval.code.nonEmpty) {
+        // Add `this` in the comment.
+        eval.copy(code = s"${ctx.registerComment(this.toString)}\n" + eval.code.trim)
+      } else {
+        eval
+      }
+    }
+  }
 
-      // TODO: support whole stage codegen too
-      if (ve.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
-        val setIsNull = if (ve.isNull != "false" && ve.isNull != "true") {
-          val globalIsNull = ctx.freshName("globalIsNull")
-          ctx.addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
-          val localIsNull = ve.isNull
-          ve.isNull = globalIsNull
-          s"$globalIsNull = $localIsNull;"
-        } else {
-          ""
-        }
+  private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
+    // TODO: support whole stage codegen too
+    if (eval.code.trim.length > 100 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
+        val globalIsNull = ctx.freshName("globalIsNull")
+        ctx.addMutableState(ctx.JAVA_BOOLEAN, globalIsNull)
+        val localIsNull = eval.isNull
+        eval.isNull = globalIsNull
+        s"$globalIsNull = $localIsNull;"
+      } else {
+        ""
+      }
 
-        val javaType = ctx.javaType(dataType)
-        val newValue = ctx.freshName("value")
+      val javaType = ctx.javaType(dataType)
+      val newValue = ctx.freshName("value")
 
-        val funcName = ctx.freshName(nodeName)
-        val funcFullName = ctx.addNewFunction(funcName,
-          s"""
-             |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
-             |  ${ve.code.trim}
-             |  $setIsNull
-             |  return ${ve.value};
-             |}
+      val funcName = ctx.freshName(nodeName)
+      val funcFullName = ctx.addNewFunction(funcName,
+        s"""
+           |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
+           |  ${eval.code.trim}
+           |  $setIsNull
+           |  return ${eval.value};
+           |}
            """.stripMargin)
 
-        ve.value = newValue
-        ve.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
-      }
-
-      if (ve.code.nonEmpty) {
-        // Add `this` in the comment.
-        ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
-      } else {
-        ve
-      }
+      eval.value = newValue
+      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }
 
