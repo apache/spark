@@ -519,6 +519,31 @@ class CatalogSuite
     }
   }
 
+  test("createTable with partition columns") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "json",
+          schema = new StructType().add("i", "int").add("year", "int"),
+          options = Map("path" -> dir.getAbsolutePath),
+          partitionColumnNames = Seq("year"))
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.tableType == CatalogTableType.EXTERNAL)
+        assert(table.storage.locationUri.get == makeQualifiedPath(dir.getAbsolutePath))
+
+        val columns = spark.catalog.listColumns("t")
+        assert(1 == columns.filter("name == 'i' and isPartition = false").count())
+        assert(1 == columns.filter("name == 'year' and isPartition = true").count())
+
+        sql("DROP TABLE t")
+        // the table path and data files are still there after DROP TABLE, if custom table path is
+        // specified.
+        assert(dir.exists() && dir.listFiles().nonEmpty)
+      }
+    }
+  }
+
   test("clone Catalog") {
     // need to test tempTables are cloned
     assert(spark.catalog.listTables().collect().isEmpty)
