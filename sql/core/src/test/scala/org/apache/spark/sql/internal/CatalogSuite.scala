@@ -19,8 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterEach
-
+import org.scalatest.{BeforeAndAfterEach, Tag}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
@@ -519,7 +518,7 @@ class CatalogSuite
     }
   }
 
-  test("createTable with partition columns") {
+  test("createTable with partition columns", Tag("go")) {
     withTable("t") {
       withTempDir { dir =>
         spark.catalog.createTable(
@@ -537,9 +536,6 @@ class CatalogSuite
         assert(1 == columns.filter("name == 'year' and isPartition = true").count())
 
         sql("DROP TABLE t")
-        // the table path and data files are still there after DROP TABLE, if custom table path is
-        // specified.
-        assert(dir.exists() && dir.listFiles().nonEmpty)
       }
     }
   }
