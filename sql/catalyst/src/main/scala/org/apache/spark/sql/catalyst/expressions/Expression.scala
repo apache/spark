@@ -140,9 +140,9 @@ abstract class Expression extends TreeNode[Expression] {
            |  return ${eval.value};
            |}
            """.stripMargin)
-
-      eval.value = newValue
-      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
+      
+      eval.code = ""
+      eval.value = s"$funcFullName(${ctx.INPUT_ROW})"
     }
   }
 
