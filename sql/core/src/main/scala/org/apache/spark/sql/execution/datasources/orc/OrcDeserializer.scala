@@ -40,14 +40,19 @@ private[orc] class OrcDeserializer(
 
   private[this] val length = requiredSchema.length
 
-  private[this] val unwrappers = requiredSchema.map(_.dataType).map(unwrapperFor).toArray
+  private[this] val unwrappers = requiredSchema.map { f =>
+    if (missingColumnNames.contains(f.name)) {
+      (value: Any, row: InternalRow, ordinal: Int) => row.setNullAt(ordinal)
+    } else {
+      unwrapperFor(f.dataType)
+    }
+  }.toArray
 
   def deserialize(orcStruct: OrcStruct): InternalRow = {
-    var i = 0
     val names = orcStruct.getSchema.getFieldNames
-    while (i < length) {
-      val name = requiredSchema(i).name
-      val writable = if (missingColumnNames.contains(name)) {
+    val fieldRefs = requiredSchema.map { f =>
+      val name = f.name
+      if (missingColumnNames.contains(name)) {
         null
       } else {
         if (names.contains(name)) {
@@ -56,6 +61,11 @@ private[orc] class OrcDeserializer(
           orcStruct.getFieldValue("_col" + dataSchema.fieldIndex(name))
         }
       }
+    }.toArray
+
+    var i = 0
+    while (i < length) {
+      val writable = fieldRefs(i)
       if (writable == null) {
         mutableRow.setNullAt(i)
       } else {
