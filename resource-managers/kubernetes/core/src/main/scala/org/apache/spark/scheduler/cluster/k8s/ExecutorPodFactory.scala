@@ -53,8 +53,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
 
   private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
     sparkConf,
-    KUBERNETES_EXECUTOR_LABEL_PREFIX,
-    "executor label")
+    KUBERNETES_EXECUTOR_LABEL_PREFIX)
   require(
     !executorLabels.contains(SPARK_APP_ID_LABEL),
     s"Custom executor labels cannot contain $SPARK_APP_ID_LABEL as it is reserved for Spark.")
@@ -69,13 +68,11 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
   private val executorAnnotations =
     ConfigurationUtils.parsePrefixedKeyValuePairs(
       sparkConf,
-      KUBERNETES_EXECUTOR_ANNOTATION_PREFIX,
-      "executor annotation")
+      KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
   private val nodeSelector =
     ConfigurationUtils.parsePrefixedKeyValuePairs(
       sparkConf,
-      KUBERNETES_NODE_SELECTOR_PREFIX,
-      "node selector")
+      KUBERNETES_NODE_SELECTOR_PREFIX)
 
   private val executorDockerImage = sparkConf.get(EXECUTOR_DOCKER_IMAGE)
   private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)

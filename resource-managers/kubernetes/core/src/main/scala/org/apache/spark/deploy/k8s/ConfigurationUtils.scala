@@ -27,13 +27,11 @@ private[spark] object ConfigurationUtils {
    *
    * @param sparkConf Spark configuration
    * @param prefix the given property name prefix
-   * @param configType a descriptive note on the type of entities of interest
    * @return a Map storing the configuration property keys and values
    */
   def parsePrefixedKeyValuePairs(
       sparkConf: SparkConf,
-      prefix: String,
-      configType: String): Map[String, String] = {
+      prefix: String): Map[String, String] = {
     sparkConf.getAllWithPrefix(prefix).toMap
   }
 
