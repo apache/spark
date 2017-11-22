@@ -76,19 +76,22 @@ case class BroadcastHashJoinExec(
     streamedPlan.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
-  override def needCopyResult: Boolean = joinType match {
+  private def multipleOutputForOneInput: Boolean = joinType match {
     case _: InnerLike | LeftOuter | RightOuter =>
       // For inner and outer joins, one row from the streamed side may produce multiple result rows,
-      // if the build side has duplicated keys. Then we need to copy the result rows before putting
-      // them in a buffer, because these result rows share one UnsafeRow instance. Note that here
-      // we wait for the broadcast to be finished, which is a no-op because it's already finished
-      // when we wait it in `doProduce`.
+      // if the build side has duplicated keys. Note that here we wait for the broadcast to be
+      // finished, which is a no-op because it's already finished when we wait it in `doProduce`.
       !buildPlan.executeBroadcast[HashedRelation]().value.keyIsUnique
 
     // Other joins types(semi, anti, existence) can at most produce one result row for one input
-    // row from the streamed side, so no need to copy the result rows.
+    // row from the streamed side.
     case _ => false
   }
+
+  // If the streaming side needs to copy result, this join plan needs to copy too. Otherwise,
+  // this join plan only needs to copy result if it may output multiple rows for one input.
+  override def needCopyResult: Boolean =
+    streamedPlan.asInstanceOf[CodegenSupport].needCopyResult || multipleOutputForOneInput
 
   override def doProduce(ctx: CodegenContext): String = {
     streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
