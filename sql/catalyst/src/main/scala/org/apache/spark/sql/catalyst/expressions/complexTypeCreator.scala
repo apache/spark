@@ -87,31 +87,36 @@ private [sql] object GenArrayData {
       elementType: DataType,
       elementsCode: Seq[ExprCode],
       isMapKey: Boolean): (String, Seq[String], String, String) = {
-    val arrayName = ctx.freshName("array")
+    val arrayName = "array"
     val arrayDataName = ctx.freshName("arrayData")
     val numElements = elementsCode.length
 
     if (!ctx.isPrimitiveType(elementType)) {
       val genericArrayClass = classOf[GenericArrayData].getName
-      ctx.addMutableState("Object[]", arrayName,
-        s"$arrayName = new Object[$numElements];")
+      if (!ctx.mutableStates.exists(s => s._1 == arrayName)) {
+        ctx.addMutableState("Object[]", arrayName)
+      }
 
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
-        val isNullAssignment = if (!isMapKey) {
-          s"$arrayName[$i] = null;"
+        val isNullAssignment = if (eval.isNull == "false") {
+          ""
         } else {
-          "throw new RuntimeException(\"Cannot use null as map key!\");"
+          if (!isMapKey) {
+            s"$arrayName[$i] = null;"
+          } else {
+            "throw new RuntimeException(\"Cannot use null as map key!\");"
+          }
         }
         eval.code + s"""
-         if (${eval.isNull}) {
-           $isNullAssignment
-         } else {
+         if (!${eval.isNull}) {
            $arrayName[$i] = ${eval.value};
+         } else {
+           $isNullAssignment
          }
        """
       }
 
-      ("",
+      (s"$arrayName = new Object[$numElements];",
        assignments,
        s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
        arrayDataName)
