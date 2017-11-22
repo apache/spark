@@ -1119,7 +1119,7 @@ def _merge_type(a, b, name=None):
         if name is None:
             raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
         else:
-            raise TypeError("Can not merge type %s and %s in column %s" % (type(a), type(b), name))
+            raise TypeError("Can not merge type %s and %s in field '%s'" % (type(a), type(b), name))
 
     # same type
     if isinstance(a, StructType):
@@ -1133,11 +1133,11 @@ def _merge_type(a, b, name=None):
         return StructType(fields)
 
     elif isinstance(a, ArrayType):
-        return ArrayType(_merge_type(a.elementType, b.elementType), True)
+        return ArrayType(_merge_type(a.elementType, b.elementType, name=name), True)
 
     elif isinstance(a, MapType):
-        return MapType(_merge_type(a.keyType, b.keyType),
-                       _merge_type(a.valueType, b.valueType),
+        return MapType(_merge_type(a.keyType, b.keyType, name=name),
+                       _merge_type(a.valueType, b.valueType, name=name),
                        True)
     else:
         return a
