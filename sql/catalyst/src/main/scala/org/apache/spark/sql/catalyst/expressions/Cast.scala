@@ -799,9 +799,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
-        s"$wrapper = new UTF8String.IntWrapper();")
+      val wrapper = "intWrapper"
+      if (!ctx.mutableStates.exists(s => s._1 == wrapper)) {
+        ctx.addMutableState("UTF8String.IntWrapper", wrapper,
+          s"$wrapper = new UTF8String.IntWrapper();")
+      }
       (c, evPrim, evNull) =>
         s"""
           if ($c.toByte($wrapper)) {
@@ -826,9 +828,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
-        s"$wrapper = new UTF8String.IntWrapper();")
+      val wrapper = "intWrapper"
+      if (!ctx.mutableStates.exists(s => s._1 == wrapper)) {
+        ctx.addMutableState("UTF8String.IntWrapper", wrapper,
+          s"$wrapper = new UTF8String.IntWrapper();")
+      }
       (c, evPrim, evNull) =>
         s"""
           if ($c.toShort($wrapper)) {
@@ -851,9 +855,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
-        s"$wrapper = new UTF8String.IntWrapper();")
+      val wrapper = "intWrapper"
+      if (!ctx.mutableStates.exists(s => s._1 == wrapper)) {
+        ctx.addMutableState("UTF8String.IntWrapper", wrapper,
+          s"$wrapper = new UTF8String.IntWrapper();")
+      }
       (c, evPrim, evNull) =>
         s"""
           if ($c.toInt($wrapper)) {
@@ -876,9 +882,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.LongWrapper", wrapper,
-        s"$wrapper = new UTF8String.LongWrapper();")
+      val wrapper = "longWrapper"
+      if (!ctx.mutableStates.exists(s => s._1 == wrapper)) {
+        ctx.addMutableState("UTF8String.LongWrapper", wrapper,
+          s"$wrapper = new UTF8String.LongWrapper();")
+      }
 
       (c, evPrim, evNull) =>
         s"""
