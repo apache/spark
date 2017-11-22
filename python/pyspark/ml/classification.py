@@ -914,7 +914,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed",
+    ...                               stringOrderType="alphabetAsc")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
     >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
@@ -1050,7 +1051,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed",
+    ...                               stringOrderType="alphabetAsc")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
     >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42)
@@ -1188,7 +1190,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed",
+    ...                               stringOrderType="alphabetAsc")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
     >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
