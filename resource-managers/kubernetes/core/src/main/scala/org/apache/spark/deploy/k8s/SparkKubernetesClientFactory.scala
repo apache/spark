@@ -92,8 +92,8 @@ private[spark] object SparkKubernetesClientFactory {
     extends AnyVal {
 
     def withOption[T]
-    (option: Option[T])
-    (configurator: ((T, ConfigBuilder) => ConfigBuilder)): ConfigBuilder = {
+        (option: Option[T])
+        (configurator: ((T, ConfigBuilder) => ConfigBuilder)): ConfigBuilder = {
       option.map { opt =>
         configurator(opt, configBuilder)
       }.getOrElse(configBuilder)

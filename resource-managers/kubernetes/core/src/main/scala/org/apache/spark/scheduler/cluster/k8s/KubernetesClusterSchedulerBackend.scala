@@ -103,24 +103,26 @@ private[spark] class KubernetesClusterSchedulerBackend(
       val currentTotalRegisteredExecutors = totalRegisteredExecutors.get
       val currentTotalExpectedExecutors = totalExpectedExecutors.get
       val currentNodeToLocalTaskCount = getNodesWithLocalTaskCounts()
-      if (currentTotalRegisteredExecutors < runningExecutorsToPods.size) {
-        logDebug("Waiting for pending executors before scaling")
-      } else if (currentTotalExpectedExecutors <= runningExecutorsToPods.size) {
-        logDebug("Maximum allowed executor limit reached. Not scaling up further.")
-      } else {
-        for (i <- 0 until math.min(
-          currentTotalExpectedExecutors - runningExecutorsToPods.size, podAllocationSize)) {
-          val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
-          val executorPod = executorPodFactory.createExecutorPod(
-            executorId,
-            applicationId(),
-            driverUrl,
-            conf.getExecutorEnv,
-            driverPod,
-            currentNodeToLocalTaskCount)
-          executorsToAllocate(executorId) = executorPod
-          logInfo(
-            s"Requesting a new executor, total executors is now ${runningExecutorsToPods.size}")
+      RUNNING_EXECUTOR_PODS_LOCK.synchronized {
+        if (currentTotalRegisteredExecutors < runningExecutorsToPods.size) {
+          logDebug("Waiting for pending executors before scaling")
+        } else if (currentTotalExpectedExecutors <= runningExecutorsToPods.size) {
+          logDebug("Maximum allowed executor limit reached. Not scaling up further.")
+        } else {
+          for (i <- 0 until math.min(
+            currentTotalExpectedExecutors - runningExecutorsToPods.size, podAllocationSize)) {
+            val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
+            val executorPod = executorPodFactory.createExecutorPod(
+              executorId,
+              applicationId(),
+              driverUrl,
+              conf.getExecutorEnv,
+              driverPod,
+              currentNodeToLocalTaskCount)
+            executorsToAllocate(executorId) = executorPod
+            logInfo(
+              s"Requesting a new executor, total executors is now ${runningExecutorsToPods.size}")
+          }
         }
       }
 
@@ -182,7 +184,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     def deleteExecutorFromClusterAndDataStructures(executorId: String): Unit = {
       deleteExecutorFromDataStructures(executorId).foreach { pod =>
-        kubernetesClient.pods().delete(pod) }
+        kubernetesClient.pods().delete(pod)
+      }
     }
 
     def deleteExecutorFromDataStructures(executorId: String): Option[Pod] = {

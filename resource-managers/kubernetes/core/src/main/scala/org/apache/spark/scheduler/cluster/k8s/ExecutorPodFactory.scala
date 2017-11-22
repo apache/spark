@@ -94,7 +94,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
 
   private val executorCores = sparkConf.getDouble("spark.executor.cores", 1)
-  private val executorLimitCores = sparkConf.getOption(KUBERNETES_EXECUTOR_LIMIT_CORES.key)
+  private val executorLimitCores = sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
   override def createExecutorPod(
       executorId: String,

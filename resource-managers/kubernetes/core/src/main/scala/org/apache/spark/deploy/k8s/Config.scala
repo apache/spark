@@ -40,8 +40,9 @@ private[spark] object Config extends Logging {
 
   val DOCKER_IMAGE_PULL_POLICY =
     ConfigBuilder("spark.kubernetes.docker.image.pullPolicy")
-      .doc("Docker image pull policy when pulling any docker image in Kubernetes integration")
+      .doc("Kubernetes image pull policy. Valid values are Always, Never, and IfNotPresent.")
       .stringConf
+      .checkValues(Set("Always", "Never", "IfNotPresent"))
       .createWithDefault("IfNotPresent")
 
   val APISERVER_AUTH_DRIVER_CONF_PREFIX =
@@ -101,7 +102,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.allocation.batch.delay")
       .doc("Number of seconds to wait between each round of executor allocation.")
       .longConf
-      .checkValue(value => value > 0, s"Allocation batch delay should be a positive integer")
+      .checkValue(value => value > 0, "Allocation batch delay should be a positive integer")
       .createWithDefault(1)
 
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
