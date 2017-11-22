@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalog
 
 import scala.collection.JavaConverters._
-
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
@@ -411,7 +410,29 @@ abstract class Catalog {
       tableName: String,
       source: String,
       schema: StructType,
-      options: Map[String, String]): DataFrame
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options, Nil)
+  }
+
+  /**
+    * :: Experimental ::
+    * (Scala-specific)
+    * Create a table based on the dataset in a data source, a schema, a set of options and a set of partition columns.
+    * Then, returns the corresponding DataFrame.
+    *
+    * @param tableName is either a qualified or unqualified name that designates a table.
+    *                  If no database identifier is provided, it refers to a table in
+    *                  the current database.
+    * @since ???
+    */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(
+    tableName: String,
+    source: String,
+    schema: StructType,
+    options: Map[String, String],
+    partitionColumnNames : Seq[String]): DataFrame
 
   /**
    * Drops the local temporary view with the given view name in the catalog.

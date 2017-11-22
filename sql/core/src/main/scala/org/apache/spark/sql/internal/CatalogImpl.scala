@@ -335,6 +335,25 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options, Nil, None)
+  }
+
+  /**
+    * :: Experimental ::
+    * (Scala-specific)
+    * Creates a table based on the dataset in a data source, a schema, a set of options and a set of partition columns names.
+    * Then, returns the corresponding DataFrame.
+    *
+    * @group ddl_ops
+    * @since ???
+    */
+  @Experimental
+  override def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: Map[String, String],
+      partitionColumnNames : Seq[String]): DataFrame = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val storage = DataSource.buildStorageFormatFromOptions(options)
     val tableType = if (storage.locationUri.isDefined) {
@@ -347,7 +366,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableType = tableType,
       storage = storage,
       schema = schema,
-      provider = Some(source)
+      provider = Some(source),
+      partitionColumnNames = partitionColumnNames
     )
     val plan = CreateTable(tableDesc, SaveMode.ErrorIfExists, None)
     sparkSession.sessionState.executePlan(plan).toRdd
