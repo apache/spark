@@ -196,23 +196,29 @@ case class InMemoryTableScanExec(
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   private def doFilterCachedBatches(
-      cachedBatchIterator: Iterator[CachedBatch],
-      partitionStatsSchema: Seq[AttributeReference],
-      partitionFilter: GenPredicate): Iterator[CachedBatch] = {
+      rdd: RDD[CachedBatch],
+      partitionStatsSchema: Seq[AttributeReference]): RDD[CachedBatch] = {
     val schemaIndex = partitionStatsSchema.zipWithIndex
-    cachedBatchIterator.filter { cachedBatch =>
-      if (!partitionFilter.eval(cachedBatch.stats)) {
-        logDebug {
-          val statsString = schemaIndex.map { case (a, i) =>
-            val value = cachedBatch.stats.get(i, a.dataType)
-            s"${a.name}: $value"
-          }.mkString(", ")
-          s"Skipping partition based on stats $statsString"
+    rdd.mapPartitionsWithIndex {
+      case (partitionIndex, cachedBatches) =>
+        cachedBatches.filter { cachedBatch =>
+          val partitionFilter = newPredicate(
+            partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+            partitionStatsSchema)
+          partitionFilter.initialize(partitionIndex)
+          if (!partitionFilter.eval(cachedBatch.stats)) {
+            logDebug {
+              val statsString = schemaIndex.map { case (a, i) =>
+                val value = cachedBatch.stats.get(i, a.dataType)
+                s"${a.name}: $value"
+              }.mkString(", ")
+              s"Skipping partition based on stats $statsString"
+            }
+            false
+          } else {
+            true
+          }
         }
-        false
-      } else {
-        true
-      }
     }
   }
 
@@ -239,8 +245,15 @@ case class InMemoryTableScanExec(
           partitionFilter.eval(partitionStats)
         }
     }.map(_._2).map(partitionIndex => buffers.partitions(partitionIndex))
-    new FilteredCachedColumnarRDD(buffers.sparkContext, buffers.asInstanceOf[CachedColumnarRDD],
+    val prunedRDD = new FilteredCachedColumnarRDD(
+      buffers.sparkContext,
+      buffers.asInstanceOf[CachedColumnarRDD],
       buildFilteredRDDPartitions(metadataOfValidPartitions))
+    if (!inMemoryPartitionPruningEnabled) {
+      prunedRDD
+    } else {
+      doFilterCachedBatches(prunedRDD, schema)
+    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
