@@ -335,7 +335,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    createTable(tableName, source, schema, options, Nil, None)
+    createTable(tableName, source, schema, options, Nil)
   }
 
   /**
