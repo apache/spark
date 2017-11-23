@@ -177,7 +177,8 @@ case class FileSourceScanExec(
   override def vectorTypes: Option[Seq[String]] =
     relation.fileFormat.vectorTypes(
       requiredSchema = requiredSchema,
-      partitionSchema = relation.partitionSchema)
+      partitionSchema = relation.partitionSchema,
+      relation.sparkSession.sessionState.conf)
 
   @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)

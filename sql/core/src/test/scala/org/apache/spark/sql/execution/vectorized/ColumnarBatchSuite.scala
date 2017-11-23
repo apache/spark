@@ -919,7 +919,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val batch = new ColumnarBatch(schema, columns.toArray, ColumnarBatch.DEFAULT_BATCH_SIZE)
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 0)
-      assert(batch.numValidRows() == 0)
       assert(batch.capacity() > 0)
       assert(batch.rowIterator().hasNext == false)
 
@@ -933,7 +932,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       // Verify the results of the row.
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 1)
-      assert(batch.numValidRows() == 1)
       assert(batch.rowIterator().hasNext == true)
       assert(batch.rowIterator().hasNext == true)
 
@@ -957,16 +955,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(it.hasNext == false)
       assert(it.hasNext == false)
 
-      // Filter out the row.
-      row.markFiltered()
-      assert(batch.numRows() == 1)
-      assert(batch.numValidRows() == 0)
-      assert(batch.rowIterator().hasNext == false)
-
       // Reset and add 3 rows
       batch.reset()
       assert(batch.numRows() == 0)
-      assert(batch.numValidRows() == 0)
       assert(batch.rowIterator().hasNext == false)
 
       // Add rows [NULL, 2.2, 2, "abc"], [3, NULL, 3, ""], [4, 4.4, 4, "world]
@@ -1002,25 +993,11 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       // Verify
       assert(batch.numRows() == 3)
-      assert(batch.numValidRows() == 3)
       val it2 = batch.rowIterator()
       rowEquals(it2.next(), Row(null, 2.2, 2, "abc"))
       rowEquals(it2.next(), Row(3, null, 3, ""))
       rowEquals(it2.next(), Row(4, 4.4, 4, "world"))
       assert(!it.hasNext)
-
-      // Filter out some rows and verify
-      batch.markFiltered(1)
-      assert(batch.numValidRows() == 2)
-      val it3 = batch.rowIterator()
-      rowEquals(it3.next(), Row(null, 2.2, 2, "abc"))
-      rowEquals(it3.next(), Row(4, 4.4, 4, "world"))
-      assert(!it.hasNext)
-
-      batch.markFiltered(2)
-      assert(batch.numValidRows() == 1)
-      val it4 = batch.rowIterator()
-      rowEquals(it4.next(), Row(null, 2.2, 2, "abc"))
 
       batch.close()
     }}
@@ -1174,35 +1151,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
   test("Random nested schema") {
     testRandomRows(false, 30)
-  }
-
-  test("null filtered columns") {
-    val NUM_ROWS = 10
-    val schema = new StructType()
-      .add("key", IntegerType, nullable = false)
-      .add("value", StringType, nullable = true)
-    for (numNulls <- List(0, NUM_ROWS / 2, NUM_ROWS)) {
-      val rows = mutable.ArrayBuffer.empty[Row]
-      for (i <- 0 until NUM_ROWS) {
-        val row = if (i < numNulls) Row.fromSeq(Seq(i, null)) else Row.fromSeq(Seq(i, i.toString))
-        rows += row
-      }
-      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
-        val batch = ColumnVectorUtils.toBatch(schema, memMode, rows.iterator.asJava)
-        batch.filterNullsInColumn(1)
-        batch.setNumRows(NUM_ROWS)
-        assert(batch.numRows() == NUM_ROWS)
-        val it = batch.rowIterator()
-        // Top numNulls rows should be filtered
-        var k = numNulls
-        while (it.hasNext) {
-          assert(it.next().getInt(0) == k)
-          k += 1
-        }
-        assert(k == NUM_ROWS)
-        batch.close()
-      }}
-    }
   }
 
   test("mutable ColumnarBatch rows") {

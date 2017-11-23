@@ -64,52 +64,22 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     val trueEval = trueValue.genCode(ctx)
     val falseEval = falseValue.genCode(ctx)
 
-    // place generated code of condition, true value and false value in separate methods if
-    // their code combined is large
-    val combinedLength = condEval.code.length + trueEval.code.length + falseEval.code.length
-    val generatedCode = if (combinedLength > 1024 &&
-      // Split these expressions only if they are created from a row object
-      (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
-
-      val (condFuncName, condGlobalIsNull, condGlobalValue) =
-        ctx.createAndAddFunction(condEval, predicate.dataType, "evalIfCondExpr")
-      val (trueFuncName, trueGlobalIsNull, trueGlobalValue) =
-        ctx.createAndAddFunction(trueEval, trueValue.dataType, "evalIfTrueExpr")
-      val (falseFuncName, falseGlobalIsNull, falseGlobalValue) =
-        ctx.createAndAddFunction(falseEval, falseValue.dataType, "evalIfFalseExpr")
+    val code =
       s"""
-        $condFuncName(${ctx.INPUT_ROW});
-        boolean ${ev.isNull} = false;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        if (!$condGlobalIsNull && $condGlobalValue) {
-          $trueFuncName(${ctx.INPUT_ROW});
-          ${ev.isNull} = $trueGlobalIsNull;
-          ${ev.value} = $trueGlobalValue;
-        } else {
-          $falseFuncName(${ctx.INPUT_ROW});
-          ${ev.isNull} = $falseGlobalIsNull;
-          ${ev.value} = $falseGlobalValue;
-        }
-      """
-    }
-    else {
-      s"""
-        ${condEval.code}
-        boolean ${ev.isNull} = false;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        if (!${condEval.isNull} && ${condEval.value}) {
-          ${trueEval.code}
-          ${ev.isNull} = ${trueEval.isNull};
-          ${ev.value} = ${trueEval.value};
-        } else {
-          ${falseEval.code}
-          ${ev.isNull} = ${falseEval.isNull};
-          ${ev.value} = ${falseEval.value};
-        }
-      """
-    }
-
-    ev.copy(code = generatedCode)
+         |${condEval.code}
+         |boolean ${ev.isNull} = false;
+         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |if (!${condEval.isNull} && ${condEval.value}) {
+         |  ${trueEval.code}
+         |  ${ev.isNull} = ${trueEval.isNull};
+         |  ${ev.value} = ${trueEval.value};
+         |} else {
+         |  ${falseEval.code}
+         |  ${ev.isNull} = ${falseEval.isNull};
+         |  ${ev.value} = ${falseEval.value};
+         |}
+       """.stripMargin
+    ev.copy(code = code)
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"

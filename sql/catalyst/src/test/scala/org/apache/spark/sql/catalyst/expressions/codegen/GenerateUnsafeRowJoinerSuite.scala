@@ -66,6 +66,11 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-22508: GenerateUnsafeRowJoiner.create should not generate codes beyond 64KB") {
+    val N = 3000
+    testConcatOnce(N, N, variable)
+  }
+
   private def testConcat(numFields1: Int, numFields2: Int, candidateTypes: Seq[DataType]): Unit = {
     for (i <- 0 until 10) {
       testConcatOnce(numFields1, numFields2, candidateTypes)
