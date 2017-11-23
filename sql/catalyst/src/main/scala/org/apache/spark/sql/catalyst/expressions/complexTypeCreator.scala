@@ -93,25 +93,19 @@ private [sql] object GenArrayData {
     if (!ctx.isPrimitiveType(elementType)) {
       val arrayName = "arrayObject"
       val genericArrayClass = classOf[GenericArrayData].getName
-      if (!ctx.mutableStates.exists(s => s._1 == arrayName)) {
-        ctx.addMutableState("Object[]", arrayName)
-      }
+      ctx.reuseOrAddMutableState("Object[]", arrayName)
 
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
-        val isNullAssignment = if (eval.isNull == "false") {
-          ""
+        val isNullAssignment = if (!isMapKey) {
+          s"$arrayName[$i] = null;"
         } else {
-          if (!isMapKey) {
-            s"$arrayName[$i] = null;"
-          } else {
-            "throw new RuntimeException(\"Cannot use null as map key!\");"
-          }
+          "throw new RuntimeException(\"Cannot use null as map key!\");"
         }
         eval.code + s"""
-         if (!${eval.isNull}) {
-           $arrayName[$i] = ${eval.value};
-         } else {
+         if (${eval.isNull}) {
            $isNullAssignment
+         } else {
+           $arrayName[$i] = ${eval.value};
          }
        """
       }

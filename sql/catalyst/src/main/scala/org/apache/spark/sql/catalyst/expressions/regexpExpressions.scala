@@ -334,10 +334,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     ctx.addMutableState("String", termLastReplacement, s"${termLastReplacement} = null;")
     ctx.addMutableState("UTF8String",
       termLastReplacementInUTF8, s"${termLastReplacementInUTF8} = null;")
-    if (!ctx.mutableStates.exists(s => s._1 == termResult)) {
-      ctx.addMutableState(classNameStringBuffer,
-        termResult, s"${termResult} = new $classNameStringBuffer();")
-    }
+    ctx.reuseOrAddMutableState(classNameStringBuffer,
+      termResult, s"${termResult} = new $classNameStringBuffer();")
 
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
