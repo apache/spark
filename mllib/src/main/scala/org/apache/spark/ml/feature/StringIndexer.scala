@@ -178,7 +178,7 @@ class StringIndexer @Since("1.4.0") (
 
     val countByValueArray = dataset.na.drop(inputCols)
       .select(inputCols.map(col(_).cast(StringType)): _*)
-      .rdd.aggregate(zeroState)(
+      .rdd.treeAggregate(zeroState)(
       (state: Array[OpenHashMap[String, Long]], row: Row) => {
         for (i <- 0 until inputCols.length) {
           state(i).changeValue(row.getString(i), 1L, _ + 1)
@@ -196,8 +196,10 @@ class StringIndexer @Since("1.4.0") (
     )
     val labelsArray = countByValueArray.map { countByValue =>
       $(stringOrderType) match {
-        case StringIndexer.frequencyDesc => countByValue.toSeq.sortBy(-_._2).map(_._1).toArray
-        case StringIndexer.frequencyAsc => countByValue.toSeq.sortBy(_._2).map(_._1).toArray
+        case StringIndexer.frequencyDesc =>
+          countByValue.toSeq.sortBy(_._1).sortBy(-_._2).map(_._1).toArray
+        case StringIndexer.frequencyAsc =>
+          countByValue.toSeq.sortBy(_._1).sortBy(_._2).map(_._1).toArray
         case StringIndexer.alphabetDesc => countByValue.toSeq.map(_._1).sortWith(_ > _).toArray
         case StringIndexer.alphabetAsc => countByValue.toSeq.map(_._1).sortWith(_ < _).toArray
       }
