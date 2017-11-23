@@ -72,6 +72,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
    * Generates the code for ordering based on the given order.
    */
   def genComparisons(ctx: CodegenContext, ordering: Seq[SortOrder]): String = {
+    val oldInputRow = ctx.INPUT_ROW
     val comparisons = ordering.map { order =>
       val oldCurrentVars = ctx.currentVars
       ctx.INPUT_ROW = "i"
@@ -149,10 +150,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
       })
     // make sure INPUT_ROW is declared even if splitExpressions
     // returns an inlined block
-    s"""
+    val finalCode = s"""
        |InternalRow ${ctx.INPUT_ROW} = null;
        |$code
      """.stripMargin
+    ctx.INPUT_ROW = oldInputRow
+    finalCode
   }
 
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
