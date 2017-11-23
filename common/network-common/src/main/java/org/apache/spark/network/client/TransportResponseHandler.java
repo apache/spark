@@ -199,7 +199,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     } else if (message instanceof RpcFailure) {
       RpcFailure resp = (RpcFailure) message;
       RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
-      if (listener == null) {
+      if (listener == null && resp.requestId != RpcFailure.EMPTY_REQUEST_ID) {
         logger.warn("Ignoring response for RPC {} from {} ({}) since it is not outstanding",
           resp.requestId, getRemoteAddress(channel), resp.errorString);
       } else {

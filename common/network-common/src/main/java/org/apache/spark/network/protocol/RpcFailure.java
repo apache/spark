@@ -24,6 +24,7 @@ import io.netty.buffer.ByteBuf;
 public final class RpcFailure extends AbstractMessage implements ResponseMessage {
   public final long requestId;
   public final String errorString;
+  public static final long EMPTY_REQUEST_ID = Long.MIN_VALUE;
 
   public RpcFailure(long requestId, String errorString) {
     this.requestId = requestId;

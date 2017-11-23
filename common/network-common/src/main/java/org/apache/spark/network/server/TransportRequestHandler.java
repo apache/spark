@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.server;
 
+import java.io.InvalidClassException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
@@ -206,6 +207,11 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   private void processOneWayMessage(OneWayMessage req) {
     try {
       rpcHandler.receive(reverseClient, req.body().nioByteBuffer());
+    } catch (InvalidClassException ice) {
+        final String msg = "There is probably a version mismatch between client and server: ";
+        respond(new RpcFailure(RpcFailure.EMPTY_REQUEST_ID, msg
+                + Throwables.getStackTraceAsString(ice)));
+        logger.error(msg, ice);
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() for one-way message.", e);
     } finally {
