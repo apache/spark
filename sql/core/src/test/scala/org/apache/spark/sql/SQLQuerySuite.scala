@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -2754,6 +2755,35 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         // The DESC TABLE should report same schema as table scan.
         assert(sql("desc t").select("col_name")
           .as[String].collect().mkString(",").contains("i,p,j"))
+      }
+    }
+  }
+
+  test("SPARK-22573 Shouldn't inferFilters if it contains SubqueryExpression") {
+    withTempView("lineitem", "orders", "customer") {
+      Seq((1, 1.0)).toDF("L_ORDERKEY", "L_QUANTITY").createTempView("lineitem")
+      Seq((1, 1, 12.3, "s1")).toDF("O_ORDERKEY", "O_CUSTKEY", "O_TOTALPRICE", "O_ORDERDATE").
+        createTempView("orders")
+      Seq((1, "n1")).toDF("C_CUSTKEY", "C_NAME").createTempView("customer")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        val executedPlan = spark.sql(
+          """
+            |SELECT C_NAME, C_CUSTKEY, O_ORDERKEY, O_ORDERDATE, O_TOTALPRICE,
+            |SUM(L_QUANTITY) AS SUM_QUANTITY
+            |FROM CUSTOMER, ORDERS, LINEITEM
+            |WHERE O_ORDERKEY IN (SELECT L_ORDERKEY
+            |		FROM LINEITEM
+            |		GROUP BY L_ORDERKEY
+            |		HAVING SUM(L_QUANTITY) > 300)
+            |	AND C_CUSTKEY = O_CUSTKEY
+            |	AND O_ORDERKEY = L_ORDERKEY
+            |GROUP BY C_NAME, C_CUSTKEY, O_ORDERKEY, O_ORDERDATE, O_TOTALPRICE
+            |ORDER BY O_TOTALPRICE DESC, O_ORDERDATE
+          """.stripMargin).queryExecution.executedPlan
+        val isSubqueryExists = executedPlan.treeString
+          .contains("SortMergeJoin [_1#223], [L_ORDERKEY#226#278], LeftSemi")
+        assert(!isSubqueryExists)
       }
     }
   }

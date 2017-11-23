@@ -87,12 +87,12 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
-      InferFiltersFromConstraints,
       BooleanSimplification,
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown,
       ColumnPruning,
+      InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -633,6 +633,26 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
     }
   }
 
+  private def canInferJoinFilters(constraints: Set[Expression]): Boolean = {
+    val subqueryExps = constraints.filter { exp =>
+      exp match {
+        case i: In =>
+          i.list.head match {
+            case s: SubqueryExpression => true
+            case _ => false
+          }
+        case e: Exists =>
+          e.children.head match {
+            case s: SubqueryExpression => true
+            case _ => false
+          }
+        case _ =>
+          false
+      }
+    }
+    subqueryExps.isEmpty
+  }
+
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
       val newFilters = filter.constraints --
@@ -658,7 +678,12 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
         case None =>
           additionalConstraints.reduceOption(And)
       }
-      if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
+
+      if (newConditionOpt.isDefined && canInferJoinFilters(constraints)) {
+        Join(left, right, joinType, newConditionOpt)
+      } else {
+        join
+      }
   }
 }
 
