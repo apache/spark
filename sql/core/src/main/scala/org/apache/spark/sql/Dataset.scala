@@ -514,19 +514,6 @@ class Dataset[T] private[sql](
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
-   * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
-   * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
-   * plan may grow exponentially. It will be saved to files inside the checkpoint
-   * directory set with `SparkContext#setCheckpointDir`.
-   *
-   * @group basic
-   * @since 2.1.0
-   */
-  @Experimental
-  @InterfaceStability.Evolving
-  def checkpoint(): Dataset[T] = checkpoint(eager = true)
-
-  /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
    * logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. It will be saved to files inside the checkpoint
@@ -537,9 +524,41 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def checkpoint(eager: Boolean): Dataset[T] = {
+  def checkpoint(eager: Boolean = true): Dataset[T] = _checkpoint(eager = eager)
+
+  /**
+   * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to truncate
+   * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. Local checkpoints are written to executor storage and despite
+   * potentially faster they are unreliable and may compromise job completion.
+   *
+   * @group basic
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def localCheckpoint(eager: Boolean = true): Dataset[T] = _checkpoint(eager = eager, local = true)
+
+  /**
+   * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+   * logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially.
+   * By default reliable checkpoints are created and saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`. If local is set to true a local checkpoint
+   * is performed instead. Local checkpoints are written to executor storage and despite
+   * potentially faster they are unreliable and may compromise job completion.
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def _checkpoint(eager: Boolean, local: Boolean = false): Dataset[T] = {
     val internalRdd = queryExecution.toRdd.map(_.copy())
-    internalRdd.checkpoint()
+    if (local) {
+      internalRdd.localCheckpoint()
+    } else {
+      internalRdd.checkpoint()
+    }
 
     if (eager) {
       internalRdd.count()
