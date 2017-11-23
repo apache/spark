@@ -1729,7 +1729,10 @@ class SQLTests(ReusedSQLTestCase):
 
         self.assertEqual(_merge_type(LongType(), LongType()), LongType())
 
-        self.assertEqual(_merge_type(ArrayType(LongType()), ArrayType(LongType())), ArrayType(LongType()))
+        self.assertEqual(_merge_type(
+            ArrayType(LongType()),
+            ArrayType(LongType())
+        ), ArrayType(LongType()))
         with self.assertRaisesRegexp(TypeError, 'arrayElement'):
             _merge_type(ArrayType(LongType()), ArrayType(DoubleType()))
 
@@ -1761,22 +1764,36 @@ class SQLTests(ReusedSQLTestCase):
         ), StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]))
         with self.assertRaisesRegexp(TypeError, r'structField\("f1"\)'):
             _merge_type(
-                StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]),
-                StructType([StructField("f1", ArrayType(DoubleType())), StructField("f2", StringType())]))
+                StructType([
+                    StructField("f1", ArrayType(LongType())),
+                    StructField("f2", StringType())]),
+                StructType([
+                    StructField("f1", ArrayType(DoubleType())),
+                    StructField("f2", StringType())]))
 
         self.assertEqual(_merge_type(
-            StructType([StructField("f1", MapType(StringType(), LongType())), StructField("f2", StringType())]),
-            StructType([StructField("f1", MapType(StringType(), LongType())), StructField("f2", StringType())])
-        ), StructType([StructField("f1", MapType(StringType(), LongType())), StructField("f2", StringType())]))
+            StructType([
+                StructField("f1", MapType(StringType(), LongType())),
+                StructField("f2", StringType())]),
+            StructType([
+                StructField("f1", MapType(StringType(), LongType())),
+                StructField("f2", StringType())])
+        ), StructType([
+            StructField("f1", MapType(StringType(), LongType())),
+            StructField("f2", StringType())]))
         with self.assertRaisesRegexp(TypeError, r'structField\("f1"\)'):
             _merge_type(
-                StructType([StructField("f1", MapType(StringType(), LongType())), StructField("f2", StringType())]),
-                StructType([StructField("f1", MapType(StringType(), DoubleType())), StructField("f2", StringType())]))
+                StructType([
+                    StructField("f1", MapType(StringType(), LongType())),
+                    StructField("f2", StringType())]),
+                StructType([
+                    StructField("f1", MapType(StringType(), DoubleType())),
+                    StructField("f2", StringType())]))
 
         self.assertEqual(_merge_type(
-                StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
-                StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))])
-            ), StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]))
+            StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
+            StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))])
+        ), StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]))
         with self.assertRaisesRegexp(TypeError, r'structField\("f1"\)\.arrayElement\.mapKey'):
             _merge_type(
                 StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),

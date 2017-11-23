@@ -1134,7 +1134,8 @@ def _merge_type(a, b, path=''):
         return StructType(fields)
 
     elif isinstance(a, ArrayType):
-        return ArrayType(_merge_type(a.elementType, b.elementType, path=path + '.arrayElement'), True)
+        return ArrayType(_merge_type(a.elementType, b.elementType,
+                                     path=path + '.arrayElement'), True)
 
     elif isinstance(a, MapType):
         return MapType(_merge_type(a.keyType, b.keyType, path=path + '.mapKey'),
