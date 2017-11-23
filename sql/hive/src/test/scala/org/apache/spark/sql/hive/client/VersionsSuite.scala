@@ -843,15 +843,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: SPARK-17920: Insert into/overwrite avro table") {
       withTempDir { dir =>
-        val path = dir.getAbsolutePath
-        val schemaPath = s"""$path${File.separator}avroschemadir"""
-
-        new File(schemaPath).mkdir()
         val avroSchema =
-          """{
+          """
+            |{
             |  "name": "test_record",
             |  "type": "record",
-            |  "fields": [ {
+            |  "fields": [{
             |    "name": "f0",
             |    "type": [
             |      "null",
@@ -862,17 +859,17 @@ class VersionsSuite extends SparkFunSuite with Logging {
             |        "logicalType": "decimal"
             |      }
             |    ]
-            |  } ]
+            |  }]
             |}
           """.stripMargin
-        val schemaUrl = s"""$schemaPath${File.separator}avroDecimal.avsc"""
-        val schemaFile = new File(schemaPath, "avroDecimal.avsc")
+        val schemaFile = new File(dir, "avroDecimal.avsc")
         val writer = new PrintWriter(schemaFile)
         writer.write(avroSchema)
         writer.close()
+        val schemaPath = schemaFile.getCanonicalPath
 
         val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
-        val srcLocation = new File(url.getFile)
+        val srcLocation = new File(url.getFile).getCanonicalPath
         val destTableName = "tab1"
         val srcTableName = "tab2"
 
@@ -886,7 +883,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
                |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
                |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
                |LOCATION '$srcLocation'
-               |TBLPROPERTIES ('avro.schema.url' = '$schemaUrl')
+               |TBLPROPERTIES ('avro.schema.url' = '$schemaPath')
            """.stripMargin
           )
 
@@ -898,7 +895,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
                |STORED AS
                |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
                |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
-               |TBLPROPERTIES ('avro.schema.url' = '$schemaUrl')
+               |TBLPROPERTIES ('avro.schema.url' = '$schemaPath')
            """.stripMargin
           )
           versionSpark.sql(
