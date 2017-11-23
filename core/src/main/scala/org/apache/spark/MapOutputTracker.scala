@@ -514,7 +514,7 @@ private[spark] class MapOutputTrackerMaster(
         SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD)
       val parallelism = math.min(
         Runtime.getRuntime.availableProcessors(),
-        statuses.length * totalSizes.length / parallelAggThreshold + 1)
+        statuses.length.toLong * totalSizes.length / parallelAggThreshold + 1).toInt
       if (parallelism <= 1) {
         for (s <- statuses) {
           for (i <- 0 until totalSizes.length) {
