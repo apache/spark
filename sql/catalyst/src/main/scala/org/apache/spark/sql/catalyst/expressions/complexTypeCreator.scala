@@ -87,11 +87,11 @@ private [sql] object GenArrayData {
       elementType: DataType,
       elementsCode: Seq[ExprCode],
       isMapKey: Boolean): (String, Seq[String], String, String) = {
-    val arrayName = "array"
     val arrayDataName = ctx.freshName("arrayData")
     val numElements = elementsCode.length
 
     if (!ctx.isPrimitiveType(elementType)) {
+      val arrayName = "arrayObject"
       val genericArrayClass = classOf[GenericArrayData].getName
       if (!ctx.mutableStates.exists(s => s._1 == arrayName)) {
         ctx.addMutableState("Object[]", arrayName)
@@ -121,6 +121,7 @@ private [sql] object GenArrayData {
        s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
        arrayDataName)
     } else {
+      val arrayName = ctx.freshName("array")
       val unsafeArraySizeInBytes =
         UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
