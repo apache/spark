@@ -1109,22 +1109,23 @@ def _has_nulltype(dt):
         return isinstance(dt, NullType)
 
 
-def _merge_type(a, b, name=None):
+def _merge_type(a, b, path=''):
     if isinstance(a, NullType):
         return b
     elif isinstance(b, NullType):
         return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
-        if name is None:
+        if path == '':
             raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
         else:
-            raise TypeError("Can not merge type %s and %s in field '%s'" % (type(a), type(b), name))
+            raise TypeError("%s: Can not merge type %s and %s" % (path, type(a), type(b)))
 
     # same type
     if isinstance(a, StructType):
         nfs = dict((f.name, f.dataType) for f in b.fields)
-        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType()), f.name))
+        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType()),
+                                                  path='%s.structField("%s")' % (path, f.name)))
                   for f in a.fields]
         names = set([f.name for f in fields])
         for n in nfs:
@@ -1133,11 +1134,11 @@ def _merge_type(a, b, name=None):
         return StructType(fields)
 
     elif isinstance(a, ArrayType):
-        return ArrayType(_merge_type(a.elementType, b.elementType, name=name), True)
+        return ArrayType(_merge_type(a.elementType, b.elementType, path=path + '.arrayElement'), True)
 
     elif isinstance(a, MapType):
-        return MapType(_merge_type(a.keyType, b.keyType, name=name),
-                       _merge_type(a.valueType, b.valueType, name=name),
+        return MapType(_merge_type(a.keyType, b.keyType, path=path + '.mapKey'),
+                       _merge_type(a.valueType, b.valueType, path=path + '.mapValue'),
                        True)
     else:
         return a
