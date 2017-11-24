@@ -1372,19 +1372,26 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val pattern = children.head.genCode(ctx)
 
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
-    val argListCode = argListGen.map(_._2.code + "\n")
-
-    val argListString = argListGen.foldLeft("")((s, v) => {
-      val nullSafeString =
-        if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
-          // Java primitives get boxed in order to allow null values.
-          s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
-            s"new ${ctx.boxedType(v._1)}(${v._2.value})"
-        } else {
-          s"(${v._2.isNull}) ? null : ${v._2.value}"
-        }
-      s + "," + nullSafeString
-    })
+    val argList = ctx.freshName("argLists")
+    val numArgLists = argListGen.length
+    val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
+      v._2.code + s"\n$argList[$index] = " +
+      (if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
+        // Java primitives get boxed in order to allow null values.
+        s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
+          s"new ${ctx.boxedType(v._1)}(${v._2.value});"
+      } else {
+        s"(${v._2.isNull}) ? null : ${v._2.value};"
+      })
+    }
+    val argListCodes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      ctx.splitExpressions(
+        expressions = argListCode,
+        funcName = "valueFormatString",
+        arguments = ("InternalRow", ctx.INPUT_ROW) :: ("Object[]", argList) :: Nil)
+    } else {
+      argListCode.mkString("\n")
+    }
 
     val form = ctx.freshName("formatter")
     val formatter = classOf[java.util.Formatter].getName
@@ -1395,10 +1402,11 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       boolean ${ev.isNull} = ${pattern.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        ${argListCode.mkString}
         $stringBuffer $sb = new $stringBuffer();
         $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
-        $form.format(${pattern.value}.toString() $argListString);
+        Object[] $argList = new Object[$numArgLists];
+        $argListCodes
+        $form.format(${pattern.value}.toString(), $argList);
         ${ev.value} = UTF8String.fromString($sb.toString());
       }""")
   }
