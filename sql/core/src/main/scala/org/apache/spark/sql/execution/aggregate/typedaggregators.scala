@@ -72,7 +72,6 @@ class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
 
   // Java api support
   def this(f: MapFunction[IN, Object]) = this((x: IN) => f.call(x).asInstanceOf[Any])
-
   def toColumnJava: TypedColumn[IN, java.lang.Long] = {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
   }
@@ -141,7 +140,6 @@ class TypedMaxDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Dou
 }
 
 class TypedMinLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
-
   override def zero: Long = Long.MaxValue
   override def reduce(b: Long, a: IN): Long = math.min(b, f(a))
   override def merge(b1: Long, b2: Long): Long = math.min(b1, b2)
