@@ -154,77 +154,97 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * A rule that uses propagated constraints to infer join conditions. The optimization is applicable
- * only to CROSS joins. For other join types, adding inferred join conditions would potentially
- * shuffle children as child node's partitioning won't satisfy the JOIN node's requirements
- * which otherwise could have.
+ * A rule that eliminates CROSS joins by inferring join conditions from propagated constraints.
+ *
+ * The optimization is applicable only to CROSS joins. For other join types, adding inferred join
+ * conditions would potentially shuffle children as child node's partitioning won't satisfy the JOIN
+ * node's requirements which otherwise could have.
  *
  * For instance, if there is a CROSS join, where the left relation has 'a = 1' and the right
- * relation has 'b = 1', then the rule infers 'a = b' as a join predicate.
+ * relation has 'b = 1', the rule infers 'a = b' as a join predicate.
  */
-object InferJoinConditionsFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
+object EliminateCrossJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (SQLConf.get.constraintPropagationEnabled) {
-      inferJoinConditions(plan)
+      eliminateCrossJoin(plan)
     } else {
       plan
     }
   }
 
-  private def inferJoinConditions(plan: LogicalPlan): LogicalPlan = plan transform {
-    case join @ Join(left, right, Cross, conditionOpt) =>
-
-      val rightEqualToPredicates = join.constraints.collect {
-        case equalTo @ EqualTo(attr: Attribute, _) if isAttributeContainedInPlan(attr, right) =>
-          equalTo
-        case equalTo @ EqualTo(_, attr: Attribute) if isAttributeContainedInPlan(attr, right) =>
-          equalTo
-      }
-
-      val inferredJoinPredicates = join.constraints.flatMap {
-        case EqualTo(attr: Attribute, equivalentExpr) if isAttributeContainedInPlan(attr, left) =>
-          collectJoinPredicates(attr, equivalentExpr, right, rightEqualToPredicates)
-        case EqualTo(equivalentExpr, attr: Attribute) if isAttributeContainedInPlan(attr, left) =>
-          collectJoinPredicates(attr, equivalentExpr, right, rightEqualToPredicates)
-        case _ => Nil
-      }
-
-      val newConditionOpt = conditionOpt match {
-        case Some(condition) =>
-          val existingPredicates = splitConjunctivePredicates(condition)
-          val newPredicates = findNewPredicates(inferredJoinPredicates, existingPredicates)
-          if (newPredicates.nonEmpty) Some(And(newPredicates.reduce(And), condition)) else None
-        case None =>
-          inferredJoinPredicates.reduceOption(And)
-      }
-      if (newConditionOpt.isDefined) Join(left, right, Inner, newConditionOpt) else join
+  private def eliminateCrossJoin(plan: LogicalPlan): LogicalPlan = plan transform {
+    case join@Join(leftPlan, rightPlan, Cross, None) =>
+      val leftConstraints = join.constraints.filter(_.references.subsetOf(leftPlan.outputSet))
+      val rightConstraints = join.constraints.filter(_.references.subsetOf(rightPlan.outputSet))
+      val inferredJoinPredicates = inferJoinPredicates(leftConstraints, rightConstraints)
+      val joinConditionOpt = inferredJoinPredicates.reduceOption(And)
+      if (joinConditionOpt.isDefined) Join(leftPlan, rightPlan, Inner, joinConditionOpt) else join
   }
 
-  private def collectJoinPredicates(
-      leftAttr: Attribute,
-      equivalentExpr: Expression,
-      rightPlan: LogicalPlan,
-      rightPlanEqualToPredicates: Set[EqualTo]): Set[EqualTo] = {
+  private def inferJoinPredicates(
+      leftConstraints: Set[Expression],
+      rightConstraints: Set[Expression]): Set[EqualTo] = {
 
-    rightPlanEqualToPredicates.collect {
-      case EqualTo(attr: Attribute, expr)
-        if expr.semanticEquals(equivalentExpr) && isAttributeContainedInPlan(attr, rightPlan) =>
-        EqualTo(leftAttr, attr)
-      case EqualTo(expr, attr: Attribute)
-        if expr.semanticEquals(equivalentExpr) && isAttributeContainedInPlan(attr, rightPlan) =>
-        EqualTo(leftAttr, attr)
+    // iterate through the left constraints and build a hash map that points semantically
+    // equivalent expressions into attributes
+    val emptyEquivalenceMap = Map.empty[SemanticExpression, Set[Attribute]]
+    val equivalenceMap = leftConstraints.foldLeft(emptyEquivalenceMap) { case (map, constraint) =>
+      constraint match {
+        case EqualTo(attr: Attribute, expr: Expression) =>
+          updateEquivalenceMap(map, attr, expr)
+        case EqualTo(expr: Expression, attr: Attribute) =>
+          updateEquivalenceMap(map, attr, expr)
+        case _ => map
+      }
+    }
+
+    // iterate through the right constraints and infer join conditions using the equivalence map
+    rightConstraints.foldLeft(Set.empty[EqualTo]) { case (joinConditions, constraint) =>
+      constraint match {
+        case EqualTo(attr: Attribute, expr: Expression) =>
+          appendJoinConditions(attr, expr, equivalenceMap, joinConditions)
+        case EqualTo(expr: Expression, attr: Attribute) =>
+          appendJoinConditions(attr, expr, equivalenceMap, joinConditions)
+        case _ => joinConditions
+      }
     }
   }
 
-  private def isAttributeContainedInPlan(attr: Attribute, logicalPlan: LogicalPlan): Boolean = {
-    attr.references.subsetOf(logicalPlan.outputSet)
+  private def updateEquivalenceMap(
+      equivalenceMap: Map[SemanticExpression, Set[Attribute]],
+      attr: Attribute,
+      expr: Expression): Map[SemanticExpression, Set[Attribute]] = {
+
+    val equivalentAttrs = equivalenceMap.getOrElse(expr, Set.empty[Attribute])
+    if (equivalentAttrs.contains(attr)) {
+      equivalenceMap
+    } else {
+      equivalenceMap.updated(expr, equivalentAttrs + attr)
+    }
   }
 
-  private def findNewPredicates(
-      inferredPredicates: Set[EqualTo],
-      existingPredicates: Seq[Expression]) : Set[EqualTo] = {
-    // O(n * m) time complexity but should not be critical here
-    inferredPredicates.filterNot(ip => existingPredicates.exists(ep => ip.semanticEquals(ep)))
+  private def appendJoinConditions(
+      attr: Attribute,
+      expr: Expression,
+      equivalenceMap: Map[SemanticExpression, Set[Attribute]],
+      joinConditions: Set[EqualTo]): Set[EqualTo] = {
+
+    equivalenceMap.get(expr) match {
+      case Some(equivalentAttrs) => joinConditions ++ equivalentAttrs.map(EqualTo(attr, _))
+      case None => joinConditions
+    }
   }
+
+  // the purpose of this class is to treat 'a === 1 and 1 === 'a as the same expressions
+  implicit class SemanticExpression(private val expr: Expression) {
+
+    override def hashCode(): Int = expr.semanticHash()
+
+    override def equals(other: Any): Boolean = other match {
+      case other: SemanticExpression => expr.semanticEquals(other.expr)
+      case _ => false
+    }
+  }
+
 }

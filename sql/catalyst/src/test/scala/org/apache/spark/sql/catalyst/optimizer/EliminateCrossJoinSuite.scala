@@ -26,19 +26,19 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf.CONSTRAINT_PROPAGATION_ENABLED
 import org.apache.spark.sql.types.IntegerType
 
-class InferJoinConditionsSuite extends PlanTest {
+class EliminateCrossJoinSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Infer Join Conditions", FixedPoint(10),
-        InferJoinConditionsFromConstraints,
+      Batch("Eliminate cross joins", FixedPoint(10),
+        EliminateCrossJoin,
         PushPredicateThroughJoin) :: Nil
   }
 
   val testRelation1 = LocalRelation('a.int, 'b.int)
   val testRelation2 = LocalRelation('c.int, 'd.int)
 
-  test("successful detection of join conditions (1)") {
+  test("successful elimination of cross joins (1)") {
     checkJoinOptimization(
       originalFilter = 'a === 1 && 'c === 1 && 'd === 1,
       originalJoinType = Cross,
@@ -49,7 +49,7 @@ class InferJoinConditionsSuite extends PlanTest {
       expectedJoinCondition = Some('a === 'c && 'a === 'd))
   }
 
-  test("successful detection of join conditions (2)") {
+  test("successful elimination of cross joins (2)") {
     checkJoinOptimization(
       originalFilter = 'a === 1 && 'b === 2 && 'd === 1,
       originalJoinType = Cross,
@@ -60,21 +60,10 @@ class InferJoinConditionsSuite extends PlanTest {
       expectedJoinCondition = Some('a === 'd))
   }
 
-  test("successful detection of join conditions (3)") {
-    checkJoinOptimization(
-      originalFilter = 'a === 1 && Literal(1) === 'c && 'd === 'a,
-      originalJoinType = Cross,
-      originalJoinCondition = None,
-      expectedLeftRelationFilter = 'a === 1,
-      expectedRightRelationFilter = Literal(1) === 'c,
-      expectedJoinType = Inner,
-      expectedJoinCondition = Some('a === 'c && 'd === 'a))
-  }
-
-  test("successful detection of join conditions (4)") {
-    // PushPredicateThroughJoin will push down 'd === 'a as a join condition
-    // InferJoinConditionsFromConstraints will NOT infer any semantically new predicates,
-    // so the join type will stay the same (i.e., CROSS)
+  test("successful elimination of cross joins (3)") {
+    // PushPredicateThroughJoin will push 'd === 'a into the join condition
+    // EliminateCrossJoin will NOT apply because the condition will be already present
+    // therefore, the join type will stay the same (i.e., CROSS)
     checkJoinOptimization(
       originalFilter = 'a === 1 && Literal(1) === 'd && 'd === 'a,
       originalJoinType = Cross,
@@ -85,7 +74,7 @@ class InferJoinConditionsSuite extends PlanTest {
       expectedJoinCondition = Some('a === 'd))
   }
 
-  test("successful detection of join conditions (5)") {
+  test("successful elimination of cross joins (4)") {
     // Literal(1) * Literal(2) and Literal(2) * Literal(1) are semantically equal
     checkJoinOptimization(
       originalFilter = 'a === Literal(1) * Literal(2) && Literal(2) * Literal(1) === 'c,
@@ -97,40 +86,18 @@ class InferJoinConditionsSuite extends PlanTest {
       expectedJoinCondition = Some('a === 'c))
   }
 
-  test("successful detection of join conditions (6)") {
+  test("successful elimination of cross joins (5)") {
     checkJoinOptimization(
-      originalFilter = 'a === 1 && 'd === 1,
+      originalFilter = 'a === 1 && Literal(1) === 'a && 'c === 1,
       originalJoinType = Cross,
-      originalJoinCondition = Some('a === 'c),
-      expectedLeftRelationFilter = 'a === 1,
-      expectedRightRelationFilter = 'd === 1,
+      originalJoinCondition = None,
+      expectedLeftRelationFilter = 'a === 1 && Literal(1) === 'a,
+      expectedRightRelationFilter = 'c === 1,
       expectedJoinType = Inner,
-      expectedJoinCondition = Some('a === 'c && 'a === 'd))
+      expectedJoinCondition = Some('a === 'c))
   }
 
-  test("successful detection of join conditions (7)") {
-    checkJoinOptimization(
-      originalFilter = 'b === 1 && 'd === 1,
-      originalJoinType = Cross,
-      originalJoinCondition = Some('a > 'c),
-      expectedLeftRelationFilter = 'b === 1,
-      expectedRightRelationFilter = 'd === 1,
-      expectedJoinType = Inner,
-      expectedJoinCondition = Some('a > 'c && 'b === 'd))
-  }
-
-  test("successful detection of join conditions (8)") {
-    checkJoinOptimization(
-      originalFilter = 'a === 'b + 'd && 'a === 1 && 'c === 'b + 'd && 'd === 4,
-      originalJoinType = Cross,
-      originalJoinCondition = Some('a >= 'c),
-      expectedLeftRelationFilter = 'a === 1,
-      expectedRightRelationFilter = 'd === 4,
-      expectedJoinType = Inner,
-      expectedJoinCondition = Some('a === 'c && 'a >= 'c && 'a === 'b + 'd && 'c === 'b + 'd))
-  }
-
-  test("successful detection of complex join conditions via InferJoinConditionsFromConstraints") {
+  test("successful elimination of cross joins (6)") {
     checkJoinOptimization(
       originalFilter = 'a === Cast("1", IntegerType) && 'c === Cast("1", IntegerType) && 'd === 1,
       originalJoinType = Cross,
@@ -141,28 +108,27 @@ class InferJoinConditionsSuite extends PlanTest {
       expectedJoinCondition = Some('a === 'c))
   }
 
-  test("successful detection of complex join conditions via PushPredicateThroughJoin") {
+  test("successful elimination of cross joins (7)") {
+    // The join condition appears due to PushPredicateThroughJoin
     checkJoinOptimization(
-      originalFilter = 'a === ('b % 2) && 'c === ('b % 2) && 'd === 1,
+      originalFilter = (('a >= 1 && 'c === 1) || 'd === 10) && 'b === 10 && 'c === 1,
       originalJoinType = Cross,
       originalJoinCondition = None,
-      expectedLeftRelationFilter = 'a === ('b % 2),
-      expectedRightRelationFilter = 'd === 1,
-      expectedJoinType = Inner,
-      expectedJoinCondition = Some('c === ('b % 2) && 'a === 'c))
+      expectedLeftRelationFilter = 'b === 10,
+      expectedRightRelationFilter = 'c === 1,
+      expectedJoinType = Cross,
+      expectedJoinCondition = Some(('a >= 1 && 'c === 1) || 'd === 10))
   }
 
-  test("successful detection of complex join conditions") {
-    // InferJoinConditionsFromConstraints will infer 'a === d'
-    // PushPredicateThroughJoin will add 'a === (c % 2)' to the join condition
+  test("successful elimination of cross joins (8)") {
     checkJoinOptimization(
-      originalFilter = 'a === 1 && 'a === ('c % 2) && 'd === 1,
+      originalFilter = 'a === 1 && 'c === 1 && Literal(1) === 'a && Literal(1) === 'c,
       originalJoinType = Cross,
       originalJoinCondition = None,
-      expectedLeftRelationFilter = 'a === 1,
-      expectedRightRelationFilter = 'd === 1,
+      expectedLeftRelationFilter = 'a === 1 && Literal(1) === 'a,
+      expectedRightRelationFilter = 'c === 1 && Literal(1) === 'c,
       expectedJoinType = Inner,
-      expectedJoinCondition = Some('a === 'd && 'a === ('c % 2)))
+      expectedJoinCondition = Some('a === 'c))
   }
 
   test("inability to detect join conditions when constant propagation is disabled") {
@@ -189,20 +155,7 @@ class InferJoinConditionsSuite extends PlanTest {
       expectedJoinCondition = None)
   }
 
-
   test("inability to detect join conditions (2)") {
-    // The join condition appears due to PushPredicateThroughJoin
-    checkJoinOptimization(
-      originalFilter = (('a >= 1 && 'c === 1) || 'd === 10) && 'b === 10 && 'c === 1,
-      originalJoinType = Cross,
-      originalJoinCondition = None,
-      expectedLeftRelationFilter = 'b === 10,
-      expectedRightRelationFilter = 'c === 1,
-      expectedJoinType = Cross,
-      expectedJoinCondition = Some(('a >= 1 && 'c === 1) || 'd === 10))
-  }
-
-  test("inability to detect join conditions (3)") {
     checkJoinOptimization(
       originalFilter = Literal(1) === 'b && ('c === 1 || 'd === 1),
       originalJoinType = Cross,
@@ -213,7 +166,7 @@ class InferJoinConditionsSuite extends PlanTest {
       expectedJoinCondition = None)
   }
 
-  test("inability to detect join conditions (4)") {
+  test("inability to detect join conditions (3)") {
     checkJoinOptimization(
       originalFilter = Literal(1) === 'b && 'c === 1,
       originalJoinType = Cross,
@@ -224,7 +177,7 @@ class InferJoinConditionsSuite extends PlanTest {
       expectedJoinCondition = Some('c === 'b))
   }
 
-  test("inability to detect join conditions (5)") {
+  test("inability to detect join conditions (4)") {
     checkJoinOptimization(
       originalFilter = Not('a === 1) && 'd === 1,
       originalJoinType = Cross,
