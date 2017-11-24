@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -115,9 +117,119 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
+  /**
+   * Returns the eliminated subexpressions in the children expressions.
+   */
+  private def getSubExprInChildren(ctx: CodegenContext): Seq[Expression] = {
+    children.flatMap { child =>
+      child.collect {
+        case e if ctx.subExprEliminationExprs.contains(e) => e
+      }
+    }
+  }
+
+  /**
+   * Given the list of eliminated subexpressions used in the children expressions, returns the
+   * strings of funtion parameters. The first is the variable names used to call the function,
+   * the second is the parameters used to declare the function in generated code.
+   */
+  private def getParamsForSubExprs(
+      ctx: CodegenContext,
+      subExprs: Seq[Expression]): (Seq[String], Seq[String]) = {
+    subExprs.map { subExpr =>
+      val arguType = ctx.javaType(subExpr.dataType)
+
+      val subExprState = ctx.subExprEliminationExprs(subExpr)
+      (subExprState.value, subExprState.isNull)
+
+      if (!subExpr.nullable || subExprState.isNull == "true" || subExprState.isNull == "false") {
+        (subExprState.value, s"$arguType ${subExprState.value}")
+      } else {
+        (subExprState.value + ", " + subExprState.isNull,
+          s"$arguType ${subExprState.value}, boolean ${subExprState.isNull}")
+      }
+    }.unzip
+  }
+
+  /**
+   * Finds the bound attributes and corresponding input variables under wholestage codegen.
+   * If the input variables are not evaluated yet, don't need to include them into parameters,
+   */
+  private def getInputVars(ctx: CodegenContext): (Seq[Expression], Seq[ExprCode]) = {
+    if (ctx.currentVars == null) {
+      (Seq.empty, Seq.empty)
+    } else {
+      children.flatMap(_.collect {
+        case b @ BoundReference(ordinal, dt, nullable) if ctx.currentVars(ordinal) != null &&
+            ctx.currentVars(ordinal).code == "" =>
+          (b, ctx.currentVars(ordinal))
+      }).distinct.unzip
+    }
+  }
+
+  /**
+   * Helper function to calculate the size of an expression as function parameter.
+   */
+  private def calculateParamLength(ctx: CodegenContext, input: Expression): Int = {
+    ctx.javaType(input.dataType) match {
+      case (ctx.JAVA_LONG | ctx.JAVA_DOUBLE) if !input.nullable => 2
+      case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => 3
+      case _ if !input.nullable => 1
+      case _ => 2
+    }
+  }
+
+  /**
+   * In Java, a method descriptor is valid only if it represents method parameters with a total
+   * length of 255 or less. `this` contributes one unit and a parameter of type long or double
+   * contributes two units.
+   */
+  private def isValidParamLength(
+      ctx: CodegenContext,
+      inputs: Seq[Expression],
+      subExprs: Seq[Expression]): Boolean = {
+    // Start value is 1 for `this`.
+    inputs.foldLeft(1) { case (curLength, input) =>
+      curLength + calculateParamLength(ctx, input)
+    } + subExprs.foldLeft(0) { case (curLength, subExpr) =>
+      curLength + calculateParamLength(ctx, subExpr)
+    } <= 255
+  }
+
+  /**
+   * Given the lists of input attributes and variables to this expression, returns the strings of
+   * funtion parameters. The first is the variable names used to call the function, the second is
+   * the parameters used to declare the function in generated code.
+   */
+  private def prepareFunctionParams(
+      ctx: CodegenContext,
+      inputAttrs: Seq[Expression],
+      inputVars: Seq[ExprCode]): (Seq[String], Seq[String]) = {
+    inputAttrs.zip(inputVars).map { case (input, ev) =>
+      val arguType = ctx.javaType(input.dataType)
+
+      if (!input.nullable || ev.isNull == "true" || ev.isNull == "false") {
+        (ev.value, s"$arguType ${ev.value}")
+      } else {
+        (ev.value + ", " + ev.isNull, s"$arguType ${ev.value}, boolean ${ev.isNull}")
+      }
+    }.unzip
+  }
+
+  /**
+   * In order to prevent 64kb compile error, reducing the size of generated codes by
+   * separating it into a function if the size exceeds a threshold.
+   */
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
-    // TODO: support whole stage codegen too
-    if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+    val isNotWholestageCodegen = ctx.INPUT_ROW != null && ctx.currentVars == null
+    val (inputAttrs, inputVars) = getInputVars(ctx)
+    val subExprs = getSubExprInChildren(ctx)
+    val isValidParams = isValidParamLength(ctx, inputAttrs, subExprs)
+
+    // Puts code into a function if the code is big, when:
+    // 1. Not in wholestage codegen, or
+    // 2. Parameter number is allowed for Java's method descriptor.
+    if (eval.code.trim.length > 1024 && (isNotWholestageCodegen || isValidParams)) {
       val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
         val globalIsNull = ctx.freshName("globalIsNull")
         ctx.addMutableState(ctx.JAVA_BOOLEAN, globalIsNull)
@@ -131,10 +243,30 @@ abstract class Expression extends TreeNode[Expression] {
       val javaType = ctx.javaType(dataType)
       val newValue = ctx.freshName("value")
 
+      val callParams = mutable.ArrayBuffer[String]()
+      val funcParams = mutable.ArrayBuffer[String]()
+
+      if (ctx.INPUT_ROW != null) {
+        callParams += ctx.INPUT_ROW
+        funcParams += s"InternalRow ${ctx.INPUT_ROW}"
+      }
+
+      if (inputAttrs.length > 0) {
+        val params = prepareFunctionParams(ctx, inputAttrs, inputVars)
+        params._1.foreach(callParams += _)
+        params._2.foreach(funcParams += _)
+      }
+
+      if (subExprs.length > 0) {
+        val subExprParams = getParamsForSubExprs(ctx, subExprs)
+        subExprParams._1.foreach(callParams += _)
+        subExprParams._2.foreach(funcParams += _)
+      }
+
       val funcName = ctx.freshName(nodeName)
       val funcFullName = ctx.addNewFunction(funcName,
         s"""
-           |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
+           |private $javaType $funcName(${funcParams.mkString(", ")}) {
            |  ${eval.code.trim}
            |  $setIsNull
            |  return ${eval.value};
@@ -142,7 +274,7 @@ abstract class Expression extends TreeNode[Expression] {
            """.stripMargin)
 
       eval.value = newValue
-      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
+      eval.code = s"$javaType $newValue = $funcFullName(${callParams.mkString(", ")});"
     }
   }
 

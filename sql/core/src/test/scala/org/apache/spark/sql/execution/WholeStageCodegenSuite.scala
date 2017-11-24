@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{Column, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -234,6 +235,24 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
         assert(fileScan2.asInstanceOf[FileSourceScanExec].supportsBatch)
         checkAnswer(df2, df)
       }
+    }
+  }
+
+  test("SPARK-22551: Fix 64kb limit for deeply nested expressions under wholestage codegen") {
+    import testImplicits._
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = Seq(("abc", 1)).toDF("key", "int")
+      df.write.parquet(path)
+
+      var strExpr: Expression = col("key").expr
+      for (_ <- 1 to 150) {
+        strExpr = Decode(Encode(strExpr, Literal("utf-8")), Literal("utf-8"))
+      }
+      val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
+
+      val df2 = spark.read.parquet(path).select(expressions.map(Column(_)): _*)
+      df2.collect()
     }
   }
 }
