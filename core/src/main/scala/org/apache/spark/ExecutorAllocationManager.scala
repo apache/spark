@@ -126,6 +126,8 @@ private[spark] class ExecutorAllocationManager(
   // is the number of executors we would immediately want from the cluster manager.
   private var numExecutorsTarget = initialNumExecutors
 
+  private def executorEnough = executorIds.size >= numExecutorsTarget
+
   // Executors that have been requested to be removed but have not been killed yet
   private val executorsPendingToRemove = new mutable.HashSet[String]
 
@@ -313,6 +315,7 @@ private[spark] class ExecutorAllocationManager(
    */
   private def updateAndSyncNumExecutorsTarget(now: Long): Int = synchronized {
     val maxNeeded = maxNumExecutorsNeeded
+    val reachAddTime = addTime != NOT_SET && now >= addTime
 
     if (initializing) {
       // Do not change our target while we are still initializing,
@@ -325,14 +328,20 @@ private[spark] class ExecutorAllocationManager(
       numExecutorsTarget = math.max(maxNeeded, minNumExecutors)
       numExecutorsToAdd = 1
 
-      // If the new target has not changed, avoid sending a message to the cluster manager
+      // If the new target has not changed and the current number of active executors is enough,
+      // avoid sending a message to the cluster manager
       if (numExecutorsTarget < oldNumExecutorsTarget) {
         client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
         logDebug(s"Lowering target number of executors to $numExecutorsTarget (previously " +
           s"$oldNumExecutorsTarget) because not all requested executors are actually needed")
+      } else if (reachAddTime && !executorEnough) {
+        val oldNumExecutors = executorIds.size
+        client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
+        logDebug(s"Requests new execotors because current number of executors($oldNumExecutors) " +
+          s"is not enough although target number of executors has not changed.")
       }
       numExecutorsTarget - oldNumExecutorsTarget
-    } else if (addTime != NOT_SET && now >= addTime) {
+    } else if (reachAddTime) {
       val delta = addExecutors(maxNeeded)
       logDebug(s"Starting timer to add more executors (to " +
         s"expire in $sustainedSchedulerBacklogTimeoutS seconds)")
@@ -354,7 +363,7 @@ private[spark] class ExecutorAllocationManager(
    */
   private def addExecutors(maxNumExecutorsNeeded: Int): Int = {
     // Do not request more executors if it would put our target over the upper bound
-    if (numExecutorsTarget >= maxNumExecutors) {
+    if (numExecutorsTarget >= maxNumExecutors && executorEnough) {
       logDebug(s"Not adding executors because our current target total " +
         s"is already $numExecutorsTarget (limit $maxNumExecutors)")
       numExecutorsToAdd = 1
@@ -381,7 +390,7 @@ private[spark] class ExecutorAllocationManager(
       if (listener.pendingTasks == 0 && listener.pendingSpeculativeTasks > 0) {
         numExecutorsTarget =
           math.max(math.min(maxNumExecutorsNeeded + 1, maxNumExecutors), minNumExecutors)
-      } else {
+      } else if (executorEnough) {
         numExecutorsToAdd = 1
         return 0
       }
