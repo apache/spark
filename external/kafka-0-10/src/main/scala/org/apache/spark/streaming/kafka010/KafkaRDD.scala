@@ -212,7 +212,7 @@ private[spark] class KafkaRDD[K, V](
 
     def closeIfNeeded(): Unit = {
       if (consumer != null) {
-          consumer.close()
+        consumer.close()
       }
     }
 
