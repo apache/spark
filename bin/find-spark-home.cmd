@@ -32,7 +32,7 @@ if not "x%PYSPARK_PYTHON%"=="x" (
 )
 
 rem If there is python installed, trying to use the root dir as SPARK_HOME
-where %PYTHON_RUNNER% > nul 2>$1
+where %PYTHON_RUNNER% > nul 2>&1
 if %ERRORLEVEL% neq 0 (
   if not exist %PYTHON_RUNNER% (
     if "x%SPARK_HOME%"=="x" (
