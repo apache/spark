@@ -829,7 +829,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-22500: cast for struct should not generate codes beyond 64KB") {
-    val N = 50
+    val N = 25
 
     val fromInner = new StructType(
       (1 to N).map(i => StructField(s"s$i", DoubleType)).toArray)
