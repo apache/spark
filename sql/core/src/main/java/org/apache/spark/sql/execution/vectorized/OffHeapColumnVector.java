@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.vectorized;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -73,12 +75,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     reset();
   }
 
-  @Override
+  @VisibleForTesting
   public long valuesNativeAddress() {
     return data;
   }
 
-  @Override
+  @VisibleForTesting
   public long nullsNativeAddress() {
     return nulls;
   }
