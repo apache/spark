@@ -33,14 +33,6 @@ public final class ColumnarArray extends ArrayData {
   public int length;
   public int offset;
 
-  // Populate if binary data is required for the Array. This is stored here as an optimization
-  // for string data.
-  public byte[] byteArray;
-  public int byteArrayOffset;
-
-  // Reused staging buffer, used for loading from offheap.
-  protected byte[] tmpByteArray = new byte[1];
-
   ColumnarArray(ColumnVector data) {
     this.data = data;
   }

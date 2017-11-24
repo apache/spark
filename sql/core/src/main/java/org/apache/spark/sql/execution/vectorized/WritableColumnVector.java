@@ -280,18 +280,6 @@ public abstract class WritableColumnVector extends ColumnVector {
     return putByteArray(rowId, value, 0, value.length);
   }
 
-  /**
-   * Returns the value for rowId.
-   */
-  private ColumnarArray getByteArray(int rowId) {
-    ColumnarArray array = getArray(rowId);
-    array.data.loadBytes(array);
-    return array;
-  }
-
-  /**
-   * Returns the decimal for rowId.
-   */
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
@@ -318,14 +306,10 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
   }
 
-  /**
-   * Returns the UTF8String for rowId.
-   */
   @Override
   public UTF8String getUTF8String(int rowId) {
     if (dictionary == null) {
-      ColumnarArray a = getByteArray(rowId);
-      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
+      return arrayData().getBytesAsUTF8String(getArrayOffset(rowId), getArrayLength(rowId));
     } else {
       byte[] bytes = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return UTF8String.fromBytes(bytes);
@@ -333,15 +317,16 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
-   * Returns the byte array for rowId.
+   * Gets the values of bytes from [rowId, rowId + count), as a UTF8String.
+   * This method is similar to {@link ColumnVector#getBytes(int, int)}, but can save data copy as
+   * UTF8String is used as a pointer.
    */
+  protected abstract UTF8String getBytesAsUTF8String(int rowId, int count);
+
   @Override
   public byte[] getBinary(int rowId) {
     if (dictionary == null) {
-      ColumnarArray array = getByteArray(rowId);
-      byte[] bytes = new byte[array.length];
-      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
-      return bytes;
+      return arrayData().getBytes(getArrayOffset(rowId), getArrayLength(rowId));
     } else {
       return dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
     }
