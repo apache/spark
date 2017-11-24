@@ -50,9 +50,8 @@ private[columnar] class CachedColumnarRDD(
       Iterator[CachedBatch] = {
     val metadataBlockId = RDDPartitionMetadataBlockId(id, split.index)
     val superGetOrCompute: (Partition, TaskContext) => Iterator[CachedBatch] = super.getOrCompute
-    SparkEnv.get.blockManager.getSingle[InternalRow](metadataBlockId).map(metadataBlock =>
-      new InterruptibleIterator[CachedBatch](context,
-        new CachedColumnarIterator(metadataBlock, split, context, superGetOrCompute))
+    SparkEnv.get.blockManager.getSingle[InternalRow](metadataBlockId).map(_ =>
+      superGetOrCompute(split, context)
     ).getOrElse {
       val batchIter = superGetOrCompute(split, context)
       if (containsPartitionMetadata && getStorageLevel != StorageLevel.NONE && batchIter.hasNext) {
@@ -96,26 +95,5 @@ private[columnar] object CachedColumnarRDD {
       }
       updatedMetadataBlocks
     }
-  }
-}
-
-private[columnar] class CachedColumnarIterator(
-    val partitionStats: InternalRow,
-    partition: Partition,
-    context: TaskContext,
-    fetchRDDPartition: (Partition, TaskContext) => Iterator[CachedBatch])
-  extends Iterator[CachedBatch] {
-
-  private var delegate: Iterator[CachedBatch] = _
-
-  override def hasNext: Boolean = {
-    if (delegate == null) {
-      delegate = fetchRDDPartition(partition, context)
-    }
-    delegate.hasNext
-  }
-
-  override def next(): CachedBatch = {
-    delegate.next()
   }
 }
