@@ -261,12 +261,14 @@ case class CaseWhen(
           ${ev.value} = ${res.value};
         }
       """
-    }.getOrElse("")
+    }
 
-    val casesCode = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-      cases.mkString("\n")
+    val allConditions = cases ++ elseCode
+
+    val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
+      allConditions.mkString("\n")
     } else {
-      ctx.splitExpressions(cases, "caseWhen",
+      ctx.splitExpressions(allConditions, "caseWhen",
         ("InternalRow", ctx.INPUT_ROW) :: ("boolean", conditionMet) :: Nil, returnType = "boolean",
         makeSplitFunction = {
           func =>
@@ -284,8 +286,7 @@ case class CaseWhen(
       ${ev.isNull} = true;
       ${ev.value} = ${ctx.defaultValue(dataType)};
       boolean $conditionMet = false;
-      $casesCode
-      $elseCode""")
+      $code""")
   }
 }
 
