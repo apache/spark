@@ -17,11 +17,9 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-rem Figure out where the Spark framework is installed
-call "%~dp0find-spark-home.cmd"
-
-set _SPARK_CMD_USAGE=Usage: .\bin\run-example [options] example-class [example args]
+rem This is the entry point for running SparkSQL. To avoid polluting the
+rem environment, it just launches a new cmd to do the real work.
 
 rem The outermost quotes are used to prevent Windows command line parse error
 rem when there are some quotes in parameters, see SPARK-21877.
-cmd /V /E /C ""%~dp0spark-submit.cmd" run-example %*"
+cmd /V /E /C ""%~dp0spark-sql2.cmd" %*"
