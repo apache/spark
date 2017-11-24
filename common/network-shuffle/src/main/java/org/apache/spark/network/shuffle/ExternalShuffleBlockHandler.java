@@ -203,22 +203,23 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       this.appId = appId;
       this.execId = execId;
       String[] blockId0Parts = blockIds[0].split("_");
-      if (blockId0Parts.length != 4 || !blockId0Parts[0].equals("shuffle")) {
+      if (blockId0Parts.length != 5 || !blockId0Parts[0].equals("shuffle")) {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
       }
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
-      mapIdAndReduceIds = new int[2 * blockIds.length];
+      mapIdAndReduceIds = new int[3 * blockIds.length];
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
-        if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
+        if (blockIdParts.length != 5 || !blockIdParts[0].equals("shuffle")) {
           throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[i]);
         }
         if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
           throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
             ", got:" + blockIds[i]);
         }
-        mapIdAndReduceIds[2 * i] = Integer.parseInt(blockIdParts[2]);
-        mapIdAndReduceIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
+        mapIdAndReduceIds[3 * i] = Integer.parseInt(blockIdParts[2]);
+        mapIdAndReduceIds[3 * i + 1] = Integer.parseInt(blockIdParts[3]);
+        mapIdAndReduceIds[3 * i + 2] = Integer.parseInt(blockIdParts[4]);
       }
     }
 
@@ -230,7 +231,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     @Override
     public ManagedBuffer next() {
       final ManagedBuffer block = blockManager.getBlockData(appId, execId, shuffleId,
-        mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
+        mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1], mapIdAndReduceIds[index + 2]);
       index += 2;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;
