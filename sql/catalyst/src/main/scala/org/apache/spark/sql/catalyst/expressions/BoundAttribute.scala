@@ -59,14 +59,14 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
     if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
       val oev = ctx.currentVars(ordinal)
       ev.isNull = oev.isNull
       ev.value = oev.value
       ev.copy(code = oev.code)
     } else {
-      assert(ctx.INPUT_ROW != null)
+      assert(ctx.INPUT_ROW != null, "INPUT_ROW and currentVars cannot both be null.")
+      val javaType = ctx.javaType(dataType)
       val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
       if (nullable) {
         ev.copy(code =
