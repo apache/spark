@@ -522,8 +522,8 @@ private[spark] class MapOutputTrackerMaster(
           }
         }
       } else {
+        val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-aggregate")
         try {
-          val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-aggregate")
           implicit val executionContext = ExecutionContext.fromExecutor(threadPool)
           val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {
             reduceIds => Future {
@@ -534,7 +534,7 @@ private[spark] class MapOutputTrackerMaster(
           }
           ThreadUtils.awaitResult(Future.sequence(mapStatusSubmitTasks), Duration.Inf)
         } finally {
-          threadpool.shutdown()
+          threadPool.shutdown()
         }
       }
       new MapOutputStatistics(dep.shuffleId, totalSizes)
