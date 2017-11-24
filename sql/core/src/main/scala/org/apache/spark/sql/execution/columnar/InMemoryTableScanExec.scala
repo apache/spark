@@ -235,23 +235,23 @@ case class InMemoryTableScanExec(
     val schema = relation.partitionStatistics.schema
     val buffers = relation.cachedColumnBuffers
 
-    val metadataOfValidPartitions = CachedColumnarRDD.collectStats(buffers).zipWithIndex.filter {
-      case (partitionStatsOpt, partitionIndex) =>
-        partitionStatsOpt.forall { partitionStats =>
-          val partitionFilter = newPredicate(
-            partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-            schema)
-          partitionFilter.initialize(partitionIndex)
-          partitionFilter.eval(partitionStats)
-        }
-    }.map(_._2).map(partitionIndex => buffers.partitions(partitionIndex))
-    val prunedRDD = new FilteredCachedColumnarRDD(
-      buffers.sparkContext,
-      buffers.asInstanceOf[CachedColumnarRDD],
-      buildFilteredRDDPartitions(metadataOfValidPartitions))
     if (!inMemoryPartitionPruningEnabled) {
-      prunedRDD
+      doFilterCachedBatches(buffers, schema)
     } else {
+      val metadataOfValidPartitions = CachedColumnarRDD.collectStats(buffers).zipWithIndex.filter {
+        case (partitionStatsOpt, partitionIndex) =>
+          partitionStatsOpt.forall { partitionStats =>
+            val partitionFilter = newPredicate(
+              partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+              schema)
+            partitionFilter.initialize(partitionIndex)
+            partitionFilter.eval(partitionStats)
+          }
+      }.map(_._2).map(partitionIndex => buffers.partitions(partitionIndex))
+      val prunedRDD = new FilteredCachedColumnarRDD(
+        buffers.sparkContext,
+        buffers.asInstanceOf[CachedColumnarRDD],
+        buildFilteredRDDPartitions(metadataOfValidPartitions))
       doFilterCachedBatches(prunedRDD, schema)
     }
   }
