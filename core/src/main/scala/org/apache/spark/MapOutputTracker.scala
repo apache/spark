@@ -812,10 +812,7 @@ private[spark] object MapOutputTracker extends Logging {
         logError(errorMessage)
         throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
       } else {
-        var totalSize = 0L
-        for (part <- startPartition until endPartition) {
-          totalSize += status.getSizeForBlock(part)
-        }
+        val totalSize: Long = (startPartition until endPartition).map(status.getSizeForBlock).sum
         splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
           ((ShuffleBlockId(shuffleId, mapId, startPartition, endPartition - startPartition),
             totalSize))
