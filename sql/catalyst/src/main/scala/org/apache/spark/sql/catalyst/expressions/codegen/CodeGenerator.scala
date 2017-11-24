@@ -163,11 +163,24 @@ class CodegenContext {
    *                 the list of default imports available.
    *                 Also, generic type arguments are accepted but ignored.
    * @param variableName Name of the field.
-   * @param initCode The statement(s) to put into the init() method to initialize this field.
+   * @param codeFunctions Function includes statement(s) to put into the init() method to
+   *                 initialize this field. An argument is the name of the mutable state variable
    *                 If left blank, the field will be default-initialized.
+   * @param inline whether the declaration and initialization code may be inlined rather than
+   *               compacted. If true, the name is not changed
+   * @return the name of the mutable state variable, which is either the original name if the
+   *         variable is inlined to the class, or an array access if the variable is to be stored
+   *         in an array of variables of the same type and initialization.
    */
-  def addMutableState(javaType: String, variableName: String, initCode: String = ""): Unit = {
-    mutableStates += ((javaType, variableName, initCode))
+  def addMutableState(
+      javaType: String,
+      variableName: String,
+      codeFunctions: String => String = _ => "",
+      inline: Boolean = false): String = {
+    val newVariableName = if (!inline) freshName(variableName) else variableName
+    val initCode = codeFunctions(newVariableName)
+    mutableStates += ((javaType, newVariableName, initCode))
+    newVariableName
   }
 
   /**
@@ -176,8 +189,7 @@ class CodegenContext {
    * data types like: UTF8String, ArrayData, MapData & InternalRow.
    */
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
-    val value = freshName(variableName)
-    addMutableState(javaType(dataType), value, "")
+    val value = addMutableState(javaType(dataType), variableName)
     val code = dataType match {
       case StringType => s"$value = $initCode.clone();"
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"

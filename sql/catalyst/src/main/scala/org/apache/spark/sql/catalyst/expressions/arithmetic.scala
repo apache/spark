@@ -602,8 +602,7 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    val tmpIsNull = ctx.freshName("leastTmpIsNull")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, tmpIsNull)
+    val tmpIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "leastTmpIsNull")
     val evals = evalChildren.map(eval =>
       s"""
          |${eval.code}
@@ -683,8 +682,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    val tmpIsNull = ctx.freshName("greatestTmpIsNull")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, tmpIsNull)
+    val tmpIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "greatestTmpIsNull")
     val evals = evalChildren.map(eval =>
       s"""
          |${eval.code}

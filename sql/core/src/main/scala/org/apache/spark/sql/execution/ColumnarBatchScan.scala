@@ -68,30 +68,26 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
    */
   // TODO: return ColumnarBatch.Rows instead
   override protected def doProduce(ctx: CodegenContext): String = {
-    val input = ctx.freshName("input")
     // PhysicalRDD always just has one input
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val input = ctx.addMutableState("scala.collection.Iterator", "input",
+      v => s"$v = inputs[0];")
 
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
-    val scanTimeTotalNs = ctx.freshName("scanTime")
-    ctx.addMutableState(ctx.JAVA_LONG, scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
+    val scanTimeTotalNs = ctx.addMutableState(ctx.JAVA_LONG, "scanTime", v => s"$v = 0;")
 
     val columnarBatchClz = classOf[ColumnarBatch].getName
-    val batch = ctx.freshName("batch")
-    ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
+    val batch = ctx.addMutableState(columnarBatchClz, "batch", v => s"$v = null;")
 
-    val idx = ctx.freshName("batchIdx")
-    ctx.addMutableState(ctx.JAVA_INT, idx, s"$idx = 0;")
-    val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
+    val idx = ctx.addMutableState(ctx.JAVA_INT, "batchIdx", v => s"$v = 0;")
     val columnVectorClzs = vectorTypes.getOrElse(
-      Seq.fill(colVars.size)(classOf[ColumnVector].getName))
-    val columnAssigns = colVars.zip(columnVectorClzs).zipWithIndex.map {
-      case ((name, columnVectorClz), i) =>
-        ctx.addMutableState(columnVectorClz, name, s"$name = null;")
-        s"$name = ($columnVectorClz) $batch.column($i);"
-    }
+      Seq.fill(output.indices.size)(classOf[ColumnVector].getName))
+    val (colVars, columnAssigns) = columnVectorClzs.zipWithIndex.map {
+      case (columnVectorClz, i) =>
+        val name = ctx.addMutableState(columnVectorClz, s"colInstance$i", v => s"$v = null;")
+        (name, s"$name = ($columnVectorClz) $batch.column($i);")
+    }.unzip
 
     val nextBatch = ctx.freshName("nextBatch")
     val nextBatchFuncName = ctx.addNewFunction(nextBatch,
