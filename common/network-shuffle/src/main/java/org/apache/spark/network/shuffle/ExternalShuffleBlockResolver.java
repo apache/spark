@@ -175,6 +175,15 @@ public class ExternalShuffleBlockResolver {
     return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId, length);
   }
 
+  public ManagedBuffer getBlockData(
+          String appId,
+          String execId,
+          int shuffleId,
+          int mapId,
+          int reduceId) {
+    return getBlockData(appId, execId, shuffleId, mapId, reduceId, 1);
+  }
+
   /**
    * Removes our metadata of all executors registered for the given application, and optionally
    * also deletes the local directories associated with the executors of that application in a
