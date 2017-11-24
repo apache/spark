@@ -318,7 +318,7 @@ case class AlterTableChangeColumnCommand(
 
     // Find the origin column from dataSchema by column name.
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
-    // Throw an AnalysisException if the column name/dataType is changed.
+    // Throw an AnalysisException if the column name is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw new AnalysisException(
         "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
@@ -327,6 +327,16 @@ case class AlterTableChangeColumnCommand(
     }
 
     val typeChanged = originColumn.dataType != newColumn.dataType
+    val partitionColumnChanged = table.partitionColumnNames.contains(originColumn.name)
+
+    // Throw an AnalysisException if the type of partition column is changed.
+    if (typeChanged && partitionColumnChanged) {
+      throw new AnalysisException(
+        "ALTER TABLE CHANGE COLUMN is not supported for changing partition column" +
+          s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
+          s"'${newColumn.name}' with type '${newColumn.dataType}'")
+    }
+
     val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Add the comment to a column, if comment is empty, return the original column.

@@ -1702,6 +1702,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 STRING")
     val column = catalog.getTableMetadata(tableIdent).schema.fields.find(_.name == "col1")
     assert(column.get.dataType == StringType)
+
+    // Ensure that changing partition column type throw exception
+    intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.tab1 CHANGE COLUMN a a STRING")
+    }
   }
 
   test("drop build-in function") {
