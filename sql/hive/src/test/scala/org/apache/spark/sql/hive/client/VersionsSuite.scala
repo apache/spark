@@ -700,12 +700,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: SPARK-17920: Insert into/overwrite avro table") {
       withTempDir { dir =>
-        val path = dir.getAbsolutePath
-        val schemaPath = s"""$path${File.separator}avroschemadir"""
         val destTableName = "tab1"
-
-        new File(schemaPath).mkdir()
-
         val avroSchema =
           """{
             |"type": "record",
@@ -719,11 +714,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
           """.stripMargin
 
         withTable(destTableName) {
-          val schemaUrl = s"""$schemaPath${File.separator}avroSchema.avsc"""
-          val schemaFile = new File(schemaPath, "avroSchema.avsc")
+          val schemaFile = new File(dir, "avroSchema.avsc")
           val writer = new PrintWriter(schemaFile)
           writer.write(avroSchema)
           writer.close()
+          val schemaPath = schemaFile.getCanonicalPath
 
           versionSpark.sql(
             s"""CREATE TABLE $destTableName
@@ -731,7 +726,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
                |STORED AS
                |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
                |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
-               |TBLPROPERTIES ('avro.schema.url' = '$schemaUrl')
+               |TBLPROPERTIES ('avro.schema.url' = '$schemaPath')
            """.stripMargin
           )
           val insertStmt = s"INSERT OVERWRITE TABLE $destTableName SELECT 'ABC', 'DEF'"
