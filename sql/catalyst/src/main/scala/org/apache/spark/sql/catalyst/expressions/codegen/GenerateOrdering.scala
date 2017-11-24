@@ -149,16 +149,14 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           """
         }.mkString
       })
-    // make sure INPUT_ROW is declared even if splitExpressions
-    // returns an inlined block
-    val finalCode = s"""
-       |InternalRow ${ctx.INPUT_ROW} = null;
-       |$code
-     """.stripMargin
-    // Restore original currentVars and INPUT_ROW.
     ctx.currentVars = oldCurrentVars
     ctx.INPUT_ROW = oldInputRow
-    finalCode
+    // make sure INPUT_ROW is declared even if splitExpressions
+    // returns an inlined block
+    s"""
+       |InternalRow $inputRow = null;
+       |$code
+     """.stripMargin
   }
 
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
