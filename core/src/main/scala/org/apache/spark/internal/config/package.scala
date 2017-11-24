@@ -499,4 +499,15 @@ package object config {
         "array in the sorter.")
       .intConf
       .createWithDefault(Integer.MAX_VALUE)
+
+  private[spark] val SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD =
+    ConfigBuilder("spark.shuffle.mapOutput.parallelAggregationThreshold")
+      .internal()
+      .doc("Multi-thread is used when the number of mappers * shuffle partitions is greater than " +
+        "or equal to this threshold. Note that the actual parallelism is calculated by number of " +
+        "mappers * shuffle partitions / this threshold + 1, so this threshold should be positive.")
+      .intConf
+      .checkValue(v => v > 0, "The threshold should be positive.")
+      .createWithDefault(10000000)
+
 }
