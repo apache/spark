@@ -1375,14 +1375,18 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val argList = ctx.freshName("argLists")
     val numArgLists = argListGen.length
     val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
-      v._2.code + s"\n$argList[$index] = " +
-      (if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
-        // Java primitives get boxed in order to allow null values.
-        s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
-          s"new ${ctx.boxedType(v._1)}(${v._2.value});"
-      } else {
-        s"(${v._2.isNull}) ? null : ${v._2.value};"
-      })
+      val value =
+        if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
+          // Java primitives get boxed in order to allow null values.
+          s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
+            s"new ${ctx.boxedType(v._1)}(${v._2.value})"
+        } else {
+          s"(${v._2.isNull}) ? null : ${v._2.value}"
+        }
+      s"""
+         ${v._2.code}
+         $argList[$index] = $value;
+       """
     }
     val argListCodes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
       ctx.splitExpressions(
