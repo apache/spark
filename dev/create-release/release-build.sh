@@ -259,7 +259,7 @@ if [[ "$1" == "package" ]]; then
   wait
   rm -rf spark-$SPARK_VERSION-bin-*/
 
-  svn co $RELEASE_STAGING_LOCATION svn-spark
+  svn co --depth=empty $RELEASE_STAGING_LOCATION svn-spark
   rm -rf "svn-spark/${DEST_DIR_NAME}-bin"
   mkdir -p "svn-spark/${DEST_DIR_NAME}-bin"
 
@@ -286,7 +286,7 @@ if [[ "$1" == "docs" ]]; then
   cd ..
   cd ..
 
-  svn co $RELEASE_STAGING_LOCATION svn-spark
+  svn co --depth=empty $RELEASE_STAGING_LOCATION svn-spark
   rm -rf "svn-spark/${DEST_DIR_NAME}-docs"
   mkdir -p "svn-spark/${DEST_DIR_NAME}-docs"
 
