@@ -178,7 +178,7 @@ case class HashAggregateExec(
   private var bufVars: Seq[ExprCode] = _
 
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
-    val initAgg = ctx.addMutableState(ctx.JAVA_BOOLEAN, "initAgg", v => s"$v = false;")
+    val initAgg = ctx.addMutableState(ctx.JAVA_BOOLEAN, "initAgg")
     // The generated function doesn't have input row in the code context.
     ctx.INPUT_ROW = null
 
@@ -565,7 +565,7 @@ case class HashAggregateExec(
   }
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
-    val initAgg = ctx.addMutableState(ctx.JAVA_BOOLEAN, "initAgg", v => s"$v = false;")
+    val initAgg = ctx.addMutableState(ctx.JAVA_BOOLEAN, "initAgg")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
     } else {
@@ -750,7 +750,7 @@ case class HashAggregateExec(
 
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
     incCounter) = if (testFallbackStartsAt.isDefined) {
-      val countTerm = ctx.addMutableState(ctx.JAVA_INT, "fallbackCounter", v => s"$v = 0;")
+      val countTerm = ctx.addMutableState(ctx.JAVA_INT, "fallbackCounter")
       (s"$countTerm < ${testFallbackStartsAt.get._1}",
         s"$countTerm < ${testFallbackStartsAt.get._2}", s"$countTerm = 0;", s"$countTerm += 1;")
     } else {

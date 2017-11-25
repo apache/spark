@@ -534,9 +534,9 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val classNameDict = classOf[JMap[Character, Character]].getCanonicalName
 
-    val termLastMatching = ctx.addMutableState("UTF8String", "lastMatching", v => s"$v = null;")
-    val termLastReplace = ctx.addMutableState("UTF8String", "lastReplace", v => s"$v = null;")
-    val termDict = ctx.addMutableState(classNameDict, "dict", v => s"$v = null;")
+    val termLastMatching = ctx.addMutableState("UTF8String", "lastMatching")
+    val termLastReplace = ctx.addMutableState("UTF8String", "lastReplace")
+    val termDict = ctx.addMutableState(classNameDict, "dict")
 
     nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
       val check = if (matchingExpr.foldable && replaceExpr.foldable) {

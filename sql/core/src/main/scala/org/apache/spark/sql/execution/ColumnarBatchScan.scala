@@ -75,17 +75,17 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
-    val scanTimeTotalNs = ctx.addMutableState(ctx.JAVA_LONG, "scanTime", v => s"$v = 0;")
+    val scanTimeTotalNs = ctx.addMutableState(ctx.JAVA_LONG, "scanTime")
 
     val columnarBatchClz = classOf[ColumnarBatch].getName
-    val batch = ctx.addMutableState(columnarBatchClz, "batch", v => s"$v = null;")
+    val batch = ctx.addMutableState(columnarBatchClz, "batch")
 
-    val idx = ctx.addMutableState(ctx.JAVA_INT, "batchIdx", v => s"$v = 0;")
+    val idx = ctx.addMutableState(ctx.JAVA_INT, "batchIdx")
     val columnVectorClzs = vectorTypes.getOrElse(
       Seq.fill(output.indices.size)(classOf[ColumnVector].getName))
     val (colVars, columnAssigns) = columnVectorClzs.zipWithIndex.map {
       case (columnVectorClz, i) =>
-        val name = ctx.addMutableState(columnVectorClz, s"colInstance$i", v => s"$v = null;")
+        val name = ctx.addMutableState(columnVectorClz, s"colInstance$i")
         (name, s"$name = ($columnVectorClz) $batch.column($i);")
     }.unzip
 

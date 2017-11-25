@@ -321,12 +321,10 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     val matcher = ctx.freshName("matcher")
 
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex", v => s"$v = null;")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern", v => s"$v = null;")
-    val termLastReplacement = ctx.addMutableState("String", "lastReplacement",
-      v => s"$v = null;")
-    val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8",
-      v => s"$v = null;")
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+    val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
+    val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
     val termResult = ctx.addMutableState(classNameStringBuffer, "result",
       v => s"$v = new $classNameStringBuffer();")
 
@@ -414,8 +412,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
 
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex", v => s"$v = null;")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern", v => s"$v = null;")
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
 
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
