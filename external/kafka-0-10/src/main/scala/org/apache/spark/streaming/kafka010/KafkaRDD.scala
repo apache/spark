@@ -193,6 +193,8 @@ private[spark] class KafkaRDD[K, V](
     logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
       s"offsets ${part.fromOffset} -> ${part.untilOffset}")
 
+    val threadId = Thread.currentThread().getId
+
     val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
     context.addTaskCompletionListener{ context => closeIfNeeded() }
@@ -201,9 +203,9 @@ private[spark] class KafkaRDD[K, V](
       CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
       if (context.attemptNumber >= 1) {
         // just in case the prior attempt failures were cache related
-        CachedKafkaConsumer.remove(groupId, part.topic, part.partition)
+        CachedKafkaConsumer.remove(groupId, part.topic, part.partition, threadId)
       }
-      CachedKafkaConsumer.get[K, V](groupId, part.topic, part.partition, kafkaParams)
+      CachedKafkaConsumer.get[K, V](groupId, part.topic, part.partition, threadId, kafkaParams)
     } else {
       CachedKafkaConsumer.getUncached[K, V](groupId, part.topic, part.partition, kafkaParams)
     }

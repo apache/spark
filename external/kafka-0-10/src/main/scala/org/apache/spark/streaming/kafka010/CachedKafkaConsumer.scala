@@ -107,7 +107,7 @@ class CachedKafkaConsumer[K, V] private(
 private[kafka010]
 object CachedKafkaConsumer extends Logging {
 
-  private case class CacheKey(groupId: String, topic: String, partition: Int)
+  private case class CacheKey(groupId: String, topic: String, partition: Int, threadId: Long)
 
   // Don't want to depend on guava, don't want a cleanup thread, use a simple LinkedHashMap
   private var cache: ju.LinkedHashMap[CacheKey, CachedKafkaConsumer[_, _]] = null
@@ -147,9 +147,10 @@ object CachedKafkaConsumer extends Logging {
       groupId: String,
       topic: String,
       partition: Int,
+      threadId: Long,
       kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
     CachedKafkaConsumer.synchronized {
-      val k = CacheKey(groupId, topic, partition)
+      val k = CacheKey(groupId, topic, partition, threadId)
       val v = cache.get(k)
       if (null == v) {
         logInfo(s"Cache miss for $k")
@@ -175,8 +176,8 @@ object CachedKafkaConsumer extends Logging {
     new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
 
   /** remove consumer for given groupId, topic, and partition, if it exists */
-  def remove(groupId: String, topic: String, partition: Int): Unit = {
-    val k = CacheKey(groupId, topic, partition)
+  def remove(groupId: String, topic: String, partition: Int, threadId: Long): Unit = {
+    val k = CacheKey(groupId, topic, partition, threadId)
     logInfo(s"Removing $k from cache")
     val v = CachedKafkaConsumer.synchronized {
       cache.remove(k)
