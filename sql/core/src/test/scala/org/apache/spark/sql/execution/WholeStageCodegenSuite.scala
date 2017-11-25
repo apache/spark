@@ -252,6 +252,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
 
       val df2 = spark.read.parquet(path).select(expressions.map(Column(_)): _*)
+      val plan = df2.queryExecution.executedPlan
+      assert(plan.find(_.isInstanceOf[WholeStageCodegenExec]).isDefined)
       df2.collect()
     }
   }
