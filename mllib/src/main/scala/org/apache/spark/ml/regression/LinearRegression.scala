@@ -39,6 +39,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.mllib.regression.{LinearRegressionModel => OldLinearRegressionModel}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -558,7 +559,7 @@ class LinearRegressionModel private[ml] (
 }
 
 /** [[MLWriterFormat]] providing "internal" instance for [[LinearRegressionModel]] */
-class InternalLinearRegressionModelWriter()
+private class InternalLinearRegressionModelWriter()
   extends MLWriterFormat with MLFormatRegister {
 
   override def shortName(): String =
@@ -576,6 +577,26 @@ class InternalLinearRegressionModelWriter()
     val data = Data(instance.intercept, instance.coefficients)
     val dataPath = new Path(path, "data").toString
     sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+  }
+}
+
+/** [[MLWriterFormat]] providing "pmml" instance for [[LinearRegressionModel]] */
+private class PMMLLinearRegressionModelWriter()
+  extends MLWriterFormat with MLFormatRegister {
+
+  override def shortName(): String =
+    "pmml+org.apache.spark.ml.regression.LinearRegressionModel"
+
+  private case class Data(intercept: Double, coefficients: Vector)
+
+  override def write(path: String, sparkSession: SparkSession,
+    optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
+    val sc = sparkSession.sparkContext
+    // Construct the MLLib model which knows how to write to PMML.
+    val instance = stage.asInstanceOf[LinearRegressionModel]
+    val oldModel = new OldLinearRegressionModel(instance.coefficients, instance.intercept)
+    // Save PMML
+    oldModel.toPMML(sc, path)
   }
 }
 
