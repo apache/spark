@@ -134,6 +134,17 @@ class CodegenContext {
   }
 
   /**
+   * Holding the variable name of the input row of the current operator, will be used by
+   * `BoundReference` to generate code.
+   *
+   * Note that if `currentVars` is not null, `BoundReference` prefers `currentVars` over `INPUT_ROW`
+   * to generate code. If you want to make sure the generated code use `INPUT_ROW`, you need to set
+   * `currentVars` to null, or set `currentVars(i)` to null for certain columns, before calling
+   * `Expression.genCode`.
+   */
+  final var INPUT_ROW = "i"
+
+  /**
    * Holding a list of generated columns as input of current operator, will be used by
    * BoundReference to generate code.
    */
@@ -385,9 +396,6 @@ class CodegenContext {
   final val JAVA_LONG = "long"
   final val JAVA_FLOAT = "float"
   final val JAVA_DOUBLE = "double"
-
-  /** The variable name of the input row in generated code. */
-  final var INPUT_ROW = "i"
 
   /**
    * The map from a variable name to it's next ID.
