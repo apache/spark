@@ -133,9 +133,6 @@ case class ExpandExec(
      * size explosion.
      */
 
-    // Set input variables
-    ctx.currentVars = input
-
     // Tracks whether a column has the same output for all rows.
     // Size of sameOutput array should equal N.
     // If sameOutput(i) is true, then the i-th column has the same value for all output rows given
