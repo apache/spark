@@ -106,6 +106,8 @@ trait MLFormatRegister {
    * }}}
    * Indicates that this format is capable of saving Spark's own LinearRegressionModel in pmml.
    *
+   * Format discovery is done using a ServiceLoader so make sure to list your format in
+   * META-INF/services.
    * @since 2.3.0
    */
   def shortName(): String
@@ -119,7 +121,7 @@ trait MLFormatRegister {
  * @since 2.3.0
  */
 @InterfaceStability.Evolving
-trait MLWriterFormat{
+trait MLWriterFormat {
   /**
    * Function write the provided pipeline stage out.
    */
@@ -140,7 +142,6 @@ abstract class MLWriter extends BaseReadWrite with Logging {
    */
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
-  @throws[ClassNotFoundException]("If the requested format class can be loaded.")
   def save(path: String): Unit = {
     new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sc)
     saveImpl(path)
@@ -206,14 +207,15 @@ class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
    */
   @Since("2.3.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
-  @throws[ClassNotFoundException]("If the requested format class can be loaded.")
   @throws[SparkException]("If multiple sources for a given short name format are found.")
   override protected def saveImpl(path: String) = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[MLFormatRegister], loader)
     val stageName = stage.getClass.getName
     val targetName = s"${source}+${stageName}"
-    val writerCls = serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(targetName)) match {
+    val formats = serviceLoader.asScala.toList
+    val shortNames = formats.map(_.shortName())
+    val writerCls = formats.filter(_.shortName().equalsIgnoreCase(targetName)) match {
       // requested name did not match any given registered alias
       case Nil =>
         Try(loader.loadClass(source)) match {
@@ -221,8 +223,9 @@ class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
             // Found the ML writer using the fully qualified path
             writer
           case Failure(error) =>
-            throw new ClassNotFoundException(
-              s"Could not load requested format $source for $stageName", error)
+            throw new SparkException(
+              s"Could not load requested format $source for $stageName ($targetName) had $formats" +
+              s"supporting $shortNames", error)
         }
       case head :: Nil =>
         head.getClass
@@ -264,6 +267,18 @@ trait MLWritable {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = write.save(path)
+}
+
+/**
+ * Trait for classes that provide `GeneralMLWriter`.
+ */
+@Since("2.3.0")
+trait GeneralMLWritable extends MLWritable {
+  /**
+   * Returns an `MLWriter` instance for this ML instance.
+   */
+  @Since("2.3.0")
+  override def write: GeneralMLWriter
 }
 
 /**
