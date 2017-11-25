@@ -264,9 +264,9 @@ if [[ "$1" == "package" ]]; then
   mkdir -p "svn-spark/${DEST_DIR_NAME}-bin"
 
   echo "Copying release tarballs"
-  cp "spark-*" "svn-spark/${DEST_DIR_NAME}-bin/"
-  cp "pyspark-*" "svn-spark/${DEST_DIR_NAME}-bin/"
-  cp "SparkR_*" "svn-spark/${DEST_DIR_NAME}-bin/"
+  cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
+  cp pyspark-* "svn-spark/${DEST_DIR_NAME}-bin/"
+  cp SparkR_* "svn-spark/${DEST_DIR_NAME}-bin/"
   svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
   cd svn-spark
