@@ -80,15 +80,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public long valuesNativeAddress() {
-    throw new RuntimeException("Cannot get native address for on heap column");
-  }
-  @Override
-  public long nullsNativeAddress() {
-    throw new RuntimeException("Cannot get native address for on heap column");
-  }
-
-  @Override
   public void close() {
     super.close();
     nulls = null;
