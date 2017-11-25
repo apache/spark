@@ -3025,7 +3025,7 @@ test_that("repartition by columns on DataFrame", {
   # partitions to reduce the number of the tasks to speed up the test. This is particularly
   # slow on Windows because the R workers are unable to be forked. See also SPARK-21693.
   conf <- callJMethod(sparkSession, "conf")
-  value <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
+  shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
   callJMethod(conf, "set", "spark.sql.shuffle.partitions", "5")
   tryCatch({
     df <- createDataFrame(
@@ -3067,7 +3067,7 @@ test_that("repartition by columns on DataFrame", {
   },
   finally = {
     # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.shuffle.partitions", value)
+    callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
   })
 })
 
@@ -3095,7 +3095,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   # partitions to reduce the number of the tasks to speed up the test. This is particularly
   # slow on Windows because the R workers are unable to be forked. See also SPARK-21693.
   conf <- callJMethod(sparkSession, "conf")
-  value <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
+  shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
   # TODO: Lower number of 'spark.sql.shuffle.partitions' causes test failures
   # for an unknown reason. Probably we should fix it.
   callJMethod(conf, "set", "spark.sql.shuffle.partitions", "16")
@@ -3200,7 +3200,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   },
   finally = {
     # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.shuffle.partitions", value)
+    callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
   })
 })
 
