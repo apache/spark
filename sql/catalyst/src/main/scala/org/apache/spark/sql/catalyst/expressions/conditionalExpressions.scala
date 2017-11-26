@@ -162,7 +162,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
        1
       > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END;
        2
-      > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 < 0 THEN 2.0 ELSE null END;
+      > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 < 0 THEN 2.0 END;
        NULL
   """)
 // scalastyle:on line.size.limit
