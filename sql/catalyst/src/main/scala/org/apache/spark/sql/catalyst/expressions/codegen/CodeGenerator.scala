@@ -281,17 +281,18 @@ class CodegenContext {
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
     val initCodes = mutableStates.distinct.map(_._3 + "\n")
     // array state is initialized in loops
-    val arrayInitCodes = mutableStateArrayInitCodes.map { case (javaType, arrayName, qualifiedInitCode) =>
-      if (qualifiedInitCode == "") {
-        ""
-      } else {
-        val loopIdxVar = CodeGenerator.INIT_LOOP_VARIABLE_NAME
-        s"""
-           for (int $loopIdxVar = 0; $loopIdxVar < $arrayName.length; $loopIdxVar++) {
-             $qualifiedInitCode
-           }
-         """
-      }
+    val arrayInitCodes = mutableStateArrayInitCodes.map {
+      case (javaType, arrayName, qualifiedInitCode) =>
+        if (qualifiedInitCode == "") {
+          ""
+        } else {
+          val loopIdxVar = CodeGenerator.INIT_LOOP_VARIABLE_NAME
+          s"""
+             for (int $loopIdxVar = 0; $loopIdxVar < $arrayName.length; $loopIdxVar++) {
+               $qualifiedInitCode
+             }
+           """
+        }
     }
 
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
