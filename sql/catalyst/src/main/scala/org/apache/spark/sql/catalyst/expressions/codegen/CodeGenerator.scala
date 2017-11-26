@@ -154,6 +154,21 @@ class CodegenContext {
   val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
     mutable.ArrayBuffer.empty[(String, String, String)]
 
+  // An array keyed by the tuple of mutable states' types and initialization code, holds the
+  // current max index of the array
+  var mutableStateArrayIdx: mutable.Map[(String, String), Int] =
+    mutable.Map.empty[(String, String), Int]
+
+  // An array keyed by the tuple of mutable states' types and initialization code, holds the
+  // current name of the mutableStateArray into which state of the given key will be compacted
+  var mutableStateArrayCurrentNames: mutable.Map[(String, String), String] =
+    mutable.Map.empty[(String, String), String]
+
+  // An array keyed by the tuple of mutable states' types, array names and initialization code,
+  // holds the code that will initialize the mutableStateArray when initialized in loops
+  var mutableStateArrayInitCodes: mutable.ArrayBuffer[(String, String, String)] =
+    mutable.ArrayBuffer.empty[(String, String, String)]
+
   /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
    *
@@ -169,18 +184,59 @@ class CodegenContext {
    * @param inline whether the declaration and initialization code may be inlined rather than
    *               compacted. If true, the name is not changed
    * @return the name of the mutable state variable, which is either the original name if the
-   *         variable is inlined to the class, or an array access if the variable is to be stored
-   *         in an array of variables of the same type and initialization.
+   *         variable is inlined to the outer class, or an array access if the variable is to be
+   *         stored in an array of variables of the same type and initialization.
+   *         primitive type variables will be inlined into outer class when the total number of
+   *         mutable variables is less than `CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD`
+   *         the max size of an array for compaction is given by
+   *         `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
    */
   def addMutableState(
       javaType: String,
       variableName: String,
       codeFunctions: String => String = _ => "",
       inline: Boolean = false): String = {
-    val newVariableName = if (!inline) freshName(variableName) else variableName
-    val initCode = codeFunctions(newVariableName)
-    mutableStates += ((javaType, newVariableName, initCode))
-    newVariableName
+    val varName = if (!inline) freshName(variableName) else variableName
+    val initCode = codeFunctions(varName)
+
+    if (inline ||
+        // want to put a primitive type variable at outerClass for performance
+        isPrimitiveType(javaType) &&
+          (mutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD) ||
+        // identify no simply-assigned object
+        !isPrimitiveType(javaType) && !initCode.matches("(^[\\w_]+\\d+\\s*=\\s*null;|"
+          + "^[\\w_]+\\d+\\s*=\\s*new\\s*[\\w\\.]+\\(\\);$|"
+          + "^$)")) {
+      // primitive type or non-simply-assigned state is declared inline to the outer class
+      mutableStates += ((javaType, varName, initCode))
+      varName
+    } else {
+      // Create an initialization code agnostic to the actual variable name which we can key by
+      val initCodeKey = initCode.replaceAll(varName, "*VALUE*")
+
+      val arrayName = mutableStateArrayCurrentNames.getOrElse((javaType, initCodeKey), "")
+      val prevIdx = mutableStateArrayIdx.getOrElse((javaType, arrayName), -1)
+      if (0 <= prevIdx && prevIdx < CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT - 1) {
+        // a mutableStateArray for the given type and initialization has already been declared,
+        // update the max index of the array and return an array element
+        val idx = prevIdx + 1
+        mutableStateArrayIdx.update((javaType, arrayName), idx)
+        s"$arrayName[$idx]"
+      } else {
+        // mutableStateArray has not been declared yet for the given type and initialization code.
+        // Create a new name for the array, and add an entry to keep track of current array name
+        // for type and initialized code. In addition, type, array name, and qualified initialized
+        // code is stored for code generation
+        val arrayName = freshName("mutableStateArray")
+        val qualifiedInitCode = initCode.replaceAll(
+          varName, s"$arrayName[${CodeGenerator.INIT_LOOP_VARIABLE_NAME}]")
+        mutableStateArrayCurrentNames += (javaType, initCodeKey) -> arrayName
+        mutableStateArrayInitCodes += ((javaType, arrayName, qualifiedInitCode))
+        val idx = 0
+        mutableStateArrayIdx += (javaType, arrayName) -> idx
+        s"$arrayName[$idx]"
+      }
+    }
   }
 
   /**
@@ -201,18 +257,46 @@ class CodegenContext {
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map { case (javaType, variableName, _) =>
+    val inlinedStates = mutableStates.distinct.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
-    }.mkString("\n")
+    }
+
+    val arrayStates = mutableStateArrayInitCodes.map { case (javaType, arrayName, _) =>
+      val length = mutableStateArrayIdx((javaType, arrayName)) + 1
+      if (javaType.matches("^.*\\[\\]$")) {
+        // initializer had an one-dimensional array variable
+        val baseType = javaType.substring(0, javaType.length - 2)
+        s"private $javaType[] $arrayName = new $baseType[$length][];"
+      } else {
+        // initializer had a scalar variable
+        s"private $javaType[] $arrayName = new $javaType[$length];"
+      }
+    }
+
+    (inlinedStates ++ arrayStates).mkString("\n")
   }
 
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
     val initCodes = mutableStates.distinct.map(_._3 + "\n")
+    // array state is initialized in loops
+    val arrayInitCodes = mutableStateArrayInitCodes.map { case (javaType, arrayName, qualifiedInitCode) =>
+      if (qualifiedInitCode == "") {
+        ""
+      } else {
+        val loopIdxVar = CodeGenerator.INIT_LOOP_VARIABLE_NAME
+        s"""
+           for (int $loopIdxVar = 0; $loopIdxVar < $arrayName.length; $loopIdxVar++) {
+             $qualifiedInitCode
+           }
+         """
+      }
+    }
+
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
-    splitExpressions(expressions = initCodes, funcName = "init", arguments = Nil)
+    splitExpressions(expressions = initCodes ++ arrayInitCodes, funcName = "init", arguments = Nil)
   }
 
   /**
@@ -1176,6 +1260,18 @@ object CodeGenerator extends Logging {
   // threshold of 1000k bytes to determine when a function should be inlined to a private, inner
   // class.
   val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
+
+  // This is the threshold for the number of global variables, whose types are primitive type or
+  // complex type (e.g. more than one-dimensional array), that will be placed at the outer class
+  val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
+
+  // This is the maximum number of array elements to keep global variables in one Java array
+  // 32767 is the maximum integer value that does not require a constant pool entry in a Java
+  // bytecode instruction
+  val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
+
+  // This is an index variable name used in a loop for initializing global variables
+  val INIT_LOOP_VARIABLE_NAME = "i"
 
   /**
    * Compile the Java source code into a Java class, using Janino.
