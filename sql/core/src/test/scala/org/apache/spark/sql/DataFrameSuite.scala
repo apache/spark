@@ -2136,7 +2136,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       expr2 = expr2.when($"id" === lit(i + 10), i)
     }
     val df = spark.range(1).select(expr1, expr2.otherwise(0))
-    df.show
+    checkAnswer(df, Row(0, 10) :: Nil)
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 }

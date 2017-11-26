@@ -233,8 +233,12 @@ case class CaseWhen(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // This variable represents whether the first successful condition is met or not.
+    // It is initialized to `false` and it is set to `true` when the first condition which
+    // evaluates to `true` is met and therefore is not needed to go on anymore on the computation
+    // of the following conditions.
     val conditionMet = ctx.freshName("caseWhenConditionMet")
-    ctx.addMutableState("boolean", ev.isNull, "")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull, "")
     ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
     val cases = branches.map { case (condExpr, valueExpr) =>
       val cond = condExpr.genCode(ctx)
@@ -266,21 +270,28 @@ case class CaseWhen(
     val allConditions = cases ++ elseCode
 
     val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-      allConditions.mkString("\n")
-    } else {
-      ctx.splitExpressions(allConditions, "caseWhen",
-        ("InternalRow", ctx.INPUT_ROW) :: ("boolean", conditionMet) :: Nil, returnType = "boolean",
-        makeSplitFunction = {
-          func =>
-            s"""
-              $func
-              return $conditionMet;
-            """
-        },
-        foldFunctions = { funcCalls =>
-          funcCalls.map(funcCall => s"$conditionMet = $funcCall;").mkString("\n")
-        })
-    }
+        allConditions.mkString("\n")
+      } else {
+        ctx.splitExpressions(allConditions, "caseWhen",
+          ("InternalRow", ctx.INPUT_ROW) :: (ctx.JAVA_BOOLEAN, conditionMet) :: Nil,
+          returnType = ctx.JAVA_BOOLEAN,
+          makeSplitFunction = {
+            func =>
+              s"""
+                $func
+                return $conditionMet;
+              """
+          },
+          foldFunctions = { funcCalls =>
+            funcCalls.map { funcCall =>
+              s"""
+                $conditionMet = $funcCall;
+                if ($conditionMet) {
+                  continue;
+                }"""
+            }.mkString("do {", "", "\n} while (false);")
+          })
+      }
 
     ev.copy(code = s"""
       ${ev.isNull} = true;
