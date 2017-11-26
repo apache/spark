@@ -73,14 +73,10 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
         }
       """
     }
-    val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-      ctx.splitExpressions(
-        expressions = inputs,
-        funcName = "valueConcat",
-        arguments = ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
-    } else {
-      inputs.mkString("\n")
-    }
+    val codes = ctx.splitExpressions(
+      expressions = inputs,
+      funcName = "valueConcat",
+      argumentsExceptRow = ("UTF8String[]", args) :: Nil)
     ev.copy(s"""
       UTF8String[] $args = new UTF8String[${evals.length}];
       $codes
@@ -156,14 +152,10 @@ case class ConcatWs(children: Seq[Expression])
           ""
         }
       }
-      val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-        ctx.splitExpressions(
+      val codes = ctx.splitExpressions(
           expressions = inputs,
           funcName = "valueConcatWs",
-          arguments = ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
-      } else {
-        inputs.mkString("\n")
-      }
+          argumentsExceptRow = ("UTF8String[]", args) :: Nil)
       ev.copy(s"""
         UTF8String[] $args = new UTF8String[$numArgs];
         ${separator.code}

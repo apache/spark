@@ -797,6 +797,29 @@ class CodegenContext {
 
   /**
    * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM. This version takes care of INPUT_ROW and currentVars
+   *
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param argumentsExceptRow the list of (type, name) of the arguments of the split function
+   *                           except for ctx.INPUT_ROW
+  */
+  def splitExpressions(
+      expressions: Seq[String],
+      funcName: String,
+      argumentsExceptRow: Seq[(String, String)]): String = {
+    if (INPUT_ROW == null || currentVars != null) {
+      // Cannot split these expressions because they are not created from a row object.
+      return expressions.mkString("\n")
+    }
+    splitExpressions(
+      expressions,
+      funcName,
+      arguments = ("InternalRow", INPUT_ROW) +: argumentsExceptRow)
+  }
+
+  /**
+   * Splits the generated code of expressions into multiple functions, because function has
    * 64kb code size limit in JVM
    *
    * @param expressions the codes to evaluate expressions.
