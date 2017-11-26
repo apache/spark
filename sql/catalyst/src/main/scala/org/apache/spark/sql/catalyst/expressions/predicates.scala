@@ -257,14 +257,17 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     } else {
       listCode.mkString("\n")
     }
+    val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+      s"""
+        ${ctx.javaType(value.dataType)} $valueArg = ${valueGen.value};
+        $listCodes
+      """
+    }
     ev.copy(code = s"""
       ${valueGen.code}
       ${ev.value} = false;
       ${ev.isNull} = ${valueGen.isNull};
-      if (!${ev.isNull}) {
-        ${ctx.javaType(value.dataType)} $valueArg = ${valueGen.value};
-        $listCodes
-      }
+      $nullSafeCode
     """)
   }
 
@@ -327,14 +330,17 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     }
     ctx.addMutableState(setName, setTerm,
       s"$setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();")
+    val nullSafeExec = ctx.nullSafeExec(nullable, ev.isNull) {
+      s"""
+        ${ev.value} = $setTerm.contains(${childGen.value});
+        $setNull
+      """
+    }
     ev.copy(code = s"""
       ${childGen.code}
       boolean ${ev.isNull} = ${childGen.isNull};
       boolean ${ev.value} = false;
-      if (!${ev.isNull}) {
-        ${ev.value} = $setTerm.contains(${childGen.value});
-        $setNull
-      }
+      $nullSafeExec
      """)
   }
 

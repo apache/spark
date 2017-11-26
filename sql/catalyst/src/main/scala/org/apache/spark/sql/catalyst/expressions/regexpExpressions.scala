@@ -124,13 +124,14 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
+        val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+          s"${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();"
+        }
         ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
-          }
+          $nullSafeCode
         """)
       } else {
         ev.copy(code = s"""
@@ -199,13 +200,14 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
+        val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+          s"${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);"
+        }
         ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
-          }
+          $nullSafeCode
         """)
       } else {
         ev.copy(code = s"""

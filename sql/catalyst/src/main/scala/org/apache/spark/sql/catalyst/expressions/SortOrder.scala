@@ -179,15 +179,15 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         s"$DoublePrefixCmp.computePrefix($input.toDouble())"
       case _ => "0L"
     }
-
+    val nullSafeCode = ctx.nullSafeExec(child.child.nullable, childCode.isNull) {
+      s"${ev.value} = $prefixCode;"
+    }
     ev.copy(code = childCode.code +
       s"""
-         |long ${ev.value} = 0L;
-         |boolean ${ev.isNull} = ${childCode.isNull};
-         |if (!${childCode.isNull}) {
-         |  ${ev.value} = $prefixCode;
-         |}
-      """.stripMargin)
+        long ${ev.value} = 0L;
+        boolean ${ev.isNull} = ${childCode.isNull};
+        $nullSafeCode
+      """)
   }
 
   override def dataType: DataType = LongType

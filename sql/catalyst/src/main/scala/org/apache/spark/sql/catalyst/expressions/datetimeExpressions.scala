@@ -678,17 +678,21 @@ abstract class UnixTime
         } else {
           val formatterName = ctx.addReferenceObj("formatter", formatter, df)
           val eval1 = left.genCode(ctx)
+          val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+            s"""
+               try {
+                 ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
+               } catch (java.text.ParseException e) {
+                 ${ev.isNull} = true;
+               }
+             """
+          }
           ev.copy(code = s"""
             ${eval1.code}
             boolean ${ev.isNull} = ${eval1.isNull};
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-            if (!${ev.isNull}) {
-              try {
-                ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
-              } catch (java.text.ParseException e) {
-                ${ev.isNull} = true;
-              }
-            }""")
+            $nullSafeCode
+            """)
         }
       case StringType =>
         val tz = ctx.addReferenceMinorObj(timeZone)
@@ -707,24 +711,26 @@ abstract class UnixTime
         })
       case TimestampType =>
         val eval1 = left.genCode(ctx)
+        val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+          s"${ev.value} = ${eval1.value} / 1000000L;"
+        }
         ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = ${eval1.value} / 1000000L;
-          }""")
+          $nullSafeCode""")
       case DateType =>
         val tz = ctx.addReferenceMinorObj(timeZone)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
+        val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+          s"${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / 1000L;"
+        }
         ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / 1000L;
-          }""")
+          $nullSafeCode""")
     }
   }
 }
@@ -813,18 +819,21 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)
+        val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+          s"""
+             try {
+               ${ev.value} = UTF8String.fromString($formatterName.format(
+                 new java.util.Date(${t.value} * 1000L)));
+             } catch (java.lang.IllegalArgumentException e) {
+               ${ev.isNull} = true;
+             }
+           """
+        }
         ev.copy(code = s"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            try {
-              ${ev.value} = UTF8String.fromString($formatterName.format(
-                new java.util.Date(${t.value} * 1000L)));
-            } catch (java.lang.IllegalArgumentException e) {
-              ${ev.isNull} = true;
-            }
-          }""")
+          $nullSafeCode""")
       }
     } else {
       val tz = ctx.addReferenceMinorObj(timeZone)
@@ -1021,14 +1030,15 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
         ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $dtu.getTimeZone("$tz");""")
         ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
+        val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+          s"${ev.value} = $dtu.convertTz(${eval.value}, $utcTerm, $tzTerm);"
+        }
         ev.copy(code = s"""
-           |${eval.code}
-           |boolean ${ev.isNull} = ${eval.isNull};
-           |long ${ev.value} = 0;
-           |if (!${ev.isNull}) {
-           |  ${ev.value} = $dtu.convertTz(${eval.value}, $utcTerm, $tzTerm);
-           |}
-         """.stripMargin)
+           ${eval.code}
+           boolean ${ev.isNull} = ${eval.isNull};
+           long ${ev.value} = 0;
+           $nullSafeCode
+         """)
       }
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
@@ -1197,14 +1207,15 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
         ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $dtu.getTimeZone("$tz");""")
         ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
+        val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+          s"${ev.value} = $dtu.convertTz(${eval.value}, $tzTerm, $utcTerm);"
+        }
         ev.copy(code = s"""
-           |${eval.code}
-           |boolean ${ev.isNull} = ${eval.isNull};
-           |long ${ev.value} = 0;
-           |if (!${ev.isNull}) {
-           |  ${ev.value} = $dtu.convertTz(${eval.value}, $tzTerm, $utcTerm);
-           |}
-         """.stripMargin)
+           ${eval.code}
+           boolean ${ev.isNull} = ${eval.isNull};
+           long ${ev.value} = 0;
+           $nullSafeCode
+         """)
       }
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
@@ -1352,13 +1363,14 @@ case class TruncDate(date: Expression, format: Expression)
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
         val d = date.genCode(ctx)
+        val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+          s"${ev.value} = $dtu.truncDate(${d.value}, $truncLevel);"
+        }
         ev.copy(code = s"""
           ${d.code}
           boolean ${ev.isNull} = ${d.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $dtu.truncDate(${d.value}, $truncLevel);
-          }""")
+          $nullSafeCode""")
       }
     } else {
       nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
