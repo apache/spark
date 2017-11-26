@@ -77,13 +77,16 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
     val evals = children.map { e =>
       val eval = e.genCode(ctx)
+      val nullSafeCode = ctx.nullSafeExec(e.nullable, eval.isNull) {
+        s"""
+          ${ev.isNull} = false;
+          ${ev.value} = ${eval.value};
+         """
+      }
       s"""
         if (${ev.isNull}) {
           ${eval.code}
-          if (!${eval.isNull}) {
-            ${ev.isNull} = false;
-            ${ev.value} = ${eval.value};
-          }
+          $nullSafeCode
         }
       """
     }
@@ -371,12 +374,13 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
             }
           """
         case _ =>
+          val nullSafeCode = ctx.nullSafeExec(e.nullable, eval.isNull) {
+            s"$nonnull += 1;"
+          }
           s"""
             if ($nonnull < $n) {
               ${eval.code}
-              if (!${eval.isNull}) {
-                $nonnull += 1;
-              }
+              $nullSafeCode
             }
           """
       }

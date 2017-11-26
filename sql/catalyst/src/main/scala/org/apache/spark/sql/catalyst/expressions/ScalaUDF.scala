@@ -1050,7 +1050,9 @@ case class ScalaUDF(
            throw new org.apache.spark.SparkException($scalaUDF.udfErrorMessage(), e);
          }
        """
-
+    val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+      s"${ev.value} = $resultTerm;"
+    }
     ev.copy(code = s"""
       $evalCode
       ${converters.mkString("\n")}
@@ -1058,9 +1060,7 @@ case class ScalaUDF(
 
       boolean ${ev.isNull} = $resultTerm == null;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = $resultTerm;
-      }""")
+      $nullSafeCode""")
   }
 
   private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)

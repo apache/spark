@@ -160,12 +160,13 @@ case class StaticInvoke(
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
+        val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+          s"${ev.value} = $boxedResult;"
+        }
         s"""
           ${ctx.boxedType(dataType)} $boxedResult = $callFunc;
           ${ev.isNull} = $boxedResult == null;
-          if (!${ev.isNull}) {
-            ${ev.value} = $boxedResult;
-          }
+          $nullSafeCode
         """
       }
     } else {
@@ -272,18 +273,20 @@ case class Invoke(
         $assignResult
       """
     }
-
-    val code = s"""
-      ${obj.code}
-      boolean ${ev.isNull} = true;
-      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${obj.isNull}) {
+    val nullSafeTargetObjectCode = ctx.nullSafeExec(targetObject.nullable, obj.isNull) {
+      s"""
         $argCode
         ${ev.isNull} = $resultIsNull;
         if (!${ev.isNull}) {
           $evaluate
         }
-      }
+     """
+    }
+    val code = s"""
+      ${obj.code}
+      boolean ${ev.isNull} = true;
+      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
+      $nullSafeTargetObjectCode
      """
     ev.copy(code = code)
   }
@@ -693,12 +696,8 @@ case class MapObjects private(
             s"new ${classOf[GenericArrayData].getName}($convertedArray);"
           )
       }
-
-    val code = s"""
-      ${genInputData.code}
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-
-      if (!${genInputData.isNull}) {
+    val nullSafeCode = ctx.nullSafeExec(inputData.nullable, genInputData.isNull) {
+      s"""
         $determineCollectionType
         int $dataLength = $getLength;
         $initCollection
@@ -720,7 +719,13 @@ case class MapObjects private(
         }
 
         ${ev.value} = $getResult
-      }
+      """
+    }
+    val code = s"""
+      ${genInputData.code}
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+
+      $nullSafeCode
     """
     ev.copy(code = code, isNull = genInputData.isNull)
   }
@@ -870,11 +875,8 @@ case class CatalystToExternalMap private(
      """
     val getBuilderResult = s"${ev.value} = (${collClass.getName}) $builderValue.result();"
 
-    val code = s"""
-      ${genInputData.code}
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-
-      if (!${genInputData.isNull}) {
+    val nullSafeCode = ctx.nullSafeExec(inputData.nullable, genInputData.isNull) {
+      s"""
         int $dataLength = $getLength;
         $constructBuilder
         $getKeyArray
@@ -895,7 +897,13 @@ case class CatalystToExternalMap private(
         }
 
         $getBuilderResult
-      }
+      """
+    }
+    val code = s"""
+      ${genInputData.code}
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+
+      $nullSafeCode
     """
     ev.copy(code = code, isNull = genInputData.isNull)
   }
@@ -1048,40 +1056,43 @@ case class ExternalMapToCatalyst private(
     val mapCls = classOf[ArrayBasedMapData].getName
     val convertedKeyType = ctx.boxedType(keyConverter.dataType)
     val convertedValueType = ctx.boxedType(valueConverter.dataType)
+    val nullSafeCode = ctx.nullSafeExec(child.nullable, inputMap.isNull) {
+      s"""
+        final int $length = ${inputMap.value}.size();
+        final Object[] $convertedKeys = new Object[$length];
+        final Object[] $convertedValues = new Object[$length];
+        int $index = 0;
+        $defineEntries
+        while($entries.hasNext()) {
+          $defineKeyValue
+          $keyNullCheck
+          $valueNullCheck
+
+          ${genKeyConverter.code}
+          if (${genKeyConverter.isNull}) {
+            throw new RuntimeException("Cannot use null as map key!");
+          } else {
+            $convertedKeys[$index] = ($convertedKeyType) ${genKeyConverter.value};
+          }
+
+          ${genValueConverter.code}
+          if (${genValueConverter.isNull}) {
+            $convertedValues[$index] = null;
+          } else {
+            $convertedValues[$index] = ($convertedValueType) ${genValueConverter.value};
+          }
+
+          $index++;
+        }
+
+        ${ev.value} = new $mapCls(new $arrayCls($convertedKeys), new $arrayCls($convertedValues));
+      """
+    }
     val code =
       s"""
         ${inputMap.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        if (!${inputMap.isNull}) {
-          final int $length = ${inputMap.value}.size();
-          final Object[] $convertedKeys = new Object[$length];
-          final Object[] $convertedValues = new Object[$length];
-          int $index = 0;
-          $defineEntries
-          while($entries.hasNext()) {
-            $defineKeyValue
-            $keyNullCheck
-            $valueNullCheck
-
-            ${genKeyConverter.code}
-            if (${genKeyConverter.isNull}) {
-              throw new RuntimeException("Cannot use null as map key!");
-            } else {
-              $convertedKeys[$index] = ($convertedKeyType) ${genKeyConverter.value};
-            }
-
-            ${genValueConverter.code}
-            if (${genValueConverter.isNull}) {
-              $convertedValues[$index] = null;
-            } else {
-              $convertedValues[$index] = ($convertedValueType) ${genValueConverter.value};
-            }
-
-            $index++;
-          }
-
-          ${ev.value} = new $mapCls(new $arrayCls($convertedKeys), new $arrayCls($convertedValues));
-        }
+        $nullSafeCode
       """
     ev.copy(code = code, isNull = inputMap.isNull)
   }
@@ -1251,17 +1262,15 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
         val fieldGen = fieldValue.genCode(ctx)
         s"""
            ${fieldGen.code}
-           ${javaBeanInstance}.$setterMethod(${fieldGen.value});
+           $javaBeanInstance.$setterMethod(${fieldGen.value});
          """
     }
     val initializeCode = ctx.splitExpressions(ctx.INPUT_ROW, initialize.toSeq)
-
+    val nullSafeCode = ctx.nullSafeExec(beanInstance.nullable, instanceGen.isNull)(initializeCode)
     val code = s"""
       ${instanceGen.code}
-      ${javaBeanInstance} = ${instanceGen.value};
-      if (!${instanceGen.isNull}) {
-        $initializeCode
-      }
+      $javaBeanInstance = ${instanceGen.value};
+      $nullSafeCode
      """
     ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
   }

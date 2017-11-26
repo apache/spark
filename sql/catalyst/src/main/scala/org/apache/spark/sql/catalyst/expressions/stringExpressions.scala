@@ -62,15 +62,16 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evals = children.map(_.genCode(ctx))
     val args = ctx.freshName("args")
 
-    val inputs = evals.zipWithIndex.map { case (eval, index) =>
+    val inputs = children.zipWithIndex.map { case (child, index) =>
+      val eval = child.genCode(ctx)
+      val nullSafeExec = ctx.nullSafeExec(child.nullable, eval.isNull) {
+        s"$args[$index] = ${eval.value};"
+      }
       s"""
         ${eval.code}
-        if (!${eval.isNull}) {
-          $args[$index] = ${eval.value};
-        }
+        $nullSafeExec
       """
     }
     val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
@@ -82,7 +83,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       inputs.mkString("\n")
     }
     ev.copy(s"""
-      UTF8String[] $args = new UTF8String[${evals.length}];
+      UTF8String[] $args = new UTF8String[${children.length}];
       $codes
       UTF8String ${ev.value} = UTF8String.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
@@ -138,19 +139,20 @@ case class ConcatWs(children: Seq[Expression])
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (children.forall(_.dataType == StringType)) {
       // All children are strings. In that case we can construct a fixed size array.
-      val evals = children.map(_.genCode(ctx))
-      val separator = evals.head
-      val strings = evals.tail
+      val separator = children.head.genCode(ctx)
+      val strings = children.tail
       val numArgs = strings.length
       val args = ctx.freshName("args")
 
-      val inputs = strings.zipWithIndex.map { case (eval, index) =>
+      val inputs = strings.zipWithIndex.map { case (string, index) =>
+        val eval = string.genCode(ctx)
         if (eval.isNull != "true") {
+          val nullSafeCode = ctx.nullSafeExec(string.nullable, eval.isNull) {
+            s"$args[$index] = ${eval.value};"
+          }
           s"""
              ${eval.code}
-             if (!${eval.isNull}) {
-               $args[$index] = ${eval.value};
-             }
+             $nullSafeCode
            """
         } else {
           ""
@@ -191,19 +193,17 @@ case class ConcatWs(children: Seq[Expression])
             if (eval.isNull == "true") {
               ("", "")
             } else {
-              (s"""
-                if (!${eval.isNull}) {
-                  $varargNum += ${eval.value}.numElements();
-                }
-                """,
-               s"""
-                if (!${eval.isNull}) {
+              (ctx.nullSafeExec(child.nullable, eval.isNull) {
+                  s"$varargNum += ${eval.value}.numElements();"
+               },
+               ctx.nullSafeExec(child.nullable, eval.isNull) {
+                 s"""
                   final int $size = ${eval.value}.numElements();
                   for (int j = 0; j < $size; j ++) {
                     $array[$idxInVararg ++] = ${ctx.getValue(eval.value, StringType, "j")};
                   }
-                }
-                """)
+                """
+               })
             }
         }
       }.unzip
@@ -1071,11 +1071,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     val substrGen = substr.genCode(ctx)
     val strGen = str.genCode(ctx)
     val startGen = start.genCode(ctx)
-    ev.copy(code = s"""
-      int ${ev.value} = 0;
-      boolean ${ev.isNull} = false;
-      ${startGen.code}
-      if (!${startGen.isNull}) {
+    val nullSafeCode = ctx.nullSafeExec(start.nullable, startGen.isNull) {
+      s"""
         ${substrGen.code}
         if (!${substrGen.isNull}) {
           ${strGen.code}
@@ -1088,9 +1085,15 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
             ${ev.isNull} = true;
           }
         } else {
-          ${ev.isNull} = true;
+         ${ev.isNull} = true;
         }
-      }
+      """
+    }
+    ev.copy(code = s"""
+      int ${ev.value} = 0;
+      boolean ${ev.isNull} = false;
+      ${startGen.code}
+      $nullSafeCode
      """)
   }
 
@@ -1390,17 +1393,21 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val formatter = classOf[java.util.Formatter].getName
     val sb = ctx.freshName("sb")
     val stringBuffer = classOf[StringBuffer].getName
-    ev.copy(code = s"""
-      ${pattern.code}
-      boolean ${ev.isNull} = ${pattern.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
+    val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull) {
+      s"""
         ${argListCode.mkString}
         $stringBuffer $sb = new $stringBuffer();
         $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
         $form.format(${pattern.value}.toString() $argListString);
         ${ev.value} = UTF8String.fromString($sb.toString());
-      }""")
+      """
+    }
+    ev.copy(code = s"""
+      ${pattern.code}
+      boolean ${ev.isNull} = ${pattern.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      $nullSafeCode
+      """)
   }
 
   override def prettyName: String = "format_string"

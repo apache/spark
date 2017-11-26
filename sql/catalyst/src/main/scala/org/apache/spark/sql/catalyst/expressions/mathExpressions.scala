@@ -1133,13 +1133,12 @@ abstract class RoundBase(child: Expression, scale: Expression,
         boolean ${ev.isNull} = true;
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
     } else {
+      val nullSafeCode = ctx.nullSafeExec(nullable, ev.isNull)(evaluationCode)
       ev.copy(code = s"""
         ${ce.code}
         boolean ${ev.isNull} = ${ce.isNull};
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        if (!${ev.isNull}) {
-          $evaluationCode
-        }""")
+        $nullSafeCode""")
     }
   }
 }
