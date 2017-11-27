@@ -366,10 +366,16 @@ case class CatalogStatistics(
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
-  def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
-    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
-    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
-      attributeStats = AttributeMap(matched))
+  def toPlanStats(planOutput: Seq[Attribute], cboEnabled: Boolean): Statistics = {
+    if (cboEnabled) {
+      val attrStats = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
+      Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
+        attributeStats = AttributeMap(attrStats))
+    } else {
+      // When CBO is disabled, we apply the size-only estimation strategy, so there's no need to
+      // propagate other statistics from catalog to the plan.
+      Statistics(sizeInBytes = sizeInBytes)
+    }
   }
 
   /** Readable string representation for the CatalogStatistics. */
@@ -452,7 +458,7 @@ case class HiveTableRelation(
   )
 
   override def computeStats(): Statistics = {
-    tableMeta.stats.map(_.toPlanStats(output)).getOrElse {
+    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled)).getOrElse {
       throw new IllegalStateException("table stats must be specified.")
     }
   }
