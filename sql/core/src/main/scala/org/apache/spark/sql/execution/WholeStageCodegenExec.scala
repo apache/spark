@@ -135,7 +135,7 @@ trait CodegenSupport extends SparkPlan {
         }
         val evaluateInputs = evaluateVariables(outputVars)
         // generate the code to create a UnsafeRow
-        ctx.INPUT_ROW = null
+        ctx.INPUT_ROW = row
         ctx.currentVars = outputVars
         val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         val code = s"""
@@ -150,8 +150,10 @@ trait CodegenSupport extends SparkPlan {
     }
 
     // Set up the `currentVars` in the codegen context, as we generate the code of `inputVars`
-    // before calling `parent.doConsume`.
+    // before calling `parent.doConsume`. We can't set up `INPUT_ROW`, because parent needs to
+    // generate code of `rowVar` manually.
     ctx.currentVars = inputVars
+    ctx.INPUT_ROW = null
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
     s"""
