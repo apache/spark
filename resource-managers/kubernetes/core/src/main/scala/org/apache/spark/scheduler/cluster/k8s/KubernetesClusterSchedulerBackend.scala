@@ -112,7 +112,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         } else if (currentTotalExpectedExecutors <= runningExecutorsToPods.size) {
           logDebug("Maximum allowed executor limit reached. Not scaling up further.")
         } else {
-          for (i <- 0 until math.min(
+          for (_ <- 0 until math.min(
             currentTotalExpectedExecutors - runningExecutorsToPods.size, podAllocationSize)) {
             val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
             val executorPod = executorPodFactory.createExecutorPod(
@@ -232,19 +232,19 @@ private[spark] class KubernetesClusterSchedulerBackend(
     // send stop message to executors so they shut down cleanly
     super.stop()
 
-    // then delete the executor pods
-    Utils.tryLogNonFatalError {
-      val executorPodsToDelete = RUNNING_EXECUTOR_PODS_LOCK.synchronized {
-        val runningExecutorPodsCopy = Seq(runningExecutorsToPods.values.toSeq: _*)
-        runningExecutorsToPods.clear()
-        runningExecutorPodsCopy
-      }
-      kubernetesClient.pods().delete(executorPodsToDelete: _*)
-      executorPodsByIPs.clear()
+    try {
       val resource = executorWatchResource.getAndSet(null)
       if (resource != null) {
         resource.close()
       }
+    } catch {
+      case e: Throwable => logWarning("Failed to close the executor pod watcher", e)
+    }
+
+    // then delete the executor pods
+    Utils.tryLogNonFatalError {
+      deleteExecutorPodsOnStop()
+      executorPodsByIPs.clear()
     }
     Utils.tryLogNonFatalError {
       logInfo("Closing kubernetes client")
@@ -296,6 +296,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     kubernetesClient.pods().delete(podsToDelete: _*)
     true
+  }
+
+  private def deleteExecutorPodsOnStop(): Unit = {
+    val executorPodsToDelete = RUNNING_EXECUTOR_PODS_LOCK.synchronized {
+      val runningExecutorPodsCopy = Seq(runningExecutorsToPods.values.toSeq: _*)
+      runningExecutorsToPods.clear()
+      runningExecutorPodsCopy
+    }
+    kubernetesClient.pods().delete(executorPodsToDelete: _*)
   }
 
   private class ExecutorPodsWatcher extends Watcher[Pod] {
