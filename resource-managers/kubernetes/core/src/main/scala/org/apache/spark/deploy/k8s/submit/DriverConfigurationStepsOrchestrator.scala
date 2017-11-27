@@ -51,8 +51,12 @@ private[spark] class DriverConfigurationStepsOrchestrator(
       submissionSparkConf,
       KUBERNETES_DRIVER_LABEL_PREFIX)
     require(!driverCustomLabels.contains(SPARK_APP_ID_LABEL), "Label with key " +
-      s" $SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping" +
-      " operations.")
+      s"$SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping " +
+      "operations.")
+    require(!driverCustomLabels.contains(SPARK_ROLE_LABEL), "Label with key " +
+      s"$SPARK_ROLE_LABEL is not allowed as it is reserved for Spark bookkeeping " +
+      "operations.")
+
     val allDriverLabels = driverCustomLabels ++ Map(
       SPARK_APP_ID_LABEL -> kubernetesAppId,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)

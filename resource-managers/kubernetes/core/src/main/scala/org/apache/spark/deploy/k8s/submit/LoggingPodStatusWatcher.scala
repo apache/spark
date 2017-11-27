@@ -41,8 +41,9 @@ private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
  *                             number.
  */
 private[k8s] class LoggingPodStatusWatcherImpl(
-      appId: String, maybeLoggingInterval: Option[Long])
-    extends LoggingPodStatusWatcher with Logging {
+    appId: String,
+    maybeLoggingInterval: Option[Long])
+  extends LoggingPodStatusWatcher with Logging {
 
   private val podCompletedFuture = new CountDownLatch(1)
   // start timer for periodic logging
@@ -66,10 +67,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
   override def eventReceived(action: Action, pod: Pod): Unit = {
     this.pod = Option(pod)
     action match {
-      case Action.DELETED =>
-        closeWatch()
-
-      case Action.ERROR =>
+      case Action.DELETED | Action.ERROR =>
         closeWatch()
 
       case _ =>

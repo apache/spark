@@ -237,8 +237,8 @@ private[spark] class DriverKubernetesCredentialsStep(
 
 private class OptionSettableSparkConf(sparkConf: SparkConf) {
   def setOption(configEntry: String, option: Option[String]): SparkConf = {
-    option.map( opt => {
+    option.map( opt =>
       sparkConf.set(configEntry, opt)
-    }).getOrElse(sparkConf)
+    ).getOrElse(sparkConf)
   }
 }

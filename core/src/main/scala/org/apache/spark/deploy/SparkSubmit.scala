@@ -718,12 +718,13 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     if (isKubernetesCluster) {
       childMainClass = "org.apache.spark.deploy.k8s.submit.Client"
-      childArgs ++= Array("--primary-java-resource", args.primaryResource)
+      if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
+        childArgs ++= Array("--primary-java-resource", args.primaryResource)
+      }
       childArgs ++= Array("--main-class", args.mainClass)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg =>
-          childArgs += "--arg"
-          childArgs += arg
+          childArgs += ("--arg", arg)
         }
       }
     }

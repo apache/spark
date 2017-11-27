@@ -33,6 +33,13 @@ import org.apache.spark.deploy.k8s.submit.steps.DriverConfigurationStep
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
+/**
+ * Encapsulates arguments to the submission client.
+ *
+ * @param mainAppResource the main application resource
+ * @param mainClass the main class of the application to run
+ * @param driverArgs arguments to the driver
+ */
 private[spark] case class ClientArguments(
      mainAppResource: MainAppResource,
      mainClass: String,
@@ -58,7 +65,7 @@ private[spark] object ClientArguments {
     }
 
     require(mainAppResource.isDefined,
-      "Main app resource must be defined by either --primary-py-file or --primary-java-resource.")
+      "Main app resource must be defined by --primary-java-resource.")
     require(mainClass.isDefined, "Main class must be specified via --main-class")
 
     ClientArguments(
@@ -68,6 +75,19 @@ private[spark] object ClientArguments {
   }
 }
 
+/**
+ * Submits a Spark application to run on Kubernetes by creating the driver pod and starting a
+ * watcher that monitors and logs the application status. Waits for the application to terminate if
+ * spark.kubernetes.submission.waitAppCompletion is true.
+ *
+ * @param submissionSteps steps that collectively configure the driver
+ * @param submissionSparkConf the submission client Spark configuration
+ * @param kubernetesClient the client to talk to the Kubernetes API server
+ * @param waitForAppCompletion a flag indicating whether the client should wait for the application
+ *                             to complete
+ * @param appName the application name
+ * @param loggingPodStatusWatcher a watcher that monitors and logs the application status
+ */
 private[spark] class Client(
     submissionSteps: Seq[DriverConfigurationStep],
     submissionSparkConf: SparkConf,

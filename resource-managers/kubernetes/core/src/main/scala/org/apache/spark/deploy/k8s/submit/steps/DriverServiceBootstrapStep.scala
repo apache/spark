@@ -52,9 +52,9 @@ private[spark] class DriverServiceBootstrapStep(
     } else {
       val randomServiceId = clock.getTimeMillis()
       val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
-      logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is" +
-        s" too long (must be <= 63 characters). Falling back to use $shorterServiceName" +
-        " as the driver service's name.")
+      logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
+        s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
+        s"$shorterServiceName as the driver service's name.")
       shorterServiceName
     }
 
