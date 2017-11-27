@@ -14,26 +14,27 @@
 
 import sys
 import json
+import logging
 import time
+import datetime
 
 from airflow.contrib.hooks.gcs_hook import GoogleCloudStorageHook
-from airflow.hooks.mysql_hook import MySqlHook
+from airflow.hooks.postgres_hook import PostgresHook
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
-from datetime import date, datetime
 from decimal import Decimal
-from MySQLdb.constants import FIELD_TYPE
 from tempfile import NamedTemporaryFile
 
 PY3 = sys.version_info[0] == 3
 
 
-class MySqlToGoogleCloudStorageOperator(BaseOperator):
+class PostgresToGoogleCloudStorageOperator(BaseOperator):
     """
-    Copy data from MySQL to Google cloud storage in JSON format.
+    Copy data from Postgres to Google Cloud Storage in JSON format.
     """
-    template_fields = ('sql', 'bucket', 'filename', 'schema_filename')
-    template_ext = ('.sql',)
+    template_fields = ('sql', 'bucket', 'filename', 'schema_filename',
+                       'parameters')
+    template_ext = ('.sql', )
     ui_color = '#a0e08c'
 
     @apply_defaults
@@ -43,52 +44,56 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
                  filename,
                  schema_filename=None,
                  approx_max_file_size_bytes=1900000000,
-                 mysql_conn_id='mysql_default',
+                 postgres_conn_id='postgres_default',
                  google_cloud_storage_conn_id='google_cloud_storage_default',
                  delegate_to=None,
+                 parameters=None,
                  *args,
                  **kwargs):
         """
-        :param sql: The SQL to execute on the MySQL table.
+        :param sql: The SQL to execute on the Postgres table.
         :type sql: string
         :param bucket: The bucket to upload to.
         :type bucket: string
         :param filename: The filename to use as the object name when uploading
-            to Google cloud storage. A {} should be specified in the filename
+            to Google Cloud Storage. A {} should be specified in the filename
             to allow the operator to inject file numbers in cases where the
             file is split due to size.
         :type filename: string
         :param schema_filename: If set, the filename to use as the object name
             when uploading a .json file containing the BigQuery schema fields
-            for the table that was dumped from MySQL.
+            for the table that was dumped from Postgres.
         :type schema_filename: string
         :param approx_max_file_size_bytes: This operator supports the ability
             to split large table dumps into multiple files (see notes in the
-            filenamed param docs above). Google cloud storage allows for files
+            filenamed param docs above). Google Cloud Storage allows for files
             to be a maximum of 4GB. This param allows developers to specify the
             file size of the splits.
         :type approx_max_file_size_bytes: long
-        :param mysql_conn_id: Reference to a specific MySQL hook.
-        :type mysql_conn_id: string
+        :param postgres_conn_id: Reference to a specific Postgres hook.
+        :type postgres_conn_id: string
         :param google_cloud_storage_conn_id: Reference to a specific Google
             cloud storage hook.
         :type google_cloud_storage_conn_id: string
         :param delegate_to: The account to impersonate, if any. For this to
             work, the service account making the request must have domain-wide
             delegation enabled.
+        :param parameters: a parameters dict that is substituted at query runtime.
+        :type parameters: dict
         """
-        super(MySqlToGoogleCloudStorageOperator, self).__init__(*args, **kwargs)
+        super(PostgresToGoogleCloudStorageOperator, self).__init__(*args, **kwargs)
         self.sql = sql
         self.bucket = bucket
         self.filename = filename
         self.schema_filename = schema_filename
         self.approx_max_file_size_bytes = approx_max_file_size_bytes
-        self.mysql_conn_id = mysql_conn_id
+        self.postgres_conn_id = postgres_conn_id
         self.google_cloud_storage_conn_id = google_cloud_storage_conn_id
         self.delegate_to = delegate_to
+        self.parameters = parameters
 
     def execute(self, context):
-        cursor = self._query_mysql()
+        cursor = self._query_postgres()
         files_to_upload = self._write_local_data_files(cursor)
 
         # If a schema is set, create a BQ schema JSON file.
@@ -105,14 +110,14 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
         for file_handle in files_to_upload.values():
             file_handle.close()
 
-    def _query_mysql(self):
+    def _query_postgres(self):
         """
-        Queries mysql and returns a cursor to the results.
+        Queries Postgres and returns a cursor to the results.
         """
-        mysql = MySqlHook(mysql_conn_id=self.mysql_conn_id)
-        conn = mysql.get_conn()
+        postgres = PostgresHook(postgres_conn_id=self.postgres_conn_id)
+        conn = postgres.get_conn()
         cursor = conn.cursor()
-        cursor.execute(self.sql)
+        cursor.execute(self.sql, self.parameters)
         return cursor
 
     def _write_local_data_files(self, cursor):
@@ -133,8 +138,7 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
             row = map(self.convert_types, row)
             row_dict = dict(zip(schema, row))
 
-            # TODO validate that row isn't > 2MB. BQ enforces a hard row size of 2MB.
-            s = json.dumps(row_dict)
+            s = json.dumps(row_dict, sort_keys=True)
             if PY3:
                 s = s.encode('utf-8')
             tmp_file_handle.write(s)
@@ -164,19 +168,17 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
             # See PEP 249 for details about the description tuple.
             field_name = field[0]
             field_type = self.type_map(field[1])
-            # Always allow TIMESTAMP to be nullable. MySQLdb returns None types
-            # for required fields because some MySQL timestamps can't be
-            # represented by Python's datetime (e.g. 0000-00-00 00:00:00).
-            field_mode = 'NULLABLE' if field[6] or field_type == 'TIMESTAMP' else 'REQUIRED'
+            field_mode = 'REPEATED' if field[1] in (1009, 1005, 1007,
+                                                    1016) else 'NULLABLE'
             schema.append({
                 'name': field_name,
                 'type': field_type,
                 'mode': field_mode,
             })
 
-        self.log.info('Using schema for %s: %s', self.schema_filename, schema)
+        logging.info('Using schema for %s: %s', self.schema_filename, schema)
         tmp_schema_file_handle = NamedTemporaryFile(delete=True)
-        s = json.dumps(schema, tmp_schema_file_handle)
+        s = json.dumps(schema, sort_keys=True)
         if PY3:
             s = s.encode('utf-8')
         tmp_schema_file_handle.write(s)
@@ -185,49 +187,56 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
     def _upload_to_gcs(self, files_to_upload):
         """
         Upload all of the file splits (and optionally the schema .json file) to
-        Google cloud storage.
+        Google Cloud Storage.
         """
         hook = GoogleCloudStorageHook(
             google_cloud_storage_conn_id=self.google_cloud_storage_conn_id,
             delegate_to=self.delegate_to)
         for object, tmp_file_handle in files_to_upload.items():
-            hook.upload(self.bucket, object, tmp_file_handle.name, 'application/json')
+            hook.upload(self.bucket, object, tmp_file_handle.name,
+                        'application/json')
 
     @classmethod
     def convert_types(cls, value):
         """
-        Takes a value from MySQLdb, and converts it to a value that's safe for
-        JSON/Google cloud storage/BigQuery. Dates are converted to UTC seconds.
-        Decimals are converted to floats.
+        Takes a value from Postgres, and converts it to a value that's safe for
+        JSON/Google Cloud Storage/BigQuery. Dates are converted to UTC seconds.
+        Decimals are converted to floats. Times are converted to seconds.
         """
-        if type(value) in (datetime, date):
+        if type(value) in (datetime.datetime, datetime.date):
             return time.mktime(value.timetuple())
+        elif type(value) == datetime.time:
+            formated_time = time.strptime(str(value), "%H:%M:%S")
+            return datetime.timedelta(
+                hours=formated_time.tm_hour,
+                minutes=formated_time.tm_min,
+                seconds=formated_time.tm_sec).seconds
         elif isinstance(value, Decimal):
             return float(value)
         else:
             return value
 
     @classmethod
-    def type_map(cls, mysql_type):
+    def type_map(cls, postgres_type):
         """
-        Helper function that maps from MySQL fields to BigQuery fields. Used
+        Helper function that maps from Postgres fields to BigQuery fields. Used
         when a schema_filename is set.
         """
         d = {
-            FIELD_TYPE.INT24: 'INTEGER',
-            FIELD_TYPE.TINY: 'INTEGER',
-            FIELD_TYPE.BIT: 'INTEGER',
-            FIELD_TYPE.DATETIME: 'TIMESTAMP',
-            FIELD_TYPE.DATE: 'TIMESTAMP',
-            FIELD_TYPE.DECIMAL: 'FLOAT',
-            FIELD_TYPE.NEWDECIMAL: 'FLOAT',
-            FIELD_TYPE.DOUBLE: 'FLOAT',
-            FIELD_TYPE.FLOAT: 'FLOAT',
-            FIELD_TYPE.INT24: 'INTEGER',
-            FIELD_TYPE.LONG: 'INTEGER',
-            FIELD_TYPE.LONGLONG: 'INTEGER',
-            FIELD_TYPE.SHORT: 'INTEGER',
-            FIELD_TYPE.TIMESTAMP: 'TIMESTAMP',
-            FIELD_TYPE.YEAR: 'INTEGER',
+            1114: 'TIMESTAMP',
+            1184: 'TIMESTAMP',
+            1082: 'TIMESTAMP',
+            1083: 'TIMESTAMP',
+            1005: 'INTEGER',
+            1007: 'INTEGER',
+            1016: 'INTEGER',
+            20: 'INTEGER',
+            21: 'INTEGER',
+            23: 'INTEGER',
+            16: 'BOOLEAN',
+            700: 'FLOAT',
+            701: 'FLOAT',
+            1700: 'FLOAT'
         }
-        return d[mysql_type] if mysql_type in d else 'STRING'
+
+        return d[postgres_type] if postgres_type in d else 'STRING'
