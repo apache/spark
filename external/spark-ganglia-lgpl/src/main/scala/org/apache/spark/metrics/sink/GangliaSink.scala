@@ -64,12 +64,12 @@ class GangliaSink(
   private val host = propertyToOption(GANGLIA_KEY_HOST).get
   private val port = propertyToOption(GANGLIA_KEY_PORT).get.toInt
   private val ttl = propertyToOption(GANGLIA_KEY_TTL).map(_.toInt).getOrElse(GANGLIA_DEFAULT_TTL)
-  private val mode: UDPAddressingMode = propertyToOption(GANGLIA_KEY_MODE)
+  private val mode = propertyToOption(GANGLIA_KEY_MODE)
     .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase(Locale.ROOT)))
     .getOrElse(GANGLIA_DEFAULT_MODE)
   private val pollPeriod = propertyToOption(GANGLIA_KEY_PERIOD).map(_.toInt)
     .getOrElse(GANGLIA_DEFAULT_PERIOD)
-  private val pollUnit: TimeUnit = propertyToOption(GANGLIA_KEY_UNIT)
+  private val pollUnit = propertyToOption(GANGLIA_KEY_UNIT)
     .map(u => TimeUnit.valueOf(u.toUpperCase(Locale.ROOT))
     .getOrElse(GANGLIA_DEFAULT_UNIT)
 

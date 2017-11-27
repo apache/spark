@@ -85,7 +85,7 @@ object MimaExcludes {
     ProblemFilters.exclude[FinalClassProblem]("org.apache.spark.ml.tuning.TrainValidationSplitModel$TrainValidationSplitModelWriter"),
 
     // [SPARK-14151] Expose metrics Source and Sink interface
-      ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.metrics.sink.Sink")
+    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.metrics.sink.Sink")
   )
 
   // Exclude rules for 2.2.x
