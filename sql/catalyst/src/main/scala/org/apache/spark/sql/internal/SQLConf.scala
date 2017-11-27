@@ -298,7 +298,6 @@ object SQLConf {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
     .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
-    // TODO(aash): ^ is TIMESTAMP_MICROS right for Palantir backcompat?
 
   val PARQUET_TIMESTAMP_AS_INT96 = buildConf("spark.sql.parquet.timestampAsInt96")
     .doc(s"(Deprecated, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key} instead). Write " +
