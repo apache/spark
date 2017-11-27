@@ -279,6 +279,35 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
 
   override def transfered(): Long = _transferred
 
+  override def transferred(): Long = _transferred
+
+  /**
+   * Override this due to different return types of ReferenceCounted.touch and FileRegion.touch.
+   */
+  override def touch(): this.type = {
+    super.touch()
+    this
+  }
+
+  override def touch(o: Object): this.type = {
+    this
+  }
+
+  /**
+   * Override this due to different return types of ReferenceCounted.retain and FileRegion.retain.
+   */
+  override def retain(): this.type = {
+    super.retain()
+    this
+  }
+
+  override def retain(increment: Int): this.type = {
+    super.retain(increment)
+    this
+  }
+
+  override def release(decrement: Int): Boolean = super.release(decrement)
+
   override def transferTo(target: WritableByteChannel, pos: Long): Long = {
     assert(pos == transfered(), "Invalid position.")
 

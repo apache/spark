@@ -95,6 +95,11 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     return totalBytesTransferred;
   }
 
+  @Override
+  public long transferred() {
+    return totalBytesTransferred;
+  }
+
   /**
    * This code is more complicated than you would think because we might require multiple
    * transferTo invocations in order to transfer a single MessageWithHeader to avoid busy waiting.
@@ -159,5 +164,51 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     }
 
     return ret;
+  }
+
+  /** Override this due to different return types of ReferenceCounted.touch and FileRegion.touch. */
+  @Override
+  public MessageWithHeader touch() {
+    super.touch();
+    return this;
+  }
+
+  @Override
+  public MessageWithHeader touch(Object o) {
+    header.touch(o);
+    ReferenceCountUtil.touch(body, o);
+    return this;
+  }
+
+  /** Override this due to different return types of ReferenceCounted.touch and FileRegion.touch. */
+  @Override
+  public MessageWithHeader retain() {
+    super.retain();
+    return this;
+  }
+
+  @Override
+  public MessageWithHeader retain(int increment) {
+    super.retain(increment);
+    header.retain(increment);
+    ReferenceCountUtil.retain(body, increment);
+    if (managedBuffer != null) {
+      for (int i = 0; i < increment; i++) {
+        managedBuffer.retain();
+      }
+    }
+    return this;
+  }
+
+  @Override
+  public boolean release(int decrement) {
+    header.release(decrement);
+    ReferenceCountUtil.release(body, decrement);
+    if (managedBuffer != null) {
+      for (int i = 0; i < decrement; i++) {
+        managedBuffer.release();
+      }
+    }
+    return super.release(decrement);
   }
 }
