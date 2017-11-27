@@ -2753,6 +2753,40 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset partitioned by the given partitioning expressions into
+   * `numPartitions`. The resulting Dataset is range partitioned.
+   *
+   * @group typedrel
+   * @since 2.3.0
+   */
+  @scala.annotation.varargs
+  def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+    val sortOrder: Seq[SortOrder] = partitionExprs.map { col =>
+      col.expr match {
+        case expr: SortOrder =>
+          expr
+        case expr: Expression =>
+          SortOrder(expr, Ascending)
+      }
+    }
+    repartition(numPartitions, sortOrder.map(Column(_)): _*)
+  }
+
+  /**
+   * Returns a new Dataset partitioned by the given partitioning expressions, using
+   * `spark.sql.shuffle.partitions` as number of partitions.
+   * The resulting Dataset is range partitioned.
+   *
+   * @group typedrel
+   * @since 2.3.0
+   */
+  @scala.annotation.varargs
+  def repartitionByRange(partitionExprs: Column*): Dataset[T] = {
+    repartitionByRange(sparkSession.sessionState.conf.numShufflePartitions, partitionExprs: _*)
+  }
+
+
+  /**
    * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
    * are requested. If a larger number of partitions is requested, it will stay at the current
    * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in

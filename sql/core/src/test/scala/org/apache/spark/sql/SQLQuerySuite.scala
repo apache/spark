@@ -23,6 +23,8 @@ import java.net.{MalformedURLException, URL}
 import java.sql.Timestamp
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.util.Random
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -2756,5 +2758,48 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           .as[String].collect().mkString(",").contains("i,p,j"))
       }
     }
+  }
+
+  test("repartitionByRange") {
+    val data1d = Random.shuffle(0.to(9))
+    val data2d = data1d.map(i => (i, data1d.size - i))
+
+    checkAnswer(
+      data1d.toDF("val").repartition(data1d.size, $"val".asc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartition(data1d.size, $"val".desc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, data1d.size - 1 - i)))
+
+
+    checkAnswer(
+      data1d.toDF("val").repartition(data1d.size, $"val".asc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.toDF("val").repartitionByRange(data1d.size, $"val") // asc by default
+        .select(spark_partition_id().as("id"), $"val")
+        .collect())
+
+    checkAnswer(
+      data1d.toDF("val").repartition(data1d.size, $"val".desc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.toDF("val").repartitionByRange(data1d.size, $"val".desc)
+        .select(spark_partition_id().as("id"), $"val")
+        .collect())
+
+
+    // specifying a mix of SortOrder and non-SortOrder expressions is not allowed for .repartition()
+    intercept[IllegalArgumentException] {
+      data2d.toDF("a", "b").repartition(data1d.size, $"a".desc, $"b")
+    }
+
+    // .repartitionByRange() does support that, assuming .asc by default
+    checkAnswer(
+      data2d.toDF("a", "b").repartitionByRange(data1d.size, $"a".desc, $"b")
+        .select(spark_partition_id().as("id"), $"a", $"b"),
+      data2d.toDF("a", "b").repartition(data1d.size, $"a".desc, $"b".asc)
+        .select(spark_partition_id().as("id"), $"a", $"b"))
   }
 }

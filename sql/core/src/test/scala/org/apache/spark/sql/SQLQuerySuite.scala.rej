@@ -1,0 +1,11 @@
+--- sql/core/src/test/scala/org/apache/spark/sql/SQLQuerySuite.scala
++++ sql/core/src/test/scala/org/apache/spark/sql/SQLQuerySuite.scala
+@@ -23,6 +23,8 @@ import java.net.{MalformedURLException, URL}
+ import java.sql.Timestamp
+ import java.util.concurrent.atomic.AtomicBoolean
+ 
++import scala.util.Random
++
+ import com.databricks.sql.DatabricksSQLConf
+ 
+ import org.apache.spark.{AccumulatorSuite, SparkException}

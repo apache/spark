@@ -836,6 +836,16 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     numPartitions: Int) extends RepartitionOperation {
 
+  val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+
+  require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+    s"""${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type
+       |`SortOrder`, which means RangePartitioning, or none of them are `SortOrder`, which means
+       |HashPartitioning. In this case we have:
+       |SortOrder: ${sortOrder}
+       |NonSortOrder: ${nonSortOrder}
+     """.stripMargin)
+
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   override def maxRows: Option[Long] = child.maxRows

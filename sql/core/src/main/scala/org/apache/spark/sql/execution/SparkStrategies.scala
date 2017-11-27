@@ -448,8 +448,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case logical.RepartitionByExpression(expressions, child, numPartitions) =>
-        exchange.ShuffleExchangeExec(HashPartitioning(
-          expressions, numPartitions), planLater(child)) :: Nil
+        // RepartitionByExpression's constructor verifies that either all expressions are
+        // of type SortOrder, in which case we're doing RangePartitioning, or none of them are,
+        // in which case we're doing HashPartitioning.
+        val partitioning = if (expressions.forall(_.isInstanceOf[SortOrder])) {
+          RangePartitioning(expressions.map(_.asInstanceOf[SortOrder]), numPartitions)
+        } else {
+          HashPartitioning(expressions, numPartitions)
+        }
+        exchange.ShuffleExchangeExec(partitioning, planLater(child)) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
