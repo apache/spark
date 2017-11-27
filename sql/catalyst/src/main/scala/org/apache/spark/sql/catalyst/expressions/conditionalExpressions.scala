@@ -232,37 +232,97 @@ case class CaseWhenCodegen(
     //     }
     //   }
     // }
+
+    val isNull = ctx.freshName("caseWhenIsNull")
+    val value = ctx.freshName("caseWhenValue")
+
     val cases = branches.map { case (condExpr, valueExpr) =>
-      val cond = condExpr.genCode(ctx)
-      val res = valueExpr.genCode(ctx)
+      val (condFunc, condIsNull, condValue) = genCodeForExpression(ctx, condExpr)
+      val (resFunc, resIsNull, resValue) = genCodeForExpression(ctx, valueExpr)
       s"""
-        ${cond.code}
-        if (!${cond.isNull} && ${cond.value}) {
-          ${res.code}
-          ${ev.isNull} = ${res.isNull};
-          ${ev.value} = ${res.value};
+        ${condFunc}
+        if (!${condIsNull} && ${condValue}) {
+          ${resFunc}
+          $isNull = ${resIsNull};
+          $value = ${resValue};
         }
       """
     }
 
-    var generatedCode = cases.mkString("", "\nelse {\n", "\nelse {\n")
+    var isGlobalVariable = false
+    val (generatedIfThenElse, numBrankets) = if (cases.map(s => s.length).sum <= 1024) {
+      (cases.mkString("", "\nelse {\n", "\nelse {\n"), cases.length)
+    } else {
+      var numIfThen = 0
+      var code = ""
+      cases.foreach { ifThen =>
+        code += ifThen + "\nelse {\n"
+        numIfThen += 1
 
-    elseValue.foreach { elseExpr =>
-      val res = elseExpr.genCode(ctx)
-      generatedCode +=
-        s"""
-          ${res.code}
-          ${ev.isNull} = ${res.isNull};
-          ${ev.value} = ${res.value};
-        """
+        if (code.length > 1024 &&
+          // Split these expressions only if they are created from a row object
+          (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+          val flag = "flag"
+          code += s" $flag = false;\n" + "}\n" * numIfThen
+          val funcName = ctx.freshName("caseWhenNestedIf")
+          val funcBody =
+            s"""
+             |private boolean $funcName(InternalRow ${ctx.INPUT_ROW}) {
+             |  boolean $flag = true;
+             |  $code
+             |  return $flag;
+             |}
+           """.stripMargin
+          val fullFuncName = ctx.addNewFunction(funcName, funcBody)
+          isGlobalVariable = true
+
+          code = s"if ($fullFuncName(${ctx.INPUT_ROW})) {\n// do nothing\n} else {\n"
+          numIfThen = 1
+        }
+      }
+      (code, numIfThen)
     }
 
-    generatedCode += "}\n" * cases.size
+    var generatedCode = generatedIfThenElse
+    elseValue.foreach { elseExpr =>
+      val (resFunc, resIsNull, resValue) = genCodeForExpression(ctx, elseExpr)
+      generatedCode += s"""
+       ${resFunc}
+       $isNull = ${resIsNull};
+       $value = ${resValue};
+     """
+    }
 
-    ev.copy(code = s"""
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      $generatedCode""")
+    generatedCode += "}\n" * numBrankets
+
+    if (!isGlobalVariable) {
+      ev.copy(s"""
+       boolean $isNull = true;
+       ${ctx.javaType(dataType)} $value = ${ctx.defaultValue(dataType)};
+       $generatedCode
+      """, isNull, value)
+    } else {
+      ctx.addMutableState("boolean", isNull, s"$isNull = false;")
+      ctx.addMutableState(ctx.javaType(dataType), value,
+        s"$value = ${ctx.defaultValue(dataType)};")
+      ev.copy(code = s"""
+       $generatedCode
+       boolean ${ev.isNull} = $isNull;
+       ${ctx.javaType(dataType)} ${ev.value} = $value;
+      """)
+    }
+  }
+
+  def genCodeForExpression(ctx: CodegenContext, expression: Expression):
+      (String, String, String) = {
+    val ev = expression.genCode(ctx)
+    if (ev.code.length > 1024 && (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+      val (funcName, globalIsNull, globalValue) =
+        ctx.createAndAddFunction(ev, expression.dataType, "caseWhenElseExpr")
+      (s"$funcName(${ctx.INPUT_ROW});", globalIsNull, globalValue)
+    } else {
+      (ev.code, ev.isNull, ev.value)
+    }
   }
 }
 

@@ -2158,4 +2158,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val mean = result.select("DecimalCol").where($"summary" === "mean")
     assert(mean.collect().toSet === Set(Row("0.0345678900000000000000000000000000000")))
   }
+
+  // ignore end-to-end test since sbt test does not go to fallback path in whole-stage codegen
+  ignore("SPARK-21413: Multiple projections with CASE WHEN fails") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    var df = spark.createDataFrame(sparkContext.parallelize(Seq(Row(1))), schema)
+    for (i <- 1 to 10) {
+      df = df.withColumn("a", when($"a" === 0, null).otherwise($"a"))
+    }
+    checkAnswer(df, Row(1))
+  }
 }
