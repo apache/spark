@@ -240,11 +240,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return accessor.getArrayOffset(rowId);
   }
 
-  @Override
-  public void loadBytes(ColumnarArray array) {
-    throw new UnsupportedOperationException();
-  }
-
   //
   // APIs dealing with Decimals
   //
