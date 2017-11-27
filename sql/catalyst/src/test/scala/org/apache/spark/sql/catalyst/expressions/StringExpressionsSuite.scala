@@ -518,6 +518,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       FormatString(Literal("aa%d%s"), 12, Literal.create(null, StringType)), "aa12null")
   }
 
+  test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
+    val N = 4500
+    val args = (1 to N).map(i => Literal.create(i.toString, StringType))
+    val format = "%s" * N
+    val expected = (1 to N).map(i => i.toString).mkString
+    checkEvaluation(FormatString(Literal(format) +: args: _*), expected)
+  }
+
   test("INSTR") {
     val s1 = 'a.string.at(0)
     val s2 = 'b.string.at(1)
