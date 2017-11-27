@@ -1001,7 +1001,8 @@ object SQLConf {
     buildConf("spark.sql.execution.pandas.respectSessionTimeZone")
       .internal()
       .doc("When true, make Pandas DataFrame with timestamp type respecting session local " +
-        "timezone when converting to/from Pandas DataFrame.")
+        "timezone when converting to/from Pandas DataFrame. This configuration will be " +
+        "deprecated in the future releases.")
       .booleanConf
       .createWithDefault(true)
 
