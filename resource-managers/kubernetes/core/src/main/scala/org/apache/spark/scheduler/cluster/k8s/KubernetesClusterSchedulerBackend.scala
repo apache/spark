@@ -224,6 +224,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   override def stop(): Unit = {
     // stop allocation of new resources and caches.
     allocatorExecutor.shutdown()
+    allocatorExecutor.awaitTermination(30, TimeUnit.SECONDS)
 
     // send stop message to executors so they shut down cleanly
     super.stop()

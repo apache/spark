@@ -46,8 +46,6 @@ private[spark] trait ExecutorPodFactory {
 private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
   extends ExecutorPodFactory {
 
-  import ExecutorPodFactoryImpl._
-
   private val executorExtraClasspath =
     sparkConf.get(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
 
@@ -76,7 +74,6 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
 
   private val executorDockerImage = sparkConf.get(EXECUTOR_DOCKER_IMAGE)
   private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
-  private val executorPort = sparkConf.getInt("spark.executor.port", DEFAULT_STATIC_PORT)
   private val blockManagerPort = sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
@@ -139,7 +136,6 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
         }
       }.getOrElse(Seq.empty[EnvVar])
     val executorEnv = (Seq(
-      (ENV_EXECUTOR_PORT, executorPort.toString),
       (ENV_DRIVER_URL, driverUrl),
       // Executor backend expects integral value for executor cores, so round it up to an int.
       (ENV_EXECUTOR_CORES, math.ceil(executorCores).toInt.toString),
@@ -159,7 +155,6 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
         .build()
     ) ++ executorExtraJavaOptionsEnv ++ executorExtraClasspathEnv.toSeq
     val requiredPorts = Seq(
-      (EXECUTOR_PORT_NAME, executorPort),
       (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
       .map { case (name, port) =>
         new ContainerPortBuilder()
@@ -219,8 +214,4 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
         .endSpec()
       .build()
   }
-}
-
-private object ExecutorPodFactoryImpl {
-  private val DEFAULT_STATIC_PORT = 10000
 }
