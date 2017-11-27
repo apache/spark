@@ -179,6 +179,14 @@ case class CaseWhen(
     "CASE" + cases + elseCase + " END"
   }
 
+  private def wrapInDoWhileFalse(code: String): String = {
+    s"""
+      do {
+        $code
+      } while (false);
+    """
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // This variable represents whether the first successful condition is met or not.
     // It is initialized to `false` and it is set to `true` when the first condition which
@@ -187,6 +195,12 @@ case class CaseWhen(
     val conditionMet = ctx.freshName("caseWhenConditionMet")
     ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
     ctx.addMutableState(ctx.javaType(dataType), ev.value)
+
+    // these blocks are meant to be inside a
+    // do {
+    //   ...
+    // } while (false);
+    // loop
     val cases = branches.map { case (condExpr, valueExpr) =>
       val cond = condExpr.genCode(ctx)
       val res = valueExpr.genCode(ctx)
@@ -198,6 +212,7 @@ case class CaseWhen(
             ${ev.isNull} = ${res.isNull};
             ${ev.value} = ${res.value};
             $conditionMet = true;
+            continue;
           }
         }
       """
@@ -217,7 +232,7 @@ case class CaseWhen(
     val allConditions = cases ++ elseCode
 
     val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-        allConditions.mkString("\n")
+        wrapInDoWhileFalse(allConditions.mkString("\n"))
       } else {
         // This generates code like:
         // do {
@@ -238,18 +253,19 @@ case class CaseWhen(
             func =>
               s"""
                 ${ctx.JAVA_BOOLEAN} $conditionMet = false;
-                $func
+                ${wrapInDoWhileFalse(func)}
                 return $conditionMet;
               """
           },
           foldFunctions = { funcCalls =>
-            funcCalls.map { funcCall =>
+            val loopBody = funcCalls.map { funcCall =>
               s"""
                 $conditionMet = $funcCall;
                 if ($conditionMet) {
                   continue;
                 }"""
-            }.mkString("do {", "", "\n} while (false);")
+            }.mkString
+            wrapInDoWhileFalse(loopBody)
           })
       }
 
