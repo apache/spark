@@ -533,6 +533,7 @@ class Dataset[T] private[sql](
    * potentially faster they are unreliable and may compromise job completion.
    *
    * @group basic
+   * @since 2.3.0
    */
   @Experimental
   @InterfaceStability.Evolving
@@ -548,11 +549,11 @@ class Dataset[T] private[sql](
    * potentially faster they are unreliable and may compromise job completion.
    *
    * @group basic
-   * @since 2.1.0
+   * @since 2.3.0
    */
   @Experimental
   @InterfaceStability.Evolving
-  def _checkpoint(eager: Boolean, local: Boolean = false): Dataset[T] = {
+  private[sql] def _checkpoint(eager: Boolean, local: Boolean = false): Dataset[T] = {
     val internalRdd = queryExecution.toRdd.map(_.copy())
     if (local) {
       internalRdd.localCheckpoint()
