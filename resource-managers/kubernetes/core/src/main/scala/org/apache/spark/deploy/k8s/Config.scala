@@ -16,7 +16,6 @@
  */
 package org.apache.spark.deploy.k8s
 
-import org.apache.spark.SPARK_VERSION
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
@@ -36,7 +35,7 @@ private[spark] object Config extends Logging {
       .doc("Docker image to use for the executors. Specify this using the standard Docker tag" +
         " format.")
       .stringConf
-      .createWithDefault(s"spark-executor:$SPARK_VERSION")
+      .createOptional
 
   val DOCKER_IMAGE_PULL_POLICY =
     ConfigBuilder("spark.kubernetes.docker.image.pullPolicy")

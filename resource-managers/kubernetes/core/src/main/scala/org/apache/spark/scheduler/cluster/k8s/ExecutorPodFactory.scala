@@ -20,7 +20,7 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.Constants._
@@ -72,7 +72,9 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
       sparkConf,
       KUBERNETES_NODE_SELECTOR_PREFIX)
 
-  private val executorDockerImage = sparkConf.get(EXECUTOR_DOCKER_IMAGE)
+  private val executorDockerImage = sparkConf
+    .get(EXECUTOR_DOCKER_IMAGE)
+    .getOrElse(throw new SparkException("Must specify the executor Docker image"))
   private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
   private val blockManagerPort = sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
