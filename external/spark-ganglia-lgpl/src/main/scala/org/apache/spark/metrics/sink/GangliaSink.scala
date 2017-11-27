@@ -17,7 +17,7 @@
 
 package org.apache.spark.metrics.sink
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.MetricRegistry
@@ -64,23 +64,24 @@ class GangliaSink(
   private val host = propertyToOption(GANGLIA_KEY_HOST).get
   private val port = propertyToOption(GANGLIA_KEY_PORT).get.toInt
   private val ttl = propertyToOption(GANGLIA_KEY_TTL).map(_.toInt).getOrElse(GANGLIA_DEFAULT_TTL)
+  private val dmax = propertyToOption(GANGLIA_KEY_DMAX).map(_.toInt).getOrElse(GANGLIA_DEFAULT_DMAX)
   private val mode = propertyToOption(GANGLIA_KEY_MODE)
     .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase(Locale.ROOT)))
     .getOrElse(GANGLIA_DEFAULT_MODE)
   private val pollPeriod = propertyToOption(GANGLIA_KEY_PERIOD).map(_.toInt)
     .getOrElse(GANGLIA_DEFAULT_PERIOD)
   private val pollUnit = propertyToOption(GANGLIA_KEY_UNIT)
-    .map(u => TimeUnit.valueOf(u.toUpperCase(Locale.ROOT))
+    .map(u => TimeUnit.valueOf(u.toUpperCase(Locale.ROOT)))
     .getOrElse(GANGLIA_DEFAULT_UNIT)
 
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   private val ganglia = new GMetric(host, port, mode, ttl)
-  private val reporter: GangliaReporter = GangliaReporter.forRegistry(registry)
-      .convertDurationsTo(TimeUnit.MILLISECONDS)
-      .convertRatesTo(TimeUnit.SECONDS)
-      .withDMax(dmax)
-      .build(ganglia)
+  private val reporter = GangliaReporter.forRegistry(registry)
+    .convertDurationsTo(TimeUnit.MILLISECONDS)
+    .convertRatesTo(TimeUnit.SECONDS)
+    .withDMax(dmax)
+    .build(ganglia)
 
   override def start() {
     reporter.start(pollPeriod, pollUnit)
