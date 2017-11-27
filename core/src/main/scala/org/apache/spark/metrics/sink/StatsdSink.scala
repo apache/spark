@@ -18,28 +18,29 @@
 package org.apache.spark.metrics.sink
 
 import java.util.Properties
-import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.MetricRegistry
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.internal.Logging
-import org.apache.spark.metrics.MetricsSystem
 
 private[spark] object StatsdSink {
   val STATSD_KEY_HOST = "host"
   val STATSD_KEY_PORT = "port"
-  val STATSD_KEY_PERIOD = "period"
-  val STATSD_KEY_UNIT = "unit"
   val STATSD_KEY_PREFIX = "prefix"
 
   val STATSD_DEFAULT_HOST = "127.0.0.1"
   val STATSD_DEFAULT_PORT = "8125"
-  val STATSD_DEFAULT_PERIOD = "10"
-  val STATSD_DEFAULT_UNIT = "SECONDS"
   val STATSD_DEFAULT_PREFIX = ""
 }
 
+/**
+ * A metrics [[Sink]] which will output registered metrics to StatsD.
+ *
+ * @param property [[StatsdSink]] specific properties
+ * @param registry A [[MetricRegistry]] can this sink to register
+ * @param securityMgr A [[SecurityManager]] to check security related stuffs.
+ */
 private[spark] class StatsdSink(
     val property: Properties,
     val registry: MetricRegistry,
@@ -47,18 +48,11 @@ private[spark] class StatsdSink(
   extends Sink(property, registry) with Logging {
   import StatsdSink._
 
-  val host = property.getProperty(STATSD_KEY_HOST, STATSD_DEFAULT_HOST)
-  val port = property.getProperty(STATSD_KEY_PORT, STATSD_DEFAULT_PORT).toInt
+  private val host = property.getProperty(STATSD_KEY_HOST, STATSD_DEFAULT_HOST)
+  private val port = property.getProperty(STATSD_KEY_PORT, STATSD_DEFAULT_PORT).toInt
+  private val prefix = property.getProperty(STATSD_KEY_PREFIX, STATSD_DEFAULT_PREFIX)
 
-  val pollPeriod = property.getProperty(STATSD_KEY_PERIOD, STATSD_DEFAULT_PERIOD).toInt
-  val pollUnit =
-    TimeUnit.valueOf(property.getProperty(STATSD_KEY_UNIT, STATSD_DEFAULT_UNIT).toUpperCase)
-
-  val prefix = property.getProperty(STATSD_KEY_PREFIX, STATSD_DEFAULT_PREFIX)
-
-  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
-
-  val reporter = new StatsdReporter(registry, host, port, prefix)
+  private val reporter = new StatsdReporter(registry, host, port, prefix)
 
   override def start(): Unit = {
     reporter.start(pollPeriod, pollUnit)

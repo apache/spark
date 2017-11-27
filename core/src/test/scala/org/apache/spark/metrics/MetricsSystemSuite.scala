@@ -287,4 +287,21 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricsSystem.invokePrivate(sinks()).map(_.getClass.getCanonicalName)
       .contains(classOf[CustomMetricsSink].getCanonicalName))
   }
+
+  test("should unregister sink if failed to start") {
+    conf.set("spark.metrics.conf.test.source.fake.class",
+      classOf[CustomMetricsSource].getCanonicalName)
+      .set("spark.metrics.conf.test.sink.fake.class", classOf[CustomMetricsSink].getCanonicalName)
+      .set("spark.metrics.conf.test.sink.fake.prop1", "val1")
+      .set("spark.metrics.conf.test.sink.fake.prop2", "val2")
+      .set("spark.metrics.conf.test.sink.fake.fail", "true")
+
+    val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
+    metricsSystem.start()
+
+    val sinks = PrivateMethod[ArrayBuffer[Sink]]('sinks)
+    assert(metricsSystem.invokePrivate(sinks()).length === 1)
+    assert(!metricsSystem.invokePrivate(sinks()).map(_.getClass.getCanonicalName)
+      .contains(classOf[CustomMetricsSink].getCanonicalName))
+  }
 }

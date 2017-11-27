@@ -29,6 +29,14 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ui.JettyUtils._
 
+/**
+ * A metrics [[Sink]] which will dump registered metrics with JSON format on the web UI. This is
+ * a default enabled sink for MetricsSystem.
+ *
+ * @param property [[MetricsServlet]] specific properties
+ * @param registry A [[MetricRegistry]] can this sink to register
+ * @param securityMgr A [[SecurityManager]] to check security related stuffs.
+ */
 private[spark] class MetricsServlet(
     property: Properties,
     registry: MetricRegistry,

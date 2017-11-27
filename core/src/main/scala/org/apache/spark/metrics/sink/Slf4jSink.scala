@@ -17,36 +17,25 @@
 
 package org.apache.spark.metrics.sink
 
-import java.util.{Locale, Properties}
+import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{MetricRegistry, Slf4jReporter}
 
 import org.apache.spark.SecurityManager
-import org.apache.spark.metrics.MetricsSystem
 
+/**
+ * A metrics [[Sink]] which will output registered metrics with slf4j format.
+ *
+ * @param property [[Slf4jSink]] specific properties
+ * @param registry A [[MetricRegistry]] can this sink to register
+ * @param securityMgr A [[SecurityManager]] to check security related stuffs.
+ */
 private[spark] class Slf4jSink(
     property: Properties,
     registry: MetricRegistry,
     securityMgr: SecurityManager)
   extends Sink(property, registry) {
-  val SLF4J_DEFAULT_PERIOD = 10
-  val SLF4J_DEFAULT_UNIT = "SECONDS"
-
-  val SLF4J_KEY_PERIOD = "period"
-  val SLF4J_KEY_UNIT = "unit"
-
-  private val pollPeriod = Option(property.getProperty(SLF4J_KEY_PERIOD)) match {
-    case Some(s) => s.toInt
-    case None => SLF4J_DEFAULT_PERIOD
-  }
-
-  private val pollUnit: TimeUnit = Option(property.getProperty(SLF4J_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
-    case None => TimeUnit.valueOf(SLF4J_DEFAULT_UNIT)
-  }
-
-  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   private val reporter: Slf4jReporter = Slf4jReporter.forRegistry(registry)
     .convertDurationsTo(TimeUnit.MILLISECONDS)

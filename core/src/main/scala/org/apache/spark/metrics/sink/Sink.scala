@@ -17,11 +17,13 @@
 
 package org.apache.spark.metrics.sink
 
-import java.util.Properties
+import java.util.{Locale, Properties}
+import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.MetricRegistry
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.metrics.MetricsSystem
 
 /**
  * :: DeveloperApi ::
@@ -36,8 +38,17 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 abstract class Sink(properties: Properties, metricRegistry: MetricRegistry) {
 
+  protected val pollPeriod = properties.getProperty("period", "10").toInt
+
+  protected val pollUnit = Option(properties.getProperty("unit"))
+    .map(s => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT)))
+    .getOrElse(TimeUnit.SECONDS)
+
+  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
+
   /**
-   * Start this metrics Sink, this will be called by MetricsSystem
+   * Start this metrics Sink, this will be called by MetricsSystem. If this [[Sink]] is failed to
+   * start, Metrics system will unregister and remove it.
    */
   def start(): Unit
 

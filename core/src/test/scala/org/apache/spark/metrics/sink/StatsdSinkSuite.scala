@@ -31,8 +31,8 @@ class StatsdSinkSuite extends SparkFunSuite {
   private val securityMgr = new SecurityManager(new SparkConf(false))
   private val defaultProps = Map(
     STATSD_KEY_PREFIX -> "spark",
-    STATSD_KEY_PERIOD -> "1",
-    STATSD_KEY_UNIT -> "seconds",
+    "period" -> "1",
+    "unit" -> "seconds",
     STATSD_KEY_HOST -> "127.0.0.1"
   )
   private val socketTimeout = 30000 // milliseconds

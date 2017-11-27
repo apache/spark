@@ -17,35 +17,24 @@
 
 package org.apache.spark.metrics.sink
 
-import java.util.{Locale, Properties}
+import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{ConsoleReporter, MetricRegistry}
 
 import org.apache.spark.SecurityManager
-import org.apache.spark.metrics.MetricsSystem
 
+/**
+ * A metrics [[Sink]] which will output registered metrics to console.
+ *
+ * @param property [[ConsoleSink]] specific properties
+ * @param registry A [[MetricRegistry]] can this sink to register
+ * @param securityMgr A [[SecurityManager]] to check security related stuffs.
+ */
 private[spark] class ConsoleSink(
     property: Properties,
     registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink(property, registry) {
-  val CONSOLE_DEFAULT_PERIOD = 10
-  val CONSOLE_DEFAULT_UNIT = "SECONDS"
-
-  val CONSOLE_KEY_PERIOD = "period"
-  val CONSOLE_KEY_UNIT = "unit"
-
-  private val pollPeriod = Option(property.getProperty(CONSOLE_KEY_PERIOD)) match {
-    case Some(s) => s.toInt
-    case None => CONSOLE_DEFAULT_PERIOD
-  }
-
-  private val pollUnit: TimeUnit = Option(property.getProperty(CONSOLE_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
-    case None => TimeUnit.valueOf(CONSOLE_DEFAULT_UNIT)
-  }
-
-  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   private val reporter: ConsoleReporter = ConsoleReporter.forRegistry(registry)
       .convertDurationsTo(TimeUnit.MILLISECONDS)

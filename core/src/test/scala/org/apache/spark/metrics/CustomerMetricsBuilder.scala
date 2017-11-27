@@ -47,13 +47,19 @@ class CustomMetricsSink(properties: Properties, metricRegistry: MetricRegistry)
 
   private val prop1 = properties.getProperty("prop1")
   private val prop2 = properties.getProperty("prop2")
+  private val shouldFailed = properties.getProperty("fail", "false").toBoolean
+
 
   assert(prop1 != null)
   assert(prop2 != null)
   assert(metricRegistry.getGauges.keySet().contains("fake.test1"))
   assert(metricRegistry.getGauges.keySet().contains("fake.test2"))
 
-  def start(): Unit = { }
+  def start(): Unit = {
+    if (shouldFailed) {
+      throw new Exception("Failed to start")
+    }
+  }
 
   def stop(): Unit = { }
 

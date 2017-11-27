@@ -101,7 +101,20 @@ private[spark] class MetricsSystem private (
     StaticSources.allSources.foreach(registerSource)
     registerSources()
     registerSinks()
-    sinks.foreach(_.start)
+
+    // Unregistered sinks that failed to start.
+    sinks.zipWithIndex
+      .filterNot { case (s, _) =>
+        try {
+          s.start()
+          true
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Failed to start Sink ${s.getClass.getSimpleName}", e)
+            false
+        }
+      }
+      .foreach { case (_, idx) => sinks.remove(idx) }
   }
 
   def stop() {
@@ -196,9 +209,9 @@ private[spark] class MetricsSystem private (
       val classPath = kv._2.getProperty("class")
       if (null != classPath) {
         try {
-          val sink = Utils.classForName(classPath).getConstructor(
-            classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-              .newInstance(kv._2, registry, securityMgr)
+          val sink = Utils.classForName(classPath)
+            .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+            .newInstance(kv._2, registry, securityMgr)
           if (kv._1 == "servlet") {
             metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
           } else {

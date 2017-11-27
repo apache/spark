@@ -32,12 +32,6 @@ class GangliaSink(
     property: Properties,
     registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink(property, registry) {
-  val GANGLIA_KEY_PERIOD = "period"
-  val GANGLIA_DEFAULT_PERIOD = 10
-
-  val GANGLIA_KEY_UNIT = "unit"
-  val GANGLIA_DEFAULT_UNIT: TimeUnit = TimeUnit.SECONDS
-
   val GANGLIA_KEY_MODE = "mode"
   val GANGLIA_DEFAULT_MODE: UDPAddressingMode = GMetric.UDPAddressingMode.MULTICAST
 
@@ -68,13 +62,6 @@ class GangliaSink(
   private val mode = propertyToOption(GANGLIA_KEY_MODE)
     .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase(Locale.ROOT)))
     .getOrElse(GANGLIA_DEFAULT_MODE)
-  private val pollPeriod = propertyToOption(GANGLIA_KEY_PERIOD).map(_.toInt)
-    .getOrElse(GANGLIA_DEFAULT_PERIOD)
-  private val pollUnit = propertyToOption(GANGLIA_KEY_UNIT)
-    .map(u => TimeUnit.valueOf(u.toUpperCase(Locale.ROOT)))
-    .getOrElse(GANGLIA_DEFAULT_UNIT)
-
-  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   private val ganglia = new GMetric(host, port, mode, ttl)
   private val reporter = GangliaReporter.forRegistry(registry)

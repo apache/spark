@@ -23,6 +23,14 @@ import com.codahale.metrics.{JmxReporter, MetricRegistry}
 
 import org.apache.spark.SecurityManager
 
+/**
+ * A metrics [[Sink]] which will output registered metrics with JMX format, user can use
+ * jconsole and others to attach to the Spark process and get the metrics report.
+ *
+ * @param property [[JmxSink]] specific properties
+ * @param registry A [[MetricRegistry]] can this sink to register
+ * @param securityMgr A [[SecurityManager]] to check security related stuffs.
+ */
 private[spark] class JmxSink(
     property: Properties,
     registry: MetricRegistry,

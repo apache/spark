@@ -24,31 +24,21 @@ import java.util.concurrent.TimeUnit
 import com.codahale.metrics.{CsvReporter, MetricRegistry}
 
 import org.apache.spark.SecurityManager
-import org.apache.spark.metrics.MetricsSystem
 
+/**
+ * A metrics [[Sink]] which will write registered metrics to the specified directory with CSV
+ * format.
+ *
+ * @param property [[CsvSink]] specific properties
+ * @param registry A [[MetricRegistry]] can this sink to register
+ * @param securityMgr A [[SecurityManager]] to check security related stuffs.
+ */
 private[spark] class CsvSink(
     property: Properties,
     registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink(property, registry) {
-  val CSV_KEY_PERIOD = "period"
-  val CSV_KEY_UNIT = "unit"
   val CSV_KEY_DIR = "directory"
-
-  val CSV_DEFAULT_PERIOD = 10
-  val CSV_DEFAULT_UNIT = "SECONDS"
   val CSV_DEFAULT_DIR = "/tmp/"
-
-  private val pollPeriod = Option(property.getProperty(CSV_KEY_PERIOD)) match {
-    case Some(s) => s.toInt
-    case None => CSV_DEFAULT_PERIOD
-  }
-
-  private val pollUnit: TimeUnit = Option(property.getProperty(CSV_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
-    case None => TimeUnit.valueOf(CSV_DEFAULT_UNIT)
-  }
-
-  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   private val pollDir = Option(property.getProperty(CSV_KEY_DIR)) match {
     case Some(s) => s
