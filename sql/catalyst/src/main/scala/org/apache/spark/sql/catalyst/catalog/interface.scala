@@ -367,8 +367,8 @@ case class CatalogStatistics(
    * on column names.
    */
   def toPlanStats(planOutput: Seq[Attribute], cboEnabled: Boolean): Statistics = {
-    val attrStats = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
     if (cboEnabled) {
+      val attrStats = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
       Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
         attributeStats = AttributeMap(attrStats))
     } else {

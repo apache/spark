@@ -1219,29 +1219,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     assert(statsAfterUpdate.rowCount == Some(2))
   }
 
-  test("invalidate stats for cached tables when cbo config is changed") {
-    val tbl = "stats_invalidation_tbl"
-    sql(s"CREATE TABLE $tbl STORED AS parquet AS SELECT * FROM src")
-    sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS")
-
-    // Fill in relation cache.
-    spark.table(tbl)
-    assert(isTableInCatalogCache(tbl))
-    val cachedTable = getTableFromCatalogCache(tbl)
-
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-      assert(cachedTable.stats.sizeInBytes > 0)
-      assert(cachedTable.stats.rowCount == Some(500))
-
-      // Change the cbo config to false.
-      sql("SET spark.sql.cbo.enabled = false")
-      // The relation is still cached but stats is invalidated.
-      assert(isTableInCatalogCache(tbl))
-      assert(cachedTable.stats.sizeInBytes > 0)
-      assert(cachedTable.stats.rowCount.isEmpty)
-    }
-  }
-
   test("estimates the size of a test Hive serde tables") {
     val df = sql("""SELECT * FROM src""")
     val sizes = df.queryExecution.analyzed.collect {

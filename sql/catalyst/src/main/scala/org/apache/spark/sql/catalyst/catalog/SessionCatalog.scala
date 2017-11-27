@@ -157,12 +157,6 @@ class SessionCatalog(
     tableRelationCache.invalidateAll()
   }
 
-  /** This method provides a way to invalidate statistics for all the cached plans. */
-  def invalidateAllCachedTableStats(): Unit = {
-    val relations = tableRelationCache.asMap().values().iterator()
-    while (relations.hasNext) { relations.next().invalidateStatsCache() }
-  }
-
   /**
    * This method is used to make the given path qualified before we
    * store this path in the underlying external catalog. So, when a path

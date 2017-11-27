@@ -95,10 +95,6 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
             s"prefix spark.hadoop (e.g., spark.hadoop.$key) when starting a Spark application. " +
             "For details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
             "dynamically-loading-spark-properties.")
-        } else if (key == SQLConf.CBO_ENABLED.key &&
-            value != sparkSession.conf.get(SQLConf.CBO_ENABLED.key)) {
-          // To change CBO config, first we need to invalidate stats for all relation caches.
-          sparkSession.sessionState.catalog.invalidateAllCachedTableStats()
         }
         sparkSession.conf.set(key, value)
         Seq(Row(key, value))
