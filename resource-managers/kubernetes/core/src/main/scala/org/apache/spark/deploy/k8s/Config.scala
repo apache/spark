@@ -111,5 +111,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
+    ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")
+      .doc("Maximum number of attempts allowed for checking the reason of an executor loss " +
+        "before it is assumed that the executor failed.")
+      .intConf
+      .checkValue(value => value > 0, "Maximum attempts of checks of executor lost reason " +
+        "must be a positive integer")
+      .createWithDefault(5)
+
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
 }

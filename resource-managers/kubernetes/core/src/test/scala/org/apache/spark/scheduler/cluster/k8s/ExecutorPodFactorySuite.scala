@@ -123,8 +123,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       ENV_EXECUTOR_CORES -> "1",
       ENV_EXECUTOR_MEMORY -> "1g",
       ENV_APPLICATION_ID -> "dummy",
-      ENV_EXECUTOR_POD_IP -> null,
-      ENV_EXECUTOR_PORT -> "10000") ++ additionalEnvVars
+      ENV_EXECUTOR_POD_IP -> null) ++ additionalEnvVars
 
     assert(executor.getSpec.getContainers.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getEnv.size() === defaultEnvs.size)

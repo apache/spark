@@ -330,6 +330,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     sparkConf
       .set(KUBERNETES_ALLOCATION_BATCH_SIZE, 1)
       .set(org.apache.spark.internal.config.EXECUTOR_INSTANCES, 1)
+    val executorLostReasonCheckMaxAttempts = sparkConf.get(
+      KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS)
 
     val scheduler = newSchedulerBackend()
     scheduler.start()
@@ -346,7 +348,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       .apply(registerFirstExecutorMessage)
 
     driverEndpoint.getValue.onDisconnected(executorEndpointRef.address)
-    1 to KubernetesClusterSchedulerBackend.MAX_EXECUTOR_LOST_REASON_CHECKS foreach { _ =>
+    1 to executorLostReasonCheckMaxAttempts foreach { _ =>
       allocatorRunnable.getValue.run()
       verify(podOperations, never()).delete(FIRST_EXECUTOR_POD)
     }

@@ -90,6 +90,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
 
+  private val executorLostReasonCheckMaxAttempts = conf.get(
+    KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS)
+
   private val allocatorRunnable = new Runnable {
 
     // Maintains a map of executor id to count of checks performed to learn the loss reason
@@ -174,7 +177,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     def removeExecutorOrIncrementLossReasonCheckCount(executorId: String): Unit = {
       val reasonCheckCount = executorReasonCheckAttemptCounts.getOrElse(executorId, 0)
-      if (reasonCheckCount >= MAX_EXECUTOR_LOST_REASON_CHECKS) {
+      if (reasonCheckCount >= executorLostReasonCheckMaxAttempts) {
         removeExecutor(executorId, SlaveLost("Executor lost for unknown reasons."))
         deleteExecutorFromClusterAndDataStructures(executorId)
       } else {
@@ -427,7 +430,4 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
 private object KubernetesClusterSchedulerBackend {
   private val UNKNOWN_EXIT_CODE = -1
-  // Number of times we are allowed check for the loss reason for an executor before we give up
-  // and assume the executor failed for good, and attribute it to a framework fault.
-  val MAX_EXECUTOR_LOST_REASON_CHECKS = 10
 }
