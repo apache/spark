@@ -203,10 +203,12 @@ class CodegenContext {
         // want to put a primitive type variable at outerClass for performance
         isPrimitiveType(javaType) &&
           (mutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD) ||
-        // identify no simply-assigned object
-        !isPrimitiveType(javaType) && !initCode.matches("(^[\\w_]+\\d+\\s*=\\s*null;|"
-          + "^[\\w_]+\\d+\\s*=\\s*new\\s*[\\w\\.]+\\(\\);$|"
-          + "^$)")) {
+        // identify multi-dimensional array or no simply-assigned object
+        !isPrimitiveType(javaType) &&
+          (javaType.contains("[][]") ||
+           !initCode.matches("(^[\\w_]+\\d+\\s*=\\s*null;|"
+              + "^[\\w_]+\\d+\\s*=\\s*new\\s*[\\w\\.]+\\(\\);$|"
+              + "^$)"))) {
       // primitive type or non-simply-assigned state is declared inline to the outer class
       mutableStates += ((javaType, varName, initCode))
       varName
