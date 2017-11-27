@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -836,17 +837,28 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     numPartitions: Int) extends RepartitionOperation {
 
-  val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
-
-  require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-    s"""${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type
-       |`SortOrder`, which means RangePartitioning, or none of them are `SortOrder`, which means
-       |HashPartitioning. In this case we have:
-       |SortOrder: ${sortOrder}
-       |NonSortOrder: ${nonSortOrder}
-     """.stripMargin)
-
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+
+  require(partitionExpressions.nonEmpty, "At least one partition-by expression must be specified.")
+
+  val partitioning: Partitioning = {
+    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+
+    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+      s""""
+          |SortOrder: ${sortOrder}
+          |NonSortOrder: ${nonSortOrder}
+        """.stripMargin)
+
+    if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+    } else {
+      HashPartitioning(nonSortOrder, numPartitions)
+    }
+  }
 
   override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true

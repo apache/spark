@@ -2776,9 +2776,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     // .repartitionByRange() assumes .asc by default if no explicit sort order is specified
     checkAnswer(
-      data2d.toDF("a", "b").repartitionByRange(data1d.size, $"a".desc, $"b")
+      data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b")
         .select(spark_partition_id().as("id"), $"a", $"b"),
-      data2d.toDF("a", "b").repartitionByRange(data1d.size, $"a".desc, $"b".asc)
+      data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b".asc)
         .select(spark_partition_id().as("id"), $"a", $"b"))
   }
 

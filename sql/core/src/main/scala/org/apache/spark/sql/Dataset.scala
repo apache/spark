@@ -2733,12 +2733,14 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = withTypedPlan {
-    partitionExprs.find(_.expr.isInstanceOf[SortOrder]).foreach { sortOrder =>
-      throw new IllegalArgumentException(
-        s"""Invalid partitionExprs specified: $sortOrder
-           |For range partitioning use repartitionByRange(...) instead.
-         """.stripMargin)
-    }
+    // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
+    // However, we don't want to complicate the semantics of this API method. Instead, let's
+    // give users a friendly error message, pointing them to the new method.
+    val sortOrder = partitionExprs.filter(_.expr.isInstanceOf[SortOrder])
+    if (sortOrder.nonEmpty) throw new IllegalArgumentException(
+      s"""Invalid partitionExprs specified: $sortOrder
+         |For range partitioning use repartitionByRange(...) instead.
+       """.stripMargin)
     RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions)
   }
 
