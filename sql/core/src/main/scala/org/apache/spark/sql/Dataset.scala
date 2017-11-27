@@ -2733,6 +2733,12 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = withTypedPlan {
+    partitionExprs.find(_.expr.isInstanceOf[SortOrder]).foreach { sortOrder =>
+      throw new IllegalArgumentException(
+        s"""Invalid partitionExprs specified: $sortOrder
+           |For range partitioning use repartitionByRange(...) instead.
+         """.stripMargin)
+    }
     RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions)
   }
 
@@ -2747,9 +2753,8 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def repartition(partitionExprs: Column*): Dataset[T] = withTypedPlan {
-    RepartitionByExpression(
-      partitionExprs.map(_.expr), logicalPlan, sparkSession.sessionState.conf.numShufflePartitions)
+  def repartition(partitionExprs: Column*): Dataset[T] = {
+    repartition(sparkSession.sessionState.conf.numShufflePartitions, partitionExprs: _*)
   }
 
   /**
@@ -2760,7 +2765,7 @@ class Dataset[T] private[sql](
    * @since 2.3.0
    */
   @scala.annotation.varargs
-  def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+  def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = withTypedPlan {
     val sortOrder: Seq[SortOrder] = partitionExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>
@@ -2769,7 +2774,7 @@ class Dataset[T] private[sql](
           SortOrder(expr, Ascending)
       }
     }
-    repartition(numPartitions, sortOrder.map(Column(_)): _*)
+    RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
   }
 
   /**
@@ -2784,7 +2789,6 @@ class Dataset[T] private[sql](
   def repartitionByRange(partitionExprs: Column*): Dataset[T] = {
     repartitionByRange(sparkSession.sessionState.conf.numShufflePartitions, partitionExprs: _*)
   }
-
 
   /**
    * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
