@@ -219,12 +219,25 @@ case class CaseWhen(
     val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
         allConditions.mkString("\n")
       } else {
+        // This generates code like:
+        // do {
+        //   conditionMet = caseWhen_1(i);
+        //   if(conditionMet) {
+        //     continue;
+        //   }
+        //   conditionMet = caseWhen_2(i);
+        //   if(conditionMet) {
+        //     continue;
+        //   }
+        //   ...
+        // } while (false);
         ctx.splitExpressions(allConditions, "caseWhen",
-          ("InternalRow", ctx.INPUT_ROW) :: (ctx.JAVA_BOOLEAN, conditionMet) :: Nil,
+          ("InternalRow", ctx.INPUT_ROW) :: Nil,
           returnType = ctx.JAVA_BOOLEAN,
           makeSplitFunction = {
             func =>
               s"""
+                ${ctx.JAVA_BOOLEAN} $conditionMet = false;
                 $func
                 return $conditionMet;
               """
@@ -243,7 +256,7 @@ case class CaseWhen(
     ev.copy(code = s"""
       ${ev.isNull} = true;
       ${ev.value} = ${ctx.defaultValue(dataType)};
-      boolean $conditionMet = false;
+      ${ctx.JAVA_BOOLEAN} $conditionMet = false;
       $code""")
   }
 }
