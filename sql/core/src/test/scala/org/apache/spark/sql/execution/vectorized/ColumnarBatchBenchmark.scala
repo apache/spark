@@ -36,15 +36,6 @@ import org.apache.spark.util.collection.BitSet
  * Benchmark to low level memory access using different ways to manage buffers.
  */
 object ColumnarBatchBenchmark {
-
-  def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): WritableColumnVector = {
-    if (memMode == MemoryMode.OFF_HEAP) {
-      new OffHeapColumnVector(capacity, dt)
-    } else {
-      new OnHeapColumnVector(capacity, dt)
-    }
-  }
-
   // This benchmark reads and writes an array of ints.
   // TODO: there is a big (2x) penalty for a random access API for off heap.
   // Note: carefully if modifying this code. It's hard to reason about the JIT.
@@ -151,7 +142,7 @@ object ColumnarBatchBenchmark {
 
     // Access through the column API with on heap memory
     val columnOnHeap = { i: Int =>
-      val col = allocate(count, IntegerType, MemoryMode.ON_HEAP)
+      val col = new OnHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0
@@ -170,7 +161,7 @@ object ColumnarBatchBenchmark {
 
     // Access through the column API with off heap memory
     def columnOffHeap = { i: Int => {
-      val col = allocate(count, IntegerType, MemoryMode.OFF_HEAP)
+      val col = new OffHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0
@@ -189,7 +180,7 @@ object ColumnarBatchBenchmark {
 
     // Access by directly getting the buffer backing the column.
     val columnOffheapDirect = { i: Int =>
-      val col = allocate(count, IntegerType, MemoryMode.OFF_HEAP)
+      val col = new OffHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
         var addr = col.valuesNativeAddress()
@@ -255,7 +246,7 @@ object ColumnarBatchBenchmark {
 
     // Adding values by appending, instead of putting.
     val onHeapAppend = { i: Int =>
-      val col = allocate(count, IntegerType, MemoryMode.ON_HEAP)
+      val col = new OnHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0
@@ -330,7 +321,7 @@ object ColumnarBatchBenchmark {
       for (n <- 0L until iters) {
         var i = 0
         while (i < count) {
-          if (i % 2 == 0) b(i) = 1;
+          if (i % 2 == 0) b(i) = 1
           i += 1
         }
         i = 0
@@ -351,7 +342,7 @@ object ColumnarBatchBenchmark {
   }
 
   def stringAccess(iters: Long): Unit = {
-    val chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    val chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     val random = new Random(0)
 
     def randomString(min: Int, max: Int): String = {
@@ -359,10 +350,10 @@ object ColumnarBatchBenchmark {
       val sb = new StringBuilder(len)
       var i = 0
       while (i < len) {
-        sb.append(chars.charAt(random.nextInt(chars.length())));
+        sb.append(chars.charAt(random.nextInt(chars.length())))
         i += 1
       }
-      return sb.toString
+      sb.toString
     }
 
     val minString = 3
@@ -373,7 +364,12 @@ object ColumnarBatchBenchmark {
       .map(_.getBytes(StandardCharsets.UTF_8)).toArray
 
     def column(memoryMode: MemoryMode) = { i: Int =>
-      val column = allocate(count, BinaryType, memoryMode)
+      val column = if (memoryMode == MemoryMode.OFF_HEAP) {
+        new OffHeapColumnVector(count, BinaryType)
+      } else {
+        new OnHeapColumnVector(count, BinaryType)
+      }
+
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0

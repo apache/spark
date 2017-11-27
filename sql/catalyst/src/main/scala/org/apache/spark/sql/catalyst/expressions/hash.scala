@@ -277,7 +277,7 @@ abstract class HashExpression[E] extends Expression {
       }
     })
 
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
+    ctx.addMutableState(ctx.javaType(dataType), ev.value)
     ev.copy(code = s"""
       ${ev.value} = $seed;
       $childrenHash""")
@@ -389,9 +389,10 @@ abstract class HashExpression[E] extends Expression {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
-    fields.zipWithIndex.map { case (field, index) =>
+    val hashes = fields.zipWithIndex.map { case (field, index) =>
       nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
-    }.mkString("\n")
+    }
+    ctx.splitExpressions(input, hashes)
   }
 
   @tailrec
@@ -615,8 +616,8 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
         s"\n$childHash = 0;"
     })
 
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
-    ctx.addMutableState("int", childHash, s"$childHash = 0;")
+    ctx.addMutableState(ctx.javaType(dataType), ev.value)
+    ctx.addMutableState(ctx.JAVA_INT, childHash, s"$childHash = 0;")
     ev.copy(code = s"""
       ${ev.value} = $seed;
       $childrenHash""")

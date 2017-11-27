@@ -65,7 +65,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   - `overwrite`: overwrite the existing data.
    *   - `append`: append the data.
    *   - `ignore`: ignore the operation (i.e. no-op).
-   *   - `error`: default option, throw an exception at runtime.
+   *   - `error` or `errorifexists`: default option, throw an exception at runtime.
    *
    * @since 1.4.0
    */

@@ -23,8 +23,9 @@ from threading import RLock
 
 if sys.version >= '3':
     basestring = unicode = str
+    xrange = range
 else:
-    from itertools import imap as map
+    from itertools import izip as zip, imap as map
 
 from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
@@ -71,6 +72,9 @@ class SparkSession(object):
     ...     .appName("Word Count") \\
     ...     .config("spark.some.config.option", "some-value") \\
     ...     .getOrCreate()
+
+    .. autoattribute:: builder
+       :annotation:
     """
 
     class Builder(object):
@@ -182,6 +186,7 @@ class SparkSession(object):
                 return session
 
     builder = Builder()
+    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
 
     _instantiatedSession = None
 
@@ -416,6 +421,92 @@ class SparkSession(object):
         data = [schema.toInternal(row) for row in data]
         return self._sc.parallelize(data), schema
 
+    def _get_numpy_record_dtype(self, rec):
+        """
+        Used when converting a pandas.DataFrame to Spark using to_records(), this will correct
+        the dtypes of fields in a record so they can be properly loaded into Spark.
+        :param rec: a numpy record to check field dtypes
+        :return corrected dtype for a numpy.record or None if no correction needed
+        """
+        import numpy as np
+        cur_dtypes = rec.dtype
+        col_names = cur_dtypes.names
+        record_type_list = []
+        has_rec_fix = False
+        for i in xrange(len(cur_dtypes)):
+            curr_type = cur_dtypes[i]
+            # If type is a datetime64 timestamp, convert to microseconds
+            # NOTE: if dtype is datetime[ns] then np.record.tolist() will output values as longs,
+            # conversion from [us] or lower will lead to py datetime objects, see SPARK-22417
+            if curr_type == np.dtype('datetime64[ns]'):
+                curr_type = 'datetime64[us]'
+                has_rec_fix = True
+            record_type_list.append((str(col_names[i]), curr_type))
+        return np.dtype(record_type_list) if has_rec_fix else None
+
+    def _convert_from_pandas(self, pdf):
+        """
+         Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
+         :return list of records
+        """
+
+        # Convert pandas.DataFrame to list of numpy records
+        np_records = pdf.to_records(index=False)
+
+        # Check if any columns need to be fixed for Spark to infer properly
+        if len(np_records) > 0:
+            record_dtype = self._get_numpy_record_dtype(np_records[0])
+            if record_dtype is not None:
+                return [r.astype(record_dtype).tolist() for r in np_records]
+
+        # Convert list of numpy records to python lists
+        return [r.tolist() for r in np_records]
+
+    def _create_from_pandas_with_arrow(self, pdf, schema):
+        """
+        Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
+        to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
+        data types will be used to coerce the data in Pandas to Arrow conversion.
+        """
+        from pyspark.serializers import ArrowSerializer, _create_batch
+        from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
+        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+
+        # Determine arrow types to coerce data when creating batches
+        if isinstance(schema, StructType):
+            arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+        elif isinstance(schema, DataType):
+            raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
+        else:
+            # Any timestamps must be coerced to be compatible with Spark
+            arrow_types = [to_arrow_type(TimestampType())
+                           if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
+                           for t in pdf.dtypes]
+
+        # Slice the DataFrame to be batched
+        step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
+        pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
+
+        # Create Arrow record batches
+        batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)])
+                   for pdf_slice in pdf_slices]
+
+        # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)
+        if isinstance(schema, (list, tuple)):
+            struct = from_arrow_schema(batches[0].schema)
+            for i, name in enumerate(schema):
+                struct.fields[i].name = name
+                struct.names[i] = name
+            schema = struct
+
+        # Create the Spark DataFrame directly from the Arrow data and schema
+        jrdd = self._sc._serialize_to_jvm(batches, len(batches), ArrowSerializer())
+        jdf = self._jvm.PythonSQLUtils.arrowPayloadToDataFrame(
+            jrdd, schema.json(), self._wrapped._jsqlContext)
+        df = DataFrame(jdf, self._wrapped)
+        df._schema = schema
+        return df
+
     @since(2.0)
     @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
@@ -505,6 +596,9 @@ class SparkSession(object):
 
         if isinstance(schema, basestring):
             schema = _parse_datatype_string(schema)
+        elif isinstance(schema, (list, tuple)):
+            # Must re-encode any unicode strings to be consistent with StructField names
+            schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
 
         try:
             import pandas
@@ -512,9 +606,19 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
+
+            # If no schema supplied by user then get the names of columns only
             if schema is None:
-                schema = [str(x) for x in data.columns]
-            data = [r.tolist() for r in data.to_records(index=False)]
+                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in data.columns]
+
+            if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
+                    and len(data) > 0:
+                try:
+                    return self._create_from_pandas_with_arrow(data, schema)
+                except Exception as e:
+                    warnings.warn("Arrow will not be used in createDataFrame: %s" % str(e))
+                    # Fallback to create DataFrame without arrow if raise some exception
+            data = self._convert_from_pandas(data)
 
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
@@ -533,8 +637,6 @@ class SparkSession(object):
                 verify_func(obj)
                 return obj,
         else:
-            if isinstance(schema, list):
-                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):

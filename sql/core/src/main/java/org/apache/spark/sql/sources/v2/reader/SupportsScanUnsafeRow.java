@@ -19,7 +19,6 @@ package org.apache.spark.sql.sources.v2.reader;
 
 import java.util.List;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;

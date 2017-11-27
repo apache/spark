@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -62,14 +63,14 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
     val resultIsNull = if (needNullCheck) {
       val resultIsNull = ctx.freshName("resultIsNull")
-      ctx.addMutableState("boolean", resultIsNull, "")
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, resultIsNull)
       resultIsNull
     } else {
       "false"
     }
     val argValues = arguments.map { e =>
       val argValue = ctx.freshName("argValue")
-      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
+      ctx.addMutableState(ctx.javaType(e.dataType), argValue)
       argValue
     }
 
@@ -214,11 +215,13 @@ case class Invoke(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
+  private lazy val encodedFunctionName = TermName(functionName).encodedName.toString
+
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      val m = cls.getMethods.find(_.getName == functionName)
+      val m = cls.getMethods.find(_.getName == encodedFunctionName)
       if (m.isEmpty) {
-        sys.error(s"Couldn't find $functionName on $cls")
+        sys.error(s"Couldn't find $encodedFunctionName on $cls")
       } else {
         m
       }
@@ -247,7 +250,7 @@ case class Invoke(
     }
 
     val evaluate = if (returnPrimitive) {
-      getFuncResult(ev.value, s"${obj.value}.$functionName($argString)")
+      getFuncResult(ev.value, s"${obj.value}.$encodedFunctionName($argString)")
     } else {
       val funcResult = ctx.freshName("funcResult")
       // If the function can return null, we do an extra check to make sure our null bit is still
@@ -265,7 +268,7 @@ case class Invoke(
       }
       s"""
         Object $funcResult = null;
-        ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
+        ${getFuncResult(funcResult, s"${obj.value}.$encodedFunctionName($argString)")}
         $assignResult
       """
     }
@@ -545,7 +548,7 @@ case class MapObjects private(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = ctx.javaType(loopVarDataType)
-    ctx.addMutableState(elementJavaType, loopValue, "")
+    ctx.addMutableState(elementJavaType, loopValue)
     val genInputData = inputData.genCode(ctx)
     val genFunction = lambdaFunction.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -641,7 +644,7 @@ case class MapObjects private(
     }
 
     val loopNullCheck = if (loopIsNull != "false") {
-      ctx.addMutableState("boolean", loopIsNull, "")
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, loopIsNull)
       inputDataType match {
         case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
         case _ => s"$loopIsNull = $loopValue == null;"
@@ -805,10 +808,10 @@ case class CatalystToExternalMap private(
 
     val mapType = inputDataType(inputData.dataType).asInstanceOf[MapType]
     val keyElementJavaType = ctx.javaType(mapType.keyType)
-    ctx.addMutableState(keyElementJavaType, keyLoopValue, "")
+    ctx.addMutableState(keyElementJavaType, keyLoopValue)
     val genKeyFunction = keyLambdaFunction.genCode(ctx)
     val valueElementJavaType = ctx.javaType(mapType.valueType)
-    ctx.addMutableState(valueElementJavaType, valueLoopValue, "")
+    ctx.addMutableState(valueElementJavaType, valueLoopValue)
     val genValueFunction = valueLambdaFunction.genCode(ctx)
     val genInputData = inputData.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -841,7 +844,7 @@ case class CatalystToExternalMap private(
     val genValueFunctionValue = genFunctionValue(valueLambdaFunction, genValueFunction)
 
     val valueLoopNullCheck = if (valueLoopIsNull != "false") {
-      ctx.addMutableState("boolean", valueLoopIsNull, "")
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueLoopIsNull)
       s"$valueLoopIsNull = $valueArray.isNullAt($loopIndex);"
     } else {
       ""
@@ -991,8 +994,8 @@ case class ExternalMapToCatalyst private(
 
     val keyElementJavaType = ctx.javaType(keyType)
     val valueElementJavaType = ctx.javaType(valueType)
-    ctx.addMutableState(keyElementJavaType, key, "")
-    ctx.addMutableState(valueElementJavaType, value, "")
+    ctx.addMutableState(keyElementJavaType, key)
+    ctx.addMutableState(valueElementJavaType, value)
 
     val (defineEntries, defineKeyValue) = child.dataType match {
       case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
@@ -1028,14 +1031,14 @@ case class ExternalMapToCatalyst private(
     }
 
     val keyNullCheck = if (keyIsNull != "false") {
-      ctx.addMutableState("boolean", keyIsNull, "")
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, keyIsNull)
       s"$keyIsNull = $key == null;"
     } else {
       ""
     }
 
     val valueNullCheck = if (valueIsNull != "false") {
-      ctx.addMutableState("boolean", valueIsNull, "")
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueIsNull)
       s"$valueIsNull = $value == null;"
     } else {
       ""
@@ -1103,7 +1106,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, "")
+    ctx.addMutableState("Object[]", values)
 
     val childrenCodes = children.zipWithIndex.map { case (e, i) =>
       val eval = e.genCode(ctx)
@@ -1241,7 +1244,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
 
     val javaBeanInstance = ctx.freshName("javaBean")
     val beanInstanceJavaType = ctx.javaType(beanInstance.dataType)
-    ctx.addMutableState(beanInstanceJavaType, javaBeanInstance, "")
+    ctx.addMutableState(beanInstanceJavaType, javaBeanInstance)
 
     val initialize = setters.map {
       case (setterMethod, fieldValue) =>

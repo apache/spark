@@ -130,6 +130,13 @@ else
   fi
 fi
 
+# This is a band-aid fix to avoid the failure of Maven nightly snapshot in some Jenkins
+# machines by explicitly calling /usr/sbin/lsof. Please see SPARK-22377 and the discussion
+# in its pull request.
+LSOF=lsof
+if ! hash $LSOF 2>/dev/null; then
+  LSOF=/usr/sbin/lsof
+fi
 
 if [ -z "$SPARK_PACKAGE_VERSION" ]; then
   SPARK_PACKAGE_VERSION="${SPARK_VERSION}-$(date +%Y_%m_%d_%H_%M)-${git_hash}"
@@ -345,7 +352,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   #  -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
 
   # Clean-up Zinc nailgun process
-  lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   rm $tmp_settings
   cd ..
@@ -382,7 +389,7 @@ if [[ "$1" == "publish-release" ]]; then
   #  -DskipTests $SCALA_2_12_PROFILES §$PUBLISH_PROFILES clean install
 
   # Clean-up Zinc nailgun process
-  lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   #./dev/change-scala-version.sh 2.11
 
