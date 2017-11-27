@@ -41,6 +41,10 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
   private def empty(plan: LogicalPlan) =
     LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
+  // Construct a project list from plan's output, while the value is always NULL.
+  private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
+    plan.output.map{ a => Alias(Literal(null), a.name)(a.exprId) }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p: Union if p.children.forall(isEmptyLocalRelation) =>
       empty(p)
@@ -55,7 +59,13 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
         // Intersect is handled as LeftSemi by `ReplaceIntersectWithSemiJoin` rule.
         // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
         case LeftOuter | LeftSemi | LeftAnti if isEmptyLocalRelation(p.left) => empty(p)
+        case LeftSemi if isEmptyLocalRelation(p.right) => empty(p)
+        case LeftAnti if isEmptyLocalRelation(p.right) => p.left
+        case LeftOuter if isEmptyLocalRelation(p.right) =>
+          Project(p.left.output ++ nullValueProjectList(p.right), p.left)
         case RightOuter if isEmptyLocalRelation(p.right) => empty(p)
+        case RightOuter if isEmptyLocalRelation(p.left) =>
+          Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
         case FullOuter if p.children.forall(isEmptyLocalRelation) => empty(p)
         case _ => p
     }
