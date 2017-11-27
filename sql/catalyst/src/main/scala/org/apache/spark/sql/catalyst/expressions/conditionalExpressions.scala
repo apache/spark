@@ -185,8 +185,8 @@ case class CaseWhen(
     // evaluates to `true` is met and therefore is not needed to go on anymore on the computation
     // of the following conditions.
     val conditionMet = ctx.freshName("caseWhenConditionMet")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull, "")
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
+    ctx.addMutableState(ctx.javaType(dataType), ev.value)
     val cases = branches.map { case (condExpr, valueExpr) =>
       val cond = condExpr.genCode(ctx)
       val res = valueExpr.genCode(ctx)
