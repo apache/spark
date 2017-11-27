@@ -74,8 +74,10 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       """
     }
     val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-      ctx.splitExpressions(inputs, "valueConcat",
-        ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
+      ctx.splitExpressions(
+        expressions = inputs,
+        funcName = "valueConcat",
+        arguments = ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
     } else {
       inputs.mkString("\n")
     }
@@ -137,13 +139,36 @@ case class ConcatWs(children: Seq[Expression])
     if (children.forall(_.dataType == StringType)) {
       // All children are strings. In that case we can construct a fixed size array.
       val evals = children.map(_.genCode(ctx))
+      val separator = evals.head
+      val strings = evals.tail
+      val numArgs = strings.length
+      val args = ctx.freshName("args")
 
-      val inputs = evals.map { eval =>
-        s"${eval.isNull} ? (UTF8String) null : ${eval.value}"
-      }.mkString(", ")
-
-      ev.copy(evals.map(_.code).mkString("\n") + s"""
-        UTF8String ${ev.value} = UTF8String.concatWs($inputs);
+      val inputs = strings.zipWithIndex.map { case (eval, index) =>
+        if (eval.isNull != "true") {
+          s"""
+             ${eval.code}
+             if (!${eval.isNull}) {
+               $args[$index] = ${eval.value};
+             }
+           """
+        } else {
+          ""
+        }
+      }
+      val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
+        ctx.splitExpressions(
+          expressions = inputs,
+          funcName = "valueConcatWs",
+          arguments = ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
+      } else {
+        inputs.mkString("\n")
+      }
+      ev.copy(s"""
+        UTF8String[] $args = new UTF8String[$numArgs];
+        ${separator.code}
+        $codes
+        UTF8String ${ev.value} = UTF8String.concatWs(${separator.value}, $args);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
     } else {
@@ -156,32 +181,66 @@ case class ConcatWs(children: Seq[Expression])
         child.dataType match {
           case StringType =>
             ("", // we count all the StringType arguments num at once below.
-              s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};")
+             if (eval.isNull == "true") {
+               ""
+             } else {
+               s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
+             })
           case _: ArrayType =>
             val size = ctx.freshName("n")
-            (s"""
-              if (!${eval.isNull}) {
-                $varargNum += ${eval.value}.numElements();
-              }
-            """,
-            s"""
-            if (!${eval.isNull}) {
-              final int $size = ${eval.value}.numElements();
-              for (int j = 0; j < $size; j ++) {
-                $array[$idxInVararg ++] = ${ctx.getValue(eval.value, StringType, "j")};
-              }
+            if (eval.isNull == "true") {
+              ("", "")
+            } else {
+              (s"""
+                if (!${eval.isNull}) {
+                  $varargNum += ${eval.value}.numElements();
+                }
+                """,
+               s"""
+                if (!${eval.isNull}) {
+                  final int $size = ${eval.value}.numElements();
+                  for (int j = 0; j < $size; j ++) {
+                    $array[$idxInVararg ++] = ${ctx.getValue(eval.value, StringType, "j")};
+                  }
+                }
+                """)
             }
-            """)
         }
       }.unzip
 
-      ev.copy(evals.map(_.code).mkString("\n") +
-      s"""
+      val codes = ctx.splitExpressions(ctx.INPUT_ROW, evals.map(_.code))
+      val varargCounts = ctx.splitExpressions(
+        expressions = varargCount,
+        funcName = "varargCountsConcatWs",
+        arguments = ("InternalRow", ctx.INPUT_ROW) :: Nil,
+        returnType = "int",
+        makeSplitFunction = body =>
+          s"""
+           int $varargNum = 0;
+           $body
+           return $varargNum;
+           """,
+        foldFunctions = _.mkString(s"$varargNum += ", s";\n$varargNum += ", ";"))
+      val varargBuilds = ctx.splitExpressions(
+        expressions = varargBuild,
+        funcName = "varargBuildsConcatWs",
+        arguments =
+          ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
+        returnType = "int",
+        makeSplitFunction = body =>
+          s"""
+           $body
+           return $idxInVararg;
+           """,
+        foldFunctions = _.mkString(s"$idxInVararg = ", s";\n$idxInVararg = ", ";"))
+      ev.copy(
+        s"""
+        $codes
         int $varargNum = ${children.count(_.dataType == StringType) - 1};
         int $idxInVararg = 0;
-        ${varargCount.mkString("\n")}
+        $varargCounts
         UTF8String[] $array = new UTF8String[$varargNum];
-        ${varargBuild.mkString("\n")}
+        $varargBuilds
         UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $array);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
@@ -236,22 +295,52 @@ case class Elt(children: Seq[Expression])
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = indexExpr.genCode(ctx)
     val strings = stringExprs.map(_.genCode(ctx))
+    val indexVal = ctx.freshName("index")
+    val stringVal = ctx.freshName("stringVal")
     val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
       s"""
         case ${index + 1}:
-          ${ev.value} = ${eval.isNull} ? null : ${eval.value};
+          ${eval.code}
+          $stringVal = ${eval.isNull} ? null : ${eval.value};
           break;
       """
-    }.mkString("\n")
-    val indexVal = ctx.freshName("index")
-    val stringArray = ctx.freshName("strings");
+    }
 
-    ev.copy(index.code + "\n" + strings.map(_.code).mkString("\n") + s"""
-      final int $indexVal = ${index.value};
-      UTF8String ${ev.value} = null;
-      switch ($indexVal) {
-        $assignStringValue
+    val cases = ctx.buildCodeBlocks(assignStringValue)
+    val codes = if (cases.length == 1) {
+      s"""
+        UTF8String $stringVal = null;
+        switch ($indexVal) {
+          ${cases.head}
+        }
+       """
+    } else {
+      var prevFunc = "null"
+      for (c <- cases.reverse) {
+        val funcName = ctx.freshName("eltFunc")
+        val funcBody = s"""
+         private UTF8String $funcName(InternalRow ${ctx.INPUT_ROW}, int $indexVal) {
+           UTF8String $stringVal = null;
+           switch ($indexVal) {
+             $c
+             default:
+               return $prevFunc;
+           }
+           return $stringVal;
+         }
+        """
+        val fullFuncName = ctx.addNewFunction(funcName, funcBody)
+        prevFunc = s"$fullFuncName(${ctx.INPUT_ROW}, $indexVal)"
       }
+      s"UTF8String $stringVal = $prevFunc;"
+    }
+
+    ev.copy(
+      s"""
+      ${index.code}
+      final int $indexVal = ${index.value};
+      $codes
+      UTF8String ${ev.value} = $stringVal;
       final boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
@@ -1977,7 +2066,7 @@ case class FormatNumber(x: Expression, d: Expression)
       val numberFormat = ctx.freshName("numberFormat")
       val i = ctx.freshName("i")
       val dFormat = ctx.freshName("dFormat")
-      ctx.addMutableState("int", lastDValue, s"$lastDValue = -100;")
+      ctx.addMutableState(ctx.JAVA_INT, lastDValue, s"$lastDValue = -100;")
       ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
       ctx.addMutableState(df, numberFormat,
       s"""$numberFormat = new $df("", new $dfs($l.$usLocale));""")

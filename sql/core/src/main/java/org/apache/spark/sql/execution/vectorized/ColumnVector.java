@@ -63,13 +63,6 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract boolean anyNullsSet();
 
   /**
-   * Returns the off heap ptr for the arrays backing the NULLs and values buffer. Only valid
-   * to call for off heap columns.
-   */
-  public abstract long nullsNativeAddress();
-  public abstract long valuesNativeAddress();
-
-  /**
    * Returns whether the value at rowId is NULL.
    */
   public abstract boolean isNullAt(int rowId);

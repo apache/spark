@@ -294,10 +294,13 @@ class JDBCSuite extends SparkFunSuite
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
-    val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2 AND NAME != 'mary')")
-    val df2 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
+    val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
     assert(df1.collect.toSet === Set(Row("mary", 2)))
-    assert(df2.collect.toSet === Set(Row("mary", 2)))
+
+    // SPARK-22548: Incorrect nested AND expression pushed down to JDBC data source
+    val df2 = sql("SELECT * FROM foobar " +
+      "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
+    assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
 
     def checkNotPushdown(df: DataFrame): DataFrame = {
       val parentPlan = df.queryExecution.executedPlan

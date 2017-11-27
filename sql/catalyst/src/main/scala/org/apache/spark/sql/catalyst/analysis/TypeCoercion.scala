@@ -155,7 +155,7 @@ object TypeCoercion {
    * i.e. the main difference with [[findTightestCommonType]] is that here we allow some
    * loss of precision when widening decimal and double, and promotion to string.
    */
-  private[analysis] def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
+  def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
       .orElse(stringPromotion(t1, t2))
