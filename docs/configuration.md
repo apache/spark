@@ -2306,6 +2306,50 @@ showDF(properties, numRows = 200, truncate = FALSE)
   </tr>
 </table>
 
+### Spark Application Garbage Collector
+
+<table class="table">
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>spark.cleaner.periodicGC.interval</code></td>
+    <td>30min</td>
+    <td>
+      Controls how often to trigger a garbage collection.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.cleaner.referenceTracking</code></td>
+    <td>true</td>
+    <td>
+      Controls whether a ContextCleaner should be created when a SparkContext initializes.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.cleaner.referenceTracking.blocking</code></td>
+    <td>true</td>
+    <td>
+      Controls whether the cleaning thread should block on cleanup tasks (other than shuffle, which is controlled by
+      spark.cleaner.referenceTracking.blocking.shuffle Spark property).<br><br>
+      It is true as a workaround to <a href="https://issues.apache.org/jira/browse/SPARK-3015">
+      SPARK-3015 Removing broadcast in quick successions causes Akka timeout</a>.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.cleaner.referenceTracking.blocking.shuffle</code></td>
+    <td>false</td>
+    <td>
+      Controls whether the cleaning thread should block on shuffle cleanup tasks.<br><br>
+      It is false as a workaround to SPARK-3139 Akka timeouts from ContextCleaner when cleaning shuffles.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.cleaner.referenceTracking.cleanCheckpoints</code></td>
+    <td>false</td>
+    <td>
+      Controls whether to clean checkpoint files if the reference is out of scope.
+    </td>
+  </tr>
+</table>
 
 ### Cluster Managers
 
