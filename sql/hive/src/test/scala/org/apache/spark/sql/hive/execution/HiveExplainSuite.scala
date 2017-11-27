@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -46,6 +47,8 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("ANALYZE TABLE src COMPUTE STATISTICS")
       checkKeywordsExist(sql(explainCostCommand), "sizeInBytes", "rowCount")
     }
+
+    spark.sessionState.catalog.refreshTable(TableIdentifier("src"))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
       // Don't show rowCount if cbo is disabled
