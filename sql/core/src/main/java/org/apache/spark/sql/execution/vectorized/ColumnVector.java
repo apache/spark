@@ -181,11 +181,6 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Loads the data into array.byteArray.
-   */
-  public abstract void loadBytes(ColumnarArray array);
-
-  /**
    * Returns the value for rowId.
    */
   public MapData getMap(int ordinal) {
@@ -198,7 +193,8 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract Decimal getDecimal(int rowId, int precision, int scale);
 
   /**
-   * Returns the UTF8String for rowId.
+   * Returns the UTF8String for rowId. Note that the returned UTF8String may point to the data of
+   * this column vector, please copy it if you want to keep it after this column vector is freed.
    */
   public abstract UTF8String getUTF8String(int rowId);
 

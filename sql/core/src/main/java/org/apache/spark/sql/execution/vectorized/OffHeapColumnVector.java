@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Column data backed using offheap memory.
@@ -75,14 +76,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     reset();
   }
 
+  /**
+   * Returns the off heap pointer for the values buffer.
+   */
   @VisibleForTesting
   public long valuesNativeAddress() {
     return data;
-  }
-
-  @VisibleForTesting
-  public long nullsNativeAddress() {
-    return nulls;
   }
 
   @Override
@@ -205,6 +204,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     byte[] array = new byte[count];
     Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
     return array;
+  }
+
+  @Override
+  protected UTF8String getBytesAsUTF8String(int rowId, int count) {
+    return UTF8String.fromAddress(null, data + rowId, count);
   }
 
   //
@@ -522,15 +526,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     Platform.putInt(null, lengthData + 4 * rowId, length);
     Platform.putInt(null, offsetData + 4 * rowId, result);
     return result;
-  }
-
-  @Override
-  public void loadBytes(ColumnarArray array) {
-    if (array.tmpByteArray.length < array.length) array.tmpByteArray = new byte[array.length];
-    Platform.copyMemory(
-        null, data + array.offset, array.tmpByteArray, Platform.BYTE_ARRAY_OFFSET, array.length);
-    array.byteArray = array.tmpByteArray;
-    array.byteArrayOffset = 0;
   }
 
   // Split out the slow path.
