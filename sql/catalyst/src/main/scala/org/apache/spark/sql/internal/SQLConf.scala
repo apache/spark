@@ -1217,8 +1217,8 @@ class SQLConf extends Serializable with Logging {
       ParquetOutputTimestampType.TIMESTAMP_MILLIS
     } else if (!isOutputTimestampTypeSet && isParquetTimestampAsINT96) {
       // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_TIMESTAMP_AS_INT96 is set,
-      // respect PARQUET_TIMESTAMP_AS_INT96 and use TIMESTAMP_MILLIS.
-      ParquetOutputTimestampType.TIMESTAMP_MILLIS
+      // respect PARQUET_TIMESTAMP_AS_INT96 and use INT96.
+      ParquetOutputTimestampType.INT96
     } else {
       // Otherwise, PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
       ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
