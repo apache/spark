@@ -298,7 +298,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.setConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS, false)
     spark.sessionState.conf.setConf(SQLConf.PARQUET_TIMESTAMP_AS_INT96, true)
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
+      SQLConf.ParquetOutputTimestampType.INT96)
 
     // when both are set, tie-break with PARQUET_OUTPUT_TIMESTAMP_TYPE (micros)
     spark.sessionState.conf.setConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS, true)
