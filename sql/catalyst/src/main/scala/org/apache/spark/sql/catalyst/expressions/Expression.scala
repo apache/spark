@@ -107,12 +107,34 @@ abstract class Expression extends TreeNode[Expression] {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val eval = doGenCode(ctx, ExprCode("", isNull, value))
+      populateInputs(ctx, eval)
       reduceCodeSize(ctx, eval)
       if (eval.code.nonEmpty) {
         // Add `this` in the comment.
         eval.copy(code = s"${ctx.registerComment(this.toString)}\n" + eval.code.trim)
       } else {
         eval
+      }
+    }
+  }
+
+  /**
+   * Records current input row and variables for this expression into created `ExprCode`.
+   */
+  private def populateInputs(ctx: CodegenContext, eval: ExprCode): Unit = {
+    if (ctx.INPUT_ROW != null) {
+      eval.inputRow = ctx.INPUT_ROW
+    }
+    if (ctx.currentVars != null) {
+      val boundRefs = children.flatMap(_.collect {
+        case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null => (ordinal, b)
+      }).toMap
+
+      ctx.currentVars.zipWithIndex.filter(_._1 != null).foreach { case (currentVar, idx) =>
+        if (boundRefs.contains(idx)) {
+          val inputVar = ExprInputVar(boundRefs(idx), exprCode = currentVar)
+          eval.inputVars += inputVar
+        }
       }
     }
   }
@@ -152,19 +174,113 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Finds the bound attributes and corresponding input variables under wholestage codegen.
-   * If the input variables are not evaluated yet, don't need to include them into parameters,
+   * Retrieves previous input rows referred by children and deferred expressions.
    */
-  private def getInputVars(ctx: CodegenContext): (Seq[Expression], Seq[ExprCode]) = {
-    if (ctx.currentVars == null) {
-      (Seq.empty, Seq.empty)
-    } else {
-      children.flatMap(_.collect {
-        case b @ BoundReference(ordinal, dt, nullable) if ctx.currentVars(ordinal) != null &&
-            ctx.currentVars(ordinal).code == "" =>
-          (b, ctx.currentVars(ordinal))
-      }).distinct.unzip
+  private def getInputRowsForChildren(ctx: CodegenContext): Seq[String] = {
+    children.flatMap(getInputRows(ctx, _)).distinct
+  }
+
+  /**
+   * Given a child expression, retrieves previous input rows referred by it or deferred expressions
+   * which are needed to evaluate it.
+   */
+  private def getInputRows(ctx: CodegenContext, child: Expression): Seq[String] = {
+    child.flatMap {
+      // An expression directly evaluates on current input row.
+      case BoundReference(ordinal, _, _) if ctx.currentVars == null ||
+          ctx.currentVars(ordinal) == null =>
+        Seq(ctx.INPUT_ROW)
+
+      // An expression which is not evaluated yet. Tracks down to find input rows.
+      case BoundReference(ordinal, _, _) if ctx.currentVars(ordinal).code != "" =>
+        trackDownRow(ctx, ctx.currentVars(ordinal))
+
+      case _ => Seq.empty
+    }.distinct
+  }
+
+  /**
+   * Tracks down input rows referred by the generated code snippet.
+   */
+  private def trackDownRow(ctx: CodegenContext, exprCode: ExprCode): Seq[String] = {
+    var exprCodes: List[ExprCode] = List(exprCode)
+    val inputRows = mutable.ArrayBuffer.empty[String]
+
+    while (exprCodes.nonEmpty) {
+      exprCodes match {
+        case first :: others =>
+          exprCodes = others
+          if (first.inputRow != null) {
+            inputRows += first.inputRow
+          }
+          first.inputVars.foreach { inputVar =>
+            if (inputVar.exprCode.code != "") {
+              exprCodes = inputVar.exprCode :: exprCodes
+            }
+          }
+        case _ =>
+      }
     }
+    inputRows.toSeq
+  }
+
+  /**
+   * Retrieves previously evaluated columns referred by children and deferred expressions.
+   * Returned tuple contains the list of expressions and the list of generated codes.
+   */
+  private def getInputVarsForChildren(ctx: CodegenContext): (Seq[Expression], Seq[ExprCode]) = {
+    children.flatMap(getInputVars(ctx, _)).distinct.unzip
+  }
+
+  /**
+   * Given a child expression, retrieves previously evaluated columns referred by it or
+   * deferred expressions which are needed to evaluate it.
+   */
+  private def getInputVars(ctx: CodegenContext, child: Expression): Seq[(Expression, ExprCode)] = {
+    if (ctx.currentVars == null) {
+      return Seq.empty
+    }
+
+    child.flatMap {
+      // An evaluated variable.
+      case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null &&
+          ctx.currentVars(ordinal).code == "" =>
+        Seq((b, ctx.currentVars(ordinal)))
+
+      // An input variable which is not evaluated yet. Tracks down to find any evaluated variables
+      // in the expression path.
+      // E.g., if this expression is "d = c + 1" and "c" is not evaluated. We need to track to
+      // "c = a + b" and see if "a" and "b" are evaluated. If they are, we need to return them so
+      // to include them into parameters, if not, we tract down further.
+      case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null =>
+        trackDownVar(ctx, ctx.currentVars(ordinal))
+
+      case _ => Seq.empty
+    }.distinct
+  }
+
+  /**
+   * Tracks down previously evaluated columns referred by the generated code snippet.
+   */
+  private def trackDownVar(ctx: CodegenContext, exprCode: ExprCode): Seq[(Expression, ExprCode)] = {
+    var exprCodes: List[ExprCode] = List(exprCode)
+    val inputVars = mutable.ArrayBuffer.empty[(Expression, ExprCode)]
+
+    while (exprCodes.nonEmpty) {
+      exprCodes match {
+        case first :: others =>
+          exprCodes = others
+          first.inputVars.foreach { inputVar =>
+            if (inputVar.exprCode.code == "") {
+              inputVars += ((inputVar.expr, inputVar.exprCode))
+            } else {
+              exprCodes = inputVar.exprCode :: exprCodes
+            }
+          }
+        case _ =>
+      }
+    }
+    inputVars.toSeq
   }
 
   /**
@@ -184,16 +300,16 @@ abstract class Expression extends TreeNode[Expression] {
    * length of 255 or less. `this` contributes one unit and a parameter of type long or double
    * contributes two units.
    */
-  private def isValidParamLength(
+  private def getValidParamLength(
       ctx: CodegenContext,
       inputs: Seq[Expression],
-      subExprs: Seq[Expression]): Boolean = {
+      subExprs: Seq[Expression]): Int = {
     // Start value is 1 for `this`.
     inputs.foldLeft(1) { case (curLength, input) =>
       curLength + calculateParamLength(ctx, input)
     } + subExprs.foldLeft(0) { case (curLength, subExpr) =>
       curLength + calculateParamLength(ctx, subExpr)
-    } <= 255
+    }
   }
 
   /**
@@ -222,14 +338,20 @@ abstract class Expression extends TreeNode[Expression] {
    */
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     val isNotWholestageCodegen = ctx.INPUT_ROW != null && ctx.currentVars == null
-    val (inputAttrs, inputVars) = getInputVars(ctx)
+    val (inputAttrs, inputVars) = getInputVarsForChildren(ctx)
+    val inputRows = getInputRowsForChildren(ctx)
     val subExprs = getSubExprInChildren(ctx)
-    val isValidParams = isValidParamLength(ctx, inputAttrs, subExprs)
+
+    // Params to include:
+    // 1. Evaluated columns referred by this, children or deferred expressions.
+    // 2. Input rows referred by this, children or deferred expressions.
+    // 3. Eliminated subexpressions.
+    val paramsLength = getValidParamLength(ctx, inputAttrs, subExprs) + inputRows.length
 
     // Puts code into a function if the code is big, when:
     // 1. Not in wholestage codegen, or
-    // 2. Parameter number is allowed for Java's method descriptor.
-    if (eval.code.trim.length > 1024 && (isNotWholestageCodegen || isValidParams)) {
+    // 2. Allowed parameter number for Java's method descriptor.
+    if (eval.code.trim.length > 1024 && (isNotWholestageCodegen || paramsLength <= 255)) {
       val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
         val globalIsNull = ctx.freshName("globalIsNull")
         ctx.addMutableState(ctx.JAVA_BOOLEAN, globalIsNull)
@@ -243,12 +365,20 @@ abstract class Expression extends TreeNode[Expression] {
       val javaType = ctx.javaType(dataType)
       val newValue = ctx.freshName("value")
 
+      // Prepare function parameters.
       val callParams = mutable.ArrayBuffer[String]()
       val funcParams = mutable.ArrayBuffer[String]()
 
       if (ctx.INPUT_ROW != null) {
         callParams += ctx.INPUT_ROW
         funcParams += s"InternalRow ${ctx.INPUT_ROW}"
+      }
+
+      if (inputRows.length > 0) {
+        inputRows.foreach { row =>
+          callParams += row
+          funcParams += s"InternalRow $row"
+        }
       }
 
       if (inputAttrs.length > 0) {
@@ -266,7 +396,7 @@ abstract class Expression extends TreeNode[Expression] {
       val funcName = ctx.freshName(nodeName)
       val funcFullName = ctx.addNewFunction(funcName,
         s"""
-           |private $javaType $funcName(${funcParams.mkString(", ")}) {
+           |private $javaType $funcName(${funcParams.distinct.mkString(", ")}) {
            |  ${eval.code.trim}
            |  $setIsNull
            |  return ${eval.value};
@@ -274,7 +404,7 @@ abstract class Expression extends TreeNode[Expression] {
            """.stripMargin)
 
       eval.value = newValue
-      eval.code = s"$javaType $newValue = $funcFullName(${callParams.mkString(", ")});"
+      eval.code = s"$javaType $newValue = $funcFullName(${callParams.distinct.mkString(", ")});"
     }
   }
 

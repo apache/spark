@@ -55,8 +55,20 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  *                 to null.
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
+ * @param inputRow A term that holds the input row name when generating this code.
+ * @param inputVars A list of [[ExprInputVar]] that holds input variables when generating this code.
  */
-case class ExprCode(var code: String, var isNull: String, var value: String)
+case class ExprCode(
+    var code: String,
+    var isNull: String,
+    var value: String,
+    var inputRow: String = null,
+    val inputVars: mutable.ArrayBuffer[ExprInputVar] = mutable.ArrayBuffer.empty)
+
+/**
+ * Represents an input variable that holds the java type and the [[ExprCode]].
+ */
+case class ExprInputVar(val expr: Expression, val exprCode: ExprCode)
 
 /**
  * State used for subexpression elimination.
