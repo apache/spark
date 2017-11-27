@@ -179,14 +179,6 @@ case class CaseWhen(
     "CASE" + cases + elseCase + " END"
   }
 
-  private def wrapInDoWhileFalse(code: String): String = {
-    s"""
-      do {
-        $code
-      } while (false);
-    """
-  }
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // This variable represents whether the first successful condition is met or not.
     // It is initialized to `false` and it is set to `true` when the first condition which
@@ -232,10 +224,9 @@ case class CaseWhen(
     val allConditions = cases ++ elseCode
 
     val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-        wrapInDoWhileFalse(allConditions.mkString("\n"))
+        allConditions.mkString("\n")
       } else {
         // This generates code like:
-        // do {
         //   conditionMet = caseWhen_1(i);
         //   if(conditionMet) {
         //     continue;
@@ -245,7 +236,14 @@ case class CaseWhen(
         //     continue;
         //   }
         //   ...
-        // } while (false);
+        // and the declared methods are:
+        //   private boolean caseWhen_1234() {
+        //     boolean conditionMet = false;
+        //     do {
+        //       // here the evaluation of the conditions
+        //     } while (false);
+        //     return conditionMet;
+        //   }
         ctx.splitExpressions(allConditions, "caseWhen",
           ("InternalRow", ctx.INPUT_ROW) :: Nil,
           returnType = ctx.JAVA_BOOLEAN,
@@ -253,19 +251,20 @@ case class CaseWhen(
             func =>
               s"""
                 ${ctx.JAVA_BOOLEAN} $conditionMet = false;
-                ${wrapInDoWhileFalse(func)}
+                do {
+                  $func
+                } while (false);
                 return $conditionMet;
               """
           },
           foldFunctions = { funcCalls =>
-            val loopBody = funcCalls.map { funcCall =>
+            funcCalls.map { funcCall =>
               s"""
                 $conditionMet = $funcCall;
                 if ($conditionMet) {
                   continue;
                 }"""
             }.mkString
-            wrapInDoWhileFalse(loopBody)
           })
       }
 
@@ -273,7 +272,9 @@ case class CaseWhen(
       ${ev.isNull} = true;
       ${ev.value} = ${ctx.defaultValue(dataType)};
       ${ctx.JAVA_BOOLEAN} $conditionMet = false;
-      $code""")
+      do {
+        $code
+      } while (false);""")
   }
 }
 
