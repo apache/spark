@@ -609,17 +609,26 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       df.write.format("parquet").bucketBy(8, "j", "k").saveAsTable("bucketed_table")
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-        sql("""
-              |SELECT *
-              |FROM (
-              |  SELECT a.i, a.j, a.k
-              |  FROM bucketed_table a
-              |  JOIN table1 b
-              |  ON a.i = b.i
-              |) c
-              |JOIN table2
-              |ON c.i = table2.i
-              |""".stripMargin).explain()
+        checkAnswer(
+          sql("""
+                |SELECT ab.i, ab.j, ab.k, c.i, c.j, c.k
+                |FROM (
+                |  SELECT a.i, a.j, a.k
+                |  FROM bucketed_table a
+                |  JOIN table1 b
+                |  ON a.i = b.i
+                |) ab
+                |JOIN table2 c
+                |ON ab.i = c.i
+                |""".stripMargin),
+          sql("""
+                |SELECT a.i, a.j, a.k, c.i, c.j, c.k
+                |FROM bucketed_table a
+                |JOIN table1 b
+                |ON a.i = b.i
+                |JOIN table2 c
+                |ON a.i = c.i
+                |""".stripMargin))
       }
     }
   }
