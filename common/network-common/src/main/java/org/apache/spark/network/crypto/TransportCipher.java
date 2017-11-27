@@ -204,6 +204,63 @@ public class TransportCipher {
     }
 
     @Override
+    public long transferred() {
+      return transferred;
+    }
+
+    /**
+     * Override this due to different return types of ReferenceCounted.touch and FileRegion.touch.
+     */
+    @Override
+    public EncryptedMessage touch() {
+      super.touch();
+      return this;
+    }
+
+    @Override
+    public EncryptedMessage touch(Object o) {
+      if (region != null) {
+        region.touch(o);
+      }
+      if (buf != null) {
+        buf.touch(o);
+      }
+      return this;
+    }
+
+    /**
+     * Override this due to different return types of ReferenceCounted.touch and FileRegion.touch.
+     */
+    @Override
+    public EncryptedMessage retain() {
+      super.retain();
+      return this;
+    }
+
+    @Override
+    public EncryptedMessage retain(int increment) {
+      super.retain(increment);
+      if (region != null) {
+        region.retain(increment);
+      }
+      if (buf != null) {
+        buf.retain(increment);
+      }
+      return this;
+    }
+
+    @Override
+    public boolean release(int decrement) {
+      if (region != null) {
+        region.release(decrement);
+      }
+      if (buf != null) {
+        buf.release(decrement);
+      }
+      return super.release(decrement);
+    }
+
+    @Override
     public long transferTo(WritableByteChannel target, long position) throws IOException {
       Preconditions.checkArgument(position == transfered(), "Invalid position.");
 
