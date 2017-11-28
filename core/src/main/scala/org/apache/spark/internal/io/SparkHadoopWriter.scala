@@ -60,17 +60,17 @@ object SparkHadoopWriter extends Logging {
       config: HadoopWriteConfigUtil[K, V]): Unit = {
     // Extract context and configuration from RDD.
     val sparkContext = rdd.context
-    val stageId = rdd.id
+    val commitJobId = rdd.id
 
     // Set up a job.
     val jobTrackerId = createJobTrackerID(new Date())
-    val jobContext = config.createJobContext(jobTrackerId, stageId)
+    val jobContext = config.createJobContext(jobTrackerId, commitJobId)
     config.initOutputFormat(jobContext)
 
     // Assert the output format/key/value class is set in JobConf.
     config.assertConf(jobContext, rdd.conf)
 
-    val committer = config.createCommitter(stageId)
+    val committer = config.createCommitter(commitJobId)
     committer.setupJob(jobContext)
 
     // Try to write all RDD partitions as a Hadoop OutputFormat.
@@ -80,6 +80,7 @@ object SparkHadoopWriter extends Logging {
           context = context,
           config = config,
           jobTrackerId = jobTrackerId,
+          commitJobId = commitJobId,
           sparkStageId = context.stageId,
           sparkPartitionId = context.partitionId,
           sparkAttemptNumber = context.attemptNumber,
@@ -102,6 +103,7 @@ object SparkHadoopWriter extends Logging {
       context: TaskContext,
       config: HadoopWriteConfigUtil[K, V],
       jobTrackerId: String,
+      commitJobId: Int,
       sparkStageId: Int,
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
@@ -109,7 +111,7 @@ object SparkHadoopWriter extends Logging {
       iterator: Iterator[(K, V)]): TaskCommitMessage = {
     // Set up a task.
     val taskContext = config.createTaskAttemptContext(
-      jobTrackerId, sparkStageId, sparkPartitionId, sparkAttemptNumber)
+      jobTrackerId, commitJobId, sparkPartitionId, sparkAttemptNumber)
     committer.setupTask(taskContext)
 
     val (outputMetrics, callback) = initHadoopOutputMetrics(context)
@@ -131,7 +133,7 @@ object SparkHadoopWriter extends Logging {
         }
 
         config.closeWriter(taskContext)
-        committer.commitTask(taskContext)
+        committer.commitTask(taskContext, sparkStageId)
       }(catchBlock = {
         // If there is an error, release resource and then abort the task.
         try {

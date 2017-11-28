@@ -102,6 +102,11 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
       s"$this does not support adding files with an absolute path")
   }
 
+  override def commitTask(taskContext: TaskAttemptContext, stageId: Int): TaskCommitMessage = {
+    commitTask(taskContext)
+  }
+
+  private[spark]
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
     if (addedFiles.nonEmpty) {
       val fs = new Path(addedFiles.head).getFileSystem(taskContext.getConfiguration)
