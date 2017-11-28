@@ -225,34 +225,48 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("Shouldn't change broadcast join buildSide if user clearly specified") {
-    spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value").createTempView("table1")
-    spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value").createTempView("table2")
-
     def assertJoinBuildSide(pair: (String, BuildSide)): Any = {
       val (sqlString, s) = pair
       val df = sql(sqlString)
-      val physical = df.queryExecution.executedPlan
-      physical match {
+      val executedPlan = df.queryExecution.executedPlan
+      executedPlan match {
         case b: BroadcastNestedLoopJoinExec =>
           assert(b.buildSide === s)
-        case h: WholeStageCodegenExec =>
-          assert(h.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === s)
+        case w: WholeStageCodegenExec =>
+          assert(w.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === s)
       }
     }
 
-    Seq(
-      ("SELECT /*+ MAPJOIN(t1) */ * FROM table1 t1 JOIN table2 t2 ON t1.key = t2.key", BuildLeft),
-      ("SELECT /*+ MAPJOIN(t2) */ * FROM table1 t1 JOIN table2 t2 ON t1.key = t2.key", BuildRight)
-    ).foreach(assertJoinBuildSide)
+    withTempView("t1", "t2") {
+      spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value").createTempView("t1")
+      spark.createDataFrame(Seq((1, "1"), (2, "12.3"), (2, "123"))).toDF("key", "value")
+        .createTempView("t2")
 
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val t1Size = spark.table("t1").queryExecution.analyzed.children.head.stats.sizeInBytes
+      val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
+      assert(t1Size < t2Size)
+
       Seq(
-        ("SELECT /*+ MAPJOIN(table1) */ * FROM table1 JOIN table2", BuildLeft),
-        ("SELECT /*+ MAPJOIN(table2) */ * FROM table1 JOIN table2", BuildRight),
-        ("SELECT /*+ MAPJOIN(table1) */ * FROM table1 FULL OUTER JOIN table2", BuildLeft),
-        ("SELECT /*+ MAPJOIN(table2) */ * FROM table1 FULL OUTER JOIN table2", BuildRight)
+        ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", BuildLeft),
+        ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2 ON t1.key = t2.key", BuildRight),
+        ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2 ON t1.key = t2.key", BuildLeft),
+        ("SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2 ON t1.key = t2.key", BuildLeft),
+        ("SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", BuildRight)
       ).foreach(assertJoinBuildSide)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+        SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        Seq(
+          ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2", BuildLeft),
+          ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 FULL JOIN t2", BuildLeft),
+          ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", BuildRight),
+          ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2", BuildLeft),
+          ("SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2", BuildLeft),
+          ("SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2", BuildRight),
+          ("SELECT /*+ MAPJOIN(t1) */ * FROM t1 FULL OUTER JOIN t2", BuildLeft),
+          ("SELECT /*+ MAPJOIN(t2) */ * FROM t1 FULL OUTER JOIN t2", BuildRight)
+        ).foreach(assertJoinBuildSide)
+      }
     }
   }
 }

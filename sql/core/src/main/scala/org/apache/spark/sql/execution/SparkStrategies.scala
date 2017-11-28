@@ -94,7 +94,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * - Broadcast: if one side of the join has an estimated physical size that is smaller than the
    *     user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold
    *     or if that side has an explicit broadcast hint (e.g. the user applied the
-   *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame), then that side
+   *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame or
+   *     a MAPJOIN comment in SQL queries), then that side
    *     of the join will be broadcasted and the other side will be streamed, with no shuffling
    *     performed. If both sides of the join are eligible to be broadcasted then the
    * - Shuffle hash join: if the average size of a single partition is small enough to build a hash
@@ -149,7 +150,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
-      // --- BroadcastHashJoin with hint ----------------------------------------------------------
+      // --- BroadcastHashJoin --------------------------------------------------------------------
+
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+        if canBuildRight(joinType) && canBuildLeft(joinType)
+          && left.stats.hints.broadcast && right.stats.hints.broadcast =>
+       if (right.stats.sizeInBytes <= left.stats.sizeInBytes) {
+         Seq(joins.BroadcastHashJoinExec(
+           leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
+       } else {
+         Seq(joins.BroadcastHashJoinExec(
+           leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
+       }
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if canBuildRight(joinType) && right.stats.hints.broadcast =>
@@ -160,8 +172,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if canBuildLeft(joinType) && left.stats.hints.broadcast =>
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
-
-      // --- BroadcastHashJoin --------------------------------------------------------------------
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if canBuildRight(joinType) && canBroadcast(right) =>
@@ -200,6 +210,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcasted
       case j @ logical.Join(left, right, joinType, condition)
+        if canBuildRight(joinType) && canBuildLeft(joinType)
+          && left.stats.hints.broadcast && right.stats.hints.broadcast =>
+        if (right.stats.sizeInBytes <= left.stats.sizeInBytes) {
+          joins.BroadcastNestedLoopJoinExec(
+            planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
+        } else {
+          joins.BroadcastNestedLoopJoinExec(
+            planLater(left), planLater(right), BuildLeft, joinType, condition) :: Nil
+        }
+
+      case j @ logical.Join(left, right, joinType, condition)
         if canBuildRight(joinType) && right.stats.hints.broadcast =>
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
@@ -223,9 +244,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
-          if (right.stats.hints.broadcast) {
+          if (right.stats.hints.broadcast && !left.stats.hints.broadcast) {
             BuildRight
-          } else if (left.stats.hints.broadcast) {
+          } else if (left.stats.hints.broadcast && !right.stats.hints.broadcast) {
             BuildLeft
           } else if (right.stats.sizeInBytes <= left.stats.sizeInBytes) {
             BuildRight

@@ -1492,6 +1492,19 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
 </table>
 
+## Broadcast Hint for SQL Queries
+
+Broadcast hint is a way for users to manually annotate a query and suggest to the query optimizer the join method. 
+It is very useful when the query optimizer cannot make optimal decision with respect to join methods 
+due to conservativeness or the lack of proper statistics. The hint syntax looks like the following 
+(Note that we accept `BROADCAST`, `BROADCASTJOIN` and `MAPJOIN` for broadcast hint):
+
+{% highlight sql %}
+
+SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2 ON t1.key = t2.key
+
+{% endhighlight %}
+
 # Distributed SQL Engine
 
 Spark SQL can also act as a distributed query engine using its JDBC/ODBC or command-line interface.
