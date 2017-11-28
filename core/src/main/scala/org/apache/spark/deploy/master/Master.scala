@@ -671,10 +671,16 @@ private[deploy] class Master(
       // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
       if (app.coresLeft >= coresPerExecutor) {
         // Filter out workers that don't have enough resources to launch an executor
-        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+        var usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
             worker.coresFree >= coresPerExecutor)
           .sortBy(_.coresFree).reverse
+
+        // The previous schedule iteration has launched the executor for this App.
+        if (spreadOutApps && app.coresGranted > 0) {
+          // sort by executors which have assigned for this app per worker (ascend)
+          usableWorkers = usableWorkers.sortBy(w => app.executors.values.count(_.worker == w))
+        }
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
         // Now that we've decided how many cores to allocate on each worker, let's allocate them
