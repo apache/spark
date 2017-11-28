@@ -108,11 +108,23 @@ class _ImageSchema(object):
         """
         Converts an image to an array with metadata.
 
-        :param image: The image to be converted.
+        :param `Row` image: A row that contains the image to be converted. It should
+            have the attributes specified in `ImageSchema.imageSchema`.
         :return: a `numpy.ndarray` that is an image.
 
         .. versionadded:: 2.3.0
         """
+
+        if not isinstance(image, Row):
+            raise TypeError(
+                "image argument should be pyspark.sql.types.Row; however, "
+                "it got [%s]." % type(image))
+
+        if not hasattr(image, "height") or \
+           not hasattr(image, "width") or \
+           not hasattr(image, "nChannels"):
+            raise ValueError(
+                "image argument should have attributes specified in ImageSchema.imageSchema.")
 
         height = image.height
         width = image.width
@@ -127,15 +139,20 @@ class _ImageSchema(object):
         """
         Converts an array with metadata to a two-dimensional image.
 
-        :param array array: The array to convert to image.
+        :param `numpy.ndarray` array: The array to convert to image.
         :param str origin: Path to the image, optional.
         :return: a :class:`Row` that is a two dimensional image.
 
         .. versionadded:: 2.3.0
         """
 
+        if not isinstance(array, np.ndarray):
+            raise TypeError(
+                "array argument should be numpy.ndarray; however, it got [%s]." % type(array))
+
         if array.ndim != 3:
             raise ValueError("Invalid array shape")
+
         height, width, nChannels = array.shape
         ocvTypes = ImageSchema.ocvTypes
         if nChannels == 1:
@@ -146,7 +163,12 @@ class _ImageSchema(object):
             mode = ocvTypes["CV_8UC4"]
         else:
             raise ValueError("Invalid number of channels")
-        data = bytearray(array.astype(dtype=np.uint8).ravel())
+
+        # Running `bytearray(numpy.array([1]))` fails in specific Python versions
+        # with a specific Numpy version, for example in Python 3.6.0 and NumPy 1.13.3.
+        # Here, it avoids it by converting it to bytes.
+        data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order
         # when the new DataFrame is created by UDF
