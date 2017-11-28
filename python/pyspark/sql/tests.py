@@ -1753,7 +1753,7 @@ class SQLTests(ReusedSQLTestCase):
             StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
             StructType([StructField("f1", LongType()), StructField("f2", StringType())])
         ), StructType([StructField("f1", LongType()), StructField("f2", StringType())]))
-        with self.assertRaisesRegexp(TypeError, r'structField\("f1"\)'):
+        with self.assertRaisesRegexp(TypeError, 'structField\("f1"\)'):
             _merge_type(
                 StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
                 StructType([StructField("f1", DoubleType()), StructField("f2", StringType())]))
@@ -1762,7 +1762,7 @@ class SQLTests(ReusedSQLTestCase):
             StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]),
             StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())])
         ), StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]))
-        with self.assertRaisesRegexp(TypeError, r'structField\("f1"\)'):
+        with self.assertRaisesRegexp(TypeError, 'structField\("f1"\)'):
             _merge_type(
                 StructType([
                     StructField("f1", ArrayType(LongType())),
@@ -1781,7 +1781,7 @@ class SQLTests(ReusedSQLTestCase):
         ), StructType([
             StructField("f1", MapType(StringType(), LongType())),
             StructField("f2", StringType())]))
-        with self.assertRaisesRegexp(TypeError, r'structField\("f1"\)'):
+        with self.assertRaisesRegexp(TypeError, 'structField\("f1"\)'):
             _merge_type(
                 StructType([
                     StructField("f1", MapType(StringType(), LongType())),
@@ -1794,7 +1794,7 @@ class SQLTests(ReusedSQLTestCase):
             StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
             StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))])
         ), StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]))
-        with self.assertRaisesRegexp(TypeError, r'structField\("f1"\)\.arrayElement\.mapKey'):
+        with self.assertRaisesRegexp(TypeError, 'structField\("f1"\)\.arrayElement\.mapKey'):
             _merge_type(
                 StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
                 StructType([StructField("f1", ArrayType(MapType(DoubleType(), LongType())))])
