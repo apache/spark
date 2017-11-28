@@ -120,11 +120,10 @@ class _ImageSchema(object):
                 "image argument should be pyspark.sql.types.Row; however, "
                 "it got [%s]." % type(image))
 
-        if not hasattr(image, "height") or \
-           not hasattr(image, "width") or \
-           not hasattr(image, "nChannels"):
+        if any(not hasattr(image, f) for f in self.imageFields):
             raise ValueError(
-                "image argument should have attributes specified in ImageSchema.imageSchema.")
+                "image argument should have attributes specified in "
+                "ImageSchema.imageSchema [%s]." % ", ".join(self.imageFields))
 
         height = image.height
         width = image.width
