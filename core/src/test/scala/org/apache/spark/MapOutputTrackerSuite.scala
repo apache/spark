@@ -302,7 +302,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val newConf = new SparkConf
     newConf.set("spark.sql.adaptive.enabled", "true")
     val rpcEnv = createRpcEnv("test")
-    val tracker = newTrackerMaster()
+    val tracker = newTrackerMaster(newConf)
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, newConf))
     tracker.registerShuffle(10, 2)

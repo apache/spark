@@ -238,7 +238,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     public ManagedBuffer next() {
       final ManagedBuffer block = blockManager.getBlockData(appId, execId, shuffleId,
         mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1], mapIdAndReduceIds[index + 2]);
-      index += 2;
+      index += 3;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;
     }

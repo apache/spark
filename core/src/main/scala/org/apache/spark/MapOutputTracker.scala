@@ -328,6 +328,8 @@ private[spark] class MapOutputTrackerMaster(
   /** Whether to compute locality preferences for reduce tasks */
   private val shuffleLocalityEnabled = conf.getBoolean("spark.shuffle.reduceLocality.enabled", true)
 
+  private val adaptiveEnabled = conf.getBoolean("spark.sql.adaptive.enabled", false)
+
   // Number of map and reduce tasks above which we do not assign preferred locations based on map
   // output sizes. We limit the size of jobs for which assign preferred locations as computing the
   // top locations by size becomes expensive.
@@ -639,7 +641,8 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
-          MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
+          MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses,
+            adaptiveEnabled)
         }
       case None =>
         Seq.empty
@@ -663,6 +666,8 @@ private[spark] class MapOutputTrackerMaster(
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
 
+  private val adaptiveEnabled = conf.getBoolean("spark.sql.adaptive.enabled", false)
+
   val mapStatuses: Map[Int, Array[MapStatus]] =
     new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
 
@@ -674,7 +679,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     val statuses = getStatuses(shuffleId)
     try {
-      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
+      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses,
+        adaptiveEnabled)
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
@@ -857,7 +863,8 @@ private[spark] object MapOutputTracker extends Logging {
       shuffleId: Int,
       startPartition: Int,
       endPartition: Int,
-      statuses: Array[MapStatus]): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      statuses: Array[MapStatus],
+      useContinuousFetch: Boolean): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
     for ((status, mapId) <- statuses.zipWithIndex) {
@@ -866,16 +873,16 @@ private[spark] object MapOutputTracker extends Logging {
         logError(errorMessage)
         throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
       } else {
-        if (SparkEnv.get.conf.getBoolean("spark.sql.adaptive.enabled", false)) {
-          val totalSize: Long = (startPartition until endPartition).map(status.getSizeForBlock).sum
-          splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
-            ((ContinuousShuffleBlockId(shuffleId, mapId,
-              startPartition, endPartition - startPartition), totalSize))
-        } else {
+        if (!useContinuousFetch) {
           for (part <- startPartition until endPartition) {
             splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
               ((ShuffleBlockId(shuffleId, mapId, part), status.getSizeForBlock(part)))
           }
+        } else {
+          val totalSize: Long = (startPartition until endPartition).map(status.getSizeForBlock).sum
+          splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
+            ((ContinuousShuffleBlockId(shuffleId, mapId,
+              startPartition, endPartition - startPartition), totalSize))
         }
       }
     }
