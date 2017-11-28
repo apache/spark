@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.StructType
@@ -367,13 +368,14 @@ case class CatalogStatistics(
    * on column names.
    */
   def toPlanStats(planOutput: Seq[Attribute], cboEnabled: Boolean): Statistics = {
-    if (cboEnabled) {
-      val attrStats = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
-      Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
-        attributeStats = AttributeMap(attrStats))
+    if (cboEnabled && rowCount.isDefined) {
+      val attrStats = AttributeMap(planOutput.flatMap(a => colStats.get(a.name).map(a -> _)))
+      // Estimate size as number of rows * row size.
+      val size = EstimationUtils.getOutputSize(planOutput, rowCount.get, attrStats)
+      Statistics(sizeInBytes = size, rowCount = rowCount, attributeStats = attrStats)
     } else {
-      // When CBO is disabled, we apply the size-only estimation strategy, so there's no need to
-      // propagate other statistics from catalog to the plan.
+      // When CBO is disabled or the table doesn't have other statistics, we apply the size-only
+      // estimation strategy and only propagate sizeInBytes in statistics.
       Statistics(sizeInBytes = sizeInBytes)
     }
   }
