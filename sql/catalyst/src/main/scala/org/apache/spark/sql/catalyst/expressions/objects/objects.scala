@@ -101,7 +101,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
         """
       }
     }
-    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
+    val argCode = ctx.splitExpressions(argCodes)
 
     (argCode, argValues.mkString(", "), resultIsNull)
   }
@@ -1119,7 +1119,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
          """
     }
 
-    val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
+    val childrenCode = ctx.splitExpressions(childrenCodes)
     val schemaField = ctx.addReferenceObj("schema", schema)
 
     val code = s"""
@@ -1254,7 +1254,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
            ${javaBeanInstance}.$setterMethod(${fieldGen.value});
          """
     }
-    val initializeCode = ctx.splitExpressions(ctx.INPUT_ROW, initialize.toSeq)
+    val initializeCode = ctx.splitExpressions(initialize.toSeq)
 
     val code = s"""
       ${instanceGen.code}

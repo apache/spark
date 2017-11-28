@@ -781,15 +781,18 @@ class CodegenContext {
    * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
    * instead, because classes have a constant pool limit of 65,536 named values.
    *
-   * @param row the variable name of row that is used by expressions
+   * Note that we will extract the current inputs of this context and pass them to the generated
+   * functions. The input is `INPUT_ROW` for normal codegen path, and `currentVars` for whole
+   * stage codegen path. Whole stage codegen path is not supported yet.
+   *
    * @param expressions the codes to evaluate expressions.
    */
-  def splitExpressions(row: String, expressions: Seq[String]): String = {
-    if (row == null || currentVars != null) {
-      // Cannot split these expressions because they are not created from a row object.
+  def splitExpressions(expressions: Seq[String]): String = {
+    // TODO: support whole stage codegen
+    if (INPUT_ROW == null || currentVars != null) {
       return expressions.mkString("\n")
     }
-    splitExpressions(expressions, funcName = "apply", arguments = ("InternalRow", row) :: Nil)
+    splitExpressions(expressions, funcName = "apply", arguments = ("InternalRow", INPUT_ROW) :: Nil)
   }
 
   /**

@@ -1009,6 +1009,15 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE =
+    buildConf("spark.sql.execution.pandas.respectSessionTimeZone")
+      .internal()
+      .doc("When true, make Pandas DataFrame with timestamp type respecting session local " +
+        "timezone when converting to/from Pandas DataFrame. This configuration will be " +
+        "deprecated in the future releases.")
+      .booleanConf
+      .createWithDefault(true)
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -1338,6 +1347,8 @@ class SQLConf extends Serializable with Logging {
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

@@ -63,7 +63,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     val (preprocess, assigns, postprocess, arrayData) =
       GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
     ev.copy(
-      code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
+      code = preprocess + ctx.splitExpressions(assigns) + postprocess,
       value = arrayData,
       isNull = "false")
   }
@@ -216,10 +216,10 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
       s"""
        final boolean ${ev.isNull} = false;
        $preprocessKeyData
-       ${ctx.splitExpressions(ctx.INPUT_ROW, assignKeys)}
+       ${ctx.splitExpressions(assignKeys)}
        $postprocessKeyData
        $preprocessValueData
-       ${ctx.splitExpressions(ctx.INPUT_ROW, assignValues)}
+       ${ctx.splitExpressions(assignValues)}
        $postprocessValueData
        final MapData ${ev.value} = new $mapClass($keyArrayData, $valueArrayData);
       """
@@ -351,24 +351,25 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, s"$values = null;")
-
-    ev.copy(code = s"""
-      $values = new Object[${valExprs.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        valExprs.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
+    val valuesCode = ctx.splitExpressions(
+      valExprs.zipWithIndex.map { case (e, i) =>
+        val eval = e.genCode(ctx)
+        s"""
+          ${eval.code}
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
             $values[$i] = ${eval.value};
           }"""
-        }) +
+      })
+
+    ev.copy(code =
       s"""
-        final InternalRow ${ev.value} = new $rowClass($values);
-        $values = null;
-      """, isNull = "false")
+         |$values = new Object[${valExprs.size}];
+         |$valuesCode
+         |final InternalRow ${ev.value} = new $rowClass($values);
+         |$values = null;
+       """.stripMargin, isNull = "false")
   }
 
   override def prettyName: String = "named_struct"

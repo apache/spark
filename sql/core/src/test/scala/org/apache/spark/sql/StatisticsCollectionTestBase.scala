@@ -224,7 +224,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
     // Check relation statistics
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-      assert(relation.stats.sizeInBytes == 0)
+      assert(relation.stats.sizeInBytes == 1)
       assert(relation.stats.rowCount == Some(0))
       assert(relation.stats.attributeStats.size == 1)
       val (attribute, colStat) = relation.stats.attributeStats.head

@@ -208,7 +208,7 @@ case class ConcatWs(children: Seq[Expression])
         }
       }.unzip
 
-      val codes = ctx.splitExpressions(ctx.INPUT_ROW, evals.map(_.code))
+      val codes = ctx.splitExpressions(evals.map(_.code))
       val varargCounts = ctx.splitExpressions(
         expressions = varargCount,
         funcName = "varargCountsConcatWs",

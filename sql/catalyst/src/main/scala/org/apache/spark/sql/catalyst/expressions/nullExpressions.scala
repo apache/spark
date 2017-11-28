@@ -91,7 +91,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     ev.copy(code = s"""
       ${ev.isNull} = true;
       ${ev.value} = ${ctx.defaultValue(dataType)};
-      ${ctx.splitExpressions(ctx.INPUT_ROW, evals)}""")
+      ${ctx.splitExpressions(evals)}""")
   }
 }
 
