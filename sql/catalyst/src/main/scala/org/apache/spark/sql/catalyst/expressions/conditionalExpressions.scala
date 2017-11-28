@@ -197,28 +197,24 @@ case class CaseWhen(
       val cond = condExpr.genCode(ctx)
       val res = valueExpr.genCode(ctx)
       s"""
-        if(!$conditionMet) {
-          ${cond.code}
-          if (!${cond.isNull} && ${cond.value}) {
-            ${res.code}
-            ${ev.isNull} = ${res.isNull};
-            ${ev.value} = ${res.value};
-            $conditionMet = true;
-            continue;
-          }
-        }
-      """
+         |${cond.code}
+         |if (!${cond.isNull} && ${cond.value}) {
+         |  ${res.code}
+         |  ${ev.isNull} = ${res.isNull};
+         |  ${ev.value} = ${res.value};
+         |  $conditionMet = true;
+         |  continue;
+         |}
+       """.stripMargin
     }
 
     val elseCode = elseValue.map { elseExpr =>
       val res = elseExpr.genCode(ctx)
       s"""
-        if(!$conditionMet) {
-          ${res.code}
-          ${ev.isNull} = ${res.isNull};
-          ${ev.value} = ${res.value};
-        }
-      """
+         |${res.code}
+         |${ev.isNull} = ${res.isNull};
+         |${ev.value} = ${res.value};
+       """.stripMargin
     }
 
     val allConditions = cases ++ elseCode
