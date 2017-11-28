@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkApplication
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesClientFactory
@@ -182,9 +183,17 @@ private[spark] class Client(
   }
 }
 
-private[spark] object Client {
+/**
+ * Main class and entry point of application submission in KUBERNETES mode.
+ */
+private[spark] object Client extends SparkApplication {
 
-  def run(sparkConf: SparkConf, clientArguments: ClientArguments): Unit = {
+  override def start(args: Array[String], conf: SparkConf): Unit = {
+    val parsedArguments = ClientArguments.fromCommandLineArgs(args)
+    run(parsedArguments, conf)
+  }
+
+  private def run(clientArguments: ClientArguments, sparkConf: SparkConf): Unit = {
     val namespace = sparkConf.get(KUBERNETES_NAMESPACE)
     val kubernetesAppId = s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
     val launchTime = System.currentTimeMillis()
@@ -223,17 +232,5 @@ private[spark] object Client {
           loggingPodStatusWatcher)
         client.run()
     }
-  }
-
-   /**
-    * Entry point from SparkSubmit in spark-core
-    *
-    * @param args Array of strings that have interchanging values that will be
-    *             parsed by ClientArguments with the identifiers that precede the values
-    */
-  def main(args: Array[String]): Unit = {
-    val parsedArguments = ClientArguments.fromCommandLineArgs(args)
-    val sparkConf = new SparkConf()
-    run(sparkConf, parsedArguments)
   }
 }
