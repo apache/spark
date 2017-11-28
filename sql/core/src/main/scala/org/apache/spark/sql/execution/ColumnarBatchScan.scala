@@ -109,12 +109,10 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
     ctx.currentVars = null
     val rowidx = ctx.freshName("rowIdx")
+    ctx.addMutableState(ctx.JAVA_INT, rowidx)
     val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
       genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable)
     }
-    // `rowIdx` is a special variable which can't be referred if the parent nodes split expressions.
-    // So we evaluate column outputs right away.
-    val evalColumnsBatchInput = evaluateVariables(columnsBatchInput)
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
     val numRows = ctx.freshName("numRows")
@@ -131,8 +129,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
        |  int $numRows = $batch.numRows();
        |  int $localEnd = $numRows - $idx;
        |  for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
-       |    int $rowidx = $idx + $localIdx;
-       |    $evalColumnsBatchInput
+       |    $rowidx = $idx + $localIdx;
        |    ${consume(ctx, columnsBatchInput).trim}
        |    $shouldStop
        |  }
