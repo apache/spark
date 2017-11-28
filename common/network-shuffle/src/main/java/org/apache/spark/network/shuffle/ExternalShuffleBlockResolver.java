@@ -175,6 +175,10 @@ public class ExternalShuffleBlockResolver {
     return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId, length);
   }
 
+  /**
+   * After [SPARK-9853], we will use (shuffleId, mapId, reduceId, length) to fetch data,
+   * keep this interface for forward compatible.
+   */
   public ManagedBuffer getBlockData(
           String appId,
           String execId,
