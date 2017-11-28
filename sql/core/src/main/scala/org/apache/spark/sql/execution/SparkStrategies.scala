@@ -91,11 +91,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * predicates can be evaluated by matching join keys. If found,  Join implementations are chosen
    * with the following precedence:
    *
-   * - Broadcast: if one side of the join has an estimated physical size that is smaller than the
-   *     user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold
-   *     or if that side has an explicit broadcast hint (e.g. the user applied the
-   *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame or
-   *     a MAPJOIN comment in SQL queries), then that side
+   * - Broadcast: if one side of the join has an explicit broadcast hint (e.g. the user applied the
+   *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame)
+   *     or if that side has an estimated physical size that is smaller than the
+   *     user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold, then that side
    *     of the join will be broadcasted and the other side will be streamed, with no shuffling
    *     performed. If both sides of the join are eligible to be broadcasted then the
    * - Shuffle hash join: if the average size of a single partition is small enough to build a hash

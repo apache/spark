@@ -1496,14 +1496,56 @@ that these options will be deprecated in future release as more optimizations ar
 
 Broadcast hint is a way for users to manually annotate a query and suggest to the query optimizer the join method. 
 It is very useful when the query optimizer cannot make optimal decision with respect to join methods 
-due to conservativeness or the lack of proper statistics. The hint syntax looks like the following 
-(Note that we accept `BROADCAST`, `BROADCASTJOIN` and `MAPJOIN` for broadcast hint):
+due to conservativeness or the lack of proper statistics. 
+Spark Broadcast Hint has higher priority than autoBroadcastJoin mechanism, examples:
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val src = sql("SELECT * FROM src")
+broadcast(src).join(recordsDF, Seq("key")).show()
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> src = sql("SELECT * FROM src");
+broadcast(src).join(recordsDF, Seq("key")).show();
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+src = spark.sql("SELECT * FROM src")
+recordsDF.join(broadcast(src), "key").show()
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+src <- sql("SELECT COUNT(*) FROM src")
+showDF(join(broadcast(src), recordsDF, src$key == recordsDF$key)))
+{% endhighlight %}
+
+</div>
+
+<div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
-
-SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2 ON t1.key = t2.key
-
+SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 {% endhighlight %}
+
+</div>
+</div>
+(Note that we accept `BROADCAST`, `BROADCASTJOIN` and `MAPJOIN` for broadcast hint)
 
 # Distributed SQL Engine
 
