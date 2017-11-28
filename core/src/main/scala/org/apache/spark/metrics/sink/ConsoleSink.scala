@@ -37,9 +37,9 @@ private[spark] class ConsoleSink(
     securityMgr: SecurityManager) extends Sink(property, registry) {
 
   private val reporter: ConsoleReporter = ConsoleReporter.forRegistry(registry)
-      .convertDurationsTo(TimeUnit.MILLISECONDS)
-      .convertRatesTo(TimeUnit.SECONDS)
-      .build()
+    .convertDurationsTo(TimeUnit.MILLISECONDS)
+    .convertRatesTo(TimeUnit.SECONDS)
+    .build()
 
   override def start() {
     reporter.start(pollPeriod, pollUnit)

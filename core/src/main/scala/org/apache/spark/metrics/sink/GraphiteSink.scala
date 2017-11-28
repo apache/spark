@@ -69,10 +69,10 @@ private[spark] class GraphiteSink(
   }
 
   private val reporter: GraphiteReporter = GraphiteReporter.forRegistry(registry)
-      .convertDurationsTo(TimeUnit.MILLISECONDS)
-      .convertRatesTo(TimeUnit.SECONDS)
-      .prefixedWith(prefix)
-      .build(graphite)
+    .convertDurationsTo(TimeUnit.MILLISECONDS)
+    .convertRatesTo(TimeUnit.SECONDS)
+    .prefixedWith(prefix)
+    .build(graphite)
 
   override def start() {
     reporter.start(pollPeriod, pollUnit)

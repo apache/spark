@@ -47,7 +47,7 @@ abstract class Sink(properties: Properties, metricRegistry: MetricRegistry) {
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   /**
-   * Start this metrics Sink, this will be called by MetricsSystem. If this [[Sink]] is failed to
+   * Start this metrics Sink, this will be called by MetricsSystem. If this [[Sink]] fails to
    * start, Metrics system will unregister and remove it.
    */
   def start(): Unit
