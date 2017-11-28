@@ -32,7 +32,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BuildLeft}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -1184,6 +1184,22 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         assert(spark.table("with_parts").filter($"p" === 4).collect().head == Row(3, 4))
       } finally {
         spark.sparkContext.hadoopConfiguration.set(modeConfKey, originalValue)
+      }
+    }
+  }
+
+  test("Wrong Hive table statistics may trigger OOM if enables join reorder in CBO") {
+    withTable("small", "big") {
+      sql("CREATE TABLE small (c1 bigint)" +
+        "TBLPROPERTIES ('numRows'='3', 'rawDataSize'='600','totalSize'='800')")
+      sql("CREATE TABLE big (c1 bigint)" +
+        "TBLPROPERTIES ('numRows'='0', 'rawDataSize'='60000000000', 'totalSize'='8000000000000')")
+
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
+        val plan = sql("select count(*) from small t1 join big t2 on (t1.c1 = t2.c1)")
+          .queryExecution.executedPlan
+        val buildSide = plan.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide
+        assert(buildSide === BuildLeft)
       }
     }
   }
