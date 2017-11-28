@@ -344,9 +344,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
           podsWithKnownExitReasons.put(pod.getMetadata.getName, executorExitReason)
 
           if (!disconnectedPodsByExecutorIdPendingRemoval.containsKey(executorId)) {
-            log.warn(s"Executor with id $executorId was not marked as disconnected, but the" +
-              s" watch received an event of type $action for this executor. The executor may" +
-              " have failed to start in the first place and never registered with the driver.")
+            log.warn(s"Executor with id $executorId was not marked as disconnected, but the " +
+              s"watch received an event of type $action for this executor. The executor may " +
+              "have failed to start in the first place and never registered with the driver.")
           }
           disconnectedPodsByExecutorIdPendingRemoval.put(executorId, pod)
 
@@ -388,8 +388,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
       // container was probably actively killed by the driver.
       if (isPodAlreadyReleased(pod)) {
         ExecutorExited(containerExitStatus, exitCausedByApp = false,
-          s"Container in pod ${pod.getMetadata.getName} exited from explicit termination" +
-            " request.")
+          s"Container in pod ${pod.getMetadata.getName} exited from explicit termination " +
+            "request.")
       } else {
         val containerExitReason = s"Pod ${pod.getMetadata.getName}'s executor container " +
           s"exited with exit status code $containerExitStatus."
