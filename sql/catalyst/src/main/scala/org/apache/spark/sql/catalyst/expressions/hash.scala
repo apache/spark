@@ -270,7 +270,7 @@ abstract class HashExpression[E] extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.isNull = "false"
-    val childrenHash = ctx.splitExpressions(ctx.INPUT_ROW, children.map { child =>
+    val childrenHash = ctx.splitExpressions(children.map { child =>
       val childGen = child.genCode(ctx)
       childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, ev.value, ctx)
@@ -330,9 +330,9 @@ abstract class HashExpression[E] extends Expression {
     } else {
       val bytes = ctx.freshName("bytes")
       s"""
-            final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
-            ${genHashBytes(bytes, result)}
-          """
+         |final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
+         |${genHashBytes(bytes, result)}
+       """.stripMargin
     }
   }
 
@@ -392,7 +392,10 @@ abstract class HashExpression[E] extends Expression {
     val hashes = fields.zipWithIndex.map { case (field, index) =>
       nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
     }
-    ctx.splitExpressions(input, hashes)
+    ctx.splitExpressions(
+      expressions = hashes,
+      funcName = "getHash",
+      arguments = Seq("InternalRow" -> input))
   }
 
   @tailrec
@@ -608,12 +611,17 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.isNull = "false"
     val childHash = ctx.freshName("childHash")
-    val childrenHash = ctx.splitExpressions(ctx.INPUT_ROW, children.map { child =>
+    val childrenHash = ctx.splitExpressions(children.map { child =>
       val childGen = child.genCode(ctx)
-      childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
+      val codeToComputeHash = ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, childHash, ctx)
-      } + s"${ev.value} = (31 * ${ev.value}) + $childHash;" +
-        s"\n$childHash = 0;"
+      }
+      s"""
+         |${childGen.code}
+         |$codeToComputeHash
+         |${ev.value} = (31 * ${ev.value}) + $childHash;
+         |$childHash = 0;
+       """.stripMargin
     })
 
     ctx.addMutableState(ctx.javaType(dataType), ev.value)
