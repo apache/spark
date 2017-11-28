@@ -77,16 +77,16 @@ private[mesos] class MesosSubmitRequestServlet(
   private def buildDriverDescription(request: CreateSubmissionRequest): MesosDriverDescription = {
     // Required fields, including the main class because python is not yet supported
     val appResource = Option(request.appResource).getOrElse {
-      throw new SubmitRestMissingFieldException("Application jar is missing.")
+      throw new SubmitRestMissingFieldException("Application jar 'appResource' is missing.")
     }
     val mainClass = Option(request.mainClass).getOrElse {
-      throw new SubmitRestMissingFieldException("Main class is missing.")
+      throw new SubmitRestMissingFieldException("Main class 'mainClass' is missing.")
     }
     val appArgs = Option(request.appArgs).getOrElse {
-      throw new SubmitRestMissingFieldException("Application arguments are missing.")
+      throw new SubmitRestMissingFieldException("Application arguments 'appArgs' are missing.")
     }
     val environmentVariables = Option(request.environmentVariables).getOrElse {
-      throw new SubmitRestMissingFieldException("Environment variables are missing.")
+      throw new SubmitRestMissingFieldException("Environment variables 'environmentVariables' are missing.")
     }
 
     // Optional fields
