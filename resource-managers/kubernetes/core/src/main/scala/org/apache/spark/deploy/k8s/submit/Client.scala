@@ -51,9 +51,9 @@ private[spark] object ClientArguments {
   def fromCommandLineArgs(args: Array[String]): ClientArguments = {
     var mainAppResource: Option[MainAppResource] = None
     var mainClass: Option[String] = None
-    val driverArgs = mutable.Buffer.empty[String]
+    val driverArgs = mutable.ArrayBuffer.empty[String]
 
-    args.sliding(2, 2).toList.collect {
+    args.sliding(2, 2).toList.foreach {
       case Array("--primary-java-resource", primaryJavaResource: String) =>
         mainAppResource = Some(JavaMainAppResource(primaryJavaResource))
       case Array("--main-class", clazz: String) =>
@@ -65,8 +65,6 @@ private[spark] object ClientArguments {
         throw new RuntimeException(s"Unknown arguments: $invalid")
     }
 
-    require(mainAppResource.isDefined,
-      "Main app resource must be defined by --primary-java-resource.")
     require(mainClass.isDefined, "Main class must be specified via --main-class")
 
     ClientArguments(
@@ -123,10 +121,11 @@ private[spark] class Client(
         case (confKey, confValue) => s"-D$confKey=$confValue"
       } ++ driverJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
     val driverJavaOptsEnvs: Seq[EnvVar] = resolvedDriverJavaOpts.zipWithIndex.map {
-      case (option, index) => new EnvVarBuilder()
-        .withName(s"$ENV_JAVA_OPT_PREFIX$index")
-        .withValue(option)
-        .build()
+      case (option, index) =>
+        new EnvVarBuilder()
+          .withName(s"$ENV_JAVA_OPT_PREFIX$index")
+          .withValue(option)
+          .build()
     }
 
     val resolvedDriverContainer = new ContainerBuilder(currentDriverSpec.driverContainer)
@@ -221,8 +220,7 @@ private[spark] object Client extends SparkApplication {
       KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,
       sparkConf,
       None,
-      None)) {
-      kubernetesClient =>
+      None)) { kubernetesClient =>
         val client = new Client(
           configurationStepsOrchestrator.getAllConfigurationSteps(),
           sparkConf,

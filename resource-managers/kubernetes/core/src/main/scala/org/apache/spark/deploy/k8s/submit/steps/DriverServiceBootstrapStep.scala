@@ -40,11 +40,11 @@ private[spark] class DriverServiceBootstrapStep(
 
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     require(submissionSparkConf.getOption(DRIVER_BIND_ADDRESS_KEY).isEmpty,
-      s"$DRIVER_BIND_ADDRESS_KEY is not supported in Kubernetes mode, as the driver's bind" +
-      " address is managed and set to the driver pod's IP address.")
+      s"$DRIVER_BIND_ADDRESS_KEY is not supported in Kubernetes mode, as the driver's bind " +
+      "address is managed and set to the driver pod's IP address.")
     require(submissionSparkConf.getOption(DRIVER_HOST_KEY).isEmpty,
-      s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be" +
-      " managed via a Kubernetes service.")
+      s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
+      "managed via a Kubernetes service.")
 
     val preferredServiceName = s"$kubernetesResourceNamePrefix$DRIVER_SVC_POSTFIX"
     val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {

@@ -301,7 +301,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateKillArguments(): Unit = {
-    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
+    if (!master.startsWith("spark://")
+      && !master.startsWith("mesos://")
+      && !master.startsWith("k8s://")) {
       SparkSubmit.printErrorAndExit(
         "Killing submissions is only supported in standalone or Mesos mode!")
     }
@@ -311,7 +313,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateStatusRequestArguments(): Unit = {
-    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
+    if (!master.startsWith("spark://")
+      && !master.startsWith("mesos://")
+      && !master.startsWith("k8s://")) {
       SparkSubmit.printErrorAndExit(
         "Requesting submission statuses is only supported in standalone or Mesos mode!")
     }
@@ -525,8 +529,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     outStream.println(
       s"""
         |Options:
-        |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local
-        |                              (Default: local[*]).
+        |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn,
+        |                              k8s://https://host:port, or local (Default: local[*]).
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
         |                              on one of the worker machines inside the cluster ("cluster")
         |                              (Default: client).
