@@ -23,6 +23,7 @@ import org.apache.commons.lang.NotImplementedException;
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * A column backed by UnsafeArrayData on byte[].
@@ -45,15 +46,6 @@ public final class UnsafeColumnVector extends WritableColumnVector {
     reserveInternal(capacity);
     reset();
     nulls = new byte[capacity];
-  }
-
-  @Override
-  public long valuesNativeAddress() {
-    throw new RuntimeException("Cannot get native address for on heap column");
-  }
-  @Override
-  public long nullsNativeAddress() {
-    throw new RuntimeException("Cannot get native address for on heap column");
   }
 
   @Override
@@ -174,6 +166,11 @@ public final class UnsafeColumnVector extends WritableColumnVector {
       System.arraycopy(array, 0, newArray, 0, count);
       return newArray;
     }
+  }
+
+  @Override
+  protected UTF8String getBytesAsUTF8String(int rowId, int count) {
+    return UTF8String.fromAddress(null, unsafeArray.getBaseOffset() + rowId, count);
   }
 
   //
@@ -475,11 +472,6 @@ public final class UnsafeColumnVector extends WritableColumnVector {
 
   @Override
   public void putArray(int rowId, int offset, int length) {
-    throw new NotImplementedException();
-  }
-
-  @Override
-  public void loadBytes(ColumnarArray array) {
     throw new NotImplementedException();
   }
 
