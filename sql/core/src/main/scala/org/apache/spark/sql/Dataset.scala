@@ -2736,9 +2736,9 @@ class Dataset[T] private[sql](
     // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
     // However, we don't want to complicate the semantics of this API method. Instead, let's
     // give users a friendly error message, pointing them to the new method.
-    val sortOrder = partitionExprs.filter(_.expr.isInstanceOf[SortOrder])
-    if (sortOrder.nonEmpty) throw new IllegalArgumentException(
-      s"""Invalid partitionExprs specified: $sortOrder
+    val sortOrders = partitionExprs.filter(_.expr.isInstanceOf[SortOrder])
+    if (sortOrders.nonEmpty) throw new IllegalArgumentException(
+      s"""Invalid partitionExprs specified: $sortOrders
          |For range partitioning use repartitionByRange(...) instead.
        """.stripMargin)
     RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions)

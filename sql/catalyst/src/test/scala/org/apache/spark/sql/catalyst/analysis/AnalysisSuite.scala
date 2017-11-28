@@ -536,11 +536,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     intercept[IllegalArgumentException] {
       checkPartitioning(numPartitions = -1, exprs = Literal(20))
     }
-
     intercept[IllegalArgumentException] {
       checkPartitioning(numPartitions = 10, exprs = Seq.empty: _*)
     }
-
     intercept[IllegalArgumentException] {
       checkPartitioning(numPartitions = 10, exprs = SortOrder('a.attr, Ascending), 'b.attr)
     }
