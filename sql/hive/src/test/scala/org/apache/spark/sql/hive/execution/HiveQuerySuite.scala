@@ -1196,7 +1196,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         "TBLPROPERTIES ('numRows'='0', 'rawDataSize'='60000000000', 'totalSize'='8000000000000')")
 
       withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
-        val plan = sql("select count(*) from small t1 join big t2 on (t1.c1 = t2.c1)")
+        val plan = sql("select * from small t1 join big t2 on (t1.c1 = t2.c1)")
           .queryExecution.executedPlan
         val buildSide = plan.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide
         assert(buildSide === BuildLeft)
