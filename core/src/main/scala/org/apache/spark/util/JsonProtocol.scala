@@ -389,6 +389,7 @@ private[spark] object JsonProtocol {
         ("Shuffle ID" -> fetchFailed.shuffleId) ~
         ("Map ID" -> fetchFailed.mapId) ~
         ("Reduce ID" -> fetchFailed.reduceId) ~
+        ("Length" -> fetchFailed.reduceId) ~
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
         val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
@@ -897,8 +898,9 @@ private[spark] object JsonProtocol {
         val shuffleId = (json \ "Shuffle ID").extract[Int]
         val mapId = (json \ "Map ID").extract[Int]
         val reduceId = (json \ "Reduce ID").extract[Int]
+        val length = (json \ "Length").extract[Int]
         val message = Utils.jsonOption(json \ "Message").map(_.extract[String])
-        new FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId,
+        FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId, length,
           message.getOrElse("Unknown reason"))
       case `exceptionFailure` =>
         val className = (json \ "Class Name").extract[String]

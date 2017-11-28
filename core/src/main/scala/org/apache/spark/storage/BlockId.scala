@@ -38,7 +38,7 @@ sealed abstract class BlockId {
   // convenience methods
   def asRDDId: Option[RDDBlockId] = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
   def isRDD: Boolean = isInstanceOf[RDDBlockId]
-  def isShuffle: Boolean = isInstanceOf[ShuffleBlockId]
+  def isShuffle: Boolean = isInstanceOf[ShuffleBlockIdBase]
   def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]
 
   override def toString: String = name
@@ -51,9 +51,21 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
 
 // Format of the shuffle block ids (including data and index) should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
+trait ShuffleBlockIdBase {
+  def shuffleId: Int
+  def mapId: Int
+  def reduceId: Int
+}
+
 @DeveloperApi
-case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int, length: Int = 1)
-  extends BlockId {
+case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int)
+  extends BlockId with ShuffleBlockIdBase {
+  override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
+}
+
+@DeveloperApi
+case class ContinuousShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int, length: Int)
+  extends BlockId with ShuffleBlockIdBase {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + length
 }
 
@@ -104,7 +116,8 @@ class UnrecognizedBlockId(name: String)
 @DeveloperApi
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
-  val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
+  val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
+  val CONTINUE_SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
@@ -117,8 +130,10 @@ object BlockId {
   def apply(name: String): BlockId = name match {
     case RDD(rddId, splitIndex) =>
       RDDBlockId(rddId.toInt, splitIndex.toInt)
-    case SHUFFLE(shuffleId, mapId, reduceId, n) =>
-      ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, n.toInt)
+    case SHUFFLE(shuffleId, mapId, reduceId) =>
+      ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
+    case CONTINUE_SHUFFLE(shuffleId, mapId, reduceId, length) =>
+      ContinuousShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, length.toInt)
     case SHUFFLE_DATA(shuffleId, mapId, reduceId) =>
       ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
     case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>

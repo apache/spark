@@ -34,7 +34,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, ContinuousShuffleBlockId, ShuffleBlockId}
 import org.apache.spark.util._
 
 /**
@@ -866,10 +866,17 @@ private[spark] object MapOutputTracker extends Logging {
         logError(errorMessage)
         throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
       } else {
-        val totalSize: Long = (startPartition until endPartition).map(status.getSizeForBlock).sum
-        splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
-          ((ShuffleBlockId(shuffleId, mapId, startPartition, endPartition - startPartition),
-            totalSize))
+        if (SparkEnv.get.conf.getBoolean("spark.sql.adaptive.enabled", false)) {
+          val totalSize: Long = (startPartition until endPartition).map(status.getSizeForBlock).sum
+          splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
+            ((ContinuousShuffleBlockId(shuffleId, mapId,
+              startPartition, endPartition - startPartition), totalSize))
+        } else {
+          for (part <- startPartition until endPartition) {
+            splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
+              ((ShuffleBlockId(shuffleId, mapId, part), status.getSizeForBlock(part)))
+          }
+        }
       }
     }
 
