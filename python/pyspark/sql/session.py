@@ -459,6 +459,8 @@ class SparkSession(object):
                     if isinstance(field.dataType, TimestampType):
                         s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
                         if not copied and s is not pdf[field.name]:
+                            # Copy once if the series is modified to prevent the original Pandas
+                            # DataFrame from being updated
                             pdf = pdf.copy()
                             copied = True
                         pdf[field.name] = s
@@ -466,6 +468,8 @@ class SparkSession(object):
                 for column, series in pdf.iteritems():
                     s = _check_series_convert_timestamps_tz_local(pdf[column], timezone)
                     if not copied and s is not pdf[column]:
+                        # Copy once if the series is modified to prevent the original Pandas
+                        # DataFrame from being updated
                         pdf = pdf.copy()
                         copied = True
                     pdf[column] = s

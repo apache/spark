@@ -3291,6 +3291,7 @@ class ArrowTests(ReusedSQLTestCase):
 
             self.assertNotEqual(result_ny, result_la)
 
+            # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
             result_la_corrected = [Row(**{k: v - timedelta(hours=3) if k == '7_timestamp_t' else v
                                           for k, v in row.asDict().items()})
                                    for row in result_la]
@@ -3834,6 +3835,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
                 df_la = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
                     .withColumn("internal_value", internal_value(col("timestamp")))
                 result_la = df_la.select(col("idx"), col("internal_value")).collect()
+                # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
                 diff = 3 * 60 * 60 * 1000 * 1000 * 1000
                 result_la_corrected = \
                     df_la.select(col("idx"), col("tscopy"), col("internal_value") + diff).collect()
