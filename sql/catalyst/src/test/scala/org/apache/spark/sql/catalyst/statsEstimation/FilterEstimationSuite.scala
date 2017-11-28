@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
  */
 class FilterEstimationSuite extends StatsEstimationTestBase {
 
-  // Suppose our test table has 10 rows and 6 columns.
+  // Suppose our test table has 10 rows and 10 columns.
   // column cint has values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
   // Hence, distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
   val attrInt = AttributeReference("cint", IntegerType)()
@@ -92,14 +92,14 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     nullCount = 0, avgLen = 4, maxLen = 4)
 
 
-  // Suppose our test table has 10 rows and 6 columns.
-  // column cint has values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 with histogram.
-  // Hence, distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
+  // column cintHgm has values: 1, 4, 4, 5, 5, 5, 6, 6, 7, 10 with histogram.
+  // Note that cintHgm has a skewed distribution.
+  // distinctCount:6, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
   val attrIntHgm = AttributeReference("cintHgm", IntegerType)()
-  val hgmInt = Histogram(2.0, Array(HistogramBin(1.0, 2.0, 2),
-    HistogramBin(2.0, 4.0, 2), HistogramBin(4.0, 6.0, 2),
-    HistogramBin(6.0, 8.0, 2), HistogramBin(8.0, 10.0, 2)))
-  val colStatIntHgm = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+  val hgmInt = Histogram(2.0, Array(HistogramBin(1.0, 4.0, 2),
+    HistogramBin(4.0, 5.0, 2), HistogramBin(5.0, 5.0, 1),
+    HistogramBin(5.0, 6.0, 1), HistogramBin(6.0, 10.0, 2)))
+  val colStatIntHgm = ColumnStat(distinctCount = 6, min = Some(1), max = Some(10),
     nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))
 
   val attributeMap = AttributeMap(Seq(
@@ -371,7 +371,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   test("cbool > false") {
     validateEstimatedStats(
       Filter(GreaterThan(attrBool, Literal(false)), childStatsTestPlan(Seq(attrBool), 10L)),
-      Seq(attrBool -> ColumnStat(distinctCount = 1, min = Some(true), max = Some(true),
+      Seq(attrBool -> ColumnStat(distinctCount = 1, min = Some(false), max = Some(true),
         nullCount = 0, avgLen = 1, maxLen = 1)),
       expectedRowCount = 5)
   }
@@ -595,16 +595,16 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     val condition = Not(And(LessThan(attrIntHgm, Literal(3)), Literal(null, IntegerType)))
     validateEstimatedStats(
       Filter(condition, childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Seq(attrIntHgm -> colStatIntHgm.copy(distinctCount = 7)),
-      expectedRowCount = 7)
+      Seq(attrIntHgm -> colStatIntHgm.copy(distinctCount = 6)),
+      expectedRowCount = 9)
   }
 
-  test("cintHgm = 2") {
+  test("cintHgm = 5") {
     validateEstimatedStats(
-      Filter(EqualTo(attrIntHgm, Literal(2)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Seq(attrIntHgm -> ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
+      Filter(EqualTo(attrIntHgm, Literal(5)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 1, min = Some(5), max = Some(5),
         nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
-      expectedRowCount = 1)
+      expectedRowCount = 4)
   }
 
   test("cintHgm = 0") {
@@ -618,9 +618,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   test("cintHgm < 3") {
     validateEstimatedStats(
       Filter(LessThan(attrIntHgm, Literal(3)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Seq(attrIntHgm -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(3),
         nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
-      expectedRowCount = 3)
+      expectedRowCount = 2)
   }
 
   test("cintHgm < 0") {
@@ -634,17 +634,17 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   test("cintHgm <= 3") {
     validateEstimatedStats(
       Filter(LessThanOrEqual(attrIntHgm, Literal(3)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Seq(attrIntHgm -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(3),
         nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
-      expectedRowCount = 3)
+      expectedRowCount = 2)
   }
 
   test("cintHgm > 6") {
     validateEstimatedStats(
       Filter(GreaterThan(attrIntHgm, Literal(6)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Seq(attrIntHgm -> ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 2, min = Some(6), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
-      expectedRowCount = 4)
+      expectedRowCount = 2)
   }
 
   test("cintHgm > 10") {
@@ -658,9 +658,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   test("cintHgm >= 6") {
     validateEstimatedStats(
       Filter(GreaterThanOrEqual(attrIntHgm, Literal(6)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Seq(attrIntHgm -> ColumnStat(distinctCount = 5, min = Some(6), max = Some(10),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 3, min = Some(6), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
-      expectedRowCount = 5)
+      expectedRowCount = 4)
   }
 
   test("cintHgm IS NULL") {
@@ -673,7 +673,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   test("cintHgm IS NOT NULL") {
     validateEstimatedStats(
       Filter(IsNotNull(attrIntHgm), childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Seq(attrIntHgm -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 6, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
       expectedRowCount = 10)
   }
@@ -683,9 +683,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Literal(3)), LessThanOrEqual(attrIntHgm, Literal(6)))
     validateEstimatedStats(
       Filter(condition, childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Seq(attrIntHgm -> ColumnStat(distinctCount = 4, min = Some(3), max = Some(6),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 5, min = Some(3), max = Some(6),
         nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
-      expectedRowCount = 4)
+      expectedRowCount = 8)
   }
 
   test("cintHgm = 3 OR cintHgm = 6") {
@@ -693,7 +693,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     validateEstimatedStats(
       Filter(condition, childStatsTestPlan(Seq(attrIntHgm), 10L)),
       Seq(attrIntHgm -> colStatIntHgm.copy(distinctCount = 2)),
-      expectedRowCount = 2)
+      expectedRowCount = 3)
   }
 
   private def childStatsTestPlan(outList: Seq[Attribute], tableRowCount: BigInt): StatsTestPlan = {
