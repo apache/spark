@@ -86,8 +86,8 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     message.clientSparkVersion = "1.2.3"
     message.appResource = "honey-walnut-cherry.jar"
     message.mainClass = "org.apache.spark.examples.SparkPie"
-    message.appArgs = Array("hdfs://tmp/auth")
-    message.environmentVariables = Map("SPARK_HOME" -> "/test")
+    message.appArgs = Array("two slices")
+    message.environmentVariables = Map("PATH" -> "/dev/null")
     val conf = new SparkConf(false)
     conf.set("spark.app.name", "SparkPie")
     message.sparkProperties = conf.getAll.toMap
