@@ -41,7 +41,35 @@ import org.apache.spark.sql.types._
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
-   test("Hive serde tables should fallback to HDFS for size estimation") {
+
+  test("size estimation for relations based on row size * number of rows") {
+    val dsTbl = "rel_est_ds_table"
+    val hiveTbl = "rel_est_hive_table"
+    withTable(dsTbl, hiveTbl) {
+      spark.range(1000L).write.format("parquet").saveAsTable(dsTbl)
+      sql(s"CREATE TABLE $hiveTbl STORED AS parquet AS SELECT * FROM $dsTbl")
+
+      Seq(dsTbl, hiveTbl).foreach { tbl =>
+        sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS")
+        val catalogStats = getCatalogStatistics(tbl)
+        withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+          val relationStats = spark.table(tbl).queryExecution.optimizedPlan.stats
+          assert(relationStats.sizeInBytes == catalogStats.sizeInBytes)
+          assert(relationStats.rowCount.isEmpty)
+        }
+        spark.sessionState.catalog.refreshTable(TableIdentifier(tbl))
+        withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+          val relationStats = spark.table(tbl).queryExecution.optimizedPlan.stats
+          // Due to compression in parquet files, in this test, file size is smaller than
+          // in-memory size.
+          assert(catalogStats.sizeInBytes < relationStats.sizeInBytes)
+          assert(catalogStats.rowCount == relationStats.rowCount)
+        }
+      }
+    }
+  }
+
+  test("Hive serde tables should fallback to HDFS for size estimation") {
     withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
       withTable("csv_table") {
         withTempDir { tempDir =>
