@@ -39,6 +39,7 @@ from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import IntegralType
 from pyspark.sql.types import *
+from pyspark.util import _exception_message
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
@@ -1881,6 +1882,13 @@ class DataFrame(object):
         1    5    Bob
         """
         import pandas as pd
+
+        if self.sql_ctx.getConf("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
+           == "true":
+            timezone = self.sql_ctx.getConf("spark.sql.session.timeZone")
+        else:
+            timezone = None
+
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
                 from pyspark.sql.types import _check_dataframe_localize_timestamps
@@ -1889,13 +1897,13 @@ class DataFrame(object):
                 if tables:
                     table = pyarrow.concat_tables(tables)
                     pdf = table.to_pandas()
-                    return _check_dataframe_localize_timestamps(pdf)
+                    return _check_dataframe_localize_timestamps(pdf, timezone)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
             except ImportError as e:
                 msg = "note: pyarrow must be installed and available on calling Python process " \
                       "if using spark.sql.execution.arrow.enabled=true"
-                raise ImportError("%s\n%s" % (e.message, msg))
+                raise ImportError("%s\n%s" % (_exception_message(e), msg))
         else:
             pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
@@ -1913,7 +1921,17 @@ class DataFrame(object):
 
             for f, t in dtype.items():
                 pdf[f] = pdf[f].astype(t, copy=False)
-            return pdf
+
+            if timezone is None:
+                return pdf
+            else:
+                from pyspark.sql.types import _check_series_convert_timestamps_local_tz
+                for field in self.schema:
+                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+                    if isinstance(field.dataType, TimestampType):
+                        pdf[field.name] = \
+                            _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
+                return pdf
 
     def _collectAsArrow(self):
         """
