@@ -209,7 +209,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
-    return UTF8String.fromAddress(null, data.getBaseOffset() + rowId, count);
+    return UTF8String.fromAddress(data, data.getBaseOffset() + rowId, count);
   }
 
   //
