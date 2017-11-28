@@ -991,7 +991,11 @@ class CodegenContext {
       val expr = e.head
       // Generate the code for this expression tree.
       val eval = expr.genCode(this)
-      val state = SubExprEliminationState(eval.isNull, eval.value)
+      val state = if (expr.nullable) {
+        SubExprEliminationState(eval.isNull, eval.value)
+      } else {
+        SubExprEliminationState("false", eval.value)
+      }
       e.foreach(subExprEliminationExprs.put(_, state))
       eval.code.trim
     }
@@ -1013,16 +1017,25 @@ class CodegenContext {
     commonExprs.foreach { e =>
       val expr = e.head
       val fnName = freshName("evalExpr")
-      val isNull = s"${fnName}IsNull"
+      val isNull = if (expr.nullable) {
+        s"${fnName}IsNull"
+      } else {
+        ""
+      }
       val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
       val eval = expr.genCode(this)
+      val nullValue = if (expr.nullable) {
+        s"$isNull = ${eval.isNull};"
+      } else {
+        ""
+      }
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
            |  ${eval.code.trim}
-           |  $isNull = ${eval.isNull};
+           |  $nullValue
            |  $value = ${eval.value};
            |}
            """.stripMargin
@@ -1040,12 +1053,18 @@ class CodegenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-      addMutableState(JAVA_BOOLEAN, isNull, s"$isNull = false;")
+      if (expr.nullable) {
+        addMutableState(JAVA_BOOLEAN, isNull, s"$isNull = false;")
+      }
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
+      val state = if (expr.nullable) {
+        SubExprEliminationState(isNull, value)
+      } else {
+        SubExprEliminationState("false", value)
+      }
       e.foreach(subExprEliminationExprs.put(_, state))
     }
   }
