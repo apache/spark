@@ -126,9 +126,9 @@ abstract class Expression extends TreeNode[Expression] {
       eval.inputRow = ctx.INPUT_ROW
     }
     if (ctx.currentVars != null) {
-      val boundRefs = children.flatMap(_.collect {
+      val boundRefs = this.collect {
         case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null => (ordinal, b)
-      }).toMap
+      }.toMap
 
       ctx.currentVars.zipWithIndex.filter(_._1 != null).foreach { case (currentVar, idx) =>
         if (boundRefs.contains(idx)) {
