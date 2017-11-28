@@ -202,19 +202,19 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("SPARK-22431: table with nested type") {
     withTable("t", "x") {
       spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
-      checkAnswer(sql("SELECT * FROM t"), Nil)
+      checkAnswer(spark.table("t"), Nil)
       spark.sql("CREATE TABLE x (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
-      checkAnswer(sql("SELECT * FROM x"), Nil)
+      checkAnswer(spark.table("x"), Nil)
     }
   }
 
   test("SPARK-22431: view with nested type") {
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
-      checkAnswer(spark.sql("SELECT * FROM v"), Row(Row("a", 1)) :: Nil)
+      checkAnswer(spark.table("v"), Row(Row("a", 1)) :: Nil)
 
       spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `b`, 1 AS b) q1")
-      val df = spark.sql("SELECT * FROM v")
+      val df = spark.table("v")
       assert("q1".equals(df.schema.fields(0).name))
       checkAnswer(df, Row(Row("a", 1)) :: Nil)
     }
@@ -231,7 +231,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       spark.sql("ALTER TABLE t2 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
       spark.sql("ALTER TABLE t2 ADD COLUMNS (newcol2 STRUCT<`col1`:STRING, col2:Int>)")
 
-      val df2 = spark.sql("SELECT * FROM t2")
+      val df2 = spark.table("t2")
       checkAnswer(df2, Nil)
       assert("newcol1".equals(df2.schema.fields(2).name))
       assert("newcol2".equals(df2.schema.fields(3).name))
@@ -240,7 +240,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       spark.sql("ALTER TABLE t3 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
       spark.sql("ALTER TABLE t3 ADD COLUMNS (newcol2 STRUCT<`col1`:STRING, col2:Int>)")
 
-      val df3 = spark.sql("SELECT * FROM t3")
+      val df3 = spark.table("t3")
       checkAnswer(df3, Nil)
       assert("newcol1".equals(df3.schema.fields(2).name))
       assert("newcol2".equals(df3.schema.fields(3).name))
