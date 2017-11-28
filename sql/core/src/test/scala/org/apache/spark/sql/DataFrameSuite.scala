@@ -356,6 +356,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData.select('key).repartition(10).select('key),
       testData.select('key).collect().toSeq)
+
+    checkAnswer(
+      testData.select('key).repartition(10).select(spark_partition_id(), 'key),
+      testData.select('key).repartition(10, Seq.empty: _*).select(spark_partition_id(), 'key))
   }
 
   test("repartition with SortOrder") {
@@ -394,6 +398,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b")
         .select(spark_partition_id().as("id"), $"a", $"b"),
       data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b".asc)
+        .select(spark_partition_id().as("id"), $"a", $"b"))
+
+    // .repartitionByRange() with no partition-by expressions behaves the same as .repartition()
+    checkAnswer(
+      data2d.toDF("a", "b").repartitionByRange(data2d.size, Seq.empty: _*)
+        .select(spark_partition_id().as("id"), $"a", $"b"),
+      data2d.toDF("a", "b").repartition(data2d.size)
         .select(spark_partition_id().as("id"), $"a", $"b"))
   }
 
