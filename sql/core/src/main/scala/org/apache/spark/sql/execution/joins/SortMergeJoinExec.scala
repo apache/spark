@@ -675,7 +675,7 @@ private[joins] class SortMergeJoinScanner(
     new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
 
   // Initialization (note: do _not_ want to advance streamed here).
-  advancedBufferedToRowWithNullFreeJoinKey()
+  private lazy val advancedResult = advancedBufferedToRowWithNullFreeJoinKey()
 
   // --- Public methods ---------------------------------------------------------------------------
 
@@ -699,39 +699,42 @@ private[joins] class SortMergeJoinScanner(
       matchJoinKey = null
       bufferedMatches.clear()
       false
-    } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
-      // The new streamed row has the same join key as the previous row, so return the same matches.
-      true
-    } else if (bufferedRow == null) {
-      // The streamed row's join key does not match the current batch of buffered rows and there are
-      // no more rows to read from the buffered iterator, so there can be no more matches.
-      matchJoinKey = null
-      bufferedMatches.clear()
-      false
     } else {
-      // Advance both the streamed and buffered iterators to find the next pair of matching rows.
-      var comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
-      do {
-        if (streamedRowKey.anyNull) {
-          advancedStreamed()
-        } else {
-          assert(!bufferedRowKey.anyNull)
-          comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
-          if (comp > 0) advancedBufferedToRowWithNullFreeJoinKey()
-          else if (comp < 0) advancedStreamed()
-        }
-      } while (streamedRow != null && bufferedRow != null && comp != 0)
-      if (streamedRow == null || bufferedRow == null) {
-        // We have either hit the end of one of the iterators, so there can be no more matches.
+      advancedResult
+      if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
+        // The new streamed row has the same join key as the previous row, so return the same matches.
+        true
+      } else if (bufferedRow == null) {
+        // The streamed row's join key does not match the current batch of buffered rows and there are
+        // no more rows to read from the buffered iterator, so there can be no more matches.
         matchJoinKey = null
         bufferedMatches.clear()
         false
       } else {
-        // The streamed row's join key matches the current buffered row's join, so walk through the
-        // buffered iterator to buffer the rest of the matching rows.
-        assert(comp == 0)
-        bufferMatchingRows()
-        true
+        // Advance both the streamed and buffered iterators to find the next pair of matching rows.
+        var comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
+        do {
+          if (streamedRowKey.anyNull) {
+            advancedStreamed()
+          } else {
+            assert(!bufferedRowKey.anyNull)
+            comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
+            if (comp > 0) advancedBufferedToRowWithNullFreeJoinKey()
+            else if (comp < 0) advancedStreamed()
+          }
+        } while (streamedRow != null && bufferedRow != null && comp != 0)
+        if (streamedRow == null || bufferedRow == null) {
+          // We have either hit the end of one of the iterators, so there can be no more matches.
+          matchJoinKey = null
+          bufferedMatches.clear()
+          false
+        } else {
+          // The streamed row's join key matches the current buffered row's join, so walk through the
+          // buffered iterator to buffer the rest of the matching rows.
+          assert(comp == 0)
+          bufferMatchingRows()
+          true
+        }
       }
     }
   }
@@ -750,6 +753,7 @@ private[joins] class SortMergeJoinScanner(
       bufferedMatches.clear()
       false
     } else {
+      advancedResult
       if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
         // Matches the current group, so do nothing.
       } else {
