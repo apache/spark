@@ -42,12 +42,12 @@ import org.apache.spark.sql.types._
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
-  test("size estimation for relations based on row size * number of rows") {
+  test("size estimation for relations is based on row size * number of rows") {
     val dsTbl = "rel_est_ds_table"
     val hiveTbl = "rel_est_hive_table"
     withTable(dsTbl, hiveTbl) {
       spark.range(1000L).write.format("parquet").saveAsTable(dsTbl)
-      sql(s"CREATE TABLE $hiveTbl STORED AS parquet AS SELECT * FROM $dsTbl")
+      spark.range(1000L).write.format("hive").saveAsTable(hiveTbl)
 
       Seq(dsTbl, hiveTbl).foreach { tbl =>
         sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS")

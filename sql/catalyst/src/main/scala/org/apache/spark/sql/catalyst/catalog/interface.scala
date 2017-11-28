@@ -374,8 +374,8 @@ case class CatalogStatistics(
       val size = EstimationUtils.getOutputSize(planOutput, rowCount.get, attrStats)
       Statistics(sizeInBytes = size, rowCount = rowCount, attributeStats = attrStats)
     } else {
-      // When CBO is disabled, we apply the size-only estimation strategy, so there's no need to
-      // propagate other statistics from catalog to the plan.
+      // When CBO is disabled or the table doesn't have other statistics, we apply the size-only
+      // estimation strategy and only propagate sizeInBytes in statistics.
       Statistics(sizeInBytes = sizeInBytes)
     }
   }
