@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
@@ -71,7 +72,8 @@ trait FileFormat {
    */
   def vectorTypes(
       requiredSchema: StructType,
-      partitionSchema: StructType): Option[Seq[String]] = {
+      partitionSchema: StructType,
+      sqlConf: SQLConf): Option[Seq[String]] = {
     None
   }
 

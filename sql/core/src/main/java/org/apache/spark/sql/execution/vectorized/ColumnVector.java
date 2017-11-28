@@ -63,13 +63,6 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract boolean anyNullsSet();
 
   /**
-   * Returns the off heap ptr for the arrays backing the NULLs and values buffer. Only valid
-   * to call for off heap columns.
-   */
-  public abstract long nullsNativeAddress();
-  public abstract long valuesNativeAddress();
-
-  /**
    * Returns whether the value at rowId is NULL.
    */
   public abstract boolean isNullAt(int rowId);
@@ -188,11 +181,6 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Loads the data into array.byteArray.
-   */
-  public abstract void loadBytes(ColumnarArray array);
-
-  /**
    * Returns the value for rowId.
    */
   public MapData getMap(int ordinal) {
@@ -205,7 +193,8 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract Decimal getDecimal(int rowId, int precision, int scale);
 
   /**
-   * Returns the UTF8String for rowId.
+   * Returns the UTF8String for rowId. Note that the returned UTF8String may point to the data of
+   * this column vector, please copy it if you want to keep it after this column vector is freed.
    */
   public abstract UTF8String getUTF8String(int rowId);
 

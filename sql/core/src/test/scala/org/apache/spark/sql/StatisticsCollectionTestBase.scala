@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, H
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.Decimal
 
@@ -223,11 +223,19 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
 
     // Check relation statistics
-    assert(relation.stats.sizeInBytes == 0)
-    assert(relation.stats.rowCount == Some(0))
-    assert(relation.stats.attributeStats.size == 1)
-    val (attribute, colStat) = relation.stats.attributeStats.head
-    assert(attribute.name == "c1")
-    assert(colStat == emptyColStat)
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      assert(relation.stats.sizeInBytes == 0)
+      assert(relation.stats.rowCount == Some(0))
+      assert(relation.stats.attributeStats.size == 1)
+      val (attribute, colStat) = relation.stats.attributeStats.head
+      assert(attribute.name == "c1")
+      assert(colStat == emptyColStat)
+    }
+    relation.invalidateStatsCache()
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+      assert(relation.stats.sizeInBytes == 0)
+      assert(relation.stats.rowCount.isEmpty)
+      assert(relation.stats.attributeStats.isEmpty)
+    }
   }
 }
