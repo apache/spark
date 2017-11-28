@@ -2424,11 +2424,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-<<<<<<< HEAD
-            <argLine>-ea -Xmx3g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraScalaTestArgs}</argLine>
-=======
-            <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
->>>>>>> origin/master
+            <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraScalaTestArgs}</argLine>
             <stderr/>
             <environmentVariables>
               <!--
