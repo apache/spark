@@ -133,6 +133,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     }
 
     def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, false, false)
+
+    def apply(checkFunction: Row => Unit): CheckAnswerRows =
+      CheckAnswerRows(null, false, false, checkFunction)
   }
 
   /**
@@ -156,9 +159,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, true, false)
   }
 
-  case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean, isSorted: Boolean)
+  case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean, isSorted: Boolean,
+    checkFunction: Row => Unit = null)
       extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
+    override def toString: String = s"$operatorName: ${
+      if (expectedAnswer != null) expectedAnswer.mkString(",") else "check via function"}"
     private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
 
@@ -551,7 +556,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           case e: ExternalAction =>
             e.runAction()
 
-          case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
+          case CheckAnswerRows(expectedAnswer, lastOnly, isSorted, checkFunction) =>
             verify(currentStream != null, "stream not running")
             // Get the map of source index to the current source objects
             val indexToSource = currentStream
@@ -573,8 +578,19 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                 failTest("Exception while getting data from sink", e)
             }
 
-            QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
-              error => failTest(error)
+            if (expectedAnswer != null) {
+              QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
+                error => failTest(error)
+              }
+            } else {
+              assert(checkFunction != null)
+              sparkAnswer.foreach { row =>
+                try {
+                  checkFunction
+                } catch {
+                  case e: Throwable => failTest(e.toString)
+                }
+              }
             }
         }
         pos += 1
