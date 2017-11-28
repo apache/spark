@@ -182,40 +182,41 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       "CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
 
     queries.foreach(query => {
-      val err = intercept[AnalysisException] {
+      val err = intercept[SparkException] {
         spark.sql(query)
       }.getMessage
-      assert(err.contains("Cannot recognize the data type"))
+      assert(err.contains("Cannot recognize hive type string"))
     })
 
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
-      assert(spark.sql("SELECT * FROM v").count() == 1L)
+      checkAnswer(sql("SELECT q.`a`, q.b FROM v"), Row("a", 1) :: Nil)
 
-      val err = intercept[AnalysisException] {
+      val err = intercept[SparkException] {
         spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
       }.getMessage
-      assert(err.contains("Cannot recognize the data type"))
+      assert(err.contains("Cannot recognize hive type string"))
     }
   }
 
   test("SPARK-22431: table with nested type") {
     withTable("t", "x") {
       spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
-      assert(spark.sql("SELECT * FROM t").count() == 0L)
+      checkAnswer(sql("SELECT * FROM t"), Nil)
       spark.sql("CREATE TABLE x (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
-      assert(spark.sql("SELECT * FROM x").count() == 0L)
+      checkAnswer(sql("SELECT * FROM x"), Nil)
     }
   }
 
   test("SPARK-22431: view with nested type") {
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
-      assert(spark.sql("SELECT * FROM v").count() == 1L)
+      checkAnswer(spark.sql("SELECT * FROM v"), Row(Row("a", 1)) :: Nil)
 
       spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `b`, 1 AS b) q1")
       val df = spark.sql("SELECT * FROM v")
       assert("q1".equals(df.schema.fields(0).name))
+      checkAnswer(df, Row(Row("a", 1)) :: Nil)
     }
   }
 
@@ -231,7 +232,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       spark.sql("ALTER TABLE t2 ADD COLUMNS (newcol2 STRUCT<`col1`:STRING, col2:Int>)")
 
       val df2 = spark.sql("SELECT * FROM t2")
-      assert(df2.count() == 0L)
+      checkAnswer(df2, Nil)
       assert("newcol1".equals(df2.schema.fields(2).name))
       assert("newcol2".equals(df2.schema.fields(3).name))
 
@@ -240,7 +241,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       spark.sql("ALTER TABLE t3 ADD COLUMNS (newcol2 STRUCT<`col1`:STRING, col2:Int>)")
 
       val df3 = spark.sql("SELECT * FROM t3")
-      assert(df3.count() == 0L)
+      checkAnswer(df3, Nil)
       assert("newcol1".equals(df3.schema.fields(2).name))
       assert("newcol2".equals(df3.schema.fields(3).name))
     }
@@ -249,10 +250,10 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("SPARK-22431: negative alter table tests with nested types") {
     withTable("t1") {
       spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
-      val err = intercept[AnalysisException] {
+      val err = intercept[SparkException] {
         spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
       }.getMessage
-      assert(err.contains("Cannot recognize the data type:"))
+      assert(err.contains("Cannot recognize hive type string:"))
    }
   }
 }

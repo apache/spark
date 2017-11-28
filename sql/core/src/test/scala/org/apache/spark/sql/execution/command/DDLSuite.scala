@@ -127,9 +127,9 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
   test("SPARK-22431: view with nested type") {
     withView("t", "v") {
       spark.sql("CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
-      assert(spark.sql("SELECT * FROM t").count() == 1L)
+      checkAnswer(sql("SELECT * FROM t"), Row(Row("a", 1)) :: Nil)
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
-      assert(spark.sql("SELECT * FROM v").count() == 1L)
+      checkAnswer(sql("SELECT * FROM t"), Row(Row("a", 1)) :: Nil)
     }
   }
 }
