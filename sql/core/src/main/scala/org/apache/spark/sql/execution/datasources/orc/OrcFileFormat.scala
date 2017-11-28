@@ -59,10 +59,8 @@ private[sql] object OrcFileFormat {
   }
 }
 
-class DefaultSource extends OrcFileFormat
-
 /**
- * New ORC File Format based on Apache ORC 1.4.1 and above.
+ * New ORC File Format based on Apache ORC.
  */
 class OrcFileFormat
   extends FileFormat

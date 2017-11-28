@@ -27,7 +27,6 @@ import org.apache.orc.storage.serde2.io.{DateWritable, HiveDecimalWritable}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.datasources.orc.OrcUtils.withNullSafe
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -36,16 +35,17 @@ private[orc] class OrcDeserializer(
     requiredSchema: StructType,
     missingColumnNames: Seq[String]) {
 
-  private[this] val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
+  private[this] val currentRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
   private[this] val length = requiredSchema.length
 
-  private[this] val unwrappers = requiredSchema.map { f =>
-    if (missingColumnNames.contains(f.name)) {
-      (value: Any, row: InternalRow, ordinal: Int) => row.setNullAt(ordinal)
-    } else {
-      unwrapperFor(f.dataType)
-    }
+  private[this] val fieldConverters: Array[Converter] = requiredSchema.zipWithIndex.map {
+    case (f, ordinal) =>
+      if (missingColumnNames.contains(f.name)) {
+        null
+      } else {
+        newConverter(f.dataType, new RowUpdater(currentRow, ordinal))
+      }
   }.toArray
 
   def deserialize(orcStruct: OrcStruct): InternalRow = {
@@ -67,160 +67,238 @@ private[orc] class OrcDeserializer(
     while (i < length) {
       val writable = fieldRefs(i)
       if (writable == null) {
-        mutableRow.setNullAt(i)
+        currentRow.setNullAt(i)
       } else {
-        unwrappers(i)(writable, mutableRow, i)
+        fieldConverters(i).set(writable)
       }
       i += 1
     }
-    mutableRow
+    currentRow
   }
 
-  private[this] def unwrapperFor(dataType: DataType): (Any, InternalRow, Int) => Unit =
+  private[this] def newConverter(dataType: DataType, updater: OrcDataUpdater): Converter =
     dataType match {
       case NullType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setNullAt(ordinal)
+        new Converter {
+          override def set(value: Any): Unit = updater.setNullAt()
+        }
 
       case BooleanType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setBoolean(ordinal, value.asInstanceOf[BooleanWritable].get)
+        new Converter {
+          override def set(value: Any): Unit =
+            updater.setBoolean(value.asInstanceOf[BooleanWritable].get)
+        }
 
       case ByteType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setByte(ordinal, value.asInstanceOf[ByteWritable].get)
+        new Converter {
+          override def set(value: Any): Unit = updater.setByte(value.asInstanceOf[ByteWritable].get)
+        }
 
       case ShortType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setShort(ordinal, value.asInstanceOf[ShortWritable].get)
+        new Converter {
+          override def set(value: Any): Unit =
+            updater.setShort(value.asInstanceOf[ShortWritable].get)
+        }
 
       case IntegerType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setInt(ordinal, value.asInstanceOf[IntWritable].get)
+        new Converter {
+          override def set(value: Any): Unit = updater.setInt(value.asInstanceOf[IntWritable].get)
+        }
 
       case LongType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setLong(ordinal, value.asInstanceOf[LongWritable].get)
+        new Converter {
+          override def set(value: Any): Unit = updater.setLong(value.asInstanceOf[LongWritable].get)
+        }
 
       case FloatType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setFloat(ordinal, value.asInstanceOf[FloatWritable].get)
+        new Converter {
+          override def set(value: Any): Unit =
+            updater.setFloat(value.asInstanceOf[FloatWritable].get)
+        }
 
       case DoubleType =>
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row.setDouble(ordinal, value.asInstanceOf[DoubleWritable].get)
+        new Converter {
+          override def set(value: Any): Unit =
+            updater.setDouble(value.asInstanceOf[DoubleWritable].get)
+        }
+
+      case StringType =>
+        new Converter {
+          override def set(value: Any): Unit =
+            updater.set(UTF8String.fromBytes(value.asInstanceOf[Text].copyBytes))
+        }
+
+      case BinaryType =>
+        new Converter {
+          override def set(value: Any): Unit = {
+            val binary = value.asInstanceOf[BytesWritable]
+            val bytes = new Array[Byte](binary.getLength)
+            System.arraycopy(binary.getBytes, 0, bytes, 0, binary.getLength)
+            updater.set(bytes)
+          }
+        }
+
+      case DateType =>
+        new Converter {
+          override def set(value: Any): Unit =
+            updater.set(DateTimeUtils.fromJavaDate(value.asInstanceOf[DateWritable].get))
+        }
+
+      case TimestampType =>
+        new Converter {
+          override def set(value: Any): Unit =
+            updater.set(DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
+        }
+
+      case DecimalType.Fixed(precision, scale) =>
+        new Converter {
+          override def set(value: Any): Unit = {
+            val decimal = value.asInstanceOf[HiveDecimalWritable].getHiveDecimal()
+            val v = Decimal(decimal.bigDecimalValue, decimal.precision(), decimal.scale())
+            v.changePrecision(precision, scale)
+            updater.set(v)
+          }
+        }
+
+      case st: StructType =>
+        new Converter {
+          override def set(value: Any): Unit = {
+            val orcStruct = value.asInstanceOf[OrcStruct]
+            val mutableRow = new SpecificInternalRow(st)
+            val fieldConverters: Array[Converter] = st.zipWithIndex.map { case (f, ordinal) =>
+              if (missingColumnNames.contains(f.name)) {
+                null
+              } else {
+                newConverter(f.dataType, new RowUpdater(mutableRow, ordinal))
+              }
+            }.toArray
+
+            var i = 0
+            val length = st.fields.length
+            while (i < length) {
+              val name = st(i).name
+              val writable = orcStruct.getFieldValue(name)
+              if (writable == null) {
+                mutableRow.setNullAt(i)
+              } else {
+                fieldConverters(i).set(writable)
+              }
+              i += 1
+            }
+            updater.set(mutableRow)
+          }
+        }
+
+      case ArrayType(elementType, _) =>
+        new Converter {
+          override def set(value: Any): Unit = {
+            val arrayDataUpdater = new ArrayDataUpdater(updater)
+            val converter = newConverter(elementType, arrayDataUpdater)
+            value.asInstanceOf[OrcList[WritableComparable[_]]].asScala.foreach { x =>
+              if (x == null) {
+                arrayDataUpdater.set(null)
+              } else {
+                converter.set(x)
+              }
+            }
+            arrayDataUpdater.end()
+          }
+        }
+
+      case MapType(keyType, valueType, _) =>
+        new Converter {
+          override def set(value: Any): Unit = {
+            val mapDataUpdater = new MapDataUpdater(keyType, valueType, updater)
+            mapDataUpdater.set(value)
+            mapDataUpdater.end()
+          }
+        }
+
+      case udt: UserDefinedType[_] =>
+        new Converter {
+          override def set(value: Any): Unit = {
+            val mutableRow = new SpecificInternalRow(new StructType().add("_col1", udt.sqlType))
+            val converter = newConverter(udt.sqlType, new RowUpdater(mutableRow, 0))
+            converter.set(value)
+            updater.set(mutableRow.get(0, dataType))
+          }
+        }
 
       case _ =>
-        val unwrapper = getValueUnwrapper(dataType)
-        (value: Any, row: InternalRow, ordinal: Int) =>
-          row(ordinal) = unwrapper(value)
+        throw new UnsupportedOperationException(s"$dataType is not supported yet.")
     }
 
-  /**
-   * Convert Apache ORC OrcStruct to Apache Spark InternalRow.
-   */
-  private[this] def convertOrcStructToInternalRow(
-      orcStruct: OrcStruct,
-      dataSchema: StructType,
-      requiredSchema: StructType): InternalRow = {
-    val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
-    val unwrappers = requiredSchema.fields.map(_.dataType).map(unwrapperFor).toSeq
-    var i = 0
-    val len = requiredSchema.length
-    val names = orcStruct.getSchema.getFieldNames
-    while (i < len) {
-      val name = requiredSchema(i).name
-      val writable = if (names.contains(name)) {
-        orcStruct.getFieldValue(name)
-      } else {
-        orcStruct.getFieldValue("_col" + dataSchema.fieldIndex(name))
-      }
-      if (writable == null) {
-        mutableRow.setNullAt(i)
-      } else {
-        unwrappers(i)(writable, mutableRow, i)
-      }
-      i += 1
-    }
-    mutableRow
+
+  // --------------------------------------------------------------------------
+  // Converter and Updaters
+  // --------------------------------------------------------------------------
+
+  trait Converter {
+    def set(value: Any): Unit
   }
 
-  /**
-   * Builds a catalyst-value return function ahead of time according to DataType
-   * to avoid pattern matching and branching costs per row.
-   */
-  private[this] def getValueUnwrapper(dataType: DataType): Any => Any = dataType match {
-    case NullType => _ => null
+  trait OrcDataUpdater {
+    def setNullAt(): Unit = ()
+    def set(value: Any): Unit = ()
+    def setBoolean(value: Boolean): Unit = set(value)
+    def setByte(value: Byte): Unit = set(value)
+    def setShort(value: Short): Unit = set(value)
+    def setInt(value: Int): Unit = set(value)
+    def setLong(value: Long): Unit = set(value)
+    def setDouble(value: Double): Unit = set(value)
+    def setFloat(value: Float): Unit = set(value)
+  }
 
-    case BooleanType => withNullSafe(o => o.asInstanceOf[BooleanWritable].get)
+  final class RowUpdater(row: InternalRow, i: Int) extends OrcDataUpdater {
+    override def set(value: Any): Unit = row(i) = value
+    override def setBoolean(value: Boolean): Unit = row.setBoolean(i, value)
+    override def setByte(value: Byte): Unit = row.setByte(i, value)
+    override def setShort(value: Short): Unit = row.setShort(i, value)
+    override def setInt(value: Int): Unit = row.setInt(i, value)
+    override def setLong(value: Long): Unit = row.setLong(i, value)
+    override def setDouble(value: Double): Unit = row.setDouble(i, value)
+    override def setFloat(value: Float): Unit = row.setFloat(i, value)
+  }
 
-    case ByteType => withNullSafe(o => o.asInstanceOf[ByteWritable].get)
-    case ShortType => withNullSafe(o => o.asInstanceOf[ShortWritable].get)
-    case IntegerType => withNullSafe(o => o.asInstanceOf[IntWritable].get)
-    case LongType => withNullSafe(o => o.asInstanceOf[LongWritable].get)
+  final class ArrayDataUpdater(updater: OrcDataUpdater) extends OrcDataUpdater {
+    private val currentArray: ArrayBuffer[Any] = ArrayBuffer.empty[Any]
 
-    case FloatType => withNullSafe(o => o.asInstanceOf[FloatWritable].get)
-    case DoubleType => withNullSafe(o => o.asInstanceOf[DoubleWritable].get)
+    override def set(value: Any): Unit = currentArray += value
 
-    case StringType =>
-      withNullSafe(o => UTF8String.fromBytes(o.asInstanceOf[Text].copyBytes))
+    def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
+  }
 
-    case BinaryType =>
-      withNullSafe { o =>
-        val binary = o.asInstanceOf[BytesWritable]
-        val bytes = new Array[Byte](binary.getLength)
-        System.arraycopy(binary.getBytes, 0, bytes, 0, binary.getLength)
-        bytes
-      }
+  final class MapDataUpdater(
+      keyType: DataType,
+      valueType: DataType,
+      updater: OrcDataUpdater)
+    extends OrcDataUpdater {
 
-    case DateType =>
-      withNullSafe(o => DateTimeUtils.fromJavaDate(o.asInstanceOf[DateWritable].get))
-    case TimestampType =>
-      withNullSafe(o => DateTimeUtils.fromJavaTimestamp(o.asInstanceOf[OrcTimestamp]))
+    private val currentKeys: ArrayBuffer[Any] = ArrayBuffer.empty[Any]
+    private val currentValues: ArrayBuffer[Any] = ArrayBuffer.empty[Any]
 
-    case DecimalType.Fixed(precision, scale) =>
-      withNullSafe { o =>
-        val decimal = o.asInstanceOf[HiveDecimalWritable].getHiveDecimal()
-        val v = Decimal(decimal.bigDecimalValue, decimal.precision(), decimal.scale())
-        v.changePrecision(precision, scale)
-        v
-      }
+    private val keyConverter = newConverter(keyType, new OrcDataUpdater {
+      override def set(value: Any): Unit = currentKeys += value
+    })
+    private val valueConverter = newConverter(valueType, new OrcDataUpdater {
+      override def set(value: Any): Unit = currentValues += value
+    })
 
-    case _: StructType =>
-      withNullSafe { o =>
-        val structValue = convertOrcStructToInternalRow(
-          o.asInstanceOf[OrcStruct],
-          dataType.asInstanceOf[StructType],
-          dataType.asInstanceOf[StructType])
-        structValue
-      }
+    override def set(value: Any): Unit = {
+      value.asInstanceOf[OrcMap[WritableComparable[_], WritableComparable[_]]]
+        .entrySet().asScala.foreach { entry =>
 
-    case ArrayType(elementType, _) =>
-      withNullSafe { o =>
-        val wrapper = getValueUnwrapper(elementType)
-        val data = new ArrayBuffer[Any]
-        o.asInstanceOf[OrcList[WritableComparable[_]]].asScala.foreach { x =>
-          data += wrapper(x)
+        assert(entry != null)
+        keyConverter.set(entry.getKey)
+        assert(valueConverter != null)
+        if (entry.getValue == null) {
+          currentValues += null
+        } else {
+          valueConverter.set(entry.getValue)
         }
-        new GenericArrayData(data.toArray)
       }
+    }
 
-    case MapType(keyType, valueType, _) =>
-      withNullSafe { o =>
-        val keyWrapper = getValueUnwrapper(keyType)
-        val valueWrapper = getValueUnwrapper(valueType)
-        val map = new java.util.TreeMap[Any, Any]
-        o.asInstanceOf[OrcMap[WritableComparable[_], WritableComparable[_]]]
-          .entrySet().asScala.foreach { entry =>
-          map.put(keyWrapper(entry.getKey), valueWrapper(entry.getValue))
-        }
-        ArrayBasedMapData(map.asScala)
-      }
-
-    case udt: UserDefinedType[_] =>
-      withNullSafe { o => getValueUnwrapper(udt.sqlType)(o) }
-
-    case _ =>
-      throw new UnsupportedOperationException(s"$dataType is not supported yet.")
+    def end(): Unit = updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
   }
 }

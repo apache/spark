@@ -33,7 +33,7 @@ private[orc] class OrcSerializer(dataSchema: StructType) {
 
   private[this] lazy val orcStruct: OrcStruct = createOrcValue(dataSchema).asInstanceOf[OrcStruct]
 
-  private[this] lazy val length = dataSchema.length
+  private[this] val length = dataSchema.length
 
   private[this] val writers = dataSchema.map(_.dataType).map(makeWriter).toArray
 
