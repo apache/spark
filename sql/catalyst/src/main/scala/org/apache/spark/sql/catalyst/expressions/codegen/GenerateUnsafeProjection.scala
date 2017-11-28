@@ -160,11 +160,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
     }
 
-    val writeFieldsCode = if (isTopLevel && row == null) {
+    val writeFieldsCode = if (isTopLevel && (row == null || ctx.currentVars != null)) {
       // TODO: support whole stage codegen
       writeFields.mkString("\n")
     } else {
-      assert(row != null)
+      assert(row != null, "the input row name cannot be null when generating code to write it.")
       ctx.splitExpressions(
         expressions = writeFields,
         funcName = "writeFields",

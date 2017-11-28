@@ -362,15 +362,14 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
             $values[$i] = ${eval.value};
           }"""
       })
-    val code =
+
+    ev.copy(code =
       s"""
          |$values = new Object[${valExprs.size}];
          |$valuesCode
          |final InternalRow ${ev.value} = new $rowClass($values);
          |$values = null;
-       """.stripMargin
-
-    ev.copy(code = code, isNull = "false")
+       """.stripMargin, isNull = "false")
   }
 
   override def prettyName: String = "named_struct"
