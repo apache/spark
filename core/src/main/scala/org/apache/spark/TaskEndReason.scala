@@ -94,6 +94,15 @@ case class FetchFailed(
       s"length=$length, message=\n$message\n)"
   }
 
+  def this(
+      bmAddress: BlockManagerId,
+      shuffleId: Int,
+      mapId: Int,
+      reduceId: Int,
+      message: String) = {
+    this(bmAddress, shuffleId, mapId, reduceId, 1, message)
+  }
+
   /**
    * Fetch failures lead to a different failure handling path: (1) we don't abort the stage after
    * 4 task failures, instead we immediately go back to the stage which generated the map output,
@@ -103,6 +112,17 @@ case class FetchFailed(
    * fetch-failures in rapid succession, on all nodes of the cluster, due to one bad node.
    */
   override def countTowardsTaskFailures: Boolean = false
+}
+
+object FetchFailed {
+  def apply(
+      bmAddress: BlockManagerId,
+      shuffleId: Int,
+      mapId: Int,
+      reduceId: Int,
+      message: String): FetchFailed = {
+    new FetchFailed(bmAddress, shuffleId, mapId, reduceId, 1, message)
+  }
 }
 
 /**

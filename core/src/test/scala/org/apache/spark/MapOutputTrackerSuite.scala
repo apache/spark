@@ -27,7 +27,7 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockManagerId, ContinuousShuffleBlockId, ShuffleBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
@@ -299,10 +299,12 @@ class MapOutputTrackerSuite extends SparkFunSuite {
   }
 
   test("fetch contiguous partitions") {
+    val newConf = new SparkConf
+    newConf.set("spark.sql.adaptive.enabled", "true")
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
-      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, newConf))
     tracker.registerShuffle(10, 2)
     assert(tracker.containsShuffle(10))
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
@@ -315,16 +317,16 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val statuses1 = tracker.getMapSizesByExecutorId(10, 0, 2)
     assert(statuses1.toSet ===
       Seq((BlockManagerId("a", "hostA", 1000),
-        ArrayBuffer((ShuffleBlockId(10, 0, 0, 2), size1000 + size10000))),
+        ArrayBuffer((ContinuousShuffleBlockId(10, 0, 0, 2), size1000 + size10000))),
         (BlockManagerId("b", "hostB", 1000),
-          ArrayBuffer((ShuffleBlockId(10, 1, 0, 2), size10000 + size2000))))
+          ArrayBuffer((ContinuousShuffleBlockId(10, 1, 0, 2), size10000 + size2000))))
         .toSet)
     val statuses2 = tracker.getMapSizesByExecutorId(10, 2, 3)
     assert(statuses2.toSet ===
       Seq((BlockManagerId("a", "hostA", 1000),
-        ArrayBuffer((ShuffleBlockId(10, 0, 2, 1), size2000))),
+        ArrayBuffer((ContinuousShuffleBlockId(10, 0, 2, 1), size2000))),
         (BlockManagerId("b", "hostB", 1000),
-          ArrayBuffer((ShuffleBlockId(10, 1, 2, 1), size1000))))
+          ArrayBuffer((ContinuousShuffleBlockId(10, 1, 2, 1), size1000))))
         .toSet)
     assert(0 == tracker.getNumCachedSerializedBroadcast)
     tracker.stop()

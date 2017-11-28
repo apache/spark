@@ -157,7 +157,7 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId). We make assumptions
+   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId, length). We make assumptions
    * about how the hash and sort based shuffles store their data.
    */
   public ManagedBuffer getBlockData(
