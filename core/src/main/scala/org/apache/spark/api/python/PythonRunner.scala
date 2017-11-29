@@ -57,9 +57,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
 
+  private val env = SparkEnv.get
+  private val conf = env.conf
+
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars = funcs.head.funcs.head.envVars
-  protected val pythonExec = funcs.head.funcs.head.pythonExec
+  protected val pythonExec = conf.getOption("spark.executorEnv.PYSPARK_DRIVER_PYTHON")
+    .getOrElse(conf.getOption("spark.executorEnv.PYSPARK_PYTHON")
+      .getOrElse(funcs.head.funcs.head.pythonExec))
   protected val pythonVer = funcs.head.funcs.head.pythonVer
 
   // TODO: support accumulator in multiple UDF
@@ -70,7 +75,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       partitionIndex: Int,
       context: TaskContext): Iterator[OUT] = {
     val startTime = System.currentTimeMillis
-    val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
