@@ -203,6 +203,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       this.appId = appId;
       this.execId = execId;
       String[] blockId0Parts = blockIds[0].split("_");
+      // length == 4: ShuffleBlockId
+      // length == 5: ContinuousShuffleBlockId
       if (!(blockId0Parts.length == 4 || blockId0Parts.length == 5) ||
         !blockId0Parts[0].equals("shuffle")) {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
@@ -222,10 +224,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         shuffleBlockIds[3 * i] = Integer.parseInt(blockIdParts[2]);
         shuffleBlockIds[3 * i + 1] = Integer.parseInt(blockIdParts[3]);
         if (blockIdParts.length == 4) {
-          // ShuffleBlockId
           shuffleBlockIds[3 * i + 2] = 1;
         } else {
-          // ContinuousShuffleBlockId
           shuffleBlockIds[3 * i + 2] = Integer.parseInt(blockIdParts[4]);
         }
       }

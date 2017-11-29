@@ -176,8 +176,7 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * After [SPARK-9853], we will use (shuffleId, mapId, reduceId, length) to fetch data,
-   * keep this interface for backward compatible.
+   * This interface is for backward compatible.
    */
   public ManagedBuffer getBlockData(
       String appId,
