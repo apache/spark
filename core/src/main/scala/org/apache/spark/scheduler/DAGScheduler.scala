@@ -584,6 +584,38 @@ class DAGScheduler(
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
       properties: Properties): JobWaiter[U] = {
+     submitJob[T, U](rdd, (_: Int) => {}, func, partitions, callSite, resultHandler, properties)
+  }
+
+  /**
+   * Create configs on driver as part of commit protocol using a provided function that accepts
+   * an integer (stageId) as parameter and then Submit an action job to the scheduler
+   *
+   * @param rdd target RDD to run tasks on
+   * @param jobSetupFunc This function gets called on the driver after the final stage is known.
+   *   Its primary purpose is as part of the commit protocol, since that needs
+   *   to know the stageId for creating a unique id. See SparkHadoopWriter
+   * @param func a function to run on each partition of the RDD
+   * @param partitions set of partitions to run on; some jobs may not want to compute on all
+   *   partitions of the target RDD, e.g. for operations like first()
+   * @param callSite where in the user program this job was called
+   * @param resultHandler callback to pass each result to
+   * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
+   *
+   * @return a JobWaiter object that can be used to block until the job finishes executing
+   *         or can be used to cancel the job.
+   *
+   * @throws IllegalArgumentException when partitions ids are illegal
+   */
+  private[spark]
+  def submitJob[T, U](
+      rdd: RDD[T],
+      jobSetupFunc: Int => Unit,
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      callSite: CallSite,
+      resultHandler: (Int, U) => Unit,
+      properties: Properties): JobWaiter[U] = {
     // Check to make sure we are not launching a task on a partition that does not exist.
     val maxPartitions = rdd.partitions.length
     partitions.find(p => p >= maxPartitions || p < 0).foreach { p =>
@@ -602,7 +634,7 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, callSite, waiter,
+      jobId, rdd, jobSetupFunc, func2, partitions.toArray, callSite, waiter,
       SerializationUtils.clone(properties)))
     waiter
   }
@@ -628,8 +660,38 @@ class DAGScheduler(
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
       properties: Properties): Unit = {
+    runJob[T, U](rdd, (_: Int) => {}, func, partitions, callSite, resultHandler, properties)
+  }
+
+  /**
+   * Create configs on driver as part of commit protocol using a provided function that accepts
+   * an integer (stageId) as parameter and then run an action job on the given RDD and pass all
+   * the results to the resultHandler function as they arrive.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param jobSetupFunc This function gets called on the driver after the final stage is known.
+   * Its primary purpose is as part of the commit protocol, since that needs
+   * to know the stageId for creating a unique id. See SparkHadoopWriter
+   * @param func a function to run on each partition of the RDD
+   * @param partitions set of partitions to run on; some jobs may not want to compute on all
+   *   partitions of the target RDD, e.g. for operations like first()
+   * @param callSite where in the user program this job was called
+   * @param resultHandler callback to pass each result to
+   * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
+   *
+   * @note Throws `Exception` when the job fails
+   */
+  private[spark]
+  def runJob[T, U](
+      rdd: RDD[T],
+      jobSetupFunc: Int => Unit,
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      callSite: CallSite,
+      resultHandler: (Int, U) => Unit,
+      properties: Properties): Unit = {
     val start = System.nanoTime
-    val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
+    val waiter = submitJob(rdd, jobSetupFunc, func, partitions, callSite, resultHandler, properties)
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
@@ -668,7 +730,8 @@ class DAGScheduler(
     val partitions = (0 until rdd.partitions.length).toArray
     val jobId = nextJobId.getAndIncrement()
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
+      jobId, rdd, (_: Int) => {}, func2, partitions, callSite, listener,
+      SerializationUtils.clone(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -854,6 +917,7 @@ class DAGScheduler(
 
   private[scheduler] def handleJobSubmitted(jobId: Int,
       finalRDD: RDD[_],
+      jobSetupFunc: Int => Unit,
       func: (TaskContext, Iterator[_]) => _,
       partitions: Array[Int],
       callSite: CallSite,
@@ -864,6 +928,7 @@ class DAGScheduler(
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
+      jobSetupFunc(finalStage.id)
     } catch {
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)
@@ -1755,8 +1820,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   }
 
   private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
-    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties) =>
-      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties)
+    case JobSubmitted(jobId, rdd, jobSetupFunc, func, partitions, callSite, listener, properties) =>
+      dagScheduler.handleJobSubmitted(jobId, rdd, jobSetupFunc, func, partitions,
+        callSite, listener, properties)
 
     case MapStageSubmitted(jobId, dependency, callSite, listener, properties) =>
       dagScheduler.handleMapStageSubmitted(jobId, dependency, callSite, listener, properties)

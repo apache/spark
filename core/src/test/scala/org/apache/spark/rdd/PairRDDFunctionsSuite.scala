@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext,
   OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat,
   RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
 import org.apache.hadoop.util.Progressable
+import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.Partitioner
@@ -524,6 +525,13 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
   }
 
+  test("The JobId on driver and executor should be the same during the commit") {
+    // Create more than one rdd to mimic stageId not equal to rddId
+    val pairs = sc.parallelize(Array((1, 2), (2, 3)), 2).
+      map { p => (new Integer(p._1 + 1), new Integer(p._2 + 1)) }.filter { p => p._1 > 0 }
+    pairs.saveAsNewAPIHadoopFile[YetAnotherFakeFormat]("ignored")
+  }
+
   test("saveAsHadoopFile should respect configured output committers") {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
     val conf = new JobConf()
@@ -906,6 +914,40 @@ class NewFakeFormatWithCallback() extends NewFakeFormat {
   override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     new NewFakeWriterWithCallback()
   }
+}
+
+class YetAnotherFakeCommitter extends NewOutputCommitter with Assertions {
+  def setupJob(j: NewJobContext): Unit = {
+    JobID.jobid = j.getJobID().getId
+  }
+
+  def needsTaskCommit(t: NewTaskAttempContext): Boolean = false
+
+  def setupTask(t: NewTaskAttempContext): Unit = {
+    val jobId = t.getTaskAttemptID().getJobID().getId
+    assert(jobId === JobID.jobid)
+  }
+
+  def commitTask(t: NewTaskAttempContext): Unit = {}
+
+  def abortTask(t: NewTaskAttempContext): Unit = {}
+}
+
+class YetAnotherFakeFormat() extends NewOutputFormat[Integer, Integer]() {
+
+  def checkOutputSpecs(j: NewJobContext): Unit = {}
+
+  def getRecordWriter(t: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
+    new NewFakeWriter()
+  }
+
+  def getOutputCommitter(t: NewTaskAttempContext): NewOutputCommitter = {
+    new YetAnotherFakeCommitter()
+  }
+}
+
+object JobID {
+  var jobid = -1
 }
 
 class ConfigTestFormat() extends NewFakeFormat() with Configurable {

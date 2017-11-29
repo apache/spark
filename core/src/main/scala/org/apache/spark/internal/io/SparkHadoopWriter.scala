@@ -25,9 +25,9 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
-import org.apache.hadoop.mapreduce.{JobContext => NewJobContext,
-OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
-TaskAttemptContext => NewTaskAttemptContext, TaskAttemptID => NewTaskAttemptID, TaskType}
+import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputFormat => NewOutputFormat,
+RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttemptContext,
+TaskAttemptID => NewTaskAttemptID, TaskType}
 import org.apache.hadoop.mapreduce.task.{TaskAttemptContextImpl => NewTaskAttemptContextImpl}
 
 import org.apache.spark.{SerializableWritable, SparkConf, SparkException, TaskContext}
@@ -47,7 +47,9 @@ object SparkHadoopWriter extends Logging {
   /**
    * Basic work flow of this command is:
    * 1. Driver side setup, prepare the data source and hadoop configuration for the write job to
-   *    be issued.
+   *    be issued. To create the configurations we also need stageId. However since info about
+   *    stageId is not available yet at this point of execution, a closure is used to create configs
+   *    that will be executed on the driver when the stageId is available in the DAGScheduler.
    * 2. Issues a write job consists of one or more executor side tasks, each of which writes all
    *    rows within an RDD partition.
    * 3. If no exception is thrown in a task, commits that task, otherwise aborts that task;  If any
@@ -60,41 +62,65 @@ object SparkHadoopWriter extends Logging {
       config: HadoopWriteConfigUtil[K, V]): Unit = {
     // Extract context and configuration from RDD.
     val sparkContext = rdd.context
-    val stageId = rdd.id
-
-    // Set up a job.
-    val jobTrackerId = createJobTrackerID(new Date())
-    val jobContext = config.createJobContext(jobTrackerId, stageId)
-    config.initOutputFormat(jobContext)
-
-    // Assert the output format/key/value class is set in JobConf.
-    config.assertConf(jobContext, rdd.conf)
-
-    val committer = config.createCommitter(stageId)
-    committer.setupJob(jobContext)
-
+    val stageInfo: StageInfo = new StageInfo
+    stageInfo.rddConf = rdd.conf
+    stageInfo.isOutputSpecValidationEnabled = SparkHadoopWriterUtils.
+      isOutputSpecValidationEnabled(stageInfo.rddConf)
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
-      val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
-        executeTask(
-          context = context,
-          config = config,
-          jobTrackerId = jobTrackerId,
-          sparkStageId = context.stageId,
-          sparkPartitionId = context.partitionId,
-          sparkAttemptNumber = context.attemptNumber,
-          committer = committer,
-          iterator = iter)
-      })
+      val ret = sparkContext.runJob(rdd, createConf( stageInfo, _, config),
+        (context: TaskContext, iter: Iterator[(K, V)]) => {
+          executeTask(
+            context = context,
+            config = config,
+            jobTrackerId = stageInfo.jobTrackerId,
+            sparkStageId = context.stageId,
+            sparkPartitionId = context.partitionId,
+            sparkAttemptNumber = context.attemptNumber,
+            committer = stageInfo.committer.get,
+            iterator = iter)
+        }, 0 until rdd.partitions.length)
 
-      committer.commitJob(jobContext, ret)
-      logInfo(s"Job ${jobContext.getJobID} committed.")
+      stageInfo.committer.get.commitJob(stageInfo.jobContext, ret)
+      logInfo(s"Job ${stageInfo.jobContext.getJobID} committed.")
     } catch {
       case cause: Throwable =>
-        logError(s"Aborting job ${jobContext.getJobID}.", cause)
-        committer.abortJob(jobContext)
-        throw new SparkException("Job aborted.", cause)
+        logError(s"Aborting job ${stageInfo.jobContext.getJobID}.", cause)
+        // This checks whether the aborting was because of assertConf in createConf method
+        if (stageInfo.committer.isDefined) {
+          stageInfo.committer.get.abortJob(stageInfo.jobContext)
+          throw new SparkException("Job aborted.", cause)
+        }
+        else throw cause
     }
+  }
+
+  /**
+   * This function will be send to DAGScheduler as a closure and gets called on the driver
+   * after the final stage is known. This is because for creating committer, stageId is required.
+   */
+  private def createConf[K, V: ClassTag](
+      stageInfo: StageInfo,
+      stageId: Int,
+      config: HadoopWriteConfigUtil[K, V]): Unit = {
+    stageInfo.stageId = stageId
+    val jobTrackerId = createJobTrackerID(new Date())
+    val jobContext = config.createJobContext(jobTrackerId, stageId)
+    stageInfo.jobTrackerId = jobTrackerId
+    stageInfo.jobContext = jobContext
+    config.initOutputFormat(jobContext)
+
+    // Assert the output format/key/value class is set in JobConf. Since stageInfo.jobContext is,
+    // transient the check for the requirement of output spec validation(necessary for SPARK-4835)
+    // is done here using serializable stageInfo.isOutputSpecValidationEnabled.
+    // The check inside assertConf is not removed since assertConf can be used in other places.
+    if (stageInfo.isOutputSpecValidationEnabled) {
+      config.assertConf(stageInfo.jobContext, stageInfo.rddConf)
+    }
+
+    val committer = config.createCommitter(stageId)
+    stageInfo.committer = Some(committer)
+    committer.setupJob(jobContext)
   }
 
   /** Write a RDD partition out in a single Spark task. */
@@ -387,4 +413,15 @@ class HadoopMapReduceWriteConfigUtil[K, V: ClassTag](conf: SerializableConfigura
       getOutputFormat().checkOutputSpecs(jobContext)
     }
   }
+}
+
+private[spark]
+class StageInfo extends Serializable {
+  var committer: Option[HadoopMapReduceCommitProtocol] = None
+  @transient
+  var jobContext: NewJobContext = null
+  var stageId: Integer = 0
+  var rddConf: SparkConf = null
+  var jobTrackerId: String = ""
+  var isOutputSpecValidationEnabled: Boolean = false
 }

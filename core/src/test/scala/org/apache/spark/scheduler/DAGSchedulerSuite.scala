@@ -315,7 +315,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       listener: JobListener = jobListener,
       properties: Properties = null): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, properties))
+    runEvent(JobSubmitted(jobId, rdd, (_: Int) => {}, func, partitions, CallSite("", ""), listener,
+      properties))
     jobId
   }
 
