@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.{MalformedURLException, URI}
+import java.net.{MalformedURLException, URI, URL}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
@@ -34,7 +34,7 @@ import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{MutableURLClassLoader, ThreadUtils, Utils}
 
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
@@ -307,6 +307,34 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
     assert(sc.listJars().size == 1)
     assert(sc.listJars().head.contains(tmpJar.getName))
+  }
+
+  Seq("local_mode", "non_local_mode").foreach { schedulingMode =>
+    val tempDir = Utils.createTempDir().toString
+    val master = schedulingMode match {
+      case "local_mode" => "local"
+      case "non_local_mode" => "local-cluster[1,1,1024]"
+    }
+    val packageName = s"scala_$schedulingMode"
+    val className = "DummyClass"
+    val jarURI = TestUtils.createDummyJar(tempDir, packageName, className)
+
+    // ensure we reset the classloader after the test completes
+    val originalClassLoader = Thread.currentThread.getContextClassLoader
+    try {
+      // load the exception from the jar
+      val loader = new MutableURLClassLoader(new Array[URL](0), originalClassLoader)
+
+      test(s"jar can be added and used driver side in $schedulingMode") {
+        sc = new SparkContext(master, "test")
+        Thread.currentThread().setContextClassLoader(loader)
+        sc.addJar(jarURI, addToCurrentClassLoader = true)
+        val cl = Utils.getContextOrSparkClassLoader
+        cl.loadClass(s"$packageName.$className")
+      }
+    } finally {
+      Thread.currentThread.setContextClassLoader(originalClassLoader)
+    }
   }
 
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {

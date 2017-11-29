@@ -319,6 +319,32 @@ spark.addFile <- function(path, recursive = FALSE) {
   invisible(callJMethod(sc, "addFile", suppressWarnings(normalizePath(path)), recursive))
 }
 
+
+#' Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
+#'
+#' The \code{path} passed can be either a local file, a file in HDFS (or other Hadoop-supported
+#' filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+#' If \code{addToCurrentClassLoader} is true, add the jar to the current threads' classloader. In
+#' general adding to the current threads' class loader will impact all other application threads
+#' unless they have explicitly changed their class loader.
+#'
+#' @rdname spark.addJar
+#' @param path The path of the jar to be added
+#' @param addToCurrentClassLoader Whether to add the jar to the current driver classloader.
+#' @export
+#' @examples
+#'\dontrun{
+#' spark.addJar("/path/to/something.jar", TRUE)
+#'}
+#' @note spark.addJar since 2.2.0
+spark.addJar <- function(path, addToCurrentClassLoader = FALSE) {
+  normalizedPath <- suppressWarnings(normalizePath(path))
+  sc <- callJMethod(getSparkContext(), "sc")
+  invisible(callJMethod(sc, "addJar", normalizedPath, addToCurrentClassLoader))
+}
+
+
+
 #' Get the root directory that contains files added through spark.addFile.
 #'
 #' @rdname spark.getSparkFilesRootDirectory
