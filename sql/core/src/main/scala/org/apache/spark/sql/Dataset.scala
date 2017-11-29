@@ -518,6 +518,7 @@ class Dataset[T] private[sql](
    * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. It will be saved to files inside the checkpoint
    * directory set with `SparkContext#setCheckpointDir`.
+   *
    * @group basic
    * @since 2.1.0
    */
@@ -536,7 +537,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def checkpoint(eager: Boolean = true): Dataset[T] = _checkpoint(eager = eager)
+  def checkpoint(eager: Boolean): Dataset[T] = _checkpoint(eager = eager)
 
   /**
    * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be
@@ -562,7 +563,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def localCheckpoint(eager: Boolean = true): Dataset[T] = _checkpoint(eager = eager, local = true)
+  def localCheckpoint(eager: Boolean): Dataset[T] = _checkpoint(eager = eager, local = true)
 
   /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
