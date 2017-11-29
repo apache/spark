@@ -1129,29 +1129,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
     testRandomRows(false, 30)
   }
 
-  test("mutable ColumnarBatch rows") {
-    val NUM_ITERS = 10
-    val types = Array(
-      BooleanType, FloatType, DoubleType, IntegerType, LongType, ShortType,
-      DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
-      DecimalType.FloatDecimal, DecimalType.LongDecimal, new DecimalType(5, 2),
-      new DecimalType(12, 2), new DecimalType(30, 10))
-    for (i <- 0 to NUM_ITERS) {
-      val random = new Random(System.nanoTime())
-      val schema = RandomDataGenerator.randomSchema(random, numFields = 20, types)
-      val oldRow = RandomDataGenerator.randomRow(random, schema)
-      val newRow = RandomDataGenerator.randomRow(random, schema)
-
-      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
-        val batch = ColumnVectorUtils.toBatch(schema, memMode, (oldRow :: Nil).iterator.asJava)
-        val columnarBatchRow = batch.getRow(0)
-        newRow.toSeq.zipWithIndex.foreach(i => columnarBatchRow.update(i._2, i._1))
-        compareStruct(schema, columnarBatchRow, newRow, 0)
-        batch.close()
-      }
-    }
-  }
-
   test("exceeding maximum capacity should throw an error") {
     (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
       val column = allocate(1, ByteType, memMode)
