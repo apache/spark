@@ -42,6 +42,8 @@ private[spark] abstract class LiveEntity {
   var lastWriteTime = 0L
 
   def write(store: ElementTrackingStore, now: Long, checkTriggers: Boolean = false): Unit = {
+    // Always check triggers on the first write, since adding an element to the store may
+    // cause the maximum count for the element type to be exceeded.
     store.write(doUpdate(), checkTriggers || lastWriteTime == 0L)
     lastWriteTime = now
   }
