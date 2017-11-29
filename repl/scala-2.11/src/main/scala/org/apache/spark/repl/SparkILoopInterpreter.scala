@@ -40,9 +40,9 @@ class SparkILoopInterpreter(settings: Settings, out: JPrintWriter) extends IMain
         case sym => sym.tpe
       }
 
-      private def pos(name: Name, s: String): Int = fixIndexOf(name, safeIndexOf(name, s))
+      private def safeIndexOf(name: Name, s: String): Int = fixIndexOf(name, pos(name, s))
       private def fixIndexOf(name: Name, idx: Int): Int = if (idx == name.length) -1 else idx
-      private def safeIndexOf(name: Name, s: String): Int = {
+      private def pos(name: Name, s: String): Int = {
         var i = name.pos(s.charAt(0), 0)
         val sLen = s.length()
         if (sLen == 1) return i
