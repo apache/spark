@@ -81,7 +81,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (true, false, Cross, Some(LocalRelation('a.int, 'b.int))),
       (true, false, LeftOuter, Some(Project(Seq('a, Literal(null).as('b)), testRelation1).analyze)),
       (true, false, RightOuter, Some(LocalRelation('a.int, 'b.int))),
-      (true, false, FullOuter, None),
+      (true, false, FullOuter, Some(Project(Seq('a, Literal(null).as('b)), testRelation1).analyze)),
       (true, false, LeftAnti, Some(testRelation1)),
       (true, false, LeftSemi, Some(LocalRelation('a.int))),
 
@@ -90,7 +90,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (false, true, LeftOuter, Some(LocalRelation('a.int, 'b.int))),
       (false, true, RightOuter,
         Some(Project(Seq(Literal(null).as('a), 'b), testRelation2).analyze)),
-      (false, true, FullOuter, None),
+      (false, true, FullOuter, Some(Project(Seq(Literal(null).as('a), 'b), testRelation2).analyze)),
       (false, true, LeftAnti, Some(LocalRelation('a.int))),
       (false, true, LeftSemi, Some(LocalRelation('a.int))),
 
