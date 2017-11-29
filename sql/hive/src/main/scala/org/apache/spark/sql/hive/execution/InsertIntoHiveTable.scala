@@ -102,7 +102,8 @@ case class InsertIntoHiveTable(
       }
 
       // All partition column names in the format of "<column name 1>/<column name 2>/..."
-      val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
+      val partitionColumns = fileSinkConf.getTableInfo.getProperties.
+        getProperty("partition_columns")
       val partitionColumnNames = Option(partitionColumns).map(_.split("/")).getOrElse(Array.empty)
 
       // By this time, the partition map must match the table's partition columns
@@ -148,8 +149,8 @@ case class InsertIntoHiveTable(
             hadoopConf.get(enforceSortingConfig, "true").toBoolean) {
             throw new AnalysisException(message)
           } else {
-            logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and " +
-              s"$enforceSortingConfig are set to false.")
+            logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and "
+              + s"$enforceSortingConfig are set to false.")
           }
         case _ => // do nothing since table has no bucketing
       }
@@ -239,9 +240,9 @@ case class InsertIntoHiveTable(
 
       CommandUtils.updateTableStats(sparkSession, table)
 
-      // It would be nice to just return the childRdd unchanged so insert operations could be chained,
-      // however for now we return an empty list to simplify compatibility checks with hive, which
-      // does not return anything for insert operations.
+      // It would be nice to just return the childRdd unchanged so insert operations could be
+      // chained, however for now we return an empty list to simplify compatibility checks with
+      // hive, which does not return anything for insert operations.
       // TODO: implement hive compatibility as rules.
       Seq.empty[Row]
     } finally {
