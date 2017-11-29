@@ -167,24 +167,8 @@ class ComplexTypesSuite extends PlanTest{
 
   test("SPARK-22570: should not create a lot of instance variables") {
     val ctx = new CodegenContext
-    val codes = (1 to 60000).map(i => CreateArray(Seq(Literal(s"$i"))).genCode(ctx).code)
-    val eval = ctx.splitExpressions(ctx.INPUT_ROW, codes)
-    val codeBody = s"""
-      public ComplexTypesTest generate(Object[] references) {
-        return new ComplexTypesTest(references);
-      }
-      class ComplexTypesTest {
-        Object[] references;
-        ${ctx.declareMutableStates()}
-        public ComplexTypesTest(Object[] references) {
-          ${ctx.initMutableStates()}
-        }
-        public void apply(InternalRow ${ctx.INPUT_ROW}) {
-          ${eval}
-        }
-       ${ctx.declareAddedFunctions()}
-     }"""
-    CodeGenerator.compile(new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+    (1 to 60000).map(i => CreateArray(Seq(Literal(s"$i"))).genCode(ctx).code)
+    assert(ctx.mutableStates.length == 0)
   }
 
   test("simplify map ops") {

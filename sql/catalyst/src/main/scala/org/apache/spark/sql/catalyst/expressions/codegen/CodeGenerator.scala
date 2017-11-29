@@ -185,23 +185,6 @@ class CodegenContext {
   }
 
   /**
-   * Add a mutable state as a field to the generated class if the name has not been added
-   *
-   * @param javaType Java type of the field.
-   * @param variableName Name of the field.
-   * @param initCode The statement(s) to put into the init() method to initialize this field.
-   *                 If left blank, the field will be default-initialized.
-   */
-  def reuseOrAddMutableState(
-      javaType: String,
-      variableName: String,
-      initCode: String = ""): Unit = {
-    if (!mutableStates.exists(s => s._1 == variableName)) {
-      addMutableState(javaType, variableName, initCode)
-    }
-  }
-
-  /**
    * Add buffer variable which stores data coming from an [[InternalRow]]. This methods guarantees
    * that the variable is safely stored, which is important for (potentially) byte array backed
    * data types like: UTF8String, ArrayData, MapData & InternalRow.

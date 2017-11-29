@@ -180,26 +180,13 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-22570: should not create a lot of instance variables") {
+    val N = 16000
     val expr = RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num"))
     val ctx = new CodegenContext
-    val codes = (1 to 16000).map(_ => expr.genCode(ctx).code)
-    val eval = ctx.splitExpressions(ctx.INPUT_ROW, codes)
-    val codeBody = s"""
-      public RegexpExpressionsTest generate(Object[] references) {
-        return new RegexpExpressionsTest(references);
-      }
-      class RegexpExpressionsTest {
-        Object[] references;
-        ${ctx.declareMutableStates()}
-        public RegexpExpressionsTest(Object[] references) {
-          ${ctx.initMutableStates()}
-        }
-        public void apply(InternalRow ${ctx.INPUT_ROW}) {
-          ${eval}
-        }
-       ${ctx.declareAddedFunctions()}
-     }"""
-    CodeGenerator.compile(new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+    (1 to N).map(_ => expr.genCode(ctx).code)
+    // four global variables (lastRegex, pattern, lastReplacement, and lastReplacementInUTF8)
+    // are always required
+    assert(ctx.mutableStates.length == 4 * N)
   }
 
   test("RegexExtract") {

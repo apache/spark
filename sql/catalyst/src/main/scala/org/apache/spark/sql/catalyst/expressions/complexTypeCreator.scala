@@ -63,7 +63,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     val (preprocess, assigns, postprocess, arrayData) =
       GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
     ev.copy(
-      code = preprocess + ctx.splitExpressions(assigns) + postprocess,
+      code = preprocess + assigns + postprocess,
       value = arrayData,
       isNull = "false")
   }
@@ -77,23 +77,22 @@ private [sql] object GenArrayData {
    *
    * @param ctx a [[CodegenContext]]
    * @param elementType data type of underlying array elements
-   * @param elementsCode a set of [[ExprCode]] for each element of an underlying array
+   * @param elementsCode concatenated set of [[ExprCode]] for each element of an underlying array
    * @param isMapKey if true, throw an exception when the element is null
-   * @return (code pre-assignments, assignments to each array elements, code post-assignments,
-   *           arrayData name)
+   * @return (code pre-assignments, concatenated assignments to each array elements,
+   *           code post-assignments, arrayData name)
    */
   def genCodeToCreateArrayData(
       ctx: CodegenContext,
       elementType: DataType,
       elementsCode: Seq[ExprCode],
-      isMapKey: Boolean): (String, Seq[String], String, String) = {
+      isMapKey: Boolean): (String, String, String, String) = {
     val arrayDataName = ctx.freshName("arrayData")
     val numElements = elementsCode.length
 
     if (!ctx.isPrimitiveType(elementType)) {
-      val arrayName = "arrayObject"
+      val arrayName = ctx.freshName("arrayObject")
       val genericArrayClass = classOf[GenericArrayData].getName
-      ctx.reuseOrAddMutableState("Object[]", arrayName)
 
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
@@ -109,9 +108,13 @@ private [sql] object GenArrayData {
          }
        """
       }
+      val assignmentString = ctx.splitExpressions(
+        expressions = assignments,
+        funcName = "apply",
+        extraArguments = ("Object[]", arrayDataName) :: Nil)
 
       (s"$arrayName = new Object[$numElements];",
-       assignments,
+       assignmentString,
        s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
        arrayDataName)
     } else {
@@ -120,7 +123,6 @@ private [sql] object GenArrayData {
         UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
-      ctx.addMutableState("UnsafeArrayData", arrayDataName)
 
       val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
@@ -137,6 +139,10 @@ private [sql] object GenArrayData {
          }
        """
       }
+      val assignmentString = ctx.splitExpressions(
+        expressions = assignments,
+        funcName = "apply",
+        extraArguments = ("UnsafeArrayData", arrayDataName) :: Nil)
 
       (s"""
         byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
@@ -144,7 +150,7 @@ private [sql] object GenArrayData {
         Platform.putLong($arrayName, $baseOffset, $numElements);
         $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
       """,
-       assignments,
+       assignmentString,
        "",
        arrayDataName)
     }
@@ -216,10 +222,10 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
       s"""
        final boolean ${ev.isNull} = false;
        $preprocessKeyData
-       ${ctx.splitExpressions(assignKeys)}
+       $assignKeys
        $postprocessKeyData
        $preprocessValueData
-       ${ctx.splitExpressions(assignValues)}
+       $assignValues
        $postprocessValueData
        final MapData ${ev.value} = new $mapClass($keyArrayData, $valueArrayData);
       """
