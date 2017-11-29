@@ -532,6 +532,14 @@ mesos = Module(
     sbt_test_goals=["mesos/test"]
 )
 
+kubernetes = Module(
+    name="kubernetes",
+    dependencies=[],
+    source_file_regexes=["resource-managers/kubernetes/core"],
+    build_profile_flags=["-Pkubernetes"],
+    sbt_test_goals=["kubernetes/test"]
+)
+
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
 root = Module(

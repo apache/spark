@@ -53,11 +53,11 @@ object BuildCommons {
     "tags", "sketch", "kvstore"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
-  val optionallyEnabledProjects@Seq(mesos, yarn,
+  val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     streamingFlumeSink, streamingFlume,
     streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
     dockerIntegrationTests, hadoopCloud) =
-    Seq("mesos", "yarn",
+    Seq("kubernetes", "mesos", "yarn",
       "streaming-flume-sink", "streaming-flume",
       "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests", "hadoop-cloud").map(ProjectRef(buildLocation, _))
@@ -671,9 +671,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, tags, streamingKafka010, sqlKafka010),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, kubernetes, yarn, tags, streamingKafka010, sqlKafka010),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, tags, streamingKafka010, sqlKafka010),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, kubernetes, yarn, tags, streamingKafka010, sqlKafka010),
 
     unidocAllClasspaths in (ScalaUnidoc, unidoc) := {
       ignoreClasspaths((unidocAllClasspaths in (ScalaUnidoc, unidoc)).value)
