@@ -1494,18 +1494,20 @@ that these options will be deprecated in future release as more optimizations ar
 
 ## Broadcast Hint for SQL Queries
 
-Broadcast hint is a way for users to manually annotate a query and suggest to the query optimizer the join method. 
-It is very useful when the query optimizer cannot make optimal decision with respect to join methods 
-due to conservativeness or the lack of proper statistics. 
-Spark Broadcast Hint has higher priority than autoBroadcastJoin mechanism, examples:
+The `BROADCAST` hint guides Spark to broadcast each specified table when joining them with another table or view.
+When Spark deciding the join methods, the broadcast hash join (i.e., BHJ) is preferred, 
+even if the statistics is above the configuration `spark.sql.autoBroadcastJoinThreshold`.
+When both sides of a join are specified, Spark broadcasts the one having the lower statistics.
+Note Spark does not guaranttee BHJ is always chosen, since not all cases (e.g. full outer join) 
+support BHJ. When the broadcast nested loop join is selected, we still respect the hint.
 
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val src = sql("SELECT * FROM src")
-broadcast(src).join(recordsDF, Seq("key")).show()
+import org.apache.spark.sql.functions.broadcast
+broadcast(spark.table("src")).join(spark.table("records"), "key").show()
 {% endhighlight %}
 
 </div>
@@ -1513,8 +1515,8 @@ broadcast(src).join(recordsDF, Seq("key")).show()
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-Dataset<Row> src = sql("SELECT * FROM src");
-broadcast(src).join(recordsDF, Seq("key")).show();
+import static org.apache.spark.sql.functions.broadcast;
+broadcast(spark.table("src")).join(spark.table("records"), "key").show();
 {% endhighlight %}
 
 </div>
@@ -1522,8 +1524,8 @@ broadcast(src).join(recordsDF, Seq("key")).show();
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-src = spark.sql("SELECT * FROM src")
-recordsDF.join(broadcast(src), "key").show()
+from pyspark.sql.functions import broadcast
+broadcast(spark.table("src")).join(spark.table("records"), "key").show()
 {% endhighlight %}
 
 </div>
@@ -1531,8 +1533,9 @@ recordsDF.join(broadcast(src), "key").show()
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-src <- sql("SELECT COUNT(*) FROM src")
-showDF(join(broadcast(src), recordsDF, src$key == recordsDF$key)))
+src <- sql("SELECT * FROM src")
+records <- sql("SELECT * FROM records")
+head(join(broadcast(src), records, src$key == records$key))
 {% endhighlight %}
 
 </div>
@@ -1540,12 +1543,12 @@ showDF(join(broadcast(src), recordsDF, src$key == recordsDF$key)))
 <div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
+-- We accept BROADCAST, BROADCASTJOIN and MAPJOIN for broadcast hint
 SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 {% endhighlight %}
 
 </div>
 </div>
-(Note that we accept `BROADCAST`, `BROADCASTJOIN` and `MAPJOIN` for broadcast hint)
 
 # Distributed SQL Engine
 
