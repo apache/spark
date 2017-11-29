@@ -225,9 +225,8 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("Shouldn't change broadcast join buildSide if user clearly specified") {
-    def assertJoinBuildSide(pair: (String, String, BuildSide)): Any = {
-      val (sqlString, joinMethod, buildSide) = pair
-      val executedPlan = sql(sqlString).queryExecution.executedPlan
+    def assertJoinBuildSide(sqlStr: String, joinMethod: String, buildSide: BuildSide): Any = {
+      val executedPlan = sql(sqlStr).queryExecution.executedPlan
       executedPlan match {
         case b: BroadcastNestedLoopJoinExec =>
           assert(b.getClass.getSimpleName === joinMethod)
@@ -250,41 +249,44 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       val bh = BroadcastHashJoinExec.toString
       val bl = BroadcastNestedLoopJoinExec.toString
 
-      Seq(
-        // INNER JOIN && t1Size < t2Size => BuildLeft
-        ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft),
-        // LEFT JOIN => BuildRight
-        ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2 ON t1.key = t2.key", bh, BuildRight),
-        // RIGHT JOIN => BuildLeft
-        ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2 ON t1.key = t2.key", bh, BuildLeft),
-        // INNER JOIN && broadcast(t1) => BuildLeft
-        ("SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft),
-        // INNER JOIN && broadcast(t2) => BuildRight
-        ("SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildRight)
-      ).foreach(assertJoinBuildSide)
+      // INNER JOIN && t1Size < t2Size => BuildLeft
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+      // LEFT JOIN => BuildRight
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2 ON t1.key = t2.key", bh, BuildRight)
+      // RIGHT JOIN => BuildLeft
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+      // INNER JOIN && broadcast(t1) => BuildLeft
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+      // INNER JOIN && broadcast(t2) => BuildRight
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildRight)
+
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
         SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-        Seq(
-          // INNER JOIN && t1Size < t2Size => BuildLeft
-          ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2", bl, BuildLeft),
-          // FULL JOIN && t1Size < t2Size => BuildLeft
-          ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 FULL JOIN t2", bl, BuildLeft),
-          // LEFT JOIN => BuildRight
-          ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", bl, BuildRight),
-          // RIGHT JOIN => BuildLeft
-          ("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2", bl, BuildLeft),
-          // INNER JOIN && broadcast(t1) => BuildLeft
-          ("SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2", bl, BuildLeft),
-          // INNER JOIN && broadcast(t2) => BuildRight
-          ("SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2", bl, BuildRight),
-          // FULL OUTER && broadcast(t1) => BuildLeft
-          ("SELECT /*+ MAPJOIN(t1) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft),
-          // FULL OUTER && broadcast(t2) => BuildRight
-          ("SELECT /*+ MAPJOIN(t2) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildRight),
-          // FULL OUTER && t1Size < t2Size => BuildLeft
-          ("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
-        ).foreach(assertJoinBuildSide)
+        // INNER JOIN && t1Size < t2Size => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2", bl, BuildLeft)
+        // FULL JOIN && t1Size < t2Size => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 FULL JOIN t2", bl, BuildLeft)
+        // LEFT JOIN => BuildRight
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", bl, BuildRight)
+        // RIGHT JOIN => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
+        // INNER JOIN && broadcast(t1) => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2", bl, BuildLeft)
+        // INNER JOIN && broadcast(t2) => BuildRight
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2", bl, BuildRight)
+        // FULL OUTER && broadcast(t1) => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
+        // FULL OUTER && broadcast(t2) => BuildRight
+        assertJoinBuildSide(
+          "SELECT /*+ MAPJOIN(t2) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildRight)
+        // FULL OUTER && t1Size < t2Size => BuildLeft
+        assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
       }
     }
   }
