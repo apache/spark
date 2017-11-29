@@ -76,7 +76,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
     val codes = ctx.splitExpressions(
       expressions = inputs,
       funcName = "valueConcat",
-      argumentsExceptRow = ("UTF8String[]", args) :: Nil)
+      extraArguments = ("UTF8String[]", args) :: Nil)
     ev.copy(s"""
       UTF8String[] $args = new UTF8String[${evals.length}];
       $codes
@@ -155,7 +155,7 @@ case class ConcatWs(children: Seq[Expression])
       val codes = ctx.splitExpressions(
           expressions = inputs,
           funcName = "valueConcatWs",
-          argumentsExceptRow = ("UTF8String[]", args) :: Nil)
+          extraArguments = ("UTF8String[]", args) :: Nil)
       ev.copy(s"""
         UTF8String[] $args = new UTF8String[$numArgs];
         ${separator.code}
@@ -1380,14 +1380,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
          $argList[$index] = $value;
        """
     }
-    val argListCodes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-      ctx.splitExpressions(
-        expressions = argListCode,
-        funcName = "valueFormatString",
-        arguments = ("InternalRow", ctx.INPUT_ROW) :: ("Object[]", argList) :: Nil)
-    } else {
-      argListCode.mkString("\n")
-    }
+    val argListCodes = ctx.splitExpressions(
+      expressions = argListCode,
+      funcName = "valueFormatString",
+      extraArguments = ("Object[]", argList) :: Nil)
 
     val form = ctx.freshName("formatter")
     val formatter = classOf[java.util.Formatter].getName

@@ -788,11 +788,7 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(expressions: Seq[String]): String = {
-    // TODO: support whole stage codegen
-    if (INPUT_ROW == null || currentVars != null) {
-      return expressions.mkString("\n")
-    }
-    splitExpressions(expressions, funcName = "apply", arguments = ("InternalRow", INPUT_ROW) :: Nil)
+    splitExpressions(expressions, funcName = "apply", extraArguments = Nil)
   }
 
   /**
@@ -801,21 +797,22 @@ class CodegenContext {
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
-   * @param argumentsExceptRow the list of (type, name) of the arguments of the split function
-   *                           except for ctx.INPUT_ROW
+   * @param extraArguments the list of (type, name) of the arguments of the split function
+   *                       except for ctx.INPUT_ROW
   */
   def splitExpressions(
       expressions: Seq[String],
       funcName: String,
-      argumentsExceptRow: Seq[(String, String)]): String = {
+      extraArguments: Seq[(String, String)]): String = {
+    // TODO: support whole stage codegen
     if (INPUT_ROW == null || currentVars != null) {
-      // Cannot split these expressions because they are not created from a row object.
-      return expressions.mkString("\n")
+      expressions.mkString("\n")
+    } else {
+      splitExpressions(
+        expressions,
+        funcName,
+        arguments = ("InternalRow", INPUT_ROW) +: extraArguments)
     }
-    splitExpressions(
-      expressions,
-      funcName,
-      arguments = ("InternalRow", INPUT_ROW) +: argumentsExceptRow)
   }
 
   /**

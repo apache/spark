@@ -254,7 +254,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val listCodes = ctx.splitExpressions(
       expressions = listCode,
       funcName = "valueIn",
-      argumentsExceptRow = (ctx.javaType(value.dataType), valueArg) :: Nil)
+      extraArguments = (ctx.javaType(value.dataType), valueArg) :: Nil)
     ev.copy(code = s"""
       ${valueGen.code}
       ${ev.value} = false;
