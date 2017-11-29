@@ -208,21 +208,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-22615: Empty relation child in left outer/right outer join should pass" +
-    " Cartesian product check") {
-    val x = testData2.where($"a" === 2).as("x")
-    val y = testData2.where($"a" === 1 && !($"a" === 1)).as("y")
-    checkAnswer(x.join(y, Seq.empty, "left_outer"),
-      Row(2, 1, null, null) ::
-      Row(2, 2, null, null) :: Nil
-    )
-
-    checkAnswer(y.join(x, Seq.empty, "right_outer"),
-      Row(null, null, 2, 1) ::
-      Row(null, null, 2, 2) :: Nil
-    )
-  }
-
   test("big inner join, 4 matches per row") {
     val bigData = testData.union(testData).union(testData).union(testData)
     val bigDataX = bigData.as("x")
