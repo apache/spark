@@ -2723,8 +2723,8 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset partitioned by the given partitioning expressions into
-   * `numPartitions`. The resulting Dataset is hash partitioned.
+   * Returns a new Dataset that is hash partitioned by the given expressions into `numPartitions`.
+   * If no expressions are specified, round robin partitioning is used.
    *
    * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
    *
@@ -2745,9 +2745,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset partitioned by the given partitioning expressions, using
-   * `spark.sql.shuffle.partitions` as number of partitions.
-   * The resulting Dataset is hash partitioned.
+   * Returns a new Dataset that is hash partitioned by the given expressions, using
+   * `spark.sql.shuffle.partitions` as the number of partitions. If no expressions are specified,
+   * round robin partitioning is used.
    *
    * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
    *
@@ -2760,8 +2760,8 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset partitioned by the given partitioning expressions into
-   * `numPartitions`. The resulting Dataset is range partitioned.
+   * Returns a new Dataset that is hash partitioned by the given expressions into `numPartitions`.
+   * If no expressions are specified, round robin partitioning is used.
    *
    * @group typedrel
    * @since 2.3.0
@@ -2780,9 +2780,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset partitioned by the given partitioning expressions, using
-   * `spark.sql.shuffle.partitions` as number of partitions.
-   * The resulting Dataset is range partitioned.
+   * Returns a new Dataset that is range partitioned by the given expressions, using
+   * `spark.sql.shuffle.partitions` as the number of partitions. If no expressions are specified,
+   * round robin partitioning is used.
    *
    * @group typedrel
    * @since 2.3.0
