@@ -115,15 +115,15 @@ object EstimationUtils {
   }
 
   /**
-   * Returns the number of the first bin/bucket into which a column values falls for a specified
+   * Returns the number of the first bin into which a column values falls for a specified
    * numeric equi-height histogram.
    *
    * @param value a literal value of a column
    * @param histogram a numeric equi-height histogram
-   * @return the number of the first bin/bucket into which a column values falls.
+   * @return the number of the first bin into which a column values falls.
    */
 
-  def findFirstBucketForValue(value: Double, histogram: Histogram): Int = {
+  def findFirstBinForValue(value: Double, histogram: Histogram): Int = {
     var binId = 0
     histogram.bins.foreach { bin =>
       if (value > bin.hi) binId += 1
@@ -132,15 +132,15 @@ object EstimationUtils {
   }
 
   /**
-   * Returns the number of the last bin/bucket into which a column values falls for a specified
+   * Returns the number of the last bin into which a column values falls for a specified
    * numeric equi-height histogram.
    *
    * @param value a literal value of a column
    * @param histogram a numeric equi-height histogram
-   * @return the number of the last bin/bucket into which a column values falls.
+   * @return the number of the last bin into which a column values falls.
    */
 
-  def findLastBucketForValue(value: Double, histogram: Histogram): Int = {
+  def findLastBinForValue(value: Double, histogram: Histogram): Int = {
     var binId = 0
     for (i <- 0 until histogram.bins.length) {
       if (value > histogram.bins(i).hi) {
@@ -158,49 +158,49 @@ object EstimationUtils {
   }
 
   /**
-   * Returns a percentage of a bin/bucket holding values for column value in the range of
+   * Returns a percentage of a bin holding values for column value in the range of
    * [lowerValue, higherValue]
    *
-   * @param bucketId a given bin/bucket id in a specified histogram
+   * @param binId a given bin id in a specified histogram
    * @param higherValue a given upper bound value of a specified column value range
    * @param lowerValue a given lower bound value of a specified column value range
    * @param histogram a numeric equi-height histogram
-   * @return the percentage of a single bin/bucket holding values in [lowerValue, higherValue].
+   * @return the percentage of a single bin holding values in [lowerValue, higherValue].
    */
 
   private def getOccupation(
-      bucketId: Int,
+      binId: Int,
       higherValue: Double,
       lowerValue: Double,
       histogram: Histogram): Double = {
-    val curBucket = histogram.bins(bucketId)
-    if (bucketId == 0 && curBucket.hi == curBucket.lo) {
-      // the Min of the histogram occupies the whole first bucket
+    val curBin = histogram.bins(binId)
+    if (binId == 0 && curBin.hi == curBin.lo) {
+      // the Min of the histogram occupies the whole first bin
       1.0
-    } else if (bucketId == 0 && curBucket.hi != curBucket.lo) {
+    } else if (binId == 0 && curBin.hi != curBin.lo) {
       if (higherValue == lowerValue) {
-        // in the case curBucket.binNdv == 0, current bucket is occupied by one value, which
-        // is included in the previous bucket
-        1.0 / math.max(curBucket.ndv.toDouble, 1)
+        // in the case curBin.binNdv == 0, current bin is occupied by one value, which
+        // is included in the previous bin
+        1.0 / math.max(curBin.ndv.toDouble, 1)
       } else {
-        (higherValue - lowerValue) / (curBucket.hi - curBucket.lo)
+        (higherValue - lowerValue) / (curBin.hi - curBin.lo)
       }
     } else {
-      if (curBucket.hi == curBucket.lo) {
-        // the entire bucket is covered in the range
+      if (curBin.hi == curBin.lo) {
+        // the entire bin is covered in the range
         1.0
       } else if (higherValue == lowerValue) {
-        // the literal value falls in this bucket
-        1.0 / math.max(curBucket.ndv.toDouble, 1)
+        // the literal value falls in this bin
+        1.0 / math.max(curBin.ndv.toDouble, 1)
       } else {
-        // Use proration since the range falls inside this bucket.
-        math.min((higherValue - lowerValue) / (curBucket.hi - curBucket.lo), 1.0)
+        // Use proration since the range falls inside this bin.
+        math.min((higherValue - lowerValue) / (curBin.hi - curBin.lo), 1.0)
       }
     }
   }
 
   /**
-   * Returns the number of buckets for column values in [lowerValue, higherValue].
+   * Returns the number of bins for column values in [lowerValue, higherValue].
    * The column value distribution is saved in an equi-height histogram.
    *
    * @param higherEnd a given upper bound value of a specified column value range
@@ -209,33 +209,33 @@ object EstimationUtils {
    * @return the selectivity percentage for column values in [lowerValue, higherValue].
    */
 
-  def getOccupationBuckets(
+  def getOccupationBins(
       higherEnd: Double,
       lowerEnd: Double,
       histogram: Histogram): Double = {
-    // find buckets where current min and max locate
-    val minBucketId = findFirstBucketForValue(lowerEnd, histogram)
-    val maxBucketId = findLastBucketForValue(higherEnd, histogram)
-    assert(minBucketId <= maxBucketId)
+    // find bins where current min and max locate
+    val minBinId = findFirstBinForValue(lowerEnd, histogram)
+    val maxBinId = findLastBinForValue(higherEnd, histogram)
+    assert(minBinId <= maxBinId)
 
-    // compute how much current [min, max] occupy the histogram, in the number of buckets
-    getOccupationBuckets(maxBucketId, minBucketId, higherEnd, lowerEnd, histogram)
+    // compute how much current [min, max] occupy the histogram, in the number of bins
+    getOccupationBins(maxBinId, minBinId, higherEnd, lowerEnd, histogram)
   }
 
   /**
-   * Returns the number of buckets for column values in [lowerValue, higherValue].
+   * Returns the number of bins for column values in [lowerValue, higherValue].
    * This is an overloaded method. The column value distribution is saved in an
    * equi-height histogram.
    *
-   * @param higherId id of the high end bucket holding the high end value of a column range
-   * @param lowerId id of the low end bucket holding the low end value of a column range
+   * @param higherId id of the high end bin holding the high end value of a column range
+   * @param lowerId id of the low end bin holding the low end value of a column range
    * @param higherEnd a given upper bound value of a specified column value range
    * @param lowerEnd a given lower bound value of a specified column value range
    * @param histogram a numeric equi-height histogram
    * @return the selectivity percentage for column values in [lowerEnd, higherEnd].
    */
 
-  def getOccupationBuckets(
+  def getOccupationBins(
       higherId: Int,
       lowerId: Int,
       higherEnd: Double,
@@ -244,15 +244,15 @@ object EstimationUtils {
     if (lowerId == higherId) {
       getOccupation(lowerId, higherEnd, lowerEnd, histogram)
     } else {
-      // compute how much lowerEnd/higherEnd occupy its bucket
-      val lowerCurBucket = histogram.bins(lowerId)
-      val lowerPart = getOccupation(lowerId, lowerCurBucket.hi, lowerEnd, histogram)
+      // compute how much lowerEnd/higherEnd occupy its bin
+      val lowercurBin = histogram.bins(lowerId)
+      val lowerPart = getOccupation(lowerId, lowercurBin.hi, lowerEnd, histogram)
 
       // in case higherId > lowerId, higherId must be > 0
-      val higherCurBucket = histogram.bins(higherId)
-      val higherPart = getOccupation(higherId, higherEnd, higherCurBucket.lo,
+      val highercurBin = histogram.bins(higherId)
+      val higherPart = getOccupation(higherId, higherEnd, highercurBin.lo,
         histogram)
-      // the total length is lowerPart + higherPart + buckets between them
+      // the total length is lowerPart + higherPart + bins between them
       higherId - lowerId - 1 + lowerPart + higherPart
     }
   }
@@ -261,8 +261,8 @@ object EstimationUtils {
    * Returns the number of distinct values, ndv, for column values in [lowerEnd, higherEnd].
    * The column value distribution is saved in an equi-height histogram.
    *
-   * @param higherId id of the high end bucket holding the high end value of a column range
-   * @param lowerId id of the low end bucket holding the low end value of a column range
+   * @param higherId id of the high end bin holding the high end value of a column range
+   * @param lowerId id of the low end bin holding the low end value of a column range
    * @param higherEnd a given upper bound value of a specified column value range
    * @param lowerEnd a given lower bound value of a specified column value range
    * @param histogram a numeric equi-height histogram
@@ -281,25 +281,25 @@ object EstimationUtils {
     } else if (lowerId == higherId) {
       getOccupation(lowerId, higherEnd, lowerEnd, histogram) * histogram.bins(lowerId).ndv
     } else {
-      // compute how much lowerEnd/higherEnd occupy its bucket
-      val minCurBucket = histogram.bins(lowerId)
-      val minPartNdv = getOccupation(lowerId, minCurBucket.hi, lowerEnd, histogram) *
-        minCurBucket.ndv
+      // compute how much lowerEnd/higherEnd occupy its bin
+      val minCurBin = histogram.bins(lowerId)
+      val minPartNdv = getOccupation(lowerId, minCurBin.hi, lowerEnd, histogram) *
+        minCurBin.ndv
 
       // in case higherId > lowerId, higherId must be > 0
-      val maxCurBucket = histogram.bins(higherId)
-      val maxPartNdv = getOccupation(higherId, higherEnd, maxCurBucket.lo, histogram) *
-        maxCurBucket.ndv
+      val maxCurBin = histogram.bins(higherId)
+      val maxPartNdv = getOccupation(higherId, higherEnd, maxCurBin.lo, histogram) *
+        maxCurBin.ndv
 
       // The total ndv is minPartNdv + maxPartNdv + Ndvs between them.
       // In order to avoid counting same distinct value twice, we check if the upperBound value
-      // of next bucket is equal to the hi value of the previous bucket.  We bump up
-      // ndv value only if the hi values of two consecutive buckets are different.
+      // of next bin is equal to the hi value of the previous bin.  We bump up
+      // ndv value only if the hi values of two consecutive bins are different.
       var middleNdv: Long = 0
       for (i <- histogram.bins.indices) {
-        val bucket = histogram.bins(i)
-        if (bucket.hi != bucket.lo && i >= lowerId + 1 && i <= higherId - 1) {
-          middleNdv += bucket.ndv
+        val bin = histogram.bins(i)
+        if (bin.hi != bin.lo && i >= lowerId + 1 && i <= higherId - 1) {
+          middleNdv += bin.ndv
         }
       }
       minPartNdv + maxPartNdv + middleNdv

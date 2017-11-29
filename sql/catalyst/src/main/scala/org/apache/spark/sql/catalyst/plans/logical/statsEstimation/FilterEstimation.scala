@@ -265,7 +265,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
    * @return an optional double value to show the percentage of rows meeting a given condition
-    *         It returns None if no statistics exists for a given column or wrong value.
+   *         It returns None if no statistics exists for a given column or wrong value.
    */
   def evaluateBinary(
       op: BinaryComparison,
@@ -359,7 +359,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
           assert(lowerId <= higherId)
           val lowerBinNdv = hgmBins(lowerId).ndv
           val higherBinNdv = hgmBins(higherId).ndv
-          // assume uniform distribution in each bucket
+          // assume uniform distribution in each bin
           val percent = if (lowerId == higherId) {
             (1.0 / hgmBins.length) / math.max(lowerBinNdv, 1)
           } else {
@@ -593,33 +593,33 @@ case class FilterEstimation(plan: Filter) extends Logging {
       max: Double,
       min: Double,
       datumNumber: Double): Double = {
-    // find buckets where column's current min and max locate
-    val minBucketId = EstimationUtils.findFirstBucketForValue(min, histogram)
-    val maxBucketId = EstimationUtils.findLastBucketForValue(max, histogram)
-    assert(minBucketId <= maxBucketId)
+    // find bins where column's current min and max locate
+    val minBinId = EstimationUtils.findFirstBinForValue(min, histogram)
+    val maxBinId = EstimationUtils.findLastBinForValue(max, histogram)
+    assert(minBinId <= maxBinId)
 
-    // compute how many buckets the column's current valid range [min, max] occupies.
+    // compute how many bins the column's current valid range [min, max] occupies.
     // Note that a column's [min, max] range may vary after we apply some filter conditions.
-    val minToMaxLength = EstimationUtils.getOccupationBuckets(maxBucketId, minBucketId, max,
+    val minToMaxLength = EstimationUtils.getOccupationBins(maxBinId, minBinId, max,
       min, histogram)
 
-    val datumInBucketId = op match {
+    val datumInBinId = op match {
       case LessThan(_, _) | GreaterThanOrEqual(_, _) =>
-        EstimationUtils.findFirstBucketForValue(datumNumber, histogram)
+        EstimationUtils.findFirstBinForValue(datumNumber, histogram)
       case LessThanOrEqual(_, _) | GreaterThan(_, _) =>
-        EstimationUtils.findLastBucketForValue(datumNumber, histogram)
+        EstimationUtils.findLastBinForValue(datumNumber, histogram)
     }
 
     op match {
       // LessThan and LessThanOrEqual share the same logic,
-      // but their datumInBucketId may be different
+      // but their datumInBinId may be different
       case LessThan(_, _) | LessThanOrEqual(_, _) =>
-        EstimationUtils.getOccupationBuckets(datumInBucketId, minBucketId, datumNumber, min,
+        EstimationUtils.getOccupationBins(datumInBinId, minBinId, datumNumber, min,
           histogram) / minToMaxLength
       // GreaterThan and GreaterThanOrEqual share the same logic,
-      // but their datumInBucketId may be different
+      // but their datumInBinId may be different
       case GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-        EstimationUtils.getOccupationBuckets(maxBucketId, datumInBucketId, max, datumNumber,
+        EstimationUtils.getOccupationBins(maxBinId, datumInBinId, max, datumNumber,
           histogram) / minToMaxLength
     }
   }
