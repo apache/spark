@@ -19,6 +19,7 @@ package org.apache.spark.deploy
 
 import java.io._
 import java.net.URI
+import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
@@ -552,21 +553,9 @@ class SparkSubmitSuite
       Seq(sparkHome, "R", "pkg", "tests", "fulltests", "jarTest.R").mkString(File.separator)
     assert(new File(rScriptDir).exists)
 
+    val tempDir = Utils.createTempDir().getAbsolutePath
     // compile a small jar containing a class that will be called from R code.
-    val tempDir = Utils.createTempDir()
-    val srcDir = new File(tempDir, "sparkrtest")
-    srcDir.mkdirs()
-    val excSource = new JavaSourceFromString(new File(srcDir, "DummyClass").toURI.getPath,
-      """package sparkrtest;
-        |
-        |public class DummyClass implements java.io.Serializable {
-        |  public static String helloWorld(String arg) { return "Hello " + arg; }
-        |  public static int addStuff(int arg1, int arg2) { return arg1 + arg2; }
-        |}
-      """.stripMargin)
-    val excFile = TestUtils.createCompiledClass("DummyClass", srcDir, excSource, Seq.empty)
-    val jarFile = new File(tempDir, "sparkRTestJar-%s.jar".format(System.currentTimeMillis()))
-    val jarURL = TestUtils.createJar(Seq(excFile), jarFile, directoryPrefix = Some("sparkrtest"))
+    val jarURL = TestUtils.createDummyJar(tempDir, "sparkrtest", "DummyClass").toURI.toURL
 
     val args = Seq(
       "--name", "testApp",

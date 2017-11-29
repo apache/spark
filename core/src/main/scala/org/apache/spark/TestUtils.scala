@@ -168,6 +168,27 @@ private[spark] object TestUtils {
     createCompiledClass(className, destDir, sourceFile, classpathUrls)
   }
 
+  /** Create a dummy compile jar for a given package, classname. Jar will be placed in destDir */
+  def createDummyJar(destDir: String, packageName: String, className: String): File = {
+    val srcDir = new File(destDir, packageName)
+    srcDir.mkdirs()
+    val excSource = new JavaSourceFromString(
+      new File(srcDir, className).toURI.getPath,
+      s"""
+         |package $packageName;
+         |
+         |public class $className implements java.io.Serializable {
+         |  public static String helloWorld(String arg) { return "Hello " + arg; }
+         |  public static int addStuff(int arg1, int arg2) { return arg1 + arg2; }
+         |}
+      """.stripMargin)
+    val excFile = createCompiledClass(className, srcDir, excSource, Seq.empty)
+    val jarFile = new File(destDir,
+      s"$packageName-$className-%s.jar".format(System.currentTimeMillis()))
+    createJar(Seq(excFile), jarFile, directoryPrefix = Some(packageName))
+    jarFile
+  }
+
   /**
    * Run some code involving jobs submitted to the given context and assert that the jobs spilled.
    */
