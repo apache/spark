@@ -788,11 +788,31 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(expressions: Seq[String]): String = {
+    splitExpressions(expressions, funcName = "apply", extraArguments = Nil)
+  }
+
+  /**
+   * Similar to [[splitExpressions(expressions: Seq[String])]], but has customized function name
+   * and extra arguments.
+   *
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param extraArguments the list of (type, name) of the arguments of the split function
+   *                       except for ctx.INPUT_ROW
+  */
+  def splitExpressions(
+      expressions: Seq[String],
+      funcName: String,
+      extraArguments: Seq[(String, String)]): String = {
     // TODO: support whole stage codegen
     if (INPUT_ROW == null || currentVars != null) {
-      return expressions.mkString("\n")
+      expressions.mkString("\n")
+    } else {
+      splitExpressions(
+        expressions,
+        funcName,
+        arguments = ("InternalRow", INPUT_ROW) +: extraArguments)
     }
-    splitExpressions(expressions, funcName = "apply", arguments = ("InternalRow", INPUT_ROW) :: Nil)
   }
 
   /**
