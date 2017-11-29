@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 /**
@@ -43,7 +43,7 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
 
     // This test will check if the number of executors received by "SparkListener" is same as the
     // number of all executors, so we need to wait until all executors are up
-    sc.jobProgressListener.waitUntilExecutorsUp(2, 60000)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.map(_.toString)
