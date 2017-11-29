@@ -166,11 +166,7 @@ private[orc] class OrcDeserializer(
             val orcStruct = value.asInstanceOf[OrcStruct]
             val mutableRow = new SpecificInternalRow(st)
             val fieldConverters: Array[Converter] = st.zipWithIndex.map { case (f, ordinal) =>
-              if (missingColumnNames.contains(f.name)) {
-                null
-              } else {
-                newConverter(f.dataType, new RowUpdater(mutableRow, ordinal))
-              }
+              newConverter(f.dataType, new RowUpdater(mutableRow, ordinal))
             }.toArray
 
             var i = 0
@@ -239,7 +235,9 @@ private[orc] class OrcDeserializer(
 
   trait OrcDataUpdater {
     def setNullAt(): Unit = ()
+
     def set(value: Any): Unit = ()
+
     def setBoolean(value: Boolean): Unit = set(value)
     def setByte(value: Byte): Unit = set(value)
     def setShort(value: Short): Unit = set(value)
@@ -250,7 +248,10 @@ private[orc] class OrcDeserializer(
   }
 
   final class RowUpdater(row: InternalRow, i: Int) extends OrcDataUpdater {
+    override def setNullAt(): Unit = row.setNullAt(i)
+
     override def set(value: Any): Unit = row(i) = value
+
     override def setBoolean(value: Boolean): Unit = row.setBoolean(i, value)
     override def setByte(value: Byte): Unit = row.setByte(i, value)
     override def setShort(value: Short): Unit = row.setShort(i, value)
@@ -287,10 +288,7 @@ private[orc] class OrcDeserializer(
     override def set(value: Any): Unit = {
       value.asInstanceOf[OrcMap[WritableComparable[_], WritableComparable[_]]]
         .entrySet().asScala.foreach { entry =>
-
-        assert(entry != null)
         keyConverter.set(entry.getKey)
-        assert(valueConverter != null)
         if (entry.getValue == null) {
           currentValues += null
         } else {

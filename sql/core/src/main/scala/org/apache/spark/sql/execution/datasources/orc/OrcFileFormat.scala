@@ -69,7 +69,7 @@ class OrcFileFormat
 
   override def shortName(): String = "orc"
 
-  override def toString: String = "ORC_1.4"
+  override def toString: String = "ORC"
 
   override def hashCode(): Int = getClass.hashCode()
 
@@ -147,12 +147,11 @@ class OrcFileFormat
 
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
       // In this case, `getMissingColumnNames` returns `None` and we return an empty iterator.
-      val maybeMissingColumnNames = OrcUtils.getMissingColumnNames(
+      val (isEmptyFile, missingColumnNames) = OrcUtils.getMissingColumnNames(
         isCaseSensitive, dataSchema, partitionSchema, new Path(new URI(file.filePath)), conf)
-      if (maybeMissingColumnNames.isEmpty) {
+      if (isEmptyFile) {
         Iterator.empty
       } else {
-        val missingColumnNames = maybeMissingColumnNames.get
         val columns = requiredSchema
           .filter(f => !missingColumnNames.contains(f.name))
           .map(f => dataSchema.fieldIndex(f.name)).mkString(",")

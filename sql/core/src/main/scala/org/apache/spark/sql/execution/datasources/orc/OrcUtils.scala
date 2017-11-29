@@ -85,23 +85,23 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Return missing column names in a give ORC file or `None`.
+   * Return a pair of isEmptyFile and missing column names in a give ORC file.
    * Some old empty ORC files always have an empty schema stored in their footer. (SPARK-8501)
-   * In that case, `None` is returned and OrcFileFormat will handle as empty iterators.
+   * In that case, isEmptyFile is `true` and missing column names is `None`.
    */
   private[orc] def getMissingColumnNames(
       isCaseSensitive: Boolean,
       dataSchema: StructType,
       partitionSchema: StructType,
       file: Path,
-      conf: Configuration): Option[Seq[String]] = {
+      conf: Configuration): (Boolean, Seq[String]) = {
     val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val reader = OrcFile.createReader(file, readerOptions)
     val schema = reader.getSchema
     if (schema.getFieldNames.size == 0) {
-      None
+      (true, Seq.empty[String])
     } else {
       val orcSchema = if (schema.getFieldNames.asScala.forall(_.startsWith("_col"))) {
         logInfo("Recover ORC schema with data schema")
@@ -122,7 +122,7 @@ object OrcUtils extends Logging {
           }
         }
       }
-      Some(missingColumnNames)
+      (false, missingColumnNames)
     }
   }
 }
