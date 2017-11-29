@@ -72,14 +72,10 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val first = children(0)
-    val rest = children.drop(1)
-    val firstEval = first.genCode(ctx)
-    ev.copy(code = s"""
-      ${firstEval.code}
-      boolean ${ev.isNull} = ${firstEval.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};""" +
-      rest.map { e =>
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
+    ctx.addMutableState(ctx.javaType(dataType), ev.value)
+
+    val evals = children.map { e =>
       val eval = e.genCode(ctx)
       s"""
         if (${ev.isNull}) {
@@ -90,7 +86,12 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
           }
         }
       """
-    }.mkString("\n"))
+    }
+
+    ev.copy(code = s"""
+      ${ev.isNull} = true;
+      ${ev.value} = ${ctx.defaultValue(dataType)};
+      ${ctx.splitExpressions(evals)}""")
   }
 }
 
@@ -357,7 +358,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val nonnull = ctx.freshName("nonnull")
-    val code = children.map { e =>
+    val evals = children.map { e =>
       val eval = e.genCode(ctx)
       e.dataType match {
         case DoubleType | FloatType =>
@@ -379,7 +380,28 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
             }
           """
       }
-    }.mkString("\n")
+    }
+
+    val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
+      evals.mkString("\n")
+    } else {
+      ctx.splitExpressions(
+        expressions = evals,
+        funcName = "atLeastNNonNulls",
+        arguments = ("InternalRow", ctx.INPUT_ROW) :: ("int", nonnull) :: Nil,
+        returnType = "int",
+        makeSplitFunction = { body =>
+          s"""
+            $body
+            return $nonnull;
+          """
+        },
+        foldFunctions = { funcCalls =>
+          funcCalls.map(funcCall => s"$nonnull = $funcCall;").mkString("\n")
+        }
+      )
+    }
+
     ev.copy(code = s"""
       int $nonnull = 0;
       $code

@@ -39,6 +39,7 @@ import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
+import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
 import org.apache.spark.status.config._
@@ -105,7 +106,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .set("spark.ui.enabled", "true")
       .set("spark.ui.port", "0")
       .set("spark.ui.killEnabled", killEnabled.toString)
-      .set("spark.memory.offHeap.size", "64m")
+      .set(MEMORY_OFFHEAP_SIZE.key, "64m")
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc

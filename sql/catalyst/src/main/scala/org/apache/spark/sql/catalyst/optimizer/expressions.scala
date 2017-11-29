@@ -553,21 +553,6 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 
 
 /**
- * Optimizes expressions by replacing according to CodeGen configuration.
- */
-object OptimizeCodegen extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case e: CaseWhen if canCodegen(e) => e.toCodegen()
-  }
-
-  private def canCodegen(e: CaseWhen): Boolean = {
-    val numBranches = e.branches.size + e.elseValue.size
-    numBranches <= SQLConf.get.maxCaseBranchesForCodegen
-  }
-}
-
-
-/**
  * Removes [[Cast Casts]] that are unnecessary because the input is already the correct type.
  */
 object SimplifyCasts extends Rule[LogicalPlan] {

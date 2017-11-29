@@ -134,7 +134,7 @@ case class SortExec(
 
   override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort = ctx.freshName("needToSort")
-    ctx.addMutableState("boolean", needToSort, s"$needToSort = true;")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, needToSort, s"$needToSort = true;")
 
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.

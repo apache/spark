@@ -413,8 +413,8 @@ private class LiveStage extends LiveEntity {
       new LiveExecutorStageSummary(info.stageId, info.attemptId, executorId))
   }
 
-  override protected def doUpdate(): Any = {
-    val update = new v1.StageData(
+  def toApi(): v1.StageData = {
+    new v1.StageData(
       status,
       info.stageId,
       info.attemptId,
@@ -454,8 +454,10 @@ private class LiveStage extends LiveEntity {
       None,
       None,
       killedSummary)
+  }
 
-    new StageDataWrapper(update, jobIds)
+  override protected def doUpdate(): Any = {
+    new StageDataWrapper(toApi(), jobIds)
   }
 
 }

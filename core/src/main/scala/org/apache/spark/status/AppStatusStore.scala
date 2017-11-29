@@ -32,7 +32,9 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
  */
-private[spark] class AppStatusStore(val store: KVStore) {
+private[spark] class AppStatusStore(
+    val store: KVStore,
+    listener: Option[AppStatusListener] = None) {
 
   def applicationInfo(): v1.ApplicationInfo = {
     store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
@@ -68,6 +70,14 @@ private[spark] class AppStatusStore(val store: KVStore) {
 
   def executorSummary(executorId: String): v1.ExecutorSummary = {
     store.read(classOf[ExecutorSummaryWrapper], executorId).info
+  }
+
+  /**
+   * This is used by ConsoleProgressBar to quickly fetch active stages for drawing the progress
+   * bar. It will only return anything useful when called from a live application.
+   */
+  def activeStages(): Seq[v1.StageData] = {
+    listener.map(_.activeStages()).getOrElse(Nil)
   }
 
   def stageList(statuses: JList[v1.StageStatus]): Seq[v1.StageData] = {
@@ -342,11 +352,12 @@ private[spark] object AppStatusStore {
    */
   def createLiveStore(conf: SparkConf, addListenerFn: SparkListener => Unit): AppStatusStore = {
     val store = new ElementTrackingStore(new InMemoryStore(), conf)
-    addListenerFn(new AppStatusListener(store, conf, true))
+    val listener = new AppStatusListener(store, conf, true)
+    addListenerFn(listener)
     AppStatusPlugin.loadPlugins().foreach { p =>
       p.setupListeners(conf, store, addListenerFn, true)
     }
-    new AppStatusStore(store)
+    new AppStatusStore(store, listener = Some(listener))
   }
 
 }

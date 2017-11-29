@@ -42,15 +42,6 @@ public final class ColumnarBatch {
   private int numRows;
   final ColumnVector[] columns;
 
-  // True if the row is filtered.
-  private final boolean[] filteredRows;
-
-  // Column indices that cannot have null values.
-  private final Set<Integer> nullFilteredColumns;
-
-  // Total number of rows that have been filtered.
-  private int numRowsFiltered = 0;
-
   // Staging row returned from getRow.
   final ColumnarRow row;
 
@@ -68,24 +59,18 @@ public final class ColumnarBatch {
    * Returns an iterator over the rows in this batch. This skips rows that are filtered out.
    */
   public Iterator<ColumnarRow> rowIterator() {
-    final int maxRows = ColumnarBatch.this.numRows();
-    final ColumnarRow row = new ColumnarRow(this);
+    final int maxRows = numRows;
+    final ColumnarRow row = new ColumnarRow(columns);
     return new Iterator<ColumnarRow>() {
       int rowId = 0;
 
       @Override
       public boolean hasNext() {
-        while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
-          ++rowId;
-        }
         return rowId < maxRows;
       }
 
       @Override
       public ColumnarRow next() {
-        while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
-          ++rowId;
-        }
         if (rowId >= maxRows) {
           throw new NoSuchElementException();
         }
@@ -109,31 +94,15 @@ public final class ColumnarBatch {
         ((WritableColumnVector) columns[i]).reset();
       }
     }
-    if (this.numRowsFiltered > 0) {
-      Arrays.fill(filteredRows, false);
-    }
     this.numRows = 0;
-    this.numRowsFiltered = 0;
   }
 
   /**
-   * Sets the number of rows that are valid. Additionally, marks all rows as "filtered" if one or
-   * more of their attributes are part of a non-nullable column.
+   * Sets the number of rows that are valid.
    */
   public void setNumRows(int numRows) {
     assert(numRows <= this.capacity);
     this.numRows = numRows;
-
-    for (int ordinal : nullFilteredColumns) {
-      if (columns[ordinal].numNulls() != 0) {
-        for (int rowId = 0; rowId < numRows; rowId++) {
-          if (!filteredRows[rowId] && columns[ordinal].isNullAt(rowId)) {
-            filteredRows[rowId] = true;
-            ++numRowsFiltered;
-          }
-        }
-      }
-    }
   }
 
   /**
@@ -145,14 +114,6 @@ public final class ColumnarBatch {
    * Returns the number of rows for read, including filtered rows.
    */
   public int numRows() { return numRows; }
-
-  /**
-   * Returns the number of valid rows.
-   */
-  public int numValidRows() {
-    assert(numRowsFiltered <= numRows);
-    return numRows - numRowsFiltered;
-  }
 
   /**
    * Returns the schema that makes up this batch.
@@ -170,17 +131,6 @@ public final class ColumnarBatch {
   public ColumnVector column(int ordinal) { return columns[ordinal]; }
 
   /**
-   * Sets (replaces) the column at `ordinal` with column. This can be used to do very efficient
-   * projections.
-   */
-  public void setColumn(int ordinal, ColumnVector column) {
-    if (column instanceof OffHeapColumnVector) {
-      throw new UnsupportedOperationException("Need to ref count columns.");
-    }
-    columns[ordinal] = column;
-  }
-
-  /**
    * Returns the row in this batch at `rowId`. Returned row is reused across calls.
    */
   public ColumnarRow getRow(int rowId) {
@@ -190,30 +140,10 @@ public final class ColumnarBatch {
     return row;
   }
 
-  /**
-   * Marks this row as being filtered out. This means a subsequent iteration over the rows
-   * in this batch will not include this row.
-   */
-  public void markFiltered(int rowId) {
-    assert(!filteredRows[rowId]);
-    filteredRows[rowId] = true;
-    ++numRowsFiltered;
-  }
-
-  /**
-   * Marks a given column as non-nullable. Any row that has a NULL value for the corresponding
-   * attribute is filtered out.
-   */
-  public void filterNullsInColumn(int ordinal) {
-    nullFilteredColumns.add(ordinal);
-  }
-
   public ColumnarBatch(StructType schema, ColumnVector[] columns, int capacity) {
     this.schema = schema;
     this.columns = columns;
     this.capacity = capacity;
-    this.nullFilteredColumns = new HashSet<>();
-    this.filteredRows = new boolean[capacity];
-    this.row = new ColumnarRow(this);
+    this.row = new ColumnarRow(columns);
   }
 }
