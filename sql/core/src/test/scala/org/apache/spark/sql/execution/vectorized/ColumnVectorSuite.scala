@@ -57,7 +57,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.appendBoolean(i % 2 == 0)
     }
 
-    val array = new ColumnarArray(testVector)
+    val array = new ColumnarArray(testVector, 0, 10)
 
     (0 until 10).foreach { i =>
       assert(array.get(i, BooleanType) === (i % 2 == 0))
@@ -69,7 +69,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.appendByte(i.toByte)
     }
 
-    val array = new ColumnarArray(testVector)
+    val array = new ColumnarArray(testVector, 0, 10)
 
     (0 until 10).foreach { i =>
       assert(array.get(i, ByteType) === i.toByte)
@@ -81,7 +81,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.appendShort(i.toShort)
     }
 
-    val array = new ColumnarArray(testVector)
+    val array = new ColumnarArray(testVector, 0, 10)
 
     (0 until 10).foreach { i =>
       assert(array.get(i, ShortType) === i.toShort)
@@ -93,7 +93,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.appendInt(i)
     }
 
-    val array = new ColumnarArray(testVector)
+    val array = new ColumnarArray(testVector, 0, 10)
 
     (0 until 10).foreach { i =>
       assert(array.get(i, IntegerType) === i)
@@ -105,7 +105,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.appendLong(i)
     }
 
-    val array = new ColumnarArray(testVector)
+    val array = new ColumnarArray(testVector, 0, 10)
 
     (0 until 10).foreach { i =>
       assert(array.get(i, LongType) === i)
@@ -117,7 +117,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.appendFloat(i.toFloat)
     }
 
-    val array = new ColumnarArray(testVector)
+    val array = new ColumnarArray(testVector, 0, 10)
 
     (0 until 10).foreach { i =>
       assert(array.get(i, FloatType) === i.toFloat)
@@ -129,7 +129,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.appendDouble(i.toDouble)
     }
 
-    val array = new ColumnarArray(testVector)
+    val array = new ColumnarArray(testVector, 0, 10)
 
     (0 until 10).foreach { i =>
       assert(array.get(i, DoubleType) === i.toDouble)
@@ -142,7 +142,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.appendByteArray(utf8, 0, utf8.length)
     }
 
-    val array = new ColumnarArray(testVector)
+    val array = new ColumnarArray(testVector, 0, 10)
 
     (0 until 10).foreach { i =>
       assert(array.get(i, StringType) === UTF8String.fromString(s"str$i"))
@@ -155,7 +155,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.appendByteArray(utf8, 0, utf8.length)
     }
 
-    val array = new ColumnarArray(testVector)
+    val array = new ColumnarArray(testVector, 0, 10)
 
     (0 until 10).foreach { i =>
       val utf8 = s"str$i".getBytes("utf8")
@@ -179,12 +179,10 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     testVector.putArray(2, 3, 0)
     testVector.putArray(3, 3, 3)
 
-    val array = new ColumnarArray(testVector)
-
-    assert(array.getArray(0).toIntArray() === Array(0))
-    assert(array.getArray(1).toIntArray() === Array(1, 2))
-    assert(array.getArray(2).toIntArray() === Array.empty[Int])
-    assert(array.getArray(3).toIntArray() === Array(3, 4, 5))
+    assert(testVector.getArray(0).toIntArray() === Array(0))
+    assert(testVector.getArray(1).toIntArray() === Array(1, 2))
+    assert(testVector.getArray(2).toIntArray() === Array.empty[Int])
+    assert(testVector.getArray(3).toIntArray() === Array(3, 4, 5))
   }
 
   val structType: StructType = new StructType().add("int", IntegerType).add("double", DoubleType)
@@ -196,12 +194,10 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     c1.putInt(1, 456)
     c2.putDouble(1, 5.67)
 
-    val array = new ColumnarArray(testVector)
-
-    assert(array.getStruct(0, structType.length).get(0, IntegerType) === 123)
-    assert(array.getStruct(0, structType.length).get(1, DoubleType) === 3.45)
-    assert(array.getStruct(1, structType.length).get(0, IntegerType) === 456)
-    assert(array.getStruct(1, structType.length).get(1, DoubleType) === 5.67)
+    assert(testVector.getStruct(0, structType.length).get(0, IntegerType) === 123)
+    assert(testVector.getStruct(0, structType.length).get(1, DoubleType) === 3.45)
+    assert(testVector.getStruct(1, structType.length).get(0, IntegerType) === 456)
+    assert(testVector.getStruct(1, structType.length).get(1, DoubleType) === 5.67)
   }
 
   test("[SPARK-22092] off-heap column vector reallocation corrupts array data") {
@@ -214,9 +210,8 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       testVector.reserve(16)
 
       // Check that none of the values got lost/overwritten.
-      val array = new ColumnarArray(testVector)
       (0 until 8).foreach { i =>
-        assert(array.get(i, arrayType).asInstanceOf[ArrayData].toIntArray() === Array(i))
+        assert(testVector.getArray(i).toIntArray() === Array(i))
       }
     }
   }
