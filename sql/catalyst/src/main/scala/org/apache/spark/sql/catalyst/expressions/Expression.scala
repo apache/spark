@@ -158,17 +158,17 @@ abstract class Expression extends TreeNode[Expression] {
   private def getParamsForSubExprs(
       ctx: CodegenContext,
       subExprs: Seq[Expression]): (Seq[String], Seq[String]) = {
-    subExprs.map { subExpr =>
+    subExprs.flatMap { subExpr =>
       val arguType = ctx.javaType(subExpr.dataType)
 
       val subExprState = ctx.subExprEliminationExprs(subExpr)
       (subExprState.value, subExprState.isNull)
 
       if (!subExpr.nullable || subExprState.isNull == "true" || subExprState.isNull == "false") {
-        (subExprState.value, s"$arguType ${subExprState.value}")
+        Seq((subExprState.value, s"$arguType ${subExprState.value}"))
       } else {
-        (subExprState.value + ", " + subExprState.isNull,
-          s"$arguType ${subExprState.value}, boolean ${subExprState.isNull}")
+        Seq((subExprState.value, s"$arguType ${subExprState.value}"),
+          (subExprState.isNull, s"boolean ${subExprState.isNull}"))
       }
     }.unzip
   }
@@ -321,13 +321,13 @@ abstract class Expression extends TreeNode[Expression] {
       ctx: CodegenContext,
       inputAttrs: Seq[Expression],
       inputVars: Seq[ExprCode]): (Seq[String], Seq[String]) = {
-    inputAttrs.zip(inputVars).map { case (input, ev) =>
+    inputAttrs.zip(inputVars).flatMap { case (input, ev) =>
       val arguType = ctx.javaType(input.dataType)
 
       if (!input.nullable || ev.isNull == "true" || ev.isNull == "false") {
-        (ev.value, s"$arguType ${ev.value}")
+        Seq((ev.value, s"$arguType ${ev.value}"))
       } else {
-        (ev.value + ", " + ev.isNull, s"$arguType ${ev.value}, boolean ${ev.isNull}")
+        Seq((ev.value, s"$arguType ${ev.value}"), (ev.isNull, s"boolean ${ev.isNull}"))
       }
     }.unzip
   }
