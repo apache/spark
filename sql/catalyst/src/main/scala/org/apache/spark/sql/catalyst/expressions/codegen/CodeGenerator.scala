@@ -792,8 +792,8 @@ class CodegenContext {
   }
 
   /**
-   * Splits the generated code of expressions into multiple functions, because function has
-   * 64kb code size limit in JVM. This version takes care of INPUT_ROW and currentVars
+   * Similar to [[splitExpressions(expressions: Seq[String])]], but has customized function name
+   * and extra arguments.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
