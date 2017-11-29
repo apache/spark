@@ -319,7 +319,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
       case e: Exception if env.isStopped =>
         logDebug("Exception thrown after context is stopped", e)
-        null.asInstanceOf[OUT]  // exit silently
+        throw new SparkException("Spark session has been stopped", e)
 
       case e: Exception if writerThread.exception.isDefined =>
         logError("Python worker exited unexpectedly (crashed)", e)
