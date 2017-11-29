@@ -1109,23 +1109,33 @@ def _has_nulltype(dt):
         return isinstance(dt, NullType)
 
 
-def _merge_type(a, b, path=''):
+def _merge_type_path(path, addition):
+    if path:
+        return "%s in %s" % (addition, path)
+    return addition
+
+
+def _merge_type(a, b, name=None):
+    if name is None:
+        new_msg = lambda msg: msg
+        new_name = lambda n: "field %s" % n
+    else:
+        new_msg = lambda msg: "%s: %s" % (name, msg)
+        new_name = lambda n: "field %s in %s" % (n, name)
+
     if isinstance(a, NullType):
         return b
     elif isinstance(b, NullType):
         return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
-        if path == '':
-            raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
-        else:
-            raise TypeError("%s: Can not merge type %s and %s" % (path, type(a), type(b)))
+        raise TypeError(new_msg("Can not merge type %s and %s" % (type(a), type(b))))
 
     # same type
     if isinstance(a, StructType):
         nfs = dict((f.name, f.dataType) for f in b.fields)
         fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType()),
-                                                  path='%s.structField("%s")' % (path, f.name)))
+                                                  name=new_name(f.name)))
                   for f in a.fields]
         names = set([f.name for f in fields])
         for n in nfs:
@@ -1135,11 +1145,11 @@ def _merge_type(a, b, path=''):
 
     elif isinstance(a, ArrayType):
         return ArrayType(_merge_type(a.elementType, b.elementType,
-                                     path=path + '.arrayElement'), True)
+                                     name='element in array %s' % name), True)
 
     elif isinstance(a, MapType):
-        return MapType(_merge_type(a.keyType, b.keyType, path=path + '.mapKey'),
-                       _merge_type(a.valueType, b.valueType, path=path + '.mapValue'),
+        return MapType(_merge_type(a.keyType, b.keyType, name='key of map %s' % name),
+                       _merge_type(a.valueType, b.valueType, name='value of map %s' % name),
                        True)
     else:
         return a
