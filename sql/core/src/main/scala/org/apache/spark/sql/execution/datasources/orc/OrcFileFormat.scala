@@ -146,7 +146,6 @@ class OrcFileFormat
       val conf = broadcastedConf.value.value
 
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
-      // In this case, `getMissingColumnNames` returns `None` and we return an empty iterator.
       val (isEmptyFile, missingColumnNames) = OrcUtils.getMissingColumnNames(
         isCaseSensitive, dataSchema, partitionSchema, new Path(new URI(file.filePath)), conf)
       if (isEmptyFile) {
