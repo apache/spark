@@ -180,9 +180,8 @@ class _ImageSchema(object):
         .. versionadded:: 2.3.0
         """
 
-        ctx = SparkContext._active_spark_context
-        spark = SparkSession(ctx)
-        image_schema = ctx._jvm.org.apache.spark.ml.image.ImageSchema
+        spark = SparkSession.builder.getOrCreate()
+        image_schema = spark._jvm.org.apache.spark.ml.image.ImageSchema
         jsession = spark._jsparkSession
         jresult = image_schema.readImages(path, jsession, recursive, numPartitions,
                                           dropImageFailures, float(sampleRatio), seed)
