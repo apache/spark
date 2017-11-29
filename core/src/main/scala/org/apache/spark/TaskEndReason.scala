@@ -85,22 +85,13 @@ case class FetchFailed(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
-    length: Int,
-    message: String)
+    message: String,
+    length: Int = 1)
   extends TaskFailedReason {
   override def toErrorString: String = {
     val bmAddressString = if (bmAddress == null) "null" else bmAddress.toString
     s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapId=$mapId, reduceId=$reduceId, " +
       s"length=$length, message=\n$message\n)"
-  }
-
-  def this(
-      bmAddress: BlockManagerId,
-      shuffleId: Int,
-      mapId: Int,
-      reduceId: Int,
-      message: String) = {
-    this(bmAddress, shuffleId, mapId, reduceId, 1, message)
   }
 
   /**
@@ -112,17 +103,6 @@ case class FetchFailed(
    * fetch-failures in rapid succession, on all nodes of the cluster, due to one bad node.
    */
   override def countTowardsTaskFailures: Boolean = false
-}
-
-object FetchFailed {
-  def apply(
-      bmAddress: BlockManagerId,
-      shuffleId: Int,
-      mapId: Int,
-      reduceId: Int,
-      message: String): FetchFailed = {
-    new FetchFailed(bmAddress, shuffleId, mapId, reduceId, 1, message)
-  }
 }
 
 /**

@@ -900,8 +900,8 @@ private[spark] object JsonProtocol {
         val reduceId = (json \ "Reduce ID").extract[Int]
         val length = (json \ "Length").extract[Int]
         val message = Utils.jsonOption(json \ "Message").map(_.extract[String])
-        FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId, length,
-          message.getOrElse("Unknown reason"))
+        FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId,
+          message.getOrElse("Unknown reason"), length)
       case `exceptionFailure` =>
         val className = (json \ "Class Name").extract[String]
         val description = (json \ "Description").extract[String]

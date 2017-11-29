@@ -196,8 +196,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private final String appId;
     private final String execId;
     private final int shuffleId;
-    // An array containing mapId and reduceId pairs.
-    private final int[] mapIdAndReduceIds;
+    // An array containing mapId, reduceId and length tuple
+    private final int[] shuffleBlockIds;
 
     ManagedBufferIterator(String appId, String execId, String[] blockIds) {
       this.appId = appId;
@@ -208,7 +208,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
       }
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
-      mapIdAndReduceIds = new int[3 * blockIds.length];
+      shuffleBlockIds = new int[3 * blockIds.length];
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
         if (!(blockIdParts.length == 4 || blockIdParts.length == 5) ||
@@ -219,25 +219,27 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
           throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
             ", got:" + blockIds[i]);
         }
-        mapIdAndReduceIds[3 * i] = Integer.parseInt(blockIdParts[2]);
-        mapIdAndReduceIds[3 * i + 1] = Integer.parseInt(blockIdParts[3]);
+        shuffleBlockIds[3 * i] = Integer.parseInt(blockIdParts[2]);
+        shuffleBlockIds[3 * i + 1] = Integer.parseInt(blockIdParts[3]);
         if (blockIdParts.length == 4) {
-          mapIdAndReduceIds[3 * i + 2] = 1;
+          // ShuffleBlockId
+          shuffleBlockIds[3 * i + 2] = 1;
         } else {
-          mapIdAndReduceIds[3 * i + 2] = Integer.parseInt(blockIdParts[4]);
+          // ContinuousShuffleBlockId
+          shuffleBlockIds[3 * i + 2] = Integer.parseInt(blockIdParts[4]);
         }
       }
     }
 
     @Override
     public boolean hasNext() {
-      return index < mapIdAndReduceIds.length;
+      return index < shuffleBlockIds.length;
     }
 
     @Override
     public ManagedBuffer next() {
       final ManagedBuffer block = blockManager.getBlockData(appId, execId, shuffleId,
-        mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1], mapIdAndReduceIds[index + 2]);
+        shuffleBlockIds[index], shuffleBlockIds[index + 1], shuffleBlockIds[index + 2]);
       index += 3;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;

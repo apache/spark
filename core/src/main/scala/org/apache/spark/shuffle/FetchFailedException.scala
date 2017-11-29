@@ -37,37 +37,28 @@ private[spark] class FetchFailedException(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
-    length: Int,
     message: String,
-    cause: Throwable = null)
+    cause: Throwable = null,
+    length: Int = 1)
   extends Exception(message, cause) {
 
   def this(
-      bmAddress: BlockManagerId,
-      shuffleId: Int,
-      mapId: Int,
-      reduceId: Int,
-      message: String) {
-    this(bmAddress, shuffleId, mapId, reduceId, 1, message)
+    bmAddress: BlockManagerId,
+    shuffleId: Int,
+    mapId: Int,
+    reduceId: Int,
+    cause: Throwable) {
+    this(bmAddress, shuffleId, mapId, reduceId, cause.getMessage, cause)
   }
 
   def this(
-      bmAddress: BlockManagerId,
-      shuffleId: Int,
-      mapId: Int,
-      reduceId: Int,
-      cause: Throwable) {
-    this(bmAddress, shuffleId, mapId, reduceId, 1, cause.getMessage, cause)
-  }
-
-  def this(
-      bmAddress: BlockManagerId,
-      shuffleId: Int,
-      mapId: Int,
-      reduceId: Int,
-      length: Int,
-      cause: Throwable) {
-    this(bmAddress, shuffleId, mapId, reduceId, length, cause.getMessage, cause)
+    bmAddress: BlockManagerId,
+    shuffleId: Int,
+    mapId: Int,
+    reduceId: Int,
+    cause: Throwable,
+    length: Int) {
+    this(bmAddress, shuffleId, mapId, reduceId, cause.getMessage, cause, length)
   }
 
   // SPARK-19276. We set the fetch failure in the task context, so that even if there is user-code
@@ -77,7 +68,7 @@ private[spark] class FetchFailedException(
   Option(TaskContext.get()).map(_.setFetchFailed(this))
 
   def toTaskFailedReason: TaskFailedReason =
-    FetchFailed(bmAddress, shuffleId, mapId, reduceId, length, Utils.exceptionString(this))
+    FetchFailed(bmAddress, shuffleId, mapId, reduceId, Utils.exceptionString(this), length)
 }
 
 /**
@@ -87,4 +78,4 @@ private[spark] class MetadataFetchFailedException(
     shuffleId: Int,
     reduceId: Int,
     message: String)
-  extends FetchFailedException(null, shuffleId, -1, reduceId, 1, message)
+  extends FetchFailedException(null, shuffleId, -1, reduceId, message)
