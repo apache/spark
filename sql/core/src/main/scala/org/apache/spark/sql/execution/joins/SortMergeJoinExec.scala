@@ -423,7 +423,7 @@ case class SortMergeJoinExec(
   private def genScanner(ctx: CodegenContext): (String, String) = {
     // Create class member for next row from both sides.
     val leftRow = ctx.freshName("leftRow")
-    ctx.addMutableState("InternalRow", leftRow, "")
+    ctx.addMutableState("InternalRow", leftRow)
     val rightRow = ctx.freshName("rightRow")
     ctx.addMutableState("InternalRow", rightRow, s"$rightRow = null;")
 
@@ -519,10 +519,10 @@ case class SortMergeJoinExec(
       val value = ctx.freshName("value")
       val valueCode = ctx.getValue(leftRow, a.dataType, i.toString)
       // declare it as class member, so we can access the column before or in the loop.
-      ctx.addMutableState(ctx.javaType(a.dataType), value, "")
+      ctx.addMutableState(ctx.javaType(a.dataType), value)
       if (a.nullable) {
         val isNull = ctx.freshName("isNull")
-        ctx.addMutableState("boolean", isNull, "")
+        ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
         val code =
           s"""
              |$isNull = $leftRow.isNullAt($i);

@@ -44,6 +44,9 @@ import org.apache.spark.util.Utils
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits with Logging {
 
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val signaler: Signaler = ThreadSignaler
+
   val master = "local[2]"
   val appName = this.getClass.getSimpleName
   val batchDuration = Milliseconds(500)
@@ -406,8 +409,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
 
     // test whether awaitTermination() does not exit if not time is given
     val exception = intercept[Exception] {
-      // Necessary to make failAfter interrupt awaitTermination() in ScalaTest 3.x
-      implicit val signaler: Signaler = ThreadSignaler
       failAfter(1000 millis) {
         ssc.awaitTermination()
         throw new Exception("Did not wait for stop")

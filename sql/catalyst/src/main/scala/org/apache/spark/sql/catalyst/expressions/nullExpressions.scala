@@ -72,8 +72,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.addMutableState("boolean", ev.isNull, "")
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
+    ctx.addMutableState(ctx.javaType(dataType), ev.value)
 
     val evals = children.map { e =>
       val eval = e.genCode(ctx)
@@ -91,7 +91,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     ev.copy(code = s"""
       ${ev.isNull} = true;
       ${ev.value} = ${ctx.defaultValue(dataType)};
-      ${ctx.splitExpressions(ctx.INPUT_ROW, evals)}""")
+      ${ctx.splitExpressions(evals)}""")
   }
 }
 
@@ -385,8 +385,10 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
       evals.mkString("\n")
     } else {
-      ctx.splitExpressions(evals, "atLeastNNonNulls",
-        ("InternalRow", ctx.INPUT_ROW) :: ("int", nonnull) :: Nil,
+      ctx.splitExpressions(
+        expressions = evals,
+        funcName = "atLeastNNonNulls",
+        arguments = ("InternalRow", ctx.INPUT_ROW) :: ("int", nonnull) :: Nil,
         returnType = "int",
         makeSplitFunction = { body =>
           s"""

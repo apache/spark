@@ -592,7 +592,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`sep` (default `,`): sets the single character as a separator for each
    * field and value.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the separator can be part of the value.</li>
+   * the separator can be part of the value. If an empty string is set, it uses `u0000`
+   * (null character).</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing

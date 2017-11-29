@@ -206,11 +206,12 @@ class ArrowSerializer(FramedSerializer):
         return "ArrowSerializer"
 
 
-def _create_batch(series):
+def _create_batch(series, timezone):
     """
     Create an Arrow record batch from the given pandas.Series or list of Series, with optional type.
 
     :param series: A single pandas.Series, list of Series, or list of (series, arrow_type)
+    :param timezone: A timezone to respect when handling timestamp values
     :return: Arrow RecordBatch
     """
 
@@ -227,7 +228,7 @@ def _create_batch(series):
     def cast_series(s, t):
         if type(t) == pa.TimestampType:
             # NOTE: convert to 'us' with astype here, unit ignored in `from_pandas` see ARROW-1680
-            return _check_series_convert_timestamps_internal(s.fillna(0))\
+            return _check_series_convert_timestamps_internal(s.fillna(0), timezone)\
                 .values.astype('datetime64[us]', copy=False)
         # NOTE: can not compare None with pyarrow.DataType(), fixed with Arrow >= 0.7.1
         elif t is not None and t == pa.date32():
@@ -253,6 +254,10 @@ class ArrowStreamPandasSerializer(Serializer):
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
+    def __init__(self, timezone):
+        super(ArrowStreamPandasSerializer, self).__init__()
+        self._timezone = timezone
+
     def dump_stream(self, iterator, stream):
         """
         Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
@@ -262,7 +267,7 @@ class ArrowStreamPandasSerializer(Serializer):
         writer = None
         try:
             for series in iterator:
-                batch = _create_batch(series)
+                batch = _create_batch(series, self._timezone)
                 if writer is None:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
@@ -280,7 +285,7 @@ class ArrowStreamPandasSerializer(Serializer):
         reader = pa.open_stream(stream)
         for batch in reader:
             # NOTE: changed from pa.Columns.to_pandas, timezone issue in conversion fixed in 0.7.1
-            pdf = _check_dataframe_localize_timestamps(batch.to_pandas())
+            pdf = _check_dataframe_localize_timestamps(batch.to_pandas(), self._timezone)
             yield [c for _, c in pdf.iteritems()]
 
     def __repr__(self):
