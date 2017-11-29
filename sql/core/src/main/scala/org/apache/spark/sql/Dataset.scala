@@ -524,7 +524,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def checkpoint(): Dataset[T] = _checkpoint(eager = true)
+  def checkpoint(): Dataset[T] = checkpoint(eager = true, local = false)
 
   /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
@@ -537,7 +537,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def checkpoint(eager: Boolean): Dataset[T] = _checkpoint(eager = eager)
+  def checkpoint(eager: Boolean): Dataset[T] = checkpoint(eager = eager, local = false)
 
   /**
    * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be
@@ -550,7 +550,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def localCheckpoint(): Dataset[T] = _checkpoint(eager = true, local = true)
+  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, local = true)
 
   /**
    * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to truncate
@@ -563,7 +563,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def localCheckpoint(eager: Boolean): Dataset[T] = _checkpoint(eager = eager, local = true)
+  def localCheckpoint(eager: Boolean): Dataset[T] = checkpoint(eager = eager, local = true)
 
   /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
@@ -579,7 +579,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  private[sql] def _checkpoint(eager: Boolean, local: Boolean = false): Dataset[T] = {
+  private[sql] def checkpoint(eager: Boolean, local: Boolean): Dataset[T] = {
     val internalRdd = queryExecution.toRdd.map(_.copy())
     if (local) {
       internalRdd.localCheckpoint()
