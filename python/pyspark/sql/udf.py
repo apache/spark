@@ -32,7 +32,7 @@ def _wrap_function(sc, func, returnType):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
-def _create_udf(f, returnType, evalType):
+def _create_udf(f, returnType, evalType, nullable):
     if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
         import inspect
         argspec = inspect.getargspec(f)
@@ -52,7 +52,7 @@ def _create_udf(f, returnType, evalType):
             )
 
     # Set the name of the UserDefinedFunction object to be the name of function f
-    udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, evalType=evalType)
+    udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, evalType=evalType, nullable=nullable)
     return udf_obj._wrapped()
 
 
@@ -64,7 +64,8 @@ class UserDefinedFunction(object):
     """
     def __init__(self, func,
                  returnType=StringType(), name=None,
-                 evalType=PythonEvalType.SQL_BATCHED_UDF):
+                 evalType=PythonEvalType.SQL_BATCHED_UDF,
+                 nullable=True):
         if not callable(func):
             raise TypeError(
                 "Invalid function: not a function or callable (__call__ is not defined): "
@@ -88,6 +89,7 @@ class UserDefinedFunction(object):
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
         self.evalType = evalType
+        self.nullable = nullable
 
     @property
     def returnType(self):
@@ -126,6 +128,7 @@ class UserDefinedFunction(object):
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt, self.evalType)
+        judf = judf.withNullability(self.nullable)
         return judf
 
     def __call__(self, *cols):
@@ -157,5 +160,6 @@ class UserDefinedFunction(object):
         wrapper.func = self.func
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
+        wrapper.nullable = self.nullable
 
         return wrapper
