@@ -179,14 +179,12 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(nonNullExpr, "num-num", row1)
   }
 
-  test("SPARK-22570: should not create a lot of instance variables") {
-    val N = 16000
-    val expr = RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num"))
+  test("SPARK-22570: RegExpReplace should not create a lot of global variables") {
     val ctx = new CodegenContext
-    (1 to N).map(_ => expr.genCode(ctx).code)
+    RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num")).genCode(ctx)
     // four global variables (lastRegex, pattern, lastReplacement, and lastReplacementInUTF8)
     // are always required
-    assert(ctx.mutableStates.length == 4 * N)
+    assert(ctx.mutableStates.length == 4)
   }
 
   test("RegexExtract") {

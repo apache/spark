@@ -23,6 +23,7 @@ import java.util.{Calendar, Locale, TimeZone}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
@@ -846,23 +847,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create(inputOuter, fromOuter), toOuter), outputOuter)
   }
 
-  test("SPARK-22570: should not create a lot of instance variables") {
-    val N = 30000
-
-    val from1 = new StructType(
-      (1 to N).map(i => StructField(s"s$i", StringType)).toArray)
-    val to1 = new StructType(
-      (1 to N).map(i => StructField(s"i$i", IntegerType)).toArray)
-    val input1 = Row.fromSeq((1 to N).map(i => i.toString))
-    val output1 = Row.fromSeq((1 to N))
-    checkEvaluation(cast(Literal.create(input1, from1), to1), output1)
-
-    val from2 = new StructType(
-      (1 to N).map(i => StructField(s"s$i", StringType)).toArray)
-    val to2 = new StructType(
-      (1 to N).map(i => StructField(s"i$i", LongType)).toArray)
-    val input2 = Row.fromSeq((1 to N).map(i => i.toString))
-    val output2 = Row.fromSeq((1 to N).map(i => i.toLong))
-    checkEvaluation(cast(Literal.create(input2, from2), to2), output2)
+  test("SPARK-22570: Cast should not create a lot of instance variables") {
+    val ctx = new CodegenContext
+    cast("1", IntegerType).genCode(ctx).code
+    cast("2", LongType).genCode(ctx).code
+    assert(ctx.mutableStates.length == 0)
   }
 }

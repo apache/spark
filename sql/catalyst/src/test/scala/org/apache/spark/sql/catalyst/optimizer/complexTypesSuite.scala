@@ -165,9 +165,9 @@ class ComplexTypesSuite extends PlanTest{
     comparePlans(Optimizer execute query, expected)
   }
 
-  test("SPARK-22570: should not create a lot of instance variables") {
+  test("SPARK-22570: CreateArray should not create a lot of global variables") {
     val ctx = new CodegenContext
-    (1 to 60000).map(i => CreateArray(Seq(Literal(s"$i"))).genCode(ctx).code)
+    CreateArray(Seq(Literal(1))).genCode(ctx).code
     assert(ctx.mutableStates.length == 0)
   }
 
