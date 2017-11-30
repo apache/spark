@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -140,218 +138,13 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Returns the eliminated subexpressions in the children expressions.
-   */
-  private def getSubExprInChildren(ctx: CodegenContext): Seq[Expression] = {
-    children.flatMap { child =>
-      child.collect {
-        case e if ctx.subExprEliminationExprs.contains(e) => e
-      }
-    }
-  }
-
-  /**
-   * Given the list of eliminated subexpressions used in the children expressions, returns the
-   * strings of funtion parameters. The first is the variable names used to call the function,
-   * the second is the parameters used to declare the function in generated code.
-   */
-  private def getParamsForSubExprs(
-      ctx: CodegenContext,
-      subExprs: Seq[Expression]): (Seq[String], Seq[String]) = {
-    subExprs.flatMap { subExpr =>
-      val argType = ctx.javaType(subExpr.dataType)
-
-      val subExprState = ctx.subExprEliminationExprs(subExpr)
-      (subExprState.value, subExprState.isNull)
-
-      if (!subExpr.nullable || subExprState.isNull == "true" || subExprState.isNull == "false") {
-        Seq((subExprState.value, s"$argType ${subExprState.value}"))
-      } else {
-        Seq((subExprState.value, s"$argType ${subExprState.value}"),
-          (subExprState.isNull, s"boolean ${subExprState.isNull}"))
-      }
-    }.unzip
-  }
-
-  /**
-   * Retrieves previous input rows referred by children and deferred expressions.
-   */
-  private def getInputRowsForChildren(ctx: CodegenContext): Seq[String] = {
-    children.flatMap(getInputRows(ctx, _)).distinct
-  }
-
-  /**
-   * Given a child expression, retrieves previous input rows referred by it or deferred expressions
-   * which are needed to evaluate it.
-   */
-  private def getInputRows(ctx: CodegenContext, child: Expression): Seq[String] = {
-    child.flatMap {
-      // An expression directly evaluates on current input row.
-      case BoundReference(ordinal, _, _) if ctx.currentVars == null ||
-          ctx.currentVars(ordinal) == null =>
-        Seq(ctx.INPUT_ROW)
-
-      // An expression which is not evaluated yet. Tracks down to find input rows.
-      case BoundReference(ordinal, _, _) if ctx.currentVars(ordinal).code != "" =>
-        trackDownRow(ctx, ctx.currentVars(ordinal))
-
-      case _ => Seq.empty
-    }.distinct
-  }
-
-  /**
-   * Tracks down input rows referred by the generated code snippet.
-   */
-  private def trackDownRow(ctx: CodegenContext, exprCode: ExprCode): Seq[String] = {
-    var exprCodes: List[ExprCode] = List(exprCode)
-    val inputRows = mutable.ArrayBuffer.empty[String]
-
-    while (exprCodes.nonEmpty) {
-      exprCodes match {
-        case first :: others =>
-          exprCodes = others
-          if (first.inputRow != null) {
-            inputRows += first.inputRow
-          }
-          first.inputVars.foreach { inputVar =>
-            if (inputVar.exprCode.code != "") {
-              exprCodes = inputVar.exprCode :: exprCodes
-            }
-          }
-        case _ =>
-      }
-    }
-    inputRows.toSeq
-  }
-
-  /**
-   * Retrieves previously evaluated columns referred by children and deferred expressions.
-   * Returned tuple contains the list of expressions and the list of generated codes.
-   */
-  private def getInputVarsForChildren(ctx: CodegenContext): (Seq[Expression], Seq[ExprCode]) = {
-    children.flatMap(getInputVars(ctx, _)).distinct.unzip
-  }
-
-  /**
-   * Given a child expression, retrieves previously evaluated columns referred by it or
-   * deferred expressions which are needed to evaluate it.
-   */
-  private def getInputVars(ctx: CodegenContext, child: Expression): Seq[(Expression, ExprCode)] = {
-    if (ctx.currentVars == null) {
-      return Seq.empty
-    }
-
-    child.flatMap {
-      // An evaluated variable.
-      case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null &&
-          ctx.currentVars(ordinal).code == "" =>
-        Seq((b, ctx.currentVars(ordinal)))
-
-      // An input variable which is not evaluated yet. Tracks down to find any evaluated variables
-      // in the expression path.
-      // E.g., if this expression is "d = c + 1" and "c" is not evaluated. We need to track to
-      // "c = a + b" and see if "a" and "b" are evaluated. If they are, we need to return them so
-      // to include them into parameters, if not, we track down further.
-      case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null =>
-        trackDownVar(ctx, ctx.currentVars(ordinal))
-
-      case _ => Seq.empty
-    }.distinct
-  }
-
-  /**
-   * Tracks down previously evaluated columns referred by the generated code snippet.
-   */
-  private def trackDownVar(ctx: CodegenContext, exprCode: ExprCode): Seq[(Expression, ExprCode)] = {
-    var exprCodes: List[ExprCode] = List(exprCode)
-    val inputVars = mutable.ArrayBuffer.empty[(Expression, ExprCode)]
-
-    while (exprCodes.nonEmpty) {
-      exprCodes match {
-        case first :: others =>
-          exprCodes = others
-          first.inputVars.foreach { inputVar =>
-            if (inputVar.exprCode.code == "") {
-              inputVars += ((inputVar.expr, inputVar.exprCode))
-            } else {
-              exprCodes = inputVar.exprCode :: exprCodes
-            }
-          }
-        case _ =>
-      }
-    }
-    inputVars.toSeq
-  }
-
-  /**
-   * Helper function to calculate the size of an expression as function parameter.
-   */
-  private def calculateParamLength(ctx: CodegenContext, input: Expression): Int = {
-    ctx.javaType(input.dataType) match {
-      case (ctx.JAVA_LONG | ctx.JAVA_DOUBLE) if !input.nullable => 2
-      case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => 3
-      case _ if !input.nullable => 1
-      case _ => 2
-    }
-  }
-
-  /**
-   * In Java, a method descriptor is valid only if it represents method parameters with a total
-   * length of 255 or less. `this` contributes one unit and a parameter of type long or double
-   * contributes two units.
-   */
-  private def getValidParamLength(
-      ctx: CodegenContext,
-      inputs: Seq[Expression],
-      subExprs: Seq[Expression]): Int = {
-    // Start value is 1 for `this`.
-    inputs.foldLeft(1) { case (curLength, input) =>
-      curLength + calculateParamLength(ctx, input)
-    } + subExprs.foldLeft(0) { case (curLength, subExpr) =>
-      curLength + calculateParamLength(ctx, subExpr)
-    }
-  }
-
-  /**
-   * Given the lists of input attributes and variables to this expression, returns the strings of
-   * funtion parameters. The first is the variable names used to call the function, the second is
-   * the parameters used to declare the function in generated code.
-   */
-  private def prepareFunctionParams(
-      ctx: CodegenContext,
-      inputAttrs: Seq[Expression],
-      inputVars: Seq[ExprCode]): (Seq[String], Seq[String]) = {
-    inputAttrs.zip(inputVars).flatMap { case (input, ev) =>
-      val argType = ctx.javaType(input.dataType)
-
-      if (!input.nullable || ev.isNull == "true" || ev.isNull == "false") {
-        Seq((ev.value, s"$argType ${ev.value}"))
-      } else {
-        Seq((ev.value, s"$argType ${ev.value}"), (ev.isNull, s"boolean ${ev.isNull}"))
-      }
-    }.unzip
-  }
-
-  /**
    * In order to prevent 64kb compile error, reducing the size of generated codes by
    * separating it into a function if the size exceeds a threshold.
    */
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
-    val isNotWholestageCodegen = ctx.INPUT_ROW != null && ctx.currentVars == null
-    val (inputAttrs, inputVars) = getInputVarsForChildren(ctx)
-    val inputRows = getInputRowsForChildren(ctx)
-    val subExprs = getSubExprInChildren(ctx)
+    val funcParams = ExpressionCodegen.getExpressionInputParams(ctx, this)
 
-    // Params to include:
-    // 1. Evaluated columns referred by this, children or deferred expressions.
-    // 2. Input rows referred by this, children or deferred expressions.
-    // 3. Eliminated subexpressions.
-    val paramsLength = getValidParamLength(ctx, inputAttrs, subExprs) + inputRows.length
-
-    // Puts code into a function if the code is big, when:
-    // 1. Not in wholestage codegen, or
-    // 2. Allowed parameter number for Java's method descriptor.
-    if (eval.code.trim.length > 1024 && (isNotWholestageCodegen || paramsLength <= 255)) {
+    if (eval.code.trim.length > 1024 && funcParams.isDefined) {
       val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
         val globalIsNull = ctx.freshName("globalIsNull")
         ctx.addMutableState(ctx.JAVA_BOOLEAN, globalIsNull)
@@ -365,38 +158,13 @@ abstract class Expression extends TreeNode[Expression] {
       val javaType = ctx.javaType(dataType)
       val newValue = ctx.freshName("value")
 
-      // Prepare function parameters.
-      val callParams = mutable.ArrayBuffer[String]()
-      val funcParams = mutable.ArrayBuffer[String]()
-
-      if (ctx.INPUT_ROW != null) {
-        callParams += ctx.INPUT_ROW
-        funcParams += s"InternalRow ${ctx.INPUT_ROW}"
-      }
-
-      if (inputRows.length > 0) {
-        inputRows.foreach { row =>
-          callParams += row
-          funcParams += s"InternalRow $row"
-        }
-      }
-
-      if (inputAttrs.length > 0) {
-        val params = prepareFunctionParams(ctx, inputAttrs, inputVars)
-        params._1.foreach(callParams += _)
-        params._2.foreach(funcParams += _)
-      }
-
-      if (subExprs.length > 0) {
-        val subExprParams = getParamsForSubExprs(ctx, subExprs)
-        subExprParams._1.foreach(callParams += _)
-        subExprParams._2.foreach(funcParams += _)
-      }
-
       val funcName = ctx.freshName(nodeName)
+      val callParams = funcParams.map(_._1.mkString(", ")).get
+      val declParams = funcParams.map(_._2.mkString(", ")).get
+
       val funcFullName = ctx.addNewFunction(funcName,
         s"""
-           |private $javaType $funcName(${funcParams.distinct.mkString(", ")}) {
+           |private $javaType $funcName($declParams) {
            |  ${eval.code.trim}
            |  $setIsNull
            |  return ${eval.value};
@@ -404,7 +172,7 @@ abstract class Expression extends TreeNode[Expression] {
            """.stripMargin)
 
       eval.value = newValue
-      eval.code = s"$javaType $newValue = $funcFullName(${callParams.distinct.mkString(", ")});"
+      eval.code = s"$javaType $newValue = $funcFullName($callParams);"
     }
   }
 
