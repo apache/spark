@@ -65,17 +65,17 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           val value = ctx.addMutableState(ctx.javaType(e.dataType), s"value_$i",
             v => s"$v = ${ctx.defaultValue(e.dataType)};")
           (s"""
-            ${ev.code}
-            $isNull = ${ev.isNull};
-            $value = ${ev.value};
-           """, isNull, value, i)
+             ${ev.code}
+             $isNull = ${ev.isNull};
+             $value = ${ev.value};
+            """, isNull, value, i)
         } else {
           val value = ctx.addMutableState(ctx.javaType(e.dataType), s"value_$i",
             v => s"$v = ${ctx.defaultValue(e.dataType)};")
           (s"""
-            ${ev.code}
-            $value = ${ev.value};
-           """, ev.isNull, value, i)
+             ${ev.code}
+             $value = ${ev.value};
+            """, ev.isNull, value, i)
         }
     }
 
