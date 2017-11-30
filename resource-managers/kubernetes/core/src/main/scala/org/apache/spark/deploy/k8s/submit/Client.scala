@@ -29,7 +29,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesClientFactory
+import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
 import org.apache.spark.deploy.k8s.submit.steps.DriverConfigurationStep
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -37,12 +37,12 @@ import org.apache.spark.util.Utils
 /**
  * Encapsulates arguments to the submission client.
  *
- * @param mainAppResource the main application resource
+ * @param mainAppResource the main application resource if any
  * @param mainClass the main class of the application to run
  * @param driverArgs arguments to the driver
  */
 private[spark] case class ClientArguments(
-     mainAppResource: MainAppResource,
+     mainAppResource: Option[MainAppResource],
      mainClass: String,
      driverArgs: Array[String])
 
@@ -68,7 +68,7 @@ private[spark] object ClientArguments {
     require(mainClass.isDefined, "Main class must be specified via --main-class")
 
     ClientArguments(
-      mainAppResource.get,
+      mainAppResource,
       mainClass.get,
       driverArgs.toArray)
   }
@@ -214,7 +214,7 @@ private[spark] object Client extends SparkApplication {
       clientArguments.driverArgs,
       sparkConf)
 
-    Utils.tryWithResource(KubernetesClientFactory.createKubernetesClient(
+    Utils.tryWithResource(SparkKubernetesClientFactory.createKubernetesClient(
       master,
       Some(namespace),
       KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,

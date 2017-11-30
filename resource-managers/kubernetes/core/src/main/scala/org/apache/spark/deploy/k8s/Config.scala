@@ -152,6 +152,22 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1s")
 
+  private[spark] val JARS_DOWNLOAD_LOCATION =
+    ConfigBuilder("spark.kubernetes.mountDependencies.jarsDownloadDir")
+      .doc("Location to download jars to in the driver and executors. When using" +
+        " spark-submit, this directory must be empty and will be mounted as an empty directory" +
+        " volume on the driver and executor pod.")
+      .stringConf
+      .createWithDefault("/var/spark-data/spark-jars")
+
+  private[spark] val FILES_DOWNLOAD_LOCATION =
+    ConfigBuilder("spark.kubernetes.mountDependencies.filesDownloadDir")
+      .doc("Location to download files to in the driver and executors. When using" +
+        " spark-submit, this directory must be empty and will be mounted as an empty directory" +
+        " volume on the driver and executor pods.")
+      .stringConf
+      .createWithDefault("/var/spark-data/spark-files")
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

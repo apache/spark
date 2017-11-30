@@ -213,16 +213,16 @@ private[spark] class DriverKubernetesCredentialsStep(
       mountedUserSpecified: Option[String],
       valueMountedFromSubmitter: Option[String],
       mountedCanonicalLocation: String): Option[String] = {
-    mountedUserSpecified.orElse(valueMountedFromSubmitter.map( _ => {
+    mountedUserSpecified.orElse(valueMountedFromSubmitter.map( _ =>
       mountedCanonicalLocation
-    }))
+    ))
   }
 
   private def resolveSecretData(
       mountedUserSpecified: Option[String],
       valueMountedFromSubmitter: Option[String],
       secretName: String): Map[String, String] = {
-    mountedUserSpecified.map { _ => Map.empty[String, String]}
+    mountedUserSpecified.map { _ => Map.empty[String, String] }
       .getOrElse {
         valueMountedFromSubmitter.map { valueBase64 =>
           Map(secretName -> valueBase64)

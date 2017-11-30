@@ -20,7 +20,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.steps.{BaseDriverConfigurationStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, DriverServiceBootstrapStep}
+import org.apache.spark.deploy.k8s.submit.steps._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.SystemClock
 
 /**
@@ -30,7 +31,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     namespace: String,
     kubernetesAppId: String,
     launchTime: Long,
-    mainAppResource: MainAppResource,
+    mainAppResource: Option[MainAppResource],
     appName: String,
     mainClass: String,
     appArgs: Array[String],
@@ -45,6 +46,8 @@ private[spark] class DriverConfigurationStepsOrchestrator(
   private val kubernetesResourceNamePrefix =
       s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
   private val dockerImagePullPolicy = submissionSparkConf.get(DOCKER_IMAGE_PULL_POLICY)
+  private val jarsDownloadPath = submissionSparkConf.get(JARS_DOWNLOAD_LOCATION)
+  private val filesDownloadPath = submissionSparkConf.get(FILES_DOWNLOAD_LOCATION)
 
   def getAllConfigurationSteps(): Seq[DriverConfigurationStep] = {
     val driverCustomLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
@@ -80,9 +83,39 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsStep(
       submissionSparkConf, kubernetesResourceNamePrefix)
 
+    val additionalMainAppJar = if (mainAppResource.nonEmpty) {
+       val mayBeResource = mainAppResource.get match {
+        case JavaMainAppResource(resource) if resource != SparkLauncher.NO_RESOURCE =>
+          Some(resource)
+        case _ => Option.empty
+      }
+      mayBeResource
+    } else {
+      Option.empty
+    }
+
+    val sparkJars = submissionSparkConf.getOption("spark.jars")
+      .map(_.split(","))
+      .getOrElse(Array.empty[String]) ++
+      additionalMainAppJar.toSeq
+    val sparkFiles = submissionSparkConf.getOption("spark.files")
+      .map(_.split(","))
+      .getOrElse(Array.empty[String])
+
+    val maybeDependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
+      Some(new DependencyResolutionStep(
+        sparkJars,
+        sparkFiles,
+        jarsDownloadPath,
+        filesDownloadPath))
+    } else {
+      Option.empty
+    }
+
     Seq(
       initialSubmissionStep,
       driverAddressStep,
-      kubernetesCredentialsStep)
+      kubernetesCredentialsStep) ++
+      maybeDependencyResolutionStep.toSeq
   }
 }

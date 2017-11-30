@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config.DRIVER_DOCKER_IMAGE
-import org.apache.spark.deploy.k8s.submit.steps.{BaseDriverConfigurationStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, DriverServiceBootstrapStep}
+import org.apache.spark.deploy.k8s.submit.steps._
 
 class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
@@ -30,7 +30,7 @@ class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
   private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
   private val APP_ARGS = Array("arg1", "arg2")
 
-  test("Base submission steps without an init-container or python files.") {
+  test("Base submission steps with a main app resource.") {
     val sparkConf = new SparkConf(false)
       .set(DRIVER_DOCKER_IMAGE, DRIVER_IMAGE)
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
@@ -38,7 +38,28 @@ class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
       NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
-      mainAppResource,
+      Some(mainAppResource),
+      APP_NAME,
+      MAIN_CLASS,
+      APP_ARGS,
+      sparkConf)
+    validateStepTypes(
+      orchestrator,
+      classOf[BaseDriverConfigurationStep],
+      classOf[DriverServiceBootstrapStep],
+      classOf[DriverKubernetesCredentialsStep],
+      classOf[DependencyResolutionStep]
+    )
+  }
+
+  test("Base submission steps without a main app resource.") {
+    val sparkConf = new SparkConf(false)
+      .set(DRIVER_DOCKER_IMAGE, DRIVER_IMAGE)
+    val orchestrator = new DriverConfigurationStepsOrchestrator(
+      NAMESPACE,
+      APP_ID,
+      LAUNCH_TIME,
+      Option.empty,
       APP_NAME,
       MAIN_CLASS,
       APP_ARGS,
