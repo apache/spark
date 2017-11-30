@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
@@ -160,8 +161,9 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
  * conditions would potentially shuffle children as child node's partitioning won't satisfy the JOIN
  * node's requirements which otherwise could have.
  *
- * For instance, if there is a CROSS join, where the left relation has 'a = 1' and the right
- * relation has 'b = 1', the rule infers 'a = b' as a join predicate.
+ * For instance, given a CROSS join with the constraint 'a = 1' from the left child and the
+ * constraint 'b = 1' from the right child, this rule infers a new join predicate 'a = b' and
+ * converts it to an Inner join.
  */
 object EliminateCrossJoin extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -174,7 +176,7 @@ object EliminateCrossJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def eliminateCrossJoin(plan: LogicalPlan): LogicalPlan = plan transform {
-    case join@Join(leftPlan, rightPlan, Cross, None) =>
+    case join @ Join(leftPlan, rightPlan, Cross, None) =>
       val leftConstraints = join.constraints.filter(_.references.subsetOf(leftPlan.outputSet))
       val rightConstraints = join.constraints.filter(_.references.subsetOf(rightPlan.outputSet))
       val inferredJoinPredicates = inferJoinPredicates(leftConstraints, rightConstraints)
@@ -184,67 +186,29 @@ object EliminateCrossJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   private def inferJoinPredicates(
       leftConstraints: Set[Expression],
-      rightConstraints: Set[Expression]): Set[EqualTo] = {
+      rightConstraints: Set[Expression]): mutable.Set[EqualTo] = {
 
-    // iterate through the left constraints and build a hash map that points semantically
-    // equivalent expressions into attributes
-    val emptyEquivalenceMap = Map.empty[SemanticExpression, Set[Attribute]]
-    val equivalenceMap = leftConstraints.foldLeft(emptyEquivalenceMap) { case (map, constraint) =>
-      constraint match {
-        case EqualTo(attr: Attribute, expr: Expression) =>
-          updateEquivalenceMap(map, attr, expr)
-        case EqualTo(expr: Expression, attr: Attribute) =>
-          updateEquivalenceMap(map, attr, expr)
-        case _ => map
-      }
+    val equivalentExpressionMap = new EquivalentExpressionMap()
+
+    leftConstraints.foreach {
+      case EqualTo(attr: Attribute, expr: Expression) =>
+        equivalentExpressionMap.put(expr, attr)
+      case EqualTo(expr: Expression, attr: Attribute) =>
+        equivalentExpressionMap.put(expr, attr)
+      case _ =>
     }
 
-    // iterate through the right constraints and infer join conditions using the equivalence map
-    rightConstraints.foldLeft(Set.empty[EqualTo]) { case (joinConditions, constraint) =>
-      constraint match {
-        case EqualTo(attr: Attribute, expr: Expression) =>
-          appendJoinConditions(attr, expr, equivalenceMap, joinConditions)
-        case EqualTo(expr: Expression, attr: Attribute) =>
-          appendJoinConditions(attr, expr, equivalenceMap, joinConditions)
-        case _ => joinConditions
-      }
+    val joinConditions = mutable.Set.empty[EqualTo]
+
+    rightConstraints.foreach {
+      case EqualTo(attr: Attribute, expr: Expression) =>
+        joinConditions ++= equivalentExpressionMap.get(expr).map(EqualTo(attr, _))
+      case EqualTo(expr: Expression, attr: Attribute) =>
+        joinConditions ++= equivalentExpressionMap.get(expr).map(EqualTo(attr, _))
+      case _ =>
     }
-  }
 
-  private def updateEquivalenceMap(
-      equivalenceMap: Map[SemanticExpression, Set[Attribute]],
-      attr: Attribute,
-      expr: Expression): Map[SemanticExpression, Set[Attribute]] = {
-
-    val equivalentAttrs = equivalenceMap.getOrElse(expr, Set.empty[Attribute])
-    if (equivalentAttrs.contains(attr)) {
-      equivalenceMap
-    } else {
-      equivalenceMap.updated(expr, equivalentAttrs + attr)
-    }
-  }
-
-  private def appendJoinConditions(
-      attr: Attribute,
-      expr: Expression,
-      equivalenceMap: Map[SemanticExpression, Set[Attribute]],
-      joinConditions: Set[EqualTo]): Set[EqualTo] = {
-
-    equivalenceMap.get(expr) match {
-      case Some(equivalentAttrs) => joinConditions ++ equivalentAttrs.map(EqualTo(attr, _))
-      case None => joinConditions
-    }
-  }
-
-  // the purpose of this class is to treat 'a === 1 and 1 === 'a as the same expressions
-  implicit class SemanticExpression(private val expr: Expression) {
-
-    override def hashCode(): Int = expr.semanticHash()
-
-    override def equals(other: Any): Boolean = other match {
-      case other: SemanticExpression => expr.semanticEquals(other.expr)
-      case _ => false
-    }
+    joinConditions
   }
 
 }

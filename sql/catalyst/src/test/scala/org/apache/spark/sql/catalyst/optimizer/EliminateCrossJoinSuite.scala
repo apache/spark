@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal, Not, Rand}
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -43,6 +43,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = 'a === 1 && 'c === 1 && 'd === 1,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = 'a === 1,
       expectedRightRelationFilter = 'c === 1 && 'd === 1,
       expectedJoinType = Inner,
@@ -54,6 +55,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = 'a === 1 && 'b === 2 && 'd === 1,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = 'a === 1 && 'b === 2,
       expectedRightRelationFilter = 'd === 1,
       expectedJoinType = Inner,
@@ -68,6 +70,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = 'a === 1 && Literal(1) === 'd && 'd === 'a,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = 'a === 1,
       expectedRightRelationFilter = Literal(1) === 'd,
       expectedJoinType = Cross,
@@ -80,6 +83,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = 'a === Literal(1) * Literal(2) && Literal(2) * Literal(1) === 'c,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = 'a === Literal(1) * Literal(2),
       expectedRightRelationFilter = Literal(2) * Literal(1) === 'c,
       expectedJoinType = Inner,
@@ -91,6 +95,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = 'a === 1 && Literal(1) === 'a && 'c === 1,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = 'a === 1 && Literal(1) === 'a,
       expectedRightRelationFilter = 'c === 1,
       expectedJoinType = Inner,
@@ -102,6 +107,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = 'a === Cast("1", IntegerType) && 'c === Cast("1", IntegerType) && 'd === 1,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = 'a === Cast("1", IntegerType),
       expectedRightRelationFilter = 'c === Cast("1", IntegerType) && 'd === 1,
       expectedJoinType = Inner,
@@ -114,6 +120,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = (('a >= 1 && 'c === 1) || 'd === 10) && 'b === 10 && 'c === 1,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = 'b === 10,
       expectedRightRelationFilter = 'c === 1,
       expectedJoinType = Cross,
@@ -125,6 +132,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = 'a === 1 && 'c === 1 && Literal(1) === 'a && Literal(1) === 'c,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = 'a === 1 && Literal(1) === 'a,
       expectedRightRelationFilter = 'c === 1 && Literal(1) === 'c,
       expectedJoinType = Inner,
@@ -137,6 +145,7 @@ class EliminateCrossJoinSuite extends PlanTest {
         originalFilter = 'a === 1 && 'c === 1 && 'd === 1,
         originalJoinType = Cross,
         originalJoinCondition = None,
+        expectedFilter = None,
         expectedLeftRelationFilter = 'a === 1,
         expectedRightRelationFilter = 'c === 1 && 'd === 1,
         expectedJoinType = Cross,
@@ -149,6 +158,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = 'a >= 1 && 'c === 1 && 'd >= 1,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = 'a >= 1,
       expectedRightRelationFilter = 'c === 1 && 'd >= 1,
       expectedJoinType = Cross,
@@ -160,6 +170,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = Literal(1) === 'b && ('c === 1 || 'd === 1),
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = Literal(1) === 'b,
       expectedRightRelationFilter = 'c === 1 || 'd === 1,
       expectedJoinType = Cross,
@@ -171,6 +182,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = Literal(1) === 'b && 'c === 1,
       originalJoinType = Cross,
       originalJoinCondition = Some('c === 'b),
+      expectedFilter = None,
       expectedLeftRelationFilter = Literal(1) === 'b,
       expectedRightRelationFilter = 'c === 1,
       expectedJoinType = Cross,
@@ -182,8 +194,21 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter = Not('a === 1) && 'd === 1,
       originalJoinType = Cross,
       originalJoinCondition = None,
+      expectedFilter = None,
       expectedLeftRelationFilter = Not('a === 1),
       expectedRightRelationFilter = 'd === 1,
+      expectedJoinType = Cross,
+      expectedJoinCondition = None)
+  }
+
+  test("inability to detect join conditions (5)") {
+    checkJoinOptimization(
+      originalFilter = 'a === Rand(10) && 'b === 1 && 'd === Rand(10) && 'c === 3,
+      originalJoinType = Cross,
+      originalJoinCondition = None,
+      expectedFilter = Some('a === Rand(10) && 'd === Rand(10)),
+      expectedLeftRelationFilter = 'b === 1,
+      expectedRightRelationFilter = 'c === 3,
       expectedJoinType = Cross,
       expectedJoinCondition = None)
   }
@@ -192,6 +217,7 @@ class EliminateCrossJoinSuite extends PlanTest {
       originalFilter: Expression,
       originalJoinType: JoinType,
       originalJoinCondition: Option[Expression],
+      expectedFilter: Option[Expression],
       expectedLeftRelationFilter: Expression,
       expectedRightRelationFilter: Expression,
       expectedJoinType: JoinType,
@@ -204,7 +230,9 @@ class EliminateCrossJoinSuite extends PlanTest {
 
     val left = testRelation1.where(expectedLeftRelationFilter)
     val right = testRelation2.where(expectedRightRelationFilter)
-    val expectedQuery = left.join(right, expectedJoinType, expectedJoinCondition).analyze
+    val join = left.join(right, expectedJoinType, expectedJoinCondition)
+    val expectedQuery = expectedFilter.fold(join)(join.where(_)).analyze
+
     comparePlans(optimizedQuery, expectedQuery)
   }
 }
