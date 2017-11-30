@@ -1054,7 +1054,7 @@ class CodegenContext {
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
       if (expr.nullable) {
-        addMutableState(JAVA_BOOLEAN, isNull, s"$isNull = false;")
+        addMutableState(JAVA_BOOLEAN, isNull)
       }
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")

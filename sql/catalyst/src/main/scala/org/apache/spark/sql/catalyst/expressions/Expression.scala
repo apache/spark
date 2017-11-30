@@ -159,15 +159,15 @@ abstract class Expression extends TreeNode[Expression] {
       ctx: CodegenContext,
       subExprs: Seq[Expression]): (Seq[String], Seq[String]) = {
     subExprs.flatMap { subExpr =>
-      val arguType = ctx.javaType(subExpr.dataType)
+      val argType = ctx.javaType(subExpr.dataType)
 
       val subExprState = ctx.subExprEliminationExprs(subExpr)
       (subExprState.value, subExprState.isNull)
 
       if (!subExpr.nullable || subExprState.isNull == "true" || subExprState.isNull == "false") {
-        Seq((subExprState.value, s"$arguType ${subExprState.value}"))
+        Seq((subExprState.value, s"$argType ${subExprState.value}"))
       } else {
-        Seq((subExprState.value, s"$arguType ${subExprState.value}"),
+        Seq((subExprState.value, s"$argType ${subExprState.value}"),
           (subExprState.isNull, s"boolean ${subExprState.isNull}"))
       }
     }.unzip
@@ -251,7 +251,7 @@ abstract class Expression extends TreeNode[Expression] {
       // in the expression path.
       // E.g., if this expression is "d = c + 1" and "c" is not evaluated. We need to track to
       // "c = a + b" and see if "a" and "b" are evaluated. If they are, we need to return them so
-      // to include them into parameters, if not, we tract down further.
+      // to include them into parameters, if not, we track down further.
       case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null =>
         trackDownVar(ctx, ctx.currentVars(ordinal))
 
@@ -322,12 +322,12 @@ abstract class Expression extends TreeNode[Expression] {
       inputAttrs: Seq[Expression],
       inputVars: Seq[ExprCode]): (Seq[String], Seq[String]) = {
     inputAttrs.zip(inputVars).flatMap { case (input, ev) =>
-      val arguType = ctx.javaType(input.dataType)
+      val argType = ctx.javaType(input.dataType)
 
       if (!input.nullable || ev.isNull == "true" || ev.isNull == "false") {
-        Seq((ev.value, s"$arguType ${ev.value}"))
+        Seq((ev.value, s"$argType ${ev.value}"))
       } else {
-        Seq((ev.value, s"$arguType ${ev.value}"), (ev.isNull, s"boolean ${ev.isNull}"))
+        Seq((ev.value, s"$argType ${ev.value}"), (ev.isNull, s"boolean ${ev.isNull}"))
       }
     }.unzip
   }

@@ -108,6 +108,8 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
          |}""".stripMargin)
 
     ctx.currentVars = null
+    // `rowIdx` isn't in `ctx.currentVars`. If the expressions are split later, we can't track it.
+    // So making it as global variable.
     val rowidx = ctx.freshName("rowIdx")
     ctx.addMutableState(ctx.JAVA_INT, rowidx)
     val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
