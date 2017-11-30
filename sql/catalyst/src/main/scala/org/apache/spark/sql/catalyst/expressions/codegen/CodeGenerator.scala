@@ -154,7 +154,7 @@ class CodegenContext {
   val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
     mutable.ArrayBuffer.empty[(String, String, String)]
 
-  // An array keyed by the tuple of mutable states' types and initialization code, holds the
+  // An array keyed by the tuple of mutable states' types and array name, holds the
   // current max index of the array
   var mutableStateArrayIdx: mutable.Map[(String, String), Int] =
     mutable.Map.empty[(String, String), Int]
@@ -186,7 +186,10 @@ class CodegenContext {
    * @return the name of the mutable state variable, which is either the original name if the
    *         variable is inlined to the outer class, or an array access if the variable is to be
    *         stored in an array of variables of the same type and initialization.
-   *         primitive type variables will be inlined into outer class when the total number of
+   *         There are two use cases. One is to use the original name for global variable instead
+   *         of fresh name. Second is to use the original initialization statement since it is
+   *         complex (e.g. allocate multi-dimensional array or object constructor has varibles).
+   *         Primitive type variables will be inlined into outer class when the total number of
    *         mutable variables is less than `CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD`
    *         the max size of an array for compaction is given by
    *         `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
@@ -202,14 +205,7 @@ class CodegenContext {
     if (inline ||
         // want to put a primitive type variable at outerClass for performance
         isPrimitiveType(javaType) &&
-          (mutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD) ||
-        // identify multi-dimensional array or no simply-assigned object
-        !isPrimitiveType(javaType) &&
-          (javaType.contains("[][]") ||
-           !initCode.matches("(^[\\w_]+\\d+\\s*=\\s*null;|"
-              + "^[\\w_]+\\d+\\s*=\\s*new\\s*[\\w\\.]+\\(\\);$|"
-              + "^$)"))) {
-      // primitive type or non-simply-assigned state is declared inline to the outer class
+          (mutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)) {
       mutableStates += ((javaType, varName, initCode))
       varName
     } else {

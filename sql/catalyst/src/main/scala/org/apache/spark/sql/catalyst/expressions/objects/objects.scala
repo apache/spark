@@ -1156,14 +1156,15 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializer = ctx.addMutableState(serializerInstanceClass, "serializer",
+    val serializer = ctx.freshName("serializer")
+    ctx.addMutableState(serializerInstanceClass, serializer,
       v => s"""
        if ($env == null) {
          $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
        } else {
          $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
        }
-     """)
+     """, inline = true)
 
     // Code to serialize.
     val input = child.genCode(ctx)
@@ -1201,14 +1202,15 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializer = ctx.addMutableState(serializerInstanceClass, "serializer",
+    val serializer = ctx.freshName("serializer")
+    ctx.addMutableState(serializerInstanceClass, serializer,
       v => s"""
        if ($env == null) {
          $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
        } else {
          $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
        }
-     """)
+     """, inline = true)
 
     // Code to deserialize.
     val input = child.genCode(ctx)

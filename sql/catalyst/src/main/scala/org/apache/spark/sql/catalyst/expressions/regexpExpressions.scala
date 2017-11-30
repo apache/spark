@@ -118,8 +118,9 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-        val pattern = ctx.addMutableState(patternClass, "patternLike",
-          v => s"""$v = ${patternClass}.compile("$regexStr");""")
+        val pattern = ctx.freshName("patternLike")
+        ctx.addMutableState(patternClass, pattern,
+          v => s"""$v = ${patternClass}.compile("$regexStr");""", inline = true)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -193,8 +194,9 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
-        val pattern = ctx.addMutableState(patternClass, "patternRLike",
-          v => s"""$v = ${patternClass}.compile("$regexStr");""")
+        val pattern = ctx.freshName("patternRLike")
+        ctx.addMutableState(patternClass, pattern,
+          v => s"""$v = ${patternClass}.compile("$regexStr");""", inline = true)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
