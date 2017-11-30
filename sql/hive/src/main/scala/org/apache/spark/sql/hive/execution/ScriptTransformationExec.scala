@@ -412,7 +412,9 @@ case class HiveScriptIOSchema (
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
     val properties = new Properties()
-    properties.putAll(propsMap.asJava)
+    // properties.putAll(propsMap.asJava)
+    // see https://github.com/apache/kafka/pull/3647
+    propsMap.foreach{ case (k, v) => properties.put(k, v) }
     serde.initialize(null, properties)
 
     serde
@@ -424,7 +426,9 @@ case class HiveScriptIOSchema (
     recordReaderClass.map { klass =>
       val instance = Utils.classForName(klass).newInstance().asInstanceOf[RecordReader]
       val props = new Properties()
-      props.putAll(outputSerdeProps.toMap.asJava)
+      // props.putAll(outputSerdeProps.toMap.asJava)
+      // see https://github.com/apache/kafka/pull/3647
+      outputSerdeProps.toMap.foreach { case (k, v) => props.put(k, v) }
       instance.initialize(inputStream, conf, props)
       instance
     }
