@@ -172,8 +172,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // for the last default broadcast nested loop join
         smallerSide
       } else {
-        throw new AnalysisException(
-          "Can not decide to use which side for BuildSide for this join")
+        throw new AnalysisException("Can not decide which side to broadcast for this join")
       }
     }
 

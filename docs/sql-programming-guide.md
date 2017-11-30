@@ -1498,7 +1498,7 @@ The `BROADCAST` hint guides Spark to broadcast each specified table when joining
 When Spark deciding the join methods, the broadcast hash join (i.e., BHJ) is preferred, 
 even if the statistics is above the configuration `spark.sql.autoBroadcastJoinThreshold`.
 When both sides of a join are specified, Spark broadcasts the one having the lower statistics.
-Note Spark does not guaranttee BHJ is always chosen, since not all cases (e.g. full outer join) 
+Note Spark does not guarantee BHJ is always chosen, since not all cases (e.g. full outer join) 
 support BHJ. When the broadcast nested loop join is selected, we still respect the hint.
 
 <div class="codetabs">
