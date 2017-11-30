@@ -847,10 +847,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create(inputOuter, fromOuter), toOuter), outputOuter)
   }
 
-  test("SPARK-22570: Cast should not create a lot of instance variables") {
+  test("SPARK-22570: Cast should not create a lot of global variables") {
     val ctx = new CodegenContext
-    cast("1", IntegerType).genCode(ctx).code
-    cast("2", LongType).genCode(ctx).code
+    cast("1", IntegerType).genCode(ctx)
+    cast("2", LongType).genCode(ctx)
     assert(ctx.mutableStates.length == 0)
   }
 }
