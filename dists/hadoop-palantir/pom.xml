@@ -34,7 +34,7 @@
     <sbt.project.name>spark-dist-hadoop-palantir</sbt.project.name>
     <build.testJarPhase>none</build.testJarPhase>
     <build.copyDependenciesPhase>none</build.copyDependenciesPhase>
-    <hadoop.version>2.9.0-palantir.2</hadoop.version>
+    <hadoop.version>2.9.0-palantir.3</hadoop.version>
     <curator.version>2.7.1</curator.version>
   </properties>
 
