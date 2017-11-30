@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql._
@@ -216,7 +217,7 @@ class QuantileDiscretizerSuite
     val data = (0 until validData1.length).map { idx =>
       (validData1(idx), validData2(idx), expectedKeep1(idx), expectedKeep2(idx))
     }
-    val dataFrame = data.toSeq.toDF("input1", "input2", "expected1", "expected2")
+    val dataFrame = data.toDF("input1", "input2", "expected1", "expected2")
 
     val discretizer = new QuantileDiscretizer()
       .setInputCols(Array("input1", "input2"))
@@ -254,7 +255,6 @@ class QuantileDiscretizerSuite
     val spark = this.spark
     import spark.implicits._
 
-    val datasetSize = 20
     val numBucketsArray: Array[Int] = Array(2, 5, 10)
     val data1 = Array.range(1, 21, 1).map(_.toDouble)
     val expected1 = Array (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
@@ -269,13 +269,15 @@ class QuantileDiscretizerSuite
       (data1(idx), data2(idx), data3(idx), expected1(idx), expected2(idx), expected3(idx))
     }
     val df =
-      data.toSeq.toDF("input1", "input2", "input3", "expected1", "expected2", "expected3")
+      data.toDF("input1", "input2", "input3", "expected1", "expected2", "expected3")
 
     val discretizer = new QuantileDiscretizer()
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("result1", "result2", "result3"))
       .setNumBucketsArray(numBucketsArray)
+
     assert(discretizer.isQuantileDiscretizeMultipleColumns())
+
     discretizer.fit(df).transform(df).
       select("result1", "expected1", "result2", "expected2", "result3", "expected3")
       .collect().foreach {
@@ -286,6 +288,104 @@ class QuantileDiscretizerSuite
           s"The result value is not correct after bucketing. Expected $e2 but found $r2")
         assert(r3 === e3,
           s"The result value is not correct after bucketing. Expected $e3 but found $r3")
+    }
+  }
+
+  test("Multiple Columns: Compare single/multiple column(s) QuantileDiscretizer in pipeline") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val numBucketsArray: Array[Int] = Array(2, 5, 10)
+    val data1 = Array.range(1, 21, 1).map(_.toDouble)
+    val data2 = Array.range(1, 40, 2).map(_.toDouble)
+    val data3 = Array.range(1, 60, 3).map(_.toDouble)
+    val data = (0 until 20).map { idx =>
+      (data1(idx), data2(idx), data3(idx))
+    }
+    val df =
+      data.toDF("input1", "input2", "input3")
+
+    val multiColsDiscretizer = new QuantileDiscretizer()
+      .setInputCols(Array("input1", "input2", "input3"))
+      .setOutputCols(Array("result1", "result2", "result3"))
+      .setNumBucketsArray(numBucketsArray)
+    val plForMultiCols = new Pipeline()
+      .setStages(Array(multiColsDiscretizer))
+      .fit(df)
+
+    val discretizerForCol1 = new QuantileDiscretizer()
+      .setInputCol("input1")
+      .setOutputCol("result1")
+      .setNumBuckets(numBucketsArray(0))
+
+    val discretizerForCol2 = new QuantileDiscretizer()
+      .setInputCol("input2")
+      .setOutputCol("result2")
+      .setNumBuckets(numBucketsArray(1))
+
+    val discretizerForCol3 = new QuantileDiscretizer()
+      .setInputCol("input3")
+      .setOutputCol("result3")
+      .setNumBuckets(numBucketsArray(2))
+
+    val plForSingleCol = new Pipeline()
+      .setStages(Array(discretizerForCol1, discretizerForCol2, discretizerForCol3))
+      .fit(df)
+
+    val resultForMultiCols = plForMultiCols.transform(df)
+      .select("result1", "result2", "result3")
+      .collect()
+
+    val resultForSingleCol = plForSingleCol.transform(df)
+      .select("result1", "result2", "result3")
+      .collect()
+
+    resultForSingleCol.zip(resultForMultiCols).foreach {
+      case (rowForSingle, rowForMultiCols) =>
+        assert(rowForSingle.getDouble(0) == rowForMultiCols.getDouble(0) &&
+          rowForSingle.getDouble(1) == rowForMultiCols.getDouble(1) &&
+          rowForSingle.getDouble(2) == rowForMultiCols.getDouble(2))
+    }
+  }
+
+  test("Multiple Columns: Comparing setting numBuckets with setting numBucketsArray" +
+    " explicitly with identical values") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val datasetSize = 20
+    val numBucketsArray: Array[Int] = Array(2, 5, 10)
+    val data1 = Array.range(1, 21, 1).map(_.toDouble)
+    val data2 = Array.range(1, 40, 2).map(_.toDouble)
+    val data3 = Array.range(1, 60, 3).map(_.toDouble)
+    val data = (0 until 20).map { idx =>
+      (data1(idx), data2(idx), data3(idx))
+    }
+    val df =
+      data.toDF("input1", "input2", "input3")
+
+    val discretizerSingleNumBuckets = new QuantileDiscretizer()
+      .setInputCols(Array("input1", "input2", "input3"))
+      .setOutputCols(Array("result1", "result2", "result3"))
+      .setNumBuckets(10)
+
+    val discretizerNumBucketsArray = new QuantileDiscretizer()
+      .setInputCols(Array("input1", "input2", "input3"))
+      .setOutputCols(Array("result1", "result2", "result3"))
+      .setNumBucketsArray(Array(10, 10, 10))
+
+    val result1 = discretizerSingleNumBuckets.fit(df).transform(df)
+      .select("result1", "result2", "result3")
+      .collect()
+    val result2 = discretizerNumBucketsArray.fit(df).transform(df)
+      .select("result1", "result2", "result3")
+      .collect()
+
+    result1.zip(result2).foreach {
+      case (row1, row2) =>
+        assert(row1.getDouble(0) == row2.getDouble(0) &&
+          row1.getDouble(1) == row2.getDouble(1) &&
+          row1.getDouble(2) == row2.getDouble(2))
     }
   }
 

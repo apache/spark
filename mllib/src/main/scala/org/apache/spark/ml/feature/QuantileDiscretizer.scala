@@ -52,6 +52,7 @@ private[feature] trait QuantileDiscretizerBase extends Params
 
   /**
    * Array of number of buckets (quantiles, or categories) into which data points are grouped.
+   * Each value must be greater than or equal to 2
    *
    * See also [[handleInvalid]], which can optionally create an additional bucket for NaN values.
    *
@@ -59,8 +60,9 @@ private[feature] trait QuantileDiscretizerBase extends Params
    */
   val numBucketsArray = new IntArrayParam(this, "numBucketsArray", "Array of number of buckets " +
     "(quantiles, or categories) into which data points are grouped. This is for multiple " +
-    "columns input. If numBucketsArray is not set but numBuckets is set, it means user wants " +
-    "to use the same numBuckets across all columns.")
+    "columns input. If transforming multiple columns and numBucketsArray is not set, but " +
+    "numBuckets is set, then numBuckets will be applied across all columns.",
+    (arrayOfNumBuckets: Array[Int]) => arrayOfNumBuckets.forall(ParamValidators.gtEq(2)))
 
   /** @group getParam */
   def getNumBucketsArray: Array[Int] = $(numBucketsArray)
@@ -105,9 +107,11 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * possible that the number of buckets used will be smaller than this value, for example, if there
  * are too few distinct values of the input to create enough distinct quantiles.
  * Since 2.3.0,
- * `QuantileDiscretizer` can also map multiple columns at once. Whether it goes to map a column or
- * multiple columns, it depends on which parameter of `inputCol` and `inputCols` is set. When both
- * are set, a log warning will be printed and by default it chooses `inputCol`.
+ * `QuantileDiscretizer ` can map multiple columns at once by setting the `inputCols` parameter.
+ * Note that when both the `inputCol` and `inputCols` parameters are set, a log warning will be
+ * printed and only `inputCol` will take effect, while `inputCols` will be ignored. To specify
+ * the number of bucketsfor each column , the `numBucketsArray ` parameter can be set, or if the
+ *  number of buckets should be the same across columns, `numBuckets` can be set as a convenience.
  *
  * NaN handling:
  * null and NaN values will be ignored from the column during `QuantileDiscretizer` fitting. This
@@ -167,7 +171,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   private[feature] def isQuantileDiscretizeMultipleColumns(): Boolean = {
     if (isSet(inputCols) && isSet(inputCol)) {
       logWarning("Both `inputCol` and `inputCols` are set, we ignore `inputCols` and this " +
-        "`QuantileDiscretize` only map one column specified by `inputCol`")
+        "`QuantileDiscretizer` will only map one column specified by `inputCol`")
       false
     } else if (isSet(inputCols)) {
       true
@@ -206,35 +210,22 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     transformSchema(dataset.schema, logging = true)
     val bucketizer = new Bucketizer(uid).setHandleInvalid($(handleInvalid))
     if (isQuantileDiscretizeMultipleColumns) {
-      var bucketArray = Array.empty[Int]
-      if (isSet(numBucketsArray)) {
-        bucketArray = $(numBucketsArray)
+      val bucketSeq = if (isSet(numBucketsArray)) {
+        $(numBucketsArray).toSeq
       } else {
-        bucketArray = Array($(numBuckets))
+        Array.fill($(inputCols).length)($(numBuckets)).toSeq
       }
 
-      val probabilityArray = bucketArray.toSeq.flatMap { numOfBucket =>
+      val probabilityArray = bucketSeq.flatMap { numOfBucket =>
         (0.0 to 1.0 by 1.0 / numOfBucket)
       }.sorted.toArray.distinct
 
       val splitsArray = dataset.stat.approxQuantile($(inputCols),
         probabilityArray, $(relativeError))
-
-      var distinctSplitsArray = Seq.empty[Array[Double]]
-      if (bucketArray.length > 1) {
-        var idxForColumn = 0
-        distinctSplitsArray = bucketArray.toSeq.map { numOfBuckets =>
-          val splitArrayForEachColumn =
-            getSplitsForEachColumn(numOfBuckets, probabilityArray, splitsArray, idxForColumn)
-          idxForColumn += 1
-          splitArrayForEachColumn
-        }
-      } else {
-        distinctSplitsArray = splitsArray.toSeq.map { splits =>
-          getDistinctSplits(splits)
-        }
+      val distinctSplits = bucketSeq.zipWithIndex.map { case (numOfBuckets, index) =>
+        getSplitsForEachColumn(numOfBuckets, probabilityArray, splitsArray, index)
       }
-      bucketizer.setSplitsArray(distinctSplitsArray.toArray)
+      bucketizer.setSplitsArray(distinctSplits.toArray)
     } else {
       val splits = dataset.stat.approxQuantile($(inputCol),
         (0.0 to 1.0 by 1.0 / $(numBuckets)).toArray, $(relativeError))
