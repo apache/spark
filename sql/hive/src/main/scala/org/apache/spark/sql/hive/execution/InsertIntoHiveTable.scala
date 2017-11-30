@@ -77,35 +77,35 @@ case class InsertIntoHiveTable(
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
-    try {
-      val hiveQlTable = HiveClientImpl.toHiveTable(table)
-      // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
-      // instances within the closure, since Serializer is not serializable while TableDesc is.
-      val tableDesc = new TableDesc(
-        hiveQlTable.getInputFormatClass,
-        // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
-        // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to
-        // substitute some output formats, e.g. substituting SequenceFileOutputFormat to
-        // HiveSequenceFileOutputFormat.
-        hiveQlTable.getOutputFormatClass,
-        hiveQlTable.getMetadata
-      )
-      val tableLocation = hiveQlTable.getDataLocation
-      val tmpLocation = getExternalTmpPath(sparkSession, hadoopConf, tableLocation)
-      val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
+    val hiveQlTable = HiveClientImpl.toHiveTable(table)
+    // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
+    // instances within the closure, since Serializer is not serializable while TableDesc is.
+    val tableDesc = new TableDesc(
+      hiveQlTable.getInputFormatClass,
+      // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
+      // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to
+      // substitute some output formats, e.g. substituting SequenceFileOutputFormat to
+      // HiveSequenceFileOutputFormat.
+      hiveQlTable.getOutputFormatClass,
+      hiveQlTable.getMetadata
+    )
+    val tableLocation = hiveQlTable.getDataLocation
 
-      val numDynamicPartitions = partition.values.count(_.isEmpty)
-      val numStaticPartitions = partition.values.count(_.nonEmpty)
-      val partitionSpec = partition.map {
-        case (key, Some(value)) => key -> value
-        case (key, None) => key -> ""
-      }
+    val tmpLocation = getExternalTmpPath(sparkSession, hadoopConf, tableLocation)
+    val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
 
-      // All partition column names in the format of "<column name 1>/<column name 2>/..."
-      val partitionColumns = fileSinkConf.getTableInfo.getProperties.
-        getProperty("partition_columns")
-      val partitionColumnNames = Option(partitionColumns).map(_.split("/")).getOrElse(Array.empty)
+    val numDynamicPartitions = partition.values.count(_.isEmpty)
+    val numStaticPartitions = partition.values.count(_.nonEmpty)
+    val partitionSpec = partition.map {
+      case (key, Some(value)) => key -> value
+      case (key, None) => key -> ""
+    }
 
+    // All partition column names in the format of "<column name 1>/<column name 2>/..."
+    val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
+    val partitionColumnNames = Option(partitionColumns).map(_.split("/")).getOrElse(Array.empty)
+
+    def processInsert = {
       // By this time, the partition map must match the table's partition columns
       if (partitionColumnNames.toSet != partition.keySet) {
         throw new SparkException(
@@ -233,22 +233,26 @@ case class InsertIntoHiveTable(
           overwrite,
           isSrcLocal = false)
       }
+    }
 
-      // un-cache this table.
-      sparkSession.catalog.uncacheTable(table.identifier.quotedString)
-      sparkSession.sessionState.catalog.refreshTable(table.identifier)
-
-      CommandUtils.updateTableStats(sparkSession, table)
-
-      // It would be nice to just return the childRdd unchanged so insert operations could be
-      // chained, however for now we return an empty list to simplify compatibility checks with
-      // hive, which does not return anything for insert operations.
-      // TODO: implement hive compatibility as rules.
-      Seq.empty[Row]
+    try {
+      processInsert
     } finally {
       // Attempt to delete the staging directory and the inclusive files. If failed, the files are
       // expected to be dropped at the normal termination of VM since deleteOnExit is used.
       deleteExternalTmpPath(hadoopConf)
     }
+
+    // un-cache this table.
+    sparkSession.catalog.uncacheTable(table.identifier.quotedString)
+    sparkSession.sessionState.catalog.refreshTable(table.identifier)
+
+    CommandUtils.updateTableStats(sparkSession, table)
+
+    // It would be nice to just return the childRdd unchanged so insert operations could be
+    // chained, however for now we return an empty list to simplify compatibility checks with
+    // hive, which does not return anything for insert operations.
+    // TODO: implement hive compatibility as rules.
+    Seq.empty[Row]
   }
 }
