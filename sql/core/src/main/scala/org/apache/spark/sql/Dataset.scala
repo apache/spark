@@ -2732,16 +2732,18 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = withTypedPlan {
+  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
     // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
-    // However, we don't want to complicate the semantics of this API method. Instead, let's
-    // give users a friendly error message, pointing them to the new method.
+    // However, we don't want to complicate the semantics of this API method.
+    // Instead, let's give users a friendly error message, pointing them to the new method.
     val sortOrders = partitionExprs.filter(_.expr.isInstanceOf[SortOrder])
     if (sortOrders.nonEmpty) throw new IllegalArgumentException(
       s"""Invalid partitionExprs specified: $sortOrders
          |For range partitioning use repartitionByRange(...) instead.
        """.stripMargin)
-    RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions)
+    withTypedPlan {
+      RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions)
+    }
   }
 
   /**
@@ -2763,26 +2765,31 @@ class Dataset[T] private[sql](
    * Returns a new Dataset partitioned by the given partitioning expressions into
    * `numPartitions`. The resulting Dataset is range partitioned.
    *
+   * At least one partition-by expression must be specified.
+   * When no explicit sort order is specified, "ascending nulls first" is assumed.
+   *
    * @group typedrel
    * @since 2.3.0
    */
   @scala.annotation.varargs
-  def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = withTypedPlan {
-    val sortOrder: Seq[SortOrder] = partitionExprs.map { col =>
-      col.expr match {
-        case expr: SortOrder =>
-          expr
-        case expr: Expression =>
-          SortOrder(expr, Ascending)
-      }
+  def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+    require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
+    val sortOrder: Seq[SortOrder] = partitionExprs.map(_.expr match {
+      case expr: SortOrder => expr
+      case expr: Expression => SortOrder(expr, Ascending)
+    })
+    withTypedPlan {
+      RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
     }
-    RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
   }
 
   /**
    * Returns a new Dataset partitioned by the given partitioning expressions, using
    * `spark.sql.shuffle.partitions` as number of partitions.
    * The resulting Dataset is range partitioned.
+   *
+   * At least one partition-by expression must be specified.
+   * When no explicit sort order is specified, "ascending nulls first" is assumed.
    *
    * @group typedrel
    * @since 2.3.0

@@ -389,12 +389,30 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .select(spark_partition_id().as("id"), $"val"),
       data1d.map(i => Row(i, data1d.size - 1 - i)))
 
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, lit(42))
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(0, i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, lit(null), $"val".asc, rand())
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, i)))
+
     // .repartitionByRange() assumes .asc by default if no explicit sort order is specified
     checkAnswer(
       data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b")
         .select(spark_partition_id().as("id"), $"a", $"b"),
       data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b".asc)
         .select(spark_partition_id().as("id"), $"a", $"b"))
+
+    // at least one partition-by expression must be specified
+    intercept[IllegalArgumentException] {
+      data1d.toDF("val").repartitionByRange(data1d.size)
+    }
+    intercept[IllegalArgumentException] {
+      data1d.toDF("val").repartitionByRange(data1d.size, Seq.empty: _*)
+    }
   }
 
   test("coalesce") {
