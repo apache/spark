@@ -145,6 +145,34 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsToAdd(manager) === 1)
   }
 
+  test("tasksPerExecutorSlot is correctly handled") {
+    val conf = new SparkConf()
+      .setMaster("myDummyLocalExternalClusterManager")
+      .setAppName("test-executor-allocation-manager")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+
+    val sc0 = new SparkContext(conf)
+    contexts += sc0
+    var manager = sc0.executorAllocationManager.get
+    assert(tasksPerExecutor(manager) === 1)
+    sc0.stop()
+
+    val conf1 = conf.clone.set("spark.dynamicAllocation.tasksPerExecutorSlot", "2")
+    val sc1 = new SparkContext(conf1)
+    contexts += sc1
+    manager = sc1.executorAllocationManager.get
+    assert(tasksPerExecutor(manager) === 2)
+    sc1.stop()
+
+    val conf2 = conf1.clone.set("spark.executor.cores", "2")
+    val sc2 = new SparkContext(conf2)
+    contexts += sc2
+    manager = sc2.executorAllocationManager.get
+    assert(tasksPerExecutor(manager) === 4)
+    sc2.stop()
+  }
+
   test("add executors capped by num pending tasks") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
@@ -1195,6 +1223,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
   private val _onSpeculativeTaskSubmitted = PrivateMethod[Unit]('onSpeculativeTaskSubmitted)
   private val _totalRunningTasks = PrivateMethod[Int]('totalRunningTasks)
+  private val _tasksPerExecutor = PrivateMethod[Int]('tasksPerExecutor)
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()
@@ -1284,6 +1313,10 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def hostToLocalTaskCount(manager: ExecutorAllocationManager): Map[String, Int] = {
     manager invokePrivate _hostToLocalTaskCount()
+  }
+
+  private def tasksPerExecutor(manager: ExecutorAllocationManager): Int = {
+    manager invokePrivate _tasksPerExecutor()
   }
 }
 

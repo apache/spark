@@ -116,8 +116,12 @@ private[spark] class ExecutorAllocationManager(
   // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
   // allocation is only supported for YARN and the default number of cores per executor in YARN is
   // 1, but it might need to be attained differently for different cluster managers
-  private val tasksPerExecutor =
+  private val taskSlotPerExecutor =
     conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+
+  private val tasksPerExecutorSlot = conf.getInt("spark.dynamicAllocation.tasksPerExecutorSlot", 1)
+
+  private val tasksPerExecutor = tasksPerExecutorSlot * taskSlotPerExecutor
 
   validateSettings()
 
