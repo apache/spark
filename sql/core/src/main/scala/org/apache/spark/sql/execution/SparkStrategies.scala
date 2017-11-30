@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -91,12 +91,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * predicates can be evaluated by matching join keys. If found,  Join implementations are chosen
    * with the following precedence:
    *
-   * - Broadcast: if one side of the join has an estimated physical size that is smaller than the
-   *     user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold
-   *     or if that side has an explicit broadcast hint (e.g. the user applied the
-   *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame), then that side
-   *     of the join will be broadcasted and the other side will be streamed, with no shuffling
-   *     performed. If both sides of the join are eligible to be broadcasted then the
+   * - Broadcast: We prefer to broadcast the join side with an explicit broadcast hint(e.g. the
+   *     user applied the [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame).
+   *     If both sides have the broadcast hint, we prefer to broadcast the side with a smaller
+   *     estimated physical size. If neither one of the sides has the broadcast hint,
+   *     we only broadcast the join side if its estimated physical size that is smaller than
+   *     the user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold.
    * - Shuffle hash join: if the average size of a single partition is small enough to build a hash
    *     table.
    * - Sort merge: if the matching join keys are sortable.
@@ -112,9 +112,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * Matches a plan whose output should be small enough to be used in broadcast join.
      */
     private def canBroadcast(plan: LogicalPlan): Boolean = {
-      plan.stats.hints.broadcast ||
-        (plan.stats.sizeInBytes >= 0 &&
-          plan.stats.sizeInBytes <= conf.autoBroadcastJoinThreshold)
+      plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= conf.autoBroadcastJoinThreshold
     }
 
     /**
@@ -149,9 +147,44 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => false
     }
 
+    private def broadcastSide(
+        canBuildLeft: Boolean,
+        canBuildRight: Boolean,
+        left: LogicalPlan,
+        right: LogicalPlan): BuildSide = {
+
+      def smallerSide =
+        if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
+
+      val buildRight = canBuildRight && right.stats.hints.broadcast
+      val buildLeft = canBuildLeft && left.stats.hints.broadcast
+
+      if (buildRight && buildLeft) {
+        // Broadcast smaller side base on its estimated physical size
+        // if both sides have broadcast hint
+        smallerSide
+      } else if (buildRight) {
+        BuildRight
+      } else if (buildLeft) {
+        BuildLeft
+      } else if (canBuildRight && canBuildLeft) {
+        // for the last default broadcast nested loop join
+        smallerSide
+      } else {
+        throw new AnalysisException("Can not decide which side to broadcast for this join")
+      }
+    }
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // --- BroadcastHashJoin --------------------------------------------------------------------
+
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+        if (canBuildRight(joinType) && right.stats.hints.broadcast) ||
+          (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
+        val buildSide = broadcastSide(canBuildLeft(joinType), canBuildRight(joinType), left, right)
+        Seq(joins.BroadcastHashJoinExec(
+          leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if canBuildRight(joinType) && canBroadcast(right) =>
@@ -190,6 +223,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcasted
       case j @ logical.Join(left, right, joinType, condition)
+        if (canBuildRight(joinType) && right.stats.hints.broadcast) ||
+          (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
+        val buildSide = broadcastSide(canBuildLeft(joinType), canBuildRight(joinType), left, right)
+        joins.BroadcastNestedLoopJoinExec(
+          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
+
+      case j @ logical.Join(left, right, joinType, condition)
           if canBuildRight(joinType) && canBroadcast(right) =>
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
@@ -203,12 +243,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>
-        val buildSide =
-          if (right.stats.sizeInBytes <= left.stats.sizeInBytes) {
-            BuildRight
-          } else {
-            BuildLeft
-          }
+        val buildSide = broadcastSide(canBuildLeft = true, canBuildRight = true, left, right)
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
