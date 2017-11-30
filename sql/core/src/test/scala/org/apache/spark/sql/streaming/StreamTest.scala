@@ -134,8 +134,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, false, false)
 
-    def apply(checkFunction: Row => Unit): CheckAnswerRows =
-      CheckAnswerRows(null, false, false, checkFunction)
+    def apply(checkFunction: Row => Unit): CheckAnswerRowsByFunc =
+      CheckAnswerRowsByFunc(checkFunction, false)
   }
 
   /**
@@ -157,14 +157,21 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     }
 
     def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, true, false)
+
+    def apply(checkFunction: Row => Unit): CheckAnswerRowsByFunc =
+      CheckAnswerRowsByFunc(checkFunction, true)
   }
 
-  case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean, isSorted: Boolean,
-    checkFunction: Row => Unit = null)
+  case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean, isSorted: Boolean)
       extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"$operatorName: ${
-      if (expectedAnswer != null) expectedAnswer.mkString(",") else "check via function"}"
+    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
     private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
+  }
+
+  case class CheckAnswerRowsByFunc(checkFunction: Row => Unit, lastOnly: Boolean)
+    extends StreamAction with StreamMustBeRunning {
+    override def toString: String = s"$operatorName: ${checkFunction.toString()}"
+    private def operatorName = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
   }
 
   /** Stops the stream. It must currently be running. */
@@ -355,6 +362,29 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
            |${(m ++ c).mkString(": ")}
            |$testState
          """.stripMargin)
+    }
+
+    def fetchStreamAnswer(currentStream: StreamExecution, lastOnly: Boolean) = {
+      verify(currentStream != null, "stream not running")
+      // Get the map of source index to the current source objects
+      val indexToSource = currentStream
+        .logicalPlan
+        .collect { case StreamingExecutionRelation(s, _) => s }
+        .zipWithIndex
+        .map(_.swap)
+        .toMap
+
+      // Block until all data added has been processed for all the source
+      awaiting.foreach { case (sourceIndex, offset) =>
+        failAfter(streamingTimeout) {
+          currentStream.awaitOffset(indexToSource(sourceIndex), offset)
+        }
+      }
+
+      try if (lastOnly) sink.latestBatchData else sink.allData catch {
+        case e: Exception =>
+          failTest("Exception while getting data from sink", e)
+      }
     }
 
     var manualClockExpectedTime = -1L
@@ -556,40 +586,19 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           case e: ExternalAction =>
             e.runAction()
 
-          case CheckAnswerRows(expectedAnswer, lastOnly, isSorted, checkFunction) =>
-            verify(currentStream != null, "stream not running")
-            // Get the map of source index to the current source objects
-            val indexToSource = currentStream
-              .logicalPlan
-              .collect { case StreamingExecutionRelation(s, _) => s }
-              .zipWithIndex
-              .map(_.swap)
-              .toMap
-
-            // Block until all data added has been processed for all the source
-            awaiting.foreach { case (sourceIndex, offset) =>
-              failAfter(streamingTimeout) {
-                currentStream.awaitOffset(indexToSource(sourceIndex), offset)
-              }
+          case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
+            val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+            QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
+              error => failTest(error)
             }
 
-            val sparkAnswer = try if (lastOnly) sink.latestBatchData else sink.allData catch {
-              case e: Exception =>
-                failTest("Exception while getting data from sink", e)
-            }
-
-            if (expectedAnswer != null) {
-              QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
-                error => failTest(error)
-              }
-            } else {
-              assert(checkFunction != null)
-              sparkAnswer.foreach { row =>
-                try {
-                  checkFunction
-                } catch {
-                  case e: Throwable => failTest(e.toString)
-                }
+          case CheckAnswerRowsByFunc(checkFunction, lastOnly) =>
+            val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+            sparkAnswer.foreach { row =>
+              try {
+                checkFunction(row)
+              } catch {
+                case e: Throwable => failTest(e.toString)
               }
             }
         }
