@@ -44,8 +44,7 @@ object SparkHadoopMapRedUtil extends Logging {
     commitTask(committer, mrTaskContext, jobId, -1, splitId)
   }
 
-  private[spark]
-  def commitTask(
+  private[spark] def commitTask(
       committer: MapReduceOutputCommitter,
       mrTaskContext: MapReduceTaskAttemptContext,
       jobId: Int,

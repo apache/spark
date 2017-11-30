@@ -171,8 +171,9 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     commitTask(taskContext, -1)
   }
 
-  private[spark]
-  override def commitTask(taskContext: TaskAttemptContext, stageId: Int): TaskCommitMessage = {
+  private[spark] override def commitTask(
+      taskContext: TaskAttemptContext,
+      stageId: Int): TaskCommitMessage = {
     val attemptId = taskContext.getTaskAttemptID
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId, stageId, attemptId.getTaskID.getId)

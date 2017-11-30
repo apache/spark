@@ -110,8 +110,7 @@ abstract class FileCommitProtocol {
    * Commits a task which blongs to a specific stage after the writes succeed.
    * Must be called on the executors when running tasks.
    */
-  private[spark]
-  def commitTask(taskContext: TaskAttemptContext, stageId: Int): TaskCommitMessage
+  private[spark] def commitTask(taskContext: TaskAttemptContext, stageId: Int): TaskCommitMessage
 
   /**
    * Aborts a task after the writes have failed. Must be called on the executors when running tasks.
