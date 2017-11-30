@@ -87,6 +87,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
+      EliminateCrossJoin,
       InferFiltersFromConstraints,
       BooleanSimplification,
       PushPredicateThroughJoin,
