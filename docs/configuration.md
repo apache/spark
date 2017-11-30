@@ -2346,6 +2346,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
   </tr>
 </table>
 
+
 ### Cluster Managers
 
 Each cluster manager in Spark has additional configuration options. Configurations
