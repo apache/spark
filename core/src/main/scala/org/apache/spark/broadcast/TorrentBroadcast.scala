@@ -99,7 +99,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private def calcChecksum(block: ByteBuffer): Int = {
     val adler = new Adler32()
     if (block.hasArray) {
-      adler.update(block.array, block.arrayOffset + block.position, block.limit - block.position)
+      adler.update(block.array, block.arrayOffset + block.position(), block.limit() - block.position())
     } else {
       val bytes = new Array[Byte](block.remaining())
       block.duplicate.get(bytes)

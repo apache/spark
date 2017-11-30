@@ -288,13 +288,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         val serializedTask = TaskDescription.encode(task)
-        if (serializedTask.limit >= maxRpcMessageSize) {
+        if (serializedTask.limit() >= maxRpcMessageSize) {
           scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
                 "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
                 "spark.rpc.message.maxSize or using broadcast variables for large values."
-              msg = msg.format(task.taskId, task.index, serializedTask.limit, maxRpcMessageSize)
+              msg = msg.format(task.taskId, task.index, serializedTask.limit(), maxRpcMessageSize)
               taskSetMgr.abort(msg)
             } catch {
               case e: Exception => logError("Exception in error callback", e)
