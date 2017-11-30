@@ -142,7 +142,7 @@ abstract class Expression extends TreeNode[Expression] {
    * separating it into a function if the size exceeds a threshold.
    */
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
-    val funcParams = ExpressionCodegen.getExpressionInputParams(ctx, this)
+    lazy val funcParams = ExpressionCodegen.getExpressionInputParams(ctx, this)
 
     if (eval.code.trim.length > 1024 && funcParams.isDefined) {
       val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
