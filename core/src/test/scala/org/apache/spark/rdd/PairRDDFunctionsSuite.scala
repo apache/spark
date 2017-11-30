@@ -525,11 +525,13 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
   }
 
-  test("The JobId on driver and executor should be the same during the commit") {
+  test("The JobId on the driver and executors should be the same during the commit") {
     // Create more than one rdd to mimic stageId not equal to rddId
-    val pairs = sc.parallelize(Array((1, 2), (2, 3)), 2).
-      map { p => (new Integer(p._1 + 1), new Integer(p._2 + 1)) }.filter { p => p._1 > 0 }
+    val pairs = sc.parallelize(Array((1, 2), (2, 3)), 2)
+      .map { p => (new Integer(p._1 + 1), new Integer(p._2 + 1)) }
+      .filter { p => p._1 > 0 }
     pairs.saveAsNewAPIHadoopFile[YetAnotherFakeFormat]("ignored")
+    assert(JobID.jobid != -1)
   }
 
   test("saveAsHadoopFile should respect configured output committers") {

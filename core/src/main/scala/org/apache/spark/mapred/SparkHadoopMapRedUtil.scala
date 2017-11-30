@@ -41,15 +41,6 @@ object SparkHadoopMapRedUtil extends Logging {
       mrTaskContext: MapReduceTaskAttemptContext,
       jobId: Int,
       splitId: Int): Unit = {
-    commitTask(committer, mrTaskContext, jobId, -1, splitId)
-  }
-
-  private[spark] def commitTask(
-      committer: MapReduceOutputCommitter,
-      mrTaskContext: MapReduceTaskAttemptContext,
-      jobId: Int,
-      stageId: Int,
-      splitId: Int): Unit = {
 
     val mrTaskAttemptID = mrTaskContext.getTaskAttemptID
 
@@ -79,14 +70,8 @@ object SparkHadoopMapRedUtil extends Logging {
       if (shouldCoordinateWithDriver) {
         val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
         val taskAttemptNumber = TaskContext.get().attemptNumber()
-        var canCommit: Boolean = true
-        // This checks whether the commitTask provided by stageId, which if not the canCommit
-        // will use jobId as stageId to decide whether the commit should be possible
-        if (stageId != -1) {
-          canCommit = outputCommitCoordinator.canCommit(stageId, splitId, taskAttemptNumber)
-        } else {
-          canCommit = outputCommitCoordinator.canCommit(jobId, splitId, taskAttemptNumber)
-        }
+        val stageId = TaskContext.get().stageId()
+        val canCommit = outputCommitCoordinator.canCommit(stageId, splitId, taskAttemptNumber)
 
         if (canCommit) {
           performCommit()

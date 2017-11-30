@@ -168,15 +168,9 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   }
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
-    commitTask(taskContext, -1)
-  }
-
-  private[spark] override def commitTask(
-      taskContext: TaskAttemptContext,
-      stageId: Int): TaskCommitMessage = {
     val attemptId = taskContext.getTaskAttemptID
     SparkHadoopMapRedUtil.commitTask(
-      committer, taskContext, attemptId.getJobID.getId, stageId, attemptId.getTaskID.getId)
+      committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
     new TaskCommitMessage(addedAbsPathFiles.toMap)
   }
 
