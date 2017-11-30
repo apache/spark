@@ -159,16 +159,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       val buildRight = canBuildRight && right.stats.hints.broadcast
       val buildLeft = canBuildLeft && left.stats.hints.broadcast
 
-      // Both sides have broadcast hint, broadcast smaller side base on its estimated physical size.
+
       if (buildRight && buildLeft) {
+        // Broadcast smaller side base on its estimated physical size
+        // if both sides have broadcast hint
         smallerSide
       } else if (buildRight) {
         BuildRight
       } else if (buildLeft) {
         BuildLeft
-      // This used for `case logical.Join(left, right, joinType, condition)`
-      } else {
+      } else if (canBuildRight && canBuildLeft) {
+        // for the last default broadcast nested loop join
         smallerSide
+      } else {
+        throw new AnalysisException(
+          "Can not decide to use which side for BuildSide for this join")
       }
     }
 
@@ -177,8 +182,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- BroadcastHashJoin --------------------------------------------------------------------
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if (canBuildRight(joinType) && right.stats.hints.broadcast)
-          || (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
+        if (canBuildRight(joinType) && right.stats.hints.broadcast) ||
+          (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
         val buildSide = broadcastSide(canBuildLeft(joinType), canBuildRight(joinType), left, right)
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
@@ -220,8 +225,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcasted
       case j @ logical.Join(left, right, joinType, condition)
-        if (canBuildRight(joinType) && right.stats.hints.broadcast)
-          || (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
+        if (canBuildRight(joinType) && right.stats.hints.broadcast) ||
+          (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
         val buildSide = broadcastSide(canBuildLeft(joinType), canBuildRight(joinType), left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
@@ -240,7 +245,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>
-        val buildSide = broadcastSide(true, true, left, right)
+        val buildSide = broadcastSide(canBuildLeft = true, canBuildRight = true, left, right)
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
