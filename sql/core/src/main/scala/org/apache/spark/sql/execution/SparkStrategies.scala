@@ -159,7 +159,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       val buildRight = canBuildRight && right.stats.hints.broadcast
       val buildLeft = canBuildLeft && left.stats.hints.broadcast
 
-
       if (buildRight && buildLeft) {
         // Broadcast smaller side base on its estimated physical size
         // if both sides have broadcast hint
