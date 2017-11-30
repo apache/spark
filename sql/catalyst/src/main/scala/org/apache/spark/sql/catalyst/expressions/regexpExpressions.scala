@@ -316,6 +316,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def prettyName: String = "regexp_replace"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val termResult = ctx.freshName("termResult")
+
     val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
 
@@ -325,8 +327,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     val termPattern = ctx.addMutableState(classNamePattern, "pattern")
     val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
     val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
-    val termResult = ctx.addMutableState(classNameStringBuffer, "result",
-      v => s"$v = new $classNameStringBuffer();")
 
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
