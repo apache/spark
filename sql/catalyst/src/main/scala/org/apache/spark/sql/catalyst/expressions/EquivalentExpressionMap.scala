@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.EquivalentExpressionMap.SemanticallyEqualExpr
 
 /**
- * ﻿A class that allows you to map an expression into a set of equivalent expressions. The keys are
+ * A class that allows you to map an expression into a set of equivalent expressions. The keys are
  * handled based on their semantic meaning and ignoring cosmetic differences. The values are
  * represented as [[ExpressionSet]]s.
  *
