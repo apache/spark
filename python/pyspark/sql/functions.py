@@ -2230,7 +2230,8 @@ def pandas_udf(f=None, returnType=None, functionType=None, nullable=True):
                          "functionType must be one the values from PandasUDFType")
 
     if is_decorator:
-        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type, nullable=nullable)
+        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type,
+                                 nullable=nullable)
     else:
         return _create_udf(f=f, returnType=return_type, evalType=eval_type, nullable=nullable)
 
