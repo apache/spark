@@ -1837,7 +1837,11 @@ class SparkContext(config: SparkConf) extends Logging {
         Utils.validateURL(uri)
         uri.getScheme match {
           // A JAR file which exists only on the driver node
-          case null | "file" => addJarFile(new File(uri.getPath))
+          case null =>
+            // SPARK-22585 path without schema is not url encoded
+            addJarFile(new File(uri.getRawPath))
+          // A JAR file which exists only on the driver node
+          case "file" => addJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
           case "local" => "file:" + uri.getPath
           case _ => path
