@@ -2760,7 +2760,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset that is range partitioned by the given expressions into `numPartitions`.
+   * Returns a new Dataset that is hash partitioned by the given expressions into `numPartitions`.
    * If no expressions are specified, round robin partitioning is used.
    *
    * @group typedrel
