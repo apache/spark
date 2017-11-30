@@ -595,9 +595,7 @@ case class HashAggregateExec(
 
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName();")
-        ctx.addMutableState(
-          s"java.util.Iterator<${classOf[ColumnarRow].getName}>",
-          iterTermForFastHashMap)
+        ctx.addMutableState(s"java.util.Iterator<InternalRow>", iterTermForFastHashMap)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
           fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
@@ -674,7 +672,7 @@ case class HashAggregateExec(
        """.stripMargin
     }
 
-    // Iterate over the aggregate rows and convert them from ColumnarRow to UnsafeRow
+    // Iterate over the aggregate rows and convert them from InternalRow to UnsafeRow
     def outputFromVectorizedMap: String = {
       val row = ctx.freshName("fastHashMapRow")
       ctx.currentVars = null
@@ -687,10 +685,9 @@ case class HashAggregateExec(
         bufferSchema.toAttributes.zipWithIndex.map { case (attr, i) =>
           BoundReference(groupingKeySchema.length + i, attr.dataType, attr.nullable)
         })
-      val columnarRowCls = classOf[ColumnarRow].getName
       s"""
          |while ($iterTermForFastHashMap.hasNext()) {
-         |  $columnarRowCls $row = ($columnarRowCls) $iterTermForFastHashMap.next();
+         |  InternalRow $row = (InternalRow) $iterTermForFastHashMap.next();
          |  ${generateKeyRow.code}
          |  ${generateBufferRow.code}
          |  $outputFunc(${generateKeyRow.value}, ${generateBufferRow.value});

@@ -751,11 +751,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       c2.putDouble(1, 5.67)
 
       val s = column.getStruct(0)
-      assert(s.columns()(0).getInt(0) == 123)
-      assert(s.columns()(0).getInt(1) == 456)
-      assert(s.columns()(1).getDouble(0) == 3.45)
-      assert(s.columns()(1).getDouble(1) == 5.67)
-
       assert(s.getInt(0) == 123)
       assert(s.getDouble(1) == 3.45)
 

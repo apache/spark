@@ -323,7 +323,6 @@ public final class ArrowColumnVector extends ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         childColumns[i] = new ArrowColumnVector(mapVector.getVectorById(i));
       }
-      resultStruct = new ColumnarRow(childColumns);
     } else {
       throw new UnsupportedOperationException();
     }
