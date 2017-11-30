@@ -28,8 +28,9 @@ private[spark] object KubernetesFileUtils {
    * - File URIs with scheme local:// resolve to just the path of the URI.
    * - Otherwise, the URIs are returned as-is.
    */
-  def resolveSubmittedUris(fileUris: Iterable[String], fileDownloadPath: String)
-  : Iterable[String] = {
+  def resolveSubmittedUris(
+      fileUris: Iterable[String],
+      fileDownloadPath: String): Iterable[String] = {
     fileUris.map { uri =>
       val fileUri = Utils.resolveURI(uri)
       val fileScheme = Option(fileUri.getScheme).getOrElse("file")
