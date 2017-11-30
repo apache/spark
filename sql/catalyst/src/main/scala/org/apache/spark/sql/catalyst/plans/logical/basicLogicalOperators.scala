@@ -846,10 +846,10 @@ case class RepartitionByExpression(
       s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
         "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
         "means `HashPartitioning`. In this case we have:" +
-      s"""
-         |SortOrder: ${sortOrder}
-         |NonSortOrder: ${nonSortOrder}
-       """.stripMargin)
+      s""""
+          |SortOrder: ${sortOrder}
+          |NonSortOrder: ${nonSortOrder}
+        """.stripMargin)
 
     if (sortOrder.nonEmpty) {
       RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
