@@ -835,7 +835,7 @@ private[spark] class Client(
       }
       sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
     } else {
-      // Propagate the auth secret to the AM using the environment, if set.
+      // Only propagate the auth secret to the AM in client mode, using the environment, if set.
       sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF).foreach { secret =>
         env(SecurityManager.ENV_AUTH_SECRET) = secret
       }
