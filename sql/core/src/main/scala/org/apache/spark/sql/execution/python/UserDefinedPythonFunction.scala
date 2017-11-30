@@ -39,9 +39,6 @@ case class UserDefinedPythonFunction(
   def nullable: Boolean = _nullable
 
   def builder(e: Seq[Expression]): PythonUDF = {
-<<<<<<< HEAD
-    PythonUDF(name, func, dataType, e, pythonEvalType)
-=======
     PythonUDF(name, func, dataType, e, pythonEvalType, _nullable)
   }
 
