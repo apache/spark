@@ -115,12 +115,12 @@ class ReliableKafkaReceiver[
 
     assert(!consumerConfig.autoCommitEnable)
 
-    logInfo(s"Connecting to Zookeeper: ${consumerConfig.zkConnect}")
     consumerConnector = Consumer.create(consumerConfig)
-    logInfo(s"Connected to Zookeeper: ${consumerConfig.zkConnect}")
 
+    logInfo(s"Connecting to Zookeeper: ${consumerConfig.zkConnect}")
     zkClient = new ZkClient(consumerConfig.zkConnect, consumerConfig.zkSessionTimeoutMs,
       consumerConfig.zkConnectionTimeoutMs, ZKStringSerializer)
+    logInfo(s"Connected to Zookeeper: ${consumerConfig.zkConnect}")
 
     messageHandlerThreadPool = ThreadUtils.newDaemonFixedThreadPool(
       topics.values.sum, "KafkaMessageHandler")
