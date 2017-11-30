@@ -75,7 +75,6 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
     dictionary = null;
     resultStruct = null;
-    resultArray = null;
   }
 
   public void reserve(int requiredCapacity) {
@@ -650,6 +649,11 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   protected abstract WritableColumnVector reserveNewColumn(int capacity, DataType type);
 
+  protected boolean isArray() {
+    return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
+      DecimalType.isByteArrayDecimalType(type);
+  }
+
   /**
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
@@ -658,8 +662,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     super(type);
     this.capacity = capacity;
 
-    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
-        || DecimalType.isByteArrayDecimalType(type)) {
+    if (isArray()) {
       DataType childType;
       int childCapacity = capacity;
       if (type instanceof ArrayType) {
@@ -670,7 +673,6 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewColumn(childCapacity, childType);
-      this.resultArray = new ColumnarArray(this.childColumns[0]);
       this.resultStruct = null;
     } else if (type instanceof StructType) {
       StructType st = (StructType)type;
@@ -678,18 +680,15 @@ public abstract class WritableColumnVector extends ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
-      this.resultArray = null;
       this.resultStruct = new ColumnarRow(this.childColumns);
     } else if (type instanceof CalendarIntervalType) {
       // Two columns. Months as int. Microseconds as Long.
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
-      this.resultArray = null;
       this.resultStruct = new ColumnarRow(this.childColumns);
     } else {
       this.childColumns = null;
-      this.resultArray = null;
       this.resultStruct = null;
     }
   }
