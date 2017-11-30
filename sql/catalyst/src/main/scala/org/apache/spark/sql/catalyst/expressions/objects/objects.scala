@@ -546,7 +546,7 @@ case class MapObjects private(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = ctx.javaType(loopVarDataType)
-    ctx.addMutableState(elementJavaType, loopValue, inline = true)
+    ctx.addMutableState(elementJavaType, loopValue, inline = true, useFreshName = false)
     val genInputData = inputData.genCode(ctx)
     val genFunction = lambdaFunction.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -642,7 +642,7 @@ case class MapObjects private(
     }
 
     val loopNullCheck = if (loopIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, loopIsNull, inline = true)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, loopIsNull, inline = true, useFreshName = false)
       inputDataType match {
         case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
         case _ => s"$loopIsNull = $loopValue == null;"
@@ -806,10 +806,10 @@ case class CatalystToExternalMap private(
 
     val mapType = inputDataType(inputData.dataType).asInstanceOf[MapType]
     val keyElementJavaType = ctx.javaType(mapType.keyType)
-    ctx.addMutableState(keyElementJavaType, keyLoopValue, inline = true)
+    ctx.addMutableState(keyElementJavaType, keyLoopValue, inline = true, useFreshName = false)
     val genKeyFunction = keyLambdaFunction.genCode(ctx)
     val valueElementJavaType = ctx.javaType(mapType.valueType)
-    ctx.addMutableState(valueElementJavaType, valueLoopValue, inline = true)
+    ctx.addMutableState(valueElementJavaType, valueLoopValue, inline = true, useFreshName = false)
     val genValueFunction = valueLambdaFunction.genCode(ctx)
     val genInputData = inputData.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -842,7 +842,7 @@ case class CatalystToExternalMap private(
     val genValueFunctionValue = genFunctionValue(valueLambdaFunction, genValueFunction)
 
     val valueLoopNullCheck = if (valueLoopIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueLoopIsNull, inline = true)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueLoopIsNull, inline = true, useFreshName = false)
       s"$valueLoopIsNull = $valueArray.isNullAt($loopIndex);"
     } else {
       ""
@@ -992,8 +992,8 @@ case class ExternalMapToCatalyst private(
 
     val keyElementJavaType = ctx.javaType(keyType)
     val valueElementJavaType = ctx.javaType(valueType)
-    ctx.addMutableState(keyElementJavaType, key, inline = true)
-    ctx.addMutableState(valueElementJavaType, value, inline = true)
+    ctx.addMutableState(keyElementJavaType, key, inline = true, useFreshName = false)
+    ctx.addMutableState(valueElementJavaType, value, inline = true, useFreshName = false)
 
     val (defineEntries, defineKeyValue) = child.dataType match {
       case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
@@ -1029,14 +1029,14 @@ case class ExternalMapToCatalyst private(
     }
 
     val keyNullCheck = if (keyIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, keyIsNull, inline = true)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, keyIsNull, inline = true, useFreshName = false)
       s"$keyIsNull = $key == null;"
     } else {
       ""
     }
 
     val valueNullCheck = if (valueIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueIsNull, inline = true)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueIsNull, inline = true, useFreshName = false)
       s"$valueIsNull = $value == null;"
     } else {
       ""
@@ -1156,8 +1156,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializer = ctx.freshName("serializer")
-    ctx.addMutableState(serializerInstanceClass, serializer,
+    val serializer = ctx.addMutableState(serializerInstanceClass, "serializerForEncode",
       v => s"""
        if ($env == null) {
          $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
@@ -1202,8 +1201,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializer = ctx.freshName("serializer")
-    ctx.addMutableState(serializerInstanceClass, serializer,
+    val serializer = ctx.addMutableState(serializerInstanceClass, "serializerForDecode",
       v => s"""
        if ($env == null) {
          $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();

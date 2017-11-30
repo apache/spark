@@ -144,7 +144,7 @@ case class BroadcastHashJoinExec(
          | $v = (($clsName) $broadcast.value()).asReadOnlyCopy();
          | incPeakExecutionMemory($v.estimatedSize());
          | ${genTaskListener(avgHashProbe, v)}
-       """.stripMargin)
+       """.stripMargin, inline = true)
     (broadcastRelation, relationTerm)
   }
 

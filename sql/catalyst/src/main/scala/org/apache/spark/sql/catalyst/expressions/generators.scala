@@ -217,7 +217,8 @@ case class Stack(children: Seq[Expression]) extends Generator {
     ctx.addMutableState(
       s"$wrapperClass<InternalRow>",
       ev.value,
-      _ => s"${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);", inline = true)
+      v => s"$v = $wrapperClass$$.MODULE$$.make($rowData);",
+      inline = true, useFreshName = false)
     ev.copy(code = code, isNull = "false")
   }
 }

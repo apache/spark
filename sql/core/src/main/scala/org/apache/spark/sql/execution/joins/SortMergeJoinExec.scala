@@ -576,9 +576,9 @@ case class SortMergeJoinExec(
 
   override def doProduce(ctx: CodegenContext): String = {
     val leftInput = ctx.addMutableState("scala.collection.Iterator", "leftInput",
-      v => s"$v = inputs[0];")
+      v => s"$v = inputs[0];", inline = true)
     val rightInput = ctx.addMutableState("scala.collection.Iterator", "rightInput",
-      v => s"$v = inputs[1];")
+      v => s"$v = inputs[1];", inline = true)
 
     val (leftRow, matches) = genScanner(ctx)
 

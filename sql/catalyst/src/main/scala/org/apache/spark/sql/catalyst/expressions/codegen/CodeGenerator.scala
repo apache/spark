@@ -182,7 +182,8 @@ class CodegenContext {
    *                 initialize this field. An argument is the name of the mutable state variable
    *                 If left blank, the field will be default-initialized.
    * @param inline whether the declaration and initialization code may be inlined rather than
-   *               compacted. If true, the name is not changed
+   *               compacted.
+   * @param useFreshName If false and inline is true, the name is not changed
    * @return the name of the mutable state variable, which is either the original name if the
    *         variable is inlined to the outer class, or an array access if the variable is to be
    *         stored in an array of variables of the same type and initialization.
@@ -198,8 +199,9 @@ class CodegenContext {
       javaType: String,
       variableName: String,
       codeFunctions: String => String = _ => "",
-      inline: Boolean = false): String = {
-    val varName = if (!inline) freshName(variableName) else variableName
+      inline: Boolean = false,
+      useFreshName: Boolean = true): String = {
+    val varName = if (useFreshName) freshName(variableName) else variableName
     val initCode = codeFunctions(varName)
 
     if (inline ||
