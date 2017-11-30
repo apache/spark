@@ -1753,6 +1753,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
     <code>spark.dynamicAllocation.initialExecutors</code>
+    <code>spark.dynamicAllocation.tasksPerExecutorSlots</code>
   </td>
 </tr>
 <tr>
@@ -1795,6 +1796,19 @@ Apart from these, the following properties are also available, and may be useful
   <td>0</td>
   <td>
     Lower bound for the number of executors if dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.tasksPerSlot</code></td>
+  <td>1</td>
+  <td>
+    Each executor can process a certain number of tasks in parallel (task slots).
+    The number of task slots per executor is: executor.cores / task.cpus.
+    The ExecutorAllocationManager will set a target number of running executors equal to:
+    nbCurrentTask / (taskSlots * tasksPerSlot), with nbCurrentTask being the total number
+    of running and backlogged tasks. With the default value of 1, each available task slot
+    will compute a single task in average, which gives the best latency. With small tasks
+    however, this setting wastes a lot of resources due to executor allocation overhead
   </td>
 </tr>
 <tr>
