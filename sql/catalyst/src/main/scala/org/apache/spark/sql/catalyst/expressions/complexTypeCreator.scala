@@ -113,7 +113,7 @@ private [sql] object GenArrayData {
         funcName = "apply",
         extraArguments = ("Object[]", arrayDataName) :: Nil)
 
-      (s"$arrayName = new Object[$numElements];",
+      (s"Object[] $arrayName = new Object[$numElements];",
        assignmentString,
        s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
        arrayDataName)
