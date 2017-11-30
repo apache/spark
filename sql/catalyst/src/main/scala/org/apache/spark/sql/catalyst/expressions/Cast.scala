@@ -808,6 +808,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
       (c, evPrim, evNull) => s"$evPrim = $c ? (byte) 1 : (byte) 0;"
@@ -834,6 +835,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
       (c, evPrim, evNull) => s"$evPrim = $c ? (short) 1 : (short) 0;"
@@ -858,6 +860,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
       (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
@@ -883,6 +886,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
       (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0L;"
