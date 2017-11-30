@@ -566,20 +566,13 @@ class Dataset[T] private[sql](
   def localCheckpoint(eager: Boolean): Dataset[T] = checkpoint(eager = eager, local = true)
 
   /**
-   * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
-   * logical plan of this Dataset, which is especially useful in iterative algorithms where the
-   * plan may grow exponentially.
-   * By default reliable checkpoints are created and saved to files inside the checkpoint
-   * directory set with `SparkContext#setCheckpointDir`. If local is set to true a local checkpoint
-   * is performed instead. Local checkpoints are written to executor storage and despite
-   * potentially faster they are unreliable and may compromise job completion.
+   * Returns a checkpointed version of this Dataset.
    *
-   * @group basic
-   * @since 2.3.0
+   * @param eager Whether to checkpoint this dataframe immediately
+   * @param local Whether to create a local checkpoint (using the caching system). If local is false
+   *              creates a reliable checkpoint saved to files inside the checkpoint directory.
    */
-  @Experimental
-  @InterfaceStability.Evolving
-  private[sql] def checkpoint(eager: Boolean, local: Boolean): Dataset[T] = {
+  private def checkpoint(eager: Boolean, local: Boolean): Dataset[T] = {
     val internalRdd = queryExecution.toRdd.map(_.copy())
     if (local) {
       internalRdd.localCheckpoint()
