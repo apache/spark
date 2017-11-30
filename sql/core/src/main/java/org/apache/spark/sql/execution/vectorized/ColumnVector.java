@@ -175,9 +175,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the array at rowid.
    */
   public final ColumnarArray getArray(int rowId) {
-    resultArray.length = getArrayLength(rowId);
-    resultArray.offset = getArrayOffset(rowId);
-    return resultArray;
+    return new ColumnarArray(arrayData(), getArrayOffset(rowId), getArrayLength(rowId));
   }
 
   /**
@@ -214,19 +212,9 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract ColumnVector getChildColumn(int ordinal);
 
   /**
-   * Returns true if this column is an array.
-   */
-  public final boolean isArray() { return resultArray != null; }
-
-  /**
    * Data type for this column.
    */
   protected DataType type;
-
-  /**
-   * Reusable Array holder for getArray().
-   */
-  protected ColumnarArray resultArray;
 
   /**
    * Reusable Struct holder for getStruct().
