@@ -1109,12 +1109,6 @@ def _has_nulltype(dt):
         return isinstance(dt, NullType)
 
 
-def _merge_type_path(path, addition):
-    if path:
-        return "%s in %s" % (addition, path)
-    return addition
-
-
 def _merge_type(a, b, name=None):
     if name is None:
         new_msg = lambda msg: msg
