@@ -71,6 +71,22 @@ class Estimator(Params):
             raise ValueError("Params must be either a param map or a list/tuple of param maps, "
                              "but got %s." % type(params))
 
+    @since("2.3.0")
+    def parallelFit(self, dataset, paramMaps, threadPool, modelCallback):
+        """
+        Parallelly fits models to the input dataset with a list of param maps.
+
+        :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`
+        :param paramMaps: a list of param maps
+        :param threadPool: a thread pool used to run parallel fitting
+        :param modelCallback: fitted model with corresponding param map index will be passed to
+                              the callback function.
+        """
+        def singleTrain(paramMapIndex):
+            model = self.fit(dataset, paramMaps[paramMapIndex])
+            modelCallback(model, paramMapIndex)
+        threadPool.map(singleTrain, range(len(paramMaps)))
+
 
 @inherit_doc
 class Transformer(Params):

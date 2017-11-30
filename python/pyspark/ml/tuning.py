@@ -20,11 +20,12 @@ from multiprocessing.pool import ThreadPool
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
-from pyspark.ml.common import _py2java
+from pyspark.ml.common import _java2py, _py2java
+from pyspark.ml.evaluation import JavaEvaluator
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasParallelism, HasSeed
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.wrapper import JavaEstimator, JavaParams
 from pyspark.sql.functions import rand
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
@@ -247,9 +248,14 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
+        eva = self.getOrDefault(self.evaluator)
+
+        if isinstance(est, JavaEstimator) and isinstance(eva, JavaEvaluator):
+            java_model = self._to_java().fit(dataset._jdf)
+            return CrossValidatorModel._from_java(java_model)
+
         epm = self.getOrDefault(self.estimatorParamMaps)
         numModels = len(epm)
-        eva = self.getOrDefault(self.evaluator)
         nFolds = self.getOrDefault(self.numFolds)
         seed = self.getOrDefault(self.seed)
         h = 1.0 / nFolds
@@ -266,15 +272,15 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
             validation = df.filter(condition).cache()
             train = df.filter(~condition).cache()
 
-            def singleTrain(paramMap):
-                model = est.fit(train, paramMap)
-                # TODO: duplicate evaluator to take extra params from input
-                metric = eva.evaluate(model.transform(validation, paramMap))
-                return metric
+            currentFoldMetrics = [0.0] * numModels
+            def modelCallback(model, paramMapIndex):
+                metric = eva.evaluate(model.transform(validation, epm[paramMapIndex]))
+                currentFoldMetrics[paramMapIndex] = metric
+            est.parallelFit(train, epm, pool, modelCallback)
 
-            currentFoldMetrics = pool.map(singleTrain, epm)
             for j in range(numModels):
                 metrics[j] += (currentFoldMetrics[j] / nFolds)
+
             validation.unpersist()
             train.unpersist()
 
@@ -409,10 +415,12 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         Used for ML persistence.
         """
 
+        sc = SparkContext._active_spark_context
         bestModel = JavaParams._from_java(java_stage.bestModel())
+        avgMetrics = _java2py(sc, java_stage.avgMetrics())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
-        py_stage = cls(bestModel=bestModel).setEstimator(estimator)
+        py_stage = cls(bestModel = bestModel, avgMetrics = avgMetrics).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
 
         py_stage._resetUid(java_stage.uid())
@@ -426,11 +434,10 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         """
 
         sc = SparkContext._active_spark_context
-        # TODO: persist average metrics as well
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
                                              self.uid,
                                              self.bestModel._to_java(),
-                                             _py2java(sc, []))
+                                             _py2java(sc, self.avgMetrics))
         estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
@@ -512,9 +519,14 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
+        eva = self.getOrDefault(self.evaluator)
+
+        if isinstance(est, JavaEstimator) and isinstance(eva, JavaEvaluator):
+            java_model = self._to_java().fit(dataset._jdf)
+            return TrainValidationSplitModel._from_java(java_model)
+
         epm = self.getOrDefault(self.estimatorParamMaps)
         numModels = len(epm)
-        eva = self.getOrDefault(self.evaluator)
         tRatio = self.getOrDefault(self.trainRatio)
         seed = self.getOrDefault(self.seed)
         randCol = self.uid + "_rand"
@@ -523,13 +535,14 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         validation = df.filter(condition).cache()
         train = df.filter(~condition).cache()
 
-        def singleTrain(paramMap):
-            model = est.fit(train, paramMap)
-            metric = eva.evaluate(model.transform(validation, paramMap))
-            return metric
+        def modelCallback(model, paramMapIndex):
+            metric = eva.evaluate(model.transform(validation, epm[paramMapIndex]))
+            metrics[paramMapIndex] = metric
 
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        metrics = pool.map(singleTrain, epm)
+        metrics = [0.0] * numModels
+        est.parallelFit(train, epm, pool, modelCallback)
+
         train.unpersist()
         validation.unpersist()
 
@@ -663,12 +676,15 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         Used for ML persistence.
         """
 
+        sc = SparkContext._active_spark_context
         # Load information from java_stage to the instance.
         bestModel = JavaParams._from_java(java_stage.bestModel())
+        validationMetrics = _java2py(sc, java_stage.validationMetrics())
         estimator, epms, evaluator = super(TrainValidationSplitModel,
                                            cls)._from_java_impl(java_stage)
         # Create a new instance of this stage.
-        py_stage = cls(bestModel=bestModel).setEstimator(estimator)
+        py_stage = cls(bestModel = bestModel, validationMetrics = validationMetrics)\
+            .setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
 
         py_stage._resetUid(java_stage.uid())
@@ -681,12 +697,11 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         """
 
         sc = SparkContext._active_spark_context
-        # TODO: persst validation metrics as well
         _java_obj = JavaParams._new_java_obj(
             "org.apache.spark.ml.tuning.TrainValidationSplitModel",
             self.uid,
             self.bestModel._to_java(),
-            _py2java(sc, []))
+            _py2java(sc, self.validationMetrics))
         estimator, epms, evaluator = super(TrainValidationSplitModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
