@@ -25,7 +25,7 @@
     <version>18</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-parent_2.11</artifactId>
+  <artifactId>spark-parent_2.12</artifactId>
   <version>2.3.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
@@ -156,7 +156,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.11.8</scala.version>
-    <scala.binary.version>2.11</scala.binary.version>
+    <scala.binary.version>2.12</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.6.7</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.6.7.1</fasterxml.jackson.databind.version>

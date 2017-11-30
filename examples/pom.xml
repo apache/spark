@@ -20,12 +20,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
+    <artifactId>spark-parent_2.12</artifactId>
     <version>2.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-examples_2.11</artifactId>
+  <artifactId>spark-examples_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Examples</name>
   <url>http://spark.apache.org/</url>
