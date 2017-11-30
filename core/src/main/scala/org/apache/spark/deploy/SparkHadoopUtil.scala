@@ -131,10 +131,21 @@ class SparkHadoopUtil extends Logging {
     if (!new File(keytabFilename).exists()) {
       throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
     } else {
-      logInfo("Attempting to login to Kerberos" +
-        s" using principal: ${principalName} and keytab: ${keytabFilename}")
+      logInfo("Attempting to login to Kerberos " +
+        s"using principal: ${principalName} and keytab: ${keytabFilename}")
       UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
     }
+  }
+
+  /**
+   * Add or overwrite current user's credentials with serialized delegation tokens,
+   * also confirms correct hadoop configuration is set.
+   */
+  private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
+    UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
+    val creds = deserialize(tokens)
+    logInfo(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
+    addCurrentUserCredentials(creds)
   }
 
   /**
@@ -425,6 +436,19 @@ object SparkHadoopUtil {
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 
   def get: SparkHadoopUtil = instance
+
+  /**
+   * Given an expiration date (e.g. for Hadoop Delegation Tokens) return a the date
+   * when a given fraction of the duration until the expiration date has passed.
+   * Formula: current time + (fraction * (time until expiration))
+   * @param expirationDate Drop-dead expiration date
+   * @param fraction fraction of the time until expiration return
+   * @return Date when the fraction of the time until expiration has passed
+   */
+  private[spark] def getDateOfNextUpdate(expirationDate: Long, fraction: Double): Long = {
+    val ct = System.currentTimeMillis
+    (ct + (fraction * (expirationDate - ct))).toLong
+  }
 
   /**
    * Returns a Configuration object with Spark configuration applied on top. Unlike

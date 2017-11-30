@@ -134,20 +134,21 @@ class CodegenContext {
   }
 
   /**
+   * Holding the variable name of the input row of the current operator, will be used by
+   * `BoundReference` to generate code.
+   *
+   * Note that if `currentVars` is not null, `BoundReference` prefers `currentVars` over `INPUT_ROW`
+   * to generate code. If you want to make sure the generated code use `INPUT_ROW`, you need to set
+   * `currentVars` to null, or set `currentVars(i)` to null for certain columns, before calling
+   * `Expression.genCode`.
+   */
+  final var INPUT_ROW = "i"
+
+  /**
    * Holding a list of generated columns as input of current operator, will be used by
    * BoundReference to generate code.
    */
   var currentVars: Seq[ExprCode] = null
-
-  /**
-   * Whether should we copy the result rows or not.
-   *
-   * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
-   * example, Join), this should be true.
-   *
-   * If an operator starts a new pipeline, this should be reset to false before calling `consume()`.
-   */
-  var copyResult: Boolean = false
 
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
@@ -167,7 +168,19 @@ class CodegenContext {
   val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
     mutable.ArrayBuffer.empty[(String, String, String)]
 
-  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
+  /**
+   * Add a mutable state as a field to the generated class. c.f. the comments above.
+   *
+   * @param javaType Java type of the field. Note that short names can be used for some types,
+   *                 e.g. InternalRow, UnsafeRow, UnsafeArrayData, etc. Other types will have to
+   *                 specify the fully-qualified Java type name. See the code in doCompile() for
+   *                 the list of default imports available.
+   *                 Also, generic type arguments are accepted but ignored.
+   * @param variableName Name of the field.
+   * @param initCode The statement(s) to put into the init() method to initialize this field.
+   *                 If left blank, the field will be default-initialized.
+   */
+  def addMutableState(javaType: String, variableName: String, initCode: String = ""): Unit = {
     mutableStates += ((javaType, variableName, initCode))
   }
 
@@ -201,7 +214,7 @@ class CodegenContext {
     val initCodes = mutableStates.distinct.map(_._3 + "\n")
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
-    splitExpressions(initCodes, "init", Nil)
+    splitExpressions(expressions = initCodes, funcName = "init", arguments = Nil)
   }
 
   /**
@@ -383,9 +396,6 @@ class CodegenContext {
   final val JAVA_LONG = "long"
   final val JAVA_FLOAT = "float"
   final val JAVA_DOUBLE = "double"
-
-  /** The variable name of the input row in generated code. */
-  final var INPUT_ROW = "i"
 
   /**
    * The map from a variable name to it's next ID.
@@ -771,15 +781,38 @@ class CodegenContext {
    * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
    * instead, because classes have a constant pool limit of 65,536 named values.
    *
-   * @param row the variable name of row that is used by expressions
+   * Note that we will extract the current inputs of this context and pass them to the generated
+   * functions. The input is `INPUT_ROW` for normal codegen path, and `currentVars` for whole
+   * stage codegen path. Whole stage codegen path is not supported yet.
+   *
    * @param expressions the codes to evaluate expressions.
    */
-  def splitExpressions(row: String, expressions: Seq[String]): String = {
-    if (row == null || currentVars != null) {
-      // Cannot split these expressions because they are not created from a row object.
-      return expressions.mkString("\n")
+  def splitExpressions(expressions: Seq[String]): String = {
+    splitExpressions(expressions, funcName = "apply", extraArguments = Nil)
+  }
+
+  /**
+   * Similar to [[splitExpressions(expressions: Seq[String])]], but has customized function name
+   * and extra arguments.
+   *
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param extraArguments the list of (type, name) of the arguments of the split function
+   *                       except for ctx.INPUT_ROW
+  */
+  def splitExpressions(
+      expressions: Seq[String],
+      funcName: String,
+      extraArguments: Seq[(String, String)]): String = {
+    // TODO: support whole stage codegen
+    if (INPUT_ROW == null || currentVars != null) {
+      expressions.mkString("\n")
+    } else {
+      splitExpressions(
+        expressions,
+        funcName,
+        arguments = ("InternalRow", INPUT_ROW) +: extraArguments)
     }
-    splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
   }
 
   /**
@@ -800,23 +833,7 @@ class CodegenContext {
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
       foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
-    val blocks = new ArrayBuffer[String]()
-    val blockBuilder = new StringBuilder()
-    var length = 0
-    for (code <- expressions) {
-      // We can't know how many bytecode will be generated, so use the length of source code
-      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
-      // also not be too small, or it will have many function calls (for wide table), see the
-      // results in BenchmarkWideTable.
-      if (length > 1024) {
-        blocks += blockBuilder.toString()
-        blockBuilder.clear()
-        length = 0
-      }
-      blockBuilder.append(code)
-      length += CodeFormatter.stripExtraNewLinesAndComments(code).length
-    }
-    blocks += blockBuilder.toString()
+    val blocks = buildCodeBlocks(expressions)
 
     if (blocks.length == 1) {
       // inline execution if only one block
@@ -849,6 +866,32 @@ class CodegenContext {
 
       foldFunctions(outerClassFunctionCalls ++ innerClassFunctionCalls)
     }
+  }
+
+  /**
+   * Splits the generated code of expressions into multiple sequences of String
+   * based on a threshold of length of a String
+   *
+   * @param expressions the codes to evaluate expressions.
+   */
+  def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
+    val blocks = new ArrayBuffer[String]()
+    val blockBuilder = new StringBuilder()
+    var length = 0
+    for (code <- expressions) {
+      // We can't know how many bytecode will be generated, so use the length of source code
+      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
+      // also not be too small, or it will have many function calls (for wide table), see the
+      // results in BenchmarkWideTable.
+      if (length > 1024) {
+        blocks += blockBuilder.toString()
+        blockBuilder.clear()
+        length = 0
+      }
+      blockBuilder.append(code)
+      length += CodeFormatter.stripExtraNewLinesAndComments(code).length
+    }
+    blocks += blockBuilder.toString()
   }
 
   /**
@@ -1008,7 +1051,7 @@ class CodegenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-      addMutableState("boolean", isNull, s"$isNull = false;")
+      addMutableState(JAVA_BOOLEAN, isNull, s"$isNull = false;")
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
@@ -1023,7 +1066,8 @@ class CodegenContext {
    * elimination will be performed. Subexpression elimination assumes that the code for each
    * expression will be combined in the `expressions` order.
    */
-  def generateExpressions(expressions: Seq[Expression],
+  def generateExpressions(
+      expressions: Seq[Expression],
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
     expressions.map(e => e.genCode(this))

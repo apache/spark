@@ -49,8 +49,6 @@ object YarnSparkHadoopUtil {
 
   val ANY_HOST = "*"
 
-  val DEFAULT_NUMBER_EXECUTORS = 2
-
   // All RM requests are issued with same priority : we do not (yet) have any distinction between
   // request types (like map/reduce in hadoop for example)
   val RM_REQUEST_PRIORITY = Priority.newInstance(1)
@@ -186,28 +184,6 @@ object YarnSparkHadoopUtil {
       ApplicationAccessType.MODIFY_APP -> (securityMgr.getModifyAcls + " " +
         securityMgr.getModifyAclsGroups)
     )
-  }
-
-  /**
-   * Getting the initial target number of executors depends on whether dynamic allocation is
-   * enabled.
-   * If not using dynamic allocation it gets the number of executors requested by the user.
-   */
-  def getInitialTargetExecutorNumber(
-      conf: SparkConf,
-      numExecutors: Int = DEFAULT_NUMBER_EXECUTORS): Int = {
-    if (Utils.isDynamicAllocationEnabled(conf)) {
-      val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
-      val initialNumExecutors = Utils.getDynamicAllocationInitialExecutors(conf)
-      val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
-      require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
-        s"initial executor number $initialNumExecutors must between min executor number " +
-          s"$minNumExecutors and max executor number $maxNumExecutors")
-
-      initialNumExecutors
-    } else {
-      conf.get(EXECUTOR_INSTANCES).getOrElse(numExecutors)
-    }
   }
 
   def getContainerId: ContainerId = {

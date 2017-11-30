@@ -66,7 +66,7 @@ test_that("spark.svmLinear", {
   feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
   data <- as.data.frame(cbind(label, feature))
   df <- createDataFrame(data)
-  model <- spark.svmLinear(df, label ~ feature, regParam = 0.1)
+  model <- spark.svmLinear(df, label ~ feature, regParam = 0.1, maxIter = 5)
   prediction <- collect(select(predict(model, df), "prediction"))
   expect_equal(sort(prediction$prediction), c("0.0", "0.0", "0.0", "1.0", "1.0"))
 
@@ -77,10 +77,11 @@ test_that("spark.svmLinear", {
   trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
   traindf <- as.DataFrame(data[trainidxs, ])
   testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
-  model <- spark.svmLinear(traindf, clicked ~ ., regParam = 0.1)
+  model <- spark.svmLinear(traindf, clicked ~ ., regParam = 0.1, maxIter = 5)
   predictions <- predict(model, testdf)
   expect_error(collect(predictions))
-  model <- spark.svmLinear(traindf, clicked ~ ., regParam = 0.1, handleInvalid = "skip")
+  model <- spark.svmLinear(traindf, clicked ~ ., regParam = 0.1,
+                           handleInvalid = "skip", maxIter = 5)
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "list")
 

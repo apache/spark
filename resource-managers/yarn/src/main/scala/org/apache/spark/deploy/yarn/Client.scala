@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
+import java.io.{FileSystem => _, _}
 import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
@@ -680,6 +680,19 @@ private[spark] class Client(
    */
   private def createConfArchive(): File = {
     val hadoopConfFiles = new HashMap[String, File]()
+
+    // SPARK_CONF_DIR shows up in the classpath before HADOOP_CONF_DIR/YARN_CONF_DIR
+    sys.env.get("SPARK_CONF_DIR").foreach { localConfDir =>
+      val dir = new File(localConfDir)
+      if (dir.isDirectory) {
+        val files = dir.listFiles(new FileFilter {
+          override def accept(pathname: File): Boolean = {
+            pathname.isFile && pathname.getName.endsWith(".xml")
+          }
+        })
+        files.foreach { f => hadoopConfFiles(f.getName) = f }
+      }
+    }
 
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
       sys.env.get(envKey).foreach { path =>

@@ -244,11 +244,11 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
       inferredSchema match {
         case Some(dataSchema) =>
-          val schema = StructType(dataSchema ++ relation.tableMeta.partitionSchema)
           if (inferenceMode == INFER_AND_SAVE) {
-            updateCatalogSchema(relation.tableMeta.identifier, schema)
+            updateDataSchema(relation.tableMeta.identifier, dataSchema)
           }
-          relation.tableMeta.copy(schema = schema)
+          val newSchema = StructType(dataSchema ++ relation.tableMeta.partitionSchema)
+          relation.tableMeta.copy(schema = newSchema)
         case None =>
           logWarning(s"Unable to infer schema for table $tableName from file format " +
             s"$fileFormat (inference mode: $inferenceMode). Using metastore schema.")
@@ -259,10 +259,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
   }
 
-  private def updateCatalogSchema(identifier: TableIdentifier, schema: StructType): Unit = try {
-    val db = identifier.database.get
+  private def updateDataSchema(identifier: TableIdentifier, newDataSchema: StructType): Unit = try {
     logInfo(s"Saving case-sensitive schema for table ${identifier.unquotedString}")
-    sparkSession.sharedState.externalCatalog.alterTableSchema(db, identifier.table, schema)
+    sparkSession.sessionState.catalog.alterTableDataSchema(identifier, newDataSchema)
   } catch {
     case NonFatal(ex) =>
       logWarning(s"Unable to save case-sensitive schema for table ${identifier.unquotedString}", ex)

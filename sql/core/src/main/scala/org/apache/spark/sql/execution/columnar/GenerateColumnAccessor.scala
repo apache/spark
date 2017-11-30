@@ -89,7 +89,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case array: ArrayType => classOf[ArrayColumnAccessor].getName
         case t: MapType => classOf[MapColumnAccessor].getName
       }
-      ctx.addMutableState(accessorCls, accessorName, "")
+      ctx.addMutableState(accessorCls, accessorName)
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>

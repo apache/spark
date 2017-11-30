@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.Utils
@@ -149,6 +150,14 @@ case class HashAggregateExec(
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
+  // The result rows come from the aggregate buffer, or a single row(no grouping keys), so this
+  // operator doesn't need to copy its result even if its child does.
+  override def needCopyResult: Boolean = false
+
+  // Aggregate operator always consumes all the input rows before outputting any result, so we
+  // don't need a stop check before aggregating.
+  override def needStopCheck: Boolean = false
+
   protected override def doProduce(ctx: CodegenContext): String = {
     if (groupingExpressions.isEmpty) {
       doProduceWithoutKeys(ctx)
@@ -170,7 +179,9 @@ case class HashAggregateExec(
 
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
-    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, initAgg, s"$initAgg = false;")
+    // The generated function doesn't have input row in the code context.
+    ctx.INPUT_ROW = null
 
     // generate variables for aggregation buffer
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
@@ -178,8 +189,8 @@ case class HashAggregateExec(
     bufVars = initExpr.map { e =>
       val isNull = ctx.freshName("bufIsNull")
       val value = ctx.freshName("bufValue")
-      ctx.addMutableState("boolean", isNull, "")
-      ctx.addMutableState(ctx.javaType(e.dataType), value, "")
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
+      ctx.addMutableState(ctx.javaType(e.dataType), value)
       // The initial expression should not access any column
       val ev = e.genCode(ctx)
       val initVars = s"""
@@ -245,8 +256,6 @@ case class HashAggregateExec(
        | }
      """.stripMargin
   }
-
-  protected override val shouldStopRequired = false
 
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
@@ -559,7 +568,7 @@ case class HashAggregateExec(
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
-    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, initAgg, s"$initAgg = false;")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
     } else {
@@ -589,28 +598,28 @@ case class HashAggregateExec(
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName();")
         ctx.addMutableState(
-          "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>",
-          iterTermForFastHashMap, "")
+          "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarRow>",
+          iterTermForFastHashMap)
       } else {
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName(" +
             s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());")
         ctx.addMutableState(
           "org.apache.spark.unsafe.KVIterator",
-          iterTermForFastHashMap, "")
+          iterTermForFastHashMap)
       }
     }
 
     // create hashMap
     hashMapTerm = ctx.freshName("hashMap")
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
-    ctx.addMutableState(hashMapClassName, hashMapTerm, "")
+    ctx.addMutableState(hashMapClassName, hashMapTerm)
     sorterTerm = ctx.freshName("sorter")
-    ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, sorterTerm, "")
+    ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, sorterTerm)
 
     // Create a name for iterator from HashMap
     val iterTerm = ctx.freshName("mapIter")
-    ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm, "")
+    ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm)
 
     def generateGenerateCode(): String = {
       if (isFastHashMapEnabled) {
@@ -651,10 +660,6 @@ case class HashAggregateExec(
     val outputFunc = generateResultFunction(ctx)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // The child could change `copyResult` to true, but we had already consumed all the rows,
-    // so `copyResult` should be reset to `false`.
-    ctx.copyResult = false
-
     def outputFromGeneratedMap: String = {
       if (isFastHashMapEnabled) {
         if (isVectorizedHashMapEnabled) {
@@ -679,7 +684,7 @@ case class HashAggregateExec(
      """
     }
 
-    // Iterate over the aggregate rows and convert them from ColumnarBatch.Row to UnsafeRow
+    // Iterate over the aggregate rows and convert them from ColumnarRow to UnsafeRow
     def outputFromVectorizedMap: String = {
         val row = ctx.freshName("fastHashMapRow")
         ctx.currentVars = null
@@ -695,8 +700,8 @@ case class HashAggregateExec(
         s"""
            | while ($iterTermForFastHashMap.hasNext()) {
            |   $numOutput.add(1);
-           |   org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $row =
-           |     (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row)
+           |   org.apache.spark.sql.execution.vectorized.ColumnarRow $row =
+           |     (org.apache.spark.sql.execution.vectorized.ColumnarRow)
            |     $iterTermForFastHashMap.next();
            |   ${generateKeyRow.code}
            |   ${generateBufferRow.code}
@@ -772,7 +777,7 @@ case class HashAggregateExec(
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
     incCounter) = if (testFallbackStartsAt.isDefined) {
       val countTerm = ctx.freshName("fallbackCounter")
-      ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
+      ctx.addMutableState(ctx.JAVA_INT, countTerm, s"$countTerm = 0;")
       (s"$countTerm < ${testFallbackStartsAt.get._1}",
         s"$countTerm < ${testFallbackStartsAt.get._2}", s"$countTerm = 0;", s"$countTerm += 1;")
     } else {
@@ -890,7 +895,7 @@ case class HashAggregateExec(
      ${
         if (isVectorizedHashMapEnabled) {
           s"""
-             | org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $fastRowBuffer = null;
+             | ${classOf[MutableColumnarRow].getName} $fastRowBuffer = null;
            """.stripMargin
         } else {
           s"""

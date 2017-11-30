@@ -75,7 +75,6 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
     dictionary = null;
     resultStruct = null;
-    resultArray = null;
   }
 
   public void reserve(int requiredCapacity) {
@@ -280,18 +279,6 @@ public abstract class WritableColumnVector extends ColumnVector {
     return putByteArray(rowId, value, 0, value.length);
   }
 
-  /**
-   * Returns the value for rowId.
-   */
-  private ColumnVector.Array getByteArray(int rowId) {
-    ColumnVector.Array array = getArray(rowId);
-    array.data.loadBytes(array);
-    return array;
-  }
-
-  /**
-   * Returns the decimal for rowId.
-   */
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
@@ -318,14 +305,10 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
   }
 
-  /**
-   * Returns the UTF8String for rowId.
-   */
   @Override
   public UTF8String getUTF8String(int rowId) {
     if (dictionary == null) {
-      ColumnVector.Array a = getByteArray(rowId);
-      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
+      return arrayData().getBytesAsUTF8String(getArrayOffset(rowId), getArrayLength(rowId));
     } else {
       byte[] bytes = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return UTF8String.fromBytes(bytes);
@@ -333,15 +316,16 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
-   * Returns the byte array for rowId.
+   * Gets the values of bytes from [rowId, rowId + count), as a UTF8String.
+   * This method is similar to {@link ColumnVector#getBytes(int, int)}, but can save data copy as
+   * UTF8String is used as a pointer.
    */
+  protected abstract UTF8String getBytesAsUTF8String(int rowId, int count);
+
   @Override
   public byte[] getBinary(int rowId) {
     if (dictionary == null) {
-      ColumnVector.Array array = getByteArray(rowId);
-      byte[] bytes = new byte[array.length];
-      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
-      return bytes;
+      return arrayData().getBytes(getArrayOffset(rowId), getArrayLength(rowId));
     } else {
       return dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
     }
@@ -665,6 +649,11 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   protected abstract WritableColumnVector reserveNewColumn(int capacity, DataType type);
 
+  protected boolean isArray() {
+    return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
+      DecimalType.isByteArrayDecimalType(type);
+  }
+
   /**
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
@@ -673,8 +662,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     super(type);
     this.capacity = capacity;
 
-    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
-        || DecimalType.isByteArrayDecimalType(type)) {
+    if (isArray()) {
       DataType childType;
       int childCapacity = capacity;
       if (type instanceof ArrayType) {
@@ -685,7 +673,6 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewColumn(childCapacity, childType);
-      this.resultArray = new ColumnVector.Array(this.childColumns[0]);
       this.resultStruct = null;
     } else if (type instanceof StructType) {
       StructType st = (StructType)type;
@@ -693,18 +680,15 @@ public abstract class WritableColumnVector extends ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
-      this.resultArray = null;
-      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+      this.resultStruct = new ColumnarRow(this.childColumns);
     } else if (type instanceof CalendarIntervalType) {
       // Two columns. Months as int. Microseconds as Long.
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
-      this.resultArray = null;
-      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+      this.resultStruct = new ColumnarRow(this.childColumns);
     } else {
       this.childColumns = null;
-      this.resultArray = null;
       this.resultStruct = null;
     }
   }

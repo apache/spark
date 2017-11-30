@@ -1731,7 +1731,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val payloadIter = ArrowConverters.toPayloadIterator(inputRows.toIterator, schema, 0, null, ctx)
     val outputRowIter = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
 
-    assert(schema.equals(outputRowIter.schema))
+    assert(schema == outputRowIter.schema)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>

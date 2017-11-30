@@ -123,6 +123,10 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
+
+    case UpdateDelegationTokens(tokenBytes) =>
+      logInfo(s"Received tokens of ${tokenBytes.length} bytes")
+      SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -221,9 +225,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           .invoke(null, driverConf)
       }
 
-      cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
-        val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
-        SparkHadoopUtil.get.addCurrentUserCredentials(creds)
+      cfg.hadoopDelegationCreds.foreach { tokens =>
+        SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
 
       val env = SparkEnv.createExecutorEnv(

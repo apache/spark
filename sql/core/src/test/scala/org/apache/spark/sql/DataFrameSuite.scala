@@ -29,7 +29,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
@@ -684,6 +684,34 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       }
       assert(err.getMessage.contains("Found duplicate column(s)"))
     }
+  }
+
+  test("withColumns: given metadata") {
+    def buildMetadata(num: Int): Seq[Metadata] = {
+      (0 until num).map { n =>
+        val builder = new MetadataBuilder
+        builder.putLong("key", n.toLong)
+        builder.build()
+      }
+    }
+
+    val df = testData.toDF().withColumns(
+      Seq("newCol1", "newCol2"),
+      Seq(col("key") + 1, col("key") + 2),
+      buildMetadata(2))
+
+    df.select("newCol1", "newCol2").schema.zipWithIndex.foreach { case (col, idx) =>
+      assert(col.metadata.getLong("key").toInt === idx)
+    }
+
+    val err = intercept[IllegalArgumentException] {
+      testData.toDF().withColumns(
+        Seq("newCol1", "newCol2"),
+        Seq(col("key") + 1, col("key") + 2),
+        buildMetadata(1))
+    }
+    assert(err.getMessage.contains(
+      "The size of column names: 2 isn't equal to the size of metadata elements: 1"))
   }
 
   test("replace column using withColumn") {
@@ -2069,7 +2097,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .count
   }
 
-  testQuietly("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
+  // The fix of SPARK-21720 avoid an exception regarding JVM code size limit
+  // TODO: When we make a threshold of splitting statements (1024) configurable,
+  // we will re-enable this with max threshold to cause an exception
+  // See https://github.com/apache/spark/pull/18972/files#r150223463
+  ignore("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
     val N = 400
     val rows = Seq(Row.fromSeq(Seq.fill(N)("string")))
     val schema = StructType(Seq.tabulate(N)(i => StructField(s"_c$i", StringType)))
@@ -2125,5 +2157,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .select(col("DecimalCol")).describe()
     val mean = result.select("DecimalCol").where($"summary" === "mean")
     assert(mean.collect().toSet === Set(Row("0.0345678900000000000000000000000000000")))
+  }
+
+  test("SPARK-22520: support code generation for large CaseWhen") {
+    val N = 30
+    var expr1 = when($"id" === lit(0), 0)
+    var expr2 = when($"id" === lit(0), 10)
+    (1 to N).foreach { i =>
+      expr1 = expr1.when($"id" === lit(i), -i)
+      expr2 = expr2.when($"id" === lit(i + 10), i)
+    }
+    val df = spark.range(1).select(expr1, expr2.otherwise(0))
+    checkAnswer(df, Row(0, 10) :: Nil)
+    assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 }

@@ -184,15 +184,6 @@ private[sql] object SQLUtils extends Logging {
     colArray
   }
 
-  def saveMode(mode: String): SaveMode = {
-    mode match {
-      case "append" => SaveMode.Append
-      case "overwrite" => SaveMode.Overwrite
-      case "error" => SaveMode.ErrorIfExists
-      case "ignore" => SaveMode.Ignore
-    }
-  }
-
   def readSqlObject(dis: DataInputStream, dataType: Char): Object = {
     dataType match {
       case 's' =>
