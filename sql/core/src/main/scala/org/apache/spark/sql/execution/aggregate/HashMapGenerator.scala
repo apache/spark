@@ -126,7 +126,13 @@ abstract class HashMapGenerator(
 
   protected def generateRowIterator(): String
 
-  protected def generateClose(): String
+  protected final def generateClose(): String = {
+    s"""
+       |public void close() {
+       |  batch.close();
+       |}
+     """.stripMargin
+  }
 
   protected final def genComputeHash(
       ctx: CodegenContext,

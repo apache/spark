@@ -212,12 +212,4 @@ class RowBasedHashMapGenerator(
        |}
      """.stripMargin
   }
-
-  protected def generateClose(): String = {
-    s"""
-       |public void close() {
-       |  batch.close();
-       |}
-     """.stripMargin
-  }
 }

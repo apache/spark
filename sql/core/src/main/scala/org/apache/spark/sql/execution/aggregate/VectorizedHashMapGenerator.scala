@@ -78,6 +78,7 @@ class VectorizedHashMapGenerator(
 
     s"""
        |  private ${classOf[OnHeapColumnVector].getName}[] vectors;
+       |  private ${classOf[ColumnarBatch].getName} batch;
        |  private ${classOf[MutableColumnarRow].getName} aggBufferRow;
        |  private int[] buckets;
        |  private int capacity = 1 << 16;
@@ -91,6 +92,7 @@ class VectorizedHashMapGenerator(
        |
        |  public $generatedClassName() {
        |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, schema);
+       |    batch = new ${classOf[ColumnarBatch].getName}(schema, vectors, capacity);
        |
        |    // Generates a projection to return the aggregate buffer only.
        |    ${classOf[OnHeapColumnVector].getName}[] aggBufferVectors =
@@ -230,20 +232,8 @@ class VectorizedHashMapGenerator(
   protected def generateRowIterator(): String = {
     s"""
        |public java.util.Iterator<${classOf[ColumnarRow].getName}> rowIterator() {
-       |  ${classOf[ColumnarBatch].getName} batch = new ${classOf[ColumnarBatch].getName}(
-       |    schema, vectors, numRows);
        |  batch.setNumRows(numRows);
        |  return batch.rowIterator();
-       |}
-     """.stripMargin
-  }
-
-  protected def generateClose(): String = {
-    s"""
-       |public void close() {
-       |  for (${classOf[OnHeapColumnVector].getName} c: vectors) {
-       |    c.close();
-       |  }
        |}
      """.stripMargin
   }
