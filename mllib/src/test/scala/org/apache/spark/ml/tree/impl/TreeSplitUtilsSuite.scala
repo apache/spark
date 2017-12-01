@@ -186,13 +186,13 @@ class TreeSplitUtilsSuite
   test("chooseUnorderedCategoricalSplit: basic case") {
     val featureIndex = 0
     // Construct data for unordered categorical feature
-    // label: 0 --> values: 1
-    // label: 1 --> values: 0, 2
-    // label: 2 --> values: 2
-    // Expected split: feature value 1 on the left, values (0, 2) on the right
-    val values = Array(1, 1, 0, 2, 2)
+    // label: 0 --> values: 0, 1
+    // label: 1 --> values: 2, 3
+    // label: 2 --> values: 2, 2, 4
+    // Expected split: feature values (0, 1) on the left, values (2, 3, 4) on the right
+    val values = Array(0, 1, 2, 3, 2, 2, 4)
+    val labels = Array(0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0)
     val featureArity = values.max + 1
-    val labels = Array(0.0, 0.0, 1.0, 1.0, 2.0)
     // Construct DTStatsAggregator, compute sufficient stats
     val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 3, Map(featureIndex -> featureArity))
@@ -206,14 +206,14 @@ class TreeSplitUtilsSuite
     split match {
       case s: CategoricalSplit =>
         assert(s.featureIndex === featureIndex)
-        assert(s.leftCategories.toSet === Set(1.0))
-        assert(s.rightCategories.toSet === Set(0.0, 2.0))
+        assert(s.leftCategories.toSet === Set(0.0, 1.0))
+        assert(s.rightCategories.toSet === Set(2.0, 3.0, 4.0))
       case _ =>
         throw new AssertionError(
           s"Expected CategoricalSplit but got ${split.getClass.getSimpleName}")
     }
     validateImpurityStats(Entropy, labels, stats, expectedLeftStats = Array(2.0, 0.0, 0.0),
-      expectedRightStats = Array(0.0, 2.0, 1.0))
+      expectedRightStats = Array(0.0, 2.0, 3.0))
   }
 
   test("chooseUnorderedCategoricalSplit: return bad stats if we should not split") {
