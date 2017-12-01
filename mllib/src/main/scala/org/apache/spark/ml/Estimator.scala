@@ -20,7 +20,7 @@ package org.apache.spark.ml
 import scala.annotation.varargs
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.param.{ParamMap, ParamPair}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
 import org.apache.spark.sql.Dataset
 
 /**
@@ -81,6 +81,12 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   def fit(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
     paramMaps.map(fit(dataset, _))
   }
+
+  /**
+   * Return any Params that the estimator provides optimized training for.
+   * @return Array of optimized Params
+   */
+  private[ml] def getOptimizedParams: Array[Param[Any]] = Array.empty
 
   override def copy(extra: ParamMap): Estimator[M]
 }
