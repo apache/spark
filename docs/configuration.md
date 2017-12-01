@@ -1132,6 +1132,46 @@ Apart from these, the following properties are also available, and may be useful
     to get the replication level of the block to the initial number.
   </td>
 </tr>
+<tr>
+  <td><code>spark.cleaner.periodicGC.interval</code></td>
+  <td>30min</td>
+  <td>
+    Controls how often to trigger a garbage collection.<br><br>
+    This context cleaner triggers cleanups only when weak references are garbage collected.
+    In long-running applications with large driver JVMs, where there is little memory pressure
+    on the driver, this may happen very occasionally or not at all. Not cleaning at all may
+    lead to executors running out of disk space after a while.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking</code></td>
+  <td>true</td>
+  <td>
+    Enables or disables context cleaning.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking.blocking</code></td>
+  <td>true</td>
+  <td>
+    Controls whether the cleaning thread should block on cleanup tasks (other than shuffle, which is controlled by
+    <code>spark.cleaner.referenceTracking.blocking.shuffle</code> Spark property).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking.blocking.shuffle</code></td>
+  <td>false</td>
+  <td>
+    Controls whether the cleaning thread should block on shuffle cleanup tasks.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking.cleanCheckpoints</code></td>
+  <td>false</td>
+  <td>
+    Controls whether to clean checkpoint files if the reference is out of scope.
+  </td>
+</tr>
 </table>
 
 ### Execution Behavior
