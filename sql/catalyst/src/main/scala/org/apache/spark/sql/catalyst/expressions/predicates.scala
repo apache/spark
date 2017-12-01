@@ -234,36 +234,62 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaDataType = ctx.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
     ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.value)
     ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
     val valueArg = ctx.freshName("valueArg")
+    // All the blocks are meant to be inside a do { ... } while (false); loop.
+    // The evaluation of variables can be stopped when we find a matching value.
     val listCode = listGen.map(x =>
       s"""
-        if (!${ev.value}) {
-          ${x.code}
-          if (${x.isNull}) {
-            ${ev.isNull} = true;
-          } else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
-            ${ev.isNull} = false;
-            ${ev.value} = true;
+         |${x.code}
+         |if (${x.isNull}) {
+         |  ${ev.isNull} = true;
+         |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
+         |  ${ev.isNull} = false;
+         |  ${ev.value} = true;
+         |  continue;
+         |}
+       """.stripMargin)
+    val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
+        listCode.mkString("\n")
+      } else {
+        ctx.splitExpressions(
+          expressions = listCode,
+          funcName = "valueIn",
+          arguments = ("InternalRow", ctx.INPUT_ROW) :: (javaDataType, valueArg) :: Nil,
+          makeSplitFunction = { body =>
+            s"""
+               |do {
+               |  $body
+               |} while (false);
+             """.stripMargin
+          },
+          foldFunctions = { funcCalls =>
+            funcCalls.map(funcCall =>
+              s"""
+                 |$funcCall;
+                 |if (${ev.value}) {
+                 |  continue;
+                 |}
+               """.stripMargin).mkString("\n")
           }
-        }
-       """)
-    val listCodes = ctx.splitExpressions(
-      expressions = listCode,
-      funcName = "valueIn",
-      extraArguments = (ctx.javaType(value.dataType), valueArg) :: Nil)
-    ev.copy(code = s"""
-      ${valueGen.code}
-      ${ev.value} = false;
-      ${ev.isNull} = ${valueGen.isNull};
-      if (!${ev.isNull}) {
-        ${ctx.javaType(value.dataType)} $valueArg = ${valueGen.value};
-        $listCodes
+        )
       }
-    """)
+    ev.copy(code =
+      s"""
+         |${valueGen.code}
+         |${ev.value} = false;
+         |${ev.isNull} = ${valueGen.isNull};
+         |if (!${ev.isNull}) {
+         |  $javaDataType $valueArg = ${valueGen.value};
+         |  do {
+         |    $code
+         |  } while (false);
+         |}
+       """.stripMargin)
   }
 
   override def sql: String = {
