@@ -1842,6 +1842,7 @@ class ImageReaderTest2(PySparkTestCase):
     @classmethod
     def setUpClass(cls):
         PySparkTestCase.setUpClass()
+        # Note that here we enable Hive's support.
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
@@ -1851,6 +1852,11 @@ class ImageReaderTest2(PySparkTestCase):
             cls.tearDownClass()
             raise unittest.SkipTest("Hive is not available")
         cls.spark = HiveContext._createForTesting(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        PySparkTestCase.tearDownClass()
+        cls.spark.sparkSession.stop()
 
     def test_read_images_multiple_times(self):
         # This test case is to check if `ImageSchema.readImages` tries to
