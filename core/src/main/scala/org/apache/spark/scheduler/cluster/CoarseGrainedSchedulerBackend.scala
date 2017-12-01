@@ -178,7 +178,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           addressToExecutorId(executorAddress) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
-          val data = new ExecutorData(executorRef, executorRef.address, hostname,
+          val data = new ExecutorData(executorRef, executorAddress, hostname,
             cores, cores, logUrls)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
