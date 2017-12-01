@@ -93,10 +93,17 @@ object OrcUtils extends Logging {
       if (orcFieldNames.forall(_.startsWith("_col"))) {
         // This is a ORC file written by Hive, no field names in the physical schema, assume the
         // physical schema maps to the data scheme by index.
-        assert(orcFieldNames.length == dataSchema.length, "The given data schema " +
-          s"${dataSchema.simpleString} doesn't match the actual ORC physical schema " +
-          orcFieldNames.mkString(", "))
-        Some(requiredSchema.fieldNames.map { name => dataSchema.fieldIndex(name) })
+        assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
+          s"${dataSchema.simpleString} has less fields than the actual ORC physical schema, " +
+          "no idea which columns were dropped, fail to read.")
+        Some(requiredSchema.fieldNames.map { name =>
+          val index = dataSchema.fieldIndex(name)
+          if (index < orcFieldNames.length) {
+            index
+          } else {
+            -1
+          }
+        })
       } else {
         val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
         Some(requiredSchema.fieldNames.map { name => orcFieldNames.indexWhere(resolver(_, name)) })
