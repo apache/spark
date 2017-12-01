@@ -1669,11 +1669,12 @@ def from_arrow_type(at):
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type
 
+
 def from_arrow_field(field):
     import pyarrow as pa
     at = field.type
-    if type(at) == pa.ListType:
-        element_type = from_arrow_field(at.value_type)
+    if type(at) == pa.lib.ListType:  # TODO: check with is_list?
+        element_type = from_arrow_type(at.value_type)
         element_nullable = field.nullable
         return ArrayType(element_type, element_nullable)
     else:

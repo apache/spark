@@ -3357,6 +3357,26 @@ class ArrowTests(ReusedSQLTestCase):
         schema_rt = from_arrow_schema(arrow_schema)
         self.assertEquals(self.schema, schema_rt)
 
+    def test_createDataFrame_with_array_type(self):
+        import pandas as pd
+        pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [[u"x", u"y"], [u"y", u"z"]]})
+        df = self.spark.createDataFrame(pdf)
+        # TODO: assert is ArrayType and check values
+        df.show()
+        df.printSchema()
+        self.assertTrue(False)
+
+    def test_toPandas_with_array_type(self):
+        array_data = [([1, 2], ["x", "y"]), ([3, 4], ["y", "z"])]
+        array_schema = StructType([StructField("a", ArrayType(IntegerType())),
+                                   StructField("b", ArrayType(StringType()))])
+        df = self.spark.createDataFrame(array_data, schema=array_schema)
+        pdf = df.toPandas()
+        # TODO: assert
+        print(pdf)
+        print(pdf.dtypes)
+        self.assertTrue(False)
+
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class PandasUDFTests(ReusedSQLTestCase):
