@@ -24,16 +24,17 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
-import org.apache.spark.sql.{Column, DataFrame, QueryTest}
+import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, OrcTest}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 /**
  * A test suite that tests ORC filter API based filter pushdown optimization.
  */
-class OrcFilterSuite extends QueryTest with OrcTest {
+class OrcFilterSuite extends OrcTest with TestHiveSingleton {
   private def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,

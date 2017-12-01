@@ -28,10 +28,11 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, OrcTest, RecordReaderIterator}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
@@ -57,7 +58,7 @@ case class Contact(name: String, phone: String)
 
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
-class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
+class OrcQuerySuite extends OrcTest with TestHiveSingleton with BeforeAndAfterAll {
 
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
