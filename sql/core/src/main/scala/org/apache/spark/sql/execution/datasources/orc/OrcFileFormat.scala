@@ -145,16 +145,17 @@ class OrcFileFormat
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
 
-      // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
-      val (isEmptyFile, missingColumnNames) = OrcUtils.getMissingColumnNames(
-        isCaseSensitive, dataSchema, partitionSchema, new Path(new URI(file.filePath)), conf)
-      if (isEmptyFile) {
+      val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
+        isCaseSensitive, dataSchema, requiredSchema, new Path(new URI(file.filePath)), conf)
+
+      if (requestedColIdsOrEmptyFile.isEmpty) {
         Iterator.empty
       } else {
-        val columns = requiredSchema
-          .filter(f => !missingColumnNames.contains(f.name))
-          .map(f => dataSchema.fieldIndex(f.name)).mkString(",")
-        conf.set(OrcConf.INCLUDE_COLUMNS.getAttribute, columns)
+        val requestedColIds = requestedColIdsOrEmptyFile.get
+        assert(requestedColIds.length == requiredSchema.length,
+          "[BUG] requested column IDs do not match required schema")
+        conf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
+          requestedColIds.filter(_ != -1).sorted.mkString(","))
 
         val fileSplit =
           new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
@@ -167,7 +168,7 @@ class OrcFileFormat
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
 
         val unsafeProjection = UnsafeProjection.create(requiredSchema)
-        val deserializer = new OrcDeserializer(dataSchema, requiredSchema, missingColumnNames)
+        val deserializer = new OrcDeserializer(dataSchema, requiredSchema, requestedColIds)
         iter.map(value => unsafeProjection(deserializer.deserialize(value)))
       }
     }
