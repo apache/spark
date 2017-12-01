@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
@@ -33,7 +34,8 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options, ReadSupport, ReadSupportWithSchema}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -169,6 +171,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     option("path", path).load(Seq.empty: _*) // force invocation of `load(...varargs...)`
   }
 
+  import DataFrameReader._
+
   /**
    * Loads input in as a `DataFrame`, for data sources that support multiple paths.
    * Only works if the source is a HadoopFsRelationProvider.
@@ -184,9 +188,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val cls = DataSource.lookupDataSource(source)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val options = new DataSourceV2Options(extraOptions.asJava)
+      val dataSource = cls.newInstance()
+      val options = dataSource match {
+        case cs: ConfigSupport =>
+          val confs = withSessionConfig(cs, sparkSession.sessionState.conf)
+          new DataSourceV2Options((confs ++ extraOptions).asJava)
+        case _ =>
+          new DataSourceV2Options(extraOptions.asJava)
+      }
 
-      val reader = (cls.newInstance(), userSpecifiedSchema) match {
+      val reader = (dataSource, userSpecifiedSchema) match {
         case (ds: ReadSupportWithSchema, Some(schema)) =>
           ds.createReader(schema, options)
 
@@ -731,4 +742,26 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   private val extraOptions = new scala.collection.mutable.HashMap[String, String]
 
+}
+
+private[sql] object DataFrameReader {
+
+  /**
+   * Helper method to filter session configs with config key that matches at least one of the given
+   * prefixes.
+   *
+   * @param cs the config key-prefixes that should be filtered.
+   * @param conf the session conf
+   * @return an immutable map that contains all the session configs that should be propagated to
+   *         the data source.
+   */
+  def withSessionConfig(
+      cs: ConfigSupport,
+      conf: SQLConf): immutable.Map[String, String] = {
+    val prefixes = cs.getConfigPrefixes
+    require(prefixes != null, "The config key-prefixes cann't be null.")
+    conf.getAllConfs.filterKeys { confKey =>
+      prefixes.asScala.exists(confKey.startsWith(_))
+    }
+  }
 }
