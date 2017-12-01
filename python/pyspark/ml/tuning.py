@@ -262,7 +262,6 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(seed).alias(randCol))
         metrics = [0.0] * numModels
-
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
 
         for i in range(nFolds):
@@ -273,9 +272,11 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
             train = df.filter(~condition).cache()
 
             currentFoldMetrics = [0.0] * numModels
+
             def modelCallback(model, paramMapIndex):
                 metric = eva.evaluate(model.transform(validation, epm[paramMapIndex]))
                 currentFoldMetrics[paramMapIndex] = metric
+
             est.parallelFit(train, epm, pool, modelCallback)
 
             for j in range(numModels):
@@ -420,7 +421,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         avgMetrics = _java2py(sc, java_stage.avgMetrics())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
-        py_stage = cls(bestModel = bestModel, avgMetrics = avgMetrics).setEstimator(estimator)
+        py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
 
         py_stage._resetUid(java_stage.uid())
@@ -683,8 +684,8 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         estimator, epms, evaluator = super(TrainValidationSplitModel,
                                            cls)._from_java_impl(java_stage)
         # Create a new instance of this stage.
-        py_stage = cls(bestModel = bestModel, validationMetrics = validationMetrics)\
-            .setEstimator(estimator)
+        py_stage = cls(bestModel=bestModel,
+                       validationMetrics=validationMetrics).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
 
         py_stage._resetUid(java_stage.uid())
