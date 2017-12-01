@@ -203,11 +203,16 @@ class CodegenContext {
       useFreshName: Boolean = true): String = {
     val varName = if (useFreshName) freshName(variableName) else variableName
     val initCode = codeFunctions(varName)
+    if (javaType.contains("[][]")) {
+      Thread.dumpStack()
+    }
 
     if (inline ||
         // want to put a primitive type variable at outerClass for performance
         isPrimitiveType(javaType) &&
-          (mutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)) {
+          (mutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD) ||
+        // type is multi-dimensional array
+        javaType.contains("[][]")) {
       mutableStates += ((javaType, varName, initCode))
       varName
     } else {
