@@ -94,18 +94,21 @@ object PartitioningUtils {
       paths: Seq[Path],
       typeInference: Boolean,
       basePaths: Set[Path],
+      partitionTemplatePath: Option[String],
       timeZoneId: String): PartitionSpec = {
-    parsePartitions(paths, typeInference, basePaths, DateTimeUtils.getTimeZone(timeZoneId))
+    parsePartitions(
+      paths, typeInference, basePaths, partitionTemplatePath, DateTimeUtils.getTimeZone(timeZoneId))
   }
 
   private[datasources] def parsePartitions(
       paths: Seq[Path],
       typeInference: Boolean,
       basePaths: Set[Path],
+      partitionTemplatePath: Option[String],
       timeZone: TimeZone): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
-      parsePartition(path, typeInference, basePaths, timeZone)
+      parsePartition(path, typeInference, basePaths, partitionTemplatePath, timeZone)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -185,12 +188,14 @@ object PartitioningUtils {
       path: Path,
       typeInference: Boolean,
       basePaths: Set[Path],
+      partitionTemplatePath: Option[String],
       timeZone: TimeZone): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
     // currentPath is the current path that we will use to parse partition column value.
     var currentPath: Path = path
+    var maybeCurrentPartitionTemplatePath: Option[Path] = partitionTemplatePath.map(new Path(_))
 
     while (!finished) {
       // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
@@ -205,8 +210,14 @@ object PartitioningUtils {
       } else {
         // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
         // Once we get the string, we try to parse it and find the partition column and value.
-        val maybeColumn =
-          parsePartitionColumn(currentPath.getName, typeInference, timeZone)
+        // In case of existing partitionTemplatePath:
+        //  - Let's say that partitionTemplatePath is in the form "/table/a=/" and
+        //  - Let's say currentPath is a path of "/table/1/" then
+        // currentPath.getName, which give us 1, will be replaced by a=1
+        val maybeColumn = maybeCurrentPartitionTemplatePath.map { currentPartitionTemplatePath =>
+          val columnSpec = partitionizePathName(currentPath, currentPartitionTemplatePath)
+          parsePartitionColumn(columnSpec, typeInference, timeZone)
+        }.getOrElse(parsePartitionColumn(currentPath.getName, typeInference, timeZone))
         maybeColumn.foreach(columns += _)
 
         // Now, we determine if we should stop.
@@ -224,6 +235,7 @@ object PartitioningUtils {
         if (!finished) {
           // For the above example, currentPath will be "/table/".
           currentPath = currentPath.getParent
+          maybeCurrentPartitionTemplatePath = maybeCurrentPartitionTemplatePath.map(_.getParent)
         }
       }
     }
@@ -234,6 +246,13 @@ object PartitioningUtils {
       val (columnNames, values) = columns.reverse.unzip
       (Some(PartitionValues(columnNames, values)), Some(currentPath))
     }
+  }
+
+  private def partitionizePathName(
+       currentPath: Path,
+       currentPartPath: Path
+      ): String = {
+    currentPartPath.getName + currentPath.getName
   }
 
   private def parsePartitionColumn(

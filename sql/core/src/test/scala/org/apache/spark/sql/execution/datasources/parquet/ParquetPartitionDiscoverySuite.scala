@@ -91,7 +91,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       "hdfs://host:9000/path/a=10.5/b=hello")
 
     var exception = intercept[AssertionError] {
-      parsePartitions(paths.map(new Path(_)), true, Set.empty[Path], timeZoneId)
+      parsePartitions(paths.map(new Path(_)), true, Set.empty[Path], None, timeZoneId)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
 
@@ -105,6 +105,20 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       paths.map(new Path(_)),
       true,
       Set(new Path("hdfs://host:9000/path/")),
+      None,
+      timeZoneId)
+
+    // Valid
+    paths = Seq(
+      "hdfs://host:9000/path/_temporary",
+      "hdfs://host:9000/path/10/20",
+      "hdfs://host:9000/path/_temporary/path")
+
+    parsePartitions(
+      paths.map(new Path(_)),
+      true,
+      Set(new Path("hdfs://host:9000/path/")),
+      Some("hdfs://host:9000/path/a=/b=/"),
       timeZoneId)
 
     // Valid
@@ -118,19 +132,35 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       paths.map(new Path(_)),
       true,
       Set(new Path("hdfs://host:9000/path/something=true/table")),
+      None,
+      timeZoneId)
+
+    // Valid
+    paths = Seq(
+      "hdfs://host:9000/path/something=true/table/",
+      "hdfs://host:9000/path/something=true/table/_temporary",
+      "hdfs://host:9000/path/something=true/table/a=10/b=20",
+      "hdfs://host:9000/path/something=true/table/_temporary/path")
+
+    parsePartitions(
+      paths.map(new Path(_)),
+      true,
+      Set(new Path("hdfs://host:9000/path/something=true/table")),
+      None,
       timeZoneId)
 
     // Valid
     paths = Seq(
       "hdfs://host:9000/path/table=true/",
       "hdfs://host:9000/path/table=true/_temporary",
-      "hdfs://host:9000/path/table=true/a=10/b=20",
+      "hdfs://host:9000/path/table=true/10/20",
       "hdfs://host:9000/path/table=true/_temporary/path")
 
     parsePartitions(
       paths.map(new Path(_)),
       true,
-      Set(new Path("hdfs://host:9000/path/table=true")),
+      Set(new Path("hdfs://host:9000/path/table=true/")),
+      Some("hdfs://host:9000/path/table=true/a=/b=/"),
       timeZoneId)
 
     // Invalid
@@ -144,6 +174,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         paths.map(new Path(_)),
         true,
         Set(new Path("hdfs://host:9000/path/")),
+        None,
         timeZoneId)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
@@ -164,6 +195,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         paths.map(new Path(_)),
         true,
         Set(new Path("hdfs://host:9000/tmp/tables/")),
+        None,
         timeZoneId)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
@@ -171,16 +203,28 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
   test("parse partition") {
     def check(path: String, expected: Option[PartitionValues]): Unit = {
-      val actual = parsePartition(new Path(path), true, Set.empty[Path], timeZone)._1
+      val actual = parsePartition(new Path(path), true, Set.empty[Path], None, timeZone)._1
       assert(expected === actual)
     }
 
     def checkThrows[T <: Throwable: Manifest](path: String, expected: String): Unit = {
       val message = intercept[T] {
-        parsePartition(new Path(path), true, Set.empty[Path], timeZone)
+        parsePartition(new Path(path), true, Set.empty[Path], None, timeZone)
       }.getMessage
 
       assert(message.contains(expected))
+    }
+
+    def checkPartitionTemplate(
+        path: String,
+        basePath: Option[String],
+        template: String,
+        expected: Option[PartitionValues]): Unit = {
+      val actual =
+        parsePartition(new Path(path), true,
+          basePath.map { path =>
+            Set(new Path(path)) }.getOrElse(Set.empty[Path]), Some(template), timeZone)._1
+      assert(expected === actual)
     }
 
     check("file://path/a=10", Some {
@@ -213,6 +257,16 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
     checkThrows[AssertionError]("file://path/=10", "Empty partition column name")
     checkThrows[AssertionError]("file://path/a=", "Empty partition column value")
+
+    checkPartitionTemplate("file://path/10/hello/1.5",
+      Some("file://path"), "file://path/a=/b=/c=/", Some {
+      PartitionValues(
+        ArrayBuffer("a", "b", "c"),
+        ArrayBuffer(
+          Literal.create(10, IntegerType),
+          Literal.create("hello", StringType),
+          Literal.create(1.5, DoubleType)))
+    })
   }
 
   test("parse partition with base paths") {
@@ -221,6 +275,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       path = new Path("file://path/a=10"),
       typeInference = true,
       basePaths = Set(new Path("file://path/a=10")),
+      None,
       timeZone = timeZone)._1
 
     assert(partitionSpec1.isEmpty)
@@ -230,6 +285,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       path = new Path("file://path/a=10"),
       typeInference = true,
       basePaths = Set(new Path("file://path")),
+      None,
       timeZone = timeZone)._1
 
     assert(partitionSpec2 ==
@@ -248,6 +304,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           paths.map(new Path(_)),
           true,
           rootPaths,
+          None,
           timeZoneId)
       assert(actualSpec.partitionColumns === spec.partitionColumns)
       assert(actualSpec.partitions.length === spec.partitions.length)
@@ -360,7 +417,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   test("parse partitions with type inference disabled") {
     def check(paths: Seq[String], spec: PartitionSpec): Unit = {
       val actualSpec =
-        parsePartitions(paths.map(new Path(_)), false, Set.empty[Path], timeZoneId)
+        parsePartitions(paths.map(new Path(_)), false, Set.empty[Path], None, timeZoneId)
       assert(actualSpec === spec)
     }
 
@@ -445,7 +502,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         pi <- Seq(1, 2)
         ps <- Seq("foo", "bar")
       } {
-        val dir = makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
+        val dir = makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
         makeParquetFile(
           (1 to 10).map(i => ParquetData(i, i.toString)),
           dir)
@@ -491,11 +548,66 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
   }
 
+  test("read partitioned table using partitionTemplate - normal case") {
+    withTempDir { base =>
+      for {
+        pi <- Seq(1, 2)
+        ps <- Seq("foo", "bar")
+      } {
+        val dir = makeValueOnlyNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
+        makeParquetFile(
+          (1 to 10).map(i => ParquetData(i, i.toString)),
+          dir)
+        // Introduce _temporary dir to test the robustness of the schema discovery process.
+        new File(dir.toString, "_temporary").mkdir()
+      }
+      // Introduce _temporary dir to the base dir the robustness of the schema discovery process.
+      new File(base.getCanonicalPath, "_temporary").mkdir()
+
+      spark.read
+        .option("basePath", base.getCanonicalPath)
+        .option("partitionTemplate", s"${base.getCanonicalPath}/pi=/ps=/")
+        .parquet(base.getCanonicalPath).createOrReplaceTempView("t")
+
+      withTempView("t") {
+        checkAnswer(
+          sql("SELECT * FROM t"),
+          for {
+            i <- 1 to 10
+            pi <- Seq(1, 2)
+            ps <- Seq("foo", "bar")
+          } yield Row(i, i.toString, pi, ps))
+
+        checkAnswer(
+          sql("SELECT intField, pi FROM t"),
+          for {
+            i <- 1 to 10
+            pi <- Seq(1, 2)
+            _ <- Seq("foo", "bar")
+          } yield Row(i, pi))
+
+        checkAnswer(
+          sql("SELECT * FROM t WHERE pi = 1"),
+          for {
+            i <- 1 to 10
+            ps <- Seq("foo", "bar")
+          } yield Row(i, i.toString, 1, ps))
+
+        checkAnswer(
+          sql("SELECT * FROM t WHERE ps = 'foo'"),
+          for {
+            i <- 1 to 10
+            pi <- Seq(1, 2)
+          } yield Row(i, i.toString, pi, "foo"))
+      }
+    }
+  }
+
   test("read partitioned table using different path options") {
     withTempDir { base =>
       val pi = 1
       val ps = "foo"
-      val path = makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
+      val path = makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
       makeParquetFile(
         (1 to 10).map(i => ParquetData(i, i.toString)), path)
 
@@ -538,7 +650,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       } {
         makeParquetFile(
           (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+          makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
       spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
@@ -586,7 +698,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       } {
         makeParquetFile(
           (1 to 10).map(i => ParquetData(i, i.toString)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+          makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
@@ -626,7 +738,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       } {
         makeParquetFile(
           (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+          makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
@@ -655,11 +767,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempDir { base =>
       makeParquetFile(
         (1 to 10).map(i => Tuple1(i)).toDF("intField"),
-        makePartitionDir(base, defaultPartitionName, "pi" -> 1))
+        makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> 1))
 
       makeParquetFile(
         (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
-        makePartitionDir(base, defaultPartitionName, "pi" -> 2))
+        makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> 2))
 
       spark
         .read
