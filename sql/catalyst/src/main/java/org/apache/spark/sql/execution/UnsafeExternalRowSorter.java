@@ -138,7 +138,7 @@ public final class UnsafeExternalRowSorter {
     sorter.cleanupResources();
   }
 
-  public Iterator<UnsafeRow> sort() throws IOException {
+  public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
     try {
       final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
       if (!sortedIterator.hasNext()) {
@@ -147,7 +147,7 @@ public final class UnsafeExternalRowSorter {
         cleanupResources();
       }
       return new AbstractIterator<UnsafeRow>() {
-
+        boolean alreadyCalculated = false;
         private final int numFields = schema.length();
         private UnsafeRow row = new UnsafeRow(numFields);
 
@@ -159,6 +159,12 @@ public final class UnsafeExternalRowSorter {
         @Override
         public UnsafeRow next() {
           try {
+            if (!alreadyCalculated) {
+              while (inputIterator.hasNext()) {
+                insertRow(inputIterator.next());
+              }
+              alreadyCalculated = true;
+            }
             sortedIterator.loadNext();
             row.pointTo(
               sortedIterator.getBaseObject(),
@@ -185,13 +191,6 @@ public final class UnsafeExternalRowSorter {
       cleanupResources();
       throw e;
     }
-  }
-
-  public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
-    while (inputIterator.hasNext()) {
-      insertRow(inputIterator.next());
-    }
-    return sort();
   }
 
   private static final class RowComparator extends RecordComparator {
