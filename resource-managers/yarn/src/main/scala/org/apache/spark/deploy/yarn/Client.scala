@@ -758,9 +758,7 @@ private[spark] class Client(
       // Save Spark configuration to a file in the archive, but filter out the app's secret.
       val props = new Properties()
       sparkConf.getAll.foreach { case (k, v) =>
-        if (k != SecurityManager.SPARK_AUTH_SECRET_CONF) {
-          props.setProperty(k, v)
-        }
+        props.setProperty(k, v)
       }
       // Override spark.yarn.key to point to the location in distributed cache which will be used
       // by AM.
@@ -834,11 +832,6 @@ private[spark] class Client(
         }
       }
       sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
-    } else {
-      // Only propagate the auth secret to the AM in client mode, using the environment, if set.
-      sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF).foreach { secret =>
-        env(SecurityManager.ENV_AUTH_SECRET) = secret
-      }
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>

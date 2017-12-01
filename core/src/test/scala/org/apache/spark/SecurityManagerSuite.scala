@@ -18,6 +18,10 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.charset.StandardCharsets.UTF_8
+import java.security.PrivilegedExceptionAction
+
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
@@ -441,8 +445,18 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
       .set(NETWORK_AUTH_ENABLED, true)
       .set(SparkLauncher.SPARK_MASTER, "yarn")
     val mgr = new SecurityManager(conf)
-    mgr.initializeAuth()
-    assert(mgr.getSecretKey() != null)
+
+    UserGroupInformation.createUserForTesting("authTest", Array()).doAs(
+      new PrivilegedExceptionAction[Unit]() {
+        override def run(): Unit = {
+          mgr.initializeAuth()
+          val creds = UserGroupInformation.getCurrentUser().getCredentials()
+          val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
+          assert(secret != null)
+          assert(new String(secret, UTF_8) === mgr.getSecretKey())
+        }
+      }
+    )
   }
 
 }

@@ -65,12 +65,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     }
   }
 
-  // Initialize the security manager for authentication, if enabled. This needs to be done
-  // before the config is propagated to the system properties.
   private val securityMgr = new SecurityManager(sparkConf)
-  if (isClusterMode) {
-    securityMgr.initializeAuth()
-  }
 
   // Set system properties for each config entry. This covers two use cases:
   // - The default configuration stored by the SparkHadoopUtil class
