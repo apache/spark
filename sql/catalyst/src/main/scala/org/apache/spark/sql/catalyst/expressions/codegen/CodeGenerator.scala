@@ -1056,8 +1056,7 @@ class CodegenContext {
       if (expr.nullable) {
         addMutableState(JAVA_BOOLEAN, isNull)
       }
-      addMutableState(javaType(expr.dataType), value,
-        s"$value = ${defaultValue(expr.dataType)};")
+      addMutableState(javaType(expr.dataType), value)
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
       val state = if (expr.nullable) {

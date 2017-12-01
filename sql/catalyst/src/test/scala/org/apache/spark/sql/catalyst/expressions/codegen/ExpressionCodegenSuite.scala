@@ -42,7 +42,8 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     ctx.subExprEliminationExprs.put(subExprs(0), SubExprEliminationState("false", "value1"))
     ctx.subExprEliminationExprs.put(subExprs(1), SubExprEliminationState("isNull2", "value2"))
 
-    val params = ExpressionCodegen.getParamsForSubExprs(ctx, subExprs)
+    val subExprCodes = ExpressionCodegen.getSubExprCodes(ctx, subExprs)
+    val params = ExpressionCodegen.prepareFunctionParams(ctx, subExprs, subExprCodes)
     assert(params.length == 3)
     assert(params(0) == Tuple2("value1", "int value1"))
     assert(params(1) == Tuple2("value2", "int value2"))

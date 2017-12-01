@@ -46,7 +46,8 @@ object ExpressionCodegen {
     val paramsFromColumns = prepareFunctionParams(ctx, inputAttrs, inputVars)
 
     val subExprs = getSubExprInChildren(ctx, expr)
-    val paramsFromSubExprs = getParamsForSubExprs(ctx, subExprs)
+    val subExprCodes = getSubExprCodes(ctx, subExprs)
+    val paramsFromSubExprs = prepareFunctionParams(ctx, subExprs, subExprCodes)
 
     val inputRows = ctx.INPUT_ROW +: getInputRowsForChildren(ctx, expr)
     val paramsFromRows = inputRows.distinct.filter(_ != null).map { row =>
@@ -77,25 +78,13 @@ object ExpressionCodegen {
   }
 
   /**
-   * Given the list of eliminated subexpressions used in the children expressions, returns the
-   * strings of funtion parameters. The first is the variable names used to call the function,
-   * the second is the parameters used to declare the function in generated code.
+   * A small helper function to return `ExprCode`s that represent subexpressions.
    */
-  def getParamsForSubExprs(
-      ctx: CodegenContext,
-      subExprs: Seq[Expression]): Seq[(String, String)] = {
-    subExprs.flatMap { subExpr =>
-      val argType = ctx.javaType(subExpr.dataType)
-
-      val subExprState = ctx.subExprEliminationExprs(subExpr)
-
-      if (!subExpr.nullable || subExprState.isNull == "true" || subExprState.isNull == "false") {
-        Seq((subExprState.value, s"$argType ${subExprState.value}"))
-      } else {
-        Seq((subExprState.value, s"$argType ${subExprState.value}"),
-          (subExprState.isNull, s"boolean ${subExprState.isNull}"))
-      }
-    }.distinct
+  def getSubExprCodes(ctx: CodegenContext, subExprs: Seq[Expression]): Seq[ExprCode] = {
+    subExprs.map { subExpr =>
+      val stat = ctx.subExprEliminationExprs(subExpr)
+      ExprCode(code = "", value = stat.value, isNull = stat.isNull)
+    }
   }
 
   /**
