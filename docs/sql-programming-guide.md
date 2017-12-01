@@ -1776,6 +1776,8 @@ options.
     Note that, for <b>DecimalType(38,0)*</b>, the table above intentionally does not cover all other combinations of scales and precisions because currently we only infer decimal type like `BigInteger`/`BigInt`. For example, 1.1 is inferred as double type.
   - In PySpark, now we need Pandas 0.19.2 or upper if you want to use Pandas related functionalities, such as `toPandas`, `createDataFrame` from Pandas DataFrame, etc.
   - In PySpark, the behavior of timestamp values for Pandas related functionalities was changed to respect session timezone. If you want to use the old behavior, you need to set a configuration `spark.sql.execution.pandas.respectSessionTimeZone` to `False`. See [SPARK-22395](https://issues.apache.org/jira/browse/SPARK-22395) for details.
+ 
+ - Since Spark 2.3, broadcast behaviour changed to broadcast the join side with an explicit broadcast hint first. See [SPARK-22489](https://issues.apache.org/jira/browse/SPARK-22489) for details.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 
