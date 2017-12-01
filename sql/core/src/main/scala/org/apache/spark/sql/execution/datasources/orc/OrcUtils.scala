@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.io.IOException
-
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -42,10 +39,6 @@ object OrcUtils extends Logging {
     "ZLIB" -> ".zlib",
     "LZO" -> ".lzo")
 
-  def withNullSafe(f: Any => Any): Any => Any = {
-    input => if (input == null) null else f(input)
-  }
-
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
@@ -57,7 +50,7 @@ object OrcUtils extends Logging {
     paths
   }
 
-  private[orc] def readSchema(file: Path, conf: Configuration): Option[TypeDescription] = {
+  def readSchema(file: Path, conf: Configuration): Option[TypeDescription] = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val reader = OrcFile.createReader(file, readerOptions)
@@ -69,7 +62,7 @@ object OrcUtils extends Logging {
     }
   }
 
-  private[orc] def readSchema(sparkSession: SparkSession, files: Seq[FileStatus])
+  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus])
       : Option[StructType] = {
     val conf = sparkSession.sessionState.newHadoopConf()
     // TODO: We need to support merge schema. Please see SPARK-11412.
@@ -79,50 +72,42 @@ object OrcUtils extends Logging {
     }
   }
 
-  private[orc] def getTypeDescription(dataType: DataType) = dataType match {
-    case st: StructType => TypeDescription.fromString(st.catalogString)
-    case _ => TypeDescription.fromString(dataType.catalogString)
-  }
-
   /**
-   * Return a pair of isEmptyFile and missing column names in a give ORC file.
-   * Some old empty ORC files always have an empty schema stored in their footer. (SPARK-8501)
-   * In that case, isEmptyFile is `true` and missing column names is `None`.
+   * Returns the requested column ids from the given ORC file. Column id can be -1, which means the
+   * requested column doesn't exist in the ORC file. Returns None if the given ORC file is empty.
    */
-  private[orc] def getMissingColumnNames(
+  def requestedColumnIds(
       isCaseSensitive: Boolean,
       dataSchema: StructType,
-      partitionSchema: StructType,
+      requiredSchema: StructType,
       file: Path,
-      conf: Configuration): (Boolean, Seq[String]) = {
-    val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+      conf: Configuration): Option[Array[Int]] = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val reader = OrcFile.createReader(file, readerOptions)
-    val schema = reader.getSchema
-    if (schema.getFieldNames.size == 0) {
-      (true, Seq.empty[String])
+    val orcFieldNames = reader.getSchema.getFieldNames.asScala
+    if (orcFieldNames.isEmpty) {
+      // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
+      None
     } else {
-      val orcSchema = if (schema.getFieldNames.asScala.forall(_.startsWith("_col"))) {
-        logInfo("Recover ORC schema with data schema")
-        var schemaString = schema.toString
-        dataSchema.zipWithIndex.foreach { case (field: StructField, index: Int) =>
-          schemaString = schemaString.replace(s"_col$index:", s"${field.name}:")
-        }
-        TypeDescription.fromString(schemaString)
-      } else {
-        schema
-      }
-
-      val missingColumnNames = new ArrayBuffer[String]
-      if (dataSchema.length > orcSchema.getFieldNames.size) {
-        dataSchema.filter(x => partitionSchema.getFieldIndex(x.name).isEmpty).foreach { f =>
-          if (!orcSchema.getFieldNames.asScala.exists(resolver(_, f.name))) {
-            missingColumnNames += f.name
+      if (orcFieldNames.forall(_.startsWith("_col"))) {
+        // This is a ORC file written by Hive, no field names in the physical schema, assume the
+        // physical schema maps to the data scheme by index.
+        assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
+          s"${dataSchema.simpleString} has less fields than the actual ORC physical schema, " +
+          "no idea which columns were dropped, fail to read.")
+        Some(requiredSchema.fieldNames.map { name =>
+          val index = dataSchema.fieldIndex(name)
+          if (index < orcFieldNames.length) {
+            index
+          } else {
+            -1
           }
-        }
+        })
+      } else {
+        val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+        Some(requiredSchema.fieldNames.map { name => orcFieldNames.indexWhere(resolver(_, name)) })
       }
-      (false, missingColumnNames)
     }
   }
 }

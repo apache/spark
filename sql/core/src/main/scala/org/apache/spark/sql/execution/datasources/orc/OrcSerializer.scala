@@ -18,188 +18,218 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.hadoop.io._
+import org.apache.orc.TypeDescription
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 import org.apache.orc.storage.common.`type`.HiveDecimal
 import org.apache.orc.storage.serde2.io.{DateWritable, HiveDecimalWritable}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.datasources.orc.OrcUtils.{getTypeDescription, withNullSafe}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
-private[orc] class OrcSerializer(dataSchema: StructType) {
+/**
+ * A serializer to serialize Spark rows to ORC structs.
+ */
+class OrcSerializer(dataSchema: StructType) {
 
-  private[this] lazy val orcStruct: OrcStruct = createOrcValue(dataSchema).asInstanceOf[OrcStruct]
-
-  private[this] val length = dataSchema.length
-
-  private[this] val writers = dataSchema.map(_.dataType).map(makeWriter).toArray
+  private val result = createOrcValue(dataSchema).asInstanceOf[OrcStruct]
+  private val converters = dataSchema.map(_.dataType).map(newConverter(_)).toArray
 
   def serialize(row: InternalRow): OrcStruct = {
     var i = 0
-    while (i < length) {
+    while (i < converters.length) {
       if (row.isNullAt(i)) {
-        orcStruct.setFieldValue(i, null)
+        result.setFieldValue(i, null)
       } else {
-        writers(i)(row, i)
+        result.setFieldValue(i, converters(i)(row, i))
       }
       i += 1
     }
-    orcStruct
+    result
   }
 
-  private[this] def makeWriter(dataType: DataType): (SpecializedGetters, Int) => Unit = {
-    dataType match {
-      case BooleanType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          orcStruct.setFieldValue(ordinal, new BooleanWritable(row.getBoolean(ordinal)))
+  private type Converter = (SpecializedGetters, Int) => WritableComparable[_]
 
-      case ByteType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          orcStruct.setFieldValue(ordinal, new ByteWritable(row.getByte(ordinal)))
+  /**
+   * Creates a converter to convert Catalyst data at the given ordinal to ORC values.
+   */
+  private def newConverter(
+      dataType: DataType,
+      reuseObj: Boolean = true): Converter = dataType match {
+    case NullType => (getter, ordinal) => null
 
-      case ShortType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          orcStruct.setFieldValue(ordinal, new ShortWritable(row.getShort(ordinal)))
+    case BooleanType =>
+      if (reuseObj) {
+        val result = new BooleanWritable()
+        (getter, ordinal) =>
+          result.set(getter.getBoolean(ordinal))
+          result
+      } else {
+        (getter, ordinal) => new BooleanWritable(getter.getBoolean(ordinal))
+      }
 
-      case IntegerType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          orcStruct.setFieldValue(ordinal, new IntWritable(row.getInt(ordinal)))
+    case ByteType =>
+      if (reuseObj) {
+        val result = new ByteWritable()
+        (getter, ordinal) =>
+          result.set(getter.getByte(ordinal))
+          result
+      } else {
+        (getter, ordinal) => new ByteWritable(getter.getByte(ordinal))
+      }
 
-      case LongType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          orcStruct.setFieldValue(ordinal, new LongWritable(row.getLong(ordinal)))
+    case ShortType =>
+      if (reuseObj) {
+        val result = new ShortWritable()
+        (getter, ordinal) =>
+          result.set(getter.getShort(ordinal))
+          result
+      } else {
+        (getter, ordinal) => new ShortWritable(getter.getShort(ordinal))
+      }
 
-      case FloatType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          orcStruct.setFieldValue(ordinal, new FloatWritable(row.getFloat(ordinal)))
+    case IntegerType =>
+      if (reuseObj) {
+        val result = new IntWritable()
+        (getter, ordinal) =>
+          result.set(getter.getInt(ordinal))
+          result
+      } else {
+        (getter, ordinal) => new IntWritable(getter.getInt(ordinal))
+      }
 
-      case DoubleType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          orcStruct.setFieldValue(ordinal, new DoubleWritable(row.getDouble(ordinal)))
 
-      case _ =>
-        val wrapper = getWritableWrapper(dataType)
-        (row: SpecializedGetters, ordinal: Int) => {
-          val value = wrapper(row.get(ordinal, dataType)).asInstanceOf[WritableComparable[_]]
-          orcStruct.setFieldValue(ordinal, value)
+    case LongType =>
+      if (reuseObj) {
+        val result = new LongWritable()
+        (getter, ordinal) =>
+          result.set(getter.getLong(ordinal))
+          result
+      } else {
+        (getter, ordinal) => new LongWritable(getter.getLong(ordinal))
+      }
+
+    case FloatType =>
+      if (reuseObj) {
+        val result = new FloatWritable()
+        (getter, ordinal) =>
+          result.set(getter.getFloat(ordinal))
+          result
+      } else {
+        (getter, ordinal) => new FloatWritable(getter.getFloat(ordinal))
+      }
+
+    case DoubleType =>
+      if (reuseObj) {
+        val result = new DoubleWritable()
+        (getter, ordinal) =>
+          result.set(getter.getDouble(ordinal))
+          result
+      } else {
+        (getter, ordinal) => new DoubleWritable(getter.getDouble(ordinal))
+      }
+
+
+    // Don't reuse the result object for string and binary as it would cause extra data copy.
+    case StringType => (getter, ordinal) =>
+      new Text(getter.getUTF8String(ordinal).getBytes)
+
+    case BinaryType => (getter, ordinal) =>
+      new BytesWritable(getter.getBinary(ordinal))
+
+    case DateType =>
+      if (reuseObj) {
+        val result = new DateWritable()
+        (getter, ordinal) =>
+          result.set(getter.getInt(ordinal))
+          result
+      } else {
+        (getter, ordinal) => new DateWritable(getter.getInt(ordinal))
+      }
+
+    // Already expensive, reusing object or not doesn't matter.
+    case TimestampType =>
+      (getter, ordinal) =>
+        val ts = DateTimeUtils.toJavaTimestamp(getter.getLong(ordinal))
+        val result = new OrcTimestamp(ts.getTime)
+        result.setNanos(ts.getNanos)
+        result
+
+    // Already expensive, reusing object or not doesn't matter.
+    case DecimalType.Fixed(precision, scale) =>
+      (getter, ordinal) =>
+        val d = getter.getDecimal(ordinal, precision, scale)
+        new HiveDecimalWritable(HiveDecimal.create(d.toJavaBigDecimal))
+
+    case st: StructType =>
+      val result = createOrcValue(st).asInstanceOf[OrcStruct]
+      val fieldConverters = st.map(_.dataType).map(newConverter(_))
+      val numFields = st.length
+      (getter, ordinal) =>
+        val struct = getter.getStruct(ordinal, numFields)
+        var i = 0
+        while (i < numFields) {
+          if (struct.isNullAt(i)) {
+            result.setFieldValue(i, null)
+          } else {
+            result.setFieldValue(i, fieldConverters(i)(struct, i))
+          }
+          i += 1
         }
-    }
+        result
+
+    case ArrayType(elementType, _) =>
+      val result = createOrcValue(dataType).asInstanceOf[OrcList[WritableComparable[_]]]
+      // Need to put all converted values to a list, can't reuse object.
+      val elementConverter = newConverter(elementType, reuseObj = false)
+      (getter, ordinal) =>
+        result.clear()
+        val array = getter.getArray(ordinal)
+        var i = 0
+        while (i < array.numElements()) {
+          if (array.isNullAt(i)) {
+            result.add(null)
+          } else {
+            result.add(elementConverter(array, i))
+          }
+          i += 1
+        }
+        result
+
+    case MapType(keyType, valueType, _) =>
+      val result = createOrcValue(dataType)
+        .asInstanceOf[OrcMap[WritableComparable[_], WritableComparable[_]]]
+      // Need to put all converted values to a list, can't reuse object.
+      val keyConverter = newConverter(keyType, reuseObj = false)
+      val valueConverter = newConverter(valueType, reuseObj = false)
+      (getter, ordinal) =>
+        result.clear()
+        val map = getter.getMap(ordinal)
+        val keyArray = map.keyArray()
+        val valueArray = map.valueArray()
+        var i = 0
+        while (i < map.numElements()) {
+          val key = keyConverter(keyArray, i)
+          if (valueArray.isNullAt(i)) {
+            result.put(key, null)
+          } else {
+            result.put(key, valueConverter(valueArray, i))
+          }
+          i += 1
+        }
+        result
+
+    case udt: UserDefinedType[_] => newConverter(udt.sqlType)
+
+    case _ =>
+      throw new UnsupportedOperationException(s"$dataType is not supported yet.")
   }
 
   /**
    * Return a Orc value object for the given Spark schema.
    */
-  private[this] def createOrcValue(dataType: DataType) =
-    OrcStruct.createValue(getTypeDescription(dataType))
-
-  /**
-   * Convert Apache Spark InternalRow to Apache ORC OrcStruct.
-   */
-  private[this] def convertInternalRowToOrcStruct(row: InternalRow, schema: StructType) = {
-    val wrappers = schema.map(_.dataType).map(getWritableWrapper).toArray
-    val orcStruct = createOrcValue(schema).asInstanceOf[OrcStruct]
-
-    var i = 0
-    val length = schema.length
-    while (i < length) {
-      val fieldType = schema(i).dataType
-      if (row.isNullAt(i)) {
-        orcStruct.setFieldValue(i, null)
-      } else {
-        val field = row.get(i, fieldType)
-        val fieldValue = wrappers(i)(field).asInstanceOf[WritableComparable[_]]
-        orcStruct.setFieldValue(i, fieldValue)
-      }
-      i += 1
-    }
-    orcStruct
-  }
-
-  /**
-   * Builds a WritableComparable-return function ahead of time according to DataType
-   * to avoid pattern matching and branching costs per row.
-   */
-  private[this] def getWritableWrapper(dataType: DataType): Any => Any = dataType match {
-    case NullType => _ => null
-
-    case BooleanType => withNullSafe(o => new BooleanWritable(o.asInstanceOf[Boolean]))
-
-    case ByteType => withNullSafe(o => new ByteWritable(o.asInstanceOf[Byte]))
-    case ShortType => withNullSafe(o => new ShortWritable(o.asInstanceOf[Short]))
-    case IntegerType => withNullSafe(o => new IntWritable(o.asInstanceOf[Int]))
-    case LongType => withNullSafe(o => new LongWritable(o.asInstanceOf[Long]))
-
-    case FloatType => withNullSafe(o => new FloatWritable(o.asInstanceOf[Float]))
-    case DoubleType => withNullSafe(o => new DoubleWritable(o.asInstanceOf[Double]))
-
-    case StringType => withNullSafe(o => new Text(o.asInstanceOf[UTF8String].getBytes))
-
-    case BinaryType => withNullSafe(o => new BytesWritable(o.asInstanceOf[Array[Byte]]))
-
-    case DateType =>
-      withNullSafe(o => new DateWritable(DateTimeUtils.toJavaDate(o.asInstanceOf[Int])))
-    case TimestampType =>
-      withNullSafe { o =>
-        val us = o.asInstanceOf[Long]
-        var seconds = us / DateTimeUtils.MICROS_PER_SECOND
-        var micros = us % DateTimeUtils.MICROS_PER_SECOND
-        if (micros < 0) {
-          micros += DateTimeUtils.MICROS_PER_SECOND
-          seconds -= 1
-        }
-        val t = new OrcTimestamp(seconds * 1000)
-        t.setNanos(micros.toInt * 1000)
-        t
-      }
-
-    case _: DecimalType =>
-      withNullSafe { o =>
-        new HiveDecimalWritable(HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal))
-      }
-
-    case st: StructType =>
-      withNullSafe(o => convertInternalRowToOrcStruct(o.asInstanceOf[InternalRow], st))
-
-    case ArrayType(et, _) =>
-      withNullSafe { o =>
-        val data = o.asInstanceOf[ArrayData]
-        val list = createOrcValue(dataType)
-        for (i <- 0 until data.numElements()) {
-          val d = data.get(i, et)
-          val v = getWritableWrapper(et)(d).asInstanceOf[WritableComparable[_]]
-          list.asInstanceOf[OrcList[WritableComparable[_]]].add(v)
-        }
-        list
-      }
-
-    case MapType(keyType, valueType, _) =>
-      withNullSafe { o =>
-        val keyWrapper = getWritableWrapper(keyType)
-        val valueWrapper = getWritableWrapper(valueType)
-        val data = o.asInstanceOf[MapData]
-        val map = createOrcValue(dataType)
-          .asInstanceOf[OrcMap[WritableComparable[_], WritableComparable[_]]]
-        data.foreach(keyType, valueType, { case (k, v) =>
-          map.put(
-            keyWrapper(k).asInstanceOf[WritableComparable[_]],
-            valueWrapper(v).asInstanceOf[WritableComparable[_]])
-        })
-        map
-      }
-
-    case udt: UserDefinedType[_] =>
-      withNullSafe { o =>
-        val udtRow = new SpecificInternalRow(Seq(udt.sqlType))
-        udtRow(0) = o
-        convertInternalRowToOrcStruct(
-          udtRow,
-          StructType(Seq(StructField("tmp", udt.sqlType)))).getFieldValue(0)
-      }
-
-    case _ =>
-      throw new UnsupportedOperationException(s"$dataType is not supported yet.")
+  private def createOrcValue(dataType: DataType) = {
+    OrcStruct.createValue(TypeDescription.fromString(dataType.catalogString))
   }
 }
