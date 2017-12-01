@@ -332,42 +332,38 @@ case class FilterEstimation(plan: Filter) extends Logging {
         colStatsMap.update(attr, newStats)
       }
 
-      // We compute filter selectivity using Histogram information
-      attr.dataType match {
-        case StringType | BinaryType =>
-          Some(1.0 / BigDecimal(ndv))
-
-        case _ =>
-          // returns 1/ndv if there is no histogram
-          if (colStat.histogram.isEmpty) return Some(1.0 / BigDecimal(ndv))
-
-          // We traverse histogram bins to locate the literal value
-          val hgmBins = colStat.histogram.get.bins
-          val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
-          // find the interval where this datum locates
-          var lowerId, higherId = -1
-          for (i <- hgmBins.indices) {
-            // if datum > upperBound, just move to next bin
-            if (datum <= hgmBins(i).hi && lowerId < 0) lowerId = i
-            if (higherId < 0) {
-              if ((datum < hgmBins(i).hi || i == hgmBins.length - 1) ||
-                ((datum == hgmBins(i).hi) && (datum < hgmBins(i + 1).hi))) {
-                higherId = i
-              }
+      if (colStat.histogram.isEmpty) {
+        // returns 1/ndv if there is no histogram
+        Some(1.0 / BigDecimal(ndv))
+      } else {
+        // We compute filter selectivity using Histogram information.
+        // Here we traverse histogram bins to locate the range of bins the literal values falls
+        // into.  For skewed distribution, a literal value can occupy multiple bins.
+        val hgmBins = colStat.histogram.get.bins
+        val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
+        var lowerId, higherId = -1
+        for (i <- hgmBins.indices) {
+          // if datum > upperBound, just traverse to next bin
+          if (datum <= hgmBins(i).hi && lowerId < 0) lowerId = i
+          if (higherId < 0) {
+            if ((datum < hgmBins(i).hi || i == hgmBins.length - 1) ||
+              ((datum == hgmBins(i).hi) && (datum < hgmBins(i + 1).hi))) {
+              higherId = i
             }
-          }
-          assert(lowerId <= higherId)
-          val lowerBinNdv = hgmBins(lowerId).ndv
-          val higherBinNdv = hgmBins(higherId).ndv
-          // assume uniform distribution in each bin
-          val percent = if (lowerId == higherId) {
-            (1.0 / hgmBins.length) / math.max(lowerBinNdv, 1)
-          } else {
-            1.0 / hgmBins.length * (higherId - lowerId - 1) +
-              (1.0 / hgmBins.length) / math.max(lowerBinNdv, 1) +
-              (1.0 / hgmBins.length) / math.max(higherBinNdv, 1)
-          }
-          Some(percent)
+           }
+        }
+        assert(lowerId <= higherId)
+        val lowerBinNdv = hgmBins(lowerId).ndv
+        val higherBinNdv = hgmBins(higherId).ndv
+        // assume uniform distribution in each bin
+        val occupiedBins = if (lowerId == higherId) {
+          1.0 / lowerBinNdv
+        } else {
+          (1.0 / lowerBinNdv) +   // lowest bin
+            (higherId - lowerId - 1) + // middle bins
+            (1.0 / higherBinNdv)  // highest bin
+        }
+        Some(occupiedBins / hgmBins.length)
       }
 
     } else {  // not in interval
@@ -547,7 +543,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
         val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
         val maxDouble = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
         val minDouble = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
-        percent = computePercentForNumericEquiHeightHgm(op, numericHistogram, maxDouble, minDouble,
+        percent = computePercentByEquiHeightHgm(op, numericHistogram, maxDouble, minDouble,
           datum)
       }
 
@@ -576,7 +572,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
   }
 
   /**
-   * Returns the selectivity percentage for a combined op-dataNumber in the column's
+   * Returns the selectivity percentage for binary condition in the column's
    * current valid range [min, max]
    *
    * @param op a binary comparison operator
@@ -587,15 +583,16 @@ case class FilterEstimation(plan: Filter) extends Logging {
    * @return the selectivity percentage for a condition in the current range.
    */
 
-  def computePercentForNumericEquiHeightHgm(
+  def computePercentByEquiHeightHgm(
       op: BinaryComparison,
       histogram: Histogram,
       max: Double,
       min: Double,
       datumNumber: Double): Double = {
-    // find bins where column's current min and max locate
-    val minBinId = EstimationUtils.findFirstBinForValue(min, histogram)
-    val maxBinId = EstimationUtils.findLastBinForValue(max, histogram)
+    // find bins where column's current min and max locate.  Note that a column's [min, max]
+    // range may change due to another condition applied earlier.
+    val minBinId = EstimationUtils.findFirstBinForValue(min, histogram.bins)
+    val maxBinId = EstimationUtils.findLastBinForValue(max, histogram.bins)
     assert(minBinId <= maxBinId)
 
     // compute how many bins the column's current valid range [min, max] occupies.
@@ -605,9 +602,9 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
     val datumInBinId = op match {
       case LessThan(_, _) | GreaterThanOrEqual(_, _) =>
-        EstimationUtils.findFirstBinForValue(datumNumber, histogram)
+        EstimationUtils.findFirstBinForValue(datumNumber, histogram.bins)
       case LessThanOrEqual(_, _) | GreaterThan(_, _) =>
-        EstimationUtils.findLastBinForValue(datumNumber, histogram)
+        EstimationUtils.findLastBinForValue(datumNumber, histogram.bins)
     }
 
     op match {

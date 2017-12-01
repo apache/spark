@@ -119,13 +119,12 @@ object EstimationUtils {
    * numeric equi-height histogram.
    *
    * @param value a literal value of a column
-   * @param histogram a numeric equi-height histogram
+   * @param bins an array of bins for a given numeric equi-height histogram
    * @return the number of the first bin into which a column values falls.
    */
-
-  def findFirstBinForValue(value: Double, histogram: Histogram): Int = {
+  def findFirstBinForValue(value: Double, bins: Array[HistogramBin]): Int = {
     var binId = 0
-    histogram.bins.foreach { bin =>
+    bins.foreach { bin =>
       if (value > bin.hi) binId += 1
     }
     binId
@@ -136,20 +135,19 @@ object EstimationUtils {
    * numeric equi-height histogram.
    *
    * @param value a literal value of a column
-   * @param histogram a numeric equi-height histogram
+   * @param bins an array of bins for a given numeric equi-height histogram
    * @return the number of the last bin into which a column values falls.
    */
-
-  def findLastBinForValue(value: Double, histogram: Histogram): Int = {
+  def findLastBinForValue(value: Double, bins: Array[HistogramBin]): Int = {
     var binId = 0
-    for (i <- 0 until histogram.bins.length) {
-      if (value > histogram.bins(i).hi) {
+    for (i <- bins.indices) {
+      if (value > bins(i).hi) {
         // increment binId to point to next bin
         binId += 1
       }
-      if ((value == histogram.bins(i).hi) && (i < histogram.bins.length - 1)) {
-        if (value == histogram.bins(i + 1).lo) {
-          // increment binId since the value appears into this bin and next bin
+      if ((value == bins(i).hi) && (i < bins.length - 1)) {
+        if (value == bins(i + 1).lo) {
+          // increment binId since the value appears in this bin and next bin
           binId += 1
         }
       }
@@ -167,7 +165,6 @@ object EstimationUtils {
    * @param histogram a numeric equi-height histogram
    * @return the percentage of a single bin holding values in [lowerValue, higherValue].
    */
-
   private def getOccupation(
       binId: Int,
       higherValue: Double,
@@ -179,10 +176,10 @@ object EstimationUtils {
       1.0
     } else if (binId == 0 && curBin.hi != curBin.lo) {
       if (higherValue == lowerValue) {
-        // in the case curBin.binNdv == 0, current bin is occupied by one value, which
-        // is included in the previous bin
-        1.0 / math.max(curBin.ndv.toDouble, 1)
+        // set percentage to 1/NDV
+        1.0 / curBin.ndv.toDouble
       } else {
+        // Use proration since the range falls inside this bin.
         (higherValue - lowerValue) / (curBin.hi - curBin.lo)
       }
     } else {
@@ -190,8 +187,8 @@ object EstimationUtils {
         // the entire bin is covered in the range
         1.0
       } else if (higherValue == lowerValue) {
-        // the literal value falls in this bin
-        1.0 / math.max(curBin.ndv.toDouble, 1)
+        // set percentage to 1/NDV
+        1.0 / curBin.ndv.toDouble
       } else {
         // Use proration since the range falls inside this bin.
         math.min((higherValue - lowerValue) / (curBin.hi - curBin.lo), 1.0)
@@ -208,18 +205,18 @@ object EstimationUtils {
    * @param histogram a numeric equi-height histogram
    * @return the selectivity percentage for column values in [lowerValue, higherValue].
    */
-
   def getOccupationBins(
       higherEnd: Double,
       lowerEnd: Double,
       histogram: Histogram): Double = {
     // find bins where current min and max locate
-    val minBinId = findFirstBinForValue(lowerEnd, histogram)
-    val maxBinId = findLastBinForValue(higherEnd, histogram)
-    assert(minBinId <= maxBinId)
+    val lowerBinId = findFirstBinForValue(lowerEnd, histogram.bins)
+    val higherBinId = findLastBinForValue(higherEnd, histogram.bins)
+    assert(lowerBinId <= higherBinId)
 
-    // compute how much current [min, max] occupy the histogram, in the number of bins
-    getOccupationBins(maxBinId, minBinId, higherEnd, lowerEnd, histogram)
+    // compute how much current [lowerEnd, higherEnd] range occupies the histogram in the
+    // number of bins
+    getOccupationBins(higherBinId, lowerBinId, higherEnd, lowerEnd, histogram)
   }
 
   /**
@@ -234,7 +231,6 @@ object EstimationUtils {
    * @param histogram a numeric equi-height histogram
    * @return the selectivity percentage for column values in [lowerEnd, higherEnd].
    */
-
   def getOccupationBins(
       higherId: Int,
       lowerId: Int,
@@ -244,7 +240,7 @@ object EstimationUtils {
     if (lowerId == higherId) {
       getOccupation(lowerId, higherEnd, lowerEnd, histogram)
     } else {
-      // compute how much lowerEnd/higherEnd occupy its bin
+      // compute how much lowerEnd/higherEnd occupies its bin
       val lowercurBin = histogram.bins(lowerId)
       val lowerPart = getOccupation(lowerId, lowercurBin.hi, lowerEnd, histogram)
 
@@ -268,7 +264,6 @@ object EstimationUtils {
    * @param histogram a numeric equi-height histogram
    * @return the number of distinct values, ndv, for column values in [lowerEnd, higherEnd].
    */
-
   def getOccupationNdv(
       higherId: Int,
       lowerId: Int,
@@ -281,7 +276,8 @@ object EstimationUtils {
     } else if (lowerId == higherId) {
       getOccupation(lowerId, higherEnd, lowerEnd, histogram) * histogram.bins(lowerId).ndv
     } else {
-      // compute how much lowerEnd/higherEnd occupy its bin
+      // compute how much the [lowerEnd, higherEnd] range occupies the bins in a histogram.
+      // Our computation has 3 parts: the smallest/min bin, the middle bins, the largest/max bin.
       val minCurBin = histogram.bins(lowerId)
       val minPartNdv = getOccupation(lowerId, minCurBin.hi, lowerEnd, histogram) *
         minCurBin.ndv

@@ -604,7 +604,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(EqualTo(attrIntHgm, Literal(5)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
       Seq(attrIntHgm -> ColumnStat(distinctCount = 1, min = Some(5), max = Some(5),
         nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
-      expectedRowCount = 4)
+      expectedRowCount = 3)
   }
 
   test("cintHgm = 0") {
@@ -661,21 +661,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Seq(attrIntHgm -> ColumnStat(distinctCount = 3, min = Some(6), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
       expectedRowCount = 4)
-  }
-
-  test("cintHgm IS NULL") {
-    validateEstimatedStats(
-      Filter(IsNull(attrIntHgm), childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Nil,
-      expectedRowCount = 0)
-  }
-
-  test("cintHgm IS NOT NULL") {
-    validateEstimatedStats(
-      Filter(IsNotNull(attrIntHgm), childStatsTestPlan(Seq(attrIntHgm), 10L)),
-      Seq(attrIntHgm -> ColumnStat(distinctCount = 6, min = Some(1), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
-      expectedRowCount = 10)
   }
 
   test("cintHgm > 3 AND cintHgm <= 6") {
