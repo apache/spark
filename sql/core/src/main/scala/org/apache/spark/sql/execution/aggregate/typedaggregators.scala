@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import java.lang
+
 import org.apache.spark.api.java.function.MapFunction
-import org.apache.spark.sql.{Encoder, TypedColumn}
+import org.apache.spark.sql.{Encoder, Encoders, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 
@@ -95,90 +97,164 @@ class TypedAverage[IN](val f: IN => Double) extends Aggregator[IN, (Double, Long
   }
 }
 
-class TypedMinDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Double] {
-  override def zero: Double = Double.PositiveInfinity
-  override def reduce(b: Double, a: IN): Double = math.min(b, f(a))
-  override def merge(b1: Double, b2: Double): Double = math.min(b1, b2)
-  override def finish(reduction: Double): Double = {
-    if (Double.PositiveInfinity == reduction) {
-      Double.NegativeInfinity
+class TypedMinDouble[IN](val f: IN => Double)
+  extends Aggregator[IN, MutableDouble, java.lang.Double] {
+  override def zero: MutableDouble = null
+  override def reduce(b: MutableDouble, a: IN): MutableDouble = {
+    if (b == null) {
+      new MutableDouble(f(a))
     } else {
-      reduction
+      b.value = math.min(b.value, f(a))
+      b
+    }
+  }
+  override def merge(b1: MutableDouble, b2: MutableDouble): MutableDouble = {
+    if (b1 == null) {
+      b2
+    } else if (b2 == null) {
+      b1
+    } else {
+      b1.value = math.min(b1.value, b2.value)
+      b1
+    }
+  }
+  override def finish(reduction: MutableDouble): java.lang.Double = {
+    if (reduction == null) {
+      null
+    } else {
+      reduction.toJavaDouble
     }
   }
 
-  override def bufferEncoder: Encoder[Double] = ExpressionEncoder[Double]()
-  override def outputEncoder: Encoder[Double] = ExpressionEncoder[Double]()
+  override def bufferEncoder: Encoder[MutableDouble] = Encoders.kryo[MutableDouble]
+  override def outputEncoder: Encoder[java.lang.Double] = ExpressionEncoder[java.lang.Double]()
 
   // Java api support
-  def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x).asInstanceOf[Double])
-  def toColumnJava: TypedColumn[IN, java.lang.Double] = {
-    toColumn.asInstanceOf[TypedColumn[IN, java.lang.Double]]
+  def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x))
+  def toColumnScala: TypedColumn[IN, Double] = {
+    toColumn.asInstanceOf[TypedColumn[IN, Double]]
   }
 }
 
-class TypedMaxDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Double] {
-  override def zero: Double = Double.NegativeInfinity
-  override def reduce(b: Double, a: IN): Double = math.max(b, f(a))
-  override def merge(b1: Double, b2: Double): Double = math.max(b1, b2)
-  override def finish(reduction: Double): Double = {
-    if (Double.NegativeInfinity == reduction) {
-      Double.PositiveInfinity
+class TypedMaxDouble[IN](val f: IN => Double)
+  extends Aggregator[IN, MutableDouble, java.lang.Double] {
+  override def zero: MutableDouble = null
+  override def reduce(b: MutableDouble, a: IN): MutableDouble = {
+    if (b == null) {
+      new MutableDouble(f(a))
     } else {
-      reduction
+      b.value = math.max(b.value, f(a))
+      b
+    }
+  }
+  override def merge(b1: MutableDouble, b2: MutableDouble): MutableDouble = {
+    if (b1 == null) {
+      b2
+    } else if (b2 == null) {
+      b1
+    } else {
+      b1.value = math.max(b1.value, b2.value)
+      b1
+    }
+  }
+  override def finish(reduction: MutableDouble): java.lang.Double = {
+    if (reduction == null) {
+      null
+    } else {
+      reduction.toJavaDouble
     }
   }
 
-  override def bufferEncoder: Encoder[Double] = ExpressionEncoder[Double]()
-  override def outputEncoder: Encoder[Double] = ExpressionEncoder[Double]()
+  override def bufferEncoder: Encoder[MutableDouble] = Encoders.kryo[MutableDouble]
+  override def outputEncoder: Encoder[java.lang.Double] = ExpressionEncoder[java.lang.Double]()
 
   // Java api support
-  def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x).asInstanceOf[Double])
-  def toColumnJava: TypedColumn[IN, java.lang.Double] = {
-    toColumn.asInstanceOf[TypedColumn[IN, java.lang.Double]]
+  def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x))
+  def toColumnScala: TypedColumn[IN, Double] = {
+    toColumn.asInstanceOf[TypedColumn[IN, Double]]
   }
 }
 
-class TypedMinLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
-  override def zero: Long = Long.MaxValue
-  override def reduce(b: Long, a: IN): Long = math.min(b, f(a))
-  override def merge(b1: Long, b2: Long): Long = math.min(b1, b2)
-  override def finish(reduction: Long): Long = {
-    if (Long.MaxValue == reduction) {
-      Long.MinValue
+class TypedMinLong[IN](val f: IN => Long) extends Aggregator[IN, MutableLong, java.lang.Long] {
+  override def zero: MutableLong = null
+  override def reduce(b: MutableLong, a: IN): MutableLong = {
+    if (b == null) {
+      new MutableLong(f(a))
     } else {
-      reduction
+      b.value = math.min(b.value, f(a))
+      b
+    }
+  }
+  override def merge(b1: MutableLong, b2: MutableLong): MutableLong = {
+    if (b1 == null) {
+      b2
+    } else if (b2 == null) {
+      b1
+    } else {
+      b1.value = math.min(b1.value, b2.value)
+      b1
+    }
+  }
+  override def finish(reduction: MutableLong): java.lang.Long = {
+    if (reduction == null) {
+      null
+    } else {
+      reduction.toJavaLong
     }
   }
 
-  override def bufferEncoder: Encoder[Long] = ExpressionEncoder[Long]()
-  override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+  override def bufferEncoder: Encoder[MutableLong] = Encoders.kryo[MutableLong]
+  override def outputEncoder: Encoder[java.lang.Long] = ExpressionEncoder[java.lang.Long]()
 
   // Java api support
-  def this(f: MapFunction[IN, java.lang.Long]) = this((x: IN) => f.call(x).asInstanceOf[Long])
-  def toColumnJava: TypedColumn[IN, java.lang.Long] = {
-    toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
+  def this(f: MapFunction[IN, java.lang.Long]) = this((x: IN) => f.call(x))
+  def toColumnScala: TypedColumn[IN, Long] = {
+    toColumn.asInstanceOf[TypedColumn[IN, Long]]
   }
 }
 
-class TypedMaxLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
-  override def zero: Long = Long.MinValue
-  override def reduce(b: Long, a: IN): Long = math.max(b, f(a))
-  override def merge(b1: Long, b2: Long): Long = math.max(b1, b2)
-  override def finish(reduction: Long): Long = {
-    if (Long.MinValue == reduction) {
-      Long.MaxValue
+class TypedMaxLong[IN](val f: IN => Long) extends Aggregator[IN, MutableLong, java.lang.Long] {
+  override def zero: MutableLong = null
+  override def reduce(b: MutableLong, a: IN): MutableLong = {
+    if (b == null) {
+      new MutableLong(f(a))
     } else {
-      reduction
+      b.value = math.max(b.value, f(a))
+      b
+    }
+  }
+  override def merge(b1: MutableLong, b2: MutableLong): MutableLong = {
+    if (b1 == null) {
+      b2
+    } else if (b2 == null) {
+      b1
+    } else {
+      b1.value = math.max(b1.value, b2.value)
+      b1
+    }
+  }
+  override def finish(reduction: MutableLong): java.lang.Long = {
+    if (reduction == null) {
+      null
+    } else {
+      reduction.toJavaLong
     }
   }
 
-  override def bufferEncoder: Encoder[Long] = ExpressionEncoder[Long]()
-  override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+  override def bufferEncoder: Encoder[MutableLong] = Encoders.kryo[MutableLong]
+  override def outputEncoder: Encoder[java.lang.Long] = ExpressionEncoder[java.lang.Long]()
 
   // Java api support
-  def this(f: MapFunction[IN, java.lang.Long]) = this((x: IN) => f.call(x).asInstanceOf[Long])
-  def toColumnJava: TypedColumn[IN, java.lang.Long] = {
-    toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
+  def this(f: MapFunction[IN, java.lang.Long]) = this((x: IN) => f.call(x))
+  def toColumnScala: TypedColumn[IN, Long] = {
+    toColumn.asInstanceOf[TypedColumn[IN, Long]]
   }
+}
+
+class MutableLong(var value: Long) extends Serializable {
+  def toJavaLong: java.lang.Long = new java.lang.Long(value)
+}
+
+class MutableDouble(var value: Double) extends Serializable {
+  def toJavaDouble: java.lang.Double = new lang.Double(value)
 }

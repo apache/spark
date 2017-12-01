@@ -47,8 +47,6 @@ object typed {
     override protected def _sqlContext: SQLContext = null
   }
 
-  import implicits._
-
   /**
    * Average aggregate function.
    *
@@ -82,28 +80,28 @@ object typed {
    *
    * @since 2.3.0
    */
-  def min[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedMinDouble[IN](f).toColumn
+  def min[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedMinDouble[IN](f).toColumnScala
 
   /**
    * Min aggregate function for integral (long, i.e. 64 bit integer) type.
    *
    * @since 2.3.0
    */
-  def minLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedMinLong[IN](f).toColumn
+  def minLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedMinLong[IN](f).toColumnScala
 
   /**
    * Max aggregate function for floating point (double) type.
    *
    * @since 2.3.0
    */
-  def max[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedMaxDouble[IN](f).toColumn
+  def max[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedMaxDouble[IN](f).toColumnScala
 
   /**
    * Max aggregate function for integral (long, i.e. 64 bit integer) type.
    *
    * @since 2.3.0
    */
-  def maxLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedMaxLong[IN](f).toColumn
+  def maxLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedMaxLong[IN](f).toColumnScala
 
   // TODO:
   // stddevOf: Double

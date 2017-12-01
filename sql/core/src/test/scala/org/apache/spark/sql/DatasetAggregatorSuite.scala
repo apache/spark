@@ -277,8 +277,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       empty.agg(typed.sum(f), typed.sumLong(g), typed.avg(f),
         typed.min(f), typed.minLong(g), typed.max(f), typed.maxLong(g)),
-      Row(0.0, 0L, Double.NaN,
-        Double.NegativeInfinity, Long.MinValue, Double.PositiveInfinity, Long.MaxValue))
+      Row(0.0, 0L, Double.NaN, null, null, null, null))
   }
 
   test("SPARK-12555 - result should not be corrupted after input columns are reordered") {
