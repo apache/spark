@@ -43,16 +43,17 @@ object ExpressionCodegen {
       ctx: CodegenContext,
       expr: Expression): Option[(Seq[String], Seq[String])] = {
     val (inputAttrs, inputVars) = getInputVarsForChildren(ctx, expr)
-    val inputRows = ctx.INPUT_ROW +: getInputRowsForChildren(ctx, expr)
-    val subExprs = getSubExprInChildren(ctx, expr)
+    val paramsFromColumns = prepareFunctionParams(ctx, inputAttrs, inputVars)
 
+    val subExprs = getSubExprInChildren(ctx, expr)
+    val paramsFromSubExprs = getParamsForSubExprs(ctx, subExprs)
+
+    val inputRows = ctx.INPUT_ROW +: getInputRowsForChildren(ctx, expr)
     val paramsFromRows = inputRows.distinct.filter(_ != null).map { row =>
       (row, s"InternalRow $row")
     }
-    val paramsFromColumns = prepareFunctionParams(ctx, inputAttrs, inputVars)
-    val paramsFromSubExprs = getParamsForSubExprs(ctx, subExprs)
-    val paramsLength = getParamLength(ctx, inputAttrs, subExprs) + paramsFromRows.length
 
+    val paramsLength = getParamLength(ctx, inputAttrs, subExprs) + paramsFromRows.length
     // Maximum allowed parameter number for Java's method descriptor.
     if (paramsLength > 255) {
       None
@@ -87,7 +88,6 @@ object ExpressionCodegen {
       val argType = ctx.javaType(subExpr.dataType)
 
       val subExprState = ctx.subExprEliminationExprs(subExpr)
-      (subExprState.value, subExprState.isNull)
 
       if (!subExpr.nullable || subExprState.isNull == "true" || subExprState.isNull == "false") {
         Seq((subExprState.value, s"$argType ${subExprState.value}"))
@@ -128,25 +128,21 @@ object ExpressionCodegen {
    * Tracks down input rows referred by the generated code snippet.
    */
   def trackDownRow(ctx: CodegenContext, exprCode: ExprCode): Seq[String] = {
-    var exprCodes: List[ExprCode] = List(exprCode)
+    val exprCodes = mutable.Queue[ExprCode](exprCode)
     val inputRows = mutable.ArrayBuffer.empty[String]
 
     while (exprCodes.nonEmpty) {
-      exprCodes match {
-        case first :: others =>
-          exprCodes = others
-          if (first.inputRow != null) {
-            inputRows += first.inputRow
-          }
-          first.inputVars.foreach { inputVar =>
-            if (inputVar.exprCode.code != "") {
-              exprCodes = inputVar.exprCode :: exprCodes
-            }
-          }
-        case _ =>
+      val curExprCode = exprCodes.dequeue()
+      if (curExprCode.inputRow != null) {
+        inputRows += curExprCode.inputRow
+      }
+      curExprCode.inputVars.foreach { inputVar =>
+        if (inputVar.exprCode.code != "") {
+          exprCodes.enqueue(inputVar.exprCode)
+        }
       }
     }
-    inputRows.toSeq
+    inputRows
   }
 
   /**
@@ -179,7 +175,7 @@ object ExpressionCodegen {
       // E.g., if this expression is "d = c + 1" and "c" is not evaluated. We need to track to
       // "c = a + b" and see if "a" and "b" are evaluated. If they are, we need to return them so
       // to include them into parameters, if not, we track down further.
-      case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null =>
+      case BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null =>
         trackDownVar(ctx, ctx.currentVars(ordinal))
 
       case _ => Seq.empty
@@ -190,24 +186,19 @@ object ExpressionCodegen {
    * Tracks down previously evaluated columns referred by the generated code snippet.
    */
   def trackDownVar(ctx: CodegenContext, exprCode: ExprCode): Seq[(Expression, ExprCode)] = {
-    var exprCodes: List[ExprCode] = List(exprCode)
+    val exprCodes = mutable.Queue[ExprCode](exprCode)
     val inputVars = mutable.ArrayBuffer.empty[(Expression, ExprCode)]
 
     while (exprCodes.nonEmpty) {
-      exprCodes match {
-        case first :: others =>
-          exprCodes = others
-          first.inputVars.foreach { inputVar =>
-            if (inputVar.exprCode.code == "") {
-              inputVars += ((inputVar.expr, inputVar.exprCode))
-            } else {
-              exprCodes = inputVar.exprCode :: exprCodes
-            }
-          }
-        case _ =>
+      exprCodes.dequeue().inputVars.foreach { inputVar =>
+        if (inputVar.exprCode.code == "") {
+          inputVars += ((inputVar.expr, inputVar.exprCode))
+        } else {
+          exprCodes.enqueue(inputVar.exprCode)
+        }
       }
     }
-    inputVars.toSeq
+    inputVars
   }
 
   /**
@@ -231,10 +222,8 @@ object ExpressionCodegen {
       ctx: CodegenContext,
       inputs: Seq[Expression],
       subExprs: Seq[Expression]): Int = {
-    // Start value is 1 for `this`.
-    (inputs ++ subExprs).distinct.foldLeft(1) { case (curLength, input) =>
-      curLength + calculateParamLength(ctx, input)
-    }
+    // Initial value is 1 for `this`.
+    1 + (inputs ++ subExprs).distinct.map(calculateParamLength(ctx, _)).sum
   }
 
   /**

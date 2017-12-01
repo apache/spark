@@ -88,9 +88,8 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     val fakeExpr = AttributeReference("a", IntegerType, nullable = true)()
 
     // currentVars(0) depends on this evaluated column.
-    currentVars(0).inputVars += ExprInputVar(
-      fakeExpr,
-      ExprCode("", isNull = "isNull2", value = "value2"))
+    currentVars(0).inputVars = Seq(ExprInputVar(fakeExpr,
+      ExprCode("", isNull = "isNull2", value = "value2")))
     ctx.currentVars = currentVars
     ctx.INPUT_ROW = null
 

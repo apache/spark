@@ -63,10 +63,10 @@ case class ExprCode(
     var isNull: String,
     var value: String,
     var inputRow: String = null,
-    val inputVars: mutable.ArrayBuffer[ExprInputVar] = mutable.ArrayBuffer.empty)
+    var inputVars: Seq[ExprInputVar] = Seq.empty)
 
 /**
- * Represents an input variable that holds the java type and the [[ExprCode]].
+ * Represents an input variable [[ExprCode]] to an evaluation of an [[Expression]].
  */
 case class ExprInputVar(val expr: Expression, val exprCode: ExprCode)
 

@@ -105,7 +105,11 @@ abstract class Expression extends TreeNode[Expression] {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val eval = doGenCode(ctx, ExprCode("", isNull, value))
-      populateInputs(ctx, eval)
+
+      // Records current input row and variables of this expression.
+      eval.inputRow = ctx.INPUT_ROW
+      eval.inputVars = findInputVars(ctx, eval)
+
       reduceCodeSize(ctx, eval)
       if (eval.code.nonEmpty) {
         // Add `this` in the comment.
@@ -117,23 +121,23 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Records current input row and variables for this expression into created `ExprCode`.
+   * Returns the input variables to this expression.
    */
-  private def populateInputs(ctx: CodegenContext, eval: ExprCode): Unit = {
-    if (ctx.INPUT_ROW != null) {
-      eval.inputRow = ctx.INPUT_ROW
-    }
+  private def findInputVars(ctx: CodegenContext, eval: ExprCode): Seq[ExprInputVar] = {
     if (ctx.currentVars != null) {
       val boundRefs = this.collect {
         case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null => (ordinal, b)
       }.toMap
 
-      ctx.currentVars.zipWithIndex.filter(_._1 != null).foreach { case (currentVar, idx) =>
+      ctx.currentVars.zipWithIndex.filter(_._1 != null).flatMap { case (currentVar, idx) =>
         if (boundRefs.contains(idx)) {
-          val inputVar = ExprInputVar(boundRefs(idx), exprCode = currentVar)
-          eval.inputVars += inputVar
+          Some(ExprInputVar(boundRefs(idx), exprCode = currentVar))
+        } else {
+          None
         }
       }
+    } else {
+      Seq.empty
     }
   }
 
