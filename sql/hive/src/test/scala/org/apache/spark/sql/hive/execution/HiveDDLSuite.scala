@@ -1983,4 +1983,13 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("load command for non local invalid path validation") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(i INT, j STRING)")
+      val e = intercept[AnalysisException](
+        sql("load data inpath '/doesnotexist.csv' into table tbl"))
+      assert(e.message.contains("LOAD DATA input path does not exist"))
+    }
+  }
 }
