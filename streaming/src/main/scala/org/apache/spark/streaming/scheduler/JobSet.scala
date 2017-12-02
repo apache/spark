@@ -44,7 +44,9 @@ case class JobSet(
   }
 
   def handleJobCompletion(job: Job) {
-    incompleteJobs -= job
+    if (job.result.isSuccess) {
+      incompleteJobs -= job
+    }
     if (hasCompleted) processingEndTime = System.currentTimeMillis()
   }
 
