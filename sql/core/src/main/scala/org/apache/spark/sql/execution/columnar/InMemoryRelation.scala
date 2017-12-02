@@ -79,7 +79,7 @@ case class InMemoryRelation(
     }
   }
 
-  private var inheritedStats: Option[Statistics] = _
+  private var inheritedStats: Option[Statistics] = None
 
   private[execution] def setStatsFromCachedPlan(planToCache: LogicalPlan): Unit = {
     require(planToCache.conf.cboEnabled, "you cannot use the stats of cached plan in" +
