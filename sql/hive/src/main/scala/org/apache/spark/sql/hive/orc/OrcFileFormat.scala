@@ -32,7 +32,7 @@ import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
-import org.apache.orc.OrcConf.COMPRESS
+import org.apache.orc.OrcConf.{COMPRESS, MAPRED_OUTPUT_SCHEMA}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.SparkSession
@@ -59,10 +59,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    OrcFileOperator.readSchema(
-      files.map(_.getPath.toString),
-      Some(sparkSession.sessionState.newHadoopConf())
-    )
+    org.apache.spark.sql.execution.datasources.orc.OrcFileFormat.readSchema(sparkSession, files)
   }
 
   override def prepareWrite(
@@ -73,6 +70,10 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
 
     val configuration = job.getConfiguration
+
+    configuration.set(
+      MAPRED_OUTPUT_SCHEMA.getAttribute,
+      org.apache.spark.sql.execution.datasources.orc.OrcFileFormat.getSchemaString(dataSchema))
 
     configuration.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
     configuration match {
@@ -252,6 +253,12 @@ private[orc] class OrcOutputWriter(
   override def close(): Unit = {
     if (recordWriterInstantiated) {
       recordWriter.close(Reporter.NULL)
+    } else {
+      // SPARK-15474 Write empty orc file with correct schema
+      val conf = context.getConfiguration()
+      val writer = org.apache.orc.OrcFile.createWriter(
+        new Path(path), org.apache.orc.mapred.OrcOutputFormat.buildOptions(conf))
+      new org.apache.orc.mapreduce.OrcMapreduceRecordWriter(writer).close(context)
     }
   }
 }
