@@ -74,7 +74,7 @@ case class InMemoryRelation(
   override def computeStats(): Statistics = {
     if (batchStats.value == 0L) {
       children.filter(_.isInstanceOf[LogicalRelation]) match {
-        case Seq(c @ LogicalRelation(_, _, _, _), _) if SQLConf.CBO_ENABLED =>
+        case Seq(c @ LogicalRelation(_, _, _, _), _) if c.conf.cboEnabled =>
           val stats = c.computeStats()
           if (stats.rowCount.isDefined) {
             stats
