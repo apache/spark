@@ -94,14 +94,16 @@ class CacheManager extends Logging {
       logWarning("Asked to cache already cached data.")
     } else {
       val sparkSession = query.sparkSession
-      cachedData.add(CachedData(
-        planToCache,
-        InMemoryRelation(
-          sparkSession.sessionState.conf.useCompression,
-          sparkSession.sessionState.conf.columnBatchSize,
-          storageLevel,
-          sparkSession.sessionState.executePlan(planToCache).executedPlan,
-          tableName)))
+      val inMemoryRelation = InMemoryRelation(
+        sparkSession.sessionState.conf.useCompression,
+        sparkSession.sessionState.conf.columnBatchSize,
+        storageLevel,
+        sparkSession.sessionState.executePlan(planToCache).executedPlan,
+        tableName)
+      if (planToCache.conf.cboEnabled && planToCache.stats.rowCount.isDefined) {
+        inMemoryRelation.setStatsFromCachedPlan(planToCache)
+      }
+      cachedData.add(CachedData(planToCache, inMemoryRelation))
     }
   }
 
