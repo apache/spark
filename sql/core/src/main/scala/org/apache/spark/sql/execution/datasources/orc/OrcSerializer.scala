@@ -148,77 +148,70 @@ class OrcSerializer(dataSchema: StructType) {
         (getter, ordinal) => new DateWritable(getter.getInt(ordinal))
       }
 
-    // Already expensive, reusing object or not doesn't matter.
-    case TimestampType =>
-      (getter, ordinal) =>
-        val ts = DateTimeUtils.toJavaTimestamp(getter.getLong(ordinal))
-        val result = new OrcTimestamp(ts.getTime)
-        result.setNanos(ts.getNanos)
-        result
+    // The following cases are already expensive, reusing object or not doesn't matter.
 
-    // Already expensive, reusing object or not doesn't matter.
-    case DecimalType.Fixed(precision, scale) =>
-      (getter, ordinal) =>
-        val d = getter.getDecimal(ordinal, precision, scale)
-        new HiveDecimalWritable(HiveDecimal.create(d.toJavaBigDecimal))
+    case TimestampType => (getter, ordinal) =>
+      val ts = DateTimeUtils.toJavaTimestamp(getter.getLong(ordinal))
+      val result = new OrcTimestamp(ts.getTime)
+      result.setNanos(ts.getNanos)
+      result
 
-    case st: StructType =>
+    case DecimalType.Fixed(precision, scale) => (getter, ordinal) =>
+      val d = getter.getDecimal(ordinal, precision, scale)
+      new HiveDecimalWritable(HiveDecimal.create(d.toJavaBigDecimal))
+
+    case st: StructType => (getter, ordinal) =>
       val result = createOrcValue(st).asInstanceOf[OrcStruct]
       val fieldConverters = st.map(_.dataType).map(newConverter(_))
       val numFields = st.length
-      (getter, ordinal) =>
-        val struct = getter.getStruct(ordinal, numFields)
-        var i = 0
-        while (i < numFields) {
-          if (struct.isNullAt(i)) {
-            result.setFieldValue(i, null)
-          } else {
-            result.setFieldValue(i, fieldConverters(i)(struct, i))
-          }
-          i += 1
+      val struct = getter.getStruct(ordinal, numFields)
+      var i = 0
+      while (i < numFields) {
+        if (struct.isNullAt(i)) {
+          result.setFieldValue(i, null)
+        } else {
+          result.setFieldValue(i, fieldConverters(i)(struct, i))
         }
-        result
+        i += 1
+      }
+      result
 
-    case ArrayType(elementType, _) =>
+    case ArrayType(elementType, _) => (getter, ordinal) =>
       val result = createOrcValue(dataType).asInstanceOf[OrcList[WritableComparable[_]]]
       // Need to put all converted values to a list, can't reuse object.
       val elementConverter = newConverter(elementType, reuseObj = false)
-      (getter, ordinal) =>
-        result.clear()
-        val array = getter.getArray(ordinal)
-        var i = 0
-        while (i < array.numElements()) {
-          if (array.isNullAt(i)) {
-            result.add(null)
-          } else {
-            result.add(elementConverter(array, i))
-          }
-          i += 1
+      val array = getter.getArray(ordinal)
+      var i = 0
+      while (i < array.numElements()) {
+        if (array.isNullAt(i)) {
+          result.add(null)
+        } else {
+          result.add(elementConverter(array, i))
         }
-        result
+        i += 1
+      }
+      result
 
-    case MapType(keyType, valueType, _) =>
+    case MapType(keyType, valueType, _) => (getter, ordinal) =>
       val result = createOrcValue(dataType)
         .asInstanceOf[OrcMap[WritableComparable[_], WritableComparable[_]]]
       // Need to put all converted values to a list, can't reuse object.
       val keyConverter = newConverter(keyType, reuseObj = false)
       val valueConverter = newConverter(valueType, reuseObj = false)
-      (getter, ordinal) =>
-        result.clear()
-        val map = getter.getMap(ordinal)
-        val keyArray = map.keyArray()
-        val valueArray = map.valueArray()
-        var i = 0
-        while (i < map.numElements()) {
-          val key = keyConverter(keyArray, i)
-          if (valueArray.isNullAt(i)) {
-            result.put(key, null)
-          } else {
-            result.put(key, valueConverter(valueArray, i))
-          }
-          i += 1
+      val map = getter.getMap(ordinal)
+      val keyArray = map.keyArray()
+      val valueArray = map.valueArray()
+      var i = 0
+      while (i < map.numElements()) {
+        val key = keyConverter(keyArray, i)
+        if (valueArray.isNullAt(i)) {
+          result.put(key, null)
+        } else {
+          result.put(key, valueConverter(valueArray, i))
         }
-        result
+        i += 1
+      }
+      result
 
     case udt: UserDefinedType[_] => newConverter(udt.sqlType)
 
