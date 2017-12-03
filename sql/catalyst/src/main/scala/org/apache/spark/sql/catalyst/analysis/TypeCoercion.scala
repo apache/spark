@@ -56,7 +56,6 @@ object TypeCoercion {
       IfCoercion ::
       StackCoercion ::
       Division ::
-      PropagateTypes ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
