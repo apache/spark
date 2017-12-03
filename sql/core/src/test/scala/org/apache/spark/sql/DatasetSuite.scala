@@ -1426,6 +1426,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       assert(e.getCause.isInstanceOf[NullPointerException])
     }
   }
+
+  test("SPARK-22665: repartitioning by empty set of expressions should not be allowed") {
+    val e = intercept[IllegalArgumentException] {
+      spark.range(10).repartition(10, Seq.empty: _*)
+    }
+    assert(e.getMessage.contains("non empty set of partitioning expressions"))
+  }
 }
 
 case class SingleData(id: Int)

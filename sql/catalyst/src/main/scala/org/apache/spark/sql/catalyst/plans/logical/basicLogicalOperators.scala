@@ -838,6 +838,8 @@ case class RepartitionByExpression(
     numPartitions: Int) extends RepartitionOperation {
 
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+  require(partitionExpressions.nonEmpty, s"${getClass.getSimpleName} requires a non empty set of " +
+    s"partitioning expressions.")
 
   val partitioning: Partitioning = {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
@@ -847,13 +849,15 @@ case class RepartitionByExpression(
         "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
         "means `HashPartitioning`. In this case we have:" +
       s"""
-         |SortOrder: ${sortOrder}
-         |NonSortOrder: ${nonSortOrder}
+         |SortOrder: $sortOrder
+         |NonSortOrder: $nonSortOrder
        """.stripMargin)
 
     if (sortOrder.nonEmpty) {
       RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
     } else {
+      // nonSortOrder cannot be empty here since we are requiring that `partitionExpressions` is
+      // not empty
       HashPartitioning(nonSortOrder, numPartitions)
     }
   }
