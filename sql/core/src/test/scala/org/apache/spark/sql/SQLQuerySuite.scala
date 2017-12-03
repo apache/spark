@@ -2757,4 +2757,29 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  // Only New OrcFileFormat supports this
+  Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
+      "parquet").foreach { format =>
+    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        val emptyDf = Seq((true, 1, "str")).toDF.limit(0)
+        emptyDf.write.format(format).save(path)
+
+        val df = spark.read.format(format).load(path)
+        assert(df.schema.sameType(emptyDf.schema))
+        checkAnswer(df, emptyDf)
+      }
+    }
+  }
+
+  test("SPARK-21791 ORC should support column names with dot") {
+    val orc = classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
+    withTempDir { dir =>
+      val path = new File(dir, "orc").getCanonicalPath
+      Seq(Some(1), None).toDF("col.dots").write.format(orc).save(path)
+      assert(spark.read.format(orc).load(path).collect().length == 2)
+    }
+  }
 }
