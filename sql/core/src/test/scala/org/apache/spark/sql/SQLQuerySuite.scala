@@ -1662,6 +1662,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("Path does not exist"))
 
     e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
+    }
+    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+
+    e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
     }
     assert(e.message.contains("Failed to find data source: com.databricks.spark.avro."))
@@ -2753,8 +2758,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  // Only New OrcFileFormat supports this.
-  Seq("orc", "parquet").foreach { format =>
+  // Only New OrcFileFormat supports this
+  Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
+      "parquet").foreach { format =>
     test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
       withTempPath { file =>
         val path = file.getCanonicalPath
@@ -2765,6 +2771,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         assert(df.schema.sameType(emptyDf.schema))
         checkAnswer(df, emptyDf)
       }
+    }
+  }
+
+  test("SPARK-21791 ORC should support column names with dot") {
+    val orc = classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
+    withTempDir { dir =>
+      val path = new File(dir, "orc").getCanonicalPath
+      Seq(Some(1), None).toDF("col.dots").write.format(orc).save(path)
+      assert(spark.read.format(orc).load(path).collect().length == 2)
     }
   }
 }

@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.io.orc.{OrcStruct, SparkOrcNewRecordReader}
 import org.apache.orc.OrcConf.COMPRESS
 import org.scalatest.BeforeAndAfterAll
@@ -60,14 +58,6 @@ case class Contact(name: String, phone: String)
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
-
-  private def getFileReader(path: String, extensions: String) = {
-    import org.apache.orc.OrcFile
-    val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(extensions))
-    assert(maybeOrcFile.isDefined)
-    val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
-    OrcFile.createReader(orcFilePath, OrcFile.readerOptions(new Configuration()))
-  }
 
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
@@ -240,13 +230,14 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("LZO compression options for writing to an ORC file") {
+  // Following codec is not supported in Hive 1.2.1, ignore it now
+  ignore("LZO compression options for writing to an ORC file not supported in Hive 1.2.1") {
     withTempPath { file =>
       spark.range(0, 10).write
         .option("compression", "LZO")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
-        getFileReader(file.getAbsolutePath, ".lzo.orc").getCompressionKind
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
       assert("LZO" === expectedCompressionKind.name())
     }
   }
@@ -608,7 +599,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val requestedSchema = StructType(Nil)
       val conf = new Configuration()
       val physicalSchema = OrcFileOperator.readSchema(Seq(path), Some(conf)).get
-      OrcFileOperator.setRequiredColumns(conf, physicalSchema, requestedSchema)
+      OrcFileFormat.setRequiredColumns(conf, physicalSchema, requestedSchema)
       val maybeOrcReader = OrcFileOperator.getFileReader(path, Some(conf))
       assert(maybeOrcReader.isDefined)
       val orcRecordReader = new SparkOrcNewRecordReader(

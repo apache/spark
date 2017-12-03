@@ -22,10 +22,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.execution.datasources.orc.OrcUtils
-import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.types.StructType
 
 private[hive] object OrcFileOperator extends Logging {
@@ -65,7 +64,7 @@ private[hive] object OrcFileOperator extends Logging {
       hdfsPath.getFileSystem(conf)
     }
 
-    OrcUtils.listOrcFiles(basePath, conf).iterator.map { path =>
+    listOrcFiles(basePath, conf).iterator.map { path =>
       path -> OrcFile.createReader(fs, path)
     }.collectFirst {
       case (path, reader) if isWithNonEmptySchema(path, reader) => reader
@@ -88,10 +87,15 @@ private[hive] object OrcFileOperator extends Logging {
     getFileReader(path, conf).map(_.getObjectInspector.asInstanceOf[StructObjectInspector])
   }
 
-  def setRequiredColumns(
-      conf: Configuration, dataSchema: StructType, requestedSchema: StructType): Unit = {
-    val ids = requestedSchema.map(a => dataSchema.fieldIndex(a.name): Integer)
-    val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
-    HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+  def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
+    // TODO: Check if the paths coming in are already qualified and simplify.
+    val origPath = new Path(pathStr)
+    val fs = origPath.getFileSystem(conf)
+    val paths = SparkHadoopUtil.get.listLeafStatuses(fs, origPath)
+      .filterNot(_.isDirectory)
+      .map(_.getPath)
+      .filterNot(_.getName.startsWith("_"))
+      .filterNot(_.getName.startsWith("."))
+    paths
   }
 }
