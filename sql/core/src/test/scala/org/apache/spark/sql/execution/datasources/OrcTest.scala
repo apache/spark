@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.orc
+package org.apache.spark.sql.execution.datasources
 
 import java.io.File
 
@@ -23,10 +23,9 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
-private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
+abstract class OrcTest extends QueryTest with SQLTestUtils {
   import testImplicits._
 
   /**
