@@ -418,7 +418,7 @@ private[hive] class HiveClientImpl(
       // Note that this statistics could be overridden by Spark's statistics if that's available.
       val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
       val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
-      val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)).filter(_ >= 0)
+      val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_))
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
       // relatively cheap if parameters for the table are populated into the metastore.
@@ -430,9 +430,9 @@ private[hive] class HiveClientImpl(
         // so when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
         // return None. Later, we will use the other ways to estimate the statistics.
         if (totalSize.isDefined && totalSize.get > 0L) {
-          Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount))
+          Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount.filter(_ > 0)))
         } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
-          Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount))
+          Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount.filter(_ > 0)))
         } else {
           // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?
           None
