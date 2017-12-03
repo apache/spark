@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -54,11 +55,17 @@ class DDLSourceLoadSuite extends DataSourceTest with SharedSQLContext {
       .load().schema == StructType(Seq(StructField("stringType", StringType, nullable = false))))
   }
 
-  test("should fail to load ORC without Hive Support") {
-    val e = intercept[AnalysisException] {
-      spark.read.format("orc").load()
+  test("should fail to load ORC only if spark.sql.orc.enabled=false and without Hive Support") {
+    Seq(
+      (true, "Unable to infer schema for ORC. It must be specified manually"),
+      (false, "The ORC data source must be used with Hive support")).foreach { case (value, m) =>
+      withSQLConf(SQLConf.ORC_ENABLED.key -> s"$value") {
+        val e = intercept[AnalysisException] {
+          spark.read.format("orc").load()
+        }
+        assert(e.message.contains(m))
+      }
     }
-    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
   }
 }
 

@@ -182,7 +182,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val cls = DataSource.lookupDataSource(source)
+    val cls = DataSource.lookupDataSource(sparkSession, source)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val options = new DataSourceV2Options(extraOptions.asJava)
 

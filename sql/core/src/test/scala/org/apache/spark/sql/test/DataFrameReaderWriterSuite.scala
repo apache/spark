@@ -155,7 +155,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-
   test("resolve default source") {
     spark.read
       .format("org.apache.spark.sql.test")
@@ -478,42 +477,56 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       spark.read.schema(userSchema).parquet(Seq(dir, dir): _*), expData ++ expData, userSchema)
   }
 
-  /**
-   * This only tests whether API compiles, but does not run it as orc()
-   * cannot be run without Hive classes.
-   */
-  ignore("orc - API") {
-    // Reader, with user specified schema
-    // Refer to csv-specific test suites for behavior without user specified schema
-    spark.read.schema(userSchema).orc()
-    spark.read.schema(userSchema).orc(dir)
-    spark.read.schema(userSchema).orc(dir, dir, dir)
-    spark.read.schema(userSchema).orc(Seq(dir, dir): _*)
-    Option(dir).map(spark.read.schema(userSchema).orc)
+  test("orc - API and behavior regarding schema") {
+    withSQLConf(SQLConf.ORC_ENABLED.key -> "true") {
+      // Writer
+      spark.createDataset(data).toDF("str").write.mode(SaveMode.Overwrite).orc(dir)
+      val df = spark.read.orc(dir)
+      checkAnswer(df, spark.createDataset(data).toDF())
+      val schema = df.schema
 
-    // Writer
-    spark.range(10).write.orc(dir)
+      // Reader, without user specified schema
+      intercept[AnalysisException] {
+        testRead(spark.read.orc(), Seq.empty, schema)
+      }
+      testRead(spark.read.orc(dir), data, schema)
+      testRead(spark.read.orc(dir, dir), data ++ data, schema)
+      testRead(spark.read.orc(Seq(dir, dir): _*), data ++ data, schema)
+      // Test explicit calls to single arg method - SPARK-16009
+      testRead(Option(dir).map(spark.read.orc).get, data, schema)
+
+      // Reader, with user specified schema, data should be nulls as schema in file different
+      // from user schema
+      val expData = Seq[String](null, null, null)
+      testRead(spark.read.schema(userSchema).orc(), Seq.empty, userSchema)
+      testRead(spark.read.schema(userSchema).orc(dir), expData, userSchema)
+      testRead(spark.read.schema(userSchema).orc(dir, dir), expData ++ expData, userSchema)
+      testRead(
+        spark.read.schema(userSchema).orc(Seq(dir, dir): _*), expData ++ expData, userSchema)
+    }
   }
 
   test("column nullability and comment - write and then read") {
-    Seq("json", "parquet", "csv").foreach { format =>
-      val schema = StructType(
-        StructField("cl1", IntegerType, nullable = false).withComment("test") ::
-          StructField("cl2", IntegerType, nullable = true) ::
-          StructField("cl3", IntegerType, nullable = true) :: Nil)
-      val row = Row(3, null, 4)
-      val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+    withSQLConf(SQLConf.ORC_ENABLED.key -> "true") {
+      Seq("json", "orc", "parquet", "csv").foreach { format =>
+        val schema = StructType(
+          StructField("cl1", IntegerType, nullable = false).withComment("test") ::
+            StructField("cl2", IntegerType, nullable = true) ::
+            StructField("cl3", IntegerType, nullable = true) :: Nil)
+        val row = Row(3, null, 4)
+        val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
 
-      val tableName = "tab"
-      withTable(tableName) {
-        df.write.format(format).mode("overwrite").saveAsTable(tableName)
-        // Verify the DDL command result: DESCRIBE TABLE
-        checkAnswer(
-          sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
-          Row("cl1", "test") :: Nil)
-        // Verify the schema
-        val expectedFields = schema.fields.map(f => f.copy(nullable = true))
-        assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
+        val tableName = "tab"
+        withTable(tableName) {
+          df.write.format(format).mode("overwrite").saveAsTable(tableName)
+          // Verify the DDL command result: DESCRIBE TABLE
+          checkAnswer(
+            sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
+            Row("cl1", "test") :: Nil)
+          // Verify the schema
+          val expectedFields = schema.fields.map(f => f.copy(nullable = true))
+          assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
+        }
       }
     }
   }

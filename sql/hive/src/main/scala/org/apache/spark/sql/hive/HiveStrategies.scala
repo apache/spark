@@ -195,8 +195,18 @@ case class RelationConversions(
         .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
     } else {
       val options = relation.tableMeta.storage.properties
-      sessionCatalog.metastoreCatalog
-        .convertToLogicalRelation(relation, options, classOf[OrcFileFormat], "orc")
+      if (conf.getConf(SQLConf.ORC_ENABLED)) {
+        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
+          relation,
+          options,
+          classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat],
+          "orc")
+      } else {
+        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
+          relation,
+          options,
+          classOf[org.apache.spark.sql.hive.orc.OrcFileFormat], "orc")
+      }
     }
   }
 

@@ -234,7 +234,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    val cls = DataSource.lookupDataSource(source)
+    val cls = DataSource.lookupDataSource(df.sparkSession, source)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       cls.newInstance() match {
         case ds: WriteSupport =>

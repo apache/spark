@@ -363,6 +363,11 @@ object SQLConf {
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
     .createWithDefault("snappy")
 
+  val ORC_ENABLED = buildConf("spark.sql.orc.enabled")
+    .doc("When true, use OrcFileFormat in sql/core module instead of the one in sql/hive module.")
+    .booleanConf
+    .createWithDefault(false)
+
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
