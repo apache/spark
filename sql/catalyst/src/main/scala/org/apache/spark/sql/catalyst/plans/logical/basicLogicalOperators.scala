@@ -839,7 +839,7 @@ case class RepartitionByExpression(
 
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
   require(partitionExpressions.nonEmpty, s"${getClass.getSimpleName} requires a non empty set of " +
-    s"partitioning expressions.")
+    "partitioning expressions.")
 
   val partitioning: Partitioning = {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
