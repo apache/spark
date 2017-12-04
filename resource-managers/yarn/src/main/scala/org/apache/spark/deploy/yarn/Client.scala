@@ -1428,6 +1428,12 @@ private object Client extends Logging {
       return false
     }
 
+    val srcAuthority = srcUri.getAuthority()
+    val detAuthority = dstUri.getAuthority()
+    if (srcAuthority != detAuthority || (srcAuthority != null && !srcAuthority.equalsIgnoreCase(detAuthority))) {
+      return false
+    }
+
     var srcHost = srcUri.getHost()
     var dstHost = dstUri.getHost()
 
