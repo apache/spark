@@ -338,7 +338,7 @@ class SparkSession(object):
         if type(first) is dict:
             warnings.warn("inferring schema from dict is deprecated,"
                           "please use pyspark.sql.Row instead")
-        schema = reduce(_merge_type, [_infer_schema(row, names) for row in data])
+        schema = reduce(_merge_type, (_infer_schema(row, names) for row in data))
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
         return schema
