@@ -573,8 +573,7 @@ object DataSource extends Logging {
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(conf: SQLConf, provider: String): Class[_] = {
     var provider1 = backwardCompatibilityMap.getOrElse(provider, provider)
-    if (Seq("orc").contains(provider1.toLowerCase) && conf.getConf(SQLConf.ORC_USE_NEW_VERSION)) {
-      logInfo(s"$provider1 is replaced with ${classOf[OrcFileFormat].getCanonicalName}")
+    if ("orc".equalsIgnoreCase(provider1) && conf.getConf(SQLConf.ORC_USE_NEW_VERSION)) {
       provider1 = classOf[OrcFileFormat].getCanonicalName
     }
     val provider2 = s"$provider1.DefaultSource"
