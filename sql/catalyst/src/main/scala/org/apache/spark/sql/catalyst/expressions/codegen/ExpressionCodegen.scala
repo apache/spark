@@ -82,8 +82,8 @@ object ExpressionCodegen {
    */
   def getSubExprCodes(ctx: CodegenContext, subExprs: Seq[Expression]): Seq[ExprCode] = {
     subExprs.map { subExpr =>
-      val stat = ctx.subExprEliminationExprs(subExpr)
-      ExprCode(code = "", value = stat.value, isNull = stat.isNull)
+      val state = ctx.subExprEliminationExprs(subExpr)
+      ExprCode(code = "", value = state.value, isNull = state.isNull)
     }
   }
 
