@@ -98,6 +98,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     "org.apache.spark.deploy.yarn.YarnClusterApplication"
   private[deploy] val REST_CLUSTER_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
   private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
+  private[deploy] val KUBERNETES_CLUSTER_SUBMIT_CLASS = "org.apache.spark.deploy.k8s.submit.Client"
 
   // scalastyle:off println
   private[spark] def printVersionAndExit(): Unit = {
@@ -298,6 +299,12 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     if (clusterManager == KUBERNETES) {
       args.master = Utils.checkAndGetK8sMasterUrl(args.master)
+      // Make sure YARN is included in our build if we're trying to use it
+      if (!Utils.classIsLoadable(KUBERNETES_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
+        printErrorAndExit(
+          "Could not load KUBERNETES classes. " +
+            "This copy of Spark may not have been compiled with KUBERNETES support.")
+      }
     }
 
     // Fail fast, the following modes are not supported or applicable
@@ -721,7 +728,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     }
 
     if (isKubernetesCluster) {
-      childMainClass = "org.apache.spark.deploy.k8s.submit.Client"
+      childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
       if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
         childArgs ++= Array("--primary-java-resource", args.primaryResource)
       }

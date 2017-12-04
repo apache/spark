@@ -406,7 +406,7 @@ class SparkSubmitSuite
     childArgsMap.get("--primary-java-resource") should be (Some("file:/home/thejar.jar"))
     childArgsMap.get("--main-class") should be (Some("org.SomeClass"))
     childArgsMap.get("--arg") should be (Some("arg1"))
-    mainClass should be ("org.apache.spark.deploy.k8s.submit.Client")
+    mainClass should be (KUBERNETES_CLUSTER_SUBMIT_CLASS)
     classpath should have length (0)
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.driver.memory") should be ("4g")
