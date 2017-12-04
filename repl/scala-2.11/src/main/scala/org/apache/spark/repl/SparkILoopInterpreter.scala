@@ -115,16 +115,18 @@ class SparkILoopInterpreter(settings: Settings, out: JPrintWriter) extends IMain
     // only emit predef import header if name not resolved in history, loosely
     var predefEscapes = false
 
-    /** Narrow down the list of requests from which imports
-      *  should be taken.  Removes requests which cannot contribute
-      *  useful imports for the specified set of wanted names.
-      */
+    /**
+     * Narrow down the list of requests from which imports
+     * should be taken.  Removes requests which cannot contribute
+     * useful imports for the specified set of wanted names.
+     */
     case class ReqAndHandler(req: Request, handler: MemberHandler)
 
     def reqsToUse: List[ReqAndHandler] = {
-      /** Loop through a list of MemberHandlers and select which ones to keep.
-        *  'wanted' is the set of names that need to be imported.
-        */
+      /**
+       * Loop through a list of MemberHandlers and select which ones to keep.
+       * 'wanted' is the set of names that need to be imported.
+       */
       def select(reqs: List[ReqAndHandler], wanted: Set[Name]): List[ReqAndHandler] = {
         // Single symbol imports might be implicits! See bug #1752.  Rather than
         // try to finesse this, we will mimic all imports for now.
