@@ -261,7 +261,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
       case m if m.startsWith("k8s") => KUBERNETES
       case m if m.startsWith("local") => LOCAL
       case _ =>
-        printErrorAndExit("Master must either be yarn or start with spark, mesos, local")
+        printErrorAndExit("Master must either be yarn or start with spark, mesos, k8s, or local")
         -1
     }
 
@@ -296,6 +296,10 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }
     }
 
+    if (clusterManager == KUBERNETES) {
+      args.master = Utils.checkAndGetK8sMasterUrl(args.master)
+    }
+
     // Fail fast, the following modes are not supported or applicable
     (clusterManager, deployMode) match {
       case (STANDALONE, CLUSTER) if args.isPython =>
@@ -304,12 +308,12 @@ object SparkSubmit extends CommandLineUtils with Logging {
       case (STANDALONE, CLUSTER) if args.isR =>
         printErrorAndExit("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
-      case (KUBERNETES, CLIENT) =>
-        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
       case (KUBERNETES, _) if args.isPython =>
         printErrorAndExit("Python applications are currently not supported for Kubernetes.")
       case (KUBERNETES, _) if args.isR =>
         printErrorAndExit("R applications are currently not supported for Kubernetes.")
+      case (KUBERNETES, CLIENT) =>
+        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>

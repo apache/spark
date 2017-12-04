@@ -1146,6 +1146,17 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
   }
 
+  test("check Kubernetes master URL") {
+    val k8sMasterURLHttps = Utils.checkAndGetK8sMasterUrl("k8s://https://host:port")
+    assert(k8sMasterURLHttps == "https://host:port")
+
+    val k8sMasterURLHttp = Utils.checkAndGetK8sMasterUrl("k8s://http://host:port")
+    assert(k8sMasterURLHttp == "http://host:port")
+
+    intercept[IllegalArgumentException] {
+      Utils.checkAndGetK8sMasterUrl("k8s:https://host:port")
+    }
+  }
 }
 
 private class SimpleExtension

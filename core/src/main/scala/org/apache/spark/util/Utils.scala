@@ -2744,6 +2744,25 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Check the validity of the given Kubernetes master URL and return the resolved URL.
+   */
+  def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
+    require(rawMasterURL.startsWith("k8s://"),
+      "Kubernetes master URL must start with k8s://.")
+    val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
+    if (masterWithoutK8sPrefix.startsWith("https://")) {
+      masterWithoutK8sPrefix
+    } else if (masterWithoutK8sPrefix.startsWith("http://")) {
+      logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
+      masterWithoutK8sPrefix
+    } else {
+      val resolvedURL = s"https://$masterWithoutK8sPrefix"
+      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+        s"URL is $resolvedURL.")
+      resolvedURL
+    }
+  }
 }
 
 private[util] object CallerContext extends Logging {

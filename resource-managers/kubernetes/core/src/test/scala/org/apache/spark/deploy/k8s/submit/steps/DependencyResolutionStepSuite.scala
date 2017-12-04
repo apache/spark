@@ -26,7 +26,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 
-private[spark] class DependencyResolutionStepSuite extends SparkFunSuite {
+class DependencyResolutionStepSuite extends SparkFunSuite {
 
   private val SPARK_JARS = Seq(
     "hdfs://localhost:9000/apps/jars/jar1.jar",

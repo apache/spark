@@ -301,9 +301,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateKillArguments(): Unit = {
-    if (!master.startsWith("spark://")
-      && !master.startsWith("mesos://")
-      && !master.startsWith("k8s://")) {
+    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
       SparkSubmit.printErrorAndExit(
         "Killing submissions is only supported in standalone or Mesos mode!")
     }
@@ -313,9 +311,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateStatusRequestArguments(): Unit = {
-    if (!master.startsWith("spark://")
-      && !master.startsWith("mesos://")
-      && !master.startsWith("k8s://")) {
+    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
       SparkSubmit.printErrorAndExit(
         "Requesting submission statuses is only supported in standalone or Mesos mode!")
     }

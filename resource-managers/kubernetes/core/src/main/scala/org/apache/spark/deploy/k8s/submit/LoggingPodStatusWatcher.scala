@@ -101,7 +101,6 @@ private[k8s] class LoggingPodStatusWatcherImpl(
   }
 
   private def formatPodState(pod: Pod): String = {
-    // TODO include specific container state
     val details = Seq[(String, String)](
       // pod metadata
       ("pod name", pod.getMetadata.getName),

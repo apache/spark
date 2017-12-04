@@ -20,7 +20,6 @@ import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -150,7 +149,7 @@ private[spark] class Client(
           kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
         }
       } catch {
-        case NonFatal(e) =>
+        case e: Throwable =>
           kubernetesClient.pods().delete(createdDriverPod)
           throw e
       }
@@ -198,7 +197,8 @@ private[spark] object Client extends SparkApplication {
     val launchTime = System.currentTimeMillis()
     val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)
     val appName = sparkConf.getOption("spark.app.name").getOrElse("spark")
-    val master = getK8sMasterUrl(sparkConf.get("spark.master"))
+    // The master URL has been checked for validity already in SparkSubmit.
+    val master = sparkConf.get("spark.master")
     val loggingInterval = Option(sparkConf.get(REPORT_INTERVAL)).filter(_ => waitForAppCompletion)
 
     val loggingPodStatusWatcher = new LoggingPodStatusWatcherImpl(

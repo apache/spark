@@ -180,19 +180,4 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
 
   val KUBERNETES_DRIVER_ENV_KEY = "spark.kubernetes.driverEnv."
-
-  def getK8sMasterUrl(rawMasterString: String): String = {
-    require(rawMasterString.startsWith("k8s://"),
-      "Master URL should start with k8s:// in Kubernetes mode.")
-    val masterWithoutK8sPrefix = rawMasterString.substring("k8s://".length)
-    if (masterWithoutK8sPrefix.startsWith("http://")
-      || masterWithoutK8sPrefix.startsWith("https://")) {
-      masterWithoutK8sPrefix
-    } else {
-      val resolvedURL = s"https://$masterWithoutK8sPrefix"
-      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
-        s"URL is $resolvedURL")
-      resolvedURL
-    }
-  }
 }
