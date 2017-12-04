@@ -160,7 +160,7 @@ class VectorSizeHintStreamingSuite extends StreamTest {
       .setInputCols(Array("a", "b"))
       .setOutputCol("assembled")
     val output = Seq(sizeHintA, sizeHintB, vectorAssembler).foldLeft(streamingDF) {
-      case (data, transform) => transform.transform(data)
+      case (data, transformer) => transformer.transform(data)
     }.select("assembled")
 
     val expected = Vectors.dense(0, 1, 2, 3, 0, 0, 6)
