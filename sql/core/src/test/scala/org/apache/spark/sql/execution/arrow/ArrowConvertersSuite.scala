@@ -25,7 +25,7 @@ import java.util.Locale
 import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
-import org.apache.arrow.vector.file.json.JsonFileReader
+import org.apache.arrow.vector.ipc.JsonFileReader
 import org.apache.arrow.vector.util.Validator
 import org.scalatest.BeforeAndAfterAll
 
@@ -76,16 +76,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 16
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 16
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b_s",
          |      "type" : {
@@ -94,16 +85,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 16
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 16
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -143,16 +125,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b_i",
          |      "type" : {
@@ -161,16 +134,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -210,16 +174,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 64
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b_l",
          |      "type" : {
@@ -228,16 +183,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 64
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -276,16 +222,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "precision" : "SINGLE"
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b_f",
          |      "type" : {
@@ -293,16 +230,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "precision" : "SINGLE"
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -341,16 +269,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "precision" : "DOUBLE"
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b_d",
          |      "type" : {
@@ -358,16 +277,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "precision" : "DOUBLE"
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -408,16 +318,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -449,16 +350,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 16
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 16
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b",
          |      "type" : {
@@ -466,16 +358,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "precision" : "SINGLE"
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "c",
          |      "type" : {
@@ -484,16 +367,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "d",
          |      "type" : {
@@ -501,16 +375,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "precision" : "DOUBLE"
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "e",
          |      "type" : {
@@ -519,16 +384,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 64
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -583,57 +439,21 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "name" : "utf8"
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "OFFSET",
-         |          "typeBitWidth" : 32
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 8
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "lower_case",
          |      "type" : {
          |        "name" : "utf8"
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "OFFSET",
-         |          "typeBitWidth" : 32
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 8
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "null_str",
          |      "type" : {
          |        "name" : "utf8"
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "OFFSET",
-         |          "typeBitWidth" : 32
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 8
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -681,16 +501,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "name" : "bool"
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 1
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -721,16 +532,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 8
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 8
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -760,19 +562,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "name" : "binary"
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "OFFSET",
-         |          "typeBitWidth" : 32
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 8
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -807,16 +597,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "unit" : "DAY"
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -855,16 +636,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
            |        "timezone" : "America/Los_Angeles"
            |      },
            |      "nullable" : true,
-           |      "children" : [ ],
-           |      "typeLayout" : {
-           |        "vectors" : [ {
-           |          "type" : "VALIDITY",
-           |          "typeBitWidth" : 1
-           |        }, {
-           |          "type" : "DATA",
-           |          "typeBitWidth" : 64
-           |        } ]
-           |      }
+           |      "children" : [ ]
            |    } ]
            |  },
            |  "batches" : [ {
@@ -904,16 +676,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "precision" : "SINGLE"
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "NaN_d",
          |      "type" : {
@@ -921,16 +684,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "precision" : "DOUBLE"
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -976,26 +730,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |          "bitWidth" : 32,
          |          "isSigned" : true
          |        },
-         |        "children" : [ ],
-         |        "typeLayout" : {
-         |          "vectors" : [ {
-         |            "type" : "VALIDITY",
-         |            "typeBitWidth" : 1
-         |          }, {
-         |            "type" : "DATA",
-         |            "typeBitWidth" : 32
-         |          } ]
-         |        }
-         |      } ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "OFFSET",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |        "children" : [ ]
+         |      } ]
          |    }, {
          |      "name" : "b_arr",
          |      "nullable" : true,
@@ -1010,26 +746,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |          "bitWidth" : 32,
          |          "isSigned" : true
          |        },
-         |        "children" : [ ],
-         |        "typeLayout" : {
-         |          "vectors" : [ {
-         |            "type" : "VALIDITY",
-         |            "typeBitWidth" : 1
-         |          }, {
-         |            "type" : "DATA",
-         |            "typeBitWidth" : 32
-         |          } ]
-         |        }
-         |      } ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "OFFSET",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |        "children" : [ ]
+         |      } ]
          |    }, {
          |      "name" : "c_arr",
          |      "nullable" : true,
@@ -1044,26 +762,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |          "bitWidth" : 32,
          |          "isSigned" : true
          |        },
-         |        "children" : [ ],
-         |        "typeLayout" : {
-         |          "vectors" : [ {
-         |            "type" : "VALIDITY",
-         |            "typeBitWidth" : 1
-         |          }, {
-         |            "type" : "DATA",
-         |            "typeBitWidth" : 32
-         |          } ]
-         |        }
-         |      } ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "OFFSET",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |        "children" : [ ]
+         |      } ]
          |    }, {
          |      "name" : "d_arr",
          |      "nullable" : true,
@@ -1084,36 +784,9 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |            "bitWidth" : 32,
          |            "isSigned" : true
          |          },
-         |          "children" : [ ],
-         |          "typeLayout" : {
-         |            "vectors" : [ {
-         |              "type" : "VALIDITY",
-         |              "typeBitWidth" : 1
-         |            }, {
-         |              "type" : "DATA",
-         |              "typeBitWidth" : 32
-         |            } ]
-         |          }
-         |        } ],
-         |        "typeLayout" : {
-         |          "vectors" : [ {
-         |            "type" : "VALIDITY",
-         |            "typeBitWidth" : 1
-         |          }, {
-         |            "type" : "OFFSET",
-         |            "typeBitWidth" : 32
-         |          } ]
-         |        }
-         |      } ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "OFFSET",
-         |          "typeBitWidth" : 32
+         |          "children" : [ ]
          |        } ]
-         |      }
+         |      } ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -1204,23 +877,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |          "bitWidth" : 32,
          |          "isSigned" : true
          |        },
-         |        "children" : [ ],
-         |        "typeLayout" : {
-         |          "vectors" : [ {
-         |            "type" : "VALIDITY",
-         |            "typeBitWidth" : 1
-         |          }, {
-         |            "type" : "DATA",
-         |            "typeBitWidth" : 32
-         |          } ]
-         |        }
-         |      } ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        } ]
-         |      }
+         |        "children" : [ ]
+         |      } ]
          |    }, {
          |      "name" : "b_struct",
          |      "nullable" : true,
@@ -1235,23 +893,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |          "bitWidth" : 32,
          |          "isSigned" : true
          |        },
-         |        "children" : [ ],
-         |        "typeLayout" : {
-         |          "vectors" : [ {
-         |            "type" : "VALIDITY",
-         |            "typeBitWidth" : 1
-         |          }, {
-         |            "type" : "DATA",
-         |            "typeBitWidth" : 32
-         |          } ]
-         |        }
-         |      } ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        } ]
-         |      }
+         |        "children" : [ ]
+         |      } ]
          |    }, {
          |      "name" : "c_struct",
          |      "nullable" : false,
@@ -1266,23 +909,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |          "bitWidth" : 32,
          |          "isSigned" : true
          |        },
-         |        "children" : [ ],
-         |        "typeLayout" : {
-         |          "vectors" : [ {
-         |            "type" : "VALIDITY",
-         |            "typeBitWidth" : 1
-         |          }, {
-         |            "type" : "DATA",
-         |            "typeBitWidth" : 32
-         |          } ]
-         |        }
-         |      } ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        } ]
-         |      }
+         |        "children" : [ ]
+         |      } ]
          |    }, {
          |      "name" : "d_struct",
          |      "nullable" : true,
@@ -1303,30 +931,9 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |            "bitWidth" : 32,
          |            "isSigned" : true
          |          },
-         |          "children" : [ ],
-         |          "typeLayout" : {
-         |            "vectors" : [ {
-         |              "type" : "VALIDITY",
-         |              "typeBitWidth" : 1
-         |            }, {
-         |              "type" : "DATA",
-         |              "typeBitWidth" : 32
-         |            } ]
-         |          }
-         |        } ],
-         |        "typeLayout" : {
-         |          "vectors" : [ {
-         |            "type" : "VALIDITY",
-         |            "typeBitWidth" : 1
-         |          } ]
-         |        }
-         |      } ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
+         |          "children" : [ ]
          |        } ]
-         |      }
+         |      } ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -1413,16 +1020,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b",
          |      "type" : {
@@ -1431,16 +1029,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -1471,16 +1060,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b",
          |      "type" : {
@@ -1489,16 +1069,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -1600,16 +1171,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b_i",
          |      "type" : {
@@ -1618,16 +1180,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -1658,16 +1211,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    }, {
          |      "name" : "a_i",
          |      "type" : {
@@ -1676,16 +1220,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |        "bitWidth" : 32
          |      },
          |      "nullable" : false,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 32
-         |        } ]
-         |      }
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {

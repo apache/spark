@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.JavaConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.stream.{ArrowStreamReader, ArrowStreamWriter}
+import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
 
 import org.apache.spark._
 import org.apache.spark.api.python._

@@ -24,8 +24,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
-import org.apache.arrow.vector.file._
-import org.apache.arrow.vector.schema.ArrowRecordBatch
+import org.apache.arrow.vector.ipc.{ArrowFileReader, ArrowFileWriter}
+import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
 
 import org.apache.spark.TaskContext

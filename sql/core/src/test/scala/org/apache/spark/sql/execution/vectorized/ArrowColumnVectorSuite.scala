@@ -30,7 +30,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
   test("boolean") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("boolean", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("boolean", BooleanType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableBitVector]
+      .createVector(allocator).asInstanceOf[BitVector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>
@@ -58,7 +58,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
   test("byte") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("byte", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("byte", ByteType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableTinyIntVector]
+      .createVector(allocator).asInstanceOf[TinyIntVector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>
@@ -86,7 +86,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
   test("short") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("short", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("short", ShortType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableSmallIntVector]
+      .createVector(allocator).asInstanceOf[SmallIntVector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>
@@ -114,7 +114,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
   test("int") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("int", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("int", IntegerType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableIntVector]
+      .createVector(allocator).asInstanceOf[IntVector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>
@@ -142,7 +142,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
   test("long") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("long", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("long", LongType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableBigIntVector]
+      .createVector(allocator).asInstanceOf[BigIntVector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>
@@ -170,7 +170,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
   test("float") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("float", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("float", FloatType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableFloat4Vector]
+      .createVector(allocator).asInstanceOf[Float4Vector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>
@@ -198,7 +198,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
   test("double") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("double", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("double", DoubleType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableFloat8Vector]
+      .createVector(allocator).asInstanceOf[Float8Vector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>
@@ -226,7 +226,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
   test("string") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("string", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("string", StringType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableVarCharVector]
+      .createVector(allocator).asInstanceOf[VarCharVector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>
@@ -253,7 +253,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
   test("binary") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("binary", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("binary", BinaryType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableVarBinaryVector]
+      .createVector(allocator).asInstanceOf[VarBinaryVector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>
@@ -282,7 +282,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     val vector = ArrowUtils.toArrowField("array", ArrayType(IntegerType), nullable = true, null)
       .createVector(allocator).asInstanceOf[ListVector]
     vector.allocateNew()
-    val elementVector = vector.getDataVector().asInstanceOf[NullableIntVector]
+    val elementVector = vector.getDataVector().asInstanceOf[IntVector]
 
     // [1, 2]
     vector.startNewValue(0)
@@ -337,8 +337,8 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     val vector = ArrowUtils.toArrowField("struct", schema, nullable = true, null)
       .createVector(allocator).asInstanceOf[NullableMapVector]
     vector.allocateNew()
-    val intVector = vector.getChildByOrdinal(0).asInstanceOf[NullableIntVector]
-    val longVector = vector.getChildByOrdinal(1).asInstanceOf[NullableBigIntVector]
+    val intVector = vector.getChildByOrdinal(0).asInstanceOf[IntVector]
+    val longVector = vector.getChildByOrdinal(1).asInstanceOf[BigIntVector]
 
     // (1, 1L)
     vector.setIndexDefined(0)
