@@ -28,7 +28,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -621,4 +621,21 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
      makeOrcFile((1 to 10).map(Tuple1.apply), path2)
      assertResult(20)(read.orc(path1.getCanonicalPath, path2.getCanonicalPath).count())
    }
+
+  test("SPARK-20728 Make ORCFileFormat configurable between sql/hive and sql/core") {
+    Seq(
+      (true, classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat]),
+      (false, classOf[org.apache.spark.sql.hive.orc.OrcFileFormat])).foreach { case (v, format) =>
+
+      withSQLConf(SQLConf.ORC_USE_NEW_VERSION.key -> s"$v") {
+        withTable("spark_20728") {
+          sql("CREATE TABLE spark_20728(a INT) USING ORC")
+          val fileFormat = sql("SELECT * FROM spark_20728").queryExecution.analyzed.collectFirst {
+            case l: LogicalRelation => l.relation.asInstanceOf[HadoopFsRelation].fileFormat.getClass
+          }
+          assert(fileFormat == Some(format))
+        }
+      }
+    }
+  }
 }

@@ -540,6 +540,7 @@ object DataSource extends Logging {
     val csv = classOf[CSVFileFormat].getCanonicalName
     val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
     val orc = "org.apache.spark.sql.hive.orc.OrcFileFormat"
+    val newOrc = classOf[OrcFileFormat].getCanonicalName
 
     Map(
       "org.apache.spark.sql.jdbc" -> jdbc,
@@ -556,6 +557,8 @@ object DataSource extends Logging {
       "org.apache.spark.sql.execution.datasources.parquet.DefaultSource" -> parquet,
       "org.apache.spark.sql.hive.orc.DefaultSource" -> orc,
       "org.apache.spark.sql.hive.orc" -> orc,
+      "org.apache.spark.sql.execution.datasources.orc.DefaultSource" -> newOrc,
+      "org.apache.spark.sql.execution.datasources.orc" -> newOrc,
       "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
       "org.apache.spark.ml.source.libsvm" -> libsvm,
       "com.databricks.spark.csv" -> csv
@@ -572,9 +575,10 @@ object DataSource extends Logging {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(conf: SQLConf, provider: String): Class[_] = {
-    var provider1 = backwardCompatibilityMap.getOrElse(provider, provider)
-    if ("orc".equalsIgnoreCase(provider1) && conf.getConf(SQLConf.ORC_USE_NEW_VERSION)) {
-      provider1 = classOf[OrcFileFormat].getCanonicalName
+    val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
+      case name if name.equalsIgnoreCase("orc") && conf.getConf(SQLConf.ORC_USE_NEW_VERSION) =>
+        classOf[OrcFileFormat].getCanonicalName
+      case name => name
     }
     val provider2 = s"$provider1.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
