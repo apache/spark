@@ -1366,17 +1366,16 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql("CREATE TABLE maybe_big (c1 bigint)" +
         "TBLPROPERTIES ('numRows'='0', 'rawDataSize'='60000000000', 'totalSize'='8000000000000')")
 
-      val relation = spark.table("maybe_big").queryExecution.analyzed.children.head
-        .asInstanceOf[HiveTableRelation]
+      val catalogTable = getCatalogTable("maybe_big")
 
-      val properties = relation.tableMeta.ignoredProperties
+      val properties = catalogTable.ignoredProperties
       assert(properties("totalSize").toLong > 0)
       assert(properties("rawDataSize").toLong > 0)
       assert(properties("numRows").toLong == 0)
 
-      assert(relation.stats.sizeInBytes > 0)
-      // May be cause OOM if rowCount == 0 when enables CBO, see SPARK-22626 for details.
-      assert(relation.stats.rowCount.isEmpty)
+      val catalogStats = catalogTable.stats.get
+      assert(catalogStats.sizeInBytes > 0)
+      assert(catalogStats.rowCount.isEmpty)
     }
   }
 }
