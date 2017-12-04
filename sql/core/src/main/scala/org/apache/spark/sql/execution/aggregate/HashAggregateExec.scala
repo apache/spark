@@ -631,7 +631,7 @@ case class HashAggregateExec(
       s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe);"
     val finishHashMap = if (isFastHashMapEnabled) {
       s"""
-         |$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();"
+         |$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();
          |$finishRegularHashMap
        """.stripMargin
     } else {
