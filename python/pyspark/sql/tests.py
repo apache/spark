@@ -4352,6 +4352,89 @@ class GroupbyApplyTests(ReusedSQLTestCase):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
                 df.groupby('id').apply(f).collect()
 
+@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
+class GroupbyAggTests(ReusedSQLTestCase):
+    def assertFramesEqual(self, expected, result):
+        msg = ("DataFrames are not equal: " +
+               ("\n\nExpected:\n%s\n%s" % (expected, expected.dtypes)) +
+               ("\n\nResult:\n%s\n%s" % (result, result.dtypes)))
+        self.assertTrue(expected.equals(result), msg=msg)
+
+    @property
+    def data(self):
+        from pyspark.sql.functions import array, explode, col, lit
+        return self.spark.range(10).toDF('id') \
+            .withColumn("vs", array([lit(i * 1.0) + col('id') for i in range(20, 30)])) \
+            .withColumn("v", explode(col('vs'))) \
+            .drop('vs') \
+            .withColumn('w', lit(1.0))
+
+    def test_basic(self):
+        import numpy as np
+        from pyspark.sql.functions import pandas_udf, PandasUDFType, col, lit, sum, mean
+
+        df = self.data
+
+        @pandas_udf('double', PandasUDFType.GROUP_AGG)
+        def mean_udf(v, w):
+            return np.average(v, weights=w)
+
+        result1 = df.groupby('id').agg(mean_udf(df.v, lit(1.0))).sort('id').toPandas()
+        expected1 = df.groupby('id').agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
+        self.assertFramesEqual(expected1, result1)
+
+        result2 = df.groupby((col('id') + 1).alias('id')).agg(mean_udf(df.v, lit(1.0))).sort('id').toPandas()
+        expected2 = df.groupby((col('id') + 1).alias('id')).agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
+        self.assertFramesEqual(expected2, result2)
+
+        result3 = df.groupby('id').agg(mean_udf(df.v, df.w)).sort('id').toPandas()
+        expected3 = df.groupby('id').agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
+        self.assertFramesEqual(expected3, result3)
+
+        result4 = df.groupby((col('id') + 1).alias('id')).agg(mean_udf(df.v, df.w)).sort('id').toPandas()
+        expected4 = df.groupby((col('id') + 1).alias('id')).agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
+        self.assertFramesEqual(expected4, result4)
+
+    def test_multiple(self):
+        import numpy as np
+        from pyspark.sql.functions import pandas_udf, PandasUDFType, col, lit, sum, mean
+        df = self.data
+
+        @pandas_udf('double', PandasUDFType.GROUP_AGG)
+        def mean_udf(v):
+            return v.mean()
+
+        @pandas_udf('double', PandasUDFType.GROUP_AGG)
+        def sum_udf(v):
+            return v.sum()
+
+        @pandas_udf('double', PandasUDFType.GROUP_AGG)
+        def weighted_mean_udf(v, w):
+            return np.average(v, weights=w)
+
+        # TODO: Fix alias
+        #result1 = df.groupBy('id') \
+        #    .agg(mean_udf(df.v).alias('mean'), \
+        #         sum_udf(df.v).alias('sum'), \
+        #         weighted_mean_udf(df.v, df.w).alias('wm')) \
+        #    .sort('id') \
+        #    .toPandas()
+
+        result1 = df.groupBy('id') \
+            .agg(mean_udf(df.v), \
+                 sum_udf(df.v), \
+                 weighted_mean_udf(df.v, df.w)) \
+            .sort('id') \
+            .toPandas()
+
+        expected1 = df.groupBy('id') \
+            .agg(mean(df.v).alias('mean_udf'), \
+                 sum(df.v).alias('sum_udf'), \
+                 mean(df.v).alias('weighted_mean_udf')) \
+            .sort('id') \
+            .toPandas()
+        self.assertFramesEqual(expected1, result1)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *

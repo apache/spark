@@ -19,7 +19,7 @@ from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.udf import UserDefinedFunction
+from pyspark.sql.udf import UserDefinedFunction, UDFColumn
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -89,8 +89,15 @@ class GroupedData(object):
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jgd.agg(exprs[0]._jc,
-                                _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
+            if isinstance(exprs[0], UDFColumn):
+                assert all(isinstance(c, UDFColumn) for c in exprs)
+                jdf = self._jgd.aggInPandas(
+                    _to_seq(self.sql_ctx._sc, [c._jc for c in exprs]))
+            else:
+                jdf = self._jgd.agg(exprs[0]._jc,
+                                    _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
+
+
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi

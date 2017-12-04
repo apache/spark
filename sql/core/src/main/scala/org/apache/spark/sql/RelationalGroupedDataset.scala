@@ -437,6 +437,37 @@ class RelationalGroupedDataset protected[sql](
           df.logicalPlan))
   }
 
+
+  private[sql] def aggInPandas(columns: Seq[Column]): DataFrame = {
+    val exprs = columns.map(column => column.expr.asInstanceOf[PythonUDF])
+
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
+
+    val child = df.logicalPlan
+
+    val childrenExpressions = exprs.flatMap(expr =>
+      expr.children.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    })
+
+    val project = Project(groupingNamedExpressions ++ childrenExpressions, child)
+
+    val udfOutputs = exprs.flatMap(expr =>
+      Seq(AttributeReference(expr.name, expr.dataType)())
+    )
+
+    val output: Seq[Attribute] = groupingAttributes ++ udfOutputs
+
+    val plan = AggregateInPandas(groupingAttributes, exprs, output, project)
+
+    Dataset.ofRows(df.sparkSession, plan)
+  }
   /**
    * Applies a grouped vectorized python user-defined function to each group of data.
    * The user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`.

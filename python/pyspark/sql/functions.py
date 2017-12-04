@@ -2089,6 +2089,8 @@ class PandasUDFType(object):
 
     GROUP_MAP = PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF
 
+    GROUP_AGG = PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF
+
 
 @since(1.3)
 def udf(f=None, returnType=StringType()):
@@ -2267,7 +2269,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         raise ValueError("Invalid returnType: returnType can not be None")
 
     if eval_type not in [PythonEvalType.SQL_PANDAS_SCALAR_UDF,
-                         PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF]:
+                         PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF,
+                         PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF]:
         raise ValueError("Invalid functionType: "
                          "functionType must be one the values from PandasUDFType")
 
