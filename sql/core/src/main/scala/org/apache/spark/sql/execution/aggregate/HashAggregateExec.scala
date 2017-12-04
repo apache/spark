@@ -681,9 +681,9 @@ case class HashAggregateExec(
 
     // Iterate over the aggregate rows and convert them from ColumnarRow to UnsafeRow
     def outputFromVectorizedMap: String = {
-        val row = ctx.freshName("fastHashMapRow")
-        ctx.currentVars = null
-        ctx.INPUT_ROW = row
+      val row = ctx.freshName("fastHashMapRow")
+      ctx.currentVars = null
+      ctx.INPUT_ROW = row
       val generateKeyRow = GenerateUnsafeProjection.createCode(ctx,
         groupingKeySchema.toAttributes.zipWithIndex
           .map { case (attr, i) => BoundReference(i, attr.dataType, attr.nullable) }
