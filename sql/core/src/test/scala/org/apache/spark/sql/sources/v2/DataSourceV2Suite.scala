@@ -22,8 +22,9 @@ import java.util.{ArrayList, List => JList}
 import test.org.apache.spark.sql.sources.v2._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrameReader, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ConfigSupport
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.sources.v2.reader._
@@ -50,7 +51,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "32",
         SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM.key -> "10000") {
       val cs = classOf[DataSourceV2WithConfig].newInstance().asInstanceOf[ConfigSupport]
-      val confs = DataFrameReader.withSessionConfig(cs, SQLConf.get)
+      val confs = DataSourceV2ConfigSupport.withSessionConfig(cs, SQLConf.get)
       assert(confs.size == 3)
       assert(confs.keySet.filter(_.startsWith("spark.sql.parquet")).size == 2)
       assert(confs.keySet.filter(
