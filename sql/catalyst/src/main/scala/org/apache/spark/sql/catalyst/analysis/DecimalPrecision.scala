@@ -58,7 +58,7 @@ import org.apache.spark.sql.types._
  * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE
  */
 // scalastyle:on
-object DecimalPrecision extends Rule[LogicalPlan] {
+object DecimalPrecision extends Rule[LogicalPlan] with TypePropagation {
   import scala.math.{max, min}
 
   private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
@@ -78,10 +78,12 @@ object DecimalPrecision extends Rule[LogicalPlan] {
     PromotePrecision(Cast(e, dataType))
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    // fix decimal precision for expressions
-    case q => q.transformExpressionsUp(
-      decimalAndDecimal.orElse(integralAndDecimalLiteral).orElse(nondecimalAndDecimal))
+  def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) {
+    _ resolveOperators {
+      // fix decimal precision for expressions
+      case q => q.transformExpressionsUp(
+        decimalAndDecimal.orElse(integralAndDecimalLiteral).orElse(nondecimalAndDecimal))
+    }
   }
 
   /** Decimal precision promotion for +, -, *, /, %, pmod, and binary comparison. */

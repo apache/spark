@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.resourceToString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -39,6 +40,8 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
    */
   protected override def afterAll(): Unit = {
     try {
+      // For debugging dump some statistics about how much time was spent in various optimizer rules
+      logWarning(RuleExecutor.dumpTimeSpent())
       spark.sessionState.catalog.reset()
     } finally {
       super.afterAll()
