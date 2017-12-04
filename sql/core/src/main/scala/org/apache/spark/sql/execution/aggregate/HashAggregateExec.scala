@@ -596,7 +596,7 @@ case class HashAggregateExec(
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName();")
         ctx.addMutableState(
-          classOf[java.util.Iterator[ColumnarRow]].getName,
+          s"java.util.Iterator<${classOf[ColumnarRow]}>",
           iterTermForFastHashMap)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
@@ -607,7 +607,7 @@ case class HashAggregateExec(
           s"$fastHashMapTerm = new $fastHashMapClassName(" +
             s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());")
         ctx.addMutableState(
-          classOf[KVIterator[UnsafeRow, UnsafeRow]].getName,
+          "org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>",
           iterTermForFastHashMap)
       }
     }
