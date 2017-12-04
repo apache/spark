@@ -426,9 +426,11 @@ private[hive] class HiveClientImpl(
       // TODO: stats should include all the other two fields (`numFiles` and `numPartitions`).
       // (see StatsSetupConst in Hive)
       val stats =
-        // When table is external, `totalSize` is always zero, which will influence join strategy
-        // so when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
-        // return None. Later, we will use the other ways to estimate the statistics.
+        // When table is external, `totalSize` is always zero, which will influence join strategy.
+        // So when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
+        // return None.
+        // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
+        // zero after INSERT command. So they are used here only if they are larger than zero.
         if (totalSize.isDefined && totalSize.get > 0L) {
           Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount.filter(_ > 0)))
         } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
