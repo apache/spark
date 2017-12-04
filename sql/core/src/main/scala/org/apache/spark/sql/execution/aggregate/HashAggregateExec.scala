@@ -596,7 +596,7 @@ case class HashAggregateExec(
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName();")
         ctx.addMutableState(
-          s"java.util.Iterator<${classOf[ColumnarRow]}>",
+          s"java.util.Iterator<${classOf[ColumnarRow].getName}>",
           iterTermForFastHashMap)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
