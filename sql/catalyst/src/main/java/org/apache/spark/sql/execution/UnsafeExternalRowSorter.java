@@ -148,18 +148,27 @@ public final class UnsafeExternalRowSorter {
 
         @Override
         public boolean hasNext() {
-          return sortedIterator.hasNext();
-        }
-
-        @Override
-        public UnsafeRow next() {
           try {
             if (!alreadyCalculated) {
               while (inputIterator.hasNext()) {
                 insertRow(inputIterator.next());
               }
               alreadyCalculated = true;
+              if (!sortedIterator.hasNext()) {
+                // Since we won't ever call next() on an empty iterator, we need to clean up resources
+                // here in order to prevent memory leaks.
+                cleanupResources();
+              }
             }
+          } catch (IOException e) {
+            return false;
+          }
+          return sortedIterator.hasNext();
+        }
+
+        @Override
+        public UnsafeRow next() {
+          try {
             sortedIterator.loadNext();
             row.pointTo(
               sortedIterator.getBaseObject(),
@@ -183,11 +192,8 @@ public final class UnsafeExternalRowSorter {
         }
       };
     } catch (IOException e) {
-      throw e;
-    } finally {
-      // Since we won't ever call next() on an empty iterator, we need to clean up resources
-      // here in order to prevent memory leaks.
       cleanupResources();
+      throw e;
     }
   }
 

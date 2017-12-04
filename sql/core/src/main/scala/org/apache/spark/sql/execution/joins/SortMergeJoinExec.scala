@@ -674,8 +674,9 @@ private[joins] class SortMergeJoinScanner(
   private[this] val bufferedMatches =
     new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
 
-  // Initialization (note: do _not_ want to advance streamed here). This is made lazy to prevent
-  // unnecessary trigger of calculation.
+  // Initialization (note: do _not_ want to advance streamed here). This is made lazy to run the
+  // initialization only once when accessing it.
+
   private lazy val advancedBufferedIterRes = advancedBufferedToRowWithNullFreeJoinKey()
 
   // --- Public methods ---------------------------------------------------------------------------
@@ -701,11 +702,10 @@ private[joins] class SortMergeJoinScanner(
       bufferedMatches.clear()
       false
     } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
-      // The new streamed row has the same join key as the previous row, so return the same
-      // matches.
+      // The new streamed row has the same join key as the previous row, so return the same matches.
       true
     } else {
-      // To make sure vars like bufferedRow is set
+      // Initialization at the first time reaching here.
       advancedBufferedIterRes
       if (bufferedRow == null) {
         // The streamed row's join key does not match the current batch of buffered rows and there
@@ -756,7 +756,7 @@ private[joins] class SortMergeJoinScanner(
       bufferedMatches.clear()
       false
     } else {
-      // To make sure vars like bufferedRow is set
+      // Initialization at the first time reaching here.
       advancedBufferedIterRes
       if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
         // Matches the current group, so do nothing.
