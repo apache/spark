@@ -141,11 +141,6 @@ public final class UnsafeExternalRowSorter {
   public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
     try {
       final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
-      if (!sortedIterator.hasNext()) {
-        // Since we won't ever call next() on an empty iterator, we need to clean up resources
-        // here in order to prevent memory leaks.
-        cleanupResources();
-      }
       return new AbstractIterator<UnsafeRow>() {
         boolean alreadyCalculated = false;
         private final int numFields = schema.length();
@@ -188,8 +183,11 @@ public final class UnsafeExternalRowSorter {
         }
       };
     } catch (IOException e) {
-      cleanupResources();
       throw e;
+    } finally {
+      // Since we won't ever call next() on an empty iterator, we need to clean up resources
+      // here in order to prevent memory leaks.
+      cleanupResources();
     }
   }
 

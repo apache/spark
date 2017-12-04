@@ -700,14 +700,14 @@ private[joins] class SortMergeJoinScanner(
       matchJoinKey = null
       bufferedMatches.clear()
       false
+    } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
+      // The new streamed row has the same join key as the previous row, so return the same
+      // matches.
+      true
     } else {
       // To make sure vars like bufferedRow is set
       advancedBufferedIterRes
-      if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
-        // The new streamed row has the same join key as the previous row, so return the same
-        // matches.
-        true
-      } else if (bufferedRow == null) {
+      if (bufferedRow == null) {
         // The streamed row's join key does not match the current batch of buffered rows and there
         // are no more rows to read from the buffered iterator, so there can be no more matches.
         matchJoinKey = null
