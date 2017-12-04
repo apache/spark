@@ -2159,7 +2159,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       (true, classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat]),
       (false, classOf[org.apache.spark.sql.hive.orc.OrcFileFormat])).foreach { case (v, format) =>
 
-      withSQLConf(SQLConf.ORC_ENABLED.key -> s"$v") {
+      withSQLConf(SQLConf.ORC_USE_NEW_VERSION.key -> s"$v") {
         withTable("spark_20728") {
           sql("CREATE TABLE spark_20728(a INT) USING ORC")
           val fileFormat = sql("SELECT * FROM spark_20728").queryExecution.analyzed.collectFirst {

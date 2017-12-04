@@ -87,7 +87,8 @@ case class DataSource(
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
-  lazy val providingClass: Class[_] = DataSource.lookupDataSource(sparkSession, className)
+  lazy val providingClass: Class[_] =
+    DataSource.lookupDataSource(sparkSession.sessionState.conf, className)
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
@@ -570,10 +571,9 @@ object DataSource extends Logging {
     "org.apache.spark.Logging")
 
   /** Given a provider name, look up the data source class definition. */
-  def lookupDataSource(sparkSession: SparkSession, provider: String): Class[_] = {
+  def lookupDataSource(conf: SQLConf, provider: String): Class[_] = {
     var provider1 = backwardCompatibilityMap.getOrElse(provider, provider)
-    if (Seq("orc", "org.apache.spark.sql.hive.orc.OrcFileFormat").contains(provider1.toLowerCase) &&
-        sparkSession.conf.get(SQLConf.ORC_ENABLED)) {
+    if (Seq("orc").contains(provider1.toLowerCase) && conf.getConf(SQLConf.ORC_USE_NEW_VERSION)) {
       logInfo(s"$provider1 is replaced with ${classOf[OrcFileFormat].getCanonicalName}")
       provider1 = classOf[OrcFileFormat].getCanonicalName
     }

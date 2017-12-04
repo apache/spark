@@ -195,7 +195,7 @@ case class RelationConversions(
         .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
     } else {
       val options = relation.tableMeta.storage.properties
-      if (conf.getConf(SQLConf.ORC_ENABLED)) {
+      if (conf.getConf(SQLConf.ORC_USE_NEW_VERSION)) {
         sessionCatalog.metastoreCatalog.convertToLogicalRelation(
           relation,
           options,

@@ -59,7 +59,7 @@ class DDLSourceLoadSuite extends DataSourceTest with SharedSQLContext {
     Seq(
       (true, "Unable to infer schema for ORC. It must be specified manually"),
       (false, "The ORC data source must be used with Hive support")).foreach { case (value, m) =>
-      withSQLConf(SQLConf.ORC_ENABLED.key -> s"$value") {
+      withSQLConf(SQLConf.ORC_USE_NEW_VERSION.key -> s"$value") {
         val e = intercept[AnalysisException] {
           spark.read.format("orc").load()
         }

@@ -478,7 +478,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("orc - API and behavior regarding schema") {
-    withSQLConf(SQLConf.ORC_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ORC_USE_NEW_VERSION.key -> "true") {
       // Writer
       spark.createDataset(data).toDF("str").write.mode(SaveMode.Overwrite).orc(dir)
       val df = spark.read.orc(dir)
@@ -507,7 +507,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("column nullability and comment - write and then read") {
-    withSQLConf(SQLConf.ORC_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ORC_USE_NEW_VERSION.key -> "true") {
       Seq("json", "orc", "parquet", "csv").foreach { format =>
         val schema = StructType(
           StructField("cl1", IntegerType, nullable = false).withComment("test") ::
