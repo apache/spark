@@ -141,7 +141,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       ColumnPruning,
-      CollapseProject) :: Nil
+      CollapseProject,
+      RemoveRedundantProject) :: Nil
   }
 
   /**

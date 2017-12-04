@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{In, ListQuery}
+import org.apache.spark.sql.catalyst.expressions.ListQuery
 import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 
@@ -30,10 +30,11 @@ class RewriteSubquerySuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Column Pruning", FixedPoint(100), ColumnPruning) ::
-        Batch("Rewrite Subquery", FixedPoint(1),
-          RewritePredicateSubquery,
-          ColumnPruning,
-          CollapseProject) :: Nil
+      Batch("Rewrite Subquery", FixedPoint(1),
+        RewritePredicateSubquery,
+        ColumnPruning,
+        CollapseProject,
+        RemoveRedundantProject) :: Nil
   }
 
   test("Column pruning after rewriting predicate subquery") {
@@ -46,7 +47,7 @@ class RewriteSubquerySuite extends PlanTest {
     val correctAnswer = relation
       .select('a)
       .join(relInSubquery.select('x), LeftSemi, Some('a === 'x))
-      .select('a).analyze
+      .analyze
 
     comparePlans(optimized, correctAnswer)
   }
