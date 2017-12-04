@@ -579,29 +579,30 @@ case class HashAggregateExec(
         case _ =>
       }
     }
-    fastHashMapTerm = ctx.freshName("fastHashMap")
-    val fastHashMapClassName = ctx.freshName("FastHashMap")
-    val fastHashMapGenerator =
-      if (isVectorizedHashMapEnabled) {
-        new VectorizedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema)
-      } else {
-        new RowBasedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema)
-      }
 
     val thisPlan = ctx.addReferenceObj("plan", this)
 
-    // Create a name for iterator from vectorized HashMap
+    // Create a name for the iterator from the fast hash map.
     val iterTermForFastHashMap = ctx.freshName("fastHashMapIter")
     if (isFastHashMapEnabled) {
+      // Generates the fast hash map class and creates the fash hash map term.
+      fastHashMapTerm = ctx.freshName("fastHashMap")
+      val fastHashMapClassName = ctx.freshName("FastHashMap")
       if (isVectorizedHashMapEnabled) {
+        val generatedMap = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
+          fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
+        ctx.addInnerClass(generatedMap)
+
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName();")
         ctx.addMutableState(
           classOf[java.util.Iterator[ColumnarRow]].getName,
           iterTermForFastHashMap)
       } else {
+        val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
+          fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
+        ctx.addInnerClass(generatedMap)
+
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName(" +
             s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());")
@@ -611,45 +612,39 @@ case class HashAggregateExec(
       }
     }
 
+    // Create a name for the iterator from the regular hash map.
+    val iterTerm = ctx.freshName("mapIter")
+    ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm)
     // create hashMap
     hashMapTerm = ctx.freshName("hashMap")
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
-    ctx.addMutableState(hashMapClassName, hashMapTerm)
+    ctx.addMutableState(hashMapClassName, hashMapTerm, s"$hashMapTerm = $thisPlan.createHashMap();")
     sorterTerm = ctx.freshName("sorter")
     ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, sorterTerm)
-
-    // Create a name for iterator from HashMap
-    val iterTerm = ctx.freshName("mapIter")
-    ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm)
-
-    if (isFastHashMapEnabled) {
-      val generatedMap = if (isVectorizedHashMapEnabled) {
-        fastHashMapGenerator.asInstanceOf[VectorizedHashMapGenerator].generate()
-      } else {
-        fastHashMapGenerator.asInstanceOf[RowBasedHashMapGenerator].generate()
-      }
-      ctx.addInnerClass(generatedMap)
-    }
 
     val doAgg = ctx.freshName("doAggregateWithKeys")
     val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
-    val finishFashHashMap = if (isFastHashMapEnabled) {
-      s"$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();"
-    } else ""
+
+    val finishRegularHashMap = s"$iterTerm = $thisPlan.finishAggregate(" +
+      s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe);"
+    val finishHashMap = if (isFastHashMapEnabled) {
+      s"""
+         |$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();"
+         |$finishRegularHashMap
+       """.stripMargin
+    } else {
+      finishRegularHashMap
+    }
 
     val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
-        private void $doAgg() throws java.io.IOException {
-          $hashMapTerm = $thisPlan.createHashMap();
-          ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
-
-          $finishFashHashMap
-          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm, $peakMemory, $spillSize,
-            $avgHashProbe);
-        }
-       """)
+         |private void $doAgg() throws java.io.IOException {
+         |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+         |  $finishHashMap
+         |}
+       """.stripMargin)
 
     // generate code for output
     val keyTerm = ctx.freshName("aggKey")
@@ -888,22 +883,26 @@ case class HashAggregateExec(
       }
     }
 
-    val declareFastRowBuffer: String = if (isFastHashMapEnabled) {
-      val rowType = if (isVectorizedHashMapEnabled) {
+    val declareRowBuffer: String = if (isFastHashMapEnabled) {
+      val fastRowType = if (isVectorizedHashMapEnabled) {
         classOf[MutableColumnarRow].getName
       } else {
         "UnsafeRow"
       }
-      s"$rowType $fastRowBuffer = null;"
-    } else ""
+      s"""
+         |UnsafeRow $unsafeRowBuffer = null;
+         |$fastRowType $fastRowBuffer = null;
+       """.stripMargin
+    } else {
+      s"UnsafeRow $unsafeRowBuffer = null;"
+    }
 
     // We try to do hash map based in-memory aggregation first. If there is not enough memory (the
     // hash map will return null for new key), we spill the hash map to disk to free memory, then
     // continue to do in-memory aggregation and spilling until all the rows had been processed.
     // Finally, sort the spilled aggregate buffers by key, and merge them together for same key.
     s"""
-     UnsafeRow $unsafeRowBuffer = null;
-     $declareFastRowBuffer
+     $declareRowBuffer
 
      $findOrInsertHashMap
 
