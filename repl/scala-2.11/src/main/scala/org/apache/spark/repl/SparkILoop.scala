@@ -85,7 +85,6 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   override def printWelcome() {
     import org.apache.spark.SPARK_VERSION
     echo("""Welcome to
-    !! The debug build of
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
@@ -121,23 +120,6 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   override def replay(): Unit = {
     initializeSpark()
     super.replay()
-  }
-
-  override def helpCommand(line: String): Result = {
-    super.helpCommand(line)
-
-    intp.allHandlers.foreach { handler =>
-      echo("")
-      echo(s"!! ${handler.toString()}")
-      echo(s"!! definedNames:    ${handler.definedNames}")
-      echo(s"!! definedSymbols:  ${handler.definedSymbols}")
-      echo(s"!! definesImplicit: ${handler.definesImplicit}")
-      echo(s"!! definesType:     ${handler.definesType}")
-      echo(s"!! definesValue:    ${handler.definesValue}")
-      echo(s"!! path:            ${handler.path}")
-      echo(s"!! referencedNames: ${handler.referencedNames}")
-      echo(s"!! symbol:          ${handler.symbol}")
-    }
   }
 
 }
