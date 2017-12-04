@@ -291,26 +291,26 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val udt = new ExamplePointUDT
 
   private val smallValues =
-    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), new Date(2000, 1, 1),
+    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), Date.valueOf("2000-01-01"),
       new Timestamp(1), "a", 1f, 1d, 0f, 0d, false, Array(1L, 2L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
   private val largeValues =
-    Seq(2.toByte, 2.toShort, 2, 2L, Decimal(2), Array(2.toByte), new Date(2000, 1, 2),
+    Seq(2.toByte, 2.toShort, 2, 2L, Decimal(2), Array(2.toByte), Date.valueOf("2000-01-02"),
       new Timestamp(2), "b", 2f, 2d, Float.NaN, Double.NaN, true, Array(2L, 1L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(2L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 2))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 3.0)), udt))
 
   private val equalValues1 =
-    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), new Date(2000, 1, 1),
+    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), Date.valueOf("2000-01-01"),
       new Timestamp(1), "a", 1f, 1d, Float.NaN, Double.NaN, true, Array(1L, 2L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
   private val equalValues2 =
-    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), new Date(2000, 1, 1),
+    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), Date.valueOf("2000-01-01"),
       new Timestamp(1), "a", 1f, 1d, Float.NaN, Double.NaN, true, Array(1L, 2L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
