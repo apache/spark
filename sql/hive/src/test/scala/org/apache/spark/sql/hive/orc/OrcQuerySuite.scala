@@ -624,10 +624,10 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("SPARK-20728 Make ORCFileFormat configurable between sql/hive and sql/core") {
     Seq(
-      (true, classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat]),
-      (false, classOf[org.apache.spark.sql.hive.orc.OrcFileFormat])).foreach { case (v, format) =>
+      ("native", classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat]),
+      ("hive", classOf[org.apache.spark.sql.hive.orc.OrcFileFormat])).foreach { case (i, format) =>
 
-      withSQLConf(SQLConf.ORC_USE_NEW_VERSION.key -> s"$v") {
+      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> i) {
         withTable("spark_20728") {
           sql("CREATE TABLE spark_20728(a INT) USING ORC")
           val fileFormat = sql("SELECT * FROM spark_20728").queryExecution.analyzed.collectFirst {

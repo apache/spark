@@ -2786,14 +2786,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-20728 Make ORCFileFormat configurable between sql/hive and sql/core") {
-    withSQLConf(SQLConf.ORC_USE_NEW_VERSION.key -> "false") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
       val e = intercept[AnalysisException] {
         sql("CREATE TABLE spark_20728(a INT) USING ORC")
       }
       assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
     }
 
-    withSQLConf(SQLConf.ORC_USE_NEW_VERSION.key -> "true") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
       withTable("spark_20728") {
         sql("CREATE TABLE spark_20728(a INT) USING ORC")
         val fileFormat = sql("SELECT * FROM spark_20728").queryExecution.analyzed.collectFirst {
