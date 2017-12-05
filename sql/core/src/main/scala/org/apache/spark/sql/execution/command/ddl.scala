@@ -204,7 +204,7 @@ case class DropTableCommand(
       }
     }
 
-    if (!ifExists || catalog.tableExists(tableName)) {
+    if (catalog.isTemporaryTable(tableName) || catalog.tableExists(tableName)) {
       try {
         sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
       } catch {
@@ -212,6 +212,10 @@ case class DropTableCommand(
       }
       catalog.refreshTable(tableName)
       catalog.dropTable(tableName, ifExists, purge)
+    } else if (ifExists) {
+      // no-op
+    } else {
+      throw new AnalysisException(s"Table or view not found: ${tableName.identifier}")
     }
     Seq.empty[Row]
   }
