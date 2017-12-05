@@ -203,15 +203,16 @@ case class DropTableCommand(
         case _ =>
       }
     }
-    try {
-      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
-    } catch {
-      case ae: AnalysisException
-        if ifExists && ae.cause.nonEmpty && ae.getCause.isInstanceOf[NoSuchTableException] =>
-      case NonFatal(e) => log.warn(e.toString, e)
+
+    if (!ifExists || catalog.tableExists(tableName)) {
+      try {
+        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
+      } catch {
+        case NonFatal(e) => log.warn(e.toString, e)
+      }
+      catalog.refreshTable(tableName)
+      catalog.dropTable(tableName, ifExists, purge)
     }
-    catalog.refreshTable(tableName)
-    catalog.dropTable(tableName, ifExists, purge)
     Seq.empty[Row]
   }
 }

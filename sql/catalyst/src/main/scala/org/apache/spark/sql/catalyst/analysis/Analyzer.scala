@@ -635,8 +635,8 @@ class Analyzer(
       try {
         catalog.lookupRelation(tableIdentWithDb)
       } catch {
-        case e: NoSuchTableException =>
-          u.failAnalysisWithCause(s"Table or view not found: ${tableIdentWithDb.unquotedString}", e)
+        case _: NoSuchTableException =>
+          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}")
         // If the database is defined and that database is not found, throw an AnalysisException.
         // Note that if the database is not defined, it is possible we are looking up a temp view.
         case e: NoSuchDatabaseException =>
