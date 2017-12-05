@@ -80,6 +80,7 @@ object AggregateExpression {
   }
 }
 
+
 /**
  * A container for an [[AggregateFunction]] with its [[AggregateMode]] and a field
  * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
