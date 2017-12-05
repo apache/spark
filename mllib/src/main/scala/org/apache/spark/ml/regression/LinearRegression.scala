@@ -558,7 +558,7 @@ class LinearRegressionModel private[ml] (
   override def write: GeneralMLWriter = new GeneralMLWriter(this)
 }
 
-/** [[MLWriterFormat]] providing "internal" instance for [[LinearRegressionModel]] */
+/** A writer for LinearRegression that handles the "internal" (or default) format */
 private class InternalLinearRegressionModelWriter()
   extends MLWriterFormat with MLFormatRegister {
 
@@ -580,7 +580,7 @@ private class InternalLinearRegressionModelWriter()
   }
 }
 
-/** [[MLWriterFormat]] providing "pmml" instance for [[LinearRegressionModel]] */
+/** A writer for LinearRegression that handles the "pmml" format */
 private class PMMLLinearRegressionModelWriter()
   extends MLWriterFormat with MLFormatRegister {
 
