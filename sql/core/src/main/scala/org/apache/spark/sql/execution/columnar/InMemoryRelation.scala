@@ -38,7 +38,7 @@ object InMemoryRelation {
       storageLevel: StorageLevel,
       child: SparkPlan,
       tableName: Option[String],
-      stats: Option[Statistics]): InMemoryRelation =
+      stats: Option[Statistics] = None): InMemoryRelation =
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)(
       statsOfPlanToCache = stats)
 }
