@@ -34,8 +34,9 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, DataType, StringType, StructType, _make_type_verifier, \
-    _infer_schema, _has_nulltype, _merge_type, _create_converter, _parse_datatype_string
+from pyspark.sql.types import Row, DataType, StringType, StructType, TimestampType, \
+    _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
+    _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SparkSession"]
@@ -72,6 +73,9 @@ class SparkSession(object):
     ...     .appName("Word Count") \\
     ...     .config("spark.some.config.option", "some-value") \\
     ...     .getOrCreate()
+
+    .. autoattribute:: builder
+       :annotation:
     """
 
     class Builder(object):
@@ -183,6 +187,7 @@ class SparkSession(object):
                 return session
 
     builder = Builder()
+    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
 
     _instantiatedSession = None
 
@@ -440,11 +445,34 @@ class SparkSession(object):
             record_type_list.append((str(col_names[i]), curr_type))
         return np.dtype(record_type_list) if has_rec_fix else None
 
-    def _convert_from_pandas(self, pdf):
+    def _convert_from_pandas(self, pdf, schema, timezone):
         """
          Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
          :return list of records
         """
+        if timezone is not None:
+            from pyspark.sql.types import _check_series_convert_timestamps_tz_local
+            copied = False
+            if isinstance(schema, StructType):
+                for field in schema:
+                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+                    if isinstance(field.dataType, TimestampType):
+                        s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
+                        if not copied and s is not pdf[field.name]:
+                            # Copy once if the series is modified to prevent the original Pandas
+                            # DataFrame from being updated
+                            pdf = pdf.copy()
+                            copied = True
+                        pdf[field.name] = s
+            else:
+                for column, series in pdf.iteritems():
+                    s = _check_series_convert_timestamps_tz_local(pdf[column], timezone)
+                    if not copied and s is not pdf[column]:
+                        # Copy once if the series is modified to prevent the original Pandas
+                        # DataFrame from being updated
+                        pdf = pdf.copy()
+                        copied = True
+                    pdf[column] = s
 
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.to_records(index=False)
@@ -458,15 +486,19 @@ class SparkSession(object):
         # Convert list of numpy records to python lists
         return [r.tolist() for r in np_records]
 
-    def _create_from_pandas_with_arrow(self, pdf, schema):
+    def _create_from_pandas_with_arrow(self, pdf, schema, timezone):
         """
         Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
         to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
         from pyspark.serializers import ArrowSerializer, _create_batch
-        from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
-        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+        from pyspark.sql.types import from_arrow_schema, to_arrow_type, \
+            _old_pandas_exception_message, TimestampType
+        try:
+            from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+        except ImportError as e:
+            raise ImportError(_old_pandas_exception_message(e))
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
@@ -484,7 +516,8 @@ class SparkSession(object):
         pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
 
         # Create Arrow record batches
-        batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)])
+        batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)],
+                                 timezone)
                    for pdf_slice in pdf_slices]
 
         # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)
@@ -592,6 +625,9 @@ class SparkSession(object):
 
         if isinstance(schema, basestring):
             schema = _parse_datatype_string(schema)
+        elif isinstance(schema, (list, tuple)):
+            # Must re-encode any unicode strings to be consistent with StructField names
+            schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
 
         try:
             import pandas
@@ -599,19 +635,24 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
+            if self.conf.get("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
+               == "true":
+                timezone = self.conf.get("spark.sql.session.timeZone")
+            else:
+                timezone = None
 
             # If no schema supplied by user then get the names of columns only
             if schema is None:
-                schema = [str(x) for x in data.columns]
+                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in data.columns]
 
             if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
                     and len(data) > 0:
                 try:
-                    return self._create_from_pandas_with_arrow(data, schema)
+                    return self._create_from_pandas_with_arrow(data, schema, timezone)
                 except Exception as e:
                     warnings.warn("Arrow will not be used in createDataFrame: %s" % str(e))
                     # Fallback to create DataFrame without arrow if raise some exception
-            data = self._convert_from_pandas(data)
+            data = self._convert_from_pandas(data, schema, timezone)
 
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
@@ -630,8 +671,6 @@ class SparkSession(object):
                 verify_func(obj)
                 return obj,
         else:
-            if isinstance(schema, (list, tuple)):
-                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):

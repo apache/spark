@@ -217,4 +217,24 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }
+
+  test(":replay should work correctly") {
+   val output = runInterpreter("local",
+     """
+     |sc
+     |:replay
+     """.stripMargin)
+    assertDoesNotContain("error: not found: value sc", output)
+  }
+
+   test("spark-shell should find imported types in class constructors and extends clause") {
+     val output = runInterpreter("local",
+       """
+         |import org.apache.spark.Partition
+         |class P(p: Partition)
+         |class P(val index: Int) extends Partition
+       """.stripMargin)
+     assertDoesNotContain("error: not found: type Partition", output)
+   }
+
 }

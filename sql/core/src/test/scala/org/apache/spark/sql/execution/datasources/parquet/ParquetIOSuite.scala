@@ -653,7 +653,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       spark.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
       val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
       {
-        val reader = new VectorizedParquetRecordReader
+        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -670,7 +670,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project just one column
       {
-        val reader = new VectorizedParquetRecordReader
+        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -686,7 +686,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project columns in opposite order
       {
-        val reader = new VectorizedParquetRecordReader
+        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -703,7 +703,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Empty projection
       {
-        val reader = new VectorizedParquetRecordReader
+        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0
@@ -742,7 +742,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       dataTypes.zip(constantValues).foreach { case (dt, v) =>
         val schema = StructType(StructField("pcol", dt) :: Nil)
-        val vectorizedReader = new VectorizedParquetRecordReader
+        val vectorizedReader =
+          new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
         val partitionValues = new GenericInternalRow(Array(v))
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
 

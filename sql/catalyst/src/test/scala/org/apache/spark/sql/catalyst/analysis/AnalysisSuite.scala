@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
+  RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.types._
 
 
@@ -513,5 +515,32 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
       Seq("Number of column aliases does not match number of columns. " +
         "Number of column aliases: 5; number of columns: 4."))
+  }
+
+  test("SPARK-22614 RepartitionByExpression partitioning") {
+    def checkPartitioning[T <: Partitioning](numPartitions: Int, exprs: Expression*): Unit = {
+      val partitioning = RepartitionByExpression(exprs, testRelation2, numPartitions).partitioning
+      assert(partitioning.isInstanceOf[T])
+    }
+
+    checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))
+    checkPartitioning[HashPartitioning](numPartitions = 10, exprs = 'a.attr, 'b.attr)
+
+    checkPartitioning[RangePartitioning](numPartitions = 10,
+      exprs = SortOrder(Literal(10), Ascending))
+    checkPartitioning[RangePartitioning](numPartitions = 10,
+      exprs = SortOrder('a.attr, Ascending), SortOrder('b.attr, Descending))
+
+    checkPartitioning[RoundRobinPartitioning](numPartitions = 10, exprs = Seq.empty: _*)
+
+    intercept[IllegalArgumentException] {
+      checkPartitioning(numPartitions = 0, exprs = Literal(20))
+    }
+    intercept[IllegalArgumentException] {
+      checkPartitioning(numPartitions = -1, exprs = Literal(20))
+    }
+    intercept[IllegalArgumentException] {
+      checkPartitioning(numPartitions = 10, exprs = SortOrder('a.attr, Ascending), 'b.attr)
+    }
   }
 }
