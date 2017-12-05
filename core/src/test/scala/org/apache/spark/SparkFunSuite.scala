@@ -112,7 +112,7 @@ object SparkFunSuite
        Set.empty
      } else {
        val whiteList = Source.fromInputStream(whileListStream)
-         .getLines().filterNot(_.startsWith("#")).toSet
+         .getLines().filterNot(s => s.isEmpty || s.startsWith("#")).toSet
        logInfo(s"\n\n===== Global thread whitelist loaded with name " +
          s"$threadWhitelistFileName from classpath: ${whiteList.mkString(", ")}' =====\n")
        whiteList
