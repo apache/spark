@@ -141,7 +141,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       CheckCartesianProducts) ::
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
-      CollapseProject) :: Nil
+      ColumnPruning,
+      CollapseProject,
+      RemoveRedundantProject) :: Nil
   }
 
   /**
