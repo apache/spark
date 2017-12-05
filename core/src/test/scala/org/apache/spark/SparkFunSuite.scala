@@ -72,11 +72,10 @@ abstract class SparkFunSuite
       filterNot(s => SparkFunSuite.threadWhiteList.exists(s.matches(_)))
     val remainingThreadNames = whitelistedThreadNames.diff(beforeAllTestThreadNames)
     if (!remainingThreadNames.isEmpty) {
-      logInfo("\n\n===== THREADS NOT STOPPED PROPERLY =====\n")
-      remainingThreadNames.foreach(logInfo(_))
-      logInfo("\n\n===== END OF THREAD DUMP =====\n")
-      logInfo("\n\n===== EITHER PUT THREAD NAME INTO THE WHITELIST FILE " +
-        "OR SHUT IT DOWN PROPERLY =====\n")
+      val suiteName = this.getClass.getName
+      val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
+      logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
+        s"thread names: ${remainingThreadNames.mkString(", ")} =====\n")
     }
   }
 
