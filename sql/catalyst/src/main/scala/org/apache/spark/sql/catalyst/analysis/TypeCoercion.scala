@@ -320,9 +320,8 @@ object TypeCoercion {
         case _ => expr
       }
     }
-    def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) { convert() }
 
-    private def convert(): LogicalPlan => LogicalPlan = _ resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -381,9 +380,7 @@ object TypeCoercion {
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) { convert() }
-
-    private def convert(): LogicalPlan => LogicalPlan = _ resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -483,9 +480,7 @@ object TypeCoercion {
    * This ensure that the types for various functions are as expected.
    */
   object FunctionArgumentConversion extends Rule[LogicalPlan] with TypePropagation {
-    def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) { convert() }
-
-    private def convert(): LogicalPlan => LogicalPlan = _ resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -575,9 +570,7 @@ object TypeCoercion {
    * converted to fractional types.
    */
   object Division extends Rule[LogicalPlan] with TypePropagation {
-    def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) { convert() }
-
-    private def convert(): LogicalPlan => LogicalPlan = _ resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
       case e if !e.childrenResolved => e
@@ -599,9 +592,7 @@ object TypeCoercion {
    * Coerces the type of different branches of a CASE WHEN statement to a common type.
    */
   object CaseWhenCoercion extends Rule[LogicalPlan] with TypePropagation {
-    def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) { convert() }
-
-    private def convert(): LogicalPlan => LogicalPlan = _ resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case c: CaseWhen if c.childrenResolved && !c.valueTypesEqual =>
         val maybeCommonType = findWiderCommonType(c.valueTypes)
         maybeCommonType.map { commonType =>
@@ -631,9 +622,7 @@ object TypeCoercion {
    * Coerces the type of different branches of If statement to a common type.
    */
   object IfCoercion extends Rule[LogicalPlan] with TypePropagation {
-    def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) { convert() }
-
-    private def convert(): LogicalPlan => LogicalPlan = _ resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if left.dataType != right.dataType =>
@@ -653,9 +642,7 @@ object TypeCoercion {
    * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
    */
   object StackCoercion extends Rule[LogicalPlan] with TypePropagation {
-    def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) { convert() }
-
-    private def convert(): LogicalPlan => LogicalPlan = _ resolveExpressions {
+    override def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s @ Stack(children) if s.childrenResolved && s.hasFoldableNumRows =>
         Stack(children.zipWithIndex.map {
           // The first child is the number of rows for stack.
@@ -692,9 +679,7 @@ object TypeCoercion {
    * Casts types according to the expected input types for [[Expression]]s.
    */
   object ImplicitTypeCasts extends Rule[LogicalPlan] with TypePropagation {
-    def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) { convert() }
-
-    private def convert(): LogicalPlan => LogicalPlan = _ resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -811,9 +796,7 @@ object TypeCoercion {
    * Cast WindowFrame boundaries to the type they operate upon.
    */
   object WindowFrameCoercion extends Rule[LogicalPlan] with TypePropagation {
-    def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) { convert() }
-
-    private def convert(): LogicalPlan => LogicalPlan = _ resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case s @ WindowSpecDefinition(_, Seq(order), SpecifiedWindowFrame(RangeFrame, lower, upper))
           if order.resolved =>
         s.copy(frameSpecification = SpecifiedWindowFrame(
@@ -840,15 +823,16 @@ trait TypePropagation extends Logging {
    * Applies any changes to [[AttributeReference]] data types that are made by the transform method
    * to instances higher in the query tree.
    */
-  def withPropagatedTypes(inputPlan: LogicalPlan)(
-      convert: LogicalPlan => LogicalPlan): LogicalPlan = {
-    val newPlan = convert(inputPlan)
-    if (inputPlan.fastEquals(newPlan)) {
-      inputPlan
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val newPlan = coerceTypes(plan)
+    if (plan.fastEquals(newPlan)) {
+      plan
     } else {
       propagateTypes(newPlan)
     }
   }
+
+  protected def coerceTypes(plan: LogicalPlan): LogicalPlan
 
   private def propagateTypes(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // No propagation required for leaf nodes.

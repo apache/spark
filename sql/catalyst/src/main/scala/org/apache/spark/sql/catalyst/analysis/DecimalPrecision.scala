@@ -78,12 +78,10 @@ object DecimalPrecision extends Rule[LogicalPlan] with TypePropagation {
     PromotePrecision(Cast(e, dataType))
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = withPropagatedTypes(plan) {
-    _ resolveOperators {
-      // fix decimal precision for expressions
-      case q => q.transformExpressionsUp(
-        decimalAndDecimal.orElse(integralAndDecimalLiteral).orElse(nondecimalAndDecimal))
-    }
+  override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    // fix decimal precision for expressions
+    case q => q.transformExpressionsUp(
+      decimalAndDecimal.orElse(integralAndDecimalLiteral).orElse(nondecimalAndDecimal))
   }
 
   /** Decimal precision promotion for +, -, *, /, %, pmod, and binary comparison. */
