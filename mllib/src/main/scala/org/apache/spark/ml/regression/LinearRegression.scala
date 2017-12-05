@@ -600,7 +600,6 @@ private class PMMLLinearRegressionModelWriter()
   }
 }
 
-
 @Since("1.6.0")
 object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 

@@ -88,7 +88,8 @@ private[util] sealed trait BaseReadWrite {
 }
 
 /**
- * ML formats for export should implement this trait so they can register an alias to their format.
+ * ML export formats for should implement this trait so that users can specify a shortname rather
+ * than the fully qualified class name of the exporter.
  *
  * A new instance of this class will be instantiated each time a DDL call is made.
  *
