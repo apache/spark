@@ -343,7 +343,7 @@ class SparkSession(object):
             raise ValueError("Some of types cannot be determined after inferring")
         return schema
 
-    def _inferSchema(self, rdd, samplingRatio=None):
+    def _inferSchema(self, rdd, samplingRatio=None, names=None):
         """
         Infer schema from an RDD of Row or tuple.
 
@@ -360,10 +360,10 @@ class SparkSession(object):
                           "Use pyspark.sql.Row instead")
 
         if samplingRatio is None:
-            schema = _infer_schema(first)
+            schema = _infer_schema(first, names=names)
             if _has_nulltype(schema):
                 for row in rdd.take(100)[1:]:
-                    schema = _merge_type(schema, _infer_schema(row))
+                    schema = _merge_type(schema, _infer_schema(row, names=names))
                     if not _has_nulltype(schema):
                         break
                 else:
@@ -372,7 +372,7 @@ class SparkSession(object):
         else:
             if samplingRatio < 0.99:
                 rdd = rdd.sample(False, float(samplingRatio))
-            schema = rdd.map(_infer_schema).reduce(_merge_type)
+            schema = rdd.map(lambda row: _infer_schema(row, names)).reduce(_merge_type)
         return schema
 
     def _createFromRDD(self, rdd, schema, samplingRatio):
@@ -380,14 +380,9 @@ class SparkSession(object):
         Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
         """
         if schema is None or isinstance(schema, (list, tuple)):
-            struct = self._inferSchema(rdd, samplingRatio)
-            converter = _create_converter(struct)
+            schema = self._inferSchema(rdd, samplingRatio, names=schema)
+            converter = _create_converter(schema)
             rdd = rdd.map(converter)
-            if isinstance(schema, (list, tuple)):
-                for i, name in enumerate(schema):
-                    struct.fields[i].name = name
-                    struct.names[i] = name
-            schema = struct
 
         elif not isinstance(schema, StructType):
             raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
