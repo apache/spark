@@ -322,7 +322,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     """
     Maps a column of continuous features to a column of feature buckets.
 
-    >>> values = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, float("nan")), (float("nan"), 1.0), (float("nan"), 0.0)]
+    >>> values = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, float("nan")),
+    ...     (float("nan"), 1.0), (float("nan"), 0.0)]
     >>> df = spark.createDataFrame(values, ["values", "numbers"])
     >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
     ...     inputCol="values", outputCol="buckets")
@@ -347,7 +348,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     >>> bucketed = bucketizer.setHandleInvalid("skip").transform(df).collect()
     >>> len(bucketed)
     4
-    >>> bucketizer2 = Bucketizer(splitsArray=[[-float("inf"), 0.5, 1.4, float("inf")], [-float("inf"), 0.5, float("inf")]],
+    >>> bucketizer2 = Bucketizer(splitsArray=[[-float("inf"), 0.5, 1.4, float("inf")],
+    ...     [-float("inf"), 0.5, float("inf")]],
     ...     inputCols=["values", "numbers"], outputCols=["buckets1", "buckets2"])
     >>> bucketed2 = bucketizer2.setHandleInvalid("keep").transform(df).collect()
     >>> len(bucketed2)
@@ -384,21 +386,22 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
                           "Options are 'skip' (filter out rows with invalid values), " +
-                          "'error' (throw an error), or 'keep' (keep invalid values in a special " +
-                          "additional bucket). Note that in the multiple column case, the invalid " +
-                          "handling is applied to all columns. That said for 'error' it will throw " +
-                          "an error if any invalids are found in any column, for 'skip' it will " +
-                          "skip rows with any invalids in any columns, etc.",
+                          "'error' (throw an error), or 'keep' (keep invalid values in a " +
+                          "special additional bucket). Note that in the multiple column " +
+                          "case, the invalid handling is applied to all columns. That said " +
+                          "for 'error' it will throw an error if any invalids are found in " +
+                          "any column, for 'skip' it will skip rows with any invalids in " +
+                          "any columns, etc.",
                           typeConverter=TypeConverters.toString)
 
     splitsArray = Param(Params._dummy(), "splitsArray", "The array of split points for mapping " +
                         "continuous features into buckets for multiple columns. For each input " +
-                        "column, with n+1 splits, there are n buckets. A bucket defined by splits " +
-                        "x,y holds values in the range [x,y) except the last bucket, which also " +
-                        "includes y. The splits should be of length >= 3 and strictly increasing. " +
-                        "Values at -inf, inf must be explicitly provided to cover all Double " +
-                        "values; otherwise, values outside the splits specified will be treated " +
-                        "as errors.",
+                        "column, with n+1 splits, there are n buckets. A bucket defined by " +
+                        "splits x,y holds values in the range [x,y) except the last bucket, " +
+                        "which also includes y. The splits should be of length >= 3 and " +
+                        "strictly increasing. Values at -inf, inf must be explicitly provided " +
+                        "to cover all Double values; otherwise, values outside the splits " +
+                        "specified will be treated as errors.",
                         typeConverter=TypeConverters.toListListFloat)
 
     @keyword_only
