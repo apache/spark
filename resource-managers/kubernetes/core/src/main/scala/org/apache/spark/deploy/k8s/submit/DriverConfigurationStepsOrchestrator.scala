@@ -41,14 +41,11 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     appArgs: Array[String],
     submissionSparkConf: SparkConf) {
 
-  // The resource name prefix is derived from the application name, making it easy to connect the
-  // names of the Kubernetes resources from e.g. kubectl or the Kubernetes dashboard to the
-  // application the user submitted. However, we can't use the application name in the label, as
-  // label values are considerably restrictive, e.g. must be no longer than 63 characters in
-  // length. So we generate a separate identifier for the app ID itself, and bookkeeping that
-  // requires finding "all pods for this application" should use the kubernetesAppId.
+  // The resource name prefix is derived from the Spark application name, making it easy to connect
+  // the names of the Kubernetes resources from e.g. kubectl or the Kubernetes dashboard to the
+  // application the user submitted.
   private val kubernetesResourceNamePrefix = {
-    val uuid = UUID.nameUUIDFromBytes(Longs.toByteArray(launchTime))
+    val uuid = UUID.nameUUIDFromBytes(Longs.toByteArray(launchTime)).toString.replaceAll("-", "")
     s"$appName-$uuid".toLowerCase.replaceAll("\\.", "-")
   }
 

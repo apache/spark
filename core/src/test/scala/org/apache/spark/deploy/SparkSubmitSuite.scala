@@ -408,6 +408,7 @@ class SparkSubmitSuite
     childArgsMap.get("--arg") should be (Some("arg1"))
     mainClass should be (KUBERNETES_CLUSTER_SUBMIT_CLASS)
     classpath should have length (0)
+    conf.get("spark.master") should be ("https://host:port")
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.driver.memory") should be ("4g")
     conf.get("spark.kubernetes.namespace") should be ("spark")

@@ -20,6 +20,7 @@ import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -137,10 +138,10 @@ private[spark] class Client(
       .build()
 
     Utils.tryWithResource(
-        kubernetesClient
-          .pods()
-          .withName(resolvedDriverPod.getMetadata.getName)
-          .watch(loggingPodStatusWatcher)) { _ =>
+      kubernetesClient
+        .pods()
+        .withName(resolvedDriverPod.getMetadata.getName)
+        .watch(loggingPodStatusWatcher)) { _ =>
       val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
       try {
         if (currentDriverSpec.otherKubernetesResources.nonEmpty) {
@@ -149,7 +150,7 @@ private[spark] class Client(
           kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
         }
       } catch {
-        case e: Throwable =>
+        case NonFatal(e) =>
           kubernetesClient.pods().delete(createdDriverPod)
           throw e
       }
@@ -193,6 +194,10 @@ private[spark] object Client extends SparkApplication {
 
   private def run(clientArguments: ClientArguments, sparkConf: SparkConf): Unit = {
     val namespace = sparkConf.get(KUBERNETES_NAMESPACE)
+    // For constructing the app ID, we can't use the Spark application name, as the app ID is going
+    // to be added as a label to group resources belonging to the same application. Label values are
+    // considerably restrictive, e.g. must be no longer than 63 characters in length. So we generate
+    // a unique app ID (captured by spark.app.id) in the format below.
     val kubernetesAppId = s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
     val launchTime = System.currentTimeMillis()
     val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)

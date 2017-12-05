@@ -2751,16 +2751,29 @@ private[spark] object Utils extends Logging {
     require(rawMasterURL.startsWith("k8s://"),
       "Kubernetes master URL must start with k8s://.")
     val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
-    if (masterWithoutK8sPrefix.startsWith("https://")) {
-      masterWithoutK8sPrefix
-    } else if (masterWithoutK8sPrefix.startsWith("http://")) {
-      logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
-      masterWithoutK8sPrefix
-    } else {
+
+    // To handle master URLs, e.g., k8s://host:port.
+    if (!masterWithoutK8sPrefix.contains("://")) {
       val resolvedURL = s"https://$masterWithoutK8sPrefix"
       logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
         s"URL is $resolvedURL.")
-      resolvedURL
+      return resolvedURL
+    }
+
+    val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
+    masterScheme.toLowerCase match {
+      case "https" =>
+        masterWithoutK8sPrefix
+      case "http" =>
+        logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
+        masterWithoutK8sPrefix
+      case null =>
+        val resolvedURL = s"https://$masterWithoutK8sPrefix"
+        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+          s"URL is $resolvedURL.")
+        resolvedURL
+      case _ =>
+        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
     }
   }
 }
