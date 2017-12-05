@@ -32,39 +32,45 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def this(in0: BufferedReader, out: JPrintWriter) = this(Some(in0), out)
   def this() = this(None, new JPrintWriter(Console.out, true))
 
+  val initializationCommands: Seq[String] = Seq(
+    """
+    @transient val spark = if (org.apache.spark.repl.Main.sparkSession != null) {
+        org.apache.spark.repl.Main.sparkSession
+      } else {
+        org.apache.spark.repl.Main.createSparkSession()
+      }
+    @transient val sc = {
+      val _sc = spark.sparkContext
+      if (_sc.getConf.getBoolean("spark.ui.reverseProxy", false)) {
+        val proxyUrl = _sc.getConf.get("spark.ui.reverseProxyUrl", null)
+        if (proxyUrl != null) {
+          println(
+            s"Spark Context Web UI is available at ${proxyUrl}/proxy/${_sc.applicationId}")
+        } else {
+          println(s"Spark Context Web UI is available at Spark Master Public URL")
+        }
+      } else {
+        _sc.uiWebUrl.foreach {
+          webUrl => println(s"Spark context Web UI available at ${webUrl}")
+        }
+      }
+      println("Spark context available as 'sc' " +
+        s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
+      println("Spark session available as 'spark'.")
+      _sc
+    }
+    """,
+    "import org.apache.spark.SparkContext._",
+    "import spark.implicits._",
+    "import spark.sql",
+    "import org.apache.spark.sql.functions._"
+  )
+
   def initializeSpark() {
     intp.beQuietDuring {
-      command("""
-        @transient val spark = if (org.apache.spark.repl.Main.sparkSession != null) {
-            org.apache.spark.repl.Main.sparkSession
-          } else {
-            org.apache.spark.repl.Main.createSparkSession()
-          }
-        @transient val sc = {
-          val _sc = spark.sparkContext
-          if (_sc.getConf.getBoolean("spark.ui.reverseProxy", false)) {
-            val proxyUrl = _sc.getConf.get("spark.ui.reverseProxyUrl", null)
-            if (proxyUrl != null) {
-              println(
-                s"Spark Context Web UI is available at ${proxyUrl}/proxy/${_sc.applicationId}")
-            } else {
-              println(s"Spark Context Web UI is available at Spark Master Public URL")
-            }
-          } else {
-            _sc.uiWebUrl.foreach {
-              webUrl => println(s"Spark context Web UI available at ${webUrl}")
-            }
-          }
-          println("Spark context available as 'sc' " +
-            s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
-          println("Spark session available as 'spark'.")
-          _sc
-        }
-        """)
-      command("import org.apache.spark.SparkContext._")
-      command("import spark.implicits._")
-      command("import spark.sql")
-      command("import org.apache.spark.sql.functions._")
+      savingReplayStack { // remove the commands from session history.
+        initializationCommands.foreach(command)
+      }
     }
   }
 
@@ -103,6 +109,12 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     initializeSpark()
     echo("Note that after :reset, state of SparkSession and SparkContext is unchanged.")
   }
+
+  override def replay(): Unit = {
+    initializeSpark()
+    super.replay()
+  }
+
 }
 
 object SparkILoop {

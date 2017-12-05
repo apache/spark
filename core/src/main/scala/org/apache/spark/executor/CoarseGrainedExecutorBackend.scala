@@ -216,7 +216,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       if (driverConf.contains("spark.yarn.credentials.file")) {
         logInfo("Will periodically update credentials from: " +
           driverConf.get("spark.yarn.credentials.file"))
-        SparkHadoopUtil.get.startCredentialUpdater(driverConf)
+        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+          .getMethod("startCredentialUpdater", classOf[SparkConf])
+          .invoke(null, driverConf)
       }
 
       cfg.hadoopDelegationCreds.foreach { tokens =>
@@ -232,7 +234,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.rpcEnv.awaitTermination()
-      SparkHadoopUtil.get.stopCredentialUpdater()
+      if (driverConf.contains("spark.yarn.credentials.file")) {
+        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+          .getMethod("stopCredentialUpdater")
+          .invoke(null)
+      }
     }
   }
 

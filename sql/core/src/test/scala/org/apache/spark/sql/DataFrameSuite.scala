@@ -29,7 +29,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
@@ -356,6 +356,63 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData.select('key).repartition(10).select('key),
       testData.select('key).collect().toSeq)
+  }
+
+  test("repartition with SortOrder") {
+    // passing SortOrder expressions to .repartition() should result in an informative error
+
+    def checkSortOrderErrorMsg[T](data: => Dataset[T]): Unit = {
+      val ex = intercept[IllegalArgumentException](data)
+      assert(ex.getMessage.contains("repartitionByRange"))
+    }
+
+    checkSortOrderErrorMsg {
+      Seq(0).toDF("a").repartition(2, $"a".asc)
+    }
+
+    checkSortOrderErrorMsg {
+      Seq((0, 0)).toDF("a", "b").repartition(2, $"a".asc, $"b")
+    }
+  }
+
+  test("repartitionByRange") {
+    val data1d = Random.shuffle(0.to(9))
+    val data2d = data1d.map(i => (i, data1d.size - i))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, $"val".asc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, $"val".desc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, data1d.size - 1 - i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, lit(42))
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(0, i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, lit(null), $"val".asc, rand())
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, i)))
+
+    // .repartitionByRange() assumes .asc by default if no explicit sort order is specified
+    checkAnswer(
+      data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b")
+        .select(spark_partition_id().as("id"), $"a", $"b"),
+      data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b".asc)
+        .select(spark_partition_id().as("id"), $"a", $"b"))
+
+    // at least one partition-by expression must be specified
+    intercept[IllegalArgumentException] {
+      data1d.toDF("val").repartitionByRange(data1d.size)
+    }
+    intercept[IllegalArgumentException] {
+      data1d.toDF("val").repartitionByRange(data1d.size, Seq.empty: _*)
+    }
   }
 
   test("coalesce") {
@@ -2157,5 +2214,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .select(col("DecimalCol")).describe()
     val mean = result.select("DecimalCol").where($"summary" === "mean")
     assert(mean.collect().toSet === Set(Row("0.0345678900000000000000000000000000000")))
+  }
+
+  test("SPARK-22520: support code generation for large CaseWhen") {
+    val N = 30
+    var expr1 = when($"id" === lit(0), 0)
+    var expr2 = when($"id" === lit(0), 10)
+    (1 to N).foreach { i =>
+      expr1 = expr1.when($"id" === lit(i), -i)
+      expr2 = expr2.when($"id" === lit(i + 10), i)
+    }
+    val df = spark.range(1).select(expr1, expr2.otherwise(0))
+    checkAnswer(df, Row(0, 10) :: Nil)
+    assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 }

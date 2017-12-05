@@ -16,11 +16,8 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.math.BigDecimal;
-
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -32,43 +29,11 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public final class ColumnarRow extends InternalRow {
   protected int rowId;
-  private final ColumnarBatch parent;
-  private final int fixedLenRowSize;
   private final ColumnVector[] columns;
-  private final WritableColumnVector[] writableColumns;
-
-  // Ctor used if this is a top level row.
-  ColumnarRow(ColumnarBatch parent) {
-    this.parent = parent;
-    this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(parent.numCols());
-    this.columns = parent.columns;
-    this.writableColumns = new WritableColumnVector[this.columns.length];
-    for (int i = 0; i < this.columns.length; i++) {
-      if (this.columns[i] instanceof WritableColumnVector) {
-        this.writableColumns[i] = (WritableColumnVector) this.columns[i];
-      }
-    }
-  }
 
   // Ctor used if this is a struct.
   ColumnarRow(ColumnVector[] columns) {
-    this.parent = null;
-    this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(columns.length);
     this.columns = columns;
-    this.writableColumns = new WritableColumnVector[this.columns.length];
-    for (int i = 0; i < this.columns.length; i++) {
-      if (this.columns[i] instanceof WritableColumnVector) {
-        this.writableColumns[i] = (WritableColumnVector) this.columns[i];
-      }
-    }
-  }
-
-  /**
-   * Marks this row as being filtered out. This means a subsequent iteration over the rows
-   * in this batch will not include this row.
-   */
-  public void markFiltered() {
-    parent.markFiltered(rowId);
   }
 
   public ColumnVector[] columns() { return columns; }
@@ -231,97 +196,8 @@ public final class ColumnarRow extends InternalRow {
   }
 
   @Override
-  public void update(int ordinal, Object value) {
-    if (value == null) {
-      setNullAt(ordinal);
-    } else {
-      DataType dt = columns[ordinal].dataType();
-      if (dt instanceof BooleanType) {
-        setBoolean(ordinal, (boolean) value);
-      } else if (dt instanceof IntegerType) {
-        setInt(ordinal, (int) value);
-      } else if (dt instanceof ShortType) {
-        setShort(ordinal, (short) value);
-      } else if (dt instanceof LongType) {
-        setLong(ordinal, (long) value);
-      } else if (dt instanceof FloatType) {
-        setFloat(ordinal, (float) value);
-      } else if (dt instanceof DoubleType) {
-        setDouble(ordinal, (double) value);
-      } else if (dt instanceof DecimalType) {
-        DecimalType t = (DecimalType) dt;
-        setDecimal(ordinal, Decimal.apply((BigDecimal) value, t.precision(), t.scale()),
-                t.precision());
-      } else {
-        throw new UnsupportedOperationException("Datatype not supported " + dt);
-      }
-    }
-  }
+  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
 
   @Override
-  public void setNullAt(int ordinal) {
-    getWritableColumn(ordinal).putNull(rowId);
-  }
-
-  @Override
-  public void setBoolean(int ordinal, boolean value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putBoolean(rowId, value);
-  }
-
-  @Override
-  public void setByte(int ordinal, byte value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putByte(rowId, value);
-  }
-
-  @Override
-  public void setShort(int ordinal, short value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putShort(rowId, value);
-  }
-
-  @Override
-  public void setInt(int ordinal, int value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putInt(rowId, value);
-  }
-
-  @Override
-  public void setLong(int ordinal, long value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putLong(rowId, value);
-  }
-
-  @Override
-  public void setFloat(int ordinal, float value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putFloat(rowId, value);
-  }
-
-  @Override
-  public void setDouble(int ordinal, double value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putDouble(rowId, value);
-  }
-
-  @Override
-  public void setDecimal(int ordinal, Decimal value, int precision) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putDecimal(rowId, value, precision);
-  }
-
-  private WritableColumnVector getWritableColumn(int ordinal) {
-    WritableColumnVector column = writableColumns[ordinal];
-    assert (!column.isConstant);
-    return column;
-  }
+  public void setNullAt(int ordinal) { throw new UnsupportedOperationException(); }
 }
