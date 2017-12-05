@@ -1833,7 +1833,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("accumulator not calculated for resubmitted task in result stage") {
-    // just for register
     val accum = AccumulatorSuite.createLongAccum("a")
     val finalRdd = new MyRDD(sc, 2, Nil)
     submit(finalRdd, Array(0, 1))
