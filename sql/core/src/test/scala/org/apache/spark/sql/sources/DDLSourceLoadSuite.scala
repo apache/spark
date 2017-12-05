@@ -53,13 +53,6 @@ class DDLSourceLoadSuite extends DataSourceTest with SharedSQLContext {
     assert(spark.read.format("org.apache.spark.sql.sources.FakeSourceOne")
       .load().schema == StructType(Seq(StructField("stringType", StringType, nullable = false))))
   }
-
-  test("should fail to load ORC without Hive Support") {
-    val e = intercept[AnalysisException] {
-      spark.read.format("orc").load()
-    }
-    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
-  }
 }
 
 
