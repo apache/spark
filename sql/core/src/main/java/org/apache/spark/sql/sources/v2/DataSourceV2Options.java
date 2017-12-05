@@ -49,4 +49,22 @@ public class DataSourceV2Options {
   public Optional<String> get(String key) {
     return Optional.ofNullable(keyLowerCasedMap.get(toLowerCase(key)));
   }
+
+  public Optional<Boolean> getBoolean(String key) {
+    String lcaseKey = toLowerCase(key);
+    return Optional.ofNullable(keyLowerCasedMap.containsKey(lcaseKey) ?
+            Boolean.parseBoolean(keyLowerCasedMap.get(lcaseKey)) : null);
+  }
+
+  public Optional<Integer> getInt(String key) {
+    String lcaseKey = toLowerCase(key);
+    return Optional.ofNullable(keyLowerCasedMap.containsKey(lcaseKey) ?
+            Integer.parseInt(keyLowerCasedMap.get(lcaseKey)) : null);
+  }
+
+  public Optional<Long> getLong(String key) {
+    String lcaseKey = toLowerCase(key);
+    return Optional.ofNullable(keyLowerCasedMap.containsKey(lcaseKey) ?
+            Long.parseLong(keyLowerCasedMap.get(lcaseKey)) : null);
+  }
 }

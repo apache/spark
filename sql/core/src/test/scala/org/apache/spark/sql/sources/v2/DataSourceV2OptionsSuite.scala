@@ -37,4 +37,33 @@ class DataSourceV2OptionsSuite extends SparkFunSuite {
     val options = new DataSourceV2Options(Map("foo" -> "bAr").asJava)
     assert(options.get("foo").get == "bAr")
   }
+
+  test("getInt") {
+    val options = new DataSourceV2Options(Map("numFoo" -> "1", "foo" -> "bar").asJava)
+    assert(options.getInt("numFoo").get == 1)
+
+    intercept[NumberFormatException]{
+      options.getInt("foo").isPresent
+    }
+  }
+
+  test("getBoolean") {
+    val options = new DataSourceV2Options(
+      Map("isFoo" -> "true", "isFoo2" -> "false", "foo" -> "bar").asJava)
+    assert(options.getBoolean("isFoo").get == true)
+    assert(options.getBoolean("isFoo2").get == false)
+    assert(options.getBoolean("isFoo2").isPresent)
+    assert(options.getBoolean("foo").get == false)
+    assert(!options.getBoolean("isBar").isPresent)
+  }
+
+  test("getLong") {
+    val options = new DataSourceV2Options(Map("numFoo" -> "9223372036854775807",
+      "foo" -> "bar").asJava)
+    assert(options.getLong("numFoo").get == 9223372036854775807L)
+
+    intercept[NumberFormatException]{
+      options.getLong("foo").isPresent
+    }
+  }
 }
