@@ -22,6 +22,12 @@ public interface MicroBatchReader extends DataSourceV2Reader, BaseStreamingSourc
     void setOffsetRange(Optional<Offset> start, Optional<Offset> end);
 
     /**
+     * Deserialize a JSON string into an Offset of the implementation-defined offset type.
+     * @throws IllegalArgumentException if the JSON does not encode a valid offset for this reader
+     */
+    Offset deserialize(String json);
+
+    /**
      * Returns the current start offset for this reader.
      */
     Offset getStart();

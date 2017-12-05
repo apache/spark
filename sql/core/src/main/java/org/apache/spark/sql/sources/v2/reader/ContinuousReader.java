@@ -19,6 +19,12 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reade
     Offset mergeOffsets(PartitionOffset[] offsets);
 
     /**
+     * Deserialize a JSON string into an Offset of the implementation-defined offset type.
+     * @throws IllegalArgumentException if the JSON does not encode a valid offset for this reader
+     */
+    Offset deserialize(String json);
+
+    /**
      * Set the desired start offset for read tasks created from this reader.
      *
      * @param start The initial offset to scan from. May be None, in which case scan will start from
