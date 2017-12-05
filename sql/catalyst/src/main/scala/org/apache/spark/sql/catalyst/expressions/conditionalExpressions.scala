@@ -180,13 +180,13 @@ case class CaseWhen(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // This variable represents whether the first successful condition is met or not.
-    // It is initialized to `false` and it is set to `true` when the first condition which
-    // evaluates to `true` is met and therefore is not needed to go on anymore on the computation
+    // This variable represents whether the condition is met with true/false or not met.
+    // It is initialized to -1 and it is set to 0 or 1 when the condition which evaluates to
+    // `false` or `true` is met and therefore is not needed to go on anymore on the computation
     // of the following conditions.
     val conditionMet = ctx.freshName("caseWhenConditionMet")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
-    ctx.addMutableState(ctx.javaType(dataType), ev.value)
+    val value = ctx.freshName("value")
+    ctx.addMutableState(ctx.javaType(dataType), value)
 
     // these blocks are meant to be inside a
     // do {
@@ -200,9 +200,8 @@ case class CaseWhen(
          |${cond.code}
          |if (!${cond.isNull} && ${cond.value}) {
          |  ${res.code}
-         |  ${ev.isNull} = ${res.isNull};
-         |  ${ev.value} = ${res.value};
-         |  $conditionMet = true;
+         |  $conditionMet = (byte)(${res.isNull} ? 1 : 0);
+         |  $value = ${res.value};
          |  continue;
          |}
        """.stripMargin
@@ -212,8 +211,8 @@ case class CaseWhen(
       val res = elseExpr.genCode(ctx)
       s"""
          |${res.code}
-         |${ev.isNull} = ${res.isNull};
-         |${ev.value} = ${res.value};
+         |$conditionMet = (byte)(${res.isNull} ? 1 : 0);
+         |$value = ${res.value};
        """.stripMargin
     }
 
@@ -221,17 +220,17 @@ case class CaseWhen(
 
     // This generates code like:
     //   conditionMet = caseWhen_1(i);
-    //   if(conditionMet) {
+    //   if(conditionMet != -1) {
     //     continue;
     //   }
     //   conditionMet = caseWhen_2(i);
-    //   if(conditionMet) {
+    //   if(conditionMet != -1) {
     //     continue;
     //   }
     //   ...
     // and the declared methods are:
-    //   private boolean caseWhen_1234() {
-    //     boolean conditionMet = false;
+    //   private byte caseWhen_1234() {
+    //     byte conditionMet = -1;
     //     do {
     //       // here the evaluation of the conditions
     //     } while (false);
@@ -240,31 +239,35 @@ case class CaseWhen(
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = allConditions,
       funcName = "caseWhen",
-      returnType = ctx.JAVA_BOOLEAN,
-      makeSplitFunction = func =>
-        s"""
-           |${ctx.JAVA_BOOLEAN} $conditionMet = false;
-           |do {
-           |  $func
-           |} while (false);
-           |return $conditionMet;
-         """.stripMargin,
-      foldFunctions = _.map { funcCall =>
-        s"""
-           |$conditionMet = $funcCall;
-           |if ($conditionMet) {
-           |  continue;
-           |}
-         """.stripMargin
-      }.mkString)
+      returnType = ctx.JAVA_BYTE,
+      makeSplitFunction = {
+        func =>
+          s"""
+            ${ctx.JAVA_BYTE} $conditionMet = -1;
+            do {
+              $func
+            } while (false);
+            return $conditionMet;
+          """
+      },
+      foldFunctions = { funcCalls =>
+        funcCalls.map { funcCall =>
+          s"""
+            $conditionMet = $funcCall;
+            if ($conditionMet != -1) {
+              continue;
+            }"""
+        }.mkString
+      })
 
     ev.copy(code = s"""
-      ${ev.isNull} = true;
-      ${ev.value} = ${ctx.defaultValue(dataType)};
-      ${ctx.JAVA_BOOLEAN} $conditionMet = false;
+      ${ctx.JAVA_BYTE} $conditionMet = -1;
+      $value = ${ctx.defaultValue(dataType)};
       do {
         $codes
-      } while (false);""")
+      } while (false);
+      boolean ${ev.isNull} = ($conditionMet != 0); // TRUE if -1 or 1
+      ${ctx.javaType(dataType)} ${ev.value} = $value;""")
   }
 }
 

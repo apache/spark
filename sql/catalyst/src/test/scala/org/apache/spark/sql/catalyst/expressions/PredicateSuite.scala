@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
@@ -243,6 +243,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val N = 3000
     val sets = (1 to N).map(i => Literal(i.toDouble))
     checkEvaluation(In(Literal(1.0D), sets), true)
+  }
+
+  test("SPARK-22705: In should use less global variables") {
+    val ctx = new CodegenContext()
+    In(Literal(1.0D), Seq(Literal(1.0D), Literal(2.0D))).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
   }
 
   test("INSET") {

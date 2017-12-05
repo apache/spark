@@ -72,8 +72,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
-    ctx.addMutableState(ctx.javaType(dataType), ev.value)
+    val isNull = ctx.freshName("isNull")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -81,7 +81,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
       s"""
          |${eval.code}
          |if (!${eval.isNull}) {
-         |  ${ev.isNull} = false;
+         |  $isNull = false;
          |  ${ev.value} = ${eval.value};
          |  continue;
          |}
@@ -91,29 +91,36 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "coalesce",
-      makeSplitFunction = func =>
-        s"""
-           |do {
-           |  $func
-           |} while (false);
-         """.stripMargin,
-      foldFunctions = _.map { funcCall =>
-        s"""
-           |$funcCall;
-           |if (!${ev.isNull}) {
-           |  continue;
-           |}
-         """.stripMargin
-      }.mkString)
-
+      extraArguments = (ctx.javaType(dataType), ev.value) :: Nil,
+      returnType = ctx.javaType(dataType),
+      makeSplitFunction = {
+        func =>
+          s"""
+            |do {
+            |  $func
+            |} while (false);
+            |return ${ev.value};
+          """.stripMargin
+      },
+      foldFunctions = { funcCalls =>
+        funcCalls.map { funcCall =>
+          s"""
+             |${ev.value} = $funcCall;
+             |if (!$isNull) {
+             |  continue;
+             |}
+           """.stripMargin
+        }.mkString
+      })
 
     ev.copy(code =
       s"""
-         |${ev.isNull} = true;
-         |${ev.value} = ${ctx.defaultValue(dataType)};
+         |$isNull = true;
+         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
+         |boolean ${ev.isNull} = $isNull;
        """.stripMargin)
   }
 }
