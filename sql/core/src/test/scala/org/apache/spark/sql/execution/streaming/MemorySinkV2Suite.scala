@@ -61,7 +61,6 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
 
   test("microbatch writer") {
     val sink = new MemorySinkV2
-    val writer = new ContinuousMemoryWriter(sink, OutputMode.Append())
     new MemoryWriter(sink, 0, OutputMode.Append()).commit(
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
