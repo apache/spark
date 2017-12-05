@@ -267,11 +267,12 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.groupByKey(_._1).agg(
         typed.min(_._2), typed.minLong(_._2), typed.max(_._2), typed.maxLong(_._2)),
-      ("a", 1.0, 1L, 3.0, 3L), ("b", -4.0, -4L, 4.0, 4L))
+      ("a", Some(1.0), Some(1L), Some(3.0), Some(3L)),
+      ("b", Some(-4.0), Some(-4L), Some(4.0), Some(4L)))
   }
 
   test("typed aggregate: empty") {
-    val empty = Seq.empty[(Double, Double)].toDS
+     val empty = Seq.empty[(Double, Double)].toDS
     val f = (x: (Double, Double)) => x._2
     val g = (x: (Long, Long)) => x._2
     checkDataset(

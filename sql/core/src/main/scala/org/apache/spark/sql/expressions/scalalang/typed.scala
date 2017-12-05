@@ -80,28 +80,32 @@ object typed {
    *
    * @since 2.3.0
    */
-  def min[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedMinDouble[IN](f).toColumnScala
+  def min[IN](f: IN => Double): TypedColumn[IN, Option[Double]] =
+    new ScalaTypedMinDouble[IN](f).toColumn
 
   /**
    * Min aggregate function for integral (long, i.e. 64 bit integer) type.
    *
    * @since 2.3.0
    */
-  def minLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedMinLong[IN](f).toColumnScala
+  def minLong[IN](f: IN => Long): TypedColumn[IN, Option[Long]] =
+    new ScalaTypedMinLong[IN](f).toColumn
 
   /**
    * Max aggregate function for floating point (double) type.
    *
    * @since 2.3.0
    */
-  def max[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedMaxDouble[IN](f).toColumnScala
+  def max[IN](f: IN => Double): TypedColumn[IN, Option[Double]] =
+    new ScalaTypedMaxDouble[IN](f).toColumn
 
   /**
    * Max aggregate function for integral (long, i.e. 64 bit integer) type.
    *
    * @since 2.3.0
    */
-  def maxLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedMaxLong[IN](f).toColumnScala
+  def maxLong[IN](f: IN => Long): TypedColumn[IN, Option[Long]] =
+    new ScalaTypedMaxLong[IN](f).toColumn
 
   // TODO:
   // stddevOf: Double
