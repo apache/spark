@@ -1666,7 +1666,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
     }
-    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+    assert(e.message.contains("Hive-based ORC data source must be used with Hive support"))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
@@ -2790,7 +2790,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val e = intercept[AnalysisException] {
         sql("CREATE TABLE spark_20728(a INT) USING ORC")
       }
-      assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+      assert(e.message.contains("Hive-based ORC data source must be used with Hive support"))
     }
 
     withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
