@@ -348,8 +348,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     >>> bucketed = bucketizer.setHandleInvalid("skip").transform(df).collect()
     >>> len(bucketed)
     4
-    >>> bucketizer2 = Bucketizer(splitsArray=[[-float("inf"), 0.5, 1.4, float("inf")],
-    ...     [-float("inf"), 0.5, float("inf")]],
+    >>> bucketizer2 = Bucketizer(splitsArray=
+    ...     [[-float("inf"), 0.5, 1.4, float("inf")], [-float("inf"), 0.5, float("inf")]],
     ...     inputCols=["values", "numbers"], outputCols=["buckets1", "buckets2"])
     >>> bucketed2 = bucketizer2.setHandleInvalid("keep").transform(df).collect()
     >>> len(bucketed2)
@@ -408,7 +408,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
                  splitsArray=None, inputCols=None, outputCols=None):
         """
-        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
                  splitsArray=None, inputCols=None, outputCols=None)
         """
         super(Bucketizer, self).__init__()
@@ -422,7 +422,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
                   splitsArray=None, inputCols=None, outputCols=None):
         """
-        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
                   splitsArray=None, inputCols=None, outputCols=None)
         Sets params for this Bucketizer.
         """
