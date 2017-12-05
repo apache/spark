@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.{LambdaVariable, MapObjects, NewInstance, UnresolvedMapObjects}
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -1945,7 +1946,7 @@ class Analyzer(
    * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
    * put them into an inner Project and finally project them away at the outer Project.
    */
-  object PullOutNondeterministic extends Rule[LogicalPlan] {
+  object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case p if !p.resolved => p // Skip unresolved nodes.
       case p: Project => p
@@ -1957,6 +1958,27 @@ class Analyzer(
         a.transformExpressions { case e =>
           nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
         }.copy(child = newChild)
+
+      case j: Join if conf.nonDeterministicJoinEnabled &&
+          j.condition.isDefined && !j.condition.get.deterministic =>
+        j match {
+          // We only push down non-deterministic equi-join joining keys.
+          // Other non-deterministic joining conditions are disallowed for now.
+          case ExtractEquiJoinKeys(_, leftKeys, rightKeys, conditions, _, _)
+              if (leftKeys.exists(!_.deterministic) || rightKeys.exists(!_.deterministic)) &&
+                conditions.map(_.deterministic).getOrElse(true) =>
+            val nondeterToAttr = getNondeterToAttr(Seq(j.condition.get))
+            val newCondition = j.condition.map(_.transform { case e =>
+              nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
+            })
+            val (inLeft, inRight) = nondeterToAttr.keys.partition { nonDeter =>
+              nonDeter.references.subsetOf(j.left.outputSet)
+            }
+            val newLeft = Project(j.left.output ++ inLeft.map(nondeterToAttr), j.left)
+            val newRight = Project(j.right.output ++ inRight.map(nondeterToAttr), j.right)
+            Project(j.output, Join(newLeft, newRight, j.joinType, newCondition))
+          case _ => j
+        }
 
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output

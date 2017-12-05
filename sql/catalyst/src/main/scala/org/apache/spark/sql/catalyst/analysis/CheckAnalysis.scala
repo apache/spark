@@ -330,6 +330,14 @@ trait CheckAnalysis extends PredicateHelper {
               s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
               "is " + mapCol.dataType.simpleString)
 
+          case o if o.expressions.exists(!_.deterministic) && o.isInstanceOf[Join] =>
+            failAnalysis(
+              s"""For Join, nondeterministic expressions are only allowed in equi join keys
+                 |when spark.sql.nonDeterministicJoin.enabled is enabled, found:
+                 | ${o.expressions.map(_.sql).mkString(",")}
+                 |in Join operator ${operator.simpleString}
+               """.stripMargin)
+
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>

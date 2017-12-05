@@ -2189,6 +2189,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("join with non-deterministic joining key") {
+    withSQLConf(SQLConf.NON_DETERMINISTIC_JOIN_ENABLED.key -> "true") {
+      val input = spark.read.json((1 to 10).map(i => s"""{"id": $i}""").toDS())
+
+      val df1 = input.select($"id").as("a")
+      val df2 = input.select($"id").as("b")
+      val joinResults = df1.join(df2, when(rand(1) > 0.5, 0).otherwise($"a.id") === $"b.id").collect
+      assert(joinResults.length > 0)
+      joinResults.foreach { row =>
+        assert(row.getLong(0) === row.getLong(1))
+      }
+    }
+  }
+
   test("order-by ordinal.") {
     checkAnswer(
       testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),

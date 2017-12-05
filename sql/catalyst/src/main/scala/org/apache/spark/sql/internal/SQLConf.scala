@@ -509,6 +509,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val NON_DETERMINISTIC_JOIN_ENABLED = buildConf("spark.sql.nonDeterministicJoin.enabled")
+    .doc("When true, we allow using non-deterministic expressions as equi join joining keys. " +
+      "Even this is true, non-deterministic expressions still cannot be used as other joining " +
+      "conditions. When false, analysis exception will be thrown. Default is false.")
+    .internal()
+    .booleanConf
+    .createWithDefault(false)
+
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
          "When false, the ordinal numbers in order/sort by clause are ignored.")
@@ -1280,6 +1288,8 @@ class SQLConf extends Serializable with Logging {
   def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def nonDeterministicJoinEnabled: Boolean = getConf(SQLConf.NON_DETERMINISTIC_JOIN_ENABLED)
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
