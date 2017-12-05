@@ -143,8 +143,8 @@ class TypeConverters(object):
             value = TypeConverters.toList(value)
             if all(map(lambda v: TypeConverters._can_convert_to_list(v), value)):
                 ll = []
-                for arr in value:
-                    ll.append([float(v) for v in arr])
+                for v in value:
+                    ll.append([float(i) for i in TypeConverters.toList(v)])
                 return ll
         raise TypeError("Could not convert %s to list of list of floats" % value)
 
