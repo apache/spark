@@ -356,22 +356,24 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"$values = null;")
-    val valuesCode = ctx.splitExpressions(
-      valExprs.zipWithIndex.map { case (e, i) =>
-        val eval = e.genCode(ctx)
-        s"""
-          ${eval.code}
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }"""
-      })
+    val valCodes = valExprs.zipWithIndex.map { case (e, i) =>
+      val eval = e.genCode(ctx)
+      s"""
+         |${eval.code}
+         |if (${eval.isNull}) {
+         |  $values[$i] = null;
+         |} else {
+         |  $values[$i] = ${eval.value};
+         |}
+       """.stripMargin
+    }
+    val valuesCode = ctx.splitExpressions(valCodes,
+      "createNamedStruct",
+      "Object[]" -> values :: Nil)
 
     ev.copy(code =
       s"""
-         |$values = new Object[${valExprs.size}];
+         |Object[] $values = new Object[${valExprs.size}];
          |$valuesCode
          |final InternalRow ${ev.value} = new $rowClass($values);
          |$values = null;
