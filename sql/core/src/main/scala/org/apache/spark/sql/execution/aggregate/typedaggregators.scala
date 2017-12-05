@@ -96,7 +96,7 @@ class TypedAverage[IN](val f: IN => Double) extends Aggregator[IN, (Double, Long
 }
 
 trait TypedMinDouble[IN, OUT] extends Aggregator[IN, MutableDouble, OUT] {
-  val f: IN => Double
+  abstract val f: IN => Double
   override def zero: MutableDouble = null
   override def reduce(b: MutableDouble, a: IN): MutableDouble = {
     if (b == null) {
@@ -120,13 +120,15 @@ trait TypedMinDouble[IN, OUT] extends Aggregator[IN, MutableDouble, OUT] {
   override def bufferEncoder: Encoder[MutableDouble] = Encoders.kryo[MutableDouble]
 }
 
-class JavaTypedMinDouble[IN](val f: IN => Double) extends TypedMinDouble[IN, java.lang.Double] {
+class JavaTypedMinDouble[IN](override val f: IN => Double)
+  extends TypedMinDouble[IN, java.lang.Double] {
   override def outputEncoder: Encoder[java.lang.Double] = ExpressionEncoder[java.lang.Double]()
   override def finish(reduction: MutableDouble): java.lang.Double = reduction.value
   def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x))
 }
 
-class ScalaTypedMinDouble[IN](val f: IN => Double) extends TypedMinDouble[IN, Option[Double]] {
+class ScalaTypedMinDouble[IN](override val f: IN => Double)
+  extends TypedMinDouble[IN, Option[Double]] {
   override def outputEncoder: Encoder[Option[Double]] = ExpressionEncoder[Option[Double]]()
   override def finish(reduction: MutableDouble): Option[Double] = {
     if (reduction != null) {
@@ -137,8 +139,8 @@ class ScalaTypedMinDouble[IN](val f: IN => Double) extends TypedMinDouble[IN, Op
   }
 }
 
-trait TypedMaxDouble[IN, OUT] extends Aggregator[IN, MutableDouble, OUT] {
-  val f: IN => Double
+trait TypedMaxDouble[IN, OUT]extends Aggregator[IN, MutableDouble, OUT] {
+  abstract val f: IN => Double
   override def zero: MutableDouble = null
   override def reduce(b: MutableDouble, a: IN): MutableDouble = {
     if (b == null) {
@@ -162,13 +164,15 @@ trait TypedMaxDouble[IN, OUT] extends Aggregator[IN, MutableDouble, OUT] {
   override def bufferEncoder: Encoder[MutableDouble] = Encoders.kryo[MutableDouble]
 }
 
-class JavaTypedMaxDouble[IN](val f: IN => Double) extends TypedMaxDouble[IN, java.lang.Double] {
+class JavaTypedMaxDouble[IN](override val f: IN => Double)
+  extends TypedMaxDouble[IN, java.lang.Double] {
   override def outputEncoder: Encoder[java.lang.Double] = ExpressionEncoder[java.lang.Double]()
   override def finish(reduction: MutableDouble): java.lang.Double = reduction.value
   def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x))
 }
 
-class ScalaTypedMaxDouble[IN](val f: IN => Double) extends TypedMaxDouble[IN, Option[Double]] {
+class ScalaTypedMaxDouble[IN](override val f: IN => Double)
+  extends TypedMaxDouble[IN, Option[Double]] {
   override def outputEncoder: Encoder[Option[Double]] = ExpressionEncoder[Option[Double]]()
   override def finish(reduction: MutableDouble): Option[Double] = {
     if (reduction != null) {
@@ -180,7 +184,7 @@ class ScalaTypedMaxDouble[IN](val f: IN => Double) extends TypedMaxDouble[IN, Op
 }
 
 trait TypedMinLong[IN, OUT] extends Aggregator[IN, MutableLong, OUT] {
-  val f: IN => Long
+  abstract val f: IN => Long
   override def zero: MutableLong = null
   override def reduce(b: MutableLong, a: IN): MutableLong = {
     if (b == null) {
@@ -204,13 +208,13 @@ trait TypedMinLong[IN, OUT] extends Aggregator[IN, MutableLong, OUT] {
   override def bufferEncoder: Encoder[MutableLong] = Encoders.kryo[MutableLong]
 }
 
-class JavaTypedMinLong[IN](val f: IN => Long) extends TypedMinLong[IN, java.lang.Long] {
+class JavaTypedMinLong[IN](override val f: IN => Long) extends TypedMinLong[IN, java.lang.Long] {
   override def outputEncoder: Encoder[java.lang.Long] = ExpressionEncoder[java.lang.Long]()
   override def finish(reduction: MutableLong): java.lang.Long = reduction.value
   def this(f: MapFunction[IN, java.lang.Long]) = this((x: IN) => f.call(x))
 }
 
-class ScalaTypedMinLong[IN](val f: IN => Long) extends TypedMinLong[IN, Option[Long]] {
+class ScalaTypedMinLong[IN](override val f: IN => Long) extends TypedMinLong[IN, Option[Long]] {
   override def outputEncoder: Encoder[Option[Long]] = ExpressionEncoder[Option[Long]]()
   override def finish(reduction: MutableLong): Option[Long] = {
     if (reduction != null) {
@@ -222,7 +226,7 @@ class ScalaTypedMinLong[IN](val f: IN => Long) extends TypedMinLong[IN, Option[L
 }
 
 trait TypedMaxLong[IN, OUT] extends Aggregator[IN, MutableLong, OUT] {
-  val f: IN => Long
+  abstract val f: IN => Long
   override def zero: MutableLong = null
   override def reduce(b: MutableLong, a: IN): MutableLong = {
     if (b == null) {
@@ -246,13 +250,13 @@ trait TypedMaxLong[IN, OUT] extends Aggregator[IN, MutableLong, OUT] {
   override def bufferEncoder: Encoder[MutableLong] = Encoders.kryo[MutableLong]
 }
 
-class JavaTypedMaxLong[IN](val f: IN => Long) extends TypedMaxLong[IN, java.lang.Long] {
+class JavaTypedMaxLong[IN](override val f: IN => Long) extends TypedMaxLong[IN, java.lang.Long] {
   override def outputEncoder: Encoder[java.lang.Long] = ExpressionEncoder[java.lang.Long]()
   override def finish(reduction: MutableLong): java.lang.Long = reduction.value
   def this(f: MapFunction[IN, java.lang.Long]) = this((x: IN) => f.call(x))
 }
 
-class ScalaTypedMaxLong[IN](val f: IN => Long) extends TypedMaxLong[IN, Option[Long]] {
+class ScalaTypedMaxLong[IN](override val f: IN => Long) extends TypedMaxLong[IN, Option[Long]] {
   override def outputEncoder: Encoder[Option[Long]] = ExpressionEncoder[Option[Long]]()
   override def finish(reduction: MutableLong): Option[Long] = {
     if (reduction != null) {
