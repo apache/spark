@@ -125,16 +125,9 @@ abstract class Expression extends TreeNode[Expression] {
    */
   private def findInputVars(ctx: CodegenContext, eval: ExprCode): Seq[ExprInputVar] = {
     if (ctx.currentVars != null) {
-      val boundRefs = this.collect {
-        case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null => (ordinal, b)
-      }.toMap
-
-      ctx.currentVars.zipWithIndex.filter(_._1 != null).flatMap { case (currentVar, idx) =>
-        if (boundRefs.contains(idx)) {
-          Some(ExprInputVar(boundRefs(idx), exprCode = currentVar))
-        } else {
-          None
-        }
+      this.collect {
+        case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null =>
+          ExprInputVar(b, exprCode = ctx.currentVars(ordinal))
       }
     } else {
       Seq.empty

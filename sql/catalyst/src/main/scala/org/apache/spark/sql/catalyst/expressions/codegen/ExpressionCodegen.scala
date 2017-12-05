@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
- * Defines APIs used in expression code generation.
+ * Defines util methods used in expression code generation.
  */
 object ExpressionCodegen {
 

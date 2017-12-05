@@ -67,8 +67,11 @@ case class ExprCode(
 
 /**
  * Represents an input variable [[ExprCode]] to an evaluation of an [[Expression]].
+ *
+ * @param expr The expression that is evaluated to the input variable.
+ * @param exprCode The [[ExprCode]] that represents the evaluation result for the input variable.
  */
-case class ExprInputVar(val expr: Expression, val exprCode: ExprCode)
+case class ExprInputVar(expr: Expression, exprCode: ExprCode)
 
 /**
  * State used for subexpression elimination.
