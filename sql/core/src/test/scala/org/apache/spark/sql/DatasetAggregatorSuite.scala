@@ -272,13 +272,13 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   }
 
   test("typed aggregate: empty") {
-     val empty = Seq.empty[(Double, Double)].toDS
+    val empty = Seq.empty[(Double, Double)].toDS
     val f = (x: (Double, Double)) => x._2
     val g = (x: (Long, Long)) => x._2
     checkDataset(
       empty.agg(typed.sum(f), typed.sumLong(g), typed.avg(f),
         typed.min(f), typed.minLong(g), typed.max(f), typed.maxLong(g)),
-      Row(0.0, 0L, Double.NaN, null, null, null, null))
+      Row(0.0, 0L, Double.NaN, None, None, None, None))
   }
 
   test("SPARK-12555 - result should not be corrupted after input columns are reordered") {
