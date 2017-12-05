@@ -25,10 +25,9 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reade
     Offset deserialize(String json);
 
     /**
-     * Set the desired start offset for read tasks created from this reader.
-     *
-     * @param start The initial offset to scan from. May be None, in which case scan will start from
-     *              the beginning of the stream.
+     * Set the desired start offset for read tasks created from this reader. The scan will start
+     * from the first record after the provided offset, or from the beginning of the stream if
+     * Optional.empty() is provided.
      */
     void setOffset(Optional<Offset> start);
 
