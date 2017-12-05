@@ -935,8 +935,6 @@ class SparkSubmitSuite
     if (supportMockHttpFs) {
       hadoopConf.set("fs.http.impl", classOf[TestFileSystem].getCanonicalName)
       hadoopConf.set("fs.http.impl.disable.cache", "true")
-    } else {
-      hadoopConf.set("fs.http.impl", "invalidClassName")
     }
 
     val tmpDir = Utils.createTempDir()
