@@ -21,8 +21,7 @@ public interface ContinuousDataReader<T> extends DataReader<T> {
     T get();
 
     /**
-     * Get the offset of the next record; that is, the earliest record after the current result of
-     * {@link this.get}.
+     * Get the offset of the current record.
      *
      * The execution engine will use this offset as a restart checkpoint.
      */
