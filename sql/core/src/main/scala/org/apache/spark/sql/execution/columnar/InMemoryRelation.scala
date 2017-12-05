@@ -144,7 +144,7 @@ case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
-        _cachedColumnBuffers, batchStats)
+        _cachedColumnBuffers, batchStats, statsOfPlanToCache)
   }
 
   override def newInstance(): this.type = {
@@ -156,11 +156,12 @@ case class InMemoryRelation(
       child,
       tableName)(
         _cachedColumnBuffers,
-        batchStats).asInstanceOf[this.type]
+        batchStats,
+        statsOfPlanToCache).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_cachedColumnBuffers, batchStats)
+    Seq(_cachedColumnBuffers, batchStats, statsOfPlanToCache)
 }
