@@ -602,23 +602,36 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
-    ctx.addMutableState(ctx.javaType(dataType), ev.value)
-    def updateEval(eval: ExprCode): String = {
+    val isNull = ctx.freshName("isNull")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
+    val evals = evalChildren.map(eval =>
       s"""
         ${eval.code}
-        if (!${eval.isNull} && (${ev.isNull} ||
+        if (!${eval.isNull} && (${isNull} ||
           ${ctx.genGreater(dataType, ev.value, eval.value)})) {
-          ${ev.isNull} = false;
+          $isNull = false;
           ${ev.value} = ${eval.value};
         }
       """
-    }
-    val codes = ctx.splitExpressionsWithCurrentInputs(evalChildren.map(updateEval))
+    )
+
+    val resultType = ctx.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "least",
+      extraArguments = Seq(resultType -> ev.value),
+      returnType = resultType,
+      makeSplitFunction = body =>
+        s"""
+          |$body
+          |return ${ev.value};
+        """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
     ev.copy(code = s"""
-      ${ev.isNull} = true;
-      ${ev.value} = ${ctx.defaultValue(dataType)};
-      $codes""")
+      $isNull = true;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      $codes
+      boolean ${ev.isNull} = $isNull;""")
   }
 }
 
@@ -668,22 +681,35 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
-    ctx.addMutableState(ctx.javaType(dataType), ev.value)
-    def updateEval(eval: ExprCode): String = {
+    val isNull = ctx.freshName("isNull")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
+    val evals = evalChildren.map(eval =>
       s"""
         ${eval.code}
-        if (!${eval.isNull} && (${ev.isNull} ||
+        if (!${eval.isNull} && (${isNull} ||
           ${ctx.genGreater(dataType, eval.value, ev.value)})) {
-          ${ev.isNull} = false;
+          $isNull = false;
           ${ev.value} = ${eval.value};
         }
       """
-    }
-    val codes = ctx.splitExpressionsWithCurrentInputs(evalChildren.map(updateEval))
+    )
+
+    val resultType = ctx.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "least",
+      extraArguments = Seq(resultType -> ev.value),
+      returnType = resultType,
+      makeSplitFunction = body =>
+        s"""
+           |$body
+           |return ${ev.value};
+        """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
     ev.copy(code = s"""
-      ${ev.isNull} = true;
-      ${ev.value} = ${ctx.defaultValue(dataType)};
-      $codes""")
+      $isNull = true;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      $codes
+      boolean ${ev.isNull} = $isNull;""")
   }
 }
