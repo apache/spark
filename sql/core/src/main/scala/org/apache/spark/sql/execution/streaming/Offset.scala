@@ -58,3 +58,11 @@ abstract class Offset {
  * that accepts a [[SerializedOffset]] for doing the conversion.
  */
 case class SerializedOffset(override val json: String) extends Offset
+
+/**
+ * Used for per-partition offsets in continuous processing. ContinuousReader implementations will
+ * provide a method to merge these into a global Offset.
+ *
+ * These offsets must be serializable.
+ */
+trait PartitionOffset

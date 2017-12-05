@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util.Optional
 import java.util.concurrent.TimeUnit
 
 import org.apache.commons.io.IOUtils
@@ -28,7 +29,10 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousRateStreamReader
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceV2, DataSourceV2Options, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.{ContinuousReader, MicroBatchReader}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ManualClock, SystemClock}
 
@@ -46,7 +50,8 @@ import org.apache.spark.util.{ManualClock, SystemClock}
  *    generated rows. The source will try its best to reach `rowsPerSecond`, but the query may
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
-class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
+class RateSourceProvider extends StreamSourceProvider with DataSourceRegister
+  with DataSourceV2 with MicroBatchReadSupport with ContinuousReadSupport{
 
   override def sourceSchema(
       sqlContext: SQLContext,
@@ -100,6 +105,21 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
       params.get("useManualClock").map(_.toBoolean).getOrElse(false) // Only for testing
     )
   }
+
+  override def createMicroBatchReader(
+      schema: Optional[StructType],
+      checkpointLocation: String,
+      options: DataSourceV2Options): MicroBatchReader = {
+    new RateStreamV2Reader(options)
+  }
+
+  override def createContinuousReader(
+      schema: Optional[StructType],
+      checkpointLocation: String,
+      options: DataSourceV2Options): ContinuousReader = {
+    new ContinuousRateStreamReader(options)
+  }
+
   override def shortName(): String = "rate"
 }
 
