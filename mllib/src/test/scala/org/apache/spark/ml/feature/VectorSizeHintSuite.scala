@@ -167,7 +167,7 @@ class VectorSizeHintStreamingSuite extends StreamTest {
 
     testStream (output) (
       AddData(stream, (a, b), (a, b)),
-      CheckAnswerRows(Seq(Row(expected), Row(expected)), false, false)
+      CheckAnswer(Tuple1(expected), Tuple1(expected))
     )
   }
 }
