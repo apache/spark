@@ -199,7 +199,7 @@ private[spark] object Client extends SparkApplication {
     val appName = sparkConf.getOption("spark.app.name").getOrElse("spark")
     // The master URL has been checked for validity already in SparkSubmit.
     val master = sparkConf.get("spark.master")
-    val loggingInterval = Option(sparkConf.get(REPORT_INTERVAL)).filter(_ => waitForAppCompletion)
+    val loggingInterval = if (waitForAppCompletion) Some(sparkConf.get(REPORT_INTERVAL)) else None
 
     val loggingPodStatusWatcher = new LoggingPodStatusWatcherImpl(
       kubernetesAppId, loggingInterval)

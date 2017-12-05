@@ -59,7 +59,6 @@ private[k8s] class LoggingPodStatusWatcherImpl(
 
   def start(): Unit = {
     maybeLoggingInterval.foreach { interval =>
-      require(interval > 0, s"Logging interval must be a positive time value, got: $interval ms.")
       scheduler.scheduleAtFixedRate(logRunnable, 0, interval, TimeUnit.MILLISECONDS)
     }
   }

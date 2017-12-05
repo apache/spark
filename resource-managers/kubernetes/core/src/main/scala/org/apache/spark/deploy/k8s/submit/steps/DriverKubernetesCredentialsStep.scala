@@ -39,45 +39,45 @@ private[spark] class DriverKubernetesCredentialsStep(
     kubernetesResourceNamePrefix: String) extends DriverConfigurationStep {
 
   private val maybeMountedOAuthTokenFile = submissionSparkConf.getOption(
-      s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$OAUTH_TOKEN_FILE_CONF_SUFFIX")
+    s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$OAUTH_TOKEN_FILE_CONF_SUFFIX")
   private val maybeMountedClientKeyFile = submissionSparkConf.getOption(
-      s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_KEY_FILE_CONF_SUFFIX")
+    s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_KEY_FILE_CONF_SUFFIX")
   private val maybeMountedClientCertFile = submissionSparkConf.getOption(
-      s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX")
+    s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX")
   private val maybeMountedCaCertFile = submissionSparkConf.getOption(
-      s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX")
+    s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX")
   private val driverServiceAccount = submissionSparkConf.get(KUBERNETES_SERVICE_ACCOUNT_NAME)
 
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     val driverSparkConf = driverSpec.driverSparkConf.clone()
 
     val oauthTokenBase64 = submissionSparkConf
-        .getOption(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$OAUTH_TOKEN_CONF_SUFFIX")
-        .map { token =>
-          BaseEncoding.base64().encode(token.getBytes(StandardCharsets.UTF_8))
-        }
+      .getOption(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$OAUTH_TOKEN_CONF_SUFFIX")
+      .map { token =>
+        BaseEncoding.base64().encode(token.getBytes(StandardCharsets.UTF_8))
+      }
     val caCertDataBase64 = safeFileConfToBase64(
-        s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
-        "Driver CA cert file provided at %s does not exist or is not a file.")
+      s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
+      "Driver CA cert file")
     val clientKeyDataBase64 = safeFileConfToBase64(
-        s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CLIENT_KEY_FILE_CONF_SUFFIX",
-        "Driver client key file provided at %s does not exist or is not a file.")
+      s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CLIENT_KEY_FILE_CONF_SUFFIX",
+      "Driver client key file")
     val clientCertDataBase64 = safeFileConfToBase64(
-        s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX",
-        "Driver client cert file provided at %s does not exist or is not a file.")
+      s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX",
+      "Driver client cert file")
 
     val driverSparkConfWithCredentialsLocations = setDriverPodKubernetesCredentialLocations(
-        driverSparkConf,
-        oauthTokenBase64,
-        caCertDataBase64,
-        clientKeyDataBase64,
-        clientCertDataBase64)
+      driverSparkConf,
+      oauthTokenBase64,
+      caCertDataBase64,
+      clientKeyDataBase64,
+      clientCertDataBase64)
 
     val kubernetesCredentialsSecret = createCredentialsSecret(
-        oauthTokenBase64,
-        caCertDataBase64,
-        clientKeyDataBase64,
-        clientCertDataBase64)
+      oauthTokenBase64,
+      caCertDataBase64,
+      clientKeyDataBase64,
+      clientCertDataBase64)
 
     val driverPodWithMountedKubernetesCredentials = kubernetesCredentialsSecret.map { secret =>
       new PodBuilder(driverSpec.driverPod)
@@ -123,19 +123,15 @@ private[spark] class DriverKubernetesCredentialsStep(
       driverClientCertDataBase64: Option[String]): Option[Secret] = {
     val allSecretData =
       resolveSecretData(
-        maybeMountedClientKeyFile,
         driverClientKeyDataBase64,
         DRIVER_CREDENTIALS_CLIENT_KEY_SECRET_NAME) ++
       resolveSecretData(
-        maybeMountedClientCertFile,
         driverClientCertDataBase64,
         DRIVER_CREDENTIALS_CLIENT_CERT_SECRET_NAME) ++
       resolveSecretData(
-        maybeMountedCaCertFile,
         driverCaCertDataBase64,
         DRIVER_CREDENTIALS_CA_CERT_SECRET_NAME) ++
       resolveSecretData(
-        maybeMountedOAuthTokenFile,
         driverOAuthTokenBase64,
         DRIVER_CREDENTIALS_OAUTH_TOKEN_SECRET_NAME)
 
@@ -198,13 +194,12 @@ private[spark] class DriverKubernetesCredentialsStep(
     sparkConfWithCredentialLocations
   }
 
-  private def safeFileConfToBase64(
-      conf: String,
-      fileNotFoundFormatString: String): Option[String] = {
+  private def safeFileConfToBase64(conf: String, fileType: String): Option[String] = {
     submissionSparkConf.getOption(conf)
       .map(new File(_))
       .map { file =>
-        require(file.isFile, String.format(fileNotFoundFormatString, file.getAbsolutePath))
+        require(file.isFile, String.format("%s provided at %s does not exist or is not a file.",
+          fileType, file.getAbsolutePath))
         BaseEncoding.base64().encode(Files.toByteArray(file))
       }
   }
@@ -213,21 +208,26 @@ private[spark] class DriverKubernetesCredentialsStep(
       mountedUserSpecified: Option[String],
       valueMountedFromSubmitter: Option[String],
       mountedCanonicalLocation: String): Option[String] = {
-    mountedUserSpecified.orElse(valueMountedFromSubmitter.map( _ =>
+    mountedUserSpecified.orElse(valueMountedFromSubmitter.map { _ =>
       mountedCanonicalLocation
-    ))
+    })
   }
 
+  /**
+   * Resolve a Kubernetes secret data entry from an optional client credential used by the
+   * driver to talk to the Kubernetes API server.
+   *
+   * @param userSpecifiedCredential the optional user-specified client credential.
+   * @param secretName name of the Kubernetes secret storing the client credential.
+   * @return a secret data entry in the form of a map from the secret name to the secret data,
+   *         which may be empty if the user-specified credential is empty.
+   */
   private def resolveSecretData(
-      mountedUserSpecified: Option[String],
-      valueMountedFromSubmitter: Option[String],
+      userSpecifiedCredential: Option[String],
       secretName: String): Map[String, String] = {
-    mountedUserSpecified.map { _ => Map.empty[String, String] }
-      .getOrElse {
-        valueMountedFromSubmitter.map { valueBase64 =>
-          Map(secretName -> valueBase64)
-        }.getOrElse(Map.empty[String, String])
-      }
+    userSpecifiedCredential.map { valueBase64 =>
+      Map(secretName -> valueBase64)
+    }.getOrElse(Map.empty[String, String])
   }
 
   private implicit def augmentSparkConf(sparkConf: SparkConf): OptionSettableSparkConf = {
@@ -237,8 +237,9 @@ private[spark] class DriverKubernetesCredentialsStep(
 
 private class OptionSettableSparkConf(sparkConf: SparkConf) {
   def setOption(configEntry: String, option: Option[String]): SparkConf = {
-    option.map( opt =>
+    option.foreach { opt =>
       sparkConf.set(configEntry, opt)
-    ).getOrElse(sparkConf)
+    }
+    sparkConf
   }
 }

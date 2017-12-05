@@ -79,17 +79,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
-      .doc("Specify the hard cpu limit for a single executor pod")
+      .doc("Specify the hard cpu limit for each executor pod")
       .stringConf
-      .createOptional
-
-  val KUBERNETES_DRIVER_MEMORY_OVERHEAD =
-    ConfigBuilder("spark.kubernetes.driver.memoryOverhead")
-      .doc("The amount of off-heap memory (in megabytes) to be allocated for the driver and the " +
-        "driver submission server. This is memory that accounts for things like VM overheads, " +
-        "interned strings, other native overheads, etc. This tends to grow with the driver's " +
-        "memory size (typically 6-10%).")
-      .bytesConf(ByteUnit.MiB)
       .createOptional
 
   // Note that while we set a default for this when we start up the
@@ -150,6 +141,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.report.interval")
       .doc("Interval between reports of the current app status in cluster mode.")
       .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
 
   private[spark] val JARS_DOWNLOAD_LOCATION =

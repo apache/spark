@@ -16,6 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import java.util.UUID
+
+import com.google.common.primitives.Longs
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.ConfigurationUtils
@@ -43,8 +47,11 @@ private[spark] class DriverConfigurationStepsOrchestrator(
   // label values are considerably restrictive, e.g. must be no longer than 63 characters in
   // length. So we generate a separate identifier for the app ID itself, and bookkeeping that
   // requires finding "all pods for this application" should use the kubernetesAppId.
-  private val kubernetesResourceNamePrefix =
-      s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
+  private val kubernetesResourceNamePrefix = {
+    val uuid = UUID.nameUUIDFromBytes(Longs.toByteArray(launchTime))
+    s"$appName-$uuid".toLowerCase.replaceAll("\\.", "-")
+  }
+
   private val dockerImagePullPolicy = submissionSparkConf.get(DOCKER_IMAGE_PULL_POLICY)
   private val jarsDownloadPath = submissionSparkConf.get(JARS_DOWNLOAD_LOCATION)
   private val filesDownloadPath = submissionSparkConf.get(FILES_DOWNLOAD_LOCATION)
@@ -91,7 +98,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
       }
       mayBeResource
     } else {
-      Option.empty
+      None
     }
 
     val sparkJars = submissionSparkConf.getOption("spark.jars")
@@ -109,7 +116,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
         jarsDownloadPath,
         filesDownloadPath))
     } else {
-      Option.empty
+      None
     }
 
     Seq(

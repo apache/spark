@@ -46,7 +46,7 @@ class BaseDriverConfigurationStepSuite extends SparkFunSuite {
       .set("spark.driver.cores", "2")
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
       .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "256M")
-      .set(KUBERNETES_DRIVER_MEMORY_OVERHEAD, 200L)
+      .set(org.apache.spark.internal.config.DRIVER_MEMORY_OVERHEAD, 200L)
       .set(DRIVER_DOCKER_IMAGE, "spark-driver:latest")
       .set(s"$KUBERNETES_DRIVER_ANNOTATION_PREFIX$CUSTOM_ANNOTATION_KEY", CUSTOM_ANNOTATION_VALUE)
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY1", "customDriverEnv1")

@@ -25,6 +25,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
+import org.apache.spark.internal.config.{DRIVER_CLASS_PATH, DRIVER_MEMORY, DRIVER_MEMORY_OVERHEAD}
 
 /**
  * Represents the initial setup required for the driver.
@@ -43,7 +44,7 @@ private[spark] class BaseDriverConfigurationStep(
     .getOrElse(s"$kubernetesResourceNamePrefix-driver")
 
   private val driverExtraClasspath = submissionSparkConf.get(
-    org.apache.spark.internal.config.DRIVER_CLASS_PATH)
+    DRIVER_CLASS_PATH)
 
   private val driverDockerImage = submissionSparkConf
     .get(DRIVER_DOCKER_IMAGE)
@@ -55,18 +56,17 @@ private[spark] class BaseDriverConfigurationStep(
 
   // Memory settings
   private val driverMemoryMiB = submissionSparkConf.get(
-    org.apache.spark.internal.config.DRIVER_MEMORY)
+    DRIVER_MEMORY)
   private val driverMemoryString = submissionSparkConf.get(
-    org.apache.spark.internal.config.DRIVER_MEMORY.key,
-    org.apache.spark.internal.config.DRIVER_MEMORY.defaultValueString)
+    DRIVER_MEMORY.key,
+    DRIVER_MEMORY.defaultValueString)
   private val memoryOverheadMiB = submissionSparkConf
-    .get(KUBERNETES_DRIVER_MEMORY_OVERHEAD)
+    .get(DRIVER_MEMORY_OVERHEAD)
     .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
   private val driverContainerMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
-  override def configureDriver(
-      driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
+  override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     val driverExtraClasspathEnv = driverExtraClasspath.map { classPath =>
       new EnvVarBuilder()
         .withName(ENV_SUBMIT_EXTRA_CLASSPATH)
@@ -83,11 +83,12 @@ private[spark] class BaseDriverConfigurationStep(
         " Spark bookkeeping operations.")
 
     val driverCustomEnvs = submissionSparkConf.getAllWithPrefix(KUBERNETES_DRIVER_ENV_KEY).toSeq
-      .map(env =>
+      .map { env =>
         new EnvVarBuilder()
           .withName(env._1)
           .withValue(env._2)
-          .build())
+          .build()
+      }
 
     val allDriverAnnotations = driverCustomAnnotations ++ Map(SPARK_APP_NAME_ANNOTATION -> appName)
 

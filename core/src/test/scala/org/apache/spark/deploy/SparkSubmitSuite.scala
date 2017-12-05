@@ -394,8 +394,8 @@ class SparkSubmitSuite
       "--master", "k8s://host:port",
       "--executor-memory", "5g",
       "--class", "org.SomeClass",
-      "--kubernetes-namespace", "foo",
       "--driver-memory", "4g",
+      "--conf", "spark.kubernetes.namespace=spark",
       "--conf", "spark.kubernetes.driver.docker.image=bar",
       "/home/thejar.jar",
       "arg1")
@@ -410,7 +410,7 @@ class SparkSubmitSuite
     classpath should have length (0)
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.driver.memory") should be ("4g")
-    conf.get("spark.kubernetes.namespace") should be ("foo")
+    conf.get("spark.kubernetes.namespace") should be ("spark")
     conf.get("spark.kubernetes.driver.docker.image") should be ("bar")
   }
 

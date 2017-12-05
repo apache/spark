@@ -28,20 +28,11 @@ private[spark] object KubernetesFileUtils {
    * - File URIs with scheme local:// resolve to just the path of the URI.
    * - Otherwise, the URIs are returned as-is.
    */
-  def resolveSubmittedUris(
+  def resolveFileUris(
       fileUris: Iterable[String],
       fileDownloadPath: String): Iterable[String] = {
     fileUris.map { uri =>
-      val fileUri = Utils.resolveURI(uri)
-      val fileScheme = Option(fileUri.getScheme).getOrElse("file")
-      fileScheme match {
-        case "file" =>
-          val fileName = new File(fileUri.getPath).getName
-          s"$fileDownloadPath/$fileName"
-        case "local" =>
-          fileUri.getPath
-        case _ => uri
-      }
+      resolveFileUri(uri, fileDownloadPath, false)
     }
   }
 
@@ -52,17 +43,26 @@ private[spark] object KubernetesFileUtils {
    */
   def resolveFilePaths(fileUris: Iterable[String], fileDownloadPath: String): Iterable[String] = {
     fileUris.map { uri =>
-      resolveFilePath(uri, fileDownloadPath)
+      resolveFileUri(uri, fileDownloadPath, true)
     }
   }
 
-  private def resolveFilePath(uri: String, fileDownloadPath: String): String = {
+  private def resolveFileUri(
+      uri: String,
+      fileDownloadPath: String,
+      assumesDownloaded: Boolean): String = {
     val fileUri = Utils.resolveURI(uri)
-    if (Option(fileUri.getScheme).getOrElse("file") == "local") {
-      fileUri.getPath
-    } else {
-      val fileName = new File(fileUri.getPath).getName
-      s"$fileDownloadPath/$fileName"
+    val fileScheme = Option(fileUri.getScheme).getOrElse("file")
+    fileScheme match {
+      case "local" =>
+        fileUri.getPath
+      case _ =>
+        if (assumesDownloaded || fileScheme == "file") {
+          val fileName = new File(fileUri.getPath).getName
+          s"$fileDownloadPath/$fileName"
+        } else {
+          uri
+        }
     }
   }
 }
