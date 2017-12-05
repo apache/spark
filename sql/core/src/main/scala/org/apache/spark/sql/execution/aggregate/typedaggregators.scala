@@ -267,6 +267,6 @@ class ScalaTypedMaxLong[IN](override val f: IN => Long) extends TypedMaxLong[IN,
   }
 }
 
-class MutableLong(var value: Long) extends Serializable
+private class MutableLong(var value: Long) extends Serializable
 
-class MutableDouble(var value: Double) extends Serializable
+private class MutableDouble(var value: Double) extends Serializable
