@@ -580,7 +580,7 @@ object DataSource extends Logging {
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
         classOf[OrcFileFormat].getCanonicalName
       case name if name.equalsIgnoreCase("orc") &&
-        conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
+          conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
         "org.apache.spark.sql.hive.orc.OrcFileFormat"
       case name => name
     }
