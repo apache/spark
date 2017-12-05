@@ -22,7 +22,7 @@ import scala.util.Random
 
 import org.dmg.pmml.{OpType, PMML, RegressionModel => PMMLRegressionModel}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
@@ -1014,6 +1014,20 @@ class LinearRegressionSuite
       assert(pmmlWeights(1) ~== model.coefficients(1) relTol 1E-3)
     }
     testPMMLWrite(sc, model, checkModel)
+  }
+
+  test("unsupported export format") {
+    val lr = new LinearRegression()
+    val model = lr.fit(datasetWithWeight)
+    intercept[SparkException] {
+      model.write.format("boop").save("boop")
+    }
+    intercept[SparkException] {
+      model.write.format("com.holdenkarau.boop").save("boop")
+    }
+    intercept[SparkException] {
+      model.write.format("org.apache.spark.SparkContext").save("boop2")
+    }
   }
 
   test("should support all NumericType labels and weights, and not support other types") {
