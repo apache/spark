@@ -1429,8 +1429,8 @@ private object Client extends Logging {
     }
 
     val srcAuthority = srcUri.getAuthority()
-    val detAuthority = dstUri.getAuthority()
-    if (srcAuthority != detAuthority || (srcAuthority != null && !srcAuthority.equalsIgnoreCase(detAuthority))) {
+    val dstAuthority = dstUri.getAuthority()
+    if (srcAuthority != null && !srcAuthority.equalsIgnoreCase(dstAuthority)) {
       return false
     }
 
