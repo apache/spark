@@ -1,0 +1,6 @@
+# Each line contains a new regex string which will be evaluated with matches
+# Lines starting with # will me skipped
+rpc-client.*
+rpc-server.*
+shuffle-client.*
+shuffle-server.*

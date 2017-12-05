@@ -20,10 +20,12 @@ package org.apache.spark
 // scalastyle:off
 import java.io.File
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.AccumulatorContext
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
+
+import scala.collection.JavaConversions._
+import scala.io.Source
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
@@ -34,12 +36,20 @@ abstract class SparkFunSuite
   with Logging {
 // scalastyle:on
 
+  var beforeAllTestThreadNames: Set[String] = Set.empty
+
+  protected override def beforeAll(): Unit = {
+    saveThreadNames()
+    super.beforeAll()
+  }
+
   protected override def afterAll(): Unit = {
     try {
       // Avoid leaking map entries in tests that use accumulators without SparkContext
       AccumulatorContext.clear()
     } finally {
       super.afterAll()
+      printRemainingThreadNames()
     }
   }
 
@@ -50,6 +60,24 @@ abstract class SparkFunSuite
 
   protected final def getTestResourcePath(file: String): String = {
     getTestResourceFile(file).getCanonicalPath
+  }
+
+  private def saveThreadNames(): Unit = {
+    beforeAllTestThreadNames = Thread.getAllStackTraces.keySet().map(_.getName).toSet
+  }
+
+  private def printRemainingThreadNames(): Unit = {
+    val currentThreadNames = Thread.getAllStackTraces.keySet().map(_.getName).toSet
+    val whitelistedThreadNames = currentThreadNames.
+      filterNot(s => SparkFunSuite.threadWhiteList.exists(s.matches(_)))
+    val remainingThreadNames = whitelistedThreadNames.diff(beforeAllTestThreadNames)
+    if (!remainingThreadNames.isEmpty) {
+      logInfo("\n\n===== THREADS NOT STOPPED PROPERLY =====\n")
+      remainingThreadNames.foreach(logInfo(_))
+      logInfo("\n\n===== END OF THREAD DUMP =====\n")
+      logInfo("\n\n===== EITHER PUT THREAD NAME INTO THE WHITELIST FILE " +
+        "OR SHUT IT DOWN PROPERLY =====\n")
+    }
   }
 
   /**
@@ -71,4 +99,28 @@ abstract class SparkFunSuite
     }
   }
 
+}
+
+object SparkFunSuite
+  extends Logging {
+  val threadWhitelistFileName = "/thread_whitelist"
+  val threadWhiteList: Set[String] = try {
+     val whileListStream = getClass.getResourceAsStream(threadWhitelistFileName)
+     if (whileListStream == null) {
+       logWarning(s"\n\n===== Could not find global thread whitelist file with " +
+         s"name $threadWhitelistFileName on classpath' =====\n")
+       Set.empty
+     } else {
+       val whiteList = Source.fromInputStream(whileListStream)
+         .getLines().filterNot(_.startsWith("#")).toSet
+       logInfo(s"\n\n===== Global thread whitelist loaded with name " +
+         s"$threadWhitelistFileName from classpath: ${whiteList.mkString(", ")}' =====\n")
+       whiteList
+     }
+  } catch {
+    case e: Exception =>
+      logWarning(s"\n\n===== Could not read global thread whitelist file with " +
+        s"name $threadWhitelistFileName from classpath: ${e.getMessage}' =====\n")
+      Set.empty
+  }
 }
