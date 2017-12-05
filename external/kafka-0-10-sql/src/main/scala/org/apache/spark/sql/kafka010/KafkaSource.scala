@@ -23,8 +23,8 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.commons.io.IOUtils
 import org.apache.kafka.common.TopicPartition
-
 import org.apache.spark.SparkContext
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
+import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 

@@ -2,7 +2,6 @@ package org.apache.spark.sql.sources.v2;
 
 import java.util.Optional;
 
-import org.apache.spark.sql.execution.streaming.Offset;
 import org.apache.spark.sql.sources.v2.reader.ContinuousReader;
 import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
 import org.apache.spark.sql.types.StructType;

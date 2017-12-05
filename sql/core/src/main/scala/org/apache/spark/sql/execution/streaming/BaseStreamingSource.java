@@ -1,6 +1,6 @@
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.execution.streaming;
 
-import org.apache.spark.sql.execution.streaming.Offset;
+import org.apache.spark.sql.sources.v2.reader.Offset;
 
 /**
  * The shared interface between V1 streaming sources and V2 streaming readers.

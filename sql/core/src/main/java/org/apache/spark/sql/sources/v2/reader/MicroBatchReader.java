@@ -1,10 +1,8 @@
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.execution.streaming.Offset;
-import org.apache.spark.sql.sources.v2.BaseStreamingSource;
+import org.apache.spark.sql.sources.v2.reader.Offset;
+import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 
-import java.util.List;
 import java.util.Optional;
 
 /**

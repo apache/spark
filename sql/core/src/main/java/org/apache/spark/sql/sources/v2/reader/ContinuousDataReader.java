@@ -1,9 +1,7 @@
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.sql.execution.streaming.Offset;
-import org.apache.spark.sql.execution.streaming.PartitionOffset;
+import org.apache.spark.sql.sources.v2.reader.PartitionOffset;
 
-import java.io.Closeable;
 import java.io.IOException;
 
 /**
