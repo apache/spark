@@ -317,13 +317,13 @@ class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable)
 
 
 @inherit_doc
-class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
-                 JavaMLReadable, JavaMLWritable):
+class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
+                 HasHandleInvalid, JavaMLReadable, JavaMLWritable):
     """
     Maps a column of continuous features to a column of feature buckets.
 
-    >>> values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
-    >>> df = spark.createDataFrame(values, ["values"])
+    >>> values = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, float("nan")), (float("nan"), 1.0), (float("nan"), 0.0)]
+    >>> df = spark.createDataFrame(values, ["values", "numbers"])
     >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
     ...     inputCol="values", outputCol="buckets")
     >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df).collect()
@@ -347,6 +347,27 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
     >>> bucketed = bucketizer.setHandleInvalid("skip").transform(df).collect()
     >>> len(bucketed)
     4
+    >>> bucketizer2 = Bucketizer(splitsArray=[[-float("inf"), 0.5, 1.4, float("inf")], [-float("inf"), 0.5, float("inf")]],
+    ...     inputCols=["values", "numbers"], outputCols=["buckets1", "buckets2"])
+    >>> bucketed2 = bucketizer2.setHandleInvalid("keep").transform(df).collect()
+    >>> len(bucketed2)
+    6
+    >>> bucketed2[0].buckets1
+    0.0
+    >>> bucketed2[1].buckets1
+    0.0
+    >>> bucketed2[2].buckets1
+    1.0
+    >>> bucketed2[3].buckets1
+    2.0
+    >>> bucketed2[0].buckets2
+    0.0
+    >>> bucketed2[1].buckets2
+    1.0
+    >>> bucketed2[2].buckets2
+    1.0
+    >>> bucketed2[3].buckets2
+    2.0
 
     .. versionadded:: 1.4.0
     """
@@ -364,13 +385,28 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
                           "Options are 'skip' (filter out rows with invalid values), " +
                           "'error' (throw an error), or 'keep' (keep invalid values in a special " +
-                          "additional bucket).",
+                          "additional bucket). Note that in the multiple column case, the invalid " +
+                          "handling is applied to all columns. That said for 'error' it will throw " +
+                          "an error if any invalids are found in any column, for 'skip' it will " +
+                          "skip rows with any invalids in any columns, etc.",
                           typeConverter=TypeConverters.toString)
 
+    splitsArray = Param(Params._dummy(), "splitsArray", "The array of split points for mapping " +
+                        "continuous features into buckets for multiple columns. For each input " +
+                        "column, with n+1 splits, there are n buckets. A bucket defined by splits " +
+                        "x,y holds values in the range [x,y) except the last bucket, which also " +
+                        "includes y. The splits should be of length >= 3 and strictly increasing. " +
+                        "Values at -inf, inf must be explicitly provided to cover all Double " +
+                        "values; otherwise, values outside the splits specified will be treated " +
+                        "as errors.",
+                        typeConverter=TypeConverters.toListListFloat)
+
     @keyword_only
-    def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
+    def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+                 splitsArray=None, inputCols=None, outputCols=None):
         """
-        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
+        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+                 splitsArray=None, inputCols=None, outputCols=None)
         """
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
@@ -380,9 +416,11 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
+    def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+                  splitsArray=None, inputCols=None, outputCols=None):
         """
-        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
+        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+                  splitsArray=None, inputCols=None, outputCols=None)
         Sets params for this Bucketizer.
         """
         kwargs = self._input_kwargs
@@ -401,6 +439,20 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
+
+    @since("2.3.0")
+    def setSplitsArray(self, value):
+        """
+        Sets the value of :py:attr:`splitsArray`.
+        """
+        return self._set(splitsArray=value)
+
+    @since("2.3.0")
+    def getSplitsArray(self):
+        """
+        Gets the array of split points or its default value.
+        """
+        return self.getOrDefault(self.splitsArray)
 
 
 @inherit_doc

@@ -135,6 +135,20 @@ class TypeConverters(object):
         raise TypeError("Could not convert %s to list of floats" % value)
 
     @staticmethod
+    def toListListFloat(value):
+        """
+        Convert a value to list of list of floats, if possible.
+        """
+        if TypeConverters._can_convert_to_list(value):
+            value = TypeConverters.toList(value)
+            if all(map(lambda v: TypeConverters._can_convert_to_list(v), value)):
+                ll = []
+                for arr in value:
+                    ll.append([float(v) for v in arr])
+                return ll
+        raise TypeError("Could not convert %s to list of list of floats" % value)
+
+    @staticmethod
     def toListInt(value):
         """
         Convert a value to list of ints, if possible.
