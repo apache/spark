@@ -312,7 +312,7 @@ object TypeCoercion {
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
-  object PromoteStrings extends Rule[LogicalPlan] with TypePropagation {
+  object PromoteStrings extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
       (expr.dataType, targetType) match {
         case (NullType, dt) => Literal.create(null, targetType)
@@ -370,7 +370,7 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  object InConversion extends Rule[LogicalPlan] with TypePropagation {
+  object InConversion extends TypeCoercionRule {
     private def flattenExpr(expr: Expression): Seq[Expression] = {
       expr match {
         // Multi columns in IN clause is represented as a CreateNamedStruct.
@@ -479,7 +479,7 @@ object TypeCoercion {
   /**
    * This ensure that the types for various functions are as expected.
    */
-  object FunctionArgumentConversion extends Rule[LogicalPlan] with TypePropagation {
+  object FunctionArgumentConversion extends TypeCoercionRule {
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
@@ -569,7 +569,7 @@ object TypeCoercion {
    * Hive only performs integral division with the DIV operator. The arguments to / are always
    * converted to fractional types.
    */
-  object Division extends Rule[LogicalPlan] with TypePropagation {
+  object Division extends TypeCoercionRule {
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
@@ -591,7 +591,7 @@ object TypeCoercion {
   /**
    * Coerces the type of different branches of a CASE WHEN statement to a common type.
    */
-  object CaseWhenCoercion extends Rule[LogicalPlan] with TypePropagation {
+  object CaseWhenCoercion extends TypeCoercionRule {
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case c: CaseWhen if c.childrenResolved && !c.valueTypesEqual =>
         val maybeCommonType = findWiderCommonType(c.valueTypes)
@@ -621,7 +621,7 @@ object TypeCoercion {
   /**
    * Coerces the type of different branches of If statement to a common type.
    */
-  object IfCoercion extends Rule[LogicalPlan] with TypePropagation {
+  object IfCoercion extends TypeCoercionRule {
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
@@ -641,7 +641,7 @@ object TypeCoercion {
   /**
    * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
    */
-  object StackCoercion extends Rule[LogicalPlan] with TypePropagation {
+  object StackCoercion extends TypeCoercionRule {
     override def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s @ Stack(children) if s.childrenResolved && s.hasFoldableNumRows =>
         Stack(children.zipWithIndex.map {
@@ -678,7 +678,7 @@ object TypeCoercion {
   /**
    * Casts types according to the expected input types for [[Expression]]s.
    */
-  object ImplicitTypeCasts extends Rule[LogicalPlan] with TypePropagation {
+  object ImplicitTypeCasts extends TypeCoercionRule {
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
@@ -795,7 +795,7 @@ object TypeCoercion {
   /**
    * Cast WindowFrame boundaries to the type they operate upon.
    */
-  object WindowFrameCoercion extends Rule[LogicalPlan] with TypePropagation {
+  object WindowFrameCoercion extends TypeCoercionRule {
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case s @ WindowSpecDefinition(_, Seq(order), SpecifiedWindowFrame(RangeFrame, lower, upper))
           if order.resolved =>
@@ -818,7 +818,7 @@ object TypeCoercion {
   }
 }
 
-trait TypePropagation extends Logging {
+trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
   /**
    * Applies any changes to [[AttributeReference]] data types that are made by the transform method
    * to instances higher in the query tree.
