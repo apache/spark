@@ -143,7 +143,7 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           while (i < numFeatures) {
             nnz1(i) += nnz2(i)
             min1(i) = math.min(min1(i), min2(i))
-            max1(i) = math.max(max1(i), max1(i))
+            max1(i) = math.max(max1(i), max2(i))
             i += 1
           }
           (count1 + count2, nnz1, min1, max1)
