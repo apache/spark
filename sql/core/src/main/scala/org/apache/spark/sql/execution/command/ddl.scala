@@ -206,7 +206,8 @@ case class DropTableCommand(
     try {
       sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
     } catch {
-      case _: NoSuchTableException if ifExists =>
+      case ae: AnalysisException
+        if ifExists && ae.cause.nonEmpty && ae.getCause.isInstanceOf[NoSuchTableException] =>
       case NonFatal(e) => log.warn(e.toString, e)
     }
     catalog.refreshTable(tableName)
