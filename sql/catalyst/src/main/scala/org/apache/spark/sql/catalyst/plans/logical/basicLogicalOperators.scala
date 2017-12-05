@@ -885,7 +885,6 @@ case class Deduplicate(
 /** A logical plan for setting a barrier of analysis */
 case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
   override def output: Seq[Attribute] = child.output
-  override def analyzed: Boolean = true
   override def isStreaming: Boolean = child.isStreaming
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }

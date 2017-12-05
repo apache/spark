@@ -281,8 +281,6 @@ object TypeCoercion {
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case p if p.analyzed => p
-
       case s @ SetOperation(left, right) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)

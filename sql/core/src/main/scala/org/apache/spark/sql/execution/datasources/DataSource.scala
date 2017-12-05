@@ -51,15 +51,15 @@ import org.apache.spark.util.Utils
  * (either batch or streaming) or to write out data using an external library.
  *
  * From an end user's perspective a DataSource description can be created explicitly using
- * [[org.apache.spark.sql.DataFrameReader]] or CREATE TABLE USING DDL. Additionally, this class is
+ * [[org.apache.spark.sql.DataFrameReader]] or CREATE TABLE USING DDL.  Additionally, this class is
  * used when resolving a description from a metastore to a concrete implementation.
  *
  * Many of the arguments to this class are optional, though depending on the specific API being used
  * these optional arguments might be filled in during resolution using either inference or external
- * metadata. For example, when reading a partitioned table from a file system, partition columns
+ * metadata.  For example, when reading a partitioned table from a file system, partition columns
  * will be inferred from the directory layout even if they are not specified.
  *
- * @param paths A list of file system paths that hold data. These will be globbed before and
+ * @param paths A list of file system paths that hold data.  These will be globbed before and
  *              qualified. This option only works when reading from a [[FileFormat]].
  * @param userSpecifiedSchema An optional specification of the schema of the data. When present
  *                            we skip attempting to infer the schema.
@@ -470,7 +470,7 @@ case class DataSource(
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
-    // ordering of data.logicalPlan (partition columns are all moved after data column). This
+    // ordering of data.logicalPlan (partition columns are all moved after data column).  This
     // will be adjusted within InsertIntoHadoopFsRelation.
     InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath,

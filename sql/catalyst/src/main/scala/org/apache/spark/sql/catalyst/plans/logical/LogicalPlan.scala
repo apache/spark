@@ -33,20 +33,6 @@ abstract class LogicalPlan
   with QueryPlanConstraints
   with Logging {
 
-  private var _analyzed: Boolean = false
-
-  /**
-   * Marks this plan as already analyzed. This should only be called by [[CheckAnalysis]].
-   */
-  private[catalyst] def setAnalyzed(): Unit = { _analyzed = true }
-
-  /**
-   * Returns true if this node and its children have already been gone through analysis and
-   * verification.  Note that this is only an optimization used to avoid analyzing trees that
-   * have already been analyzed, and can be reset by transformations.
-   */
-  def analyzed: Boolean = _analyzed
-
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true)
 

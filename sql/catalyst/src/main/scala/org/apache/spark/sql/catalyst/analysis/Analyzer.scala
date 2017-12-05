@@ -667,9 +667,9 @@ class Analyzer(
      * Generate a new logical plan for the right child with different expression IDs
      * for all conflicting attributes.
      */
-    private def dedupRight (left: LogicalPlan, oriRight: LogicalPlan): LogicalPlan = {
+    private def dedupRight (left: LogicalPlan, originalRight: LogicalPlan): LogicalPlan = {
       // Remove analysis barrier if any.
-      val right = EliminateBarriers(oriRight)
+      val right = EliminateBarriers(originalRight)
       val conflictingAttributes = left.outputSet.intersect(right.outputSet)
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
@@ -712,7 +712,7 @@ class Analyzer(
            * that this rule cannot handle. When that is the case, there must be another rule
            * that resolves these conflicts. Otherwise, the analysis will fail.
            */
-          oriRight
+          originalRight
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
           val newRight = right transformUp {
@@ -1081,8 +1081,8 @@ class Analyzer(
       case sa @ Sort(_, _, AnalysisBarrier(child: Aggregate)) => sa
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, oriChild) if !s.resolved && oriChild.resolved =>
-        val child = EliminateBarriers(oriChild)
+      case s @ Sort(order, _, originalChild) if !s.resolved && originalChild.resolved =>
+        val child = EliminateBarriers(originalChild)
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
@@ -1103,8 +1103,8 @@ class Analyzer(
           case ae: AnalysisException => s
         }
 
-      case f @ Filter(cond, oriChild) if !f.resolved && oriChild.resolved =>
-        val child = EliminateBarriers(oriChild)
+      case f @ Filter(cond, originalChild) if !f.resolved && originalChild.resolved =>
+        val child = EliminateBarriers(originalChild)
         try {
           val newCond = resolveExpressionRecursively(cond, child)
           val requiredAttrs = newCond.references.filter(_.resolved)
