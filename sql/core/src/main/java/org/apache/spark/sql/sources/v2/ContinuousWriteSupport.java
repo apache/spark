@@ -19,9 +19,6 @@ public interface ContinuousWriteSupport extends BaseStreamingSink {
      * Creates an optional {@link DataSourceV2Writer} to save the data to this data source. Data
      * sources can return None if there is no writing needed to be done.
      *
-     * If this method fails (by throwing an exception), the action would fail and no Spark job was
-     * submitted.
-     *
      * @param queryId A unique string for the writing query. It's possible that there are many writing
      *                queries running at the same time, and the returned {@link DataSourceV2Writer}
      *                can use this id to distinguish itself from others.
