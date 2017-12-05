@@ -155,10 +155,16 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   override def transform(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema)
 
+    val (inputColumns, outputColumns) = if (isBucketizeMultipleColumns()) {
+      ($(inputCols).toSeq, $(outputCols).toSeq)
+    } else {
+      (Seq($(inputCol)), Seq($(outputCol)))
+    }
+
     val (filteredDataset, keepInvalid) = {
       if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
         // "skip" NaN option is set, will filter out NaN values in the dataset
-        (dataset.na.drop().toDF(), false)
+        (dataset.na.drop(inputColumns).toDF(), false)
       } else {
         (dataset.toDF(), getHandleInvalid == Bucketizer.KEEP_INVALID)
       }
@@ -176,11 +182,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
       }.withName(s"bucketizer_$idx")
     }
 
-    val (inputColumns, outputColumns) = if (isBucketizeMultipleColumns()) {
-      ($(inputCols).toSeq, $(outputCols).toSeq)
-    } else {
-      (Seq($(inputCol)), Seq($(outputCol)))
-    }
+
     val newCols = inputColumns.zipWithIndex.map { case (inputCol, idx) =>
       bucketizers(idx)(filteredDataset(inputCol).cast(DoubleType))
     }
