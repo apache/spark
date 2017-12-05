@@ -25,22 +25,22 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
 
 
 object InMemoryRelation {
-
   def apply(
       useCompression: Boolean,
       batchSize: Int,
       storageLevel: StorageLevel,
       child: SparkPlan,
-      tableName: Option[String]): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
+      tableName: Option[String],
+      stats: Option[Statistics]): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)(
+      statsOfPlanToCache = stats)
 }
 
 
@@ -62,7 +62,8 @@ case class InMemoryRelation(
     @transient child: SparkPlan,
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator)
+    val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
+    statsOfPlanToCache: Option[Statistics] = None)
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[SparkPlan] = Seq(child)
@@ -73,18 +74,11 @@ case class InMemoryRelation(
 
   override def computeStats(): Statistics = {
     if (batchStats.value == 0L) {
-      inheritedStats.getOrElse(Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes))
+      statsOfPlanToCache.getOrElse(Statistics(sizeInBytes =
+        child.sqlContext.conf.defaultSizeInBytes))
     } else {
       Statistics(sizeInBytes = batchStats.value.longValue)
     }
-  }
-
-  private var inheritedStats: Option[Statistics] = None
-
-  private[execution] def setStatsFromCachedPlan(planToCache: LogicalPlan): Unit = {
-    require(planToCache.conf.cboEnabled, "you cannot use the stats of cached plan in" +
-      " InMemoryRelation without cbo enabled")
-    inheritedStats = Some(planToCache.stats)
   }
 
   // If the cached column buffers were not passed in, we calculate them in the constructor.

@@ -22,11 +22,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
@@ -80,6 +79,14 @@ class CacheManager extends Logging {
     cachedData.isEmpty
   }
 
+  private def extractStatsOfPlanForCache(plan: LogicalPlan): Option[Statistics] = {
+    if (plan.conf.cboEnabled && plan.stats.rowCount.isDefined) {
+      Some(plan.stats)
+    } else {
+      None
+    }
+  }
+
   /**
    * Caches the data produced by the logical representation of the given [[Dataset]].
    * Unlike `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because
@@ -96,13 +103,10 @@ class CacheManager extends Logging {
       val sparkSession = query.sparkSession
       val inMemoryRelation = InMemoryRelation(
         sparkSession.sessionState.conf.useCompression,
-        sparkSession.sessionState.conf.columnBatchSize,
-        storageLevel,
+        sparkSession.sessionState.conf.columnBatchSize, storageLevel,
         sparkSession.sessionState.executePlan(planToCache).executedPlan,
-        tableName)
-      if (planToCache.conf.cboEnabled && planToCache.stats.rowCount.isDefined) {
-        inMemoryRelation.setStatsFromCachedPlan(planToCache)
-      }
+        tableName,
+        extractStatsOfPlanForCache(planToCache))
       cachedData.add(CachedData(planToCache, inMemoryRelation))
     }
   }
@@ -150,7 +154,8 @@ class CacheManager extends Logging {
           batchSize = cd.cachedRepresentation.batchSize,
           storageLevel = cd.cachedRepresentation.storageLevel,
           child = spark.sessionState.executePlan(cd.plan).executedPlan,
-          tableName = cd.cachedRepresentation.tableName)
+          tableName = cd.cachedRepresentation.tableName,
+          stats = extractStatsOfPlanForCache(cd.plan))
         needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }
