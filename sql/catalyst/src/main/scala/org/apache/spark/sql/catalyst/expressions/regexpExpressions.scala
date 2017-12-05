@@ -119,33 +119,34 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-        ctx.addMutableState(patternClass, pattern,
-          s"""$pattern = ${patternClass}.compile("$regexStr");""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
-        ev.copy(code = s"""
-          ${eval.code}
-          boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
-          }
-        """)
+        ev.copy(code =
+          s"""
+             |${eval.code}
+             |boolean ${ev.isNull} = ${eval.isNull};
+             |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+             |if (!${ev.isNull}) {
+             |  $patternClass $pattern = $patternClass.compile("$regexStr");
+             |  ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
+             |}
+           """.stripMargin)
       } else {
-        ev.copy(code = s"""
-          boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        """)
+        ev.copy(code =
+          s"""
+             |boolean ${ev.isNull} = true;
+             |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+           """.stripMargin)
       }
     } else {
       val rightStr = ctx.freshName("rightStr")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String $rightStr = ${eval2}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc($rightStr));
-          ${ev.value} = $pattern.matcher(${eval1}.toString()).matches();
-        """
+           |String $rightStr = $eval2.toString();
+           |$patternClass $pattern = $patternClass.compile($escapeFunc($rightStr));
+           |${ev.value} = $pattern.matcher($eval1.toString()).matches();
+         """.stripMargin
       })
     }
   }
@@ -194,33 +195,34 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
-        ctx.addMutableState(patternClass, pattern,
-          s"""$pattern = ${patternClass}.compile("$regexStr");""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
-        ev.copy(code = s"""
-          ${eval.code}
-          boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
-          }
-        """)
+        ev.copy(code =
+          s"""
+             |${eval.code}
+             |boolean ${ev.isNull} = ${eval.isNull};
+             |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+             |if (!${ev.isNull}) {
+             |  $patternClass $pattern = $patternClass.compile("$regexStr");
+             |  ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
+             |}
+           """.stripMargin)
       } else {
-        ev.copy(code = s"""
-          boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        """)
+        ev.copy(code =
+          s"""
+             |boolean ${ev.isNull} = true;
+             |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+           """.stripMargin)
       }
     } else {
       val rightStr = ctx.freshName("rightStr")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String $rightStr = ${eval2}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile($rightStr);
-          ${ev.value} = $pattern.matcher(${eval1}.toString()).find(0);
-        """
+           |String $rightStr = $eval2.toString();
+           |$patternClass $pattern = $patternClass.compile($rightStr);
+           |${ev.value} = $pattern.matcher($eval1.toString()).find(0);
+         """.stripMargin
       })
     }
   }
