@@ -96,7 +96,7 @@ class TypedAverage[IN](val f: IN => Double) extends Aggregator[IN, (Double, Long
 }
 
 trait TypedMinDouble[IN, OUT] extends Aggregator[IN, MutableDouble, OUT] {
-  abstract val f: IN => Double
+  val f: IN => Double
   override def zero: MutableDouble = null
   override def reduce(b: MutableDouble, a: IN): MutableDouble = {
     if (b == null) {
@@ -139,8 +139,8 @@ class ScalaTypedMinDouble[IN](override val f: IN => Double)
   }
 }
 
-trait TypedMaxDouble[IN, OUT]extends Aggregator[IN, MutableDouble, OUT] {
-  abstract val f: IN => Double
+trait TypedMaxDouble[IN, OUT] extends Aggregator[IN, MutableDouble, OUT] {
+  val f: IN => Double
   override def zero: MutableDouble = null
   override def reduce(b: MutableDouble, a: IN): MutableDouble = {
     if (b == null) {
@@ -184,7 +184,7 @@ class ScalaTypedMaxDouble[IN](override val f: IN => Double)
 }
 
 trait TypedMinLong[IN, OUT] extends Aggregator[IN, MutableLong, OUT] {
-  abstract val f: IN => Long
+  val f: IN => Long
   override def zero: MutableLong = null
   override def reduce(b: MutableLong, a: IN): MutableLong = {
     if (b == null) {
@@ -226,7 +226,7 @@ class ScalaTypedMinLong[IN](override val f: IN => Long) extends TypedMinLong[IN,
 }
 
 trait TypedMaxLong[IN, OUT] extends Aggregator[IN, MutableLong, OUT] {
-  abstract val f: IN => Long
+  val f: IN => Long
   override def zero: MutableLong = null
   override def reduce(b: MutableLong, a: IN): MutableLong = {
     if (b == null) {
