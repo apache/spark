@@ -25,11 +25,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -117,11 +113,56 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
-      case Row(v: Vector) => OldVectors.fromML(v)
+
+    val vectors = dataset.select($(inputCol)).rdd.map {
+      case Row(v: Vector) => v
     }
-    val summary = Statistics.colStats(input)
-    copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
+    val numFeatures = vectors.first().size
+
+    val zeroValue = (0L, Array.ofDim[Long](numFeatures),
+      Array.fill(numFeatures)(Double.MaxValue), Array.fill(numFeatures)(Double.MinValue))
+
+    val (count, nnz, min, max) = vectors.treeAggregate(zeroValue)(
+      seqOp = { case ((count, nnz, min, max), vec) =>
+          require(vec.size == numFeatures)
+          vec.foreachActive { (i, v) =>
+            if (v != 0) {
+              if (v < min(i)) {
+                min(i) = v
+              }
+              if (v > max(i)) {
+                max(i) = v
+              }
+              nnz(i) += 1
+            }
+          }
+          (count + 1, nnz, min, max)
+
+      }, combOp = { case ((count1, nnz1, min1, max1), (count2, nnz2, min2, max2)) =>
+          var i = 0
+          while (i < numFeatures) {
+            nnz1(i) += nnz2(i)
+            min1(i) = math.min(min1(i), min2(i))
+            max1(i) = math.max(max1(i), max1(i))
+            i += 1
+          }
+          (count1 + count2, nnz1, min1, max1)
+      })
+
+    var i = 0
+    while (i < numFeatures) {
+      if (nnz(i) < count) {
+        if (min(i) > 0) {
+          min(i) = 0
+        }
+        if (max(i) < 0) {
+          max(i) = 0
+        }
+      }
+      i += 1
+    }
+
+    copyValues(new MinMaxScalerModel(uid, Vectors.dense(min), Vectors.dense(max)).setParent(this))
   }
 
   @Since("1.5.0")
