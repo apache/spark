@@ -219,57 +219,51 @@ case class CaseWhen(
 
     val allConditions = cases ++ elseCode
 
-    val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-        allConditions.mkString("\n")
-      } else {
-        // This generates code like:
-        //   conditionMet = caseWhen_1(i);
-        //   if(conditionMet) {
-        //     continue;
-        //   }
-        //   conditionMet = caseWhen_2(i);
-        //   if(conditionMet) {
-        //     continue;
-        //   }
-        //   ...
-        // and the declared methods are:
-        //   private boolean caseWhen_1234() {
-        //     boolean conditionMet = false;
-        //     do {
-        //       // here the evaluation of the conditions
-        //     } while (false);
-        //     return conditionMet;
-        //   }
-        ctx.splitExpressions(allConditions, "caseWhen",
-          ("InternalRow", ctx.INPUT_ROW) :: Nil,
-          returnType = ctx.JAVA_BOOLEAN,
-          makeSplitFunction = {
-            func =>
-              s"""
-                ${ctx.JAVA_BOOLEAN} $conditionMet = false;
-                do {
-                  $func
-                } while (false);
-                return $conditionMet;
-              """
-          },
-          foldFunctions = { funcCalls =>
-            funcCalls.map { funcCall =>
-              s"""
-                $conditionMet = $funcCall;
-                if ($conditionMet) {
-                  continue;
-                }"""
-            }.mkString
-          })
-      }
+    // This generates code like:
+    //   conditionMet = caseWhen_1(i);
+    //   if(conditionMet) {
+    //     continue;
+    //   }
+    //   conditionMet = caseWhen_2(i);
+    //   if(conditionMet) {
+    //     continue;
+    //   }
+    //   ...
+    // and the declared methods are:
+    //   private boolean caseWhen_1234() {
+    //     boolean conditionMet = false;
+    //     do {
+    //       // here the evaluation of the conditions
+    //     } while (false);
+    //     return conditionMet;
+    //   }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = allConditions,
+      funcName = "caseWhen",
+      returnType = ctx.JAVA_BOOLEAN,
+      makeSplitFunction = func =>
+        s"""
+           |${ctx.JAVA_BOOLEAN} $conditionMet = false;
+           |do {
+           |  $func
+           |} while (false);
+           |return $conditionMet;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$conditionMet = $funcCall;
+           |if ($conditionMet) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
 
     ev.copy(code = s"""
       ${ev.isNull} = true;
       ${ev.value} = ${ctx.defaultValue(dataType)};
       ${ctx.JAVA_BOOLEAN} $conditionMet = false;
       do {
-        $code
+        $codes
       } while (false);""")
   }
 }
