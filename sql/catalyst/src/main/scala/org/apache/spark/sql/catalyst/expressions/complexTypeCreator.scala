@@ -368,9 +368,9 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
        """.stripMargin
     }
     val valuesCode = ctx.splitExpressionsWithCurrentInputs(
-      valCodes,
-      "createNamedStruct",
-      "Object[]" -> values :: Nil)
+      expressions = valCodes,
+      funcName = "createNamedStruct",
+      extraArguments = "Object[]" -> values :: Nil)
 
     ev.copy(code =
       s"""
