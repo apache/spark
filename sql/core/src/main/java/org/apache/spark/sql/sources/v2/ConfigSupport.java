@@ -48,7 +48,7 @@ public interface ConfigSupport {
      * If the mapping is specified, for example, the returned map contains an entry
      * ("spark.sql.columnNameOfCorruptRecord" -> "colNameCorrupt"), then the session config
      * "spark.sql.columnNameOfCorruptRecord" will be converted to "colNameCorrupt" in
-     * [[DataSourceV2Options]].
+     * [[org.apache.spark.sql.sources.v2.DataSourceV2Options]].
      */
     Map<String, String> getConfigMapping();
 
