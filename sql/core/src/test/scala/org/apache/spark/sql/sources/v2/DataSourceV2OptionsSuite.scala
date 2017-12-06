@@ -39,45 +39,16 @@ class DataSourceV2OptionsSuite extends SparkFunSuite {
   }
 
   test("getInt") {
-    val options = new DataSourceV2Options(Map("numFoo" -> "1", "foo" -> "bar").asJava)
-    assert(options.getInt("numFoo").get == 1)
-
-    intercept[NumberFormatException]{
-      options.getInt("foo").isPresent
-    }
-  }
-
-  test("getBoolean") {
-    val options = new DataSourceV2Options(
-      Map("isFoo" -> "true", "isFoo2" -> "false", "foo" -> "bar").asJava)
-    assert(options.getBoolean("isFoo").get == true)
-    assert(options.getBoolean("isFoo2").get == false)
-    assert(options.getBoolean("isFoo2").isPresent)
-    assert(options.getBoolean("foo").get == false)
-    assert(!options.getBoolean("isBar").isPresent)
-  }
-
-  test("getLong") {
-    val options = new DataSourceV2Options(Map("numFoo" -> "9223372036854775807",
-      "foo" -> "bar").asJava)
-    assert(options.getLong("numFoo").get == 9223372036854775807L)
-
-    intercept[NumberFormatException]{
-      options.getLong("foo").isPresent
-    }
-  }
-
-  test("getInt - defaultValue") {
     val options = new DataSourceV2Options(Map("numFOo" -> "1", "foo" -> "bar").asJava)
     assert(options.getInt("numFOO", 10) == 1)
     assert(options.getInt("numFOO2", 10) == 10)
 
     intercept[NumberFormatException]{
-      options.getInt("foo")
+      options.getInt("foo", 1)
     }
   }
 
-  test("getBoolean - defaultValue") {
+  test("getBoolean") {
     val options = new DataSourceV2Options(
       Map("isFoo" -> "true", "isFOO2" -> "false", "foo" -> "bar").asJava)
     assert(options.getBoolean("isFoo", false))
@@ -87,7 +58,7 @@ class DataSourceV2OptionsSuite extends SparkFunSuite {
     assert(!options.getBoolean("FOO", true))
   }
 
-  test("getLong - defaultValue") {
+  test("getLong") {
     val options = new DataSourceV2Options(Map("numFoo" -> "9223372036854775807",
       "foo" -> "bar").asJava)
     assert(options.getLong("numFOO", 0L) == 9223372036854775807L)
@@ -97,5 +68,4 @@ class DataSourceV2OptionsSuite extends SparkFunSuite {
       options.getLong("foo", 0L)
     }
   }
-
 }
