@@ -602,14 +602,14 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    val isNull = ctx.freshName("leastTmpIsNull")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
+    val leastTmpIsNull = ctx.freshName("leastTmpIsNull")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, leastTmpIsNull)
     val evals = evalChildren.map(eval =>
       s"""
         ${eval.code}
-        if (!${eval.isNull} && (${isNull} ||
+        if (!${eval.isNull} && (${leastTmpIsNull} ||
           ${ctx.genGreater(dataType, ev.value, eval.value)})) {
-          $isNull = false;
+          $leastTmpIsNull = false;
           ${ev.value} = ${eval.value};
         }
       """
@@ -628,10 +628,10 @@ case class Least(children: Seq[Expression]) extends Expression {
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
     ev.copy(code = s"""
-      $isNull = true;
+      $leastTmpIsNull = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       $codes
-      final boolean ${ev.isNull} = $isNull;""")
+      final boolean ${ev.isNull} = $leastTmpIsNull;""")
   }
 }
 
@@ -681,14 +681,14 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    val isNull = ctx.freshName("greatestTmpIsNull")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
+    val greatestTmpIsNull = ctx.freshName("greatestTmpIsNull")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, greatestTmpIsNull)
     val evals = evalChildren.map(eval =>
       s"""
         ${eval.code}
-        if (!${eval.isNull} && (${isNull} ||
+        if (!${eval.isNull} && (${greatestTmpIsNull} ||
           ${ctx.genGreater(dataType, eval.value, ev.value)})) {
-          $isNull = false;
+          $greatestTmpIsNull = false;
           ${ev.value} = ${eval.value};
         }
       """
@@ -707,9 +707,9 @@ case class Greatest(children: Seq[Expression]) extends Expression {
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
     ev.copy(code = s"""
-      $isNull = true;
+      $greatestTmpIsNull = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       $codes
-      final boolean ${ev.isNull} = $isNull;""")
+      final boolean ${ev.isNull} = $greatestTmpIsNull;""")
   }
 }
