@@ -13,7 +13,8 @@ import org.apache.spark.sql.types.StructType;
 @InterfaceStability.Evolving
 public interface MicroBatchReadSupport extends DataSourceV2 {
   /**
-   * Creates a {@link MicroBatchReader} to scan a batch of data from this data source.
+   * Creates a {@link MicroBatchReader} to read batches of data from this data source in a
+   * streaming query.
    *
    * @param schema the user provided schema, or empty() if none was provided
    * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
