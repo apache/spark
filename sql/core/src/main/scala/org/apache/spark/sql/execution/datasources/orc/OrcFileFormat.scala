@@ -36,6 +36,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -138,8 +139,6 @@ class OrcFileFormat
       }
     }
 
-    val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
-
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
@@ -169,11 +168,17 @@ class OrcFileFormat
         val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
 
-        val colIds = requestedColIds ++ List.fill(partitionSchema.length)(-1).toArray[Int]
-        val unsafeProjection = UnsafeProjection.create(resultSchema)
-        val deserializer =
-          new OrcDeserializer(dataSchema, resultSchema, colIds, file.partitionValues)
-        iter.map(value => unsafeProjection(deserializer.deserialize(value)))
+        val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+        val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+        val deserializer = new OrcDeserializer(dataSchema, requiredSchema, requestedColIds)
+
+        if (partitionSchema.length == 0) {
+          iter.map(value => unsafeProjection(deserializer.deserialize(value)))
+        } else {
+          val joinedRow = new JoinedRow()
+          iter.map(value =>
+            unsafeProjection(joinedRow(deserializer.deserialize(value), file.partitionValues)))
+        }
       }
     }
   }

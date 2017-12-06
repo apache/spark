@@ -32,21 +32,13 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class OrcDeserializer(
     dataSchema: StructType,
-    resultSchema: StructType,
-    requestedColIds: Array[Int],
-    partitionValues: InternalRow) {
+    requiredSchema: StructType,
+    requestedColIds: Array[Int]) {
 
-  // Make a resultRow and initialize the partition column values once.
-  private val resultRow = new SpecificInternalRow(resultSchema.map(_.dataType))
-  private var i = 0
-  private val start = resultSchema.length - partitionValues.numFields
-  while (i < partitionValues.numFields) {
-    resultRow.update(start + i, partitionValues.get(i, resultSchema(start + i).dataType))
-    i += 1
-  }
+  private val resultRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
   private val fieldWriters: Array[WritableComparable[_] => Unit] = {
-    resultSchema.zipWithIndex
+    requiredSchema.zipWithIndex
       // The value of missing columns are always null, do not need writers.
       .filterNot { case (_, index) => requestedColIds(index) == -1 }
       .map { case (f, index) =>
