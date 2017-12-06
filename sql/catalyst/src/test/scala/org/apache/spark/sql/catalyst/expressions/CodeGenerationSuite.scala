@@ -380,4 +380,15 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
     }
   }
+
+  test("SPARK-22694: GenerateMutableProjection should not create unneeded global variables") {
+    val mutableProjection = GenerateMutableProjection.generate(
+      EqualTo(Literal(1), Literal(1)) :: Nil)
+    val declaredFields = mutableProjection.getClass.getDeclaredFields
+    // we have always 3 global declared variables at least:
+    // - one for references
+    // - one for mutableRow
+    // - one for this
+    assert(declaredFields.length == 3)
+  }
 }
