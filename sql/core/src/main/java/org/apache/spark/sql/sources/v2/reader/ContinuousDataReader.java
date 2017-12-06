@@ -9,21 +9,11 @@ import java.io.IOException;
  */
 public interface ContinuousDataReader<T> extends DataReader<T> {
     /**
-     * Proceed to next record, returning false only if the read is interrupted.
-     *
-     * @throws IOException if failure happens during disk/network IO like reading files.
-     */
-    boolean next() throws IOException;
-
-    /**
-     * Return the current record. This method should return same value until `next` is called.
-     */
-    T get();
-
-    /**
      * Get the offset of the current record.
      *
-     * The execution engine will use this offset as a restart checkpoint.
+     * The execution engine will call this method along with get() to keep track of the current
+     * offset. When an epoch ends, the offset of the previous record in each partition will be saved
+     * as a restart checkpoint.
      */
     PartitionOffset getOffset();
 }
