@@ -161,14 +161,12 @@ class BlockManagerMasterEndpoint(
     // The dispatcher is used as an implicit argument into the Future sequence construction.
     val removeMsg = RemoveRdd(rddId)
 
-    val handleRemoveRddException: PartialFunction[Throwable, Int] = {
-      case e: IOException =>
-        logWarning(s"Error trying to remove RDD $rddId", e)
-        0 // zero blocks were removed
-    }
-
     val futures = blockManagerInfo.values.map { bm =>
-      bm.slaveEndpoint.ask[Int](removeMsg).recover(handleRemoveRddException)
+      bm.slaveEndpoint.ask[Int](removeMsg).recover {
+        case e: IOException =>
+          logWarning(s"Error trying to remove RDD $rddId", e)
+          0 // zero blocks were removed
+      }
     }.toSeq
 
     Future.sequence(futures)
