@@ -16,6 +16,11 @@ public interface MicroBatchReadSupport extends DataSourceV2 {
    * Creates a {@link MicroBatchReader} to read batches of data from this data source in a
    * streaming query.
    *
+   * The execution engine will create a micro-batch reader at the start of a streaming query,
+   * alternate calls to setOffsetRange and createReadTasks for each batch to process, and then
+   * call stop() when the execution is complete. Note that a single query may have multiple
+   * executions due to restart or failure recovery.
+   *
    * @param schema the user provided schema, or empty() if none was provided
    * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
    *                           recovery. Readers for the same logical source in the same query

@@ -24,14 +24,16 @@ public interface MicroBatchReader extends DataSourceV2Reader, BaseStreamingSourc
     void setOffsetRange(Optional<Offset> start, Optional<Offset> end);
 
     /**
-     * Returns the specified or inferred start offset for this reader.
+     * Returns the specified (if explicitly set through setOffsetRange) or inferred start offset
+     * for this reader.
      *
      * @throws IllegalStateException if setOffsetRange has not been called
      */
     Offset getStartOffset();
 
     /**
-     * Return the specified or inferred end offset for this reader.
+     * Return the specified (if explicitly set through setOffsetRange) or inferred end offset
+     * for this reader.
      *
      * @throws IllegalStateException if setOffsetRange has not been called
      */
