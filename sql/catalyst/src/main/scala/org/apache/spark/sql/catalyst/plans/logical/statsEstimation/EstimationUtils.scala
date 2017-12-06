@@ -123,11 +123,11 @@ object EstimationUtils {
    * @return the number of the first bin into which a column values falls.
    */
   def findFirstBinForValue(value: Double, bins: Array[HistogramBin]): Int = {
-    var binId = 0
-    bins.foreach { bin =>
-      if (value > bin.hi) binId += 1
+    var i = 0
+    while ((i < bins.length) && (value > bins(i).hi)) {
+      i +=1
     }
-    binId
+    i
   }
 
   /**
@@ -139,6 +139,12 @@ object EstimationUtils {
    * @return the number of the last bin into which a column values falls.
    */
   def findLastBinForValue(value: Double, bins: Array[HistogramBin]): Int = {
+    var i = bins.length - 1
+    while ((i >= 0) && (value < bins(i).lo)) {
+      i -=1
+    }
+    i
+    /*
     var binId = 0
     for (i <- bins.indices) {
       if (value > bins(i).hi) {
@@ -154,6 +160,7 @@ object EstimationUtils {
       }
     }
     binId
+    */
   }
 
   /**
@@ -172,28 +179,15 @@ object EstimationUtils {
       lowerValue: Double,
       histogram: Histogram): Double = {
     val curBin = histogram.bins(binId)
-    if (binId == 0 && curBin.hi == curBin.lo) {
-      // the Min of the histogram occupies the whole first bin
+    if (curBin.hi == curBin.lo) {
+      // the entire bin is covered in the range
       1.0
-    } else if (binId == 0 && curBin.hi != curBin.lo) {
-      if (higherValue == lowerValue) {
-        // set percentage to 1/NDV
-        1.0 / curBin.ndv.toDouble
-      } else {
-        // Use proration since the range falls inside this bin.
-        (higherValue - lowerValue) / (curBin.hi - curBin.lo)
-      }
+    } else if (higherValue == lowerValue) {
+      // set percentage to 1/NDV
+      1.0 / curBin.ndv.toDouble
     } else {
-      if (curBin.hi == curBin.lo) {
-        // the entire bin is covered in the range
-        1.0
-      } else if (higherValue == lowerValue) {
-        // set percentage to 1/NDV
-        1.0 / curBin.ndv.toDouble
-      } else {
-        // Use proration since the range falls inside this bin.
-        math.min((higherValue - lowerValue) / (curBin.hi - curBin.lo), 1.0)
-      }
+      // Use proration since the range falls inside this bin.
+      math.min((higherValue - lowerValue) / (curBin.hi - curBin.lo), 1.0)
     }
   }
 
@@ -230,7 +224,7 @@ object EstimationUtils {
    * @param higherEnd a given upper bound value of a specified column value range
    * @param lowerEnd a given lower bound value of a specified column value range
    * @param histogram a numeric equi-height histogram
-   * @return the selectivity percentage for column values in [lowerEnd, higherEnd].
+   * @return the number of bins for column values in [lowerEnd, higherEnd].
    */
   def getOccupationBins(
       higherId: Int,
