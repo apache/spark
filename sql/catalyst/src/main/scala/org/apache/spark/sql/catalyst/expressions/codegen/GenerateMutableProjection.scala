@@ -91,8 +91,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
         ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
     }
 
-    val allProjections = ctx.splitExpressions(projectionCodes)
-    val allUpdates = ctx.splitExpressions(updates)
+    val allProjections = ctx.splitExpressionsWithCurrentInputs(projectionCodes)
+    val allUpdates = ctx.splitExpressionsWithCurrentInputs(updates)
 
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
