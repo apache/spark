@@ -17,30 +17,50 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.regex.Pattern
+
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.ConfigSupport
 
-private[sql] object DataSourceV2ConfigSupport {
+private[sql] object DataSourceV2ConfigSupport extends Logging {
 
   /**
-   * Helper method to filter session configs with config key that matches at least one of the given
-   * prefixes.
+   * Helper method to propagate session configs with config key that matches at least one of the
+   * given prefixes to the corresponding data source options.
    *
-   * @param cs the config key-prefixes that should be filtered.
+   * @param cs the session config propagate help class
+   * @param source the data source format
    * @param conf the session conf
    * @return an immutable map that contains all the session configs that should be propagated to
    *         the data source.
    */
   def withSessionConfig(
       cs: ConfigSupport,
+      source: String,
       conf: SQLConf): immutable.Map[String, String] = {
     val prefixes = cs.getConfigPrefixes
     require(prefixes != null, "The config key-prefixes cann't be null.")
+    val mapping = cs.getConfigMapping.asScala
+
+    val pattern = Pattern.compile(s"spark\\.sql(\\.$source)?\\.(.*)")
     conf.getAllConfs.filterKeys { confKey =>
       prefixes.asScala.exists(confKey.startsWith(_))
+    }.map{ entry =>
+      val newKey = mapping.get(entry._1).getOrElse {
+        val m = pattern.matcher(entry._1)
+        if (m.matches()) {
+          m.group(2)
+        } else {
+          // Unable to recognize the session config key.
+          logWarning(s"Unrecognizable session config name ${entry._1}.")
+          entry._1
+        }
+      }
+      (newKey, entry._2)
     }
   }
 }

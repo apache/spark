@@ -18,9 +18,9 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
@@ -32,6 +32,23 @@ public interface ConfigSupport {
     /**
      * Create a list of key-prefixes, all session configs that match at least one of the prefixes
      * will be propagated to the data source options.
+     * If the returned list is empty, no session config will be propagated.
      */
     List<String> getConfigPrefixes();
+
+    /**
+     * Create a mapping from session config names to data source option names. If a propagated
+     * session config's key doesn't exist in this mapping, the "spark.sql.${source}" prefix will
+     * be trimmed. For example, if the data source name is "parquet", perform the following config
+     * key mapping by default:
+     * "spark.sql.parquet.int96AsTimestamp" -> "int96AsTimestamp",
+     * "spark.sql.parquet.compression.codec" -> "compression.codec",
+     * "spark.sql.columnNameOfCorruptRecord" -> "columnNameOfCorruptRecord".
+     *
+     * If the mapping is specified, for example, the returned map contains an entry
+     * ("spark.sql.columnNameOfCorruptRecord" -> "colNameCorrupt"), then the session config
+     * "spark.sql.columnNameOfCorruptRecord" will be converted to "colNameCorrupt" in
+     * [[DataSourceV2Options]].
+     */
+    Map<String, String> getConfigMapping();
 }

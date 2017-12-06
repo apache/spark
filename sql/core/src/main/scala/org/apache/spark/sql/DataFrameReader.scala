@@ -190,7 +190,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val dataSource = cls.newInstance()
       val options = dataSource match {
         case cs: ConfigSupport =>
-          val confs = withSessionConfig(cs, sparkSession.sessionState.conf)
+          val confs = withSessionConfig(cs, source, sparkSession.sessionState.conf)
           new DataSourceV2Options((confs ++ extraOptions).asJava)
         case _ =>
           new DataSourceV2Options(extraOptions.asJava)
