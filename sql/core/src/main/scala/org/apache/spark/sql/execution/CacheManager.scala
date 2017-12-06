@@ -81,7 +81,7 @@ class CacheManager extends Logging {
   }
 
   private def extractStatsOfPlanForCache(plan: LogicalPlan): Option[Statistics] = {
-    if (plan.conf.cboEnabled && plan.stats.rowCount.isDefined) {
+    if (plan.stats.rowCount.isDefined) {
       Some(plan.stats)
     } else {
       None
@@ -156,7 +156,7 @@ class CacheManager extends Logging {
           storageLevel = cd.cachedRepresentation.storageLevel,
           child = spark.sessionState.executePlan(cd.plan).executedPlan,
           tableName = cd.cachedRepresentation.tableName,
-          stats = extractStatsOfPlanForCache(cd.plan))
+          statsOfPlanToCache = extractStatsOfPlanForCache(cd.plan))
         needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }

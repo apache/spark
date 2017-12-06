@@ -38,9 +38,9 @@ object InMemoryRelation {
       storageLevel: StorageLevel,
       child: SparkPlan,
       tableName: Option[String],
-      stats: Option[Statistics]): InMemoryRelation =
+      statsOfPlanToCache: Option[Statistics]): InMemoryRelation =
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)(
-      statsOfPlanToCache = stats)
+      statsOfPlanToCache = statsOfPlanToCache)
 }
 
 
@@ -74,6 +74,8 @@ case class InMemoryRelation(
 
   override def computeStats(): Statistics = {
     if (batchStats.value == 0L) {
+      // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache when
+      // applicable
       statsOfPlanToCache.getOrElse(Statistics(sizeInBytes =
         child.sqlContext.conf.defaultSizeInBytes))
     } else {
