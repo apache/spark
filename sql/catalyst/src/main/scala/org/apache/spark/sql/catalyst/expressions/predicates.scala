@@ -237,15 +237,16 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val javaDataType = ctx.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
-    // inTmpResult -1 indicates at lease one expr in list is evaluated to null.
-    // 0 means no matches found. 1 means the expr in list matches the given value expr.
+    // inTmpResult has 3 possible values:
+    //   -1 means no matches found and there is at least one value in the list evaluated to null
+    //   0 means no matches found and all values in the list are not null
+    //   1 means one value in the list is matched
     val tmpResult = ctx.freshName("inTmpResult")
     val valueArg = ctx.freshName("valueArg")
     // All the blocks are meant to be inside a do { ... } while (false); loop.
     // The evaluation of variables can be stopped when we find a matching value.
     val listCode = listGen.map(x =>
       s"""
-         |$tmpResult = 0;
          |${x.code}
          |if (${x.isNull}) {
          |  $tmpResult = -1; // isNull = true
@@ -279,8 +280,9 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     ev.copy(code =
       s"""
          |${valueGen.code}
-         |byte $tmpResult = (byte)(${valueGen.isNull} ? -1 : 0);
-         |if ($tmpResult != -1) {
+         |byte $tmpResult = -1;
+         |if (!${valueGen.isNull}) {
+         |  $tmpResult = 0;
          |  $javaDataType $valueArg = ${valueGen.value};
          |  do {
          |    $codes

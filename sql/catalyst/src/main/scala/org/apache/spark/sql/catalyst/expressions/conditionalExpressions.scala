@@ -180,12 +180,12 @@ case class CaseWhen(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // This variable represents whether the evaluated result is null or not. It's a byte value
-    // instead of boolean because it carries an extra information about if the case-when condition
-    // is met or not. It is initialized to `-1`, which means the condition is not met yet and the
-    // result is unknown. When the first condition is met, it is set to `1` if result is null, or
-    // `0` if result is not null. We won't go on anymore on the computation if it's set to `1` or
-    // `0`.
+    // This variable holds the state of the result:
+    //   -1 means the condition is not met yet and the result is unknown.
+    //   0 means the condition is met and result is not null.
+    //   1 means the condition is met and result is null.
+    // It is initialized to `-1`, and if it's set to `1` or `0`, We won't go on anymore on the
+    // computation.
     val resultState = ctx.freshName("caseWhenResultState")
     val tmpResult = ctx.freshName("caseWhenTmpResult")
     ctx.addMutableState(ctx.javaType(dataType), tmpResult)
@@ -221,22 +221,22 @@ case class CaseWhen(
     val allConditions = cases ++ elseCode
 
     // This generates code like:
-    //   caseWhenResultIsNull = caseWhen_1(i);
-    //   if(caseWhenResultIsNull != -1) {
+    //   caseWhenResultState = caseWhen_1(i);
+    //   if(caseWhenResultState != -1) {
     //     continue;
     //   }
-    //   caseWhenResultIsNull = caseWhen_2(i);
-    //   if(caseWhenResultIsNull != -1) {
+    //   caseWhenResultState = caseWhen_2(i);
+    //   if(caseWhenResultState != -1) {
     //     continue;
     //   }
     //   ...
     // and the declared methods are:
     //   private byte caseWhen_1234() {
-    //     byte caseWhenResultIsNull = -1;
+    //     byte caseWhenResultState = -1;
     //     do {
     //       // here the evaluation of the conditions
     //     } while (false);
-    //     return caseWhenResultIsNull;
+    //     return caseWhenResultState;
     //   }
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = allConditions,
