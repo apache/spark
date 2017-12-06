@@ -401,14 +401,9 @@ class SparkSession(object):
             data = list(data)
 
         if schema is None or isinstance(schema, (list, tuple)):
-            struct = self._inferSchemaFromList(data, names=schema)
-            converter = _create_converter(struct)
+            schema = self._inferSchemaFromList(data, names=schema)
+            converter = _create_converter(schema)
             data = map(converter, data)
-            if isinstance(schema, (list, tuple)):
-                for i, name in enumerate(schema):
-                    struct.fields[i].name = name
-                    struct.names[i] = name
-            schema = struct
 
         elif not isinstance(schema, StructType):
             raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
