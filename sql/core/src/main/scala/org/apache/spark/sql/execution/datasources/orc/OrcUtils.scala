@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.orc.{OrcFile, TypeDescription}
+import org.apache.orc.{OrcFile, Reader, TypeDescription}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -80,11 +80,8 @@ object OrcUtils extends Logging {
       isCaseSensitive: Boolean,
       dataSchema: StructType,
       requiredSchema: StructType,
-      file: Path,
+      reader: Reader,
       conf: Configuration): Option[Array[Int]] = {
-    val fs = file.getFileSystem(conf)
-    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val reader = OrcFile.createReader(file, readerOptions)
     val orcFieldNames = reader.getSchema.getFieldNames.asScala
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
@@ -108,6 +105,23 @@ object OrcUtils extends Logging {
         val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
         Some(requiredSchema.fieldNames.map { name => orcFieldNames.indexWhere(resolver(_, name)) })
       }
+    }
+  }
+
+  /**
+   * Return a fixed ORC schema with data schema information, if needed.
+   */
+  def getFixedTypeDescription(
+      schema: TypeDescription,
+      dataSchema: StructType): TypeDescription = {
+    if (schema.getFieldNames.asScala.forall(_.startsWith("_col"))) {
+      var schemaString = schema.toString
+      dataSchema.zipWithIndex.foreach { case (field: StructField, index: Int) =>
+        schemaString = schemaString.replace(s"_col$index:", s"${field.name}:")
+      }
+      TypeDescription.fromString(schemaString)
+    } else {
+      schema
     }
   }
 }
