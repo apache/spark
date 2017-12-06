@@ -30,8 +30,8 @@ public interface ContinuousWriteSupport extends BaseStreamingSink {
      *                case-insensitive string-to-string map.
      */
     Optional<ContinuousWriter> createContinuousWriter(
-            String queryId,
-            StructType schema,
-            OutputMode mode,
-            DataSourceV2Options options);
+        String queryId,
+        StructType schema,
+        OutputMode mode,
+        DataSourceV2Options options);
 }
