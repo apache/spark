@@ -606,13 +606,13 @@ case class Least(children: Seq[Expression]) extends Expression {
     ctx.addMutableState(ctx.JAVA_BOOLEAN, leastTmpIsNull)
     val evals = evalChildren.map(eval =>
       s"""
-        ${eval.code}
-        if (!${eval.isNull} && (${leastTmpIsNull} ||
-          ${ctx.genGreater(dataType, ev.value, eval.value)})) {
-          $leastTmpIsNull = false;
-          ${ev.value} = ${eval.value};
-        }
-      """
+         |${eval.code}
+         |if (!${eval.isNull} && (${leastTmpIsNull} ||
+         |  ${ctx.genGreater(dataType, ev.value, eval.value)})) {
+         |  $leastTmpIsNull = false;
+         |  ${ev.value} = ${eval.value};
+         |}
+      """.stripMargin
     )
 
     val resultType = ctx.javaType(dataType)
@@ -627,11 +627,13 @@ case class Least(children: Seq[Expression]) extends Expression {
           |return ${ev.value};
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
-    ev.copy(code = s"""
-      $leastTmpIsNull = true;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      $codes
-      final boolean ${ev.isNull} = $leastTmpIsNull;""")
+    ev.copy(code =
+      s"""
+         |$leastTmpIsNull = true;
+         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$codes
+         |final boolean ${ev.isNull} = $leastTmpIsNull;
+      """.stripMargin)
   }
 }
 
@@ -685,13 +687,13 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     ctx.addMutableState(ctx.JAVA_BOOLEAN, greatestTmpIsNull)
     val evals = evalChildren.map(eval =>
       s"""
-        ${eval.code}
-        if (!${eval.isNull} && (${greatestTmpIsNull} ||
-          ${ctx.genGreater(dataType, eval.value, ev.value)})) {
-          $greatestTmpIsNull = false;
-          ${ev.value} = ${eval.value};
-        }
-      """
+         |${eval.code}
+         |if (!${eval.isNull} && (${greatestTmpIsNull} ||
+         |  ${ctx.genGreater(dataType, eval.value, ev.value)})) {
+         |  $greatestTmpIsNull = false;
+         |  ${ev.value} = ${eval.value};
+         |}
+      """.stripMargin
     )
 
     val resultType = ctx.javaType(dataType)
@@ -706,10 +708,12 @@ case class Greatest(children: Seq[Expression]) extends Expression {
            |return ${ev.value};
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
-    ev.copy(code = s"""
-      $greatestTmpIsNull = true;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      $codes
-      final boolean ${ev.isNull} = $greatestTmpIsNull;""")
+    ev.copy(code =
+      s"""
+         |$greatestTmpIsNull = true;
+         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$codes
+         |final boolean ${ev.isNull} = $greatestTmpIsNull;
+      """.stripMargin)
   }
 }
