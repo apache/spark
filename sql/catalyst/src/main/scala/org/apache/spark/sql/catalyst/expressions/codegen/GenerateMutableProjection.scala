@@ -57,86 +57,79 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       case _ => true
     }.unzip
     val exprVals = ctx.generateExpressions(validExpr, useSubexprElimination)
-    val projectionCodes = exprVals.zip(index).map {
+    val projectionAndUpdatesCode = exprVals.zip(index).map {
       case (ev, i) =>
         val e = expressions(i)
-        if (e.nullable) {
-          val isNull = s"isNull_$i"
-          val value = s"value_$i"
-          ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull, s"$isNull = true;")
-          ctx.addMutableState(ctx.javaType(e.dataType), value,
-            s"$value = ${ctx.defaultValue(e.dataType)};")
+        val isNull = s"isNull_$i"
+        val value = s"value_$i"
+        // code for the projection
+        val proj = if (e.nullable) {
           s"""
-            ${ev.code}
-            $isNull = ${ev.isNull};
-            $value = ${ev.value};
-           """
+             |${ev.code}
+             |final ${ctx.JAVA_BOOLEAN} $isNull = ${ev.isNull};
+             |final ${ctx.javaType(e.dataType)} $value = ${ev.value};
+           """.stripMargin
         } else {
-          val value = s"value_$i"
-          ctx.addMutableState(ctx.javaType(e.dataType), value,
-            s"$value = ${ctx.defaultValue(e.dataType)};")
           s"""
-            ${ev.code}
-            $value = ${ev.value};
-           """
+             |${ev.code}
+             |final ${ctx.javaType(e.dataType)} $value = ${ev.value};
+           """.stripMargin
         }
+        // code for updating the mutableRow
+        val updateExpr = ExprCode("", isNull, value)
+        val update = ctx.updateColumn("mutableRow", e.dataType, i, updateExpr, e.nullable)
+        // code which performs the projection and updates the mutableRow
+        proj + update
     }
 
     // Evaluate all the subexpressions.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
-    val updates = validExpr.zip(index).map {
-      case (e, i) =>
-        val ev = ExprCode("", s"isNull_$i", s"value_$i")
-        ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
-    }
+    val allProjectionsAndUpdates = ctx.splitExpressionsWithCurrentInputs(projectionAndUpdatesCode)
 
-    val allProjections = ctx.splitExpressionsWithCurrentInputs(projectionCodes)
-    val allUpdates = ctx.splitExpressionsWithCurrentInputs(updates)
-
-    val codeBody = s"""
-      public java.lang.Object generate(Object[] references) {
-        return new SpecificMutableProjection(references);
-      }
-
-      class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
-
-        private Object[] references;
-        private InternalRow mutableRow;
-        ${ctx.declareMutableStates()}
-
-        public SpecificMutableProjection(Object[] references) {
-          this.references = references;
-          mutableRow = new $genericMutableRowType(${expressions.size});
-          ${ctx.initMutableStates()}
-        }
-
-        public void initialize(int partitionIndex) {
-          ${ctx.initPartition()}
-        }
-
-        public ${classOf[BaseMutableProjection].getName} target(InternalRow row) {
-          mutableRow = row;
-          return this;
-        }
-
-        /* Provide immutable access to the last projected row. */
-        public InternalRow currentValue() {
-          return (InternalRow) mutableRow;
-        }
-
-        public java.lang.Object apply(java.lang.Object _i) {
-          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
-          $evalSubexpr
-          $allProjections
-          // copy all the results into MutableRow
-          $allUpdates
-          return mutableRow;
-        }
-
-        ${ctx.declareAddedFunctions()}
-      }
-    """
+    val codeBody =
+      s"""
+         |public java.lang.Object generate(Object[] references) {
+         |  return new SpecificMutableProjection(references);
+         |}
+         |
+         |class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
+         |
+         |  private Object[] references;
+         |  private InternalRow mutableRow;
+         |  ${ctx.declareMutableStates()}
+         |
+         |  public SpecificMutableProjection(Object[] references) {
+         |    this.references = references;
+         |    mutableRow = new $genericMutableRowType(${expressions.size});
+         |    ${ctx.initMutableStates()}
+         |  }
+         |
+         |  public void initialize(int partitionIndex) {
+         |    ${ctx.initPartition()}
+         |  }
+         |
+         |  public ${classOf[BaseMutableProjection].getName} target(InternalRow row) {
+         |    mutableRow = row;
+         |    return this;
+         |  }
+         |
+         |  /* Provide immutable access to the last projected row. */
+         |  public InternalRow currentValue() {
+         |    return (InternalRow) mutableRow;
+         |  }
+         |
+         |  public java.lang.Object apply(java.lang.Object _i) {
+         |    InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+         |    $evalSubexpr
+         |    // evaluate all the projections and update mutableRow
+         |    $allProjectionsAndUpdates
+         |    return mutableRow;
+         |  }
+         |
+         |  ${ctx.declareAddedFunctions()}
+         |}
+       """.stripMargin
 
     val code = CodeFormatter.stripOverlappingComments(
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
