@@ -38,19 +38,19 @@ abstract class SparkFunSuite
 
   val threadWhiteList = Set(
     /**
-      * Netty related threads.
-      */
+     * Netty related threads.
+     */
     "netty.*",
 
     /**
-      * A Single-thread singleton EventExecutor inside netty which creates such threads.
-      */
+     * A Single-thread singleton EventExecutor inside netty which creates such threads.
+     */
     "globalEventExecutor.*",
 
     /**
-      * Netty creates such threads.
-      * Checks if a thread is alive periodically and runs a task when a thread dies.
-      */
+     * Netty creates such threads.
+     * Checks if a thread is alive periodically and runs a task when a thread dies.
+     */
     "threadDeathWatcher.*"
   )
   var beforeAllTestThreadNames: Set[String] = Set.empty
