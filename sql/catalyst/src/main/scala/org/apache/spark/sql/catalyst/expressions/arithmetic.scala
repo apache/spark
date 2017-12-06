@@ -681,7 +681,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    val isNull = ctx.freshName("isNull")
+    val isNull = ctx.freshName("greatestTmpIsNull")
     ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
     val evals = evalChildren.map(eval =>
       s"""
@@ -697,7 +697,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     val resultType = ctx.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
-      funcName = "least",
+      funcName = "greatest",
       extraArguments = Seq(resultType -> ev.value),
       returnType = resultType,
       makeSplitFunction = body =>
