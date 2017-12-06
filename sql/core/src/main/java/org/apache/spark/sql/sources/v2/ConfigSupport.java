@@ -51,4 +51,12 @@ public interface ConfigSupport {
      * [[DataSourceV2Options]].
      */
     Map<String, String> getConfigMapping();
+
+    /**
+     * Create a list of valid data source option names. When the list is specified, a session
+     * config will NOT be propagated if its corresponding option name is not in the list.
+     *
+     * If the returned list is empty, don't check the option names.
+     */
+    List<String> getValidOptions();
 }

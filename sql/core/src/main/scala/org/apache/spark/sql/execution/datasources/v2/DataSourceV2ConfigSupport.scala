@@ -45,11 +45,14 @@ private[sql] object DataSourceV2ConfigSupport extends Logging {
     val prefixes = cs.getConfigPrefixes
     require(prefixes != null, "The config key-prefixes cann't be null.")
     val mapping = cs.getConfigMapping.asScala
+    val validOptions = cs.getValidOptions
+    require(validOptions != null, "The valid options list cann't be null.")
 
     val pattern = Pattern.compile(s"spark\\.sql(\\.$source)?\\.(.*)")
-    conf.getAllConfs.filterKeys { confKey =>
+    val filteredConfigs = conf.getAllConfs.filterKeys { confKey =>
       prefixes.asScala.exists(confKey.startsWith(_))
-    }.map{ entry =>
+    }
+    val convertedConfigs = filteredConfigs.map{ entry =>
       val newKey = mapping.get(entry._1).getOrElse {
         val m = pattern.matcher(entry._1)
         if (m.matches()) {
@@ -61,6 +64,22 @@ private[sql] object DataSourceV2ConfigSupport extends Logging {
         }
       }
       (newKey, entry._2)
+    }
+    if (validOptions.size == 0) {
+      convertedConfigs
+    } else {
+      // Check whether all the valid options are propagated.
+      validOptions.asScala.foreach { optionName =>
+        if (!convertedConfigs.keySet.contains(optionName)) {
+          logWarning(s"Data source option '$optionName' is required, but not propagated from " +
+            "session config, please check the config settings.")
+        }
+      }
+
+      // Filter the valid options.
+      convertedConfigs.filterKeys { optionName =>
+        validOptions.contains(optionName)
+      }
     }
   }
 }

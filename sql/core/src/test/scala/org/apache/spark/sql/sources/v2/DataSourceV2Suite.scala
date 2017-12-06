@@ -61,6 +61,21 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("config support with validOptions") {
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false",
+      SQLConf.PARQUET_COMPRESSION.key -> "uncompressed",
+      SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "32",
+      SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM.key -> "10000") {
+      val cs = classOf[DataSourceV2WithValidOptions].newInstance().asInstanceOf[ConfigSupport]
+      val confs = DataSourceV2ConfigSupport.withSessionConfig(cs, "parquet", SQLConf.get)
+      assert(confs.size == 2)
+      assert(confs.keySet.filter(_.startsWith("spark.sql.parquet")).size == 0)
+      assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
+      assert(confs.keySet.contains("compressionCodec"))
+      assert(confs.keySet.contains("sources.parallelPartitionDiscovery.threshold"))
+    }
+  }
+
   test("advanced implementation") {
     Seq(classOf[AdvancedDataSourceV2], classOf[JavaAdvancedDataSourceV2]).foreach { cls =>
       withClue(cls.getName) {
@@ -209,6 +224,18 @@ class DataSourceV2WithConfig extends SimpleDataSourceV2 with ConfigSupport {
     val configMap = new util.HashMap[String, String]()
     configMap.put("spark.sql.parquet.compression.codec", "compressionCodec")
     configMap
+  }
+
+  override def getValidOptions: JList[String] = new util.ArrayList[String]()
+}
+
+class DataSourceV2WithValidOptions extends DataSourceV2WithConfig {
+
+  override def getValidOptions: JList[String] = {
+    java.util.Arrays.asList(
+      "sources.parallelPartitionDiscovery.threshold",
+      "compressionCodec",
+      "not.exist.option")
   }
 }
 
