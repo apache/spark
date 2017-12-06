@@ -231,4 +231,15 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringSplit(s1, s2), null, row3)
   }
 
+  test("SPARK-22694: Like should not use global variables") {
+    val ctx = new CodegenContext
+    Like(Literal("a"), Literal("a%")).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
+  test("SPARK-22694: RLike should not use global variables") {
+    val ctx = new CodegenContext
+    RLike(Literal("a"), Literal("a*")).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
 }
