@@ -344,17 +344,17 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     } else {
       ""
     }
-    ctx.addMutableState(setName, setTerm,
-      s"$setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();")
-    ev.copy(code = s"""
-      ${childGen.code}
-      boolean ${ev.isNull} = ${childGen.isNull};
-      boolean ${ev.value} = false;
-      if (!${ev.isNull}) {
-        ${ev.value} = $setTerm.contains(${childGen.value});
-        $setNull
-      }
-     """)
+    ev.copy(code =
+      s"""
+         |${childGen.code}
+         |${ctx.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
+         |${ctx.JAVA_BOOLEAN} ${ev.value} = false;
+         |if (!${ev.isNull}) {
+         |  $setName $setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();
+         |  ${ev.value} = $setTerm.contains(${childGen.value});
+         |  $setNull
+         |}
+       """.stripMargin)
   }
 
   override def sql: String = {
