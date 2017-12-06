@@ -18,13 +18,13 @@ public interface MicroBatchReader extends DataSourceV2Reader, BaseStreamingSourc
      * @param start The initial offset to scan from. If not specified, scan from an
      *              implementation-specified start point, such as the earliest available record.
      * @param end The last offset to include in the scan. If not specified, scan up to an
-     *            implementation-defined inferred endpoint, such as the last available offset
+     *            implementation-defined endpoint, such as the last available offset
      *            or the start offset plus a target batch size.
      */
     void setOffsetRange(Optional<Offset> start, Optional<Offset> end);
 
     /**
-     * Returns the specified start offset for this reader.
+     * Returns the specified or inferred start offset for this reader.
      *
      * @throws IllegalStateException if setOffsetRange has not been called
      */
