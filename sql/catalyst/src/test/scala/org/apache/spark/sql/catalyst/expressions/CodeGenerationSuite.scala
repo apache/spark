@@ -19,13 +19,15 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
+import scala.reflect.classTag
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, GetExternalRowField, ValidateExternalType}
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -379,5 +381,31 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       fail(
         s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
     }
+  }
+
+  test("SPARK-22696: CreateExternalRow should not use global variables") {
+    val ctx = new CodegenContext
+    val schema = new StructType().add("a", IntegerType).add("b", StringType)
+    CreateExternalRow(Seq(Literal(1), Literal("x")), schema).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
+  test("SPARK-22696: EncodeUsingSerializer should not use global variables") {
+    val ctx = new CodegenContext
+    EncodeUsingSerializer(Literal(1), kryo = false).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
+  test("SPARK-22696: DecodeUsingSerializer should not use global variables") {
+    val ctx = new CodegenContext
+    DecodeUsingSerializer[Int](Literal(1), classTag[Int], kryo = false).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
+  test("SPARK-22696: InitializeJavaBean should not use global variables") {
+    val ctx = new CodegenContext
+    InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
+      Map("add" -> Literal(1))).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
   }
 }
