@@ -22,6 +22,7 @@ import scala.util.Random
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -118,5 +119,21 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
         sortAnswers = false
       )
     }
+  }
+
+  test("SPARK-22716: SortExec should not use a global variable to reference to itself") {
+    val ctx = new CodegenContext
+    val df = Seq(("a", 1)).toDF("a", "b").sort("a")
+    val plan = df.queryExecution.executedPlan
+    val sortExec = plan.children.head.asInstanceOf[SortExec]
+    sortExec.produce(ctx, plan.asInstanceOf[CodegenSupport])
+    // we expect 8 global variables:
+    // - needToSort
+    // - sorter
+    // - metrics
+    // - sortedIter
+    // - the inputAdapter from WholeStageCodegen
+    // - the 3 metrics: peakMemory, spillSize and sortTime
+    assert(ctx.mutableStates.length == 8)
   }
 }

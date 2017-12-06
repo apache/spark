@@ -138,7 +138,7 @@ case class SortExec(
 
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.
-    val thisPlan = ctx.addReferenceObj("plan", this)
+    val thisPlan = ctx.addReferenceMinorObj(this)
     sorterVariable = ctx.freshName("sorter")
     ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, sorterVariable,
       s"$sorterVariable = $thisPlan.createSorter();")

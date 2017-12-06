@@ -36,7 +36,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   private val outputPrefix = s"Result of ${child.simpleString} is "
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val outputPrefixField = ctx.addReferenceObj("outputPrefix", outputPrefix)
+    val outputPrefixField = ctx.addReferenceMinorObj(outputPrefix)
     nullSafeCodeGen(ctx, ev, c =>
       s"""
          | System.err.println($outputPrefixField + $c);

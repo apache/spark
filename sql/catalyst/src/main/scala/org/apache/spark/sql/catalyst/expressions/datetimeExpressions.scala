@@ -676,7 +676,7 @@ abstract class UnixTime
         if (formatter == null) {
           ExprCode("", "true", ctx.defaultValue(dataType))
         } else {
-          val formatterName = ctx.addReferenceObj("formatter", formatter, df)
+          val formatterName = ctx.addReferenceMinorObj(formatter, df)
           val eval1 = left.genCode(ctx)
           ev.copy(code = s"""
             ${eval1.code}
@@ -811,7 +811,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
       if (formatter == null) {
         ExprCode("", "true", "(UTF8String) null")
       } else {
-        val formatterName = ctx.addReferenceObj("formatter", formatter, df)
+        val formatterName = ctx.addReferenceMinorObj(formatter, df)
         val t = left.genCode(ctx)
         ev.copy(code = s"""
           ${t.code}
