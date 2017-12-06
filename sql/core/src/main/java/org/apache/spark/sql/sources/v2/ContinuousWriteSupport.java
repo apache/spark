@@ -17,7 +17,7 @@ import org.apache.spark.sql.types.StructType;
 public interface ContinuousWriteSupport extends BaseStreamingSink {
 
     /**
-     * Creates an optional {@link DataSourceV2Writer} to save the data to this data source. Data
+     * Creates an optional {@link ContinuousWriter} to save the data to this data source. Data
      * sources can return None if there is no writing needed to be done.
      *
      * @param queryId A unique string for the writing query. It's possible that there are many writing
