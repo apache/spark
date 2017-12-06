@@ -434,15 +434,6 @@ object TypeCoercion {
     }
   }
 
-  private def flattenExpr(expr: Expression): Seq[Expression] = {
-    expr match {
-      // Multi columns in IN clause is represented as a CreateNamedStruct.
-      // flatten the named struct to get the list of expressions.
-      case cns: CreateNamedStruct => cns.valExprs
-      case expr => Seq(expr)
-    }
-  }
-
   /**
    * Handles type coercion for both IN expression with subquery and IN
    * expressions without subquery.
@@ -516,7 +507,7 @@ object TypeCoercion {
    */
   object HiveInConversion extends TypeCoercionRule {
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
