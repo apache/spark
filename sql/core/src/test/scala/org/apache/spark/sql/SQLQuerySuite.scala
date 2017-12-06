@@ -28,6 +28,8 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1664,7 +1666,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
     }
-    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+    assert(e.message.contains("Hive-based ORC data source must be used with Hive support"))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
@@ -2780,6 +2782,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val path = new File(dir, "orc").getCanonicalPath
       Seq(Some(1), None).toDF("col.dots").write.format(orc).save(path)
       assert(spark.read.format(orc).load(path).collect().length == 2)
+    }
+  }
+
+  test("SPARK-20728 Make ORCFileFormat configurable between sql/hive and sql/core") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE spark_20728(a INT) USING ORC")
+      }
+      assert(e.message.contains("Hive-based ORC data source must be used with Hive support"))
+    }
+
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
+      withTable("spark_20728") {
+        sql("CREATE TABLE spark_20728(a INT) USING ORC")
+        val fileFormat = sql("SELECT * FROM spark_20728").queryExecution.analyzed.collectFirst {
+          case l: LogicalRelation => l.relation.asInstanceOf[HadoopFsRelation].fileFormat.getClass
+        }
+        assert(fileFormat == Some(classOf[OrcFileFormat]))
+      }
     }
   }
 }

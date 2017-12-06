@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
+  RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.types._
 
 
@@ -529,6 +530,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       exprs = SortOrder(Literal(10), Ascending))
     checkPartitioning[RangePartitioning](numPartitions = 10,
       exprs = SortOrder('a.attr, Ascending), SortOrder('b.attr, Descending))
+
+    checkPartitioning[RoundRobinPartitioning](numPartitions = 10, exprs = Seq.empty: _*)
 
     intercept[IllegalArgumentException] {
       checkPartitioning(numPartitions = 0, exprs = Literal(20))

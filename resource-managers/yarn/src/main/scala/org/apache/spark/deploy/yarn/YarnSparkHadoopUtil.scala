@@ -17,21 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.nio.charset.StandardCharsets.UTF_8
-import java.util.regex.Matcher
-import java.util.regex.Pattern
+import java.util.regex.{Matcher, Pattern}
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.{JobConf, Master}
-import org.apache.hadoop.security.Credentials
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
-import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -43,87 +36,10 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
-
-/**
- * Contains util methods to interact with Hadoop from spark.
- */
-class YarnSparkHadoopUtil extends SparkHadoopUtil {
+object YarnSparkHadoopUtil {
 
   private var credentialUpdater: CredentialUpdater = _
 
-  override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
-    dest.addCredentials(source.getCredentials())
-  }
-
-  // Note that all params which start with SPARK are propagated all the way through, so if in yarn
-  // mode, this MUST be set to true.
-  override def isYarnMode(): Boolean = { true }
-
-  // Return an appropriate (subclass) of Configuration. Creating a config initializes some Hadoop
-  // subsystems. Always create a new config, don't reuse yarnConf.
-  override def newConfiguration(conf: SparkConf): Configuration = {
-    val hadoopConf = new YarnConfiguration(super.newConfiguration(conf))
-    hadoopConf.addResource(Client.SPARK_HADOOP_CONF_FILE)
-    hadoopConf
-  }
-
-  // Add any user credentials to the job conf which are necessary for running on a secure Hadoop
-  // cluster
-  override def addCredentials(conf: JobConf) {
-    val jobCreds = conf.getCredentials()
-    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
-  }
-
-  override def addSecretKeyToUserCredentials(key: String, secret: String) {
-    val creds = new Credentials()
-    creds.addSecretKey(new Text(key), secret.getBytes(UTF_8))
-    addCurrentUserCredentials(creds)
-  }
-
-  override def getSecretKeyFromUserCredentials(key: String): Array[Byte] = {
-    val credentials = getCurrentUserCredentials()
-    if (credentials != null) credentials.getSecretKey(new Text(key)) else null
-  }
-
-  private[spark] override def startCredentialUpdater(sparkConf: SparkConf): Unit = {
-    val hadoopConf = newConfiguration(sparkConf)
-    val credentialManager = new YARNHadoopDelegationTokenManager(
-      sparkConf,
-      hadoopConf,
-      conf => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, conf))
-    credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
-    credentialUpdater.start()
-  }
-
-  private[spark] override def stopCredentialUpdater(): Unit = {
-    if (credentialUpdater != null) {
-      credentialUpdater.stop()
-      credentialUpdater = null
-    }
-  }
-
-  private[spark] def getContainerId: ContainerId = {
-    val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
-    ConverterUtils.toContainerId(containerIdString)
-  }
-
-  /** The filesystems for which YARN should fetch delegation tokens. */
-  private[spark] def hadoopFSsToAccess(
-      sparkConf: SparkConf,
-      hadoopConf: Configuration): Set[FileSystem] = {
-    val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .toSet
-
-    val stagingFS = sparkConf.get(STAGING_DIR)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .getOrElse(FileSystem.get(hadoopConf))
-
-    filesystemsToAccess + stagingFS
-  }
-}
-
-object YarnSparkHadoopUtil {
   // Additional memory overhead
   // 10% was arrived at experimentally. In the interest of minimizing memory waste while covering
   // the common cases. Memory overhead tends to grow with container size.
@@ -137,14 +53,6 @@ object YarnSparkHadoopUtil {
   // request types (like map/reduce in hadoop for example)
   val RM_REQUEST_PRIORITY = Priority.newInstance(1)
 
-  def get: YarnSparkHadoopUtil = {
-    val yarnMode = java.lang.Boolean.parseBoolean(
-      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
-    if (!yarnMode) {
-      throw new SparkException("YarnSparkHadoopUtil is not available in non-YARN mode!")
-    }
-    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
-  }
   /**
    * Add a path variable to the given environment map.
    * If the map already contains this key, append the value to the existing value instead.
@@ -277,5 +185,42 @@ object YarnSparkHadoopUtil {
         securityMgr.getModifyAclsGroups)
     )
   }
-}
 
+  def getContainerId: ContainerId = {
+    val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
+    ConverterUtils.toContainerId(containerIdString)
+  }
+
+  /** The filesystems for which YARN should fetch delegation tokens. */
+  def hadoopFSsToAccess(
+      sparkConf: SparkConf,
+      hadoopConf: Configuration): Set[FileSystem] = {
+    val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
+      .map(new Path(_).getFileSystem(hadoopConf))
+      .toSet
+
+    val stagingFS = sparkConf.get(STAGING_DIR)
+      .map(new Path(_).getFileSystem(hadoopConf))
+      .getOrElse(FileSystem.get(hadoopConf))
+
+    filesystemsToAccess + stagingFS
+  }
+
+  def startCredentialUpdater(sparkConf: SparkConf): Unit = {
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val credentialManager = new YARNHadoopDelegationTokenManager(
+      sparkConf,
+      hadoopConf,
+      conf => YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, conf))
+    credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
+    credentialUpdater.start()
+  }
+
+  def stopCredentialUpdater(): Unit = {
+    if (credentialUpdater != null) {
+      credentialUpdater.stop()
+      credentialUpdater = null
+    }
+  }
+
+}

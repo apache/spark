@@ -108,7 +108,7 @@ private [sql] object GenArrayData {
          }
        """
       }
-      val assignmentString = ctx.splitExpressions(
+      val assignmentString = ctx.splitExpressionsWithCurrentInputs(
         expressions = assignments,
         funcName = "apply",
         extraArguments = ("Object[]", arrayDataName) :: Nil)
@@ -139,7 +139,7 @@ private [sql] object GenArrayData {
          }
        """
       }
-      val assignmentString = ctx.splitExpressions(
+      val assignmentString = ctx.splitExpressionsWithCurrentInputs(
         expressions = assignments,
         funcName = "apply",
         extraArguments = ("UnsafeArrayData", arrayDataName) :: Nil)
@@ -357,7 +357,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, s"$values = null;")
-    val valuesCode = ctx.splitExpressions(
+    val valuesCode = ctx.splitExpressionsWithCurrentInputs(
       valExprs.zipWithIndex.map { case (e, i) =>
         val eval = e.genCode(ctx)
         s"""
