@@ -50,12 +50,15 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
   val rowsPerSecond = options.get(ContinuousRateStreamSource.ROWS_PER_SECOND).orElse("6").toLong
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
-
     assert(offsets.length == numPartitions)
     val tuples = offsets.map {
       case ContinuousRateStreamPartitionOffset(p, s) => p -> s
     }
     RateStreamOffset(Map(tuples: _*))
+  }
+
+  override def deserialize(json: String): Offset = {
+    RateStreamOffset(Serialization.read[Map[Int, Long]](json))
   }
 
   override def readSchema(): StructType = {

@@ -14,6 +14,10 @@ public interface ContinuousReadSupport extends DataSourceV2 {
   /**
    * Creates a {@link DataSourceV2Reader} to scan the data from this data source.
    *
+   * @param schema the user provided schema, or empty() if none was provided
+   * @param checkpointLocation a path to HDFS scratch space that can be used for failure recovery.
+   *                           Readers for the same logical source in the same query will be
+   *                           given the same checkpointLocation.
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
