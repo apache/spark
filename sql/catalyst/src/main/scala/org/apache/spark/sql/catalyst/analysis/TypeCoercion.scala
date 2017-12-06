@@ -47,8 +47,7 @@ import org.apache.spark.sql.types._
 object TypeCoercion {
 
   private val commonTypeCoercionRules =
-    InConversion ::
-      WidenSetOperationTypes ::
+    WidenSetOperationTypes ::
       DecimalPrecision ::
       BooleanEquality ::
       FunctionArgumentConversion ::
