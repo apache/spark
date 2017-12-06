@@ -363,6 +363,14 @@ object SQLConf {
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
     .createWithDefault("snappy")
 
+  val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
+    .doc("When native, use the native version of ORC support instead of the ORC library in Hive " +
+      "1.2.1. It is 'hive' by default prior to Spark 2.3.")
+    .internal()
+    .stringConf
+    .checkValues(Set("hive", "native"))
+    .createWithDefault("native")
+
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf

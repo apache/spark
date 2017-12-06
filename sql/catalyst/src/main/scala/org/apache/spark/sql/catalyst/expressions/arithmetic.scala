@@ -614,7 +614,7 @@ case class Least(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    val codes = ctx.splitExpressions(evalChildren.map(updateEval))
+    val codes = ctx.splitExpressionsWithCurrentInputs(evalChildren.map(updateEval))
     ev.copy(code = s"""
       ${ev.isNull} = true;
       ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -680,7 +680,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    val codes = ctx.splitExpressions(evalChildren.map(updateEval))
+    val codes = ctx.splitExpressionsWithCurrentInputs(evalChildren.map(updateEval))
     ev.copy(code = s"""
       ${ev.isNull} = true;
       ${ev.value} = ${ctx.defaultValue(dataType)};

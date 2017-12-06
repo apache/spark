@@ -253,31 +253,26 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
          |  continue;
          |}
        """.stripMargin)
-    val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-        listCode.mkString("\n")
-      } else {
-        ctx.splitExpressions(
-          expressions = listCode,
-          funcName = "valueIn",
-          arguments = ("InternalRow", ctx.INPUT_ROW) :: (javaDataType, valueArg) :: Nil,
-          makeSplitFunction = { body =>
-            s"""
-               |do {
-               |  $body
-               |} while (false);
-             """.stripMargin
-          },
-          foldFunctions = { funcCalls =>
-            funcCalls.map(funcCall =>
-              s"""
-                 |$funcCall;
-                 |if (${ev.value}) {
-                 |  continue;
-                 |}
-               """.stripMargin).mkString("\n")
-          }
-        )
-      }
+
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = listCode,
+      funcName = "valueIn",
+      extraArguments = (javaDataType, valueArg) :: Nil,
+      makeSplitFunction = body =>
+        s"""
+           |do {
+           |  $body
+           |} while (false);
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$funcCall;
+           |if (${ev.value}) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString("\n"))
+
     ev.copy(code =
       s"""
          |${valueGen.code}
@@ -286,7 +281,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
          |if (!${ev.isNull}) {
          |  $javaDataType $valueArg = ${valueGen.value};
          |  do {
-         |    $code
+         |    $codes
          |  } while (false);
          |}
        """.stripMargin)

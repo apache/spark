@@ -781,29 +781,26 @@ class CodegenContext {
    * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
    * instead, because classes have a constant pool limit of 65,536 named values.
    *
-   * Note that we will extract the current inputs of this context and pass them to the generated
-   * functions. The input is `INPUT_ROW` for normal codegen path, and `currentVars` for whole
-   * stage codegen path. Whole stage codegen path is not supported yet.
-   *
-   * @param expressions the codes to evaluate expressions.
-   */
-  def splitExpressions(expressions: Seq[String]): String = {
-    splitExpressions(expressions, funcName = "apply", extraArguments = Nil)
-  }
-
-  /**
-   * Similar to [[splitExpressions(expressions: Seq[String])]], but has customized function name
-   * and extra arguments.
+   * Note that different from `splitExpressions`, we will extract the current inputs of this
+   * context and pass them to the generated functions. The input is `INPUT_ROW` for normal codegen
+   * path, and `currentVars` for whole stage codegen path. Whole stage codegen path is not
+   * supported yet.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
-   * @param extraArguments the list of (type, name) of the arguments of the split function
-   *                       except for ctx.INPUT_ROW
-  */
-  def splitExpressions(
+   * @param extraArguments the list of (type, name) of the arguments of the split function,
+   *                       except for the current inputs like `ctx.INPUT_ROW`.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
+   */
+  def splitExpressionsWithCurrentInputs(
       expressions: Seq[String],
-      funcName: String,
-      extraArguments: Seq[(String, String)]): String = {
+      funcName: String = "apply",
+      extraArguments: Seq[(String, String)] = Nil,
+      returnType: String = "void",
+      makeSplitFunction: String => String = identity,
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
     // TODO: support whole stage codegen
     if (INPUT_ROW == null || currentVars != null) {
       expressions.mkString("\n")
@@ -811,13 +808,18 @@ class CodegenContext {
       splitExpressions(
         expressions,
         funcName,
-        arguments = ("InternalRow", INPUT_ROW) +: extraArguments)
+        ("InternalRow", INPUT_ROW) +: extraArguments,
+        returnType,
+        makeSplitFunction,
+        foldFunctions)
     }
   }
 
   /**
    * Splits the generated code of expressions into multiple functions, because function has
-   * 64kb code size limit in JVM
+   * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
+   * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
+   * instead, because classes have a constant pool limit of 65,536 named values.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
