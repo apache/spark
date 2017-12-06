@@ -36,10 +36,14 @@ abstract class SparkFunSuite
   with Logging {
 // scalastyle:on
 
+  val threadWhiteList = Set(
+    "rpc-client.*", "rpc-server.*", "shuffle-client.*", "shuffle-server.*",
+    "netty.*", "globalEventExecutor.*", "threadDeathWatcher.*"
+  )
   var beforeAllTestThreadNames: Set[String] = Set.empty
 
   protected override def beforeAll(): Unit = {
-    saveThreadNames()
+    beforeAllTestThreadNames = runningThreadNames()
     super.beforeAll()
   }
 
@@ -62,14 +66,14 @@ abstract class SparkFunSuite
     getTestResourceFile(file).getCanonicalPath
   }
 
-  private def saveThreadNames(): Unit = {
-    beforeAllTestThreadNames = Thread.getAllStackTraces.keySet().map(_.getName).toSet
+  private def runningThreadNames(): Set[String] = {
+    Thread.getAllStackTraces.keySet().map(_.getName).toSet
   }
 
   private def printRemainingThreadNames(): Unit = {
-    val currentThreadNames = Thread.getAllStackTraces.keySet().map(_.getName).toSet
-    val whitelistedThreadNames = currentThreadNames.
-      filterNot(s => SparkFunSuite.threadWhiteList.exists(s.matches(_)))
+    val currentThreadNames = runningThreadNames()
+    val whitelistedThreadNames = currentThreadNames
+      .filterNot { s => threadWhiteList.exists(s.matches(_)) }
     val remainingThreadNames = whitelistedThreadNames.diff(beforeAllTestThreadNames)
     if (!remainingThreadNames.isEmpty) {
       val suiteName = this.getClass.getName
@@ -98,28 +102,4 @@ abstract class SparkFunSuite
     }
   }
 
-}
-
-object SparkFunSuite
-  extends Logging {
-  val threadWhitelistFileName = "/thread_whitelist"
-  val threadWhiteList: Set[String] = try {
-     val whileListStream = getClass.getResourceAsStream(threadWhitelistFileName)
-     if (whileListStream == null) {
-       logWarning(s"\n\n===== Could not find global thread whitelist file with " +
-         s"name $threadWhitelistFileName on classpath' =====\n")
-       Set.empty
-     } else {
-       val whiteList = Source.fromInputStream(whileListStream)
-         .getLines().filterNot(s => s.isEmpty || s.startsWith("#")).toSet
-       logInfo(s"\n\n===== Global thread whitelist loaded with name " +
-         s"$threadWhitelistFileName from classpath: ${whiteList.mkString(", ")}' =====\n")
-       whiteList
-     }
-  } catch {
-    case e: Exception =>
-      logWarning(s"\n\n===== Could not read global thread whitelist file with " +
-        s"name $threadWhitelistFileName from classpath: ${e.getMessage}' =====\n")
-      Set.empty
-  }
 }
