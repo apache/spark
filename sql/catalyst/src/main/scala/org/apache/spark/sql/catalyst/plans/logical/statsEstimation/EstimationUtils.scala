@@ -115,33 +115,33 @@ object EstimationUtils {
   }
 
   /**
-   * Returns the number of the first bin into which a column values falls for a specified
+   * Returns the number of the first bin into which a column value falls for a specified
    * numeric equi-height histogram.
    *
    * @param value a literal value of a column
    * @param bins an array of bins for a given numeric equi-height histogram
-   * @return the number of the first bin into which a column values falls.
+   * @return the id of the first bin into which a column value falls.
    */
   def findFirstBinForValue(value: Double, bins: Array[HistogramBin]): Int = {
     var i = 0
     while ((i < bins.length) && (value > bins(i).hi)) {
-      i +=1
+      i += 1
     }
     i
   }
 
   /**
-   * Returns the number of the last bin into which a column values falls for a specified
+   * Returns the number of the last bin into which a column value falls for a specified
    * numeric equi-height histogram.
    *
    * @param value a literal value of a column
    * @param bins an array of bins for a given numeric equi-height histogram
-   * @return the number of the last bin into which a column values falls.
+   * @return the id of the last bin into which a column value falls.
    */
   def findLastBinForValue(value: Double, bins: Array[HistogramBin]): Int = {
     var i = bins.length - 1
     while ((i >= 0) && (value < bins(i).lo)) {
-      i -=1
+      i -= 1
     }
     i
   }
@@ -150,51 +150,26 @@ object EstimationUtils {
    * Returns a percentage of a bin holding values for column value in the range of
    * [lowerValue, higherValue]
    *
-   * @param binId a given bin id in a specified histogram
    * @param higherValue a given upper bound value of a specified column value range
    * @param lowerValue a given lower bound value of a specified column value range
-   * @param histogram a numeric equi-height histogram
+   * @param bin a single histogram bin
    * @return the percentage of a single bin holding values in [lowerValue, higherValue].
    */
   private def getOccupation(
-      binId: Int,
       higherValue: Double,
       lowerValue: Double,
-      histogram: Histogram): Double = {
-    val curBin = histogram.bins(binId)
-    if (curBin.hi == curBin.lo) {
+      bin: HistogramBin): Double = {
+    assert(bin.lo <= lowerValue && lowerValue <= higherValue && higherValue <= bin.hi)
+    if (bin.hi == bin.lo) {
       // the entire bin is covered in the range
       1.0
     } else if (higherValue == lowerValue) {
       // set percentage to 1/NDV
-      1.0 / curBin.ndv.toDouble
+      1.0 / bin.ndv.toDouble
     } else {
       // Use proration since the range falls inside this bin.
-      math.min((higherValue - lowerValue) / (curBin.hi - curBin.lo), 1.0)
+      math.min((higherValue - lowerValue) / (bin.hi - bin.lo), 1.0)
     }
-  }
-
-  /**
-   * Returns the number of bins for column values in [lowerValue, higherValue].
-   * The column value distribution is saved in an equi-height histogram.
-   *
-   * @param higherEnd a given upper bound value of a specified column value range
-   * @param lowerEnd a given lower bound value of a specified column value range
-   * @param histogram a numeric equi-height histogram
-   * @return the selectivity percentage for column values in [lowerValue, higherValue].
-   */
-  def getOccupationBins(
-      higherEnd: Double,
-      lowerEnd: Double,
-      histogram: Histogram): Double = {
-    // find bins where current min and max locate
-    val lowerBinId = findFirstBinForValue(lowerEnd, histogram.bins)
-    val higherBinId = findLastBinForValue(higherEnd, histogram.bins)
-    assert(lowerBinId <= higherBinId)
-
-    // compute how much current [lowerEnd, higherEnd] range occupies the histogram in the
-    // number of bins
-    getOccupationBins(higherBinId, lowerBinId, higherEnd, lowerEnd, histogram)
   }
 
   /**
@@ -216,18 +191,18 @@ object EstimationUtils {
       lowerEnd: Double,
       histogram: Histogram): Double = {
     if (lowerId == higherId) {
-      getOccupation(lowerId, higherEnd, lowerEnd, histogram)
+      val curBin = histogram.bins(lowerId)
+      getOccupation(higherEnd, lowerEnd, curBin)
     } else {
       // compute how much lowerEnd/higherEnd occupies its bin
-      val lowercurBin = histogram.bins(lowerId)
-      val lowerPart = getOccupation(lowerId, lowercurBin.hi, lowerEnd, histogram)
+      val lowerCurBin = histogram.bins(lowerId)
+      val lowerPart = getOccupation(lowerCurBin.hi, lowerEnd, lowerCurBin)
 
-      // in case higherId > lowerId, higherId must be > 0
-      val highercurBin = histogram.bins(higherId)
-      val higherPart = getOccupation(higherId, higherEnd, highercurBin.lo,
-        histogram)
+      val higherCurBin = histogram.bins(higherId)
+      val higherPart = getOccupation(higherEnd, higherCurBin.lo, higherCurBin)
+
       // the total length is lowerPart + higherPart + bins between them
-      higherId - lowerId - 1 + lowerPart + higherPart
+      lowerPart + higherPart + higherId - lowerId - 1
     }
   }
 
@@ -252,18 +227,16 @@ object EstimationUtils {
     val ndv: Double = if (higherEnd == lowerEnd) {
       1
     } else if (lowerId == higherId) {
-      getOccupation(lowerId, higherEnd, lowerEnd, histogram) * histogram.bins(lowerId).ndv
+      val curBin = histogram.bins(lowerId)
+      getOccupation(higherEnd, lowerEnd, curBin) * curBin.ndv
     } else {
       // compute how much the [lowerEnd, higherEnd] range occupies the bins in a histogram.
       // Our computation has 3 parts: the smallest/min bin, the middle bins, the largest/max bin.
       val minCurBin = histogram.bins(lowerId)
-      val minPartNdv = getOccupation(lowerId, minCurBin.hi, lowerEnd, histogram) *
-        minCurBin.ndv
+      val minPartNdv = getOccupation(minCurBin.hi, lowerEnd, minCurBin) * minCurBin.ndv
 
-      // in case higherId > lowerId, higherId must be > 0
       val maxCurBin = histogram.bins(higherId)
-      val maxPartNdv = getOccupation(higherId, higherEnd, maxCurBin.lo, histogram) *
-        maxCurBin.ndv
+      val maxPartNdv = getOccupation(higherEnd, maxCurBin.lo, maxCurBin) * maxCurBin.ndv
 
       // The total ndv is minPartNdv + maxPartNdv + Ndvs between them.
       // In order to avoid counting same distinct value twice, we check if the upperBound value

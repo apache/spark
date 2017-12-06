@@ -541,10 +541,9 @@ case class FilterEstimation(plan: Filter) extends Logging {
       } else {
         val numericHistogram = colStat.histogram.get
         val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
-        val maxDouble = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
-        val minDouble = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
-        percent = computePercentByEquiHeightHgm(op, numericHistogram, maxDouble, minDouble,
-          datum)
+        val max = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
+        val min = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
+        percent = computePercentByEquiHeightHgm(op, numericHistogram, max, min, datum)
       }
 
       if (update) {
