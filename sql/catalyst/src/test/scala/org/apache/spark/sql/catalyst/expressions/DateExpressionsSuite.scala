@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
@@ -740,5 +741,29 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
+  }
+
+  test("SPARK-22684: DayOfWeek code generation should not add useless mutable states") {
+    val ctx = new CodegenContext()
+    DayOfWeek(Literal("2017-12-05")).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
+  test("SPARK-22684: WeekOfYear code generation should not add useless mutable states") {
+    val ctx = new CodegenContext()
+    WeekOfYear(Literal("2017-12-05")).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
+  test("SPARK-22684: FromUTCTimestamp code generation should not add useless mutable states") {
+    val ctx = new CodegenContext()
+    FromUTCTimestamp(Literal("2017-12-05 22:10:00"), Literal("Europe/Rome")).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
+  test("SPARK-22684: ToUTCTimestamp code generation should not add useless mutable states") {
+    val ctx = new CodegenContext()
+    ToUTCTimestamp(Literal("2017-12-05 22:10:00"), Literal("Europe/Rome")).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
   }
 }
