@@ -883,3 +883,22 @@ case class Deduplicate(
 
   override def output: Seq[Attribute] = child.output
 }
+
+/**
+ * A logical plan for setting a barrier of analysis.
+ *
+ * The SQL Analyzer goes through a whole query plan even most part of it is analyzed. This
+ * increases the time spent on query analysis for long pipelines in ML, especially.
+ *
+ * This logical plan wraps an analyzed logical plan to prevent it from analysis again. The barrier
+ * is applied to the analyzed logical plan in Dataset. It won't change the output of wrapped
+ * logical plan and just acts as a wrapper to hide it from analyzer. New operations on the dataset
+ * will be put on the barrier, so only the new nodes created will be analyzed.
+ *
+ * This analysis barrier will be removed at the end of analysis stage.
+ */
+case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
+  override def output: Seq[Attribute] = child.output
+  override def isStreaming: Boolean = child.isStreaming
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
+}

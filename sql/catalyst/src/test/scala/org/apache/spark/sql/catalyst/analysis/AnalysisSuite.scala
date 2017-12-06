@@ -543,4 +543,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkPartitioning(numPartitions = 10, exprs = SortOrder('a.attr, Ascending), 'b.attr)
     }
   }
+
+  test("SPARK-20392: analysis barrier") {
+    // [[AnalysisBarrier]] will be removed after analysis
+    checkAnalysis(
+      Project(Seq(UnresolvedAttribute("tbl.a")),
+        AnalysisBarrier(SubqueryAlias("tbl", testRelation))),
+      Project(testRelation.output, SubqueryAlias("tbl", testRelation)))
+
+    // Verify we won't go through a plan wrapped in a barrier.
+    // Since we wrap an unresolved plan and analyzer won't go through it. It remains unresolved.
+    val barrier = AnalysisBarrier(Project(Seq(UnresolvedAttribute("tbl.b")),
+      SubqueryAlias("tbl", testRelation)))
+    assertAnalysisError(barrier, Seq("cannot resolve '`tbl.b`'"))
+  }
 }
