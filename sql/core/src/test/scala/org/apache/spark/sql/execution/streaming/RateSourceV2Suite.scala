@@ -55,16 +55,16 @@ class RateSourceV2Suite extends StreamTest {
   test("microbatch - set offset") {
     val reader = new RateStreamV2Reader(DataSourceV2Options.empty())
     reader.setOffsetRange(Optional.of(LongOffset(12345)), Optional.of(LongOffset(54321)))
-    assert(reader.getStart() == LongOffset(12345))
-    assert(reader.getEnd() == LongOffset(54321))
+    assert(reader.getStartOffset() == LongOffset(12345))
+    assert(reader.getEndOffset() == LongOffset(54321))
   }
 
   test("microbatch - infer offsets") {
     val reader = new RateStreamV2Reader(DataSourceV2Options.empty())
     reader.clock.waitTillTime(reader.clock.getTimeMillis() + 100)
     reader.setOffsetRange(Optional.empty(), Optional.empty())
-    assert(reader.getStart() == LongOffset(reader.creationTimeMs))
-    assert(reader.getEnd().asInstanceOf[LongOffset].offset >= reader.creationTimeMs + 100)
+    assert(reader.getStartOffset() == LongOffset(reader.creationTimeMs))
+    assert(reader.getEndOffset().asInstanceOf[LongOffset].offset >= reader.creationTimeMs + 100)
   }
 
 

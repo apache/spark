@@ -15,9 +15,9 @@ public interface MicroBatchReader extends DataSourceV2Reader, BaseStreamingSourc
      * generate only data within (`start`, `end`]; that is, from the first record after `start` to
      * the record with offset `end`.
      *
-     * @param start The initial offset to scan from. If absent(), the reader should infer the
-     *              earliest available offset and scan from the beginning of the stream.
-     * @param end The last offset to include in the scan. If absent(), scan up to an
+     * @param start The initial offset to scan from. If not specified, scan from an
+     *              implementation-specified start point, such as the earliest available record.
+     * @param end The last offset to include in the scan. If not specified, scan up to an
      *            implementation-defined inferred endpoint, such as the last available offset
      *            or the start offset plus a target batch size.
      */
@@ -26,16 +26,16 @@ public interface MicroBatchReader extends DataSourceV2Reader, BaseStreamingSourc
     /**
      * Returns the specified or inferred start offset for this reader.
      *
-     * Should only be called after setOffsetRange.
+     * @throws IllegalStateException if setOffsetRange has not been called
      */
-    Offset getStart();
+    Offset getStartOffset();
 
     /**
      * Return the specified or inferred end offset for this reader.
      *
-     * Should only be called after setOffsetRange.
+     * @throws IllegalStateException if setOffsetRange has not been called
      */
-    Offset getEnd();
+    Offset getEndOffset();
 
     /**
      * Deserialize a JSON string into an Offset of the implementation-defined offset type.

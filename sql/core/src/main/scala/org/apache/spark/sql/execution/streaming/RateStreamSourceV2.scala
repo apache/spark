@@ -59,8 +59,14 @@ class RateStreamV2Reader(options: DataSourceV2Options)
     this.end = end.orElse(LongOffset(clock.getTimeMillis()))
   }
 
-  override def getStart(): Offset = start
-  override def getEnd(): Offset = end
+  override def getStartOffset(): Offset = {
+    if (start == null) throw new IllegalStateException("start offset not set")
+    start
+  }
+  override def getEndOffset(): Offset = {
+    if (end == null) throw new IllegalStateException("end offset not set")
+    end
+  }
 
   override def createReadTasks(): java.util.List[ReadTask[Row]] = {
     val startTime = LongOffset.convert(start).get.offset

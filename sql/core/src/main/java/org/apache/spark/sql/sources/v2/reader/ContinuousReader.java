@@ -26,17 +26,17 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reade
 
     /**
      * Set the desired start offset for read tasks created from this reader. The scan will start
-     * from the first record after the provided offset, or from the beginning of the stream if
-     * Optional.empty() is provided.
+     * from the first record after the provided offset, or from an implementation-defined inferred
+     * starting point if no offset is provided.
      */
     void setOffset(Optional<Offset> start);
 
     /**
      * Return the specified or inferred start offset for this reader.
      *
-     * Should only be called after setOffset.
+     * @throws IllegalStateException if setOffset has not been called
      */
-    Offset getStart();
+    Offset getStartOffset();
 
     /**
      * The execution engine will call this method in every epoch to determine if new read tasks need
