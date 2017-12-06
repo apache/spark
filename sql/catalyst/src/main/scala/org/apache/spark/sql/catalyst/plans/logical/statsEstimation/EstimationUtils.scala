@@ -144,23 +144,6 @@ object EstimationUtils {
       i -=1
     }
     i
-    /*
-    var binId = 0
-    for (i <- bins.indices) {
-      if (value > bins(i).hi) {
-        // increment binId to point to next bin
-        binId += 1
-      }
-      if ((value == bins(i).hi) && (i < bins.length - 1) && (value == bins(i + 1).lo)) {
-        // We assume the above 3 conditions will be evaluated from left to right sequentially.
-        // If the above 3 conditions are evaluated out-of-order, then out-of-bound error may happen.
-        // At that time, we should split the third condition into another if statement.
-        // increment binId since the value appears in this bin and next bin
-        binId += 1
-      }
-    }
-    binId
-    */
   }
 
   /**
