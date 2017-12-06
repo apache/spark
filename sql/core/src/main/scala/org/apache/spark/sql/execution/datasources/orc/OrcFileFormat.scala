@@ -124,7 +124,7 @@ class OrcFileFormat
     true
   }
 
-  override def buildReader(
+  override def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -137,6 +137,8 @@ class OrcFileFormat
         OrcInputFormat.setSearchArgument(hadoopConf, f, dataSchema.fieldNames)
       }
     }
+
+    val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
 
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -167,8 +169,10 @@ class OrcFileFormat
         val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
 
-        val unsafeProjection = UnsafeProjection.create(requiredSchema)
-        val deserializer = new OrcDeserializer(dataSchema, requiredSchema, requestedColIds)
+        val colIds = requestedColIds ++ List.fill(partitionSchema.length)(-1).toArray[Int]
+        val unsafeProjection = UnsafeProjection.create(resultSchema)
+        val deserializer =
+          new OrcDeserializer(dataSchema, resultSchema, colIds, file.partitionValues)
         iter.map(value => unsafeProjection(deserializer.deserialize(value)))
       }
     }
