@@ -227,14 +227,35 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("error: not found: value sc", output)
   }
 
-   test("spark-shell should find imported types in class constructors and extends clause") {
-     val output = runInterpreter("local",
-       """
-         |import org.apache.spark.Partition
-         |class P(p: Partition)
-         |class P(val index: Int) extends Partition
-       """.stripMargin)
-     assertDoesNotContain("error: not found: type Partition", output)
-   }
+  test("spark-shell should find imported types in class constructors and extends clause") {
+    val output = runInterpreter("local",
+      """
+        |import org.apache.spark.Partition
+        |class P(p: Partition)
+        |class P(val index: Int) extends Partition
+      """.stripMargin)
+    assertDoesNotContain("error: not found: type Partition", output)
+  }
+
+  test("spark-shell should shadow val/def definitions correctly") {
+    val output1 = runInterpreter("local",
+      """
+        |def myMethod() = "first definition"
+        |val tmp = myMethod(); val out = tmp
+        |def myMethod() = "second definition"
+        |val tmp = myMethod(); val out = s"$tmp aabbcc"
+      """.stripMargin)
+    assertContains("second definition aabbcc", output1)
+
+    val output2 = runInterpreter("local",
+      """
+        |val a = 1
+        |val b = a; val c = b;
+        |val a = 2
+        |val b = a; val c = b;
+        |s"!!$b!!"
+      """.stripMargin)
+    assertContains("!!2!!", output2)
+  }
 
 }
