@@ -73,6 +73,8 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
     this.offset = offset
   }
 
+  override def getStart(): Offset = offset.get()
+
   override def createReadTasks(): java.util.List[ReadTask[Row]] = {
     val partitionStartMap = Option(offset.orElse(null)).map {
       case o: RateStreamOffset => o.partitionToStartValue

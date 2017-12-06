@@ -32,6 +32,13 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reade
     void setOffset(Optional<Offset> start);
 
     /**
+     * Return the specified or inferred start offset for this reader.
+     *
+     * Should only be called after setOffset.
+     */
+    Offset getStart();
+
+    /**
      * The execution engine will call this method in every epoch to determine if new read tasks need
      * to be generated, which may be required if for example the underlying source system has had
      * partitions added or removed.
