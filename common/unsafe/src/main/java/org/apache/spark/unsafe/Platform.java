@@ -22,7 +22,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 
-import sun.misc.Cleaner;
+//import sun.misc.Cleaner;
 import sun.misc.Unsafe;
 
 public final class Platform {
@@ -169,8 +169,10 @@ public final class Platform {
       cleanerField.setAccessible(true);
       long memory = allocateMemory(size);
       ByteBuffer buffer = (ByteBuffer) constructor.newInstance(memory, size);
-      Cleaner cleaner = Cleaner.create(buffer, () -> freeMemory(memory));
-      cleanerField.set(buffer, cleaner);
+//    sun.misc.Cleaner is not used in JDK9(see SPARK-22659), we can use CleanUtil in HADOOP-12760 to solve it
+//    Cleaner cleaner = Cleaner.create(buffer, () -> freeMemory(memory));
+//    cleanerField.set(buffer, cleaner);
+
       return buffer;
     } catch (Exception e) {
       throwException(e);
