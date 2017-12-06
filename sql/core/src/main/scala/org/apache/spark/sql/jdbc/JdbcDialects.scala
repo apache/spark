@@ -117,6 +117,16 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
+   * The SQL query that should be used to truncate a table. Dialects can override this method to
+   * return a query that is suitable for a particular database. For PostgreSQL, for instance,
+   * a different query is used to prevent "TRUNCATE" affecting other tables.
+   * @param table The name of the table.
+   * @return The SQL query to use for truncating a table
+   */
+  @Since("2.3.0")
+  def getTruncateQuery(table: String): String
+
+  /**
    * Override connection specific properties to run before a select is made.  This is in place to
    * allow dialects that need special treatment to optimize behavior.
    * @param connection The connection object
@@ -147,14 +157,6 @@ abstract class JdbcDialect extends Serializable {
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case _ => value
   }
-
-  /**
-   * Return Some[true] iff `TRUNCATE TABLE` causes cascading default.
-   * Some[true] : TRUNCATE TABLE causes cascading.
-   * Some[false] : TRUNCATE TABLE does not cause cascading.
-   * None: The behavior of TRUNCATE TABLE is unknown (default).
-   */
-  def isCascadingTruncateTable(): Option[Boolean] = None
 }
 
 /**

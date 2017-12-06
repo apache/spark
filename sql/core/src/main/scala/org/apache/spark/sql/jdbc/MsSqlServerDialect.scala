@@ -41,5 +41,7 @@ private object MsSqlServerDialect extends JdbcDialect {
     case _ => None
   }
 
-  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+  override def getTruncateQuery(table: String): String = {
+    s"TRUNCATE $table"
+  }
 }

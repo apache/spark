@@ -31,4 +31,8 @@ private case object TeradataDialect extends JdbcDialect {
     case BooleanType => Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
     case _ => None
   }
+
+  override def getTruncateQuery(table: String): String = {
+    s"TRUNCATE $table"
+  }
 }
