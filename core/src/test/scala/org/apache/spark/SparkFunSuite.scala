@@ -37,8 +37,21 @@ abstract class SparkFunSuite
 // scalastyle:on
 
   val threadWhiteList = Set(
-    "rpc-client.*", "rpc-server.*", "shuffle-client.*", "shuffle-server.*",
-    "netty.*", "globalEventExecutor.*", "threadDeathWatcher.*"
+    /**
+      * Netty related threads.
+      */
+    "netty.*",
+
+    /**
+      * A Single-thread singleton EventExecutor inside netty which creates such threads.
+      */
+    "globalEventExecutor.*",
+
+    /**
+      * Netty creates such threads.
+      * Checks if a thread is alive periodically and runs a task when a thread dies.
+      */
+    "threadDeathWatcher.*"
   )
   var beforeAllTestThreadNames: Set[String] = Set.empty
 
@@ -71,10 +84,8 @@ abstract class SparkFunSuite
   }
 
   private def printRemainingThreadNames(): Unit = {
-    val currentThreadNames = runningThreadNames()
-    val whitelistedThreadNames = currentThreadNames
+    val remainingThreadNames = runningThreadNames.diff(beforeAllTestThreadNames)
       .filterNot { s => threadWhiteList.exists(s.matches(_)) }
-    val remainingThreadNames = whitelistedThreadNames.diff(beforeAllTestThreadNames)
     if (!remainingThreadNames.isEmpty) {
       val suiteName = this.getClass.getName
       val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
