@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.status.api.v1
+import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, ApplicationInfo}
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
@@ -36,11 +37,11 @@ private[spark] class AppStatusStore(
     val store: KVStore,
     listener: Option[AppStatusListener] = None) {
 
-  def applicationInfo(): v1.ApplicationInfo = {
+  def applicationInfo(): ApplicationInfo = {
     store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
   }
 
-  def environmentInfo(): v1.ApplicationEnvironmentInfo = {
+  def environmentInfo(): ApplicationEnvironmentInfo = {
     val klass = classOf[ApplicationEnvironmentInfoWrapper]
     store.read(klass, klass.getName()).info
   }

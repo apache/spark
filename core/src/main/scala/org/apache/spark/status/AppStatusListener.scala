@@ -29,6 +29,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
+import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationEnvironmentInfo, ApplicationInfo, RuntimeInfo}
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.scope._
@@ -50,7 +51,7 @@ private[spark] class AppStatusListener(
   import config._
 
   private var sparkVersion = SPARK_VERSION
-  private var appInfo: v1.ApplicationInfo = null
+  private var appInfo: ApplicationInfo = null
   private var coresPerTask: Int = 1
 
   // How often to update live entities. -1 means "never update" when replaying applications,
@@ -77,7 +78,7 @@ private[spark] class AppStatusListener(
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     assert(event.appId.isDefined, "Application without IDs are not supported.")
 
-    val attempt = new v1.ApplicationAttemptInfo(
+    val attempt = ApplicationAttemptInfo(
       event.appAttemptId,
       new Date(event.time),
       new Date(-1),
@@ -87,7 +88,7 @@ private[spark] class AppStatusListener(
       false,
       sparkVersion)
 
-    appInfo = new v1.ApplicationInfo(
+    appInfo = ApplicationInfo(
       event.appId.get,
       event.appName,
       None,
@@ -103,12 +104,12 @@ private[spark] class AppStatusListener(
     val details = event.environmentDetails
 
     val jvmInfo = Map(details("JVM Information"): _*)
-    val runtime = new v1.RuntimeInfo(
+    val runtime = new RuntimeInfo(
       jvmInfo.get("Java Version").orNull,
       jvmInfo.get("Java Home").orNull,
       jvmInfo.get("Scala Version").orNull)
 
-    val envInfo = new v1.ApplicationEnvironmentInfo(
+    val envInfo = new ApplicationEnvironmentInfo(
       runtime,
       details.getOrElse("Spark Properties", Nil),
       details.getOrElse("System Properties", Nil),
@@ -122,7 +123,7 @@ private[spark] class AppStatusListener(
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     val old = appInfo.attempts.head
-    val attempt = new v1.ApplicationAttemptInfo(
+    val attempt = ApplicationAttemptInfo(
       old.attemptId,
       old.startTime,
       new Date(event.time),
@@ -132,7 +133,7 @@ private[spark] class AppStatusListener(
       true,
       old.appSparkVersion)
 
-    appInfo = new v1.ApplicationInfo(
+    appInfo = ApplicationInfo(
       appInfo.id,
       appInfo.name,
       None,

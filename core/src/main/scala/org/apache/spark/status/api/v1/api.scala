@@ -24,27 +24,32 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.JobExecutionStatus
 
-class ApplicationInfo private[spark](
-    val id: String,
-    val name: String,
-    val coresGranted: Option[Int],
-    val maxCores: Option[Int],
-    val coresPerExecutor: Option[Int],
-    val memoryPerExecutorMB: Option[Int],
-    val attempts: Seq[ApplicationAttemptInfo])
+case class ApplicationInfo private[spark](
+    id: String,
+    name: String,
+    coresGranted: Option[Int],
+    maxCores: Option[Int],
+    coresPerExecutor: Option[Int],
+    memoryPerExecutorMB: Option[Int],
+    attempts: Seq[ApplicationAttemptInfo]) {
+
+    def completed: Boolean = {
+      attempts.nonEmpty && attempts.head.completed
+    }
+}
 
 @JsonIgnoreProperties(
   value = Array("startTimeEpoch", "endTimeEpoch", "lastUpdatedEpoch"),
   allowGetters = true)
-class ApplicationAttemptInfo private[spark](
-    val attemptId: Option[String],
-    val startTime: Date,
-    val endTime: Date,
-    val lastUpdated: Date,
-    val duration: Long,
-    val sparkUser: String,
-    val completed: Boolean = false,
-    val appSparkVersion: String) {
+case class ApplicationAttemptInfo private[spark](
+    attemptId: Option[String],
+    startTime: Date,
+    endTime: Date,
+    lastUpdated: Date,
+    duration: Long,
+    sparkUser: String,
+    completed: Boolean = false,
+    appSparkVersion: String) {
 
   def getStartTimeEpoch: Long = startTime.getTime
 
