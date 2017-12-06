@@ -983,7 +983,6 @@ case class ScalaUDF(
   // scalastyle:on line.size.limit
 
   private val converterClassName = classOf[Any => Any].getName
-  private val expressionClassName = classOf[Expression].getName
   private val scalaUDFClassName = classOf[ScalaUDF].getName
   private val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
 
@@ -993,7 +992,7 @@ case class ScalaUDF(
     val expressionIdx = ctx.references.size - 1
     (converterTerm,
       s"$converterClassName $converterTerm = ($converterClassName)$typeConvertersClassName" +
-        s".createToScalaConverter((($expressionClassName)((($scalaUDFClassName)" +
+        s".createToScalaConverter(((Expression)((($scalaUDFClassName)" +
         s"references[$expressionIdx]).getChildren().apply($index))).dataType());")
   }
 
