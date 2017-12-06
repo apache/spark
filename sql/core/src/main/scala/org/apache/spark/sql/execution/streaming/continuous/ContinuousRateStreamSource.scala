@@ -35,7 +35,7 @@ object ContinuousRateStreamSource {
   val ROWS_PER_SECOND = "rowsPerSecond"
 }
 
-case class RateStreamOffset(partitionToStartValue: Map[Int, Long]) extends Offset {
+case class ContinuousRateStreamOffset(partitionToStartValue: Map[Int, Long]) extends Offset {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
   override val json = Serialization.write(partitionToStartValue)
 }
@@ -54,11 +54,11 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
     val tuples = offsets.map {
       case ContinuousRateStreamPartitionOffset(p, s) => p -> s
     }
-    RateStreamOffset(Map(tuples: _*))
+    ContinuousRateStreamOffset(Map(tuples: _*))
   }
 
   override def deserialize(json: String): Offset = {
-    RateStreamOffset(Serialization.read[Map[Int, Long]](json))
+    ContinuousRateStreamOffset(Serialization.read[Map[Int, Long]](json))
   }
 
   override def readSchema(): StructType = {
@@ -77,7 +77,7 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
 
   override def createReadTasks(): java.util.List[ReadTask[Row]] = {
     val partitionStartMap = Option(offset.orElse(null)).map {
-      case o: RateStreamOffset => o.partitionToStartValue
+      case o: ContinuousRateStreamOffset => o.partitionToStartValue
       case s: SerializedOffset => Serialization.read[Map[Int, Long]](s.json)
       case _ => throw new IllegalArgumentException("invalid offset type for ContinuousRateSource")
     }
@@ -150,7 +150,6 @@ class RateStreamDataReader(
 
   override def close(): Unit = {}
 
-  // We use the value corresponding to partition 0 as the offset.
   override def getOffset(): PartitionOffset =
-    ContinuousRateStreamPartitionOffset(partitionIndex, currentValue)
+    ContinuousRateStreamPartitionOffset(partitionIndex, currentValue - increment)
 }

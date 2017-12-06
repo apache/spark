@@ -115,14 +115,14 @@ class RateSourceV2Suite extends StreamTest {
           r.next()
           data.append(r.get())
           assert(r.getOffset() ==
-            ContinuousRateStreamPartitionOffset(t.partitionIndex, r.get.getLong(1) + 2))
+            ContinuousRateStreamPartitionOffset(t.partitionIndex, r.get.getLong(1)))
         }
         assert(System.currentTimeMillis() < startTime + 100)
         for (i <- 1 to 5) {
           r.next()
           data.append(r.get())
           assert(r.getOffset() ==
-            ContinuousRateStreamPartitionOffset(t.partitionIndex, r.get.getLong(1) + 2))
+            ContinuousRateStreamPartitionOffset(t.partitionIndex, r.get.getLong(1)))
         }
         assert(System.currentTimeMillis() > startTime + 1000)
 
