@@ -26,9 +26,7 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
-      .doc("The namespace that will be used for running the driver and executor pods. When using " +
-        "spark-submit in cluster mode, this can also be passed to spark-submit via the " +
-        "--kubernetes-namespace command line argument.")
+      .doc("The namespace that will be used for running the driver and executor pods.")
       .stringConf
       .createWithDefault("default")
 

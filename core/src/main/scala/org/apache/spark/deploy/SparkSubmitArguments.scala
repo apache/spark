@@ -590,11 +590,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              the node running the Application Master via the Secure
         |                              Distributed Cache, for renewing the login tickets and the
         |                              delegation tokens periodically.
-        |
-        | Kubernetes only:
-        |  --kubernetes-namespace NS   The namespace in the Kubernetes cluster within which the
-        |                              application must be launched. The namespace must already
-        |                              exist in the cluster. (Default: default).
       """.stripMargin
     )
 
