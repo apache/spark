@@ -1120,9 +1120,9 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
     }
 
     val childrenCode = ctx.splitExpressionsWithCurrentInputs(
-      childrenCodes,
-      "createExternalRow",
-      "Object[]" -> values :: Nil)
+      expressions = childrenCodes,
+      funcName = "createExternalRow",
+      extraArguments = "Object[]" -> values :: Nil)
     val schemaField = ctx.addReferenceMinorObj(schema)
 
     val code =
@@ -1159,30 +1159,24 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializerInit =
-      s"""
-         |if ($env == null) {
-         |  $serializer = ($serializerInstanceClass)
-         |    new $serializerClass($sparkConf).newInstance();
-         |} else {
-         |  $serializer = ($serializerInstanceClass)
-         |    new $serializerClass($env.conf()).newInstance();
-         |}
-       """.stripMargin
+    val serializerInit = s"""
+      if ($env == null) {
+        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+       } else {
+         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+       }
+     """
+    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
 
     // Code to serialize.
     val input = child.genCode(ctx)
     val javaType = ctx.javaType(dataType)
-    val defaultJavaValue = ctx.defaultValue(javaType)
     val serialize = s"$serializer.serialize(${input.value}, null).array()"
 
-    val code =
-      s"""
-         |${input.code}
-         |$serializerInstanceClass $serializer;
-         |$serializerInit
-         |final $javaType ${ev.value} = ${input.isNull} ? $defaultJavaValue : $serialize;
-       """.stripMargin
+    val code = s"""
+      ${input.code}
+      final $javaType ${ev.value} = ${input.isNull} ? ${ctx.defaultValue(javaType)} : $serialize;
+     """
     ev.copy(code = code, isNull = input.isNull)
   }
 
@@ -1211,30 +1205,25 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializerInit =
-      s"""
-         |if ($env == null) {
-         |  $serializer =
-         |    ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-         |} else {
-         |  $serializer = ($serializerInstanceClass)
-         |    new $serializerClass($env.conf()).newInstance();
-         |}
-       """.stripMargin
+    val serializerInit = s"""
+      if ($env == null) {
+        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+       } else {
+         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+       }
+     """
+    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
+
     // Code to deserialize.
     val input = child.genCode(ctx)
     val javaType = ctx.javaType(dataType)
-    val defaultJavaValue = ctx.defaultValue(javaType)
     val deserialize =
       s"($javaType) $serializer.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null)"
 
-    val code =
-      s"""
-         |${input.code}
-         |$serializerInstanceClass $serializer;
-         |$serializerInit
-         |final $javaType ${ev.value} = ${input.isNull} ? $defaultJavaValue : $deserialize;
-       """.stripMargin
+    val code = s"""
+      ${input.code}
+      final $javaType ${ev.value} = ${input.isNull} ? ${ctx.defaultValue(javaType)} : $deserialize;
+     """
     ev.copy(code = code, isNull = input.isNull)
   }
 
@@ -1269,9 +1258,9 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
          """.stripMargin
     }
     val initializeCode = ctx.splitExpressionsWithCurrentInputs(
-      initialize.toSeq,
-      "initializeJavaBean",
-      beanInstanceJavaType -> javaBeanInstance :: Nil)
+      expressions = initialize.toSeq,
+      funcName = "initializeJavaBean",
+      extraArguments = beanInstanceJavaType -> javaBeanInstance :: Nil)
 
     val code =
       s"""

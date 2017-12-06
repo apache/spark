@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import scala.reflect.classTag
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
@@ -387,18 +385,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ctx = new CodegenContext
     val schema = new StructType().add("a", IntegerType).add("b", StringType)
     CreateExternalRow(Seq(Literal(1), Literal("x")), schema).genCode(ctx)
-    assert(ctx.mutableStates.isEmpty)
-  }
-
-  test("SPARK-22696: EncodeUsingSerializer should not use global variables") {
-    val ctx = new CodegenContext
-    EncodeUsingSerializer(Literal(1), kryo = false).genCode(ctx)
-    assert(ctx.mutableStates.isEmpty)
-  }
-
-  test("SPARK-22696: DecodeUsingSerializer should not use global variables") {
-    val ctx = new CodegenContext
-    DecodeUsingSerializer[Int](Literal(1), classTag[Int], kryo = false).genCode(ctx)
     assert(ctx.mutableStates.isEmpty)
   }
 
