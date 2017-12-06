@@ -601,9 +601,9 @@ object DataSource extends Logging {
                 if (provider1.toLowerCase(Locale.ROOT) == "orc" ||
                   provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw new AnalysisException(
-                    "Hive-based ORC data source must be used with Hive support enabled. " +
-                    "Please use native ORC data source instead by setting 'spark.sql.orc.impl' " +
-                    "configuration to 'native'")
+                    "Hive built-in ORC data source must be used with Hive support enabled. " +
+                    "Please use the native ORC data source by setting 'spark.sql.orc.impl' to " +
+                    "'native'")
                 } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
                   provider1 == "com.databricks.spark.avro") {
                   throw new AnalysisException(
