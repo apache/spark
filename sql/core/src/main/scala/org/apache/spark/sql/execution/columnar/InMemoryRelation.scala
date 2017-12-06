@@ -73,7 +73,6 @@ case class InMemoryRelation(
   @transient val partitionStatistics = new PartitionStatistics(output)
 
   override def computeStats(): Statistics = {
-    // scalastyle:off
     if (batchStats.value == 0L) {
       // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache when
       // applicable
