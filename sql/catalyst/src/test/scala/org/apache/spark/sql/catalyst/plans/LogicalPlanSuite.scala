@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * This suite is used to test [[LogicalPlan]]'s `transformUp` plus analysis barrier and make sure
- * it can correctly skip sub-trees that have already been marked as analyzed.
+ * This suite is used to test [[LogicalPlan]]'s `transformUp/transformDown` plus analysis barrier
+ * and make sure it can correctly skip sub-trees that have already been analyzed.
  */
 class LogicalPlanSuite extends SparkFunSuite {
   private var invocationCount = 0
@@ -42,6 +42,10 @@ class LogicalPlanSuite extends SparkFunSuite {
     plan transformUp function
 
     assert(invocationCount === 1)
+
+    invocationCount = 0
+    plan transformDown function
+    assert(invocationCount === 1)
   }
 
   test("transformUp runs on operators recursively") {
@@ -49,6 +53,10 @@ class LogicalPlanSuite extends SparkFunSuite {
     val plan = Project(Nil, Project(Nil, testRelation))
     plan transformUp function
 
+    assert(invocationCount === 2)
+
+    invocationCount = 0
+    plan transformDown function
     assert(invocationCount === 2)
   }
 
@@ -58,6 +66,10 @@ class LogicalPlanSuite extends SparkFunSuite {
     plan transformUp function
 
     assert(invocationCount === 0)
+
+    invocationCount = 0
+    plan transformDown function
+    assert(invocationCount === 0)
   }
 
   test("transformUp skips partially resolved plans wrapped in analysis barrier") {
@@ -66,6 +78,10 @@ class LogicalPlanSuite extends SparkFunSuite {
     val plan2 = Project(Nil, plan1)
     plan2 transformUp function
 
+    assert(invocationCount === 1)
+
+    invocationCount = 0
+    plan2 transformDown function
     assert(invocationCount === 1)
   }
 
