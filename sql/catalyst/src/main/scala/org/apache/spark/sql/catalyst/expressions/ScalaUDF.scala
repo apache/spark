@@ -999,9 +999,8 @@ case class ScalaUDF(
   override def doGenCode(
       ctx: CodegenContext,
       ev: ExprCode): ExprCode = {
-    val thisClassName = this.getClass.getName
     val scalaUDF = ctx.freshName("scalaUDF")
-    val scalaUDFRef = ctx.addReferenceMinorObj(this, thisClassName)
+    val scalaUDFRef = ctx.addReferenceMinorObj(this, scalaUDFClassName)
 
     // Object to convert the returned value of user-defined functions to Catalyst type
     val catalystConverterTerm = ctx.freshName("catalystConverter")
@@ -1041,7 +1040,7 @@ case class ScalaUDF(
     val callFunc =
       s"""
          |${ctx.boxedType(dataType)} $resultTerm = null;
-         |$thisClassName $scalaUDF = $scalaUDFRef;
+         |$scalaUDFClassName $scalaUDF = $scalaUDFRef;
          |try {
          |  $funcClassName $funcTerm = ($funcClassName)$scalaUDF.userDefinedFunc();
          |  $converterClassName $catalystConverterTerm = ($converterClassName)
