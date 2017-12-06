@@ -245,6 +245,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     // The evaluation of variables can be stopped when we find a matching value.
     val listCode = listGen.map(x =>
       s"""
+         |$tmpResult = 0;
          |${x.code}
          |if (${x.isNull}) {
          |  $tmpResult = -1; // isNull = true

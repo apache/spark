@@ -88,13 +88,14 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
        """.stripMargin
     }
 
+    val resultType = ctx.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "coalesce",
-      returnType = ctx.javaType(dataType),
+      returnType = resultType,
       makeSplitFunction = func =>
         s"""
-           |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+           |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
            |do {
            |  $func
            |} while (false);
@@ -113,7 +114,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     ev.copy(code =
       s"""
          |$tmpIsNull = true;
-         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);

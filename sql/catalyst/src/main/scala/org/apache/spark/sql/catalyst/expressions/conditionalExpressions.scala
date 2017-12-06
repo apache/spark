@@ -186,7 +186,7 @@ case class CaseWhen(
     // result is unknown. When the first condition is met, it is set to `1` if result is null, or
     // `0` if result is not null. We won't go on anymore on the computation if it's set to `1` or
     // `0`.
-    val resultIsNull = ctx.freshName("caseWhenResultIsNull")
+    val resultState = ctx.freshName("caseWhenResultState")
     val tmpResult = ctx.freshName("caseWhenTmpResult")
     ctx.addMutableState(ctx.javaType(dataType), tmpResult)
 
@@ -202,7 +202,7 @@ case class CaseWhen(
          |${cond.code}
          |if (!${cond.isNull} && ${cond.value}) {
          |  ${res.code}
-         |  $resultIsNull = (byte)(${res.isNull} ? 1 : 0);
+         |  $resultState = (byte)(${res.isNull} ? 1 : 0);
          |  $tmpResult = ${res.value};
          |  continue;
          |}
@@ -213,7 +213,7 @@ case class CaseWhen(
       val res = elseExpr.genCode(ctx)
       s"""
          |${res.code}
-         |$resultIsNull = (byte)(${res.isNull} ? 1 : 0);
+         |$resultState = (byte)(${res.isNull} ? 1 : 0);
          |$tmpResult = ${res.value};
        """.stripMargin
     }
@@ -244,16 +244,16 @@ case class CaseWhen(
       returnType = ctx.JAVA_BYTE,
       makeSplitFunction = func =>
         s"""
-           |${ctx.JAVA_BYTE} $resultIsNull = -1;
+           |${ctx.JAVA_BYTE} $resultState = -1;
            |do {
            |  $func
            |} while (false);
-           |return $resultIsNull;
+           |return $resultState;
          """.stripMargin,
       foldFunctions = _.map { funcCall =>
         s"""
-           |$resultIsNull = $funcCall;
-           |if ($resultIsNull != -1) {
+           |$resultState = $funcCall;
+           |if ($resultState != -1) {
            |  continue;
            |}
          """.stripMargin
@@ -261,15 +261,15 @@ case class CaseWhen(
 
     ev.copy(code =
       s"""
-         |${ctx.JAVA_BYTE} $resultIsNull = -1;
+         |${ctx.JAVA_BYTE} $resultState = -1;
          |$tmpResult = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
          |// TRUE if any condition is met and the result is not null, or no any condition is met.
-         |final boolean ${ev.isNull} = ($resultIsNull != 0);
+         |final boolean ${ev.isNull} = ($resultState != 0);
          |final ${ctx.javaType(dataType)} ${ev.value} = $tmpResult;
-       """)
+       """.stripMargin)
   }
 }
 
