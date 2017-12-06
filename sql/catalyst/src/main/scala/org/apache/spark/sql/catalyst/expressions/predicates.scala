@@ -238,9 +238,12 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
     // inTmpResult has 3 possible values:
-    //   -1 means no matches found and there is at least one value in the list evaluated to null
-    //   0 means no matches found and all values in the list are not null
-    //   1 means one value in the list is matched
+    // -1 means no matches found and there is at least one value in the list evaluated
+    val HAS_NULL = -1
+    // 0 means no matches found and all values in the list are not null
+    val NOT_MATCHED = 0
+    // 1 means one value in the list is matched
+    val MATCHED = 1
     val tmpResult = ctx.freshName("inTmpResult")
     val valueArg = ctx.freshName("valueArg")
     // All the blocks are meant to be inside a do { ... } while (false); loop.
@@ -249,9 +252,9 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
       s"""
          |${x.code}
          |if (${x.isNull}) {
-         |  $tmpResult = -1; // isNull = true
+         |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
          |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
-         |  $tmpResult = 1; // value = TRUE
+         |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
          |  continue;
          |}
        """.stripMargin)
@@ -271,7 +274,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
       foldFunctions = _.map { funcCall =>
         s"""
            |$tmpResult = $funcCall;
-           |if ($tmpResult == 1) {
+           |if ($tmpResult == $MATCHED) {
            |  continue;
            |}
          """.stripMargin
@@ -280,7 +283,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     ev.copy(code =
       s"""
          |${valueGen.code}
-         |byte $tmpResult = -1;
+         |byte $tmpResult = $HAS_NULL;
          |if (!${valueGen.isNull}) {
          |  $tmpResult = 0;
          |  $javaDataType $valueArg = ${valueGen.value};
@@ -288,8 +291,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
          |    $codes
          |  } while (false);
          |}
-         |final boolean ${ev.isNull} = ($tmpResult == -1);
-         |final boolean ${ev.value} = ($tmpResult == 1);
+         |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
+         |final boolean ${ev.value} = ($tmpResult == $MATCHED);
        """.stripMargin)
   }
 

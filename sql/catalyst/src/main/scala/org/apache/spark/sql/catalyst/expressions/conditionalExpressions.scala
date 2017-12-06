@@ -181,9 +181,12 @@ case class CaseWhen(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // This variable holds the state of the result:
-    //   -1 means the condition is not met yet and the result is unknown.
-    //   0 means the condition is met and result is not null.
-    //   1 means the condition is met and result is null.
+    // -1 means the condition is not met yet and the result is unknown.
+    val NOT_MATCHED = -1
+    // 0 means the condition is met and result is not null.
+    val HAS_NONNULL = 0
+    // 1 means the condition is met and result is null.
+    val HAS_NULL = 1
     // It is initialized to `-1`, and if it's set to `1` or `0`, We won't go on anymore on the
     // computation.
     val resultState = ctx.freshName("caseWhenResultState")
@@ -202,7 +205,7 @@ case class CaseWhen(
          |${cond.code}
          |if (!${cond.isNull} && ${cond.value}) {
          |  ${res.code}
-         |  $resultState = (byte)(${res.isNull} ? 1 : 0);
+         |  $resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
          |  $tmpResult = ${res.value};
          |  continue;
          |}
@@ -213,7 +216,7 @@ case class CaseWhen(
       val res = elseExpr.genCode(ctx)
       s"""
          |${res.code}
-         |$resultState = (byte)(${res.isNull} ? 1 : 0);
+         |$resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
          |$tmpResult = ${res.value};
        """.stripMargin
     }
@@ -244,7 +247,7 @@ case class CaseWhen(
       returnType = ctx.JAVA_BYTE,
       makeSplitFunction = func =>
         s"""
-           |${ctx.JAVA_BYTE} $resultState = -1;
+           |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
            |do {
            |  $func
            |} while (false);
@@ -253,7 +256,7 @@ case class CaseWhen(
       foldFunctions = _.map { funcCall =>
         s"""
            |$resultState = $funcCall;
-           |if ($resultState != -1) {
+           |if ($resultState != $NOT_MATCHED) {
            |  continue;
            |}
          """.stripMargin
@@ -261,13 +264,13 @@ case class CaseWhen(
 
     ev.copy(code =
       s"""
-         |${ctx.JAVA_BYTE} $resultState = -1;
+         |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
          |$tmpResult = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
          |// TRUE if any condition is met and the result is not null, or no any condition is met.
-         |final boolean ${ev.isNull} = ($resultState != 0);
+         |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
          |final ${ctx.javaType(dataType)} ${ev.value} = $tmpResult;
        """.stripMargin)
   }
