@@ -199,14 +199,20 @@ case class DropTableCommand(
         case _ =>
       }
     }
-    try {
-      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
-    } catch {
-      case _: NoSuchTableException if ifExists =>
-      case NonFatal(e) => log.warn(e.toString, e)
+
+    if (catalog.isTemporaryTable(tableName) || catalog.tableExists(tableName)) {
+      try {
+        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
+      } catch {
+        case NonFatal(e) => log.warn(e.toString, e)
+      }
+      catalog.refreshTable(tableName)
+      catalog.dropTable(tableName, ifExists, purge)
+    } else if (ifExists) {
+      // no-op
+    } else {
+      throw new AnalysisException(s"Table or view not found: ${tableName.identifier}")
     }
-    catalog.refreshTable(tableName)
-    catalog.dropTable(tableName, ifExists, purge)
     Seq.empty[Row]
   }
 }
