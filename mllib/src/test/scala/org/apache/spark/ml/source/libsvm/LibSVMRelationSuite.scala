@@ -204,10 +204,18 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
           assert(df.columns(0) == "label")
           assert(df.columns(1) == "features")
-          val row1 = df.first()
-          assert(row1.getDouble(0) == 1.0)
-          val v = row1.getAs[SparseVector](1)
-          assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+
+          val results = df.collect()
+
+          assert(results.map(_.getDouble(0)).toSet == Seq(1.0, 0.0, 0.0, 0.0).toSet)
+
+          val actual = results.map(_.getAs[SparseVector](1))
+          val expected = Seq(
+            Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))),
+            Vectors.sparse(6, Nil),
+            Vectors.sparse(6, Nil),
+            Vectors.sparse(6, Seq((1, 4.0), (3, 5.0), (5, 6.0))))
+          assert(actual.toSet == expected.toSet)
 
           // Write
           df.coalesce(1)
@@ -215,14 +223,14 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
           val partFile = Utils.recursiveList(path1).filter(f => f.getName.startsWith("part-")).head
           val readBack = new String(
             java.nio.file.Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
-          assert(readBack === dataWithTrailingLineSep)
+          assert(readBack == dataWithTrailingLineSep)
 
           // Roundtrip
           val readBackDF = spark.read
             .option("lineSep", lineSep)
             .format("libsvm")
             .load(path1.getAbsolutePath)
-          assert(df.collect().toSet === readBackDF.collect().toSet)
+          assert(df.collect().toSet == readBackDF.collect().toSet)
         } finally {
           Utils.deleteRecursively(path0)
           Utils.deleteRecursively(path1)
