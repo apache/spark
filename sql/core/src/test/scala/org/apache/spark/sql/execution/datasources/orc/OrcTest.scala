@@ -45,9 +45,9 @@ import org.apache.spark.sql.test.SQLTestUtils
 abstract class OrcTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
   import testImplicits._
 
-  def orcImp: String = "native"
+  val orcImp: String = "native"
 
-  var originalConfORCImplementation = "native"
+  private var originalConfORCImplementation = "native"
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

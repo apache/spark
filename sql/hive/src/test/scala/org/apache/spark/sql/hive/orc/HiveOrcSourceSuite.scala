@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 
 class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
 
-  override def orcImp: String = "hive"
+  override val orcImp: String = "hive"
 
   override def beforeAll(): Unit = {
     super.beforeAll()

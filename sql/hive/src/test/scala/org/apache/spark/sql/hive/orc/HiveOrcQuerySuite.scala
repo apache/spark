@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   import testImplicits._
 
-  override def orcImp: String = "hive"
+  override val orcImp: String = "hive"
 
   test("SPARK-8501: Avoids discovery schema from empty ORC files") {
     withTempPath { dir =>

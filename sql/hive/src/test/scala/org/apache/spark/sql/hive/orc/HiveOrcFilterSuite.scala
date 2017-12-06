@@ -39,7 +39,7 @@ import org.apache.spark.sql.types._
  */
 class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
 
-  override def orcImp: String = "hive"
+  override val orcImp: String = "hive"
 
   private def checkFilterPredicate(
       df: DataFrame,
