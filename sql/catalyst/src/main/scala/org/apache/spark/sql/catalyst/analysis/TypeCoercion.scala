@@ -319,40 +319,40 @@ object TypeCoercion {
       }
     }
 
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan =
-      plan transformAllExpressions {
-        // Skip nodes who's children have not been resolved yet.
-        case e if !e.childrenResolved => e
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
 
-        case a @ BinaryArithmetic(left @ StringType(), right) =>
-          a.makeCopy(Array(Cast(left, DoubleType), right))
-        case a @ BinaryArithmetic(left, right @ StringType()) =>
-          a.makeCopy(Array(left, Cast(right, DoubleType)))
+      case a @ BinaryArithmetic(left @ StringType(), right) =>
+        a.makeCopy(Array(Cast(left, DoubleType), right))
+      case a @ BinaryArithmetic(left, right @ StringType()) =>
+        a.makeCopy(Array(left, Cast(right, DoubleType)))
 
-        // For equality between string and timestamp we cast the string to a timestamp
-        // so that things like rounding of subsecond precision does not affect the comparison.
-        case p @ Equality(left @ StringType(), right @ TimestampType()) =>
-          p.makeCopy(Array(Cast(left, TimestampType), right))
-        case p @ Equality(left @ TimestampType(), right @ StringType()) =>
-          p.makeCopy(Array(left, Cast(right, TimestampType)))
+      // For equality between string and timestamp we cast the string to a timestamp
+      // so that things like rounding of subsecond precision does not affect the comparison.
+      case p @ Equality(left @ StringType(), right @ TimestampType()) =>
+        p.makeCopy(Array(Cast(left, TimestampType), right))
+      case p @ Equality(left @ TimestampType(), right @ StringType()) =>
+        p.makeCopy(Array(left, Cast(right, TimestampType)))
 
-        case p @ BinaryComparison(left, right)
-          if findCommonTypeForBinaryComparison(left.dataType, right.dataType).isDefined =>
-          val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType).get
-          p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
+      case p @ BinaryComparison(left, right)
+        if findCommonTypeForBinaryComparison(left.dataType, right.dataType).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType).get
+        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
-        case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
-        case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
-        case Average(e @ StringType()) => Average(Cast(e, DoubleType))
-        case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
-        case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
-        case UnaryMinus(e @ StringType()) => UnaryMinus(Cast(e, DoubleType))
-        case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
-        case VariancePop(e @ StringType()) => VariancePop(Cast(e, DoubleType))
-        case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
-        case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
-        case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
-      }
+      case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
+      case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
+      case Average(e @ StringType()) => Average(Cast(e, DoubleType))
+      case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
+      case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
+      case UnaryMinus(e @ StringType()) => UnaryMinus(Cast(e, DoubleType))
+      case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
+      case VariancePop(e @ StringType()) => VariancePop(Cast(e, DoubleType))
+      case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
+      case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
+      case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
+    }
   }
 
   /**
@@ -379,57 +379,57 @@ object TypeCoercion {
       }
     }
 
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan =
-      plan transformAllExpressions {
-        // Skip nodes who's children have not been resolved yet.
-        case e if !e.childrenResolved => e
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
 
-        // Handle type casting required between value expression and subquery output
-        // in IN subquery.
-        case i @ In(a, Seq(ListQuery(sub, children, exprId, _)))
-          if !i.resolved && flattenExpr(a).length == sub.output.length =>
-          // LHS is the value expression of IN subquery.
-          val lhs = flattenExpr(a)
+      // Handle type casting required between value expression and subquery output
+      // in IN subquery.
+      case i @ In(a, Seq(ListQuery(sub, children, exprId, _)))
+        if !i.resolved && flattenExpr(a).length == sub.output.length =>
+        // LHS is the value expression of IN subquery.
+        val lhs = flattenExpr(a)
 
-          // RHS is the subquery output.
-          val rhs = sub.output
+        // RHS is the subquery output.
+        val rhs = sub.output
 
-          val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-            findCommonTypeForBinaryComparison(l.dataType, r.dataType)
-              .orElse(findTightestCommonType(l.dataType, r.dataType))
+        val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
+          findCommonTypeForBinaryComparison(l.dataType, r.dataType)
+            .orElse(findTightestCommonType(l.dataType, r.dataType))
+        }
+
+        // The number of columns/expressions must match between LHS and RHS of an
+        // IN subquery expression.
+        if (commonTypes.length == lhs.length) {
+          val castedRhs = rhs.zip(commonTypes).map {
+            case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+            case (e, _) => e
+          }
+          val castedLhs = lhs.zip(commonTypes).map {
+            case (e, dt) if e.dataType != dt => Cast(e, dt)
+            case (e, _) => e
           }
 
-          // The number of columns/expressions must match between LHS and RHS of an
-          // IN subquery expression.
-          if (commonTypes.length == lhs.length) {
-            val castedRhs = rhs.zip(commonTypes).map {
-              case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
-              case (e, _) => e
-            }
-            val castedLhs = lhs.zip(commonTypes).map {
-              case (e, dt) if e.dataType != dt => Cast(e, dt)
-              case (e, _) => e
-            }
-
-            // Before constructing the In expression, wrap the multi values in LHS
-            // in a CreatedNamedStruct.
-            val newLhs = castedLhs match {
-              case Seq(lhs) => lhs
-              case _ => CreateStruct(castedLhs)
-            }
-
-            val newSub = Project(castedRhs, sub)
-            In(newLhs, Seq(ListQuery(newSub, children, exprId, newSub.output)))
-          } else {
-            i
+          // Before constructing the In expression, wrap the multi values in LHS
+          // in a CreatedNamedStruct.
+          val newLhs = castedLhs match {
+            case Seq(lhs) => lhs
+            case _ => CreateStruct(castedLhs)
           }
 
-        case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
-          findWiderCommonType(i.children.map(_.dataType)) match {
-            case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
-            case None => i
-          }
-      }
+          val newSub = Project(castedRhs, sub)
+          In(newLhs, Seq(ListQuery(newSub, children, exprId, newSub.output)))
+        } else {
+          i
+        }
+
+      case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
+        findWiderCommonType(i.children.map(_.dataType)) match {
+          case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
+          case None => i
+        }
+    }
   }
 
   /**
@@ -480,90 +480,90 @@ object TypeCoercion {
    * This ensure that the types for various functions are as expected.
    */
   object FunctionArgumentConversion extends TypeCoercionRule {
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan =
-      plan transformAllExpressions {
-        // Skip nodes who's children have not been resolved yet.
-        case e if !e.childrenResolved => e
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
 
-        case a @ CreateArray(children) if !haveSameType(children) =>
-          val types = children.map(_.dataType)
+      case a @ CreateArray(children) if !haveSameType(children) =>
+        val types = children.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
+          case None => a
+        }
+
+      case m @ CreateMap(children) if m.keys.length == m.values.length &&
+        (!haveSameType(m.keys) || !haveSameType(m.values)) =>
+        val newKeys = if (haveSameType(m.keys)) {
+          m.keys
+        } else {
+          val types = m.keys.map(_.dataType)
           findWiderCommonType(types) match {
-            case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
-            case None => a
+            case Some(finalDataType) => m.keys.map(Cast(_, finalDataType))
+            case None => m.keys
           }
+        }
 
-        case m @ CreateMap(children) if m.keys.length == m.values.length &&
-          (!haveSameType(m.keys) || !haveSameType(m.values)) =>
-          val newKeys = if (haveSameType(m.keys)) {
-            m.keys
-          } else {
-            val types = m.keys.map(_.dataType)
-            findWiderCommonType(types) match {
-              case Some(finalDataType) => m.keys.map(Cast(_, finalDataType))
-              case None => m.keys
-            }
-          }
-
-          val newValues = if (haveSameType(m.values)) {
-            m.values
-          } else {
-            val types = m.values.map(_.dataType)
-            findWiderCommonType(types) match {
-              case Some(finalDataType) => m.values.map(Cast(_, finalDataType))
-              case None => m.values
-            }
-          }
-
-          CreateMap(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
-
-        // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
-        case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
-        case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
-        case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
-
-        case s @ Average(e @ DecimalType()) => s // Decimal is already the biggest.
-        case Average(e @ IntegralType()) if e.dataType != LongType =>
-          Average(Cast(e, LongType))
-        case Average(e @ FractionalType()) if e.dataType != DoubleType =>
-          Average(Cast(e, DoubleType))
-
-        // Hive lets you do aggregation of timestamps... for some reason
-        case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
-        case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
-
-        // Coalesce should return the first non-null value, which could be any column
-        // from the list. So we need to make sure the return type is deterministic and
-        // compatible with every child column.
-        case c @ Coalesce(es) if !haveSameType(es) =>
-          val types = es.map(_.dataType)
+        val newValues = if (haveSameType(m.values)) {
+          m.values
+        } else {
+          val types = m.values.map(_.dataType)
           findWiderCommonType(types) match {
-            case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
-            case None => c
+            case Some(finalDataType) => m.values.map(Cast(_, finalDataType))
+            case None => m.values
           }
+        }
 
-        // When finding wider type for `Greatest` and `Least`, we should handle decimal types even
-        // if we need to truncate, but we should not promote one side to string if the other side is
-        // string.g
-        case g @ Greatest(children) if !haveSameType(children) =>
-          val types = children.map(_.dataType)
-          findWiderTypeWithoutStringPromotion(types) match {
-            case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
-            case None => g
-          }
+        CreateMap(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
-        case l @ Least(children) if !haveSameType(children) =>
-          val types = children.map(_.dataType)
-          findWiderTypeWithoutStringPromotion(types) match {
-            case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
-            case None => l
-          }
+      // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
+      case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
+      case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
+      case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
 
-        case NaNvl(l, r) if l.dataType == DoubleType && r.dataType == FloatType =>
-          NaNvl(l, Cast(r, DoubleType))
-        case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
-          NaNvl(Cast(l, DoubleType), r)
-        case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
-      }
+      case s @ Average(e @ DecimalType()) => s // Decimal is already the biggest.
+      case Average(e @ IntegralType()) if e.dataType != LongType =>
+        Average(Cast(e, LongType))
+      case Average(e @ FractionalType()) if e.dataType != DoubleType =>
+        Average(Cast(e, DoubleType))
+
+      // Hive lets you do aggregation of timestamps... for some reason
+      case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
+      case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
+
+      // Coalesce should return the first non-null value, which could be any column
+      // from the list. So we need to make sure the return type is deterministic and
+      // compatible with every child column.
+      case c @ Coalesce(es) if !haveSameType(es) =>
+        val types = es.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
+          case None => c
+        }
+
+      // When finding wider type for `Greatest` and `Least`, we should handle decimal types even if
+      // we need to truncate, but we should not promote one side to string if the other side is
+      // string.g
+      case g @ Greatest(children) if !haveSameType(children) =>
+        val types = children.map(_.dataType)
+        findWiderTypeWithoutStringPromotion(types) match {
+          case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
+          case None => g
+        }
+
+      case l @ Least(children) if !haveSameType(children) =>
+        val types = children.map(_.dataType)
+        findWiderTypeWithoutStringPromotion(types) match {
+          case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
+          case None => l
+        }
+
+      case NaNvl(l, r) if l.dataType == DoubleType && r.dataType == FloatType =>
+        NaNvl(l, Cast(r, DoubleType))
+      case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
+        NaNvl(Cast(l, DoubleType), r)
+      case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
+    }
   }
 
   /**
@@ -571,18 +571,18 @@ object TypeCoercion {
    * converted to fractional types.
    */
   object Division extends TypeCoercionRule {
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan =
-      plan transformAllExpressions {
-        // Skip nodes who has not been resolved yet,
-        // as this is an extra rule which should be applied at last.
-        case e if !e.childrenResolved => e
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who has not been resolved yet,
+      // as this is an extra rule which should be applied at last.
+      case e if !e.childrenResolved => e
 
-        // Decimal and Double remain the same
-        case d: Divide if d.dataType == DoubleType => d
-        case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
-        case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
-          Divide(Cast(left, DoubleType), Cast(right, DoubleType))
-      }
+      // Decimal and Double remain the same
+      case d: Divide if d.dataType == DoubleType => d
+      case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
+      case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
+        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+    }
 
     private def isNumericOrNull(ex: Expression): Boolean = {
       // We need to handle null types in case a query contains null literals.
@@ -594,52 +594,52 @@ object TypeCoercion {
    * Coerces the type of different branches of a CASE WHEN statement to a common type.
    */
   object CaseWhenCoercion extends TypeCoercionRule {
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan =
-      plan transformAllExpressions {
-        case c: CaseWhen if c.childrenResolved && !c.valueTypesEqual =>
-          val maybeCommonType = findWiderCommonType(c.valueTypes)
-          maybeCommonType.map { commonType =>
-            var changed = false
-            val newBranches = c.branches.map { case (condition, value) =>
-              if (value.dataType.sameType(commonType)) {
-                (condition, value)
-              } else {
-                changed = true
-                (condition, Cast(value, commonType))
-              }
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case c: CaseWhen if c.childrenResolved && !c.valueTypesEqual =>
+        val maybeCommonType = findWiderCommonType(c.valueTypes)
+        maybeCommonType.map { commonType =>
+          var changed = false
+          val newBranches = c.branches.map { case (condition, value) =>
+            if (value.dataType.sameType(commonType)) {
+              (condition, value)
+            } else {
+              changed = true
+              (condition, Cast(value, commonType))
             }
-            val newElseValue = c.elseValue.map { value =>
-              if (value.dataType.sameType(commonType)) {
-                value
-              } else {
-                changed = true
-                Cast(value, commonType)
-              }
+          }
+          val newElseValue = c.elseValue.map { value =>
+            if (value.dataType.sameType(commonType)) {
+              value
+            } else {
+              changed = true
+              Cast(value, commonType)
             }
-            if (changed) CaseWhen(newBranches, newElseValue) else c
-          }.getOrElse(c)
-      }
+          }
+          if (changed) CaseWhen(newBranches, newElseValue) else c
+        }.getOrElse(c)
+    }
   }
 
   /**
    * Coerces the type of different branches of If statement to a common type.
    */
   object IfCoercion extends TypeCoercionRule {
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan =
-      plan transformAllExpressions {
-        case e if !e.childrenResolved => e
-        // Find tightest common type for If, if the true value and false value have different types.
-        case i @ If(pred, left, right) if left.dataType != right.dataType =>
-          findWiderTypeForTwo(left.dataType, right.dataType).map { widestType =>
-            val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
-            val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
-            If(pred, newLeft, newRight)
-          }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
-        case If(Literal(null, NullType), left, right) =>
-          If(Literal.create(null, BooleanType), left, right)
-        case If(pred, left, right) if pred.dataType == NullType =>
-          If(Cast(pred, BooleanType), left, right)
-      }
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case e if !e.childrenResolved => e
+      // Find tightest common type for If, if the true value and false value have different types.
+      case i @ If(pred, left, right) if left.dataType != right.dataType =>
+        findWiderTypeForTwo(left.dataType, right.dataType).map { widestType =>
+          val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
+          val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
+          If(pred, newLeft, newRight)
+        }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
+      case If(Literal(null, NullType), left, right) =>
+        If(Literal.create(null, BooleanType), left, right)
+      case If(pred, left, right) if pred.dataType == NullType =>
+        If(Cast(pred, BooleanType), left, right)
+    }
   }
 
   /**
@@ -683,43 +683,43 @@ object TypeCoercion {
    * Casts types according to the expected input types for [[Expression]]s.
    */
   object ImplicitTypeCasts extends TypeCoercionRule {
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan =
-      plan transformAllExpressions {
-        // Skip nodes who's children have not been resolved yet.
-        case e if !e.childrenResolved => e
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
 
-        case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
-          findTightestCommonType(left.dataType, right.dataType).map { commonType =>
-            if (b.inputType.acceptsType(commonType)) {
-              // If the expression accepts the tightest common type, cast to that.
-              val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
-              val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
-              b.withNewChildren(Seq(newLeft, newRight))
-            } else {
-              // Otherwise, don't do anything with the expression.
-              b
-            }
-          }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
-
-        case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
-          val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
-            // If we cannot do the implicit cast, just use the original input.
-            implicitCast(in, expected).getOrElse(in)
+      case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
+        findTightestCommonType(left.dataType, right.dataType).map { commonType =>
+          if (b.inputType.acceptsType(commonType)) {
+            // If the expression accepts the tightest common type, cast to that.
+            val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
+            val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
+            b.withNewChildren(Seq(newLeft, newRight))
+          } else {
+            // Otherwise, don't do anything with the expression.
+            b
           }
-          e.withNewChildren(children)
+        }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
 
-        case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
-          // Convert NullType into some specific target type for ExpectsInputTypes that don't do
-          // general implicit casting.
-          val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
-            if (in.dataType == NullType && !expected.acceptsType(NullType)) {
-              Literal.create(null, expected.defaultConcreteType)
-            } else {
-              in
-            }
+      case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          // If we cannot do the implicit cast, just use the original input.
+          implicitCast(in, expected).getOrElse(in)
+        }
+        e.withNewChildren(children)
+
+      case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
+        // Convert NullType into some specific target type for ExpectsInputTypes that don't do
+        // general implicit casting.
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          if (in.dataType == NullType && !expected.acceptsType(NullType)) {
+            Literal.create(null, expected.defaultConcreteType)
+          } else {
+            in
           }
-          e.withNewChildren(children)
-      }
+        }
+        e.withNewChildren(children)
+    }
 
     /**
      * Given an expected data type, try to cast the expression and return the cast expression.
@@ -801,15 +801,15 @@ object TypeCoercion {
    * Cast WindowFrame boundaries to the type they operate upon.
    */
   object WindowFrameCoercion extends TypeCoercionRule {
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan =
-      plan transformAllExpressions {
-        case s @ WindowSpecDefinition(_, Seq(order), SpecifiedWindowFrame(RangeFrame, lower, upper))
-            if order.resolved =>
-          s.copy(frameSpecification = SpecifiedWindowFrame(
-            RangeFrame,
-            createBoundaryCast(lower, order.dataType),
-            createBoundaryCast(upper, order.dataType)))
-      }
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case s @ WindowSpecDefinition(_, Seq(order), SpecifiedWindowFrame(RangeFrame, lower, upper))
+          if order.resolved =>
+        s.copy(frameSpecification = SpecifiedWindowFrame(
+          RangeFrame,
+          createBoundaryCast(lower, order.dataType),
+          createBoundaryCast(upper, order.dataType)))
+    }
 
     private def createBoundaryCast(boundary: Expression, dt: DataType): Expression = {
       (boundary, dt) match {
