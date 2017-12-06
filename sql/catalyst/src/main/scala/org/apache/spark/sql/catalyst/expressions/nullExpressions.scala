@@ -72,8 +72,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val isNull = ctx.freshName("isNull")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
+    val coalesceTmpIsNull = ctx.freshName("coalesceTmpIsNull")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, coalesceTmpIsNull)
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -81,7 +81,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
       s"""
          |${eval.code}
          |if (!${eval.isNull}) {
-         |  $isNull = false;
+         |  $coalesceTmpIsNull = false;
          |  ${ev.value} = ${eval.value};
          |  continue;
          |}
@@ -91,11 +91,11 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "coalesce",
-      extraArguments = (ctx.javaType(dataType), ev.value) :: Nil,
       returnType = ctx.javaType(dataType),
       makeSplitFunction = {
         func =>
           s"""
+            |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
             |do {
             |  $func
             |} while (false);
@@ -106,7 +106,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
         funcCalls.map { funcCall =>
           s"""
              |${ev.value} = $funcCall;
-             |if (!$isNull) {
+             |if (!$coalesceTmpIsNull) {
              |  continue;
              |}
            """.stripMargin
@@ -115,12 +115,12 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
     ev.copy(code =
       s"""
-         |$isNull = true;
+         |$coalesceTmpIsNull = true;
          |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
-         |boolean ${ev.isNull} = $isNull;
+         |boolean ${ev.isNull} = $coalesceTmpIsNull;
        """.stripMargin)
   }
 }

@@ -237,8 +237,9 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val javaDataType = ctx.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
-    // inValue  -1:isNull, 0:false, 1:true
-    val inValue = ctx.freshName("value")
+    // inTmpResult -1 indicates at lease one expr in list is evaluated to null.
+    // 0 means no matches found. 1 means the expr in list matches the given value expr.
+    val inTmpResult = ctx.freshName("inTmpResult")
     val valueArg = ctx.freshName("valueArg")
     // All the blocks are meant to be inside a do { ... } while (false); loop.
     // The evaluation of variables can be stopped when we find a matching value.
@@ -246,9 +247,9 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
       s"""
          |${x.code}
          |if (${x.isNull}) {
-         |  $inValue = -1; // isNull = true
+         |  $inTmpResult = -1; // isNull = true
          |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
-         |  $inValue = 1; // value = TRUE
+         |  $inTmpResult = 1; // value = TRUE
          |  continue;
          |}
        """.stripMargin)
@@ -256,21 +257,21 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = listCode,
       funcName = "valueIn",
-      extraArguments = (javaDataType, valueArg) :: (ctx.JAVA_BYTE, inValue) :: Nil,
+      extraArguments = (javaDataType, valueArg) :: (ctx.JAVA_BYTE, inTmpResult) :: Nil,
       returnType = ctx.JAVA_BYTE,
       makeSplitFunction = { body =>
         s"""
            |do {
            |  $body
            |} while (false);
-           |return $inValue;
+           |return $inTmpResult;
          """.stripMargin
       },
       foldFunctions = { funcCalls =>
         funcCalls.map(funcCall =>
           s"""
-             |$inValue = $funcCall;
-             |if ($inValue == 1) {
+             |$inTmpResult = $funcCall;
+             |if ($inTmpResult == 1) {
              |  continue;
              |}
            """.stripMargin).mkString("\n")
@@ -280,15 +281,16 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     ev.copy(code =
       s"""
          |${valueGen.code}
-         |byte $inValue = (byte)(${valueGen.isNull} ? -1 : 0); // isNull or FALSE
-         |if ($inValue != -1) {
+         |// TRUE if any condition is met and the result is not null, or no any condition is met.
+         |byte $inTmpResult = (byte)(${valueGen.isNull} ? -1 : 0);
+         |if ($inTmpResult != -1) {
          |  $javaDataType $valueArg = ${valueGen.value};
          |  do {
          |    $codes
          |  } while (false);
          |}
-         |boolean ${ev.isNull} = ($inValue == -1);
-         |boolean ${ev.value} = ($inValue == 1);
+         |boolean ${ev.isNull} = ($inTmpResult == -1);
+         |boolean ${ev.value} = ($inTmpResult == 1);
        """.stripMargin)
   }
 

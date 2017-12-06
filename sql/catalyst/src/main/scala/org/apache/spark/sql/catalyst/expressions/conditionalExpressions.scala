@@ -180,13 +180,15 @@ case class CaseWhen(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // This variable represents whether the condition is met with true/false or not met.
-    // It is initialized to -1 and it is set to 0 or 1 when the condition which evaluates to
-    // `false` or `true` is met and therefore is not needed to go on anymore on the computation
-    // of the following conditions.
-    val conditionMet = ctx.freshName("caseWhenConditionMet")
-    val value = ctx.freshName("value")
-    ctx.addMutableState(ctx.javaType(dataType), value)
+    // This variable represents whether the evaluated result is null or not. It's a byte value
+    // instead of boolean because it carries an extra information about if the case-when condition
+    // is met or not. It is initialized to `-1`, which means the condition is not met yet and the
+    // result is unknown. When the first condition is met, it is set to `1` if result is null, or
+    // `0` if result is not null. We won't go on anymore on the computation if it's set to `1` or
+    // `0`.
+    val resultIsNull = ctx.freshName("caseWhenResultIsNull")
+    val tmpResult = ctx.freshName("caseWhenTmpResult")
+    ctx.addMutableState(ctx.javaType(dataType), tmpResult)
 
     // these blocks are meant to be inside a
     // do {
@@ -200,8 +202,8 @@ case class CaseWhen(
          |${cond.code}
          |if (!${cond.isNull} && ${cond.value}) {
          |  ${res.code}
-         |  $conditionMet = (byte)(${res.isNull} ? 1 : 0);
-         |  $value = ${res.value};
+         |  $resultIsNull = (byte)(${res.isNull} ? 1 : 0);
+         |  $tmpResult = ${res.value};
          |  continue;
          |}
        """.stripMargin
@@ -211,30 +213,30 @@ case class CaseWhen(
       val res = elseExpr.genCode(ctx)
       s"""
          |${res.code}
-         |$conditionMet = (byte)(${res.isNull} ? 1 : 0);
-         |$value = ${res.value};
+         |$resultIsNull = (byte)(${res.isNull} ? 1 : 0);
+         |$tmpResult = ${res.value};
        """.stripMargin
     }
 
     val allConditions = cases ++ elseCode
 
     // This generates code like:
-    //   conditionMet = caseWhen_1(i);
-    //   if(conditionMet != -1) {
+    //   caseWhenResultIsNull = caseWhen_1(i);
+    //   if(caseWhenResultIsNull != -1) {
     //     continue;
     //   }
-    //   conditionMet = caseWhen_2(i);
-    //   if(conditionMet != -1) {
+    //   caseWhenResultIsNull = caseWhen_2(i);
+    //   if(caseWhenResultIsNull != -1) {
     //     continue;
     //   }
     //   ...
     // and the declared methods are:
     //   private byte caseWhen_1234() {
-    //     byte conditionMet = -1;
+    //     byte caseWhenResultIsNull = -1;
     //     do {
     //       // here the evaluation of the conditions
     //     } while (false);
-    //     return conditionMet;
+    //     return caseWhenResultIsNull;
     //   }
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = allConditions,
@@ -243,31 +245,34 @@ case class CaseWhen(
       makeSplitFunction = {
         func =>
           s"""
-            ${ctx.JAVA_BYTE} $conditionMet = -1;
-            do {
-              $func
-            } while (false);
-            return $conditionMet;
-          """
+             |${ctx.JAVA_BYTE} $resultIsNull = -1;
+             |do {
+             |  $func
+             |} while (false);
+             |return $resultIsNull;
+           """.stripMargin
       },
       foldFunctions = { funcCalls =>
         funcCalls.map { funcCall =>
           s"""
-            $conditionMet = $funcCall;
-            if ($conditionMet != -1) {
-              continue;
-            }"""
+             |$resultIsNull = $funcCall;
+             |if ($resultIsNull != -1) {
+             |  continue;
+             |}
+           """.stripMargin
         }.mkString
       })
 
-    ev.copy(code = s"""
-      ${ctx.JAVA_BYTE} $conditionMet = -1;
-      $value = ${ctx.defaultValue(dataType)};
-      do {
-        $codes
-      } while (false);
-      boolean ${ev.isNull} = ($conditionMet != 0); // TRUE if -1 or 1
-      ${ctx.javaType(dataType)} ${ev.value} = $value;""")
+    ev.copy(code =
+      s"""
+         |${ctx.JAVA_BYTE} $resultIsNull = -1;
+         |$tmpResult = ${ctx.defaultValue(dataType)};
+         |do {
+         |  $codes
+         |} while (false);
+         |boolean ${ev.isNull} = ($resultIsNull != 0); // TRUE if -1 or 1
+         |${ctx.javaType(dataType)} ${ev.value} = $tmpResult;
+       """)
   }
 }
 
