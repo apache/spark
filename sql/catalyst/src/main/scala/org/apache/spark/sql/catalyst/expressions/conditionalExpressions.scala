@@ -242,26 +242,22 @@ case class CaseWhen(
       expressions = allConditions,
       funcName = "caseWhen",
       returnType = ctx.JAVA_BYTE,
-      makeSplitFunction = {
-        func =>
-          s"""
-             |${ctx.JAVA_BYTE} $resultIsNull = -1;
-             |do {
-             |  $func
-             |} while (false);
-             |return $resultIsNull;
-           """.stripMargin
-      },
-      foldFunctions = { funcCalls =>
-        funcCalls.map { funcCall =>
-          s"""
-             |$resultIsNull = $funcCall;
-             |if ($resultIsNull != -1) {
-             |  continue;
-             |}
-           """.stripMargin
-        }.mkString
-      })
+      makeSplitFunction = func =>
+        s"""
+           |${ctx.JAVA_BYTE} $resultIsNull = -1;
+           |do {
+           |  $func
+           |} while (false);
+           |return $resultIsNull;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$resultIsNull = $funcCall;
+           |if ($resultIsNull != -1) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
 
     ev.copy(code =
       s"""
@@ -270,8 +266,9 @@ case class CaseWhen(
          |do {
          |  $codes
          |} while (false);
-         |boolean ${ev.isNull} = ($resultIsNull != 0); // TRUE if -1 or 1
-         |${ctx.javaType(dataType)} ${ev.value} = $tmpResult;
+         |// TRUE if any condition is met and the result is not null, or no any condition is met.
+         |final boolean ${ev.isNull} = ($resultIsNull != 0);
+         |final ${ctx.javaType(dataType)} ${ev.value} = $tmpResult;
        """)
   }
 }

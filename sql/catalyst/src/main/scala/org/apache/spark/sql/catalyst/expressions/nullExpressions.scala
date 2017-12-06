@@ -72,8 +72,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val coalesceTmpIsNull = ctx.freshName("coalesceTmpIsNull")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, coalesceTmpIsNull)
+    val tmpIsNull = ctx.freshName("coalesceTmpIsNull")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, tmpIsNull)
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -81,7 +81,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
       s"""
          |${eval.code}
          |if (!${eval.isNull}) {
-         |  $coalesceTmpIsNull = false;
+         |  $tmpIsNull = false;
          |  ${ev.value} = ${eval.value};
          |  continue;
          |}
@@ -92,35 +92,32 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
       expressions = evals,
       funcName = "coalesce",
       returnType = ctx.javaType(dataType),
-      makeSplitFunction = {
-        func =>
-          s"""
-            |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-            |do {
-            |  $func
-            |} while (false);
-            |return ${ev.value};
-          """.stripMargin
-      },
-      foldFunctions = { funcCalls =>
-        funcCalls.map { funcCall =>
-          s"""
-             |${ev.value} = $funcCall;
-             |if (!$coalesceTmpIsNull) {
-             |  continue;
-             |}
-           """.stripMargin
-        }.mkString
-      })
+      makeSplitFunction = func =>
+        s"""
+           |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+           |do {
+           |  $func
+           |} while (false);
+           |return ${ev.value};
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |${ev.value} = $funcCall;
+           |if (!$tmpIsNull) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
+
 
     ev.copy(code =
       s"""
-         |$coalesceTmpIsNull = true;
+         |$tmpIsNull = true;
          |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
-         |boolean ${ev.isNull} = $coalesceTmpIsNull;
+         |final boolean ${ev.isNull} = $tmpIsNull;
        """.stripMargin)
   }
 }
