@@ -46,9 +46,6 @@ import org.apache.spark.sql.types.StructType;
  * Spark first applies all operator push-down optimizations that this data source supports. Then
  * Spark collects information this data source reported for further optimizations. Finally Spark
  * issues the scan request and does the actual data reading.
- *
- * This reader must be able to get constructed and serve readSchema() without assuming an active
- * Spark session. An active session can be assumed when creating read tasks.
  */
 @InterfaceStability.Evolving
 public interface DataSourceV2Reader {
