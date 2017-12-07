@@ -452,7 +452,7 @@ private[spark] class Executor(
         // TODO: do not serialize value twice
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)
-        val resultSize = serializedDirectResult.limit
+        val resultSize = serializedDirectResult.limit()
 
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
