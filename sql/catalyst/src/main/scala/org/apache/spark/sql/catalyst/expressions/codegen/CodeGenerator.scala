@@ -159,15 +159,16 @@ class CodegenContext {
   var mutableStateArrayIdx: mutable.Map[(String, String), Int] =
     mutable.Map.empty[(String, String), Int]
 
-  // An array keyed by the tuple of mutable states' types and initialization code, holds the
+  // An array keyed by the tuple of mutable states' types, holds the
   // current name of the mutableStateArray into which state of the given key will be compacted
-  var mutableStateArrayCurrentNames: mutable.Map[(String, String), String] =
-    mutable.Map.empty[(String, String), String]
+  var mutableStateArrayCurrentNames: mutable.Map[String, String] =
+    mutable.Map.empty[String, String]
 
-  // An array keyed by the tuple of mutable states' types, array names and initialization code,
-  // holds the code that will initialize the mutableStateArray when initialized in loops
-  var mutableStateArrayInitCodes: mutable.ArrayBuffer[(String, String, String)] =
-    mutable.ArrayBuffer.empty[(String, String, String)]
+  // An array keyed by the tuple of mutable states' types, array names, array index, and
+  // initialization code, holds the code that will initialize the mutableStateArray when
+  // initialized in loops
+  var mutableStateArrayInitCodes: mutable.ArrayBuffer[String] =
+    mutable.ArrayBuffer.empty[String]
 
   /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
@@ -202,10 +203,6 @@ class CodegenContext {
       inline: Boolean = false,
       useFreshName: Boolean = true): String = {
     val varName = if (useFreshName) freshName(variableName) else variableName
-    val initCode = codeFunctions(varName)
-    if (javaType.contains("[][]")) {
-      Thread.dumpStack()
-    }
 
     if (inline ||
         // want to put a primitive type variable at outerClass for performance
@@ -213,31 +210,29 @@ class CodegenContext {
           (mutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD) ||
         // type is multi-dimensional array
         javaType.contains("[][]")) {
+      val initCode = codeFunctions(varName)
       mutableStates += ((javaType, varName, initCode))
       varName
     } else {
-      // Create an initialization code agnostic to the actual variable name which we can key by
-      val initCodeKey = initCode.replaceAll(varName, "*VALUE*")
-
-      val arrayName = mutableStateArrayCurrentNames.getOrElse((javaType, initCodeKey), "")
+      val arrayName = mutableStateArrayCurrentNames.getOrElse(javaType, "")
       val prevIdx = mutableStateArrayIdx.getOrElse((javaType, arrayName), -1)
       if (0 <= prevIdx && prevIdx < CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT - 1) {
-        // a mutableStateArray for the given type and initialization has already been declared,
+        // a mutableStateArray for the given type and name has already been declared,
         // update the max index of the array and return an array element
         val idx = prevIdx + 1
+        val initCode = codeFunctions(s"$arrayName[$idx]")
+        mutableStateArrayInitCodes += initCode
         mutableStateArrayIdx.update((javaType, arrayName), idx)
         s"$arrayName[$idx]"
       } else {
-        // mutableStateArray has not been declared yet for the given type and initialization code.
+        // mutableStateArray has not been declared yet for the given type and name.
         // Create a new name for the array, and add an entry to keep track of current array name
-        // for type and initialized code. In addition, type, array name, and qualified initialized
-        // code is stored for code generation
+        // for type and initialized code. In addition, init code is stored for code generation
         val arrayName = freshName("mutableStateArray")
-        val qualifiedInitCode = initCode.replaceAll(
-          varName, s"$arrayName[${CodeGenerator.INIT_LOOP_VARIABLE_NAME}]")
-        mutableStateArrayCurrentNames += (javaType, initCodeKey) -> arrayName
-        mutableStateArrayInitCodes += ((javaType, arrayName, qualifiedInitCode))
+        mutableStateArrayCurrentNames += javaType -> arrayName
         val idx = 0
+        val initCode = codeFunctions(s"$arrayName[$idx]")
+        mutableStateArrayInitCodes += initCode
         mutableStateArrayIdx += (javaType, arrayName) -> idx
         s"$arrayName[$idx]"
       }
@@ -266,7 +261,7 @@ class CodegenContext {
       s"private $javaType $variableName;"
     }
 
-    val arrayStates = mutableStateArrayInitCodes.map { case (javaType, arrayName, _) =>
+    val arrayStates = mutableStateArrayIdx.keys.map { case (javaType, arrayName) =>
       val length = mutableStateArrayIdx((javaType, arrayName)) + 1
       if (javaType.matches("^.*\\[\\]$")) {
         // initializer had an one-dimensional array variable
@@ -285,20 +280,8 @@ class CodegenContext {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
     val initCodes = mutableStates.distinct.map(_._3 + "\n")
-    // array state is initialized in loops
-    val arrayInitCodes = mutableStateArrayInitCodes.map {
-      case (javaType, arrayName, qualifiedInitCode) =>
-        if (qualifiedInitCode == "") {
-          ""
-        } else {
-          val loopIdxVar = CodeGenerator.INIT_LOOP_VARIABLE_NAME
-          s"""
-             for (int $loopIdxVar = 0; $loopIdxVar < $arrayName.length; $loopIdxVar++) {
-               $qualifiedInitCode
-             }
-           """
-        }
-    }
+    // statements for array element initialization
+    val arrayInitCodes = mutableStateArrayInitCodes.distinct.map(_ + "\n")
 
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
