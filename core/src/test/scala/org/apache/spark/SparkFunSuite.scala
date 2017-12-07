@@ -38,36 +38,27 @@ abstract class SparkFunSuite
 
   val threadWhiteList = Set(
     /**
-     * Netty related threads.
+     * Netty related internal threads.
+     * These are excluded because their lifecycle is handled by the netty itself
+     * and spark has no explicit effect on them.
      */
     "netty.*",
 
     /**
+     * Netty related internal threads.
      * A Single-thread singleton EventExecutor inside netty which creates such threads.
+     * These are excluded because their lifecycle is handled by the netty itself
+     * and spark has no explicit effect on them.
      */
     "globalEventExecutor.*",
 
     /**
-     * Netty creates such threads.
+     * Netty related internal threads.
      * Checks if a thread is alive periodically and runs a task when a thread dies.
+     * These are excluded because their lifecycle is handled by the netty itself
+     * and spark has no explicit effect on them.
      */
-    "threadDeathWatcher.*",
-
-    /**
-     * These threads are created by spark when internal RPC environment initialized and later used.
-     * For more details, see [[org.apache.spark.rpc.RpcEnv]].
-     */
-    "rpc-client.*",
-    "rpc-server.*",
-    "dispatcher-event-loop.*",
-
-    /**
-     * These threads are created by spark when the BlockManager's BlockTransferService initialized
-     * and later used. For more details, see [[org.apache.spark.storage.BlockManager]] and
-     * [[org.apache.spark.network.BlockTransferService]].
-     */
-    "shuffle-client.*",
-    "shuffle-server.*"
+    "threadDeathWatcher.*"
   )
   var beforeAllTestThreadNames: Set[String] = Set.empty
 
