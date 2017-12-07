@@ -232,7 +232,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
       assert(model2.intercept ~== interceptR relTol 1E-3)
       assert(model2.coefficients ~= coefficientsR relTol 1E-3)
 
-      testTransformer[(Double, Vector)](datasetWithDenseFeature, Seq(model1),
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
         "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =

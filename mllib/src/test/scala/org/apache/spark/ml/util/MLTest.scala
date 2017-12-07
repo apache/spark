@@ -22,7 +22,7 @@ import java.io.File
 import org.scalatest.Suite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.{PipelineModel, Transformer}
 import org.apache.spark.sql.{DataFrame, Encoder, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.StreamTest
@@ -53,8 +53,9 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     }
   }
 
-  def testTransformer[A : Encoder](dataframe: DataFrame, transformers: Seq[Transformer],
-      firstResultCol: String, otherResultCols: String*)(checkFunction: Row => Unit): Unit = {
+  def testPipelineModelOnStreamData[A : Encoder](dataframe: DataFrame,
+      pipelineModel: PipelineModel, firstResultCol: String, otherResultCols: String*)
+      (checkFunction: Row => Unit): Unit = {
 
     val columnNames = dataframe.schema.fieldNames
     val stream = MemoryStream[A]
@@ -62,20 +63,30 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
 
     val data = dataframe.as[A].collect()
 
-    val streamOutput = transformers.foldLeft(streamDF) {
-      case (data, transformer) => transformer.transform(data)
-    }.select(firstResultCol, otherResultCols: _*)
+    val streamOutput = pipelineModel.transform(streamDF)
+      .select(firstResultCol, otherResultCols: _*)
     testStream(streamOutput) (
       AddData(stream, data: _*),
       CheckAnswer(checkFunction)
     )
+  }
 
-    val dfOutput = transformers.foldLeft(dataframe) {
-      case (data, transformer) => transformer.transform(data)
-    }
+  def testPipelineModel[A : Encoder](dataframe: DataFrame, pipelineModel: PipelineModel,
+      firstResultCol: String, otherResultCols: String*)(checkFunction: Row => Unit): Unit = {
+
+    testPipelineModelOnStreamData(dataframe, pipelineModel, firstResultCol,
+      otherResultCols: _*)(checkFunction)
+
+    val dfOutput = pipelineModel.transform(dataframe)
     dfOutput.select(firstResultCol, otherResultCols: _*).collect().foreach { row =>
       checkFunction(row)
     }
   }
 
+  def testTransformer[A : Encoder](dataframe: DataFrame, transformer: Transformer,
+      firstResultCol: String, otherResultCols: String*)(checkFunction: Row => Unit): Unit = {
+    testPipelineModel[A](dataframe,
+      new PipelineModel(Identifiable.randomUID("pipelinemodel-test"), Array(transformer)),
+      firstResultCol, otherResultCols: _*)(checkFunction)
+  }
 }

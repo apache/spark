@@ -169,7 +169,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   }
 
   case class CheckAnswerRowsByFunc(checkFunction: Row => Unit, lastOnly: Boolean)
-    extends StreamAction with StreamMustBeRunning {
+      extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"$operatorName: ${checkFunction.toString()}"
     private def operatorName = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
   }
