@@ -22,11 +22,10 @@ import java.util.Optional
 import scala.collection.JavaConverters._
 
 import org.json4s.DefaultFormats
-import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.streaming.continuous.{ContinuousRateStreamSource, RateStreamDataReader, RateStreamReadTask}
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousRateStreamSource}
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
@@ -67,6 +66,13 @@ class RateStreamV2Reader(options: DataSourceV2Options)
     if (end == null) throw new IllegalStateException("end offset not set")
     end
   }
+
+  override def deserializeOffset(json: String): Offset = {
+    LongOffset.convert(SerializedOffset(json)).getOrElse {
+      throw new IllegalArgumentException(s"invalid encoded offset $json")
+    }
+  }
+
 
   override def createReadTasks(): java.util.List[ReadTask[Row]] = {
     val startTime = LongOffset.convert(start).get.offset

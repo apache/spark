@@ -22,7 +22,7 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reade
      * Deserialize a JSON string into an Offset of the implementation-defined offset type.
      * @throws IllegalArgumentException if the JSON does not encode a valid offset for this reader
      */
-    Offset deserialize(String json);
+    Offset deserializeOffset(String json);
 
     /**
      * Set the desired start offset for read tasks created from this reader. The scan will start

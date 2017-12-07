@@ -57,7 +57,7 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
     ContinuousRateStreamOffset(Map(tuples: _*))
   }
 
-  override def deserialize(json: String): Offset = {
+  override def deserializeOffset(json: String): Offset = {
     ContinuousRateStreamOffset(Serialization.read[Map[Int, Long]](json))
   }
 
