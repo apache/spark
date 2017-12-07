@@ -300,12 +300,13 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       if (currentStream != null) currentStream.committedOffsets.toString else "not started"
 
     def threadState =
-      if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
-    def threadStackTrace = if (currentStream != null && currentStream.microBatchThread.isAlive) {
-      s"Thread stack trace: ${currentStream.microBatchThread.getStackTrace.mkString("\n")}"
-    } else {
-      ""
-    }
+      if (currentStream != null && currentStream.queryExecutionThread.isAlive) "alive" else "dead"
+    def threadStackTrace =
+      if (currentStream != null && currentStream.queryExecutionThread.isAlive) {
+        s"Thread stack trace: ${currentStream.queryExecutionThread.getStackTrace.mkString("\n")}"
+      } else {
+        ""
+      }
 
     def testState =
       s"""
@@ -460,7 +461,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             verify(currentStream != null, "can not stop a stream that is not running")
             try failAfter(streamingTimeout) {
               currentStream.stop()
-              verify(!currentStream.microBatchThread.isAlive,
+              verify(!currentStream.queryExecutionThread.isAlive,
                 s"microbatch thread not stopped")
               verify(!currentStream.isActive,
                 "query.isActive() is false even after stopping")
@@ -486,7 +487,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                 currentStream.awaitTermination()
               }
               eventually("microbatch thread not stopped after termination with failure") {
-                assert(!currentStream.microBatchThread.isAlive)
+                assert(!currentStream.queryExecutionThread.isAlive)
               }
               verify(currentStream.exception === Some(thrownException),
                 s"incorrect exception returned by query.exception()")
@@ -614,7 +615,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
         failTest("Timed out waiting for stream", e)
     } finally {
-      if (currentStream != null && currentStream.microBatchThread.isAlive) {
+      if (currentStream != null && currentStream.queryExecutionThread.isAlive) {
         currentStream.stop()
       }
 
