@@ -246,6 +246,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(In(Literal(1.0D), sets), true)
   }
 
+  test("SPARK-22705: In should use less global variables") {
+    val ctx = new CodegenContext()
+    In(Literal(1.0D), Seq(Literal(1.0D), Literal(2.0D))).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
   test("INSET") {
     val hS = HashSet[Any]() + 1 + 2
     val nS = HashSet[Any]() + 1 + 2 + null
