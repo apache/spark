@@ -23,7 +23,7 @@ import javax.ws.rs.core.MediaType
 import org.apache.spark.deploy.history.ApplicationHistoryInfo
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class ApplicationListResource(uiRoot: UIRoot) {
+private[v1] class ApplicationListResource extends ApiRequestContext {
 
   @GET
   def appList(

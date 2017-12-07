@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -298,5 +299,11 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(
       new StringToMap(Literal("a=1_b=2_c=3"), Literal("_"), NonFoldableLiteral("="))
         .checkInputDataTypes().isFailure)
+  }
+
+  test("SPARK-22693: CreateNamedStruct should not use global variables") {
+    val ctx = new CodegenContext
+    CreateNamedStruct(Seq("a", "x", "b", 2.0)).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
   }
 }

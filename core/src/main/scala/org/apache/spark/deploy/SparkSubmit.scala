@@ -92,6 +92,12 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
+  // Following constants are visible for testing.
+  private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =
+    "org.apache.spark.deploy.yarn.YarnClusterApplication"
+  private[deploy] val REST_CLUSTER_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
+  private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
+
   // scalastyle:off println
   private[spark] def printVersionAndExit(): Unit = {
     printStream.println("""Welcome to
@@ -281,7 +287,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }
 
       // Make sure YARN is included in our build if we're trying to use it
-      if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
+      if (!Utils.classIsLoadable(YARN_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
         printErrorAndExit(
           "Could not load YARN classes. " +
           "This copy of Spark may not have been compiled with YARN support.")
@@ -363,10 +369,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
     args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
 
-    // This security manager will not need an auth secret, but set a dummy value in case
-    // spark.authenticate is enabled, otherwise an exception is thrown.
-    lazy val downloadConf = sparkConf.clone().set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
-    lazy val secMgr = new SecurityManager(downloadConf)
+    lazy val secMgr = new SecurityManager(sparkConf)
 
     // In client mode, download remote files.
     var localPrimaryResource: String = null
@@ -374,13 +377,13 @@ object SparkSubmit extends CommandLineUtils with Logging {
     var localPyFiles: String = null
     if (deployMode == CLIENT) {
       localPrimaryResource = Option(args.primaryResource).map {
-        downloadFile(_, targetDir, downloadConf, hadoopConf, secMgr)
+        downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
       localJars = Option(args.jars).map {
-        downloadFileList(_, targetDir, downloadConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
       localPyFiles = Option(args.pyFiles).map {
-        downloadFileList(_, targetDir, downloadConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
     }
 
@@ -391,8 +394,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // For yarn client mode, since we already download them with above code, so we only need to
     // figure out the local path and replace the remote one.
     if (clusterManager == YARN) {
-      sparkConf.setIfMissing(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
-      val secMgr = new SecurityManager(sparkConf)
       val forceDownloadSchemes = sparkConf.get(FORCE_DOWNLOAD_SCHEMES)
 
       def shouldDownload(scheme: String): Boolean = {
@@ -409,7 +410,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
             if (file.exists()) {
               file.toURI.toString
             } else {
-              downloadFile(resource, targetDir, downloadConf, hadoopConf, secMgr)
+              downloadFile(resource, targetDir, sparkConf, hadoopConf, secMgr)
             }
           case _ => uri.toString
         }
@@ -634,11 +635,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // All Spark parameters are expected to be passed to the client through system properties.
     if (args.isStandaloneCluster) {
       if (args.useRest) {
-        childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
+        childMainClass = REST_CLUSTER_SUBMIT_CLASS
         childArgs += (args.primaryResource, args.mainClass)
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
-        childMainClass = "org.apache.spark.deploy.Client"
+        childMainClass = STANDALONE_CLUSTER_SUBMIT_CLASS
         if (args.supervise) { childArgs += "--supervise" }
         Option(args.driverMemory).foreach { m => childArgs += ("--memory", m) }
         Option(args.driverCores).foreach { c => childArgs += ("--cores", c) }
@@ -663,7 +664,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
-      childMainClass = "org.apache.spark.deploy.yarn.Client"
+      childMainClass = YARN_CLUSTER_SUBMIT_CLASS
       if (args.isPython) {
         childArgs += ("--primary-py-file", args.primaryResource)
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
@@ -684,7 +685,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     if (isMesosCluster) {
       assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
-      childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
+      childMainClass = REST_CLUSTER_SUBMIT_CLASS
       if (args.isPython) {
         // Second argument is main class
         childArgs += (args.primaryResource, "")

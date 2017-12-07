@@ -418,7 +418,7 @@ private[hive] class HiveClientImpl(
       // Note that this statistics could be overridden by Spark's statistics if that's available.
       val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
       val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
-      val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)).filter(_ >= 0)
+      val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_))
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
       // relatively cheap if parameters for the table are populated into the metastore.
@@ -426,13 +426,15 @@ private[hive] class HiveClientImpl(
       // TODO: stats should include all the other two fields (`numFiles` and `numPartitions`).
       // (see StatsSetupConst in Hive)
       val stats =
-        // When table is external, `totalSize` is always zero, which will influence join strategy
-        // so when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
-        // return None. Later, we will use the other ways to estimate the statistics.
+        // When table is external, `totalSize` is always zero, which will influence join strategy.
+        // So when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
+        // return None.
+        // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
+        // zero after INSERT command. So they are used here only if they are larger than zero.
         if (totalSize.isDefined && totalSize.get > 0L) {
-          Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount))
+          Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount.filter(_ > 0)))
         } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
-          Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount))
+          Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount.filter(_ > 0)))
         } else {
           // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?
           None
@@ -488,6 +490,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
+    verifyColumnDataType(table.dataSchema)
     client.createTable(toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
@@ -507,6 +510,7 @@ private[hive] class HiveClientImpl(
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
+    verifyColumnDataType(table.dataSchema)
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
@@ -520,6 +524,7 @@ private[hive] class HiveClientImpl(
       newDataSchema: StructType,
       schemaProps: Map[String, String]): Unit = withHiveState {
     val oldTable = client.getTable(dbName, tableName)
+    verifyColumnDataType(newDataSchema)
     val hiveCols = newDataSchema.map(toHiveColumn)
     oldTable.setFields(hiveCols.asJava)
 
@@ -872,15 +877,19 @@ private[hive] object HiveClientImpl {
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
-  /** Builds the native StructField from Hive's FieldSchema. */
-  def fromHiveColumn(hc: FieldSchema): StructField = {
-    val columnType = try {
+  /** Get the Spark SQL native DataType from Hive's FieldSchema. */
+  private def getSparkSQLDataType(hc: FieldSchema): DataType = {
+    try {
       CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
         throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
     }
+  }
 
+  /** Builds the native StructField from Hive's FieldSchema. */
+  def fromHiveColumn(hc: FieldSchema): StructField = {
+    val columnType = getSparkSQLDataType(hc)
     val metadata = if (hc.getType != columnType.catalogString) {
       new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
     } else {
@@ -893,6 +902,10 @@ private[hive] object HiveClientImpl {
       nullable = true,
       metadata = metadata)
     Option(hc.getComment).map(field.withComment).getOrElse(field)
+  }
+
+  private def verifyColumnDataType(schema: StructType): Unit = {
+    schema.foreach(col => getSparkSQLDataType(toHiveColumn(col)))
   }
 
   private def toInputFormat(name: String) =

@@ -69,7 +69,9 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  */
 trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with BeforeAndAfterAll {
 
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
+
   override def afterAll(): Unit = {
     super.afterAll()
     StateStore.stop() // stop the state store maintenance thread and unload store providers

@@ -44,7 +44,8 @@ class ArrowPythonRunner(
     evalType: Int,
     argOffsets: Array[Array[Int]],
     schema: StructType,
-    timeZoneId: String)
+    timeZoneId: String,
+    respectTimeZone: Boolean)
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
     funcs, bufferSize, reuseWorker, evalType, argOffsets) {
 
@@ -58,6 +59,11 @@ class ArrowPythonRunner(
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+        if (respectTimeZone) {
+          PythonRDD.writeUTF(timeZoneId, dataOut)
+        } else {
+          dataOut.writeInt(SpecialLengths.NULL)
+        }
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
