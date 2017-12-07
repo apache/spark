@@ -74,7 +74,6 @@ public abstract class WritableColumnVector extends ColumnVector {
       dictionaryIds = null;
     }
     dictionary = null;
-    resultStruct = null;
   }
 
   public void reserve(int requiredCapacity) {
@@ -673,23 +672,19 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewColumn(childCapacity, childType);
-      this.resultStruct = null;
     } else if (type instanceof StructType) {
       StructType st = (StructType)type;
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
-      this.resultStruct = new ColumnarRow(this.childColumns);
     } else if (type instanceof CalendarIntervalType) {
       // Two columns. Months as int. Microseconds as Long.
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
-      this.resultStruct = new ColumnarRow(this.childColumns);
     } else {
       this.childColumns = null;
-      this.resultStruct = null;
     }
   }
 }

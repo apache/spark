@@ -547,7 +547,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     } else if (type instanceof LongType || type instanceof DoubleType ||
         DecimalType.is64BitDecimalType(type) || type instanceof TimestampType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 8, newCapacity * 8);
-    } else if (resultStruct != null) {
+    } else if (childColumns != null) {
       // Nothing to store.
     } else {
       throw new RuntimeException("Unhandled " + type);

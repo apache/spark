@@ -157,18 +157,16 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns a utility object to get structs.
    */
-  public ColumnarRow getStruct(int rowId) {
-    resultStruct.rowId = rowId;
-    return resultStruct;
+  public final ColumnarRow getStruct(int rowId) {
+    return new ColumnarRow(this, rowId);
   }
 
   /**
    * Returns a utility object to get structs.
    * provided to keep API compatibility with InternalRow for code generation
    */
-  public ColumnarRow getStruct(int rowId, int size) {
-    resultStruct.rowId = rowId;
-    return resultStruct;
+  public final ColumnarRow getStruct(int rowId, int size) {
+    return getStruct(rowId);
   }
 
   /**
@@ -215,11 +213,6 @@ public abstract class ColumnVector implements AutoCloseable {
    * Data type for this column.
    */
   protected DataType type;
-
-  /**
-   * Reusable Struct holder for getStruct().
-   */
-  protected ColumnarRow resultStruct;
 
   /**
    * The Dictionary for this column.
