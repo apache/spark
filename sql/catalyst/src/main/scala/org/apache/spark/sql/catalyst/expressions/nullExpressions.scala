@@ -72,8 +72,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
-    ctx.addMutableState(ctx.javaType(dataType), ev.value)
+    val tmpIsNull = ctx.freshName("coalesceTmpIsNull")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, tmpIsNull)
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -81,26 +81,30 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
       s"""
          |${eval.code}
          |if (!${eval.isNull}) {
-         |  ${ev.isNull} = false;
+         |  $tmpIsNull = false;
          |  ${ev.value} = ${eval.value};
          |  continue;
          |}
        """.stripMargin
     }
 
+    val resultType = ctx.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "coalesce",
+      returnType = resultType,
       makeSplitFunction = func =>
         s"""
+           |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
            |do {
            |  $func
            |} while (false);
+           |return ${ev.value};
          """.stripMargin,
       foldFunctions = _.map { funcCall =>
         s"""
-           |$funcCall;
-           |if (!${ev.isNull}) {
+           |${ev.value} = $funcCall;
+           |if (!$tmpIsNull) {
            |  continue;
            |}
          """.stripMargin
@@ -109,11 +113,12 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
     ev.copy(code =
       s"""
-         |${ev.isNull} = true;
-         |${ev.value} = ${ctx.defaultValue(dataType)};
+         |$tmpIsNull = true;
+         |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
+         |final boolean ${ev.isNull} = $tmpIsNull;
        """.stripMargin)
   }
 }

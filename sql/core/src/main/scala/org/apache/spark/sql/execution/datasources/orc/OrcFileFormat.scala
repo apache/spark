@@ -36,6 +36,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -124,7 +125,7 @@ class OrcFileFormat
     true
   }
 
-  override def buildReader(
+  override def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -167,9 +168,17 @@ class OrcFileFormat
         val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
 
-        val unsafeProjection = UnsafeProjection.create(requiredSchema)
+        val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+        val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
         val deserializer = new OrcDeserializer(dataSchema, requiredSchema, requestedColIds)
-        iter.map(value => unsafeProjection(deserializer.deserialize(value)))
+
+        if (partitionSchema.length == 0) {
+          iter.map(value => unsafeProjection(deserializer.deserialize(value)))
+        } else {
+          val joinedRow = new JoinedRow()
+          iter.map(value =>
+            unsafeProjection(joinedRow(deserializer.deserialize(value), file.partitionValues)))
+        }
       }
     }
   }

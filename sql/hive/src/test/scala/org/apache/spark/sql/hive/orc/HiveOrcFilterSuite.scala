@@ -24,16 +24,22 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
-import org.apache.spark.sql.{Column, DataFrame, QueryTest}
+import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.orc.OrcTest
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.types._
 
 /**
- * A test suite that tests ORC filter API based filter pushdown optimization.
+ * A test suite that tests Hive ORC filter API based filter pushdown optimization.
  */
-class OrcFilterSuite extends QueryTest with OrcTest {
+class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
+
+  override val orcImp: String = "hive"
+
   private def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,
@@ -342,6 +348,40 @@ class OrcFilterSuite extends QueryTest with OrcTest {
     // MapType
     withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i)))) { implicit df =>
       checkNoFilterPredicate('_1.isNotNull)
+    }
+  }
+
+  test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
+    import org.apache.spark.sql.sources._
+    // The `LessThan` should be converted while the `StringContains` shouldn't
+    val schema = new StructType(
+      Array(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", StringType, nullable = true)))
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(schema, Array(
+        LessThan("a", 10),
+        StringContains("b", "prefix")
+      )).get.toString
+    }
+
+    // The `LessThan` should be converted while the whole inner `And` shouldn't
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(schema, Array(
+        LessThan("a", 10),
+        Not(And(
+          GreaterThan("a", 1),
+          StringContains("b", "prefix")
+        ))
+      )).get.toString
     }
   }
 }

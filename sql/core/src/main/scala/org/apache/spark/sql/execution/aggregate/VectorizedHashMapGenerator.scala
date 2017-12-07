@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnarRow, MutableColumnarRow, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, MutableColumnarRow, OnHeapColumnVector}
 import org.apache.spark.sql.types._
 
 /**
@@ -231,7 +232,7 @@ class VectorizedHashMapGenerator(
 
   protected def generateRowIterator(): String = {
     s"""
-       |public java.util.Iterator<${classOf[ColumnarRow].getName}> rowIterator() {
+       |public java.util.Iterator<${classOf[InternalRow].getName}> rowIterator() {
        |  batch.setNumRows(numRows);
        |  return batch.rowIterator();
        |}
