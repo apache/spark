@@ -1419,11 +1419,10 @@ private object Client extends Logging {
   }
 
   /**
-   * Return whether the two file systems are the same.
+   * Return whether two URI represent file system are the same
    */
-  private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
-    val srcUri = srcFs.getUri()
-    val dstUri = destFs.getUri()
+  private def compareUri(srcUri: URI, dstUri: URI): Boolean = {
+
     if (srcUri.getScheme() == null || srcUri.getScheme() != dstUri.getScheme()) {
       return false
     }
@@ -1451,6 +1450,17 @@ private object Client extends Logging {
     }
 
     Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
+
+  }
+
+  /**
+   * Return whether the two file systems are the same.
+   */
+  protected def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
+    val srcUri = srcFs.getUri()
+    val dstUri = destFs.getUri()
+
+    compareUri(srcUri, dstUri)
   }
 
   /**
