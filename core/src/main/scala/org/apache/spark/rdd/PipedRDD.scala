@@ -17,41 +17,37 @@
 
 package org.apache.spark.rdd
 
-import java.io.BufferedWriter
-import java.io.File
-import java.io.FilenameFilter
-import java.io.IOException
-import java.io.OutputStreamWriter
-import java.io.PrintWriter
+import java.io._
+import java.util
 import java.util.StringTokenizer
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
-import scala.io.Source
+import scala.io.Codec
 import scala.reflect.ClassTag
+
+import com.google.common.io.ByteStreams
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.util.Utils
 
-
 /**
- * An RDD that pipes the contents of each parent partition through an external command
- * (printing them one per line) and returns the output as a collection of strings.
+ * An RDD that pipes the contents of each parent partition through an
+ * external command and returns the output.
  */
-private[spark] class PipedRDD[T: ClassTag](
-    prev: RDD[T],
+private[spark] class PipedRDD[I: ClassTag, O: ClassTag](
+    prev: RDD[I],
     command: Seq[String],
     envVars: Map[String, String],
-    printPipeContext: (String => Unit) => Unit,
-    printRDDElement: (T, String => Unit) => Unit,
     separateWorkingDir: Boolean,
     bufferSize: Int,
-    encoding: String)
-  extends RDD[String](prev) {
+    inputWriter: InputWriter[I],
+    outputReader: OutputReader[O]
+) extends RDD[O](prev) {
 
-  override def getPartitions: Array[Partition] = firstParent[T].partitions
+  override def getPartitions: Array[Partition] = firstParent[I].partitions
 
   /**
    * A FilenameFilter that accepts anything that isn't equal to the name passed in.
@@ -63,7 +59,7 @@ private[spark] class PipedRDD[T: ClassTag](
     }
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[String] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[O] = {
     val pb = new ProcessBuilder(command.asJava)
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
@@ -115,17 +111,13 @@ private[spark] class PipedRDD[T: ClassTag](
     // Start a thread to print the process's stderr to ours
     new Thread(s"stderr reader for $command") {
       override def run(): Unit = {
-        val err = proc.getErrorStream
+        val os = System.err
         try {
-          for (line <- Source.fromInputStream(err)(encoding).getLines) {
-            // scalastyle:off println
-            System.err.println(line)
-            // scalastyle:on println
-          }
+          ByteStreams.copy(proc.getErrorStream, os)
         } catch {
           case t: Throwable => childThreadException.set(t)
         } finally {
-          err.close()
+          os.close()
         }
       }
     }.start()
@@ -134,54 +126,47 @@ private[spark] class PipedRDD[T: ClassTag](
     new Thread(s"stdin writer for $command") {
       override def run(): Unit = {
         TaskContext.setTaskContext(context)
-        val out = new PrintWriter(new BufferedWriter(
-          new OutputStreamWriter(proc.getOutputStream, encoding), bufferSize))
+        val dos = new DataOutputStream(
+          new BufferedOutputStream(proc.getOutputStream, bufferSize))
         try {
-          // scalastyle:off println
-          // input the pipe context firstly
-          if (printPipeContext != null) {
-            printPipeContext(out.println)
+          for (elem <- firstParent[I].iterator(split, context)) {
+            inputWriter.write(dos, elem)
           }
-          for (elem <- firstParent[T].iterator(split, context)) {
-            if (printRDDElement != null) {
-              printRDDElement(elem, out.println)
-            } else {
-              out.println(elem)
-            }
-          }
-          // scalastyle:on println
         } catch {
           case t: Throwable => childThreadException.set(t)
         } finally {
-          out.close()
+          dos.close()
         }
       }
     }.start()
 
-    // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines
-    new Iterator[String] {
-      def next(): String = {
+    val dis = new DataInputStream(
+      new BufferedInputStream(proc.getInputStream, bufferSize))
+    new Iterator[O] {
+      def next(): O = {
         if (!hasNext()) {
           throw new NoSuchElementException()
         }
-        lines.next()
+
+        outputReader.read(dis)
       }
 
       def hasNext(): Boolean = {
-        val result = if (lines.hasNext) {
-          true
-        } else {
+        dis.mark(1)
+        val eof = dis.read() < 0
+        dis.reset()
+
+        if (eof) {
           val exitStatus = proc.waitFor()
           cleanup()
           if (exitStatus != 0) {
             throw new IllegalStateException(s"Subprocess exited with status $exitStatus. " +
               s"Command ran: " + command.mkString(" "))
           }
-          false
         }
+
         propagateChildException()
-        result
+        !eof
       }
 
       private def cleanup(): Unit = {
@@ -198,14 +183,111 @@ private[spark] class PipedRDD[T: ClassTag](
         val t = childThreadException.get()
         if (t != null) {
           val commandRan = command.mkString(" ")
-          logError(s"Caught exception while running pipe() operator. Command ran: $commandRan. " +
-            s"Exception: ${t.getMessage}")
-          proc.destroy()
+          logError("Caught exception while running pipe() operator. " +
+              s"Command ran: $commandRan.", t)
           cleanup()
+          proc.destroy()
           throw t
         }
       }
     }
+  }
+}
+
+/** Specifies how to write the elements of the input [[RDD]] into the pipe. */
+trait InputWriter[T] extends Serializable {
+  def write(dos: DataOutput, elem: T): Unit
+}
+
+/** Specifies how to read the elements from the pipe into the output [[RDD]]. */
+trait OutputReader[T] extends Serializable {
+  /**
+   * Reads the next element.
+   *
+   * The input is guaranteed to have at least one byte.
+   */
+  def read(dis: DataInput): T
+}
+
+class TextInputWriter[I](
+    encoding: String = Codec.defaultCharsetCodec.name,
+    printPipeContext: (String => Unit) => Unit = null,
+    printRDDElement: (I, String => Unit) => Unit = null
+) extends InputWriter[I] {
+
+  private[this] val lineSeparator = System.lineSeparator().getBytes(encoding)
+  private[this] var initialized = printPipeContext == null
+
+  private def writeLine(dos: DataOutput, s: String): Unit = {
+    dos.write(s.getBytes(encoding))
+    dos.write(lineSeparator)
+  }
+
+  override def write(dos: DataOutput, elem: I): Unit = {
+    if (!initialized) {
+      printPipeContext(writeLine(dos, _))
+      initialized = true
+    }
+
+    if (printRDDElement == null) {
+      writeLine(dos, String.valueOf(elem))
+    } else {
+      printRDDElement(elem, writeLine(dos, _))
+    }
+  }
+}
+
+class TextOutputReader(
+    encoding: String = Codec.defaultCharsetCodec.name
+) extends OutputReader[String] {
+
+  private[this] val lf = "\n".getBytes(encoding)
+  private[this] val cr = "\r".getBytes(encoding)
+  private[this] val crlf = cr ++ lf
+  private[this] var buf = Array.ofDim[Byte](64)
+  private[this] var used = 0
+
+  @inline
+  /** Checks that the suffix of [[buf]] matches [[other]]. */
+  private def endsWith(other: Array[Byte]): Boolean = {
+    var i = used - 1
+    var j = other.length - 1
+    (j <= i) && {
+      while (j >= 0) {
+        if (buf(i) != other(j)) {
+          return false
+        }
+        i -= 1
+        j -= 1
+      }
+      true
+    }
+  }
+
+  override def read(dis: DataInput): String = {
+    used = 0
+
+    try {
+      do {
+        val ch = dis.readByte()
+        if (buf.length <= used) {
+          buf = util.Arrays.copyOf(buf, used + (used >>> 1))  // 1.5x
+        }
+
+        buf(used) = ch
+        used += 1
+      } while (!(endsWith(lf) || endsWith(cr)))
+
+      if (endsWith(crlf)) {
+        used -= crlf.length
+      } else {  // endsWith(lf) || endsWith(cr)
+        used -= lf.length
+      }
+    } catch {
+      case _: EOFException =>
+    }
+
+    new String(buf, 0, used, encoding)
   }
 }
 

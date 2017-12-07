@@ -775,12 +775,41 @@ abstract class RDD[T: ClassTag](
       separateWorkingDir: Boolean = false,
       bufferSize: Int = 8192,
       encoding: String = Codec.defaultCharsetCodec.name): RDD[String] = withScope {
-    new PipedRDD(this, command, env,
+    val inputWriter = new TextInputWriter[T](
+      encoding,
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
-      if (printRDDElement ne null) sc.clean(printRDDElement) else null,
+      if (printRDDElement ne null) sc.clean(printRDDElement) else null)
+    val outputReader = new TextOutputReader(encoding)
+    pipeFormatted(command, env, separateWorkingDir, bufferSize, inputWriter, outputReader)
+  }
+
+  /**
+   * Return an RDD created by piping elements to a forked external process. The resulting RDD
+   * is computed by executing the given process once per partition. All elements
+   * of each input partition are written to a process's stdin. The resulting partition
+   * consists of the process's stdout output.
+   *
+   * @param command command to run in forked process.
+   * @param env environment variables to set.
+   * @param separateWorkingDir Use separate working directories for each task.
+   * @param bufferSize Buffer size for the stdin writer for the piped process.
+   * @param inputWriter the format to use for serializing the elements of this RDD into
+   *                    the process's stdin.
+   * @param outputReader the format to use for reading elements into the resulting RDD
+   *                     from process's stdout.
+   * @return the result RDD
+   */
+  def pipeFormatted[O: ClassTag](
+      command: Seq[String],
+      env: Map[String, String] = Map(),
+      separateWorkingDir: Boolean = false,
+      bufferSize: Int = 8192,
+      inputWriter: InputWriter[T],
+      outputReader: OutputReader[O]): RDD[O] = withScope {
+    new PipedRDD(this, command, env,
       separateWorkingDir,
       bufferSize,
-      encoding)
+      inputWriter, outputReader)
   }
 
   /**
