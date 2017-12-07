@@ -15,24 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.orc
+package org.apache.spark.sql.execution.datasources.orc
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.io.orc.{OrcStruct, SparkOrcNewRecordReader}
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.orc.{OrcConf, OrcFile}
 import org.apache.orc.OrcConf.COMPRESS
-import org.scalatest.BeforeAndAfterAll
+import org.apache.orc.mapred.OrcStruct
+import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
-import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
 
@@ -57,7 +60,8 @@ case class Contact(name: String, phone: String)
 
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
-class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
+abstract class OrcQueryTest extends OrcTest {
+  import testImplicits._
 
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
@@ -73,7 +77,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("Read/write binary data") {
     withOrcFile(BinaryData("test".getBytes(StandardCharsets.UTF_8)) :: Nil) { file =>
-      val bytes = read.orc(file).head().getAs[Array[Byte]](0)
+      val bytes = spark.read.orc(file).head().getAs[Array[Byte]](0)
       assert(new String(bytes, StandardCharsets.UTF_8) === "test")
     }
   }
@@ -91,7 +95,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.orc(file),
+        spark.read.orc(file),
         data.toDF().collect())
     }
   }
@@ -172,7 +176,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.orc(file),
+        spark.read.orc(file),
         Row(Seq.fill(5)(null): _*))
     }
   }
@@ -183,9 +187,13 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       spark.range(0, 10).write
         .option(COMPRESS.getAttribute, "ZLIB")
         .orc(file.getCanonicalPath)
-      val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
-      assert("ZLIB" === expectedCompressionKind.name())
+
+      val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".zlib.orc"))
+      assert(maybeOrcFile.isDefined)
+
+      val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
+      val conf = OrcFile.readerOptions(new Configuration())
+      assert("ZLIB" === OrcFile.createReader(orcFilePath, conf).getCompressionKind.name)
     }
 
     // `compression` overrides `orc.compress`.
@@ -194,9 +202,13 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         .option("compression", "ZLIB")
         .option(COMPRESS.getAttribute, "SNAPPY")
         .orc(file.getCanonicalPath)
-      val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
-      assert("ZLIB" === expectedCompressionKind.name())
+
+      val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".zlib.orc"))
+      assert(maybeOrcFile.isDefined)
+
+      val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
+      val conf = OrcFile.readerOptions(new Configuration())
+      assert("ZLIB" === OrcFile.createReader(orcFilePath, conf).getCompressionKind.name)
     }
   }
 
@@ -206,39 +218,39 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       spark.range(0, 10).write
         .option("compression", "ZLIB")
         .orc(file.getCanonicalPath)
-      val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
-      assert("ZLIB" === expectedCompressionKind.name())
+
+      val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".zlib.orc"))
+      assert(maybeOrcFile.isDefined)
+
+      val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
+      val conf = OrcFile.readerOptions(new Configuration())
+      assert("ZLIB" === OrcFile.createReader(orcFilePath, conf).getCompressionKind.name)
     }
 
     withTempPath { file =>
       spark.range(0, 10).write
         .option("compression", "SNAPPY")
         .orc(file.getCanonicalPath)
-      val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
-      assert("SNAPPY" === expectedCompressionKind.name())
+
+      val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".snappy.orc"))
+      assert(maybeOrcFile.isDefined)
+
+      val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
+      val conf = OrcFile.readerOptions(new Configuration())
+      assert("SNAPPY" === OrcFile.createReader(orcFilePath, conf).getCompressionKind.name)
     }
 
     withTempPath { file =>
       spark.range(0, 10).write
         .option("compression", "NONE")
         .orc(file.getCanonicalPath)
-      val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
-      assert("NONE" === expectedCompressionKind.name())
-    }
-  }
 
-  // Following codec is not supported in Hive 1.2.1, ignore it now
-  ignore("LZO compression options for writing to an ORC file not supported in Hive 1.2.1") {
-    withTempPath { file =>
-      spark.range(0, 10).write
-        .option("compression", "LZO")
-        .orc(file.getCanonicalPath)
-      val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
-      assert("LZO" === expectedCompressionKind.name())
+      val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".orc"))
+      assert(maybeOrcFile.isDefined)
+
+      val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
+      val conf = OrcFile.readerOptions(new Configuration())
+      assert("NONE" === OrcFile.createReader(orcFilePath, conf).getCompressionKind.name)
     }
   }
 
@@ -256,22 +268,28 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
+    spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
-      checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
+      checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
+    spark.sessionState.catalog.dropTable(
+      TableIdentifier("tmp"),
+      ignoreIfNotExists = true,
+      purge = false)
   }
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
+    spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
-      checkAnswer(table("t"), data.map(Row.fromTuple))
+      checkAnswer(spark.table("t"), data.map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
+    spark.sessionState.catalog.dropTable(
+      TableIdentifier("tmp"),
+      ignoreIfNotExists = true,
+      purge = false)
   }
 
   test("self-join") {
@@ -334,57 +352,13 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      spark.range(0, 10).select('id as "Acol").write.format("orc").save(path)
-      spark.read.format("orc").load(path).schema("Acol")
+      spark.range(0, 10).select('id as "Acol").write.orc(path)
+      spark.read.orc(path).schema("Acol")
       intercept[IllegalArgumentException] {
-        spark.read.format("orc").load(path).schema("acol")
+        spark.read.orc(path).schema("acol")
       }
-      checkAnswer(spark.read.format("orc").load(path).select("acol").sort("acol"),
+      checkAnswer(spark.read.orc(path).select("acol").sort("acol"),
         (0 until 10).map(Row(_)))
-    }
-  }
-
-  test("SPARK-8501: Avoids discovery schema from empty ORC files") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      withTable("empty_orc") {
-        withTempView("empty", "single") {
-          spark.sql(
-            s"""CREATE TABLE empty_orc(key INT, value STRING)
-               |STORED AS ORC
-               |LOCATION '${dir.toURI}'
-             """.stripMargin)
-
-          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
-          emptyDF.createOrReplaceTempView("empty")
-
-          // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
-          // Spark SQL ORC data source always avoids write empty ORC files.
-          spark.sql(
-            s"""INSERT INTO TABLE empty_orc
-               |SELECT key, value FROM empty
-             """.stripMargin)
-
-          val errorMessage = intercept[AnalysisException] {
-            spark.read.orc(path)
-          }.getMessage
-
-          assert(errorMessage.contains("Unable to infer schema for ORC"))
-
-          val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-          singleRowDF.createOrReplaceTempView("single")
-
-          spark.sql(
-            s"""INSERT INTO TABLE empty_orc
-               |SELECT key, value FROM single
-             """.stripMargin)
-
-          val df = spark.read.orc(path)
-          assert(df.schema === singleRowDF.schema.asNullable)
-          checkAnswer(df, singleRowDF)
-        }
-      }
     }
   }
 
@@ -405,7 +379,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         }
         // It needs to repartition data so that we can have several ORC files
         // in order to skip stripes in ORC.
-        createDataFrame(data).toDF("a", "b").repartition(10).write.orc(path)
+        spark.createDataFrame(data).toDF("a", "b").repartition(10).write.orc(path)
         val df = spark.read.orc(path)
 
         def checkPredicate(pred: Column, answer: Seq[Row]): Unit = {
@@ -436,77 +410,6 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         checkPredicate('a < 1 || 'a > 8, List(9).map(Row(_, null)))
         checkPredicate(!('a > 3), List(1, 3).map(Row(_, null)))
         checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
-      }
-    }
-  }
-
-  test("Verify the ORC conversion parameter: CONVERT_METASTORE_ORC") {
-    withTempView("single") {
-      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
-      singleRowDF.createOrReplaceTempView("single")
-
-      Seq("true", "false").foreach { orcConversion =>
-        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> orcConversion) {
-          withTable("dummy_orc") {
-            withTempPath { dir =>
-              val path = dir.getCanonicalPath
-              spark.sql(
-                s"""
-                   |CREATE TABLE dummy_orc(key INT, value STRING)
-                   |STORED AS ORC
-                   |LOCATION '${dir.toURI}'
-                 """.stripMargin)
-
-              spark.sql(
-                s"""
-                   |INSERT INTO TABLE dummy_orc
-                   |SELECT key, value FROM single
-                 """.stripMargin)
-
-              val df = spark.sql("SELECT * FROM dummy_orc WHERE key=0")
-              checkAnswer(df, singleRowDF)
-
-              val queryExecution = df.queryExecution
-              if (orcConversion == "true") {
-                queryExecution.analyzed.collectFirst {
-                  case _: LogicalRelation => ()
-                }.getOrElse {
-                  fail(s"Expecting the query plan to convert orc to data sources, " +
-                    s"but got:\n$queryExecution")
-                }
-              } else {
-                queryExecution.analyzed.collectFirst {
-                  case _: HiveTableRelation => ()
-                }.getOrElse {
-                  fail(s"Expecting no conversion from orc to data sources, " +
-                    s"but got:\n$queryExecution")
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  test("converted ORC table supports resolving mixed case field") {
-    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
-      withTable("dummy_orc") {
-        withTempPath { dir =>
-          val df = spark.range(5).selectExpr("id", "id as valueField", "id as partitionValue")
-          df.write
-            .partitionBy("partitionValue")
-            .mode("overwrite")
-            .orc(dir.getAbsolutePath)
-
-          spark.sql(s"""
-            |create external table dummy_orc (id long, valueField long)
-            |partitioned by (partitionValue int)
-            |stored as orc
-            |location "${dir.toURI}"""".stripMargin)
-          spark.sql(s"msck repair table dummy_orc")
-          checkAnswer(spark.sql("select * from dummy_orc"), df)
-        }
       }
     }
   }
@@ -544,7 +447,8 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       withTempPath { file =>
         // It needs to repartition data so that we can have several ORC files
         // in order to skip stripes in ORC.
-        createDataFrame(data).toDF("a").repartition(10).write.orc(file.getCanonicalPath)
+        spark.createDataFrame(data).toDF("a").repartition(10)
+          .write.orc(file.getCanonicalPath)
         val df = spark.read.orc(file.getCanonicalPath).where("a == 2")
         val actual = stripSparkFilter(df).count()
 
@@ -563,7 +467,8 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       withTempPath { file =>
         // It needs to repartition data so that we can have several ORC files
         // in order to skip stripes in ORC.
-        createDataFrame(data).toDF("a").repartition(10).write.orc(file.getCanonicalPath)
+        spark.createDataFrame(data).toDF("a").repartition(10)
+          .write.orc(file.getCanonicalPath)
         val df = spark.read.orc(file.getCanonicalPath).where(s"a == '$timeString'")
         val actual = stripSparkFilter(df).count()
 
@@ -596,14 +501,18 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("Empty schema does not read data from ORC file") {
     val data = Seq((1, 1), (2, 2))
     withOrcFile(data) { path =>
-      val requestedSchema = StructType(Nil)
       val conf = new Configuration()
-      val physicalSchema = OrcFileOperator.readSchema(Seq(path), Some(conf)).get
-      OrcFileFormat.setRequiredColumns(conf, physicalSchema, requestedSchema)
-      val maybeOrcReader = OrcFileOperator.getFileReader(path, Some(conf))
-      assert(maybeOrcReader.isDefined)
-      val orcRecordReader = new SparkOrcNewRecordReader(
-        maybeOrcReader.get, conf, 0, maybeOrcReader.get.getContentLength)
+      conf.set(OrcConf.INCLUDE_COLUMNS.getAttribute, "")
+      conf.setBoolean("hive.io.file.read.all.columns", false)
+
+      val orcRecordReader = {
+        val file = new File(path).listFiles().find(_.getName.endsWith(".snappy.orc")).head
+        val split = new FileSplit(new Path(file.toURI), 0, file.length, Array.empty[String])
+        val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
+        val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+        val oif = new OrcInputFormat[OrcStruct]
+        oif.createRecordReader(split, hadoopAttemptContext)
+      }
 
       val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
       try {
@@ -614,27 +523,88 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-   test("read from multiple orc input paths") {
-     val path1 = Utils.createTempDir()
-     val path2 = Utils.createTempDir()
-     makeOrcFile((1 to 10).map(Tuple1.apply), path1)
-     makeOrcFile((1 to 10).map(Tuple1.apply), path2)
-     assertResult(20)(read.orc(path1.getCanonicalPath, path2.getCanonicalPath).count())
-   }
+  test("read from multiple orc input paths") {
+    val path1 = Utils.createTempDir()
+    val path2 = Utils.createTempDir()
+    makeOrcFile((1 to 10).map(Tuple1.apply), path1)
+    makeOrcFile((1 to 10).map(Tuple1.apply), path2)
+    val df = spark.read.orc(path1.getCanonicalPath, path2.getCanonicalPath)
+    assert(df.count() == 20)
+  }
+}
+
+class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
+  import testImplicits._
+
+  test("LZO compression options for writing to an ORC file") {
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("compression", "LZO")
+        .orc(file.getCanonicalPath)
+
+      val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".lzo.orc"))
+      assert(maybeOrcFile.isDefined)
+
+      val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
+      val conf = OrcFile.readerOptions(new Configuration())
+      assert("LZO" === OrcFile.createReader(orcFilePath, conf).getCompressionKind.name)
+    }
+  }
+
+  test("Schema discovery on empty ORC files") {
+    // SPARK-8501 is fixed.
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      withTable("empty_orc") {
+        withTempView("empty", "single") {
+          spark.sql(
+            s"""CREATE TABLE empty_orc(key INT, value STRING)
+               |USING ORC
+               |LOCATION '${dir.toURI}'
+             """.stripMargin)
+
+          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+          emptyDF.createOrReplaceTempView("empty")
+
+          // This creates 1 empty ORC file with ORC SerDe.  We are using this trick because
+          // Spark SQL ORC data source always avoids write empty ORC files.
+          spark.sql(
+            s"""INSERT INTO TABLE empty_orc
+               |SELECT key, value FROM empty
+             """.stripMargin)
+
+          val df = spark.read.orc(path)
+          assert(df.schema === emptyDF.schema.asNullable)
+          checkAnswer(df, emptyDF)
+        }
+      }
+    }
+  }
+
+  test("SPARK-21791 ORC should support column names with dot") {
+    withTempDir { dir =>
+      val path = new File(dir, "orc").getCanonicalPath
+      Seq(Some(1), None).toDF("col.dots").write.orc(path)
+      assert(spark.read.orc(path).collect().length == 2)
+    }
+  }
 
   test("SPARK-20728 Make ORCFileFormat configurable between sql/hive and sql/core") {
-    Seq(
-      ("native", classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat]),
-      ("hive", classOf[org.apache.spark.sql.hive.orc.OrcFileFormat])).foreach { case (i, format) =>
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE spark_20728(a INT) USING ORC")
+      }
+      assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
+    }
 
-      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> i) {
-        withTable("spark_20728") {
-          sql("CREATE TABLE spark_20728(a INT) USING ORC")
-          val fileFormat = sql("SELECT * FROM spark_20728").queryExecution.analyzed.collectFirst {
-            case l: LogicalRelation => l.relation.asInstanceOf[HadoopFsRelation].fileFormat.getClass
-          }
-          assert(fileFormat == Some(format))
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
+      withTable("spark_20728") {
+        sql("CREATE TABLE spark_20728(a INT) USING ORC")
+        val fileFormat = sql("SELECT * FROM spark_20728").queryExecution.analyzed.collectFirst {
+          case l: LogicalRelation => l.relation.asInstanceOf[HadoopFsRelation].fileFormat.getClass
         }
+        assert(fileFormat == Some(classOf[OrcFileFormat]))
       }
     }
   }
