@@ -51,7 +51,23 @@ abstract class SparkFunSuite
      * Netty creates such threads.
      * Checks if a thread is alive periodically and runs a task when a thread dies.
      */
-    "threadDeathWatcher.*"
+    "threadDeathWatcher.*",
+
+    /**
+     * These threads are created by spark when internal RPC environment initialized and later used.
+     * For more details, see [[org.apache.spark.rpc.RpcEnv]].
+     */
+    "rpc-client.*",
+    "rpc-server.*",
+    "dispatcher-event-loop.*",
+
+    /**
+     * These threads are created by spark when the BlockManager's BlockTransferService initialized
+     * and later used. For more details, see [[org.apache.spark.storage.BlockManager]] and
+     * [[org.apache.spark.network.BlockTransferService]].
+     */
+    "shuffle-client.*",
+    "shuffle-server.*"
   )
   var beforeAllTestThreadNames: Set[String] = Set.empty
 
