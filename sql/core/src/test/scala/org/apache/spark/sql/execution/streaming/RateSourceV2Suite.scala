@@ -29,7 +29,7 @@ import org.apache.spark.sql.streaming.StreamTest
 
 class RateSourceV2Suite extends StreamTest {
   test("microbatch in registry") {
-    DataSource.lookupDataSource("rate").newInstance() match {
+    DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
       case ds: MicroBatchReadSupport =>
         val reader = ds.createMicroBatchReader(Optional.empty(), "", DataSourceV2Options.empty())
         assert(reader.isInstanceOf[RateStreamV2Reader])
@@ -88,7 +88,7 @@ class RateSourceV2Suite extends StreamTest {
   }
 
   test("continuous in registry") {
-    DataSource.lookupDataSource("rate").newInstance() match {
+    DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
       case ds: ContinuousReadSupport =>
         val reader = ds.createContinuousReader(Optional.empty(), "", DataSourceV2Options.empty())
         assert(reader.isInstanceOf[ContinuousRateStreamReader])
