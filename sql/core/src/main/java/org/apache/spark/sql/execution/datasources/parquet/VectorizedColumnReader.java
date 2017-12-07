@@ -94,7 +94,7 @@ public class VectorizedColumnReader {
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
   private final OriginalType originalType;
-  // The timezone conversion to apply to int96 timestamps.  Null if no conversion.
+  // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final TimeZone convertTz;
   private final static TimeZone UTC = DateTimeUtils.TimeZoneUTC();
 
@@ -228,6 +228,10 @@ public class VectorizedColumnReader {
     }
   }
 
+  private boolean shouldConvertTimestamps() {
+    return convertTz != null && !convertTz.equals(UTC);
+  }
+
   /**
    * Reads `num` values into column, decoding the values from `dictionaryIds` and `dictionary`.
    */
@@ -300,14 +304,22 @@ public class VectorizedColumnReader {
         break;
       case INT96:
         if (column.dataType() == DataTypes.TimestampType) {
-          for (int i = rowId; i < rowId + num; ++i) {
-            // TODO: Convert dictionary of Binaries to dictionary of Longs
-            if (!column.isNullAt(i)) {
-              Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
-              long rawTime = ParquetRowConverter.binaryToSQLTimestamp(v);
-              long adjTime =
-                  convertTz == null ? rawTime : DateTimeUtils.convertTz(rawTime, convertTz, UTC);
-              column.putLong(i, adjTime);
+          if (!shouldConvertTimestamps()) {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+                column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
+              }
+            }
+          } else {
+            for (int i = rowId; i < rowId + num; ++i) {
+              // TODO: Convert dictionary of Binaries to dictionary of Longs
+              if (!column.isNullAt(i)) {
+                Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+                long rawTime = ParquetRowConverter.binaryToSQLTimestamp(v);
+                long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+                column.putLong(i, adjTime);
+              }
             }
           }
         } else {
@@ -437,15 +449,26 @@ public class VectorizedColumnReader {
     if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType) {
       defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
     } else if (column.dataType() == DataTypes.TimestampType) {
-      for (int i = 0; i < num; i++) {
-        if (defColumn.readInteger() == maxDefLevel) {
-          // Read 12 bytes for INT96
-          long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
-          long adjTime =
-              convertTz == null ? rawTime : DateTimeUtils.convertTz(rawTime, convertTz, UTC);
-          column.putLong(rowId + i, adjTime);
-        } else {
-          column.putNull(rowId + i);
+      if (!shouldConvertTimestamps()) {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            // Read 12 bytes for INT96
+            long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
+            column.putLong(rowId + i, rawTime);
+          } else {
+            column.putNull(rowId + i);
+          }
+        }
+      } else {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            // Read 12 bytes for INT96
+            long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
+            long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+            column.putLong(rowId + i, adjTime);
+          } else {
+            column.putNull(rowId + i);
+          }
         }
       }
     } else {
