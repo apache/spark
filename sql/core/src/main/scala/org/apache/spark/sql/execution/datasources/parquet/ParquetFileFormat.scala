@@ -397,8 +397,8 @@ class ParquetFileFormat
       }
       val taskContext = Option(TaskContext.get())
       val parquetReader = if (enableVectorizedReader) {
-        val vectorizedReader =
-          new VectorizedParquetRecordReader(convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined)
+        val vectorizedReader = new VectorizedParquetRecordReader(
+          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined)
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)

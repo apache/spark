@@ -147,7 +147,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
             }
             val fullExpectations = (ts ++ impalaExpectations).map(_.toString).sorted.toArray
             val actual = readBack.map(_.getTimestamp(0).toString).sorted
-            withClue(s"int96TimestampConversion = $int96TimestampConversion; vectorized = $vectorized") {
+            withClue(
+              s"int96TimestampConversion = $int96TimestampConversion; vectorized = $vectorized") {
               assert(fullExpectations === actual)
 
               // Now test that the behavior is still correct even with a filter which could get
