@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.scalatest.{BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.Timeouts
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.SparkSubmitSuite
@@ -32,8 +31,7 @@ class BufferHolderSparkSubmitSuite
   extends SparkFunSuite
     with Matchers
     with BeforeAndAfterEach
-    with ResetSystemProperties
-    with Timeouts {
+    with ResetSystemProperties {
 
   test("SPARK-22222: Buffer holder should be able to allocate memory larger than 1GB") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)

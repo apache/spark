@@ -22,13 +22,13 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 
-import org.apache.spark.status.api.v1.{AllRDDResource, RDDDataDistribution, RDDPartitionInfo}
-import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils, WebUIPage}
+import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.api.v1.{RDDDataDistribution, RDDPartitionInfo}
+import org.apache.spark.ui._
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
-private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
-  private val listener = parent.listener
+private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends WebUIPage("rdd") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     // stripXSS is called first to remove suspicious characters used in XSS attacks
@@ -48,11 +48,13 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val blockPrevPageSize = Option(parameterBlockPrevPageSize).map(_.toInt).getOrElse(blockPageSize)
 
     val rddId = parameterId.toInt
-    val rddStorageInfo = AllRDDResource.getRDDStorageInfo(rddId, listener, includeDetails = true)
-      .getOrElse {
+    val rddStorageInfo = try {
+      store.rdd(rddId)
+    } catch {
+      case _: NoSuchElementException =>
         // Rather than crashing, render an "RDD Not Found" page
         return UIUtils.headerSparkPage("RDD Not Found", Seq.empty[Node], parent)
-      }
+    }
 
     // Worker table
     val workerTable = UIUtils.listingTable(workerHeader, workerRow,

@@ -101,9 +101,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private boolean returnColumnarBatch;
 
   /**
-   * The default config on whether columnarBatch should be offheap.
+   * The memory mode of the columnarBatch
    */
-  private static final MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
+  private final MemoryMode MEMORY_MODE;
+
+  public VectorizedParquetRecordReader(boolean useOffHeap) {
+    MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
+  }
 
   /**
    * Implementation of RecordReader API.
@@ -165,8 +169,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   // Columns 0,1: data columns
   // Column 2: partitionValues[0]
   // Column 3: partitionValues[1]
-  public void initBatch(MemoryMode memMode, StructType partitionColumns,
-                        InternalRow partitionValues) {
+  public void initBatch(
+      MemoryMode memMode,
+      StructType partitionColumns,
+      InternalRow partitionValues) {
     StructType batchSchema = new StructType();
     for (StructField f: sparkSchema.fields()) {
       batchSchema = batchSchema.add(f);
@@ -202,11 +208,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   public void initBatch() {
-    initBatch(DEFAULT_MEMORY_MODE, null, null);
+    initBatch(MEMORY_MODE, null, null);
   }
 
   public void initBatch(StructType partitionColumns, InternalRow partitionValues) {
-    initBatch(DEFAULT_MEMORY_MODE, partitionColumns, partitionValues);
+    initBatch(MEMORY_MODE, partitionColumns, partitionValues);
   }
 
   /**
@@ -281,11 +287,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
           + rowsReturned + " out of " + totalRowCount);
     }
     List<ColumnDescriptor> columns = requestedSchema.getColumns();
+    List<Type> types = requestedSchema.asGroupType().getFields();
     columnReaders = new VectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
-      columnReaders[i] = new VectorizedColumnReader(columns.get(i),
-          pages.getPageReader(columns.get(i)));
+      columnReaders[i] = new VectorizedColumnReader(
+        columns.get(i), types.get(i).getOriginalType(), pages.getPageReader(columns.get(i)));
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

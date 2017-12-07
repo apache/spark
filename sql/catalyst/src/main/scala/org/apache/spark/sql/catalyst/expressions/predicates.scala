@@ -234,28 +234,57 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaDataType = ctx.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.value)
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
+    val valueArg = ctx.freshName("valueArg")
+    // All the blocks are meant to be inside a do { ... } while (false); loop.
+    // The evaluation of variables can be stopped when we find a matching value.
     val listCode = listGen.map(x =>
       s"""
-        if (!${ev.value}) {
-          ${x.code}
-          if (${x.isNull}) {
-            ${ev.isNull} = true;
-          } else if (${ctx.genEqual(value.dataType, valueGen.value, x.value)}) {
-            ${ev.isNull} = false;
-            ${ev.value} = true;
-          }
-        }
-       """).mkString("\n")
-    ev.copy(code = s"""
-      ${valueGen.code}
-      boolean ${ev.value} = false;
-      boolean ${ev.isNull} = ${valueGen.isNull};
-      if (!${ev.isNull}) {
-        $listCode
-      }
-    """)
+         |${x.code}
+         |if (${x.isNull}) {
+         |  ${ev.isNull} = true;
+         |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
+         |  ${ev.isNull} = false;
+         |  ${ev.value} = true;
+         |  continue;
+         |}
+       """.stripMargin)
+
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = listCode,
+      funcName = "valueIn",
+      extraArguments = (javaDataType, valueArg) :: Nil,
+      makeSplitFunction = body =>
+        s"""
+           |do {
+           |  $body
+           |} while (false);
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$funcCall;
+           |if (${ev.value}) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString("\n"))
+
+    ev.copy(code =
+      s"""
+         |${valueGen.code}
+         |${ev.value} = false;
+         |${ev.isNull} = ${valueGen.isNull};
+         |if (!${ev.isNull}) {
+         |  $javaDataType $valueArg = ${valueGen.value};
+         |  do {
+         |    $codes
+         |  } while (false);
+         |}
+       """.stripMargin)
   }
 
   override def sql: String = {
@@ -315,17 +344,17 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     } else {
       ""
     }
-    ctx.addMutableState(setName, setTerm,
-      s"$setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();")
-    ev.copy(code = s"""
-      ${childGen.code}
-      boolean ${ev.isNull} = ${childGen.isNull};
-      boolean ${ev.value} = false;
-      if (!${ev.isNull}) {
-        ${ev.value} = $setTerm.contains(${childGen.value});
-        $setNull
-      }
-     """)
+    ev.copy(code =
+      s"""
+         |${childGen.code}
+         |${ctx.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
+         |${ctx.JAVA_BOOLEAN} ${ev.value} = false;
+         |if (!${ev.isNull}) {
+         |  $setName $setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();
+         |  ${ev.value} = $setTerm.contains(${childGen.value});
+         |  $setNull
+         |}
+       """.stripMargin)
   }
 
   override def sql: String = {

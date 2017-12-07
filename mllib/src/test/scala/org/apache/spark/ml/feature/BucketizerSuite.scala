@@ -20,9 +20,10 @@ package org.apache.spark.ml.feature
 import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
@@ -187,6 +188,220 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       }
     }
   }
+
+  test("multiple columns: Bucket continuous features, without -inf,inf") {
+    // Check a set of valid feature values.
+    val splits = Array(Array(-0.5, 0.0, 0.5), Array(-0.1, 0.3, 0.5))
+    val validData1 = Array(-0.5, -0.3, 0.0, 0.2)
+    val validData2 = Array(0.5, 0.3, 0.0, -0.1)
+    val expectedBuckets1 = Array(0.0, 0.0, 1.0, 1.0)
+    val expectedBuckets2 = Array(1.0, 1.0, 0.0, 0.0)
+
+    val data = (0 until validData1.length).map { idx =>
+      (validData1(idx), validData2(idx), expectedBuckets1(idx), expectedBuckets2(idx))
+    }
+    val dataFrame: DataFrame = data.toDF("feature1", "feature2", "expected1", "expected2")
+
+    val bucketizer1: Bucketizer = new Bucketizer()
+      .setInputCols(Array("feature1", "feature2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setSplitsArray(splits)
+
+    assert(bucketizer1.isBucketizeMultipleColumns())
+
+    bucketizer1.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
+    BucketizerSuite.checkBucketResults(bucketizer1.transform(dataFrame),
+      Seq("result1", "result2"),
+      Seq("expected1", "expected2"))
+
+    // Check for exceptions when using a set of invalid feature values.
+    val invalidData1 = Array(-0.9) ++ validData1
+    val invalidData2 = Array(0.51) ++ validData1
+    val badDF1 = invalidData1.zipWithIndex.toSeq.toDF("feature", "idx")
+
+    val bucketizer2: Bucketizer = new Bucketizer()
+      .setInputCols(Array("feature"))
+      .setOutputCols(Array("result"))
+      .setSplitsArray(Array(splits(0)))
+
+    assert(bucketizer2.isBucketizeMultipleColumns())
+
+    withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
+      intercept[SparkException] {
+        bucketizer2.transform(badDF1).collect()
+      }
+    }
+    val badDF2 = invalidData2.zipWithIndex.toSeq.toDF("feature", "idx")
+    withClue("Invalid feature value 0.51 was not caught as an invalid feature!") {
+      intercept[SparkException] {
+        bucketizer2.transform(badDF2).collect()
+      }
+    }
+  }
+
+  test("multiple columns: Bucket continuous features, with -inf,inf") {
+    val splits = Array(
+      Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity),
+      Array(Double.NegativeInfinity, -0.3, 0.2, 0.5, Double.PositiveInfinity))
+
+    val validData1 = Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9)
+    val validData2 = Array(-0.1, -0.5, -0.2, 0.0, 0.1, 0.3, 0.5)
+    val expectedBuckets1 = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0)
+    val expectedBuckets2 = Array(1.0, 0.0, 1.0, 1.0, 1.0, 2.0, 3.0)
+
+    val data = (0 until validData1.length).map { idx =>
+      (validData1(idx), validData2(idx), expectedBuckets1(idx), expectedBuckets2(idx))
+    }
+    val dataFrame: DataFrame = data.toDF("feature1", "feature2", "expected1", "expected2")
+
+    val bucketizer: Bucketizer = new Bucketizer()
+      .setInputCols(Array("feature1", "feature2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setSplitsArray(splits)
+
+    assert(bucketizer.isBucketizeMultipleColumns())
+
+    BucketizerSuite.checkBucketResults(bucketizer.transform(dataFrame),
+      Seq("result1", "result2"),
+      Seq("expected1", "expected2"))
+  }
+
+  test("multiple columns: Bucket continuous features, with NaN data but non-NaN splits") {
+    val splits = Array(
+      Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity),
+      Array(Double.NegativeInfinity, -0.1, 0.2, 0.6, Double.PositiveInfinity))
+
+    val validData1 = Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9, Double.NaN, Double.NaN, Double.NaN)
+    val validData2 = Array(0.2, -0.1, 0.3, 0.0, 0.1, 0.3, 0.5, 0.8, Double.NaN, Double.NaN)
+    val expectedBuckets1 = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 4.0)
+    val expectedBuckets2 = Array(2.0, 1.0, 2.0, 1.0, 1.0, 2.0, 2.0, 3.0, 4.0, 4.0)
+
+    val data = (0 until validData1.length).map { idx =>
+      (validData1(idx), validData2(idx), expectedBuckets1(idx), expectedBuckets2(idx))
+    }
+    val dataFrame: DataFrame = data.toDF("feature1", "feature2", "expected1", "expected2")
+
+    val bucketizer: Bucketizer = new Bucketizer()
+      .setInputCols(Array("feature1", "feature2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setSplitsArray(splits)
+
+    assert(bucketizer.isBucketizeMultipleColumns())
+
+    bucketizer.setHandleInvalid("keep")
+    BucketizerSuite.checkBucketResults(bucketizer.transform(dataFrame),
+      Seq("result1", "result2"),
+      Seq("expected1", "expected2"))
+
+    bucketizer.setHandleInvalid("skip")
+    val skipResults1: Array[Double] = bucketizer.transform(dataFrame)
+      .select("result1").as[Double].collect()
+    assert(skipResults1.length === 7)
+    assert(skipResults1.forall(_ !== 4.0))
+
+    val skipResults2: Array[Double] = bucketizer.transform(dataFrame)
+      .select("result2").as[Double].collect()
+    assert(skipResults2.length === 7)
+    assert(skipResults2.forall(_ !== 4.0))
+
+    bucketizer.setHandleInvalid("error")
+    withClue("Bucketizer should throw error when setHandleInvalid=error and given NaN values") {
+      intercept[SparkException] {
+        bucketizer.transform(dataFrame).collect()
+      }
+    }
+  }
+
+  test("multiple columns: Bucket continuous features, with NaN splits") {
+    val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity, Double.NaN)
+    withClue("Invalid NaN split was not caught during Bucketizer initialization") {
+      intercept[IllegalArgumentException] {
+        new Bucketizer().setSplitsArray(Array(splits))
+      }
+    }
+  }
+
+  test("multiple columns: read/write") {
+    val t = new Bucketizer()
+      .setInputCols(Array("myInputCol"))
+      .setOutputCols(Array("myOutputCol"))
+      .setSplitsArray(Array(Array(0.1, 0.8, 0.9)))
+    assert(t.isBucketizeMultipleColumns())
+    testDefaultReadWrite(t)
+  }
+
+  test("Bucketizer in a pipeline") {
+    val df = Seq((0.5, 0.3, 1.0, 1.0), (0.5, -0.4, 1.0, 0.0))
+      .toDF("feature1", "feature2", "expected1", "expected2")
+
+    val bucket = new Bucketizer()
+      .setInputCols(Array("feature1", "feature2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setSplitsArray(Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5)))
+
+    assert(bucket.isBucketizeMultipleColumns())
+
+    val pl = new Pipeline()
+      .setStages(Array(bucket))
+      .fit(df)
+    pl.transform(df).select("result1", "expected1", "result2", "expected2")
+
+    BucketizerSuite.checkBucketResults(pl.transform(df),
+      Seq("result1", "result2"), Seq("expected1", "expected2"))
+  }
+
+  test("Compare single/multiple column(s) Bucketizer in pipeline") {
+    val df = Seq((0.5, 0.3, 1.0, 1.0), (0.5, -0.4, 1.0, 0.0))
+      .toDF("feature1", "feature2", "expected1", "expected2")
+
+    val multiColsBucket = new Bucketizer()
+      .setInputCols(Array("feature1", "feature2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setSplitsArray(Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5)))
+
+    val plForMultiCols = new Pipeline()
+      .setStages(Array(multiColsBucket))
+      .fit(df)
+
+    val bucketForCol1 = new Bucketizer()
+      .setInputCol("feature1")
+      .setOutputCol("result1")
+      .setSplits(Array(-0.5, 0.0, 0.5))
+    val bucketForCol2 = new Bucketizer()
+      .setInputCol("feature2")
+      .setOutputCol("result2")
+      .setSplits(Array(-0.5, 0.0, 0.5))
+
+    val plForSingleCol = new Pipeline()
+      .setStages(Array(bucketForCol1, bucketForCol2))
+      .fit(df)
+
+    val resultForSingleCol = plForSingleCol.transform(df)
+      .select("result1", "expected1", "result2", "expected2")
+      .collect()
+    val resultForMultiCols = plForMultiCols.transform(df)
+      .select("result1", "expected1", "result2", "expected2")
+      .collect()
+
+    resultForSingleCol.zip(resultForMultiCols).foreach {
+        case (rowForSingle, rowForMultiCols) =>
+          assert(rowForSingle.getDouble(0) == rowForMultiCols.getDouble(0) &&
+            rowForSingle.getDouble(1) == rowForMultiCols.getDouble(1) &&
+            rowForSingle.getDouble(2) == rowForMultiCols.getDouble(2) &&
+            rowForSingle.getDouble(3) == rowForMultiCols.getDouble(3))
+    }
+  }
+
+  test("Both inputCol and inputCols are set") {
+    val bucket = new Bucketizer()
+      .setInputCol("feature1")
+      .setOutputCol("result")
+      .setSplits(Array(-0.5, 0.0, 0.5))
+      .setInputCols(Array("feature1", "feature2"))
+
+    // When both are set, we ignore `inputCols` and just map the column specified by `inputCol`.
+    assert(bucket.isBucketizeMultipleColumns() == false)
+  }
 }
 
 private object BucketizerSuite extends SparkFunSuite {
@@ -218,6 +433,28 @@ private object BucketizerSuite extends SparkFunSuite {
       // Value between splits i,i+1 should be in i, which is also true if the (i+1)-th split is inf.
       testFeature((splits(i) + splits(i + 1)) / 2, i)
       i += 1
+    }
+  }
+
+  /** Checks if bucketized results match expected ones. */
+  def checkBucketResults(
+      bucketResult: DataFrame,
+      resultColumns: Seq[String],
+      expectedColumns: Seq[String]): Unit = {
+    assert(resultColumns.length == expectedColumns.length,
+      s"Given ${resultColumns.length} result columns doesn't match " +
+        s"${expectedColumns.length} expected columns.")
+    assert(resultColumns.length > 0, "At least one result and expected columns are needed.")
+
+    val allColumns = resultColumns ++ expectedColumns
+    bucketResult.select(allColumns.head, allColumns.tail: _*).collect().foreach {
+      case row =>
+        for (idx <- 0 until row.length / 2) {
+          val result = row.getDouble(idx)
+          val expected = row.getDouble(idx + row.length / 2)
+          assert(result === expected, "The feature value is not correct after bucketing. " +
+            s"Expected $expected but found $result.")
+        }
     }
   }
 }

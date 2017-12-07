@@ -56,6 +56,46 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     Utils.deleteRecursively(testDir)
   }
 
+  test("environment info") {
+    val listener = new AppStatusListener(store, conf, true)
+
+    val details = Map(
+      "JVM Information" -> Seq(
+        "Java Version" -> sys.props("java.version"),
+        "Java Home" -> sys.props("java.home"),
+        "Scala Version" -> scala.util.Properties.versionString
+      ),
+      "Spark Properties" -> Seq(
+        "spark.conf.1" -> "1",
+        "spark.conf.2" -> "2"
+      ),
+      "System Properties" -> Seq(
+        "sys.prop.1" -> "1",
+        "sys.prop.2" -> "2"
+      ),
+      "Classpath Entries" -> Seq(
+        "/jar1" -> "System",
+        "/jar2" -> "User"
+      )
+    )
+
+    listener.onEnvironmentUpdate(SparkListenerEnvironmentUpdate(details))
+
+    val appEnvKey = classOf[ApplicationEnvironmentInfoWrapper].getName()
+    check[ApplicationEnvironmentInfoWrapper](appEnvKey) { env =>
+      val info = env.info
+
+      val runtimeInfo = Map(details("JVM Information"): _*)
+      assert(info.runtime.javaVersion == runtimeInfo("Java Version"))
+      assert(info.runtime.javaHome == runtimeInfo("Java Home"))
+      assert(info.runtime.scalaVersion == runtimeInfo("Scala Version"))
+
+      assert(info.sparkProperties === details("Spark Properties"))
+      assert(info.systemProperties === details("System Properties"))
+      assert(info.classpathEntries === details("Classpath Entries"))
+    }
+  }
+
   test("scheduler events") {
     val listener = new AppStatusListener(store, conf, true)
 
@@ -140,7 +180,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     check[StageDataWrapper](key(stages.head)) { stage =>
       assert(stage.info.status === v1.StageStatus.ACTIVE)
       assert(stage.info.submissionTime === Some(new Date(stages.head.submissionTime.get)))
-      assert(stage.info.schedulingPool === "schedPool")
+      assert(stage.info.numTasks === stages.head.numTasks)
     }
 
     // Start tasks from stage 1
@@ -225,12 +265,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       "taskType", TaskResultLost, s1Tasks.head, null))
 
     time += 1
-    val reattempt = {
-      val orig = s1Tasks.head
-      // Task reattempts have a different ID, but the same index as the original.
-      new TaskInfo(nextTaskId(), orig.index, orig.attemptNumber + 1, time, orig.executorId,
-        s"${orig.executorId}.example.com", TaskLocality.PROCESS_LOCAL, orig.speculative)
-    }
+    val reattempt = newAttempt(s1Tasks.head, nextTaskId())
     listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId,
       reattempt))
 
@@ -248,7 +283,6 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     check[TaskDataWrapper](s1Tasks.head.taskId) { task =>
       assert(task.info.status === s1Tasks.head.status)
-      assert(task.info.duration === Some(s1Tasks.head.duration))
       assert(task.info.errorMessage == Some(TaskResultLost.toErrorString))
     }
 
@@ -257,8 +291,64 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(task.info.attempt === reattempt.attemptNumber)
     }
 
+    // Kill one task, restart it.
+    time += 1
+    val killed = s1Tasks.drop(1).head
+    killed.finishTime = time
+    killed.failed = true
+    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptId,
+      "taskType", TaskKilled("killed"), killed, null))
+
+    check[JobDataWrapper](1) { job =>
+      assert(job.info.numKilledTasks === 1)
+      assert(job.info.killedTasksSummary === Map("killed" -> 1))
+    }
+
+    check[StageDataWrapper](key(stages.head)) { stage =>
+      assert(stage.info.numKilledTasks === 1)
+      assert(stage.info.killedTasksSummary === Map("killed" -> 1))
+    }
+
+    check[TaskDataWrapper](killed.taskId) { task =>
+      assert(task.info.index === killed.index)
+      assert(task.info.errorMessage === Some("killed"))
+    }
+
+    // Start a new attempt and finish it with TaskCommitDenied, make sure it's handled like a kill.
+    time += 1
+    val denied = newAttempt(killed, nextTaskId())
+    val denyReason = TaskCommitDenied(1, 1, 1)
+    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId,
+      denied))
+
+    time += 1
+    denied.finishTime = time
+    denied.failed = true
+    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptId,
+      "taskType", denyReason, denied, null))
+
+    check[JobDataWrapper](1) { job =>
+      assert(job.info.numKilledTasks === 2)
+      assert(job.info.killedTasksSummary === Map("killed" -> 1, denyReason.toErrorString -> 1))
+    }
+
+    check[StageDataWrapper](key(stages.head)) { stage =>
+      assert(stage.info.numKilledTasks === 2)
+      assert(stage.info.killedTasksSummary === Map("killed" -> 1, denyReason.toErrorString -> 1))
+    }
+
+    check[TaskDataWrapper](denied.taskId) { task =>
+      assert(task.info.index === killed.index)
+      assert(task.info.errorMessage === Some(denyReason.toErrorString))
+    }
+
+    // Start a new attempt.
+    val reattempt2 = newAttempt(denied, nextTaskId())
+    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId,
+      reattempt2))
+
     // Succeed all tasks in stage 1.
-    val pending = s1Tasks.drop(1) ++ Seq(reattempt)
+    val pending = s1Tasks.drop(2) ++ Seq(reattempt, reattempt2)
 
     val s1Metrics = TaskMetrics.empty
     s1Metrics.setExecutorCpuTime(2L)
@@ -273,12 +363,14 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     check[JobDataWrapper](1) { job =>
       assert(job.info.numFailedTasks === 1)
+      assert(job.info.numKilledTasks === 2)
       assert(job.info.numActiveTasks === 0)
       assert(job.info.numCompletedTasks === pending.size)
     }
 
     check[StageDataWrapper](key(stages.head)) { stage =>
       assert(stage.info.numFailedTasks === 1)
+      assert(stage.info.numKilledTasks === 2)
       assert(stage.info.numActiveTasks === 0)
       assert(stage.info.numCompleteTasks === pending.size)
     }
@@ -288,10 +380,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(wrapper.info.errorMessage === None)
         assert(wrapper.info.taskMetrics.get.executorCpuTime === 2L)
         assert(wrapper.info.taskMetrics.get.executorRunTime === 4L)
+        assert(wrapper.info.duration === Some(task.duration))
       }
     }
 
-    assert(store.count(classOf[TaskDataWrapper]) === pending.size + 1)
+    assert(store.count(classOf[TaskDataWrapper]) === pending.size + 3)
 
     // End stage 1.
     time += 1
@@ -364,6 +457,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(stage.info.numFailedTasks === s2Tasks.size)
       assert(stage.info.numActiveTasks === 0)
       assert(stage.info.numCompleteTasks === 0)
+      assert(stage.info.failureReason === stages.last.failureReason)
     }
 
     // - Re-submit stage 2, all tasks, and succeed them and the stage.
@@ -538,145 +632,160 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       }
     }
 
-    val rdd1b1 = RDDBlockId(1, 1)
+    val rdd1b1 = RddBlock(1, 1, 1L, 2L)
+    val rdd1b2 = RddBlock(1, 2, 3L, 4L)
+    val rdd2b1 = RddBlock(2, 1, 5L, 6L)
     val level = StorageLevel.MEMORY_AND_DISK
 
-    // Submit a stage and make sure the RDD is recorded.
-    val rddInfo = new RDDInfo(rdd1b1.rddId, "rdd1", 2, level, Nil)
-    val stage = new StageInfo(1, 0, "stage1", 4, Seq(rddInfo), Nil, "details1")
+    // Submit a stage and make sure the RDDs are recorded.
+    val rdd1Info = new RDDInfo(rdd1b1.rddId, "rdd1", 2, level, Nil)
+    val rdd2Info = new RDDInfo(rdd2b1.rddId, "rdd2", 1, level, Nil)
+    val stage = new StageInfo(1, 0, "stage1", 4, Seq(rdd1Info, rdd2Info), Nil, "details1")
     listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
 
     check[RDDStorageInfoWrapper](rdd1b1.rddId) { wrapper =>
-      assert(wrapper.info.name === rddInfo.name)
-      assert(wrapper.info.numPartitions === rddInfo.numPartitions)
-      assert(wrapper.info.storageLevel === rddInfo.storageLevel.description)
+      assert(wrapper.info.name === rdd1Info.name)
+      assert(wrapper.info.numPartitions === rdd1Info.numPartitions)
+      assert(wrapper.info.storageLevel === rdd1Info.storageLevel.description)
     }
 
     // Add partition 1 replicated on two block managers.
-    listener.onBlockUpdated(SparkListenerBlockUpdated(BlockUpdatedInfo(bm1, rdd1b1, level, 1L, 1L)))
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, rdd1b1.blockId, level, rdd1b1.memSize, rdd1b1.diskSize)))
 
     check[RDDStorageInfoWrapper](rdd1b1.rddId) { wrapper =>
-      assert(wrapper.info.memoryUsed === 1L)
-      assert(wrapper.info.diskUsed === 1L)
+      assert(wrapper.info.numCachedPartitions === 1L)
+      assert(wrapper.info.memoryUsed === rdd1b1.memSize)
+      assert(wrapper.info.diskUsed === rdd1b1.diskSize)
 
       assert(wrapper.info.dataDistribution.isDefined)
       assert(wrapper.info.dataDistribution.get.size === 1)
 
       val dist = wrapper.info.dataDistribution.get.head
       assert(dist.address === bm1.hostPort)
-      assert(dist.memoryUsed === 1L)
-      assert(dist.diskUsed === 1L)
+      assert(dist.memoryUsed === rdd1b1.memSize)
+      assert(dist.diskUsed === rdd1b1.diskSize)
       assert(dist.memoryRemaining === maxMemory - dist.memoryUsed)
 
       assert(wrapper.info.partitions.isDefined)
       assert(wrapper.info.partitions.get.size === 1)
 
       val part = wrapper.info.partitions.get.head
-      assert(part.blockName === rdd1b1.name)
+      assert(part.blockName === rdd1b1.blockId.name)
       assert(part.storageLevel === level.description)
-      assert(part.memoryUsed === 1L)
-      assert(part.diskUsed === 1L)
+      assert(part.memoryUsed === rdd1b1.memSize)
+      assert(part.diskUsed === rdd1b1.diskSize)
       assert(part.executors === Seq(bm1.executorId))
     }
 
     check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
       assert(exec.info.rddBlocks === 1L)
-      assert(exec.info.memoryUsed === 1L)
-      assert(exec.info.diskUsed === 1L)
+      assert(exec.info.memoryUsed === rdd1b1.memSize)
+      assert(exec.info.diskUsed === rdd1b1.diskSize)
     }
 
-    listener.onBlockUpdated(SparkListenerBlockUpdated(BlockUpdatedInfo(bm2, rdd1b1, level, 1L, 1L)))
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm2, rdd1b1.blockId, level, rdd1b1.memSize, rdd1b1.diskSize)))
 
     check[RDDStorageInfoWrapper](rdd1b1.rddId) { wrapper =>
-      assert(wrapper.info.memoryUsed === 2L)
-      assert(wrapper.info.diskUsed === 2L)
+      assert(wrapper.info.numCachedPartitions === 1L)
+      assert(wrapper.info.memoryUsed === rdd1b1.memSize * 2)
+      assert(wrapper.info.diskUsed === rdd1b1.diskSize * 2)
       assert(wrapper.info.dataDistribution.get.size === 2L)
       assert(wrapper.info.partitions.get.size === 1L)
 
       val dist = wrapper.info.dataDistribution.get.find(_.address == bm2.hostPort).get
-      assert(dist.memoryUsed === 1L)
-      assert(dist.diskUsed === 1L)
+      assert(dist.memoryUsed === rdd1b1.memSize)
+      assert(dist.diskUsed === rdd1b1.diskSize)
       assert(dist.memoryRemaining === maxMemory - dist.memoryUsed)
 
       val part = wrapper.info.partitions.get(0)
-      assert(part.memoryUsed === 2L)
-      assert(part.diskUsed === 2L)
+      assert(part.memoryUsed === rdd1b1.memSize * 2)
+      assert(part.diskUsed === rdd1b1.diskSize * 2)
       assert(part.executors === Seq(bm1.executorId, bm2.executorId))
     }
 
     check[ExecutorSummaryWrapper](bm2.executorId) { exec =>
       assert(exec.info.rddBlocks === 1L)
-      assert(exec.info.memoryUsed === 1L)
-      assert(exec.info.diskUsed === 1L)
+      assert(exec.info.memoryUsed === rdd1b1.memSize)
+      assert(exec.info.diskUsed === rdd1b1.diskSize)
     }
 
     // Add a second partition only to bm 1.
-    val rdd1b2 = RDDBlockId(1, 2)
-    listener.onBlockUpdated(SparkListenerBlockUpdated(BlockUpdatedInfo(bm1, rdd1b2, level,
-      3L, 3L)))
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, rdd1b2.blockId, level, rdd1b2.memSize, rdd1b2.diskSize)))
 
     check[RDDStorageInfoWrapper](rdd1b1.rddId) { wrapper =>
-      assert(wrapper.info.memoryUsed === 5L)
-      assert(wrapper.info.diskUsed === 5L)
+      assert(wrapper.info.numCachedPartitions === 2L)
+      assert(wrapper.info.memoryUsed === 2 * rdd1b1.memSize + rdd1b2.memSize)
+      assert(wrapper.info.diskUsed === 2 * rdd1b1.diskSize + rdd1b2.diskSize)
       assert(wrapper.info.dataDistribution.get.size === 2L)
       assert(wrapper.info.partitions.get.size === 2L)
 
       val dist = wrapper.info.dataDistribution.get.find(_.address == bm1.hostPort).get
-      assert(dist.memoryUsed === 4L)
-      assert(dist.diskUsed === 4L)
+      assert(dist.memoryUsed === rdd1b1.memSize + rdd1b2.memSize)
+      assert(dist.diskUsed === rdd1b1.diskSize + rdd1b2.diskSize)
       assert(dist.memoryRemaining === maxMemory - dist.memoryUsed)
 
-      val part = wrapper.info.partitions.get.find(_.blockName === rdd1b2.name).get
+      val part = wrapper.info.partitions.get.find(_.blockName === rdd1b2.blockId.name).get
       assert(part.storageLevel === level.description)
-      assert(part.memoryUsed === 3L)
-      assert(part.diskUsed === 3L)
+      assert(part.memoryUsed === rdd1b2.memSize)
+      assert(part.diskUsed === rdd1b2.diskSize)
       assert(part.executors === Seq(bm1.executorId))
     }
 
     check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
       assert(exec.info.rddBlocks === 2L)
-      assert(exec.info.memoryUsed === 4L)
-      assert(exec.info.diskUsed === 4L)
+      assert(exec.info.memoryUsed === rdd1b1.memSize + rdd1b2.memSize)
+      assert(exec.info.diskUsed === rdd1b1.diskSize + rdd1b2.diskSize)
     }
 
     // Remove block 1 from bm 1.
-    listener.onBlockUpdated(SparkListenerBlockUpdated(BlockUpdatedInfo(bm1, rdd1b1,
-      StorageLevel.NONE, 1L, 1L)))
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, rdd1b1.blockId, StorageLevel.NONE, rdd1b1.memSize, rdd1b1.diskSize)))
 
     check[RDDStorageInfoWrapper](rdd1b1.rddId) { wrapper =>
-      assert(wrapper.info.memoryUsed === 4L)
-      assert(wrapper.info.diskUsed === 4L)
+      assert(wrapper.info.numCachedPartitions === 2L)
+      assert(wrapper.info.memoryUsed === rdd1b1.memSize + rdd1b2.memSize)
+      assert(wrapper.info.diskUsed === rdd1b1.diskSize + rdd1b2.diskSize)
       assert(wrapper.info.dataDistribution.get.size === 2L)
       assert(wrapper.info.partitions.get.size === 2L)
 
       val dist = wrapper.info.dataDistribution.get.find(_.address == bm1.hostPort).get
-      assert(dist.memoryUsed === 3L)
-      assert(dist.diskUsed === 3L)
+      assert(dist.memoryUsed === rdd1b2.memSize)
+      assert(dist.diskUsed === rdd1b2.diskSize)
       assert(dist.memoryRemaining === maxMemory - dist.memoryUsed)
 
-      val part = wrapper.info.partitions.get.find(_.blockName === rdd1b1.name).get
+      val part = wrapper.info.partitions.get.find(_.blockName === rdd1b1.blockId.name).get
       assert(part.storageLevel === level.description)
-      assert(part.memoryUsed === 1L)
-      assert(part.diskUsed === 1L)
+      assert(part.memoryUsed === rdd1b1.memSize)
+      assert(part.diskUsed === rdd1b1.diskSize)
       assert(part.executors === Seq(bm2.executorId))
     }
 
     check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
       assert(exec.info.rddBlocks === 1L)
-      assert(exec.info.memoryUsed === 3L)
-      assert(exec.info.diskUsed === 3L)
+      assert(exec.info.memoryUsed === rdd1b2.memSize)
+      assert(exec.info.diskUsed === rdd1b2.diskSize)
     }
 
-    // Remove block 2 from bm 2. This should leave only block 2 info in the store.
-    listener.onBlockUpdated(SparkListenerBlockUpdated(BlockUpdatedInfo(bm2, rdd1b1,
-      StorageLevel.NONE, 1L, 1L)))
+    // Remove block 1 from bm 2. This should leave only block 2's info in the store.
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm2, rdd1b1.blockId, StorageLevel.NONE, rdd1b1.memSize, rdd1b1.diskSize)))
 
     check[RDDStorageInfoWrapper](rdd1b1.rddId) { wrapper =>
-      assert(wrapper.info.memoryUsed === 3L)
-      assert(wrapper.info.diskUsed === 3L)
+      assert(wrapper.info.numCachedPartitions === 1L)
+      assert(wrapper.info.memoryUsed === rdd1b2.memSize)
+      assert(wrapper.info.diskUsed === rdd1b2.diskSize)
       assert(wrapper.info.dataDistribution.get.size === 1L)
       assert(wrapper.info.partitions.get.size === 1L)
-      assert(wrapper.info.partitions.get(0).blockName === rdd1b2.name)
+      assert(wrapper.info.partitions.get(0).blockName === rdd1b2.blockId.name)
+    }
+
+    check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
+      assert(exec.info.rddBlocks === 1L)
+      assert(exec.info.memoryUsed === rdd1b2.memSize)
+      assert(exec.info.diskUsed === rdd1b2.diskSize)
     }
 
     check[ExecutorSummaryWrapper](bm2.executorId) { exec =>
@@ -685,12 +794,61 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(exec.info.diskUsed === 0L)
     }
 
+    // Add a block from a different RDD. Verify the executor is updated correctly and also that
+    // the distribution data for both rdds is updated to match the remaining memory.
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, rdd2b1.blockId, level, rdd2b1.memSize, rdd2b1.diskSize)))
+
+    check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
+      assert(exec.info.rddBlocks === 2L)
+      assert(exec.info.memoryUsed === rdd1b2.memSize + rdd2b1.memSize)
+      assert(exec.info.diskUsed === rdd1b2.diskSize + rdd2b1.diskSize)
+    }
+
+    check[RDDStorageInfoWrapper](rdd1b2.rddId) { wrapper =>
+      assert(wrapper.info.dataDistribution.get.size === 1L)
+      val dist = wrapper.info.dataDistribution.get(0)
+      assert(dist.memoryRemaining === maxMemory - rdd2b1.memSize - rdd1b2.memSize )
+    }
+
+    check[RDDStorageInfoWrapper](rdd2b1.rddId) { wrapper =>
+      assert(wrapper.info.dataDistribution.get.size === 1L)
+
+      val dist = wrapper.info.dataDistribution.get(0)
+      assert(dist.memoryUsed === rdd2b1.memSize)
+      assert(dist.diskUsed === rdd2b1.diskSize)
+      assert(dist.memoryRemaining === maxMemory - rdd2b1.memSize - rdd1b2.memSize )
+    }
+
     // Unpersist RDD1.
     listener.onUnpersistRDD(SparkListenerUnpersistRDD(rdd1b1.rddId))
-        intercept[NoSuchElementException] {
+    intercept[NoSuchElementException] {
       check[RDDStorageInfoWrapper](rdd1b1.rddId) { _ => () }
     }
 
+    // Update a StreamBlock.
+    val stream1 = StreamBlockId(1, 1L)
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, stream1, level, 1L, 1L)))
+
+    check[StreamBlockData](Array(stream1.name, bm1.executorId)) { stream =>
+      assert(stream.name === stream1.name)
+      assert(stream.executorId === bm1.executorId)
+      assert(stream.hostPort === bm1.hostPort)
+      assert(stream.storageLevel === level.description)
+      assert(stream.useMemory === level.useMemory)
+      assert(stream.useDisk === level.useDisk)
+      assert(stream.deserialized === level.deserialized)
+      assert(stream.memSize === 1L)
+      assert(stream.diskSize === 1L)
+    }
+
+    // Drop a StreamBlock.
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, stream1, StorageLevel.NONE, 0L, 0L)))
+    intercept[NoSuchElementException] {
+      check[StreamBlockData](stream1.name) { _ => () }
+    }
   }
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptId)
@@ -698,6 +856,22 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   private def check[T: ClassTag](key: Any)(fn: T => Unit): Unit = {
     val value = store.read(classTag[T].runtimeClass, key).asInstanceOf[T]
     fn(value)
+  }
+
+  private def newAttempt(orig: TaskInfo, nextId: Long): TaskInfo = {
+    // Task reattempts have a different ID, but the same index as the original.
+    new TaskInfo(nextId, orig.index, orig.attemptNumber + 1, time, orig.executorId,
+      s"${orig.executorId}.example.com", TaskLocality.PROCESS_LOCAL, orig.speculative)
+  }
+
+  private case class RddBlock(
+      rddId: Int,
+      partId: Int,
+      memSize: Long,
+      diskSize: Long) {
+
+    def blockId: BlockId = RDDBlockId(rddId, partId)
+
   }
 
 }

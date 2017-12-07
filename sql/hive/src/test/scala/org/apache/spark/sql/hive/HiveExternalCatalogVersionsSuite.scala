@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive
 import java.io.File
 import java.nio.file.Files
 
+import scala.sys.process._
+
 import org.apache.spark.TestUtils
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -50,14 +52,24 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     super.afterAll()
   }
 
+  private def tryDownloadSpark(version: String, path: String): Unit = {
+    // Try mirrors a few times until one succeeds
+    for (i <- 0 until 3) {
+      val preferredMirror =
+        Seq("wget", "https://www.apache.org/dyn/closer.lua?preferred=true", "-q", "-O", "-").!!.trim
+      val url = s"$preferredMirror/spark/spark-$version/spark-$version-bin-hadoop2.7.tgz"
+      logInfo(s"Downloading Spark $version from $url")
+      if (Seq("wget", url, "-q", "-P", path).! == 0) {
+        return
+      }
+      logWarning(s"Failed to download Spark $version from $url")
+    }
+    fail(s"Unable to download Spark $version")
+  }
+
+
   private def downloadSpark(version: String): Unit = {
-    import scala.sys.process._
-
-    val preferredMirror =
-      Seq("wget", "https://www.apache.org/dyn/closer.lua?preferred=true", "-q", "-O", "-").!!.trim
-    val url = s"$preferredMirror/spark/spark-$version/spark-$version-bin-hadoop2.7.tgz"
-
-    Seq("wget", url, "-q", "-P", sparkTestingDir.getCanonicalPath).!
+    tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
 
     val downloaded = new File(sparkTestingDir, s"spark-$version-bin-hadoop2.7.tgz").getCanonicalPath
     val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath
