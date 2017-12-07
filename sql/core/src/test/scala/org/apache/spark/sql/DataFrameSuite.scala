@@ -2229,11 +2229,19 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 
-  test("SPARK-ABC123: support select with a splatted stream") {
+  test("SPARK-22725: select of a Stream") {
     val df = spark.createDataFrame(sparkContext.emptyRDD[Row], StructType(List("bar", "foo").map {
       StructField(_, StringType, false)
     }))
     val allColumns = Stream(df.col("bar"), col("foo"))
+    val result = df.select(allColumns : _*)
+  }
+
+  test("SPARK-22725: select with a List") {
+    val df = spark.createDataFrame(sparkContext.emptyRDD[Row], StructType(List("bar", "foo").map {
+      StructField(_, StringType, false)
+    }))
+    val allColumns = Seq(df.col("bar"), col("foo"))
     val result = df.select(allColumns : _*)
   }
 }
