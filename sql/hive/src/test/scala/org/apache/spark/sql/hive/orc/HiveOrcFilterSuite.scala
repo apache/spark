@@ -31,12 +31,13 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.types._
 
 /**
  * A test suite that tests Hive ORC filter API based filter pushdown optimization.
  */
-class OrcFilterSuite extends OrcTest with TestHiveSingleton {
+class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
 
   override val orcImp: String = "hive"
 
