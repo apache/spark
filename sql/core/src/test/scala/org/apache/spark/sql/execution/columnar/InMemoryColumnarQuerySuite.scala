@@ -506,7 +506,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       // Even CBO enabled, InMemoryRelation's stats keeps as the default one before table's stats
       // is calculated
       assert(inMemoryRelation2.computeStats().sizeInBytes === Long.MaxValue)
-      
+
       // InMemoryRelation's stats should be updated after calculating stats of the table
       spark.sql("ANALYZE TABLE table1 COMPUTE STATISTICS")
       assert(inMemoryRelation2.computeStats().sizeInBytes === 16)
