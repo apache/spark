@@ -79,17 +79,25 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
+  type EqualityPredicates = Seq[((AttributeReference, Literal), BinaryComparison)]
+
   /**
    * Traverse a condition as a tree and replace attributes with constant values.
-   * - If the child of [[And]] is [[EqualTo]] or [[EqualNullSafe]], propagate the mapping
+   * - On matching [[And]], recursively traverse each children and get propagated mappings.
+   *   If the current node is not child of another [[And]], replace all occurrences of the
+   *   attributes with the corresponding constant values.
+   * - If a child of [[And]] is [[EqualTo]] or [[EqualNullSafe]], propagate the mapping
    *   of attribute => constant.
-   * - If the current [[And]] node is not child of another [[And]], replace occurrence of the
-   *   attributes with the corresponding constant values in both children with propagated mapping.
+   * - On matching [[Or]] or [[Not]], recursively traverse each children, propagate empty mapping.
+   * - Otherwise, stop traversal and propagate empty mapping.
    * @param condition condition to be traversed
-   * @param replaceChildren whether to replace attributes with the corresponding constant values
+   * @param replaceChildren whether to replace attributes with constant values in children
+   * @return A tuple including:
+   *         1. Option[Expression]: optional changed condition after traversal
+   *         2. EqualityPredicates: propagated mapping of attribute => constant
    */
   private def traverse(condition: Expression, replaceChildren: Boolean)
-    : (Option[Expression], Seq[((AttributeReference, Literal), BinaryComparison)]) =
+    : (Option[Expression], EqualityPredicates) =
     condition match {
       case e @ EqualTo(left: AttributeReference, right: Literal) => (None, Seq(((left, right), e)))
       case e @ EqualTo(left: Literal, right: AttributeReference) => (None, Seq(((right, left), e)))
@@ -98,8 +106,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       case e @ EqualNullSafe(left: Literal, right: AttributeReference) =>
         (None, Seq(((right, left), e)))
       case a: And =>
-        val (newLeft, equalityPredicatesLeft) = traverse(a.left, false)
-        val (newRight, equalityPredicatesRight) = traverse(a.right, false)
+        val (newLeft, equalityPredicatesLeft) = traverse(a.left, replaceChildren = false)
+        val (newRight, equalityPredicatesRight) = traverse(a.right, replaceChildren = false)
         val equalityPredicates = equalityPredicatesLeft ++ equalityPredicatesRight
         val newSelf = if (equalityPredicates.nonEmpty && replaceChildren) {
           Some(And(replaceConstants(newLeft.getOrElse(a.left), equalityPredicates),
@@ -113,8 +121,9 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         }
         (newSelf, equalityPredicates)
       case o: Or =>
-        val (newLeft, _) = traverse(o.left, true)
-        val (newRight, _) = traverse(o.right, true)
+        // Ignore the EqualityPredicates from children since they are only propagated through And.
+        val (newLeft, _) = traverse(o.left, replaceChildren = true)
+        val (newRight, _) = traverse(o.right, replaceChildren = true)
         val newSelf = if (newLeft.isDefined || newRight.isDefined) {
           Some(Or(left = newLeft.getOrElse(o.left), right = newRight.getOrElse((o.right))))
         } else {
@@ -122,19 +131,13 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         }
         (newSelf, Seq.empty)
       case n: Not =>
-        val (newChild, _) = traverse(n.child, true)
-        val newSelf = if (newChild.isDefined) {
-          Some(Not(newChild.get))
-        } else {
-          None
-        }
-        (newSelf, Seq.empty)
+        // Ignore the EqualityPredicates from children since they are only propagated through And.
+        val (newChild, _) = traverse(n.child, replaceChildren = true)
+        (newChild.map(Not), Seq.empty)
       case _ => (None, Seq.empty)
     }
 
-  private def replaceConstants(
-      condition: Expression,
-      equalityPredicates: Seq[((AttributeReference, Literal), BinaryComparison)])
+  private def replaceConstants(condition: Expression, equalityPredicates: EqualityPredicates)
     : Expression = {
     val constantsMap = AttributeMap(equalityPredicates.map(_._1))
     val predicates = equalityPredicates.map(_._2).toSet
