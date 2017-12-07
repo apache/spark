@@ -484,7 +484,6 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-22673: InMemoryRelation should utilize existing stats whenever possible") {
     withSQLConf("spark.sql.cbo.enabled" -> "true") {
-      // scalastyle:off
       val workDir = s"${Utils.createTempDir()}/table1"
       val data = Seq(100, 200, 300, 400).toDF("count")
       data.write.parquet(workDir)
@@ -494,16 +493,20 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       }.head
       // InMemoryRelation's stats is Long.MaxValue before the underlying RDD is materialized
       assert(inMemoryRelation.computeStats().sizeInBytes === Long.MaxValue)
+
       // InMemoryRelation's stats is updated after materializing RDD
       dfFromFile.collect()
       assert(inMemoryRelation.computeStats().sizeInBytes === 16)
+
       // test of catalog table
       val dfFromTable = spark.catalog.createTable("table1", workDir).cache()
       val inMemoryRelation2 = dfFromTable.queryExecution.optimizedPlan.
         collect { case plan: InMemoryRelation => plan }.head
+
       // Even CBO enabled, InMemoryRelation's stats keeps as the default one before table's stats
       // is calculated
       assert(inMemoryRelation2.computeStats().sizeInBytes === Long.MaxValue)
+      
       // InMemoryRelation's stats should be updated after calculating stats of the table
       spark.sql("ANALYZE TABLE table1 COMPUTE STATISTICS")
       assert(inMemoryRelation2.computeStats().sizeInBytes === 16)
