@@ -141,16 +141,12 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     : Expression = {
     val constantsMap = AttributeMap(equalityPredicates.map(_._1))
     val predicates = equalityPredicates.map(_._2).toSet
-    def _replaceConstants(expression: Expression) = expression transform {
-      case a: AttributeReference =>
-        constantsMap.get(a) match {
-          case Some(literal) => literal
-          case None => a
-        }
+    def replaceConstants0(expression: Expression) = expression transform {
+      case a: AttributeReference => constantsMap.getOrElse(a, a)
     }
     condition transform {
-      case e @ EqualTo(_, _) if !predicates.contains(e) => _replaceConstants(e)
-      case e @ EqualNullSafe(_, _) if !predicates.contains(e) => _replaceConstants(e)
+      case e @ EqualTo(_, _) if !predicates.contains(e) => replaceConstants0(e)
+      case e @ EqualNullSafe(_, _) if !predicates.contains(e) => replaceConstants0(e)
     }
   }
 }
