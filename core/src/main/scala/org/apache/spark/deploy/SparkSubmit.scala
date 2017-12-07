@@ -98,7 +98,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
     "org.apache.spark.deploy.yarn.YarnClusterApplication"
   private[deploy] val REST_CLUSTER_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
   private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
-  private[deploy] val KUBERNETES_CLUSTER_SUBMIT_CLASS = "org.apache.spark.deploy.k8s.submit.Client"
+  private[deploy] val KUBERNETES_CLUSTER_SUBMIT_CLASS =
+    "org.apache.spark.deploy.k8s.submit.KubernetesClientApplication"
 
   // scalastyle:off println
   private[spark] def printVersionAndExit(): Unit = {

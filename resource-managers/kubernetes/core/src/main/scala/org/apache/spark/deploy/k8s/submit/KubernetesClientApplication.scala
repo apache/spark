@@ -185,7 +185,7 @@ private[spark] class Client(
 /**
  * Main class and entry point of application submission in KUBERNETES mode.
  */
-private[spark] object Client extends SparkApplication {
+private[spark] class KubernetesClientApplication extends SparkApplication {
 
   override def start(args: Array[String], conf: SparkConf): Unit = {
     val parsedArguments = ClientArguments.fromCommandLineArgs(args)
@@ -203,7 +203,8 @@ private[spark] object Client extends SparkApplication {
     val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)
     val appName = sparkConf.getOption("spark.app.name").getOrElse("spark")
     // The master URL has been checked for validity already in SparkSubmit.
-    val master = sparkConf.get("spark.master")
+    // We just need to get rid of the "k8s:" prefix here.
+    val master = sparkConf.get("spark.master").substring("k8s:".length)
     val loggingInterval = if (waitForAppCompletion) Some(sparkConf.get(REPORT_INTERVAL)) else None
 
     val loggingPodStatusWatcher = new LoggingPodStatusWatcherImpl(
