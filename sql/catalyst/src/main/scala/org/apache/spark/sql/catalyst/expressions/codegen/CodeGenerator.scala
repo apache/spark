@@ -30,7 +30,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, JaninoRuntimeException, SimpleCompiler}
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
@@ -1000,10 +1000,10 @@ object CodeGenerator extends Logging {
       evaluator.cook("generated.java", code.body)
       recordCompilationStats(evaluator)
     } catch {
-      case e: JaninoRuntimeException =>
+      case e: InternalCompilerException =>
         val msg = s"failed to compile: $e\n$formatted"
         logError(msg, e)
-        throw new JaninoRuntimeException(msg, e)
+        throw new InternalCompilerException(msg, e)
       case e: CompileException =>
         val msg = s"failed to compile: $e\n$formatted"
         logError(msg, e)
