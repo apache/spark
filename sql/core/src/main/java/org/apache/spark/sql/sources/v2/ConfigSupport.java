@@ -41,14 +41,14 @@ public interface ConfigSupport {
      * session config's key doesn't exist in this mapping, the "spark.sql.${source}" prefix will
      * be trimmed. For example, if the data source name is "parquet", perform the following config
      * key mapping by default:
-     * "spark.sql.parquet.int96AsTimestamp" -> "int96AsTimestamp",
-     * "spark.sql.parquet.compression.codec" -> "compression.codec",
-     * "spark.sql.columnNameOfCorruptRecord" -> "columnNameOfCorruptRecord".
+     * "spark.sql.parquet.int96AsTimestamp" -&gt; "int96AsTimestamp",
+     * "spark.sql.parquet.compression.codec" -&gt; "compression.codec",
+     * "spark.sql.columnNameOfCorruptRecord" -&gt; "columnNameOfCorruptRecord".
      *
      * If the mapping is specified, for example, the returned map contains an entry
-     * ("spark.sql.columnNameOfCorruptRecord" -> "colNameCorrupt"), then the session config
+     * ("spark.sql.columnNameOfCorruptRecord" -&gt; "colNameCorrupt"), then the session config
      * "spark.sql.columnNameOfCorruptRecord" will be converted to "colNameCorrupt" in
-     * [[org.apache.spark.sql.sources.v2.DataSourceV2Options]].
+     * {@link DataSourceV2Options}.
      */
     Map<String, String> getConfigMapping();
 
