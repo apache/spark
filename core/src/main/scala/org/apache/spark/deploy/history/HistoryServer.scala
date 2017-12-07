@@ -192,7 +192,7 @@ class HistoryServer(
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
-     provider.getApplicationInfo(appId)
+    provider.getApplicationInfo(appId)
   }
 
   override def writeEventLogs(

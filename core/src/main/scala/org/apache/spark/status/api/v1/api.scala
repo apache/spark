@@ -33,9 +33,6 @@ case class ApplicationInfo private[spark](
     memoryPerExecutorMB: Option[Int],
     attempts: Seq[ApplicationAttemptInfo]) {
 
-    def completed: Boolean = {
-      attempts.nonEmpty && attempts.head.completed
-    }
 }
 
 @JsonIgnoreProperties(
