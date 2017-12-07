@@ -97,7 +97,11 @@ class MicroBatchExecution(
         finishTrigger(dataAvailable)
         if (dataAvailable) {
           // Update committed offsets.
+<<<<<<< HEAD
           commitLog.add(currentBatchId)
+=======
+          batchCommitLog.add(currentBatchId)
+>>>>>>> Refactor StreamExecution into a parent class so continuous processing can extend it
           committedOffsets ++= availableOffsets
           logDebug(s"batch ${currentBatchId} committed")
           // We'll increase currentBatchId after we complete processing current batch's data
@@ -162,7 +166,11 @@ class MicroBatchExecution(
         /* identify the current batch id: if commit log indicates we successfully processed the
          * latest batch id in the offset log, then we can safely move to the next batch
          * i.e., committedBatchId + 1 */
+<<<<<<< HEAD
         commitLog.getLatest() match {
+=======
+        batchCommitLog.getLatest() match {
+>>>>>>> Refactor StreamExecution into a parent class so continuous processing can extend it
           case Some((latestCommittedBatchId, _)) =>
             if (latestBatchId == latestCommittedBatchId) {
               /* The last batch was successfully committed, so we can safely process a
@@ -307,9 +315,15 @@ class MicroBatchExecution(
 
         // It is now safe to discard the metadata beyond the minimum number to retain.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
+<<<<<<< HEAD
         if (minLogEntriesToMaintain < currentBatchId) {
           offsetLog.purge(currentBatchId - minLogEntriesToMaintain)
           commitLog.purge(currentBatchId - minLogEntriesToMaintain)
+=======
+        if (minBatchesToRetain < currentBatchId) {
+          offsetLog.purge(currentBatchId - minBatchesToRetain)
+          batchCommitLog.purge(currentBatchId - minBatchesToRetain)
+>>>>>>> Refactor StreamExecution into a parent class so continuous processing can extend it
         }
       }
     } else {
