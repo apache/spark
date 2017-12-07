@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.util.Utils
 
-class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
+class OrcSourceSuite extends OrcSuite with TestHiveSingleton {
 
   override val orcImp: String = "hive"
 

@@ -25,7 +25,7 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
-class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
+class OrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   import testImplicits._
 
   override val orcImp: String = "hive"

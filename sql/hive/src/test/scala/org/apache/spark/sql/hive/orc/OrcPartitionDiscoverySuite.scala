@@ -20,6 +20,6 @@ package org.apache.spark.sql.hive.orc
 import org.apache.spark.sql.execution.datasources.orc.OrcPartitionDiscoveryTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveOrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with TestHiveSingleton  {
+class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with TestHiveSingleton  {
   override val orcImp: String = "hive"
 }

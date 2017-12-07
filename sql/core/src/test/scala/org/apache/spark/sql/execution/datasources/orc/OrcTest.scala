@@ -31,16 +31,16 @@ import org.apache.spark.sql.test.SQLTestUtils
 /**
  * OrcTest
  *   -> OrcSuite
- *       -> OrcSourceSuite
- *       -> HiveOrcSourceSuite
+ *       -> org.apache.spark.sql.execution.datasources.orc.OrcSourceSuite
+ *       -> org.apache.spark.sql.hive.orc.OrcSourceSuite
  *   -> OrcQueryTests
- *       -> OrcQuerySuite
- *       -> HiveOrcQuerySuite
+ *       -> org.apache.spark.sql.execution.datasources.orc.OrcQuerySuite
+ *       -> org.apache.spark.sql.hive.orc.OrcQuerySuite
  *   -> OrcPartitionDiscoveryTest
- *       -> OrcPartitionDiscoverySuite
- *       -> HiveOrcPartitionDiscoverySuite
- *   -> OrcFilterSuite
- *   -> HiveOrcFilterSuite
+ *       -> org.apache.spark.sql.execution.datasources.orc.OrcPartitionDiscoverySuite
+ *       -> org.apache.spark.sql.hive.orc.OrcPartitionDiscoverySuite
+ *   -> org.apache.spark.sql.execution.datasources.orc.OrcFilterSuite
+ *   -> org.apache.spark.sql.hive.orc.OrcFilterSuite
  */
 abstract class OrcTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
   import testImplicits._
