@@ -23,6 +23,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
+import org.apache.spark.ui.scope._
 import org.apache.spark.util.kvstore.KVIndex
 
 private[spark] case class AppStatusStoreMetadata(version: Long)
@@ -106,6 +107,11 @@ private[spark] class TaskDataWrapper(
     Array(stageId: JInteger, stageAttemptId: JInteger, _runtime: JLong)
   }
 
+  @JsonIgnore @KVIndex("startTime")
+  def startTime: Array[AnyRef] = {
+    Array(stageId: JInteger, stageAttemptId: JInteger, info.launchTime.getTime(): JLong)
+  }
+
 }
 
 private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
@@ -147,3 +153,37 @@ private[spark] class StreamBlockData(
   def key: Array[String] = Array(name, executorId)
 
 }
+
+private[spark] class RDDOperationClusterWrapper(
+    val id: String,
+    val name: String,
+    val childNodes: Seq[RDDOperationNode],
+    val childClusters: Seq[RDDOperationClusterWrapper]) {
+
+  def toRDDOperationCluster(): RDDOperationCluster = {
+    val cluster = new RDDOperationCluster(id, name)
+    childNodes.foreach(cluster.attachChildNode)
+    childClusters.foreach { child =>
+      cluster.attachChildCluster(child.toRDDOperationCluster())
+    }
+    cluster
+  }
+
+}
+
+private[spark] class RDDOperationGraphWrapper(
+    @KVIndexParam val stageId: Int,
+    val edges: Seq[RDDOperationEdge],
+    val outgoingEdges: Seq[RDDOperationEdge],
+    val incomingEdges: Seq[RDDOperationEdge],
+    val rootCluster: RDDOperationClusterWrapper) {
+
+  def toRDDOperationGraph(): RDDOperationGraph = {
+    new RDDOperationGraph(edges, outgoingEdges, incomingEdges, rootCluster.toRDDOperationCluster())
+  }
+
+}
+
+private[spark] class PoolData(
+    @KVIndexParam val name: String,
+    val stageIds: Set[Int])

@@ -309,6 +309,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().head.contains(tmpJar.getName))
   }
 
+  test("SPARK-22585 addJar argument without scheme is interpreted literally without url decoding") {
+    val tmpDir = new File(Utils.createTempDir(), "host%3A443")
+    tmpDir.mkdirs()
+    val tmpJar = File.createTempFile("t%2F", ".jar", tmpDir)
+
+    sc = new SparkContext("local", "test")
+
+    sc.addJar(tmpJar.getAbsolutePath)
+    assert(sc.listJars().size === 1)
+  }
+
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))

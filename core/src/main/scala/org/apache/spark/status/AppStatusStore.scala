@@ -23,15 +23,18 @@ import java.util.{Arrays, List => JList}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.scheduler.LiveListenerBus
+import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.status.api.v1
+import org.apache.spark.ui.scope._
 import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
  */
-private[spark] class AppStatusStore(store: KVStore) {
+private[spark] class AppStatusStore(
+    val store: KVStore,
+    listener: Option[AppStatusListener] = None) {
 
   def applicationInfo(): v1.ApplicationInfo = {
     store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
@@ -43,8 +46,8 @@ private[spark] class AppStatusStore(store: KVStore) {
   }
 
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
-    val it = store.view(classOf[JobDataWrapper]).asScala.map(_.info)
-    if (!statuses.isEmpty()) {
+    val it = store.view(classOf[JobDataWrapper]).reverse().asScala.map(_.info)
+    if (statuses != null && !statuses.isEmpty()) {
       it.filter { job => statuses.contains(job.status) }.toSeq
     } else {
       it.toSeq
@@ -65,31 +68,48 @@ private[spark] class AppStatusStore(store: KVStore) {
     filtered.asScala.map(_.info).toSeq
   }
 
-  def executorSummary(executorId: String): Option[v1.ExecutorSummary] = {
-    try {
-      Some(store.read(classOf[ExecutorSummaryWrapper], executorId).info)
-    } catch {
-      case _: NoSuchElementException =>
-        None
-    }
+  def executorSummary(executorId: String): v1.ExecutorSummary = {
+    store.read(classOf[ExecutorSummaryWrapper], executorId).info
+  }
+
+  /**
+   * This is used by ConsoleProgressBar to quickly fetch active stages for drawing the progress
+   * bar. It will only return anything useful when called from a live application.
+   */
+  def activeStages(): Seq[v1.StageData] = {
+    listener.map(_.activeStages()).getOrElse(Nil)
   }
 
   def stageList(statuses: JList[v1.StageStatus]): Seq[v1.StageData] = {
-    val it = store.view(classOf[StageDataWrapper]).asScala.map(_.info)
-    if (!statuses.isEmpty) {
+    val it = store.view(classOf[StageDataWrapper]).reverse().asScala.map(_.info)
+    if (statuses != null && !statuses.isEmpty()) {
       it.filter { s => statuses.contains(s.status) }.toSeq
     } else {
       it.toSeq
     }
   }
 
-  def stageData(stageId: Int): Seq[v1.StageData] = {
+  def stageData(stageId: Int, details: Boolean = false): Seq[v1.StageData] = {
     store.view(classOf[StageDataWrapper]).index("stageId").first(stageId).last(stageId)
-      .asScala.map(_.info).toSeq
+      .asScala.map { s =>
+        if (details) stageWithDetails(s.info) else s.info
+      }.toSeq
   }
 
-  def stageAttempt(stageId: Int, stageAttemptId: Int): v1.StageData = {
-    store.read(classOf[StageDataWrapper], Array(stageId, stageAttemptId)).info
+  def lastStageAttempt(stageId: Int): v1.StageData = {
+    val it = store.view(classOf[StageDataWrapper]).index("stageId").reverse().first(stageId)
+      .closeableIterator()
+    try {
+      it.next().info
+    } finally {
+      it.close()
+    }
+  }
+
+  def stageAttempt(stageId: Int, stageAttemptId: Int, details: Boolean = false): v1.StageData = {
+    val stageKey = Array(stageId, stageAttemptId)
+    val stage = store.read(classOf[StageDataWrapper], stageKey).info
+    if (details) stageWithDetails(stage) else stage
   }
 
   def taskSummary(
@@ -189,6 +209,12 @@ private[spark] class AppStatusStore(store: KVStore) {
     )
   }
 
+  def taskList(stageId: Int, stageAttemptId: Int, maxTasks: Int): Seq[v1.TaskData] = {
+    val stageKey = Array(stageId, stageAttemptId)
+    store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey).reverse()
+      .max(maxTasks).asScala.map(_.info).toSeq.reverse
+  }
+
   def taskList(
       stageId: Int,
       stageAttemptId: Int,
@@ -215,12 +241,93 @@ private[spark] class AppStatusStore(store: KVStore) {
     }.toSeq
   }
 
+  /**
+   * Calls a closure that may throw a NoSuchElementException and returns `None` when the exception
+   * is thrown.
+   */
+  def asOption[T](fn: => T): Option[T] = {
+    try {
+      Some(fn)
+    } catch {
+      case _: NoSuchElementException => None
+    }
+  }
+
+  private def stageWithDetails(stage: v1.StageData): v1.StageData = {
+    val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
+      .map { t => (t.taskId, t) }
+      .toMap
+
+    val stageKey = Array(stage.stageId, stage.attemptId)
+    val execs = store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey)
+      .last(stageKey).closeableIterator().asScala
+      .map { exec => (exec.executorId -> exec.info) }
+      .toMap
+
+    new v1.StageData(
+      stage.status,
+      stage.stageId,
+      stage.attemptId,
+      stage.numTasks,
+      stage.numActiveTasks,
+      stage.numCompleteTasks,
+      stage.numFailedTasks,
+      stage.numKilledTasks,
+      stage.numCompletedIndices,
+      stage.executorRunTime,
+      stage.executorCpuTime,
+      stage.submissionTime,
+      stage.firstTaskLaunchedTime,
+      stage.completionTime,
+      stage.failureReason,
+      stage.inputBytes,
+      stage.inputRecords,
+      stage.outputBytes,
+      stage.outputRecords,
+      stage.shuffleReadBytes,
+      stage.shuffleReadRecords,
+      stage.shuffleWriteBytes,
+      stage.shuffleWriteRecords,
+      stage.memoryBytesSpilled,
+      stage.diskBytesSpilled,
+      stage.name,
+      stage.description,
+      stage.details,
+      stage.schedulingPool,
+      stage.rddIds,
+      stage.accumulatorUpdates,
+      Some(tasks),
+      Some(execs),
+      stage.killedTasksSummary)
+  }
+
   def rdd(rddId: Int): v1.RDDStorageInfo = {
     store.read(classOf[RDDStorageInfoWrapper], rddId).info
   }
 
   def streamBlocksList(): Seq[StreamBlockData] = {
     store.view(classOf[StreamBlockData]).asScala.toSeq
+  }
+
+  def operationGraphForStage(stageId: Int): RDDOperationGraph = {
+    store.read(classOf[RDDOperationGraphWrapper], stageId).toRDDOperationGraph()
+  }
+
+  def operationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = {
+    val job = store.read(classOf[JobDataWrapper], jobId)
+    val stages = job.info.stageIds
+
+    stages.map { id =>
+      val g = store.read(classOf[RDDOperationGraphWrapper], id).toRDDOperationGraph()
+      if (job.skippedStages.contains(id) && !g.rootCluster.name.contains("skipped")) {
+        g.rootCluster.setName(g.rootCluster.name + " (skipped)")
+      }
+      g
+    }
+  }
+
+  def pool(name: String): PoolData = {
+    store.read(classOf[PoolData], name)
   }
 
   def close(): Unit = {
@@ -237,13 +344,16 @@ private[spark] object AppStatusStore {
    * Create an in-memory store for a live application.
    *
    * @param conf Configuration.
-   * @param bus Where to attach the listener to populate the store.
+   * @param addListenerFn Function to register a listener with a bus.
    */
-  def createLiveStore(conf: SparkConf, bus: LiveListenerBus): AppStatusStore = {
+  def createLiveStore(conf: SparkConf, addListenerFn: SparkListener => Unit): AppStatusStore = {
     val store = new InMemoryStore()
-    val stateStore = new AppStatusStore(store)
-    bus.addToStatusQueue(new AppStatusListener(store, conf, true))
-    stateStore
+    val listener = new AppStatusListener(store, conf, true)
+    addListenerFn(listener)
+    AppStatusPlugin.loadPlugins().foreach { p =>
+      p.setupListeners(conf, store, addListenerFn, true)
+    }
+    new AppStatusStore(store, listener = Some(listener))
   }
 
 }
