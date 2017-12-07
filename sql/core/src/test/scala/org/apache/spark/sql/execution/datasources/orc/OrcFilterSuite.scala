@@ -34,6 +34,10 @@ import org.apache.spark.sql.types._
 
 /**
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
+ * OrcFilterSuite and HiveOrcFilterSuite is logically duplicated to provide the same test coverage.
+ * The difference are the packages containing 'Predicate' and 'SearchArgument' classes.
+ * - OrcFilterSuite uses 'org.apache.orc.storage.ql.io.sarg' package.
+ * - HiveOrcFilterSuite uses 'org.apache.hadoop.hive.ql.io.sarg' package.
  */
 class OrcFilterSuite extends OrcTest with SharedSQLContext {
 
@@ -287,11 +291,6 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
 
   test("filter pushdown - combinations with logical operators") {
     withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
-      // Because `ExpressionTree` is not accessible at Hive 1.2.x, this should be checked
-      // in string form in order to check filter creation including logical operators
-      // such as `and`, `or` or `not`. So, this function uses `SearchArgument.toString()`
-      // to produce string expression and then compare it to given string expression below.
-      // This might have to be changed after Hive version is upgraded.
       checkFilterPredicate(
         '_1.isNotNull,
         "leaf-0 = (IS_NULL _1), expr = (not leaf-0)"
