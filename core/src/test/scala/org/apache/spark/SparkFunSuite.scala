@@ -20,12 +20,12 @@ package org.apache.spark
 // scalastyle:off
 import java.io.File
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.AccumulatorContext
+import scala.collection.JavaConversions._
+
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
-import scala.collection.JavaConversions._
-import scala.io.Source
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.AccumulatorContext
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
@@ -86,7 +86,7 @@ abstract class SparkFunSuite
   private def printRemainingThreadNames(): Unit = {
     val remainingThreadNames = runningThreadNames.diff(beforeAllTestThreadNames)
       .filterNot { s => threadWhiteList.exists(s.matches(_)) }
-    if (!remainingThreadNames.isEmpty) {
+    if (remainingThreadNames.nonEmpty) {
       val suiteName = this.getClass.getName
       val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
       logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
