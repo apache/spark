@@ -879,6 +879,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Reset this map to initialized state.
    */
   public void reset() {
+    updatePeakMemoryUsed();
     numKeys = 0;
     numValues = 0;
     freeArray(longArray);
