@@ -187,8 +187,8 @@ case class CaseWhen(
     val HAS_NONNULL = 0
     // 1 means the condition is met and result is null.
     val HAS_NULL = 1
-    // It is initialized to `-1`, and if it's set to `1` or `0`, We won't go on anymore on the
-    // computation.
+    // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
+    // We won't go on anymore on the computation.
     val resultState = ctx.freshName("caseWhenResultState")
     val tmpResult = ctx.freshName("caseWhenTmpResult")
     ctx.addMutableState(ctx.javaType(dataType), tmpResult)
@@ -269,7 +269,7 @@ case class CaseWhen(
          |do {
          |  $codes
          |} while (false);
-         |// TRUE if any condition is met and the result is not null, or no any condition is met.
+         |// TRUE if any condition is met and the result is null, or no any condition is met.
          |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
          |final ${ctx.javaType(dataType)} ${ev.value} = $tmpResult;
        """.stripMargin)

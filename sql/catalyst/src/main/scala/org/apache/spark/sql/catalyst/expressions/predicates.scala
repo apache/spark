@@ -238,7 +238,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
     // inTmpResult has 3 possible values:
-    // -1 means no matches found and there is at least one value in the list evaluated
+    // -1 means no matches found and there is at least one value in the list evaluated to null
     val HAS_NULL = -1
     // 0 means no matches found and all values in the list are not null
     val NOT_MATCHED = 0
