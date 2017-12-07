@@ -49,4 +49,35 @@ public class DataSourceV2Options {
   public Optional<String> get(String key) {
     return Optional.ofNullable(keyLowerCasedMap.get(toLowerCase(key)));
   }
+
+  /**
+   * Returns the boolean value to which the specified key is mapped,
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive
+   */
+  public boolean getBoolean(String key, boolean defaultValue) {
+    String lcaseKey = toLowerCase(key);
+    return keyLowerCasedMap.containsKey(lcaseKey) ?
+      Boolean.parseBoolean(keyLowerCasedMap.get(lcaseKey)) : defaultValue;
+  }
+
+  /**
+   * Returns the integer value to which the specified key is mapped,
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive
+   */
+  public int getInt(String key, int defaultValue) {
+    String lcaseKey = toLowerCase(key);
+    return keyLowerCasedMap.containsKey(lcaseKey) ?
+      Integer.parseInt(keyLowerCasedMap.get(lcaseKey)) : defaultValue;
+  }
+
+  /**
+   * Returns the long value to which the specified key is mapped,
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive
+   */
+  public long getLong(String key, long defaultValue) {
+    String lcaseKey = toLowerCase(key);
+    return keyLowerCasedMap.containsKey(lcaseKey) ?
+      Long.parseLong(keyLowerCasedMap.get(lcaseKey)) : defaultValue;
+  }
+
 }
