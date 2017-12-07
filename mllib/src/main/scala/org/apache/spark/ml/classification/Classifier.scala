@@ -213,6 +213,10 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    */
   protected def predictRaw(features: FeaturesType): Vector
 
+  protected[classification] def predictRaw(features: Any): Vector = {
+    predictRaw(features.asInstanceOf[FeaturesType])
+  }
+
   /**
    * Given a vector of raw predictions, select the predicted label.
    * This may be overridden to support thresholds which favor particular labels.

@@ -156,54 +156,22 @@ final class OneVsRestModel private[ml] (
     // Check schema
     transformSchema(dataset.schema, logging = true)
 
-    // determine the input columns: these need to be passed through
-    val origCols = dataset.schema.map(f => col(f.name))
-
-    // add an accumulator column to store predictions of all the models
-    val accColName = "mbc$acc" + UUID.randomUUID().toString
-    val initUDF = udf { () => Map[Int, Double]() }
-    val newDataset = dataset.withColumn(accColName, initUDF())
-
-    // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) {
-      newDataset.persist(StorageLevel.MEMORY_AND_DISK)
-    }
-
-    // update the accumulator column with the result of prediction of models
-    val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
-      case (df, (model, index)) =>
-        val rawPredictionCol = model.getRawPredictionCol
-        val columns = origCols ++ List(col(rawPredictionCol), col(accColName))
-
-        // add temporary column to store intermediate scores and update
-        val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
-        val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
-          predictions + ((index, prediction(1)))
+    val predictUDF = udf { (features: Any) =>
+      var i = 0
+      var maxIndex = -1
+      var maxPred = Double.MinValue
+      while (i < models.length) {
+        val pred = models(i).predictRaw(features)(1)
+        if (pred > maxPred) {
+          maxIndex = i
+          maxPred = pred
         }
-        model.setFeaturesCol($(featuresCol))
-        val transformedDataset = model.transform(df).select(columns: _*)
-        val updatedDataset = transformedDataset
-          .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
-        val newColumns = origCols ++ List(col(tmpColName))
-
-        // switch out the intermediate column with the accumulator column
-        updatedDataset.select(newColumns: _*).withColumnRenamed(tmpColName, accColName)
+        i += 1
+      }
+      maxIndex
     }
 
-    if (handlePersistence) {
-      newDataset.unpersist()
-    }
-
-    // output the index of the classifier with highest confidence as prediction
-    val labelUDF = udf { (predictions: Map[Int, Double]) =>
-      predictions.maxBy(_._2)._1.toDouble
-    }
-
-    // output label and label metadata as prediction
-    aggregatedDataset
-      .withColumn($(predictionCol), labelUDF(col(accColName)), labelMetadata)
-      .drop(accColName)
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))), labelMetadata)
   }
 
   @Since("1.4.1")
