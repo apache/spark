@@ -31,8 +31,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val requestedIncomplete =
       Option(UIUtils.stripXSS(request.getParameter("showIncomplete"))).getOrElse("false").toBoolean
 
-    val allAppsSize = parent.getApplicationList().
-      count(isApplicationCompleted(_) != requestedIncomplete)
+    val allAppsSize = parent.getApplicationList()
+      .count(isApplicationCompleted(_) != requestedIncomplete)
     val eventLogsUnderProcessCount = parent.getEventLogsUnderProcess()
     val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()
@@ -93,6 +93,5 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
   private def isApplicationCompleted(appInfo: ApplicationInfo): Boolean = {
     appInfo.attempts.nonEmpty && appInfo.attempts.head.completed
-
   }
 }
