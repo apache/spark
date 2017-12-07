@@ -22,8 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -290,24 +289,5 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
       }
     }
-  }
-
-  test("SPARK-22716: BroadcastHashJoinExec should not use addReferenceObj") {
-    val ctx = new CodegenContext
-    val df1 = Seq((1, "a")).toDF("a", "b")
-    val df2 = Seq((1, "b")).toDF("a", "b")
-    val joined = df1.join(df2, "a")
-    val plan = joined.queryExecution.executedPlan
-    val bhj = plan.children.head.children.head.asInstanceOf[BroadcastHashJoinExec]
-    bhj.produce(ctx, plan.asInstanceOf[CodegenSupport])
-    // BroadcastHashJoinExec has always 7 global variables:
-    // - result
-    // - holder
-    // - rowWriter
-    // - relation
-    // - the 2 related to metrics: numOutputRows and avgHashProbe
-    // - the inputadapter by WholeStageCodegen
-    assert(ctx.mutableStates.length == 7)
-
   }
 }
