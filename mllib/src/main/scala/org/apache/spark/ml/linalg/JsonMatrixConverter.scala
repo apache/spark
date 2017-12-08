@@ -23,7 +23,7 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 private[ml] object JsonMatrixConverter {
 
   /** Unique class name for identifying JSON object encoded by this class. */
-  val className = "org.apache.spark.ml.linalg.Matrix"
+  val className = "matrix"
 
   /**
    * Parses the JSON representation of a Matrix into a [[Matrix]].

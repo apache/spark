@@ -2773,6 +2773,8 @@ class LogisticRegressionSuite
     def checkModelData(model: LogisticRegressionModel, model2: LogisticRegressionModel): Unit = {
       assert(model.getLowerBoundsOnCoefficients === model2.getLowerBoundsOnCoefficients)
       assert(model.getUpperBoundsOnCoefficients === model2.getUpperBoundsOnCoefficients)
+      assert(model.intercept === model2.intercept)
+      assert(model.coefficients.toArray === model2.coefficients.toArray)
     }
     val numFeatures = smallBinaryDataset.select("features").head().getAs[Vector](0).size
     val lowerBounds = new DenseMatrix(1, numFeatures, (1 to numFeatures).map(_ / 1000.0).toArray)

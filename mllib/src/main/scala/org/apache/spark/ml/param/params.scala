@@ -135,14 +135,16 @@ private[ml] object Param {
           val className = (jValue \ "class").extract[String]
           className match {
             case JsonMatrixConverter.className =>
-              val checkFields = Array("numRows", "numCols", "values", "isTransposed")
+              val checkFields = Array("numRows", "numCols", "values", "isTransposed", "type")
               require(checkFields.forall(keys.contains), s"Expect a JSON serialized Matrix" +
                 s" but cannot find fields ${checkFields.mkString(", ")} in $json.")
               JsonMatrixConverter.fromJson(json).asInstanceOf[T]
 
             case s => throw new SparkException(s"unrecognized class $s in $json")
           }
-        } else { // Vector does not have class info in json
+        } else {
+          // "class" info in JSON was added in Spark 2.3(SPARK-22289). JSON support for Vector was
+          // implemented before that and does not have "class" attribute.
           require(keys.contains("type") && keys.contains("values"), s"Expect a JSON serialized" +
             s" vector/matrix but cannot find fields 'type' and 'values' in $json.")
           JsonVectorConverter.fromJson(json).asInstanceOf[T]
