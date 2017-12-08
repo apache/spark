@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.python
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.api.python.PythonFunction
-import org.apache.spark.sql.catalyst.expressions.{Expression, NonSQLExpression, Unevaluable, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -35,7 +35,9 @@ case class PythonUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
+  override def nullable: Boolean = true
+
   override def toString: String = s"$name(${children.mkString(", ")})"
 
-  override def nullable: Boolean = true
+  lazy val resultAttribute: Attribute = AttributeReference(name, dataType)()
 }

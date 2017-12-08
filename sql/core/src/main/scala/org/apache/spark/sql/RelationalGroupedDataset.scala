@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.execution.python.PythonUDF
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -86,6 +85,8 @@ class RelationalGroupedDataset protected[sql](
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
+    case udf: PythonUDF =>
+      UnresolvedAlias(udf, Some(_ => udf.name))
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
@@ -438,6 +439,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
 
+  /*
   private[sql] def aggInPandas(columns: Seq[Column]): DataFrame = {
     val exprs = columns.map(column => column.expr.asInstanceOf[PythonUDF])
 
@@ -468,6 +470,8 @@ class RelationalGroupedDataset protected[sql](
 
     Dataset.ofRows(df.sparkSession, plan)
   }
+  */
+
   /**
    * Applies a grouped vectorized python user-defined function to each group of data.
    * The user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`.

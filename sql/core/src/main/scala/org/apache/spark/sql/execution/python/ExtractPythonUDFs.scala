@@ -48,9 +48,26 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
     }.isDefined
   }
 
+  private def isPandasGroupAggUdf(expr: Expression): Boolean = expr match {
+      case _ @ PythonUDF(_, _, _, _, PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF ) => true
+      case Alias(expr, _) => isPandasGroupAggUdf(expr)
+      case _ => false
+  }
+
+  private def hasPandasGroupAggUdf(agg: Aggregate): Boolean = {
+    val actualAggExpr = agg.aggregateExpressions.drop(agg.groupingExpressions.length)
+    actualAggExpr.exists(isPandasGroupAggUdf)
+  }
+
+
   private def extract(agg: Aggregate): LogicalPlan = {
     val projList = new ArrayBuffer[NamedExpression]()
     val aggExpr = new ArrayBuffer[NamedExpression]()
+
+    if (hasPandasGroupAggUdf(agg)) {
+      Aggregate(agg.groupingExpressions, agg.aggregateExpressions, agg.child)
+    } else {
+
     agg.aggregateExpressions.foreach { expr =>
       if (hasPythonUdfOverAggregate(expr, agg)) {
         // Python UDF can only be evaluated after aggregate
@@ -71,6 +88,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
     }
     // There is no Python UDF over aggregate expression
     Project(projList, agg.copy(aggregateExpressions = aggExpr))
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {

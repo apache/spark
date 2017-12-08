@@ -63,10 +63,6 @@ def _create_udf(f, returnType, evalType):
     return udf_obj._wrapped()
 
 
-class UDFColumn(Column):
-    pass
-
-
 class UserDefinedFunction(object):
     """
     User defined function in Python
@@ -145,7 +141,7 @@ class UserDefinedFunction(object):
     def __call__(self, *cols):
         judf = self._judf
         sc = SparkContext._active_spark_context
-        return UDFColumn(judf.apply(_to_seq(sc, cols, _to_java_column)))
+        return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
     # This function is for improving the online help system in the interactive interpreter.
     # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and

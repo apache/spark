@@ -22,6 +22,7 @@ import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -290,7 +291,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
-          aggregateExpressions,
+          aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
           planLater(child))
 
@@ -334,34 +335,51 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(
-          groupingExpressions, aggregateExpressions, resultExpressions, child) =>
+          groupingExpressions, aggExpressions, resultExpressions, child) =>
 
-        val (functionsWithDistinct, functionsWithoutDistinct) =
-          aggregateExpressions.partition(_.isDistinct)
-        if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
-          // This is a sanity check. We should not reach here when we have multiple distinct
-          // column sets. Our MultipleDistinctRewriter should take care this case.
-          sys.error("You hit a query analyzer bug. Please report your query to " +
+        if (aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression])) {
+
+          val aggregateExpressions = aggExpressions.map(expr =>
+            expr.asInstanceOf[AggregateExpression])
+
+          val (functionsWithDistinct, functionsWithoutDistinct) =
+            aggregateExpressions.partition(_.isDistinct)
+          if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
+            // This is a sanity check. We should not reach here when we have multiple distinct
+            // column sets. Our MultipleDistinctRewriter should take care this case.
+            sys.error("You hit a query analyzer bug. Please report your query to " +
               "Spark user mailing list.")
-        }
-
-        val aggregateOperator =
-          if (functionsWithDistinct.isEmpty) {
-            aggregate.AggUtils.planAggregateWithoutDistinct(
-              groupingExpressions,
-              aggregateExpressions,
-              resultExpressions,
-              planLater(child))
-          } else {
-            aggregate.AggUtils.planAggregateWithOneDistinct(
-              groupingExpressions,
-              functionsWithDistinct,
-              functionsWithoutDistinct,
-              resultExpressions,
-              planLater(child))
           }
 
-        aggregateOperator
+          val aggregateOperator =
+            if (functionsWithDistinct.isEmpty) {
+              aggregate.AggUtils.planAggregateWithoutDistinct(
+                groupingExpressions,
+                aggregateExpressions,
+                resultExpressions,
+                planLater(child))
+            } else {
+              aggregate.AggUtils.planAggregateWithOneDistinct(
+                groupingExpressions,
+                functionsWithDistinct,
+                functionsWithoutDistinct,
+                resultExpressions,
+                planLater(child))
+            }
+
+          aggregateOperator
+        } else if (aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF])) {
+          val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
+
+          Seq(execution.python.AggregateInPandasExec(
+            groupingExpressions,
+            udfExpressions,
+            resultExpressions,
+            planLater(child)))
+        } else {
+          throw new IllegalArgumentException(
+            "Cannot use mixture of aggregation function and pandas group aggregation UDF")
+        }
 
       case _ => Nil
     }
@@ -452,8 +470,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.FlatMapGroupsInR(f, p, b, is, os, key, value, grouping, data, objAttr, child) =>
         execution.FlatMapGroupsInRExec(f, p, b, is, os, key, value, grouping,
           data, objAttr, planLater(child)) :: Nil
-      case logical.AggregateInPandas(grouping, func, output, child) =>
-        execution.python.AggregateInPandasExec(grouping, func, output, planLater(child)) :: Nil
       case logical.FlatMapGroupsInPandas(grouping, func, output, child) =>
         execution.python.FlatMapGroupsInPandasExec(grouping, func, output, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>

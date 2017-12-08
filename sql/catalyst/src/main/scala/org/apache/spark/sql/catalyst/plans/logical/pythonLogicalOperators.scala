@@ -39,12 +39,3 @@ case class FlatMapGroupsInPandas(
   override val producedAttributes = AttributeSet(output)
 }
 
-case class AggregateInPandas(
-    groupingAttributes: Seq[Attribute],
-    functionExprs: Seq[Expression],
-    output: Seq[Attribute],
-    child: LogicalPlan
-) extends UnaryNode {
-  override val references: AttributeSet = child.outputSet
-  override val producedAttributes = AttributeSet(groupingAttributes ++ output)
-}

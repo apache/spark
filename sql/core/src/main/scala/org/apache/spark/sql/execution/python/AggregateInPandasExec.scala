@@ -25,19 +25,20 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, Expression, JoinedRow, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, Expression, JoinedRow, NamedExpression, PythonUDF, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 case class AggregateInPandasExec(
-    groupingAttributes: Seq[Attribute],
-    func: Seq[Expression],
-    output: Seq[Attribute],
+    groupingAttributes: Seq[Expression],
+    func: Seq[PythonUDF],
+    resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryExecNode {
-  private val udfs = func.map(expr => expr.asInstanceOf[PythonUDF])
+
+  override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -71,21 +72,27 @@ case class AggregateInPandasExec(
 
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
-    // val argOffsets = Array((0 until (child.output.length - groupingAttributes.length)).toArray)
-    val schema = StructType(child.schema.drop(groupingAttributes.length))
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
 
-    val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
+    val (pyFuncs, inputs) = func.map(collectFunctions).unzip
 
     val allInputs = new ArrayBuffer[Expression]
+    val dataTypes = new ArrayBuffer[DataType]
+
+    allInputs.appendAll(groupingAttributes)
 
     val argOffsets = inputs.map { input =>
       input.map { e =>
           allInputs += e
-          allInputs.length - 1
+          dataTypes += e.dataType
+          allInputs.length - 1 - groupingAttributes.length
       }.toArray
     }.toArray
+
+    val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
+      StructField(s"_$i", dt)
+    })
 
     inputRDD.mapPartitionsInternal { iter =>
       val grouped = if (groupingAttributes.isEmpty) {
@@ -94,7 +101,8 @@ case class AggregateInPandasExec(
         val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
 
         val dropGrouping =
-          UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
+          UnsafeProjection.create(allInputs.drop(groupingAttributes.length), child.output)
+
         groupedIter.map {
           case (k, groupedRowIter) => (k, groupedRowIter.map(dropGrouping))
         }

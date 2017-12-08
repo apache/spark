@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -199,7 +200,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 object PhysicalAggregation {
   // groupingExpressions, aggregateExpressions, resultExpressions, child
   type ReturnType =
-    (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
+    (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
@@ -213,7 +214,9 @@ object PhysicalAggregation {
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
           case agg: AggregateExpression
-            if (!equivalentAggregateExpressions.addExpr(agg)) => agg
+            if !equivalentAggregateExpressions.addExpr(agg) => agg
+          case agg @ PythonUDF(_, _, _, _, PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF)
+            if !equivalentAggregateExpressions.addExpr(agg) => agg
         }
       }
 

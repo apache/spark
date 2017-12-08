@@ -171,6 +171,7 @@ trait CheckAnalysis extends PredicateHelper {
                         s"appear in the arguments of an aggregate function.")
                   }
                 }
+              case _: PythonUDF => // OK
               case e: Attribute if groupingExprs.isEmpty =>
                 // Collect all [[AggregateExpressions]]s.
                 val aggExprs = aggregateExprs.filter(_.collect {
