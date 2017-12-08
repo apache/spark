@@ -63,7 +63,6 @@ public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
       handle.addListener(l);
     }
 
-
     String secret = server.registerHandle(handle);
     setConf(LauncherProtocol.CONF_LAUNCHER_PORT, String.valueOf(server.getPort()));
     setConf(LauncherProtocol.CONF_LAUNCHER_SECRET, secret);
