@@ -60,16 +60,6 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public long nullsNativeAddress() {
-    throw new RuntimeException("Cannot get native address for arrow column");
-  }
-
-  @Override
-  public long valuesNativeAddress() {
-    throw new RuntimeException("Cannot get native address for arrow column");
-  }
-
-  @Override
   public void close() {
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
@@ -250,11 +240,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return accessor.getArrayOffset(rowId);
   }
 
-  @Override
-  public void loadBytes(ColumnVector.Array array) {
-    throw new UnsupportedOperationException();
-  }
-
   //
   // APIs dealing with Decimals
   //
@@ -320,13 +305,16 @@ public final class ArrowColumnVector extends ColumnVector {
       accessor = new StringAccessor((NullableVarCharVector) vector);
     } else if (vector instanceof NullableVarBinaryVector) {
       accessor = new BinaryAccessor((NullableVarBinaryVector) vector);
+    } else if (vector instanceof NullableDateDayVector) {
+      accessor = new DateAccessor((NullableDateDayVector) vector);
+    } else if (vector instanceof NullableTimeStampMicroTZVector) {
+      accessor = new TimestampAccessor((NullableTimeStampMicroTZVector) vector);
     } else if (vector instanceof ListVector) {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
 
       childColumns = new ArrowColumnVector[1];
       childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
-      resultArray = new ColumnVector.Array(childColumns[0]);
     } else if (vector instanceof MapVector) {
       MapVector mapVector = (MapVector) vector;
       accessor = new StructAccessor(mapVector);
@@ -335,7 +323,6 @@ public final class ArrowColumnVector extends ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         childColumns[i] = new ArrowColumnVector(mapVector.getVectorById(i));
       }
-      resultStruct = new ColumnarBatch.Row(childColumns);
     } else {
       throw new UnsupportedOperationException();
     }
@@ -572,6 +559,36 @@ public final class ArrowColumnVector extends ColumnVector {
     @Override
     final byte[] getBinary(int rowId) {
       return accessor.getObject(rowId);
+    }
+  }
+
+  private static class DateAccessor extends ArrowVectorAccessor {
+
+    private final NullableDateDayVector.Accessor accessor;
+
+    DateAccessor(NullableDateDayVector vector) {
+      super(vector);
+      this.accessor = vector.getAccessor();
+    }
+
+    @Override
+    final int getInt(int rowId) {
+      return accessor.get(rowId);
+    }
+  }
+
+  private static class TimestampAccessor extends ArrowVectorAccessor {
+
+    private final NullableTimeStampMicroTZVector.Accessor accessor;
+
+    TimestampAccessor(NullableTimeStampMicroTZVector vector) {
+      super(vector);
+      this.accessor = vector.getAccessor();
+    }
+
+    @Override
+    final long getLong(int rowId) {
+      return accessor.get(rowId);
     }
   }
 

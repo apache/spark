@@ -76,7 +76,7 @@ public class LevelDB implements KVStore {
     this.types = new ConcurrentHashMap<>();
 
     Options options = new Options();
-    options.createIfMissing(!path.exists());
+    options.createIfMissing(true);
     this._db = new AtomicReference<>(JniDBFactory.factory.open(path, options));
 
     byte[] versionData = db().get(STORE_VERSION_KEY);

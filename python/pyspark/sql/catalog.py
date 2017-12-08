@@ -19,9 +19,9 @@ import warnings
 from collections import namedtuple
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
+from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import UserDefinedFunction
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import IntegerType, StringType, StructType
 
 
@@ -256,7 +256,8 @@ class Catalog(object):
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
-        udf = UserDefinedFunction(f, returnType, name)
+        udf = UserDefinedFunction(f, returnType=returnType, name=name,
+                                  evalType=PythonEvalType.SQL_BATCHED_UDF)
         self._jsparkSession.udf().registerPython(name, udf._judf)
         return udf._wrapped()
 

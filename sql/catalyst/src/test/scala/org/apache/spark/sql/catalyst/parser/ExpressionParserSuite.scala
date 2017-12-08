@@ -592,11 +592,6 @@ class ExpressionParserSuite extends PlanTest {
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
   }
 
-  test("current date/timestamp braceless expressions") {
-    assertEqual("current_date", CurrentDate())
-    assertEqual("current_timestamp", CurrentTimestamp())
-  }
-
   test("SPARK-17364, fully qualified column name which starts with number") {
     assertEqual("123_", UnresolvedAttribute("123_"))
     assertEqual("1a.123_", UnresolvedAttribute("1a.123_"))
