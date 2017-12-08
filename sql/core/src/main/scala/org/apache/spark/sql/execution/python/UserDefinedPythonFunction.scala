@@ -29,10 +29,11 @@ case class UserDefinedPythonFunction(
     name: String,
     func: PythonFunction,
     dataType: DataType,
-    pythonEvalType: Int) {
+    pythonEvalType: Int,
+    udfDeterministic: Boolean = true) {
 
   def builder(e: Seq[Expression]): PythonUDF = {
-    PythonUDF(name, func, dataType, e, pythonEvalType)
+    PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
   }
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
