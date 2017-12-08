@@ -316,6 +316,30 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
     }
   }
 
+  test("filter pushdown - date") {
+    val dates = Seq("2017-08-18", "2017-08-19", "2017-08-20", "2017-08-21").map { day =>
+      Date.valueOf(day)
+    }
+    withOrcDataFrame(dates.map(Tuple1(_))) { implicit df =>
+      checkFilterPredicate('_1.isNull, PredicateLeaf.Operator.IS_NULL)
+
+      checkFilterPredicate('_1 === dates(0), PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate('_1 <=> dates(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+
+      checkFilterPredicate('_1 < dates(1), PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate('_1 > dates(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate('_1 <= dates(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate('_1 >= dates(3), PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(dates(0)) === '_1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(dates(0)) <=> '_1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(dates(1)) > '_1, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(dates(2)) < '_1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(dates(0)) >= '_1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(dates(3)) <= '_1, PredicateLeaf.Operator.LESS_THAN)
+    }
+  }
+
   test("no filter pushdown - non-supported types") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
@@ -327,11 +351,6 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
     // BinaryType
     withOrcDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
       checkNoFilterPredicate('_1 <=> 1.b)
-    }
-    // DateType
-    val stringDate = "2015-01-01"
-    withOrcDataFrame(Seq(Tuple1(Date.valueOf(stringDate)))) { implicit df =>
-      checkNoFilterPredicate('_1 === Date.valueOf(stringDate))
     }
     // MapType
     withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i)))) { implicit df =>
