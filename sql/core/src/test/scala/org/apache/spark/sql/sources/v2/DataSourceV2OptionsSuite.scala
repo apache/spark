@@ -68,4 +68,15 @@ class DataSourceV2OptionsSuite extends SparkFunSuite {
       options.getLong("foo", 0L)
     }
   }
+
+  test("getDouble") {
+    val options = new DataSourceV2Options(Map("numFoo" -> "922337.1",
+      "foo" -> "bar").asJava)
+    assert(options.getDouble("numFOO", 0d) == 922337.1d)
+    assert(options.getDouble("numFoo2", -1.02d) == -1.02d)
+
+    intercept[NumberFormatException]{
+      options.getDouble("foo", 0.1d)
+    }
+  }
 }
