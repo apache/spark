@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import java.util.{List => JList, Locale}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -146,15 +147,13 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
-      var completeFitCount = 0
-      val signal = new Object
+      val completeFitCount = new AtomicInteger(0)
       // Fit models in a Future for training in parallel
       val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
         Future[Double] {
           val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
-          signal.synchronized {
-            completeFitCount += 1
-            signal.notify()
+          if (completeFitCount.incrementAndGet() == epm.length) {
+            trainingDataset.unpersist()
           }
 
           if (collectSubModelsParam) {
@@ -166,14 +165,6 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
           metric
         } (executionContext)
       }
-      Future {
-        signal.synchronized {
-          while (completeFitCount < epm.length) {
-            signal.wait()
-          }
-        }
-        trainingDataset.unpersist()
-      } (executionContext)
 
       // Wait for metrics to be calculated before unpersisting validation dataset
       val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
