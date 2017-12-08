@@ -34,10 +34,10 @@ import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
+import org.fusesource.leveldbjni.internal.NativeDB
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -132,7 +132,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       AppStatusStore.CURRENT_VERSION, logDir.toString())
 
     try {
-      open(new File(path, "listing.ldb"), metadata)
+      open(dbPath, metadata)
     } catch {
       // If there's an error, remove the listing database and any existing UI database
       // from the store directory, since it's extremely likely that they'll all contain
@@ -140,7 +140,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case _: UnsupportedStoreVersionException | _: MetadataMismatchException =>
         logInfo("Detected incompatible DB versions, deleting...")
         path.listFiles().foreach(Utils.deleteRecursively)
-        open(new File(path, "listing.ldb"), metadata)
+        open(dbPath, metadata)
+      case dbExc: NativeDB.DBException =>
+        // Get rid of the corrupted listing.ldb and re-create it.
+        logWarning(s"Failed to load disk store $dbPath :", dbExc)
+        Utils.deleteRecursively(dbPath)
+        open(dbPath, metadata)
     }
   }.getOrElse(new InMemoryStore())
 
@@ -294,8 +299,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       attempt.adminAclsGroups.getOrElse(""))
     secManager.setViewAclsGroups(attempt.viewAclsGroups.getOrElse(""))
 
-    val replayBus = new ReplayListenerBus()
-
     val uiStorePath = storePath.map { path => getStorePath(path, appId, attemptId) }
 
     val (kvstore, needReplay) = uiStorePath match {
@@ -315,48 +318,43 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         (new InMemoryStore(), true)
     }
 
-    val listener = if (needReplay) {
-      val _listener = new AppStatusListener(kvstore, conf, false,
+    if (needReplay) {
+      val replayBus = new ReplayListenerBus()
+      val listener = new AppStatusListener(kvstore, conf, false,
         lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
-      replayBus.addListener(_listener)
+      replayBus.addListener(listener)
       AppStatusPlugin.loadPlugins().foreach { plugin =>
         plugin.setupListeners(conf, kvstore, l => replayBus.addListener(l), false)
       }
-      Some(_listener)
-    } else {
-      None
-    }
-
-    val loadedUI = {
-      val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf, secManager, app.info.name,
-        HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
-        attempt.info.startTime.getTime(),
-        attempt.info.appSparkVersion)
-      LoadedAppUI(ui)
-    }
-
-    try {
-      AppStatusPlugin.loadPlugins().foreach { plugin =>
-        plugin.setupUI(loadedUI.ui)
+      try {
+        val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
+        replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+        listener.flush()
+      } catch {
+        case e: Exception =>
+          try {
+            kvstore.close()
+          } catch {
+            case _e: Exception => logInfo("Error closing store.", _e)
+          }
+          uiStorePath.foreach(Utils.deleteRecursively)
+          if (e.isInstanceOf[FileNotFoundException]) {
+            return None
+          } else {
+            throw e
+          }
       }
-
-      val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
-      replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
-      listener.foreach(_.flush())
-    } catch {
-      case e: Exception =>
-        try {
-          kvstore.close()
-        } catch {
-          case _e: Exception => logInfo("Error closing store.", _e)
-        }
-        uiStorePath.foreach(Utils.deleteRecursively)
-        if (e.isInstanceOf[FileNotFoundException]) {
-          return None
-        } else {
-          throw e
-        }
     }
+
+    val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf, secManager, app.info.name,
+      HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
+      attempt.info.startTime.getTime(),
+      attempt.info.appSparkVersion)
+    AppStatusPlugin.loadPlugins().foreach { plugin =>
+      plugin.setupUI(ui)
+    }
+
+    val loadedUI = LoadedAppUI(ui)
 
     synchronized {
       activeUIs((appId, attemptId)) = loadedUI
@@ -568,7 +566,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val logPath = fileStatus.getPath()
-    logInfo(s"Replaying log path: $logPath")
 
     val bus = new ReplayListenerBus()
     val listener = new AppListingListener(fileStatus, clock)

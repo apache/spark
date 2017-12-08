@@ -140,6 +140,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val COLUMN_VECTOR_OFFHEAP_ENABLED =
+    buildConf("spark.sql.columnVector.offheap.enabled")
+      .internal()
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .booleanConf
+      .createWithDefault(false)
+
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
     .doc("When true, prefer sort merge join over shuffle hash join.")
@@ -355,6 +362,14 @@ object SQLConf {
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
     .createWithDefault("snappy")
+
+  val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
+    .doc("When native, use the native version of ORC support instead of the ORC library in Hive " +
+      "1.2.1. It is 'hive' by default prior to Spark 2.3.")
+    .internal()
+    .stringConf
+    .checkValues(Set("hive", "native"))
+    .createWithDefault("native")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
@@ -591,12 +606,6 @@ object SQLConf {
       " fail to compile generated code")
     .booleanConf
     .createWithDefault(true)
-
-  val MAX_CASES_BRANCHES = buildConf("spark.sql.codegen.maxCaseBranches")
-    .internal()
-    .doc("The maximum number of switches supported with codegen.")
-    .intConf
-    .createWithDefault(20)
 
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
     .internal()
@@ -997,6 +1006,15 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE =
+    buildConf("spark.sql.execution.pandas.respectSessionTimeZone")
+      .internal()
+      .doc("When true, make Pandas DataFrame with timestamp type respecting session local " +
+        "timezone when converting to/from Pandas DataFrame. This configuration will be " +
+        "deprecated in the future releases.")
+      .booleanConf
+      .createWithDefault(true)
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -1133,8 +1151,6 @@ class SQLConf extends Serializable with Logging {
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
-  def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
-
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
@@ -1209,6 +1225,8 @@ class SQLConf extends Serializable with Logging {
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
+
+  def offHeapColumnVectorEnabled: Boolean = getConf(COLUMN_VECTOR_OFFHEAP_ENABLED)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
@@ -1314,6 +1332,8 @@ class SQLConf extends Serializable with Logging {
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

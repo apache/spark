@@ -828,8 +828,7 @@ class DataFrameWriter(OptionUtils):
                     set, it uses the default value, ``,``.
         :param quote: sets the single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
-                      value, ``"``. If you would like to turn off quotations, you need to set an
-                      empty string.
+                      value, ``"``. If an empty string is set, it uses ``u0000`` (null character).
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
         :param escapeQuotes: a flag indicating whether values containing quotes should always

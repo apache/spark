@@ -203,7 +203,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
     ctx.addMutableState("InternalRow[]", rowData, s"$rowData = new InternalRow[$numRows];")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
-    val code = ctx.splitExpressions(ctx.INPUT_ROW, Seq.tabulate(numRows) { row =>
+    val code = ctx.splitExpressionsWithCurrentInputs(Seq.tabulate(numRows) { row =>
       val fields = Seq.tabulate(numFields) { col =>
         val index = row * numFields + col
         if (index < values.length) values(index) else Literal(null, dataTypes(col))
