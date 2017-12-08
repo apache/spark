@@ -223,26 +223,12 @@ def _create_batch(series, timezone):
         series = [series]
     series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
-    # If a nullable integer series has been promoted to floating point with NaNs, need to cast
-    # NOTE: this is not necessary with Arrow >= 0.7
-    def cast_series(s, t):
-        if t is not None and pa.types.is_timestamp(t):
-            # NOTE: convert to 'us' with astype here, unit ignored in `from_pandas` see ARROW-1680
-            return _check_series_convert_timestamps_internal(s.fillna(0), timezone)\
-                .values.astype('datetime64[us]', copy=False)
-        elif t is not None and t == pa.date32():
-            # TODO: this converts the series to Python objects, possibly avoid with Arrow >= 0.8
-            return s.dt.date
-        elif t is None or s.dtype == t.to_pandas_dtype():
-            return s
-        else:
-            return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
-
-    # Some object types don't support masks in Arrow, see ARROW-1721
     def create_array(s, t):
-        casted = cast_series(s, t)
-        mask = None if casted.dtype == 'object' else s.isnull()
-        return pa.Array.from_pandas(casted, mask=mask, type=t)
+        mask = s.isnull()
+        # Ensure timestamp series are in expected form for Spark internal representation
+        if t is not None and pa.types.is_timestamp(t):
+            s = _check_series_convert_timestamps_internal(s.fillna(0), timezone)
+        return pa.Array.from_pandas(s, mask=mask, type=t)
 
     arrs = [create_array(s, t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])

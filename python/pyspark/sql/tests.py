@@ -3671,9 +3671,9 @@ class VectorizedUDFTests(ReusedSQLTestCase):
     def test_vectorized_udf_wrong_return_type(self):
         from pyspark.sql.functions import pandas_udf, col
         df = self.spark.range(10)
-        f = pandas_udf(lambda x: x * 1.0, StringType())
+        f = pandas_udf(lambda x: x * 1.0, ArrayType(LongType()))
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Invalid.*type'):
+            with self.assertRaisesRegexp(Exception, 'Unsupported.*type.*conversion'):
                 df.select(f(col('id'))).collect()
 
     def test_vectorized_udf_return_scalar(self):
@@ -3974,12 +3974,12 @@ class GroupbyApplyTests(ReusedSQLTestCase):
 
         foo = pandas_udf(
             lambda pdf: pdf,
-            'id long, v string',
+            'id long, v array<int>',
             PandasUDFType.GROUP_MAP
         )
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Invalid.*type'):
+            with self.assertRaisesRegexp(Exception, 'Unsupported.*type.*conversion'):
                 df.groupby('id').apply(foo).sort('id').toPandas()
 
     def test_wrong_args(self):
