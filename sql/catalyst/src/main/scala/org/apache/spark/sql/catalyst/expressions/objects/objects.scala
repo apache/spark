@@ -101,7 +101,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
         """
       }
     }
-    val argCode = ctx.splitExpressions(argCodes)
+    val argCode = ctx.splitExpressionsWithCurrentInputs(argCodes)
 
     (argCode, argValues.mkString(", "), resultIsNull)
   }
@@ -1106,27 +1106,31 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values)
 
     val childrenCodes = children.zipWithIndex.map { case (e, i) =>
       val eval = e.genCode(ctx)
-      eval.code + s"""
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }
-         """
+      s"""
+         |${eval.code}
+         |if (${eval.isNull}) {
+         |  $values[$i] = null;
+         |} else {
+         |  $values[$i] = ${eval.value};
+         |}
+       """.stripMargin
     }
 
-    val childrenCode = ctx.splitExpressions(childrenCodes)
-    val schemaField = ctx.addReferenceObj("schema", schema)
+    val childrenCode = ctx.splitExpressionsWithCurrentInputs(
+      expressions = childrenCodes,
+      funcName = "createExternalRow",
+      extraArguments = "Object[]" -> values :: Nil)
+    val schemaField = ctx.addReferenceMinorObj(schema)
 
-    val code = s"""
-      $values = new Object[${children.size}];
-      $childrenCode
-      final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
-      """
+    val code =
+      s"""
+         |Object[] $values = new Object[${children.size}];
+         |$childrenCode
+         |final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
+       """.stripMargin
     ev.copy(code = code, isNull = "false")
   }
 }
@@ -1244,25 +1248,28 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
 
     val javaBeanInstance = ctx.freshName("javaBean")
     val beanInstanceJavaType = ctx.javaType(beanInstance.dataType)
-    ctx.addMutableState(beanInstanceJavaType, javaBeanInstance)
 
     val initialize = setters.map {
       case (setterMethod, fieldValue) =>
         val fieldGen = fieldValue.genCode(ctx)
         s"""
-           ${fieldGen.code}
-           ${javaBeanInstance}.$setterMethod(${fieldGen.value});
-         """
+           |${fieldGen.code}
+           |$javaBeanInstance.$setterMethod(${fieldGen.value});
+         """.stripMargin
     }
-    val initializeCode = ctx.splitExpressions(initialize.toSeq)
+    val initializeCode = ctx.splitExpressionsWithCurrentInputs(
+      expressions = initialize.toSeq,
+      funcName = "initializeJavaBean",
+      extraArguments = beanInstanceJavaType -> javaBeanInstance :: Nil)
 
-    val code = s"""
-      ${instanceGen.code}
-      ${javaBeanInstance} = ${instanceGen.value};
-      if (!${instanceGen.isNull}) {
-        $initializeCode
-      }
-     """
+    val code =
+      s"""
+         |${instanceGen.code}
+         |$beanInstanceJavaType $javaBeanInstance = ${instanceGen.value};
+         |if (!${instanceGen.isNull}) {
+         |  $initializeCode
+         |}
+       """.stripMargin
     ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
   }
 }

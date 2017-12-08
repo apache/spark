@@ -93,7 +93,7 @@ private[spark] class AppStatusListener(
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     assert(event.appId.isDefined, "Application without IDs are not supported.")
 
-    val attempt = new v1.ApplicationAttemptInfo(
+    val attempt = v1.ApplicationAttemptInfo(
       event.appAttemptId,
       new Date(event.time),
       new Date(-1),
@@ -103,7 +103,7 @@ private[spark] class AppStatusListener(
       false,
       sparkVersion)
 
-    appInfo = new v1.ApplicationInfo(
+    appInfo = v1.ApplicationInfo(
       event.appId.get,
       event.appName,
       None,
@@ -139,7 +139,7 @@ private[spark] class AppStatusListener(
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     val old = appInfo.attempts.head
-    val attempt = new v1.ApplicationAttemptInfo(
+    val attempt = v1.ApplicationAttemptInfo(
       old.attemptId,
       old.startTime,
       new Date(event.time),
@@ -149,7 +149,7 @@ private[spark] class AppStatusListener(
       true,
       old.appSparkVersion)
 
-    appInfo = new v1.ApplicationInfo(
+    appInfo = v1.ApplicationInfo(
       appInfo.id,
       appInfo.name,
       None,

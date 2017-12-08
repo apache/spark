@@ -282,7 +282,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     // No more deletion attempts of the executors.
     // This is graceful termination and should not be detected as a failure.
     verify(podOperations, times(1)).delete(resolvedPod)
-    verify(driverEndpointRef, times(1)).ask[Boolean](
+    verify(driverEndpointRef, times(1)).send(
       RemoveExecutor("1", ExecutorExited(
         0,
         exitCausedByApp = false,
@@ -318,7 +318,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     requestExecutorRunnable.getValue.run()
     allocatorRunnable.getAllValues.asScala.last.run()
     verify(podOperations, never()).delete(firstResolvedPod)
-    verify(driverEndpointRef).ask[Boolean](
+    verify(driverEndpointRef).send(
       RemoveExecutor("1", ExecutorExited(
         1,
         exitCausedByApp = true,
@@ -356,7 +356,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     val recreatedResolvedPod = expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
     allocatorRunnable.getValue.run()
     verify(podOperations).delete(firstResolvedPod)
-    verify(driverEndpointRef).ask[Boolean](
+    verify(driverEndpointRef).send(
       RemoveExecutor("1", SlaveLost("Executor lost for unknown reasons.")))
   }
 

@@ -43,7 +43,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
-import org.apache.spark.status.api.v1
+import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.status.config._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
@@ -253,19 +253,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def getListing(): Iterator[ApplicationHistoryInfo] = {
+  override def getListing(): Iterator[ApplicationInfo] = {
     // Return the listing in end time descending order.
     listing.view(classOf[ApplicationInfoWrapper])
       .index("endTime")
       .reverse()
       .iterator()
       .asScala
-      .map(_.toAppHistoryInfo())
+      .map(_.toApplicationInfo())
   }
 
-  override def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo] = {
+  override def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     try {
-      Some(load(appId).toAppHistoryInfo())
+      Some(load(appId).toApplicationInfo())
     } catch {
       case e: NoSuchElementException =>
         None
@@ -795,24 +795,16 @@ private[history] case class LogInfo(
     fileSize: Long)
 
 private[history] class AttemptInfoWrapper(
-    val info: v1.ApplicationAttemptInfo,
+    val info: ApplicationAttemptInfo,
     val logPath: String,
     val fileSize: Long,
     val adminAcls: Option[String],
     val viewAcls: Option[String],
     val adminAclsGroups: Option[String],
-    val viewAclsGroups: Option[String]) {
-
-  def toAppAttemptInfo(): ApplicationAttemptInfo = {
-    ApplicationAttemptInfo(info.attemptId, info.startTime.getTime(),
-      info.endTime.getTime(), info.lastUpdated.getTime(), info.sparkUser,
-      info.completed, info.appSparkVersion)
-  }
-
-}
+    val viewAclsGroups: Option[String])
 
 private[history] class ApplicationInfoWrapper(
-    val info: v1.ApplicationInfo,
+    val info: ApplicationInfo,
     val attempts: List[AttemptInfoWrapper]) {
 
   @JsonIgnore @KVIndexParam
@@ -824,9 +816,7 @@ private[history] class ApplicationInfoWrapper(
   @JsonIgnore @KVIndexParam("oldestAttempt")
   def oldestAttempt(): Long = attempts.map(_.info.lastUpdated.getTime()).min
 
-  def toAppHistoryInfo(): ApplicationHistoryInfo = {
-    ApplicationHistoryInfo(info.id, info.name, attempts.map(_.toAppAttemptInfo()))
-  }
+  def toApplicationInfo(): ApplicationInfo = info.copy(attempts = attempts.map(_.info))
 
 }
 
@@ -883,7 +873,7 @@ private[history] class AppListingListener(log: FileStatus, clock: Clock) extends
     var memoryPerExecutorMB: Option[Int] = None
 
     def toView(): ApplicationInfoWrapper = {
-      val apiInfo = new v1.ApplicationInfo(id, name, coresGranted, maxCores, coresPerExecutor,
+      val apiInfo = ApplicationInfo(id, name, coresGranted, maxCores, coresPerExecutor,
         memoryPerExecutorMB, Nil)
       new ApplicationInfoWrapper(apiInfo, List(attempt.toView()))
     }
@@ -906,7 +896,7 @@ private[history] class AppListingListener(log: FileStatus, clock: Clock) extends
     var viewAclsGroups: Option[String] = None
 
     def toView(): AttemptInfoWrapper = {
-      val apiInfo = new v1.ApplicationAttemptInfo(
+      val apiInfo = ApplicationAttemptInfo(
         attemptId,
         startTime,
         endTime,

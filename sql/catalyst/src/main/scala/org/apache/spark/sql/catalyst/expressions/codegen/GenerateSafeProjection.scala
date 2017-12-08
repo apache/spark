@@ -49,8 +49,6 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val tmpInput = ctx.freshName("tmpInput")
     val output = ctx.freshName("safeRow")
     val values = ctx.freshName("values")
-    // These expressions could be split into multiple functions
-    ctx.addMutableState("Object[]", values, s"$values = null;")
 
     val rowClass = classOf[GenericInternalRow].getName
 
@@ -66,15 +64,15 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val allFields = ctx.splitExpressions(
       expressions = fieldWriters,
       funcName = "writeFields",
-      arguments = Seq("InternalRow" -> tmpInput)
+      arguments = Seq("InternalRow" -> tmpInput, "Object[]" -> values)
     )
-    val code = s"""
-      final InternalRow $tmpInput = $input;
-      $values = new Object[${schema.length}];
-      $allFields
-      final InternalRow $output = new $rowClass($values);
-      $values = null;
-    """
+    val code =
+      s"""
+         |final InternalRow $tmpInput = $input;
+         |final Object[] $values = new Object[${schema.length}];
+         |$allFields
+         |final InternalRow $output = new $rowClass($values);
+       """.stripMargin
 
     ExprCode(code, "false", output)
   }
@@ -159,7 +157,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
             }
           """
     }
-    val allExpressions = ctx.splitExpressions(expressionCodes)
+    val allExpressions = ctx.splitExpressionsWithCurrentInputs(expressionCodes)
 
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {

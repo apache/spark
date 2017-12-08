@@ -1360,4 +1360,22 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
 
   }
+
+  test("Deals with wrong Hive's statistics (zero rowCount)") {
+    withTable("maybe_big") {
+      sql("CREATE TABLE maybe_big (c1 bigint)" +
+        "TBLPROPERTIES ('numRows'='0', 'rawDataSize'='60000000000', 'totalSize'='8000000000000')")
+
+      val catalogTable = getCatalogTable("maybe_big")
+
+      val properties = catalogTable.ignoredProperties
+      assert(properties("totalSize").toLong > 0)
+      assert(properties("rawDataSize").toLong > 0)
+      assert(properties("numRows").toLong == 0)
+
+      val catalogStats = catalogTable.stats.get
+      assert(catalogStats.sizeInBytes > 0)
+      assert(catalogStats.rowCount.isEmpty)
+    }
+  }
 }

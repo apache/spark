@@ -62,7 +62,7 @@ private[yarn] class AMCredentialRenewer(
   private val credentialRenewerThread: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Refresh Thread")
 
-  private val hadoopUtil = YarnSparkHadoopUtil.get
+  private val hadoopUtil = SparkHadoopUtil.get
 
   private val credentialsFile = sparkConf.get(CREDENTIALS_FILE_PATH)
   private val daysToKeepFiles = sparkConf.get(CREDENTIALS_FILE_MAX_RETENTION)

@@ -23,6 +23,7 @@ import java.util.{Calendar, Locale, TimeZone}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
@@ -844,5 +845,12 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputOuter = Row.fromSeq((1 to N).map(_ => inputInner))
     val outputOuter = Row.fromSeq((1 to N).map(_ => outputInner))
     checkEvaluation(cast(Literal.create(inputOuter, fromOuter), toOuter), outputOuter)
+  }
+
+  test("SPARK-22570: Cast should not create a lot of global variables") {
+    val ctx = new CodegenContext
+    cast("1", IntegerType).genCode(ctx)
+    cast("2", LongType).genCode(ctx)
+    assert(ctx.mutableStates.length == 0)
   }
 }
