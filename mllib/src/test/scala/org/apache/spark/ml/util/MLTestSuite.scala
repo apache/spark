@@ -32,14 +32,13 @@ class MLTestSuite extends MLTest {
     val indexer = new StringIndexer().setStringOrderType("alphabetAsc")
       .setInputCol("label").setOutputCol("indexed")
     val indexerModel = indexer.fit(data)
-    val pipelineModel = new PipelineModel("pipelinemodel-test", Array[Transformer](indexerModel))
-    testPipelineModelOnStreamData[(Int, String)](data, pipelineModel, "id", "indexed") {
+    testTransformerOnStreamData[(Int, String)](data, indexerModel, "id", "indexed") {
       case Row(id: Int, indexed: Double) =>
         assert(id === indexed.toInt)
     }
 
     intercept[Exception] {
-      testPipelineModelOnStreamData[(Int, String)](data, pipelineModel, "id", "indexed") {
+      testTransformerOnStreamData[(Int, String)](data, indexerModel, "id", "indexed") {
         case Row(id: Int, indexed: Double) =>
           assert(id != indexed.toInt)
       }

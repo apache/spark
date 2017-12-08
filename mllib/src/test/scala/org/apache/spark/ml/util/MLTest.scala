@@ -53,8 +53,11 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     }
   }
 
-  def testPipelineModelOnStreamData[A : Encoder](dataframe: DataFrame,
-      pipelineModel: PipelineModel, firstResultCol: String, otherResultCols: String*)
+  def testTransformerOnStreamData[A : Encoder](
+      dataframe: DataFrame,
+      transformer: Transformer,
+      firstResultCol: String,
+      otherResultCols: String*)
       (checkFunction: Row => Unit): Unit = {
 
     val columnNames = dataframe.schema.fieldNames
@@ -63,7 +66,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
 
     val data = dataframe.as[A].collect()
 
-    val streamOutput = pipelineModel.transform(streamDF)
+    val streamOutput = transformer.transform(streamDF)
       .select(firstResultCol, otherResultCols: _*)
     testStream(streamOutput) (
       AddData(stream, data: _*),
@@ -71,22 +74,18 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     )
   }
 
-  def testPipelineModel[A : Encoder](dataframe: DataFrame, pipelineModel: PipelineModel,
-      firstResultCol: String, otherResultCols: String*)(checkFunction: Row => Unit): Unit = {
-
-    testPipelineModelOnStreamData(dataframe, pipelineModel, firstResultCol,
+  def testTransformer[A : Encoder](
+      dataframe: DataFrame,
+      transformer: Transformer,
+      firstResultCol: String,
+      otherResultCols: String*)
+      (checkFunction: Row => Unit): Unit = {
+    testTransformerOnStreamData(dataframe, transformer, firstResultCol,
       otherResultCols: _*)(checkFunction)
 
-    val dfOutput = pipelineModel.transform(dataframe)
+    val dfOutput = transformer.transform(dataframe)
     dfOutput.select(firstResultCol, otherResultCols: _*).collect().foreach { row =>
       checkFunction(row)
     }
-  }
-
-  def testTransformer[A : Encoder](dataframe: DataFrame, transformer: Transformer,
-      firstResultCol: String, otherResultCols: String*)(checkFunction: Row => Unit): Unit = {
-    testPipelineModel[A](dataframe,
-      new PipelineModel(Identifiable.randomUID("pipelinemodel-test"), Array(transformer)),
-      firstResultCol, otherResultCols: _*)(checkFunction)
   }
 }
