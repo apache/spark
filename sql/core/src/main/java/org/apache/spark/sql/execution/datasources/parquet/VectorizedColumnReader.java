@@ -313,7 +313,6 @@ public class VectorizedColumnReader {
             }
           } else {
             for (int i = rowId; i < rowId + num; ++i) {
-              // TODO: Convert dictionary of Binaries to dictionary of Longs
               if (!column.isNullAt(i)) {
                 Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
                 long rawTime = ParquetRowConverter.binaryToSQLTimestamp(v);
