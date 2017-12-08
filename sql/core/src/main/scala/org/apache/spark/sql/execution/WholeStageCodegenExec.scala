@@ -54,7 +54,7 @@ trait CodegenSupport extends SparkPlan {
    * @return name of the variable representing the metric
    */
   def metricTerm(ctx: CodegenContext, name: String): String = {
-    ctx.addReferenceObj(name, longMetric(name))
+    ctx.addReferenceObj(longMetric(name))
   }
 
   /**

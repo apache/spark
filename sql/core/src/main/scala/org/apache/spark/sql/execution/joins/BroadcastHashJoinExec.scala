@@ -133,7 +133,7 @@ case class BroadcastHashJoinExec(
   private def prepareBroadcast(ctx: CodegenContext): (Broadcast[HashedRelation], String) = {
     // create a name for HashedRelation
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
-    val broadcast = ctx.addReferenceMinorObj(broadcastRelation)
+    val broadcast = ctx.addReferenceObj(broadcastRelation)
     val relationTerm = ctx.freshName("relation")
     val clsName = broadcastRelation.value.getClass.getName
 

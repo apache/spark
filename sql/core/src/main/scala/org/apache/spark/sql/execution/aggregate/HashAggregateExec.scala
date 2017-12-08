@@ -580,7 +580,7 @@ case class HashAggregateExec(
       }
     }
 
-    val thisPlan = ctx.addReferenceMinorObj(this)
+    val thisPlan = ctx.addReferenceObj(this)
 
     // Create a name for the iterator from the fast hash map.
     val iterTermForFastHashMap = ctx.freshName("fastHashMapIter")
