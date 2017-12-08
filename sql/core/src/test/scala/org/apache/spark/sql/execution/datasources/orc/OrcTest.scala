@@ -51,12 +51,12 @@ abstract class OrcTest extends QueryTest with SQLTestUtils with BeforeAndAfterAl
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    originalConfORCImplementation = conf.getConf(ORC_IMPLEMENTATION)
-    conf.setConf(ORC_IMPLEMENTATION, orcImp)
+    originalConfORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+    spark.conf.set(ORC_IMPLEMENTATION.key, orcImp)
   }
 
   protected override def afterAll(): Unit = {
-    conf.setConf(ORC_IMPLEMENTATION, originalConfORCImplementation)
+    spark.conf.set(ORC_IMPLEMENTATION.key, originalConfORCImplementation)
     super.afterAll()
   }
 
