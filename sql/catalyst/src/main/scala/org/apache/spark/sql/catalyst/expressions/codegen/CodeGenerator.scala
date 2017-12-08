@@ -154,19 +154,17 @@ class CodegenContext {
   val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
     mutable.ArrayBuffer.empty[(String, String, String)]
 
-  // An array keyed by the tuple of mutable states' types and array name, holds the
-  // current max index of the array
+  // An map keyed by the tuple of mutable states' types and array name, holds the current max
+  // index of the array
   var mutableStateArrayIdx: mutable.Map[(String, String), Int] =
     mutable.Map.empty[(String, String), Int]
 
-  // An array keyed by the tuple of mutable states' types, holds the
-  // current name of the mutableStateArray into which state of the given key will be compacted
+  // An map keyed by mutable states' types holds the current name of the mutableStateArray
+  // into which state of the given key will be compacted
   var mutableStateArrayCurrentNames: mutable.Map[String, String] =
     mutable.Map.empty[String, String]
 
-  // An array keyed by the tuple of mutable states' types, array names, array index, and
-  // initialization code, holds the code that will initialize the mutableStateArray when
-  // initialized in loops
+  // An array holds the code that will initialize each element of the mutableStateArray
   var mutableStateArrayInitCodes: mutable.ArrayBuffer[String] =
     mutable.ArrayBuffer.empty[String]
 
@@ -220,21 +218,21 @@ class CodegenContext {
         // a mutableStateArray for the given type and name has already been declared,
         // update the max index of the array and return an array element
         val idx = prevIdx + 1
+        mutableStateArrayIdx.update((javaType, arrayName), idx)
         val initCode = codeFunctions(s"$arrayName[$idx]")
         mutableStateArrayInitCodes += initCode
-        mutableStateArrayIdx.update((javaType, arrayName), idx)
         s"$arrayName[$idx]"
       } else {
         // mutableStateArray has not been declared yet for the given type and name.
         // Create a new name for the array, and add an entry to keep track of current array name
-        // for type and initialized code. In addition, init code is stored for code generation
-        val arrayName = freshName("mutableStateArray")
-        mutableStateArrayCurrentNames += javaType -> arrayName
+        // for type. In addition, init code is stored for code generation
+        val newArrayName = freshName("mutableStateArray")
+        mutableStateArrayCurrentNames += javaType -> newArrayName
         val idx = 0
-        val initCode = codeFunctions(s"$arrayName[$idx]")
+        mutableStateArrayIdx += (javaType, newArrayName) -> idx
+        val initCode = codeFunctions(s"$newArrayName[$idx]")
         mutableStateArrayInitCodes += initCode
-        mutableStateArrayIdx += (javaType, arrayName) -> idx
-        s"$arrayName[$idx]"
+        s"$newArrayName[$idx]"
       }
     }
   }
