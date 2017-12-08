@@ -124,7 +124,7 @@ class RateSourceV2Suite extends StreamTest {
           assert(r.getOffset() ==
             ContinuousRateStreamPartitionOffset(t.partitionIndex, r.get.getLong(1)))
         }
-        assert(System.currentTimeMillis() > startTime + 900)
+        assert(System.currentTimeMillis() >= startTime + 1000)
 
       case _ => throw new IllegalStateException("Unexpected task type")
     }
