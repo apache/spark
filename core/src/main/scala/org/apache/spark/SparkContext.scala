@@ -380,6 +380,10 @@ class SparkContext(config: SparkConf) extends Logging {
         "Deployment to YARN is not supported directly by SparkContext. Please use spark-submit.")
     }
 
+    if (master.startsWith("k8s") && deployMode == "client") {
+      throw new SparkException("Client mode is currently not supported for Kubernetes.")
+    }
+
     if (_conf.getBoolean("spark.logConf", false)) {
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }
