@@ -155,7 +155,7 @@ final class OneVsRestModel private[ml] (
 
     val predictUDF = udf { (features: Any) =>
       var i = 0
-      var maxIndex = -1
+      var maxIndex = Double.NaN
       var maxPred = Double.MinValue
       while (i < models.length) {
         val pred = models(i).predictRawAsFeaturesType(features)(1)
