@@ -320,7 +320,7 @@ class DataFrameReader(OptionUtils):
         [Row(value=u'hello'), Row(value=u'this')]
         >>> df = spark.read.text('python/test_support/sql/text-test.txt', wholetext=True)
         >>> df.collect()
-        [Row(value=u'hello\nthis')]
+        [Row(value=u'hello\\nthis')]
         """
         self._set_opts(wholetext=wholetext)
         if isinstance(paths, basestring):
