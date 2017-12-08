@@ -310,8 +310,7 @@ class ParquetFileFormat
       requiredSchema.json)
     hadoopConf.set(
       SQLConf.SESSION_LOCAL_TIMEZONE.key,
-      sparkSession.sessionState.conf.sessionLocalTimeZone
-    )
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
@@ -388,7 +387,7 @@ class ParquetFileFormat
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
-        new TaskAttemptContextImpl(broadcastedHadoopConf.value.value, attemptId);
+        new TaskAttemptContextImpl(broadcastedHadoopConf.value.value, attemptId)
 
       // Try to push down filters when filter push-down is enabled.
       // Notice: This push-down is RowGroups level, not individual records.

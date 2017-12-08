@@ -121,10 +121,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     this(null, useOffHeap);
   }
 
-  VectorizedParquetRecordReader() {
-    this(null, false);
-  }
-
   /**
    * Implementation of RecordReader API.
    */
