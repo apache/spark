@@ -81,17 +81,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  // Note that while we set a default for this when we start up the
-  // scheduler, the specific default value is dynamically determined
-  // based on the executor memory.
-  val KUBERNETES_EXECUTOR_MEMORY_OVERHEAD =
-    ConfigBuilder("spark.kubernetes.executor.memoryOverhead")
-      .doc("The amount of off-heap memory (in megabytes) to be allocated per executor. This " +
-        "is memory that accounts for things like VM overheads, interned strings, other native " +
-        "overheads, etc. This tends to grow with the executor size. (typically 6-10%).")
-      .bytesConf(ByteUnit.MiB)
-      .createOptional
-
   val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")
       .doc("Name of the driver pod.")

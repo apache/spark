@@ -91,7 +91,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
        val mayBeResource = mainAppResource.get match {
         case JavaMainAppResource(resource) if resource != SparkLauncher.NO_RESOURCE =>
           Some(resource)
-        case _ => Option.empty
+        case _ => None
       }
       mayBeResource
     } else {

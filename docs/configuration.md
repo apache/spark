@@ -174,6 +174,15 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.executor.memoryOverhead</code></td>
+  <td>executorMemory * 0.10, with minimum of 384 </td>
+  <td>
+    The amount of off-heap memory (in megabytes) to be allocated per executor. This is memory that
+    accounts for things like VM overheads, interned strings, other native overheads, etc. This tends
+    to grow with the executor size (typically 6-10%).
+  </td>
+</tr>
+<tr>
   <td><code>spark.extraListeners</code></td>
   <td>(none)</td>
   <td>

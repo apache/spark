@@ -223,10 +223,6 @@ package object config {
     .intConf
     .createWithDefault(1)
 
-  private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.yarn.executor.memoryOverhead")
-    .bytesConf(ByteUnit.MiB)
-    .createOptional
-
   private[spark] val EXECUTOR_NODE_LABEL_EXPRESSION =
     ConfigBuilder("spark.yarn.executor.nodeLabelExpression")
       .doc("Node label expression for executors.")

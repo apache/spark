@@ -114,7 +114,7 @@ class SparkSubmitOptionParser {
     { QUEUE },
     { REPOSITORIES },
     { STATUS },
-    { TOTAL_EXECUTOR_CORES }
+    { TOTAL_EXECUTOR_CORES },
   };
 
   /**

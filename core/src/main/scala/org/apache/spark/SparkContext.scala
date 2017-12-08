@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io._
-import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
@@ -378,10 +377,6 @@ class SparkContext(config: SparkConf) extends Logging {
     if (master == "yarn" && deployMode == "cluster" && !_conf.contains("spark.yarn.app.id")) {
       throw new SparkException("Detected yarn cluster mode, but isn't running on a cluster. " +
         "Deployment to YARN is not supported directly by SparkContext. Please use spark-submit.")
-    }
-
-    if (master.startsWith("k8s") && deployMode == "client") {
-      throw new SparkException("Client mode is currently not supported for Kubernetes.")
     }
 
     if (_conf.getBoolean("spark.logConf", false)) {
