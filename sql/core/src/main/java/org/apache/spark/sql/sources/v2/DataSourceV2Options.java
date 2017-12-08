@@ -80,4 +80,13 @@ public class DataSourceV2Options {
       Long.parseLong(keyLowerCasedMap.get(lcaseKey)) : defaultValue;
   }
 
+  /**
+   * Returns the double value to which the specified key is mapped,
+   * or defaultValue if there is no mapping for the key. The key match is case-insensitive
+   */
+  public double getDouble(String key, double defaultValue) {
+    String lcaseKey = toLowerCase(key);
+    return keyLowerCasedMap.containsKey(lcaseKey) ?
+      Double.parseDouble(keyLowerCasedMap.get(lcaseKey)) : defaultValue;
+  }
 }
