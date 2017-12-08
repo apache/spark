@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.util.Utils
 
@@ -96,8 +97,10 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
            |STORED AS orc
            |LOCATION '$uri'""".stripMargin)
       val result = Row("a", "b         ", "c", Seq("d  "))
-      checkAnswer(spark.table("hive_orc"), result)
-      checkAnswer(spark.table("spark_orc"), result)
+      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
+        checkAnswer(spark.table("hive_orc"), result)
+        checkAnswer(spark.table("spark_orc"), result)
+      }
     } finally {
       hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
       hiveClient.runSqlHive("DROP TABLE IF EXISTS spark_orc")
