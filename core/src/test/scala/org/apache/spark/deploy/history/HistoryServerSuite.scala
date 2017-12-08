@@ -45,6 +45,7 @@ import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.deploy.history.config._
+import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ResetSystemProperties, Utils}
@@ -505,6 +506,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       getAppUI.store.jobsList(List(JobExecutionStatus.RUNNING).asJava)
     }
 
+    def isApplicationCompleted(appInfo: ApplicationInfo): Boolean = {
+      appInfo.attempts.nonEmpty && appInfo.attempts.head.completed
+    }
+
     activeJobs() should have size 0
     completedJobs() should have size 1
     getNumJobs("") should be (1)
@@ -537,7 +542,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
     val jobcount = getNumJobs("/jobs")
-    assert(!provider.getListing().next.completed)
+    assert(!isApplicationCompleted(provider.getListing().next))
 
     listApplications(false) should contain(appId)
 
@@ -545,7 +550,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     resetSparkContext()
     // check the app is now found as completed
     eventually(stdTimeout, stdInterval) {
-      assert(provider.getListing().next.completed,
+      assert(isApplicationCompleted(provider.getListing().next),
         s"application never completed, server=$server\n")
     }
 
