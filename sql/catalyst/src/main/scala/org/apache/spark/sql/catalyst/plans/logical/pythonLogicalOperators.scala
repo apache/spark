@@ -38,4 +38,3 @@ case class FlatMapGroupsInPandas(
    */
   override val producedAttributes = AttributeSet(output)
 }
-

@@ -74,14 +74,12 @@ object AggUtils {
 
   def planAggregateWithoutDistinct(
       groupingExpressions: Seq[NamedExpression],
-      aggExpressions: Seq[Expression],
+      aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
 
     // 1. Create an Aggregate Operator for partial aggregations.
-
-    val aggregateExpressions = aggExpressions.map(expr => expr.asInstanceOf[AggregateExpression])
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
     val partialAggregateExpressions = aggregateExpressions.map(_.copy(mode = Partial))

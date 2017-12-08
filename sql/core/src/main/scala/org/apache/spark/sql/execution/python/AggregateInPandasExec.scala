@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 case class AggregateInPandasExec(
-    groupingAttributes: Seq[Expression],
-    func: Seq[PythonUDF],
+    groupingExpressions: Seq[Expression],
+    udfExpressions: Seq[PythonUDF],
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryExecNode {
@@ -45,10 +45,10 @@ case class AggregateInPandasExec(
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (groupingAttributes.isEmpty) {
+    if (groupingExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(groupingAttributes) :: Nil
+      ClusteredDistribution(groupingExpressions) :: Nil
     }
   }
 
@@ -65,7 +65,7 @@ case class AggregateInPandasExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+    Seq(groupingExpressions.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
@@ -75,18 +75,18 @@ case class AggregateInPandasExec(
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
 
-    val (pyFuncs, inputs) = func.map(collectFunctions).unzip
+    val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
 
     val allInputs = new ArrayBuffer[Expression]
     val dataTypes = new ArrayBuffer[DataType]
 
-    allInputs.appendAll(groupingAttributes)
+    allInputs.appendAll(groupingExpressions)
 
     val argOffsets = inputs.map { input =>
       input.map { e =>
           allInputs += e
           dataTypes += e.dataType
-          allInputs.length - 1 - groupingAttributes.length
+          allInputs.length - 1 - groupingExpressions.length
       }.toArray
     }.toArray
 
@@ -95,13 +95,13 @@ case class AggregateInPandasExec(
     })
 
     inputRDD.mapPartitionsInternal { iter =>
-      val grouped = if (groupingAttributes.isEmpty) {
+      val grouped = if (groupingExpressions.isEmpty) {
         Iterator((null, iter))
       } else {
-        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
+        val groupedIter = GroupedIterator(iter, groupingExpressions, child.output)
 
         val dropGrouping =
-          UnsafeProjection.create(allInputs.drop(groupingAttributes.length), child.output)
+          UnsafeProjection.create(allInputs.drop(groupingExpressions.length), child.output)
 
         groupedIter.map {
           case (k, groupedRowIter) => (k, groupedRowIter.map(dropGrouping))
@@ -113,7 +113,7 @@ case class AggregateInPandasExec(
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
       val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingAttributes.length)
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExpressions.length)
       context.addTaskCompletionListener { _ =>
         queue.close()
       }

@@ -91,8 +91,6 @@ class GroupedData(object):
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             jdf = self._jgd.agg(exprs[0]._jc,
                                 _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
-
-
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
