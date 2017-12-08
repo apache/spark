@@ -317,10 +317,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         logDebug("Exception thrown after task interruption", e)
         throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
-      case e: Exception if env.isStopped =>
-        logDebug("Exception thrown after context is stopped", e)
-        throw new SparkException("Spark session has been stopped", e)
-
       case e: Exception if writerThread.exception.isDefined =>
         logError("Python worker exited unexpectedly (crashed)", e)
         logError("This may have been caused by a prior exception:", writerThread.exception.get)
