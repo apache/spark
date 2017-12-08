@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import java.util.UUID
-
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 import scala.language.existentials
@@ -32,7 +30,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
@@ -161,7 +158,7 @@ final class OneVsRestModel private[ml] (
       var maxIndex = -1
       var maxPred = Double.MinValue
       while (i < models.length) {
-        val pred = models(i).predictRaw(features)(1)
+        val pred = models(i).predictRawAsFeaturesType(features)(1)
         if (pred > maxPred) {
           maxIndex = i
           maxPred = pred

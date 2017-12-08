@@ -213,7 +213,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    */
   protected def predictRaw(features: FeaturesType): Vector
 
-  protected[classification] def predictRaw(features: Any): Vector = {
+  protected[classification] def predictRawAsFeaturesType(features: Any): Vector = {
     predictRaw(features.asInstanceOf[FeaturesType])
   }
 
