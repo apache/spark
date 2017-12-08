@@ -45,7 +45,7 @@ public interface MicroBatchWriteSupport extends BaseStreamingSink {
    *                contain the same records.
    * @param schema the schema of the data to be written.
    * @param mode the output mode which determines what successive batch output means to this
-   *             source, please refer to {@link OutputMode} for more details.
+   *             sink, please refer to {@link OutputMode} for more details.
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
    */

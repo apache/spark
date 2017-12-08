@@ -41,8 +41,8 @@ public interface ContinuousWriteSupport extends BaseStreamingSink {
      *                queries running at the same time, and the returned {@link DataSourceV2Writer}
      *                can use this id to distinguish itself from others.
      * @param schema the schema of the data to be written.
-     * @param mode the output mode which determines what successive batch output means to this
-     *             source, please refer to {@link OutputMode} for more details.
+     * @param mode the output mode which determines what successive epoch output means to this
+     *             sink, please refer to {@link OutputMode} for more details.
      * @param options the options for the returned data source writer, which is an immutable
      *                case-insensitive string-to-string map.
      */
