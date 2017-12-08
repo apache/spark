@@ -185,7 +185,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // four global variables (lastRegex, pattern, lastReplacement, and lastReplacementInUTF8)
     // are always required, which are allocated in type-based global array
     assert(ctx.mutableStates.length == 0)
-    assert(ctx.mutableStateArrayInitCodes.length == 3)
+    assert(ctx.mutableStateArrayInitCodes.length == 4)
   }
 
   test("RegexExtract") {
