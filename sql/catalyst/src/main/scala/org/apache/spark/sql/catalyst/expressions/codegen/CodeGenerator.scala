@@ -63,15 +63,34 @@ case class ExprCode(
     var isNull: String,
     var value: String,
     var inputRow: String = null,
-    var inputVars: Seq[ExprInputVar] = Seq.empty)
+    var inputVars: Seq[ExprInputVar] = Seq.empty) {
+
+  // Returns true if this value is a literal.
+  def isLiteral(): Boolean = {
+    assert(value.nonEmpty, "ExprCode.value can't be empty string.")
+
+    if (value == "true" || value == "false" || value == "null") {
+      true
+    } else {
+      // The valid characters for the first character of a Java variable is [a-zA-Z_$].
+      value.head match {
+        case v if v >= 'a' && v <= 'z' => false
+        case v if v >= 'A' && v <= 'Z' => false
+        case '_' | '$' => false
+        case _ => true
+      }
+    }
+  }
+}
 
 /**
  * Represents an input variable [[ExprCode]] to an evaluation of an [[Expression]].
  *
- * @param expr The expression that is evaluated to the input variable.
  * @param exprCode The [[ExprCode]] that represents the evaluation result for the input variable.
+ * @param dataType The data type of the input variable.
+ * @param nullable Whether the input variable can be null or not.
  */
-case class ExprInputVar(expr: Expression, exprCode: ExprCode)
+case class ExprInputVar(exprCode: ExprCode, dataType: DataType, nullable: Boolean)
 
 /**
  * State used for subexpression elimination.

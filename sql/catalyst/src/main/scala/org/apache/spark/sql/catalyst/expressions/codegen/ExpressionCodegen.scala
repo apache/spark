@@ -20,11 +20,15 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.DataType
 
 /**
  * Defines util methods used in expression code generation.
  */
 object ExpressionCodegen {
+
+  // Type alias for a tuple representing the data type and nullable for an expression.
+  type ExprProperty = (DataType, Boolean)
 
   /**
    * Given an expression, returns the all necessary parameters to evaluate it, so the generated
@@ -37,7 +41,7 @@ object ExpressionCodegen {
    * Params to include:
    * 1. Evaluated columns referred by this, children or deferred expressions.
    * 2. Rows referred by this, children or deferred expressions.
-   * 3. Eliminated subexpressions referred bu children expressions.
+   * 3. Eliminated subexpressions referred by children expressions.
    */
   def getExpressionInputParams(
       ctx: CodegenContext,
@@ -47,14 +51,15 @@ object ExpressionCodegen {
 
     val subExprs = getSubExprInChildren(ctx, expr)
     val subExprCodes = getSubExprCodes(ctx, subExprs)
-    val paramsFromSubExprs = prepareFunctionParams(ctx, subExprs, subExprCodes)
+    val subAttrs = subExprs.map(e => (e.dataType, e.nullable))
+    val paramsFromSubExprs = prepareFunctionParams(ctx, subAttrs, subExprCodes)
 
     val inputRows = ctx.INPUT_ROW +: getInputRowsForChildren(ctx, expr)
     val paramsFromRows = inputRows.distinct.filter(_ != null).map { row =>
       (row, s"InternalRow $row")
     }
 
-    val paramsLength = getParamLength(ctx, inputAttrs, subExprs) + paramsFromRows.length
+    val paramsLength = getParamLength(ctx, inputAttrs ++ subAttrs) + paramsFromRows.length
     // Maximum allowed parameter number for Java's method descriptor.
     if (paramsLength > 255) {
       None
@@ -140,7 +145,7 @@ object ExpressionCodegen {
    */
   def getInputVarsForChildren(
       ctx: CodegenContext,
-      expr: Expression): (Seq[Expression], Seq[ExprCode]) = {
+      expr: Expression): (Seq[ExprProperty], Seq[ExprCode]) = {
     expr.children.flatMap(getInputVars(ctx, _)).distinct.unzip
   }
 
@@ -148,7 +153,7 @@ object ExpressionCodegen {
    * Given a child expression, retrieves previously evaluated columns referred by it or
    * deferred expressions which are needed to evaluate it.
    */
-  def getInputVars(ctx: CodegenContext, child: Expression): Seq[(Expression, ExprCode)] = {
+  def getInputVars(ctx: CodegenContext, child: Expression): Seq[(ExprProperty, ExprCode)] = {
     if (ctx.currentVars == null) {
       return Seq.empty
     }
@@ -157,7 +162,7 @@ object ExpressionCodegen {
       // An evaluated variable.
       case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null &&
           ctx.currentVars(ordinal).code == "" =>
-        Seq((b, ctx.currentVars(ordinal)))
+        Seq(((b.dataType, b.nullable), ctx.currentVars(ordinal)))
 
       // An input variable which is not evaluated yet. Tracks down to find any evaluated variables
       // in the expression path.
@@ -174,14 +179,14 @@ object ExpressionCodegen {
   /**
    * Tracks down previously evaluated columns referred by the generated code snippet.
    */
-  def trackDownVar(ctx: CodegenContext, exprCode: ExprCode): Seq[(Expression, ExprCode)] = {
+  def trackDownVar(ctx: CodegenContext, exprCode: ExprCode): Seq[(ExprProperty, ExprCode)] = {
     val exprCodes = mutable.Queue[ExprCode](exprCode)
-    val inputVars = mutable.ArrayBuffer.empty[(Expression, ExprCode)]
+    val inputVars = mutable.ArrayBuffer.empty[(ExprProperty, ExprCode)]
 
     while (exprCodes.nonEmpty) {
       exprCodes.dequeue().inputVars.foreach { inputVar =>
         if (inputVar.exprCode.code == "") {
-          inputVars += ((inputVar.expr, inputVar.exprCode))
+          inputVars += (((inputVar.dataType, inputVar.nullable), inputVar.exprCode))
         } else {
           exprCodes.enqueue(inputVar.exprCode)
         }
@@ -193,11 +198,11 @@ object ExpressionCodegen {
   /**
    * Helper function to calculate the size of an expression as function parameter.
    */
-  def calculateParamLength(ctx: CodegenContext, input: Expression): Int = {
-    ctx.javaType(input.dataType) match {
-      case (ctx.JAVA_LONG | ctx.JAVA_DOUBLE) if !input.nullable => 2
+  def calculateParamLength(ctx: CodegenContext, input: ExprProperty): Int = {
+    ctx.javaType(input._1) match {
+      case (ctx.JAVA_LONG | ctx.JAVA_DOUBLE) if !input._2 => 2
       case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => 3
-      case _ if !input.nullable => 1
+      case _ if !input._2 => 1
       case _ => 2
     }
   }
@@ -207,12 +212,9 @@ object ExpressionCodegen {
    * length of 255 or less. `this` contributes one unit and a parameter of type long or double
    * contributes two units.
    */
-  def getParamLength(
-      ctx: CodegenContext,
-      inputs: Seq[Expression],
-      subExprs: Seq[Expression]): Int = {
+  def getParamLength(ctx: CodegenContext, inputs: Seq[ExprProperty]): Int = {
     // Initial value is 1 for `this`.
-    1 + (inputs ++ subExprs).distinct.map(calculateParamLength(ctx, _)).sum
+    1 + inputs.map(calculateParamLength(ctx, _)).sum
   }
 
   /**
@@ -222,16 +224,23 @@ object ExpressionCodegen {
    */
   def prepareFunctionParams(
       ctx: CodegenContext,
-      inputAttrs: Seq[Expression],
+      inputAttrs: Seq[ExprProperty],
       inputVars: Seq[ExprCode]): Seq[(String, String)] = {
     inputAttrs.zip(inputVars).flatMap { case (input, ev) =>
-      val argType = ctx.javaType(input.dataType)
+      val params = mutable.ArrayBuffer.empty[(String, String)]
 
-      if (!input.nullable || ev.isNull == "true" || ev.isNull == "false") {
-        Seq((ev.value, s"$argType ${ev.value}"))
-      } else {
-        Seq((ev.value, s"$argType ${ev.value}"), (ev.isNull, s"boolean ${ev.isNull}"))
+      // Only include the expression value if it is not a literal.
+      if (!ev.isLiteral()) {
+        val argType = ctx.javaType(input._1)
+        params += ((ev.value, s"$argType ${ev.value}"))
       }
+
+      // If it is a nullable expression and `isNull` is not a literal.
+      if (input._2 && ev.isNull != "true" && ev.isNull != "false") {
+        params += ((ev.isNull, s"boolean ${ev.isNull}"))
+      }
+
+      params
     }.distinct
   }
 }

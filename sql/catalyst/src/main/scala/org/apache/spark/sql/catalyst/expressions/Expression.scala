@@ -127,7 +127,8 @@ abstract class Expression extends TreeNode[Expression] {
     if (ctx.currentVars != null) {
       this.collect {
         case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null =>
-          ExprInputVar(b, exprCode = ctx.currentVars(ordinal))
+          ExprInputVar(exprCode = ctx.currentVars(ordinal),
+            dataType = b.dataType, nullable = b.nullable)
       }
     } else {
       Seq.empty

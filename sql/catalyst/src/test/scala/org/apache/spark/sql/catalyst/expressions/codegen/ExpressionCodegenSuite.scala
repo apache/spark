@@ -43,7 +43,8 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     ctx.subExprEliminationExprs.put(subExprs(1), SubExprEliminationState("isNull2", "value2"))
 
     val subExprCodes = ExpressionCodegen.getSubExprCodes(ctx, subExprs)
-    val params = ExpressionCodegen.prepareFunctionParams(ctx, subExprs, subExprCodes)
+    val subAttrs = subExprs.map(e => (e.dataType, e.nullable))
+    val params = ExpressionCodegen.prepareFunctionParams(ctx, subAttrs, subExprCodes)
     assert(params.length == 3)
     assert(params(0) == Tuple2("value1", "int value1"))
     assert(params(1) == Tuple2("value2", "int value2"))
@@ -53,9 +54,9 @@ class ExpressionCodegenSuite extends SparkFunSuite {
   test("Returns input variables for expression: current variables") {
     val ctx = new CodegenContext()
     val currentVars = Seq(
-      ExprCode("", isNull = "false", value = "value1"),
-      ExprCode("", isNull = "isNull2", value = "value2"),
-      ExprCode("fake code;", isNull = "isNull3", value = "value3"))
+      ExprCode("", isNull = "false", value = "value1"),             // evaluated
+      ExprCode("", isNull = "isNull2", value = "value2"),           // evaluated
+      ExprCode("fake code;", isNull = "isNull3", value = "value3")) // not evaluated
     ctx.currentVars = currentVars
     ctx.INPUT_ROW = null
 
@@ -65,9 +66,10 @@ class ExpressionCodegenSuite extends SparkFunSuite {
         BoundReference(2, IntegerType, nullable = true))
 
     val (inputAttrs, inputVars) = ExpressionCodegen.getInputVarsForChildren(ctx, expr)
+    // Only two evaluated variables included.
     assert(inputAttrs.length == 2)
-    assert(inputAttrs(0) == BoundReference(0, IntegerType, nullable = false))
-    assert(inputAttrs(1) == BoundReference(1, IntegerType, nullable = true))
+    assert(inputAttrs(0) == Tuple2(IntegerType, false))
+    assert(inputAttrs(1) == Tuple2(IntegerType, true))
 
     assert(inputVars.length == 2)
     assert(inputVars(0) == currentVars(0))
@@ -86,18 +88,17 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     // The referred column is not evaluated yet. But it depends on an evaluated column from
     // other operator.
     val currentVars = Seq(ExprCode("fake code;", isNull = "isNull1", value = "value1"))
-    val fakeExpr = AttributeReference("a", IntegerType, nullable = true)()
 
     // currentVars(0) depends on this evaluated column.
-    currentVars(0).inputVars = Seq(ExprInputVar(fakeExpr,
-      ExprCode("", isNull = "isNull2", value = "value2")))
+    currentVars(0).inputVars = Seq(ExprInputVar(ExprCode("", isNull = "isNull2", value = "value2"),
+      dataType = IntegerType, nullable = true))
     ctx.currentVars = currentVars
     ctx.INPUT_ROW = null
 
     val expr = Add(Literal(1), BoundReference(0, IntegerType, nullable = false))
     val (inputAttrs, inputVars) = ExpressionCodegen.getInputVarsForChildren(ctx, expr)
     assert(inputAttrs.length == 1)
-    assert(inputAttrs(0) == fakeExpr)
+    assert(inputAttrs(0) == Tuple2(IntegerType, true))
 
     val params = ExpressionCodegen.prepareFunctionParams(ctx, inputAttrs, inputVars)
     assert(params.length == 2)
