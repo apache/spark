@@ -25,7 +25,7 @@ class MLTestSuite extends MLTest {
 
   import testImplicits._
 
-  test("test pipeline model on stream data") {
+  test("test transformer on stream data") {
 
     val data = Seq((0, "a"), (1, "b"), (2, "c"), (3, "d"), (4, "e"), (5, "f"))
       .toDF("id", "label")
