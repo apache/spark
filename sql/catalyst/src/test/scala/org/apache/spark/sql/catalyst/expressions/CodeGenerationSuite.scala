@@ -394,4 +394,23 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       Map("add" -> Literal(1))).genCode(ctx)
     assert(ctx.mutableStates.isEmpty)
   }
+
+  test("SPARK-22668: ensure no global variables in split method arguments") {
+    val ctx = new CodegenContext
+    ctx.addMutableState(ctx.JAVA_INT, "ij")
+    ctx.addMutableState("int[]", "array")
+    ctx.addMutableState("int[][]", "b")
+
+    assert(ctx.isDeclaredMutableState("ij"))
+    assert(ctx.isDeclaredMutableState("array"))
+    assert(ctx.isDeclaredMutableState("array[1]"))
+    assert(ctx.isDeclaredMutableState("b[]"))
+    assert(ctx.isDeclaredMutableState("b[1][]"))
+
+    assert(!ctx.isDeclaredMutableState("i"))
+    assert(!ctx.isDeclaredMutableState("j"))
+    assert(!ctx.isDeclaredMutableState("ij1"))
+    assert(!ctx.isDeclaredMutableState("arr"))
+    assert(!ctx.isDeclaredMutableState("bb[]"))
+  }
 }
