@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -120,6 +121,22 @@ public class SparkLauncherSuite extends BaseSuite {
 
   @Test
   public void testInProcessLauncher() throws Exception {
+    // Because this test runs SparkLauncher in process and in client mode, it pollutes the system
+    // properties, and that can cause test failures down the test pipeline. So restore the original
+    // system properties after this test runs.
+    Map<Object, Object> properties = new HashMap<>(System.getProperties());
+    try {
+      inProcessLauncherTestImpl();
+    } finally {
+      Properties p = new Properties();
+      for (Map.Entry<Object, Object> e : properties.entrySet()) {
+        p.put(e.getKey(), e.getValue());
+      }
+      System.setProperties(p);
+    }
+  }
+
+  private void inProcessLauncherTestImpl() throws Exception {
     final List<SparkAppHandle.State> transitions = new ArrayList<>();
     SparkAppHandle.Listener listener = mock(SparkAppHandle.Listener.class);
     doAnswer(invocation -> {

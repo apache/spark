@@ -87,10 +87,6 @@ abstract class AbstractAppHandle implements SparkAppHandle {
     this.connection = connection;
   }
 
-  LauncherServer getServer() {
-    return server;
-  }
-
   LauncherConnection getConnection() {
     return connection;
   }
