@@ -2767,22 +2767,17 @@ class LogisticRegressionSuite
     val lr = new LogisticRegression()
     testEstimatorAndModelReadWrite(lr, smallBinaryDataset, LogisticRegressionSuite.allParamSettings,
       LogisticRegressionSuite.allParamSettings, checkModelData)
-  }
 
-  test("read/write with BoundsOnCoefficients") {
-    def checkModelData(model: LogisticRegressionModel, model2: LogisticRegressionModel): Unit = {
-      assert(model.getLowerBoundsOnCoefficients === model2.getLowerBoundsOnCoefficients)
-      assert(model.getUpperBoundsOnCoefficients === model2.getUpperBoundsOnCoefficients)
-      assert(model.intercept === model2.intercept)
-      assert(model.coefficients.toArray === model2.coefficients.toArray)
-    }
+    // test lr with bounds on coefficients, need to set elasticNetParam to 0.
     val numFeatures = smallBinaryDataset.select("features").head().getAs[Vector](0).size
     val lowerBounds = new DenseMatrix(1, numFeatures, (1 to numFeatures).map(_ / 1000.0).toArray)
     val upperBounds = new DenseMatrix(1, numFeatures, (1 to numFeatures).map(_ * 1000.0).toArray)
-    val lr = new LogisticRegression()
-      .setLowerBoundsOnCoefficients(lowerBounds)
-      .setUpperBoundsOnCoefficients(upperBounds)
-    testEstimatorAndModelReadWrite(lr, smallBinaryDataset, Map.empty, Map.empty, checkModelData)
+    val paramSettings = Map("lowerBoundsOnCoefficients" -> lowerBounds,
+      "upperBoundsOnCoefficients" -> upperBounds,
+      "elasticNetParam" -> 0.0
+    )
+    testEstimatorAndModelReadWrite(lr, smallBinaryDataset, paramSettings,
+      paramSettings, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {
