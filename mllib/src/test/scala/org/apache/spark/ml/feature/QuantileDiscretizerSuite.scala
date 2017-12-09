@@ -211,13 +211,10 @@ class QuantileDiscretizerSuite
     val numBuckets = 3
     val validData1 = Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9, Double.NaN, Double.NaN, Double.NaN)
     val expectedKeep1 = Array(0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0)
-    val validData2 = Array(0.2, -0.1, 0.3, 0.0, 0.1, 0.3, 0.5, 0.8, Double.NaN, Double.NaN)
-    val expectedKeep2 = Array(1.0, 0.0, 2.0, 0.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0)
-
-    val data = (0 until validData1.length).map { idx =>
-      (validData1(idx), validData2(idx), expectedKeep1(idx), expectedKeep2(idx))
-    }
-    val dataFrame = data.toDF("input1", "input2", "expected1", "expected2")
+    val expectedSkip1 = Array(0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0)
+    val validData2 = Array(0.2, -0.1, 0.3, 0.0, 0.1, 0.3, 0.5, Double.NaN, Double.NaN, Double.NaN)
+    val expectedKeep2 = Array(1.0, 0.0, 2.0, 0.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0)
+    val expectedSkip2 = Array(1.0, 0.0, 2.0, 0.0, 1.0, 2.0, 2.0)
 
     val discretizer = new QuantileDiscretizer()
       .setInputCols(Array("input1", "input2"))
@@ -226,28 +223,25 @@ class QuantileDiscretizerSuite
     assert(discretizer.isQuantileDiscretizeMultipleColumns())
 
     withClue("QuantileDiscretizer with handleInvalid=error should throw exception for NaN values") {
+      val dataFrame: DataFrame = validData1.zip(validData2).toSeq.toDF("input1", "input2")
       intercept[SparkException] {
         discretizer.fit(dataFrame).transform(dataFrame).collect()
       }
     }
 
-    discretizer.setHandleInvalid("keep")
-    discretizer.fit(dataFrame).transform(dataFrame).
-      select("result1", "expected1", "result2", "expected2")
-      .collect().foreach {
-      case Row(r1: Double, e1: Double, r2: Double, e2: Double) =>
-        assert(r1 === e1,
-          s"The result value is not correct after bucketing. Expected $e1 but found $r1")
-        assert(r2 === e2,
-          s"The result value is not correct after bucketing. Expected $e2 but found $r2")
-    }
-
-    discretizer.setHandleInvalid("skip")
-    val result = discretizer.fit(dataFrame).transform(dataFrame)
-    for (i <- 1 to 2) {
-      val skipResults1: Array[Double] = result.select("result" + i).as[Double].collect()
-      assert(skipResults1.length === 7)
-      assert(skipResults1.forall(_ !== 4.0))
+    List(("keep", expectedKeep1, expectedKeep2), ("skip", expectedSkip1, expectedSkip2)).foreach {
+      case (u, v, w) =>
+        discretizer.setHandleInvalid(u)
+        val dataFrame: DataFrame = validData1.zip(validData2).zip(v).zip(w).map {
+          case (((a, b), c), d) => (a, b, c, d)
+        }.toSeq.toDF("input1", "input2", "expected1", "expected2")
+        dataFrame.show
+        val result = discretizer.fit(dataFrame).transform(dataFrame)
+        result.show
+        result.select("result1", "expected1", "result2", "expected2").collect().foreach {
+          case Row(x: Double, y: Double, z: Double, w: Double) =>
+            assert(x === y && w === z)
+        }
     }
   }
 
@@ -348,8 +342,8 @@ class QuantileDiscretizerSuite
     }
   }
 
-  test("Multiple Columns: Comparing setting numBuckets with setting numBucketsArray" +
-    " explicitly with identical values") {
+  test("Multiple Columns: Comparing setting numBuckets with setting numBucketsArray " +
+    "explicitly with identical values") {
     val spark = this.spark
     import spark.implicits._
 
