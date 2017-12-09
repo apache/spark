@@ -56,10 +56,7 @@ public class JavaKMeansExample {
     Dataset<Row> predictions = model.transform(dataset);
 
     // Evaluate clustering by computing Silhouette score
-    ClusteringEvaluator evaluator = new ClusteringEvaluator()
-      .setFeaturesCol("features")
-      .setPredictionCol("prediction")
-      .setMetricName("silhouette");
+    ClusteringEvaluator evaluator = new ClusteringEvaluator();
 
     double silhouette = evaluator.evaluate(predictions);
     System.out.println("Silhouette with squared euclidean distance = " + silhouette);

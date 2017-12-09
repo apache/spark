@@ -53,9 +53,6 @@ object KMeansExample {
 
     // Evaluate clustering by computing Silhouette score
     val evaluator = new ClusteringEvaluator()
-      .setFeaturesCol("features")
-      .setPredictionCol("prediction")
-      .setMetricName("silhouette")
 
     val silhouette = evaluator.evaluate(predictions)
     println(s"Silhouette with squared euclidean distance = $silhouette")

@@ -50,8 +50,7 @@ if __name__ == "__main__":
     predictions = model.transform(dataset)
 
     # Evaluate clustering by computing Silhouette score
-    evaluator = ClusteringEvaluator(
-        featuresCol="features", predictionCol="prediction", metricName="silhouette")
+    evaluator = ClusteringEvaluator()
 
     silhouette = evaluator.evaluate(predictions)
     print("Silhouette with squared euclidean distance = " + str(silhouette))
