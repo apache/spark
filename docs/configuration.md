@@ -163,7 +163,8 @@ of the most common options to set are:
   <td>
     The amount of off-heap memory (in megabytes) to be allocated per driver in cluster mode. This is
     memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
-    This tends to grow with the container size (typically 6-10%).
+    This tends to grow with the container size (typically 6-10%). This option is supported in Yarn
+    mode and Kubernetes mode.
   </td>
 </tr>
 <tr>
@@ -179,7 +180,8 @@ of the most common options to set are:
   <td>
     The amount of off-heap memory (in megabytes) to be allocated per executor. This is memory that
     accounts for things like VM overheads, interned strings, other native overheads, etc. This tends
-    to grow with the executor size (typically 6-10%).
+    to grow with the executor size (typically 6-10%). This option is supported in Yarn mode and
+    Kubernetes mode.
   </td>
 </tr>
 <tr>
