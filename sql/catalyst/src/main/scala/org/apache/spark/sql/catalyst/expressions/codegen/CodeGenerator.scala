@@ -801,7 +801,8 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
    * @param extraArguments the list of (type, name) of the arguments of the split function,
-   *                       except for the current inputs like `ctx.INPUT_ROW`.
+   *                       except for the current inputs like `ctx.INPUT_ROW`. Name must not be
+   *                       mutable state.
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
    * @param foldFunctions folds the split function calls.
@@ -835,7 +836,8 @@ class CodegenContext {
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
-   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param arguments the list of (type, name) of the arguments of the split function. Name must
+   *                  not be mutable state
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
    * @param foldFunctions folds the split function calls.
