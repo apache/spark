@@ -93,7 +93,7 @@ private object PostgresDialect extends JdbcDialect {
   * @return The SQL query to use for truncating a table
   */
   override def getTruncateQuery(table: String): String = {
-    s"TRUNCATE ONLY $table"
+    s"TRUNCATE TABLE ONLY $table"
   }
 
   override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
@@ -109,4 +109,6 @@ private object PostgresDialect extends JdbcDialect {
       connection.setAutoCommit(false)
     }
   }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 }

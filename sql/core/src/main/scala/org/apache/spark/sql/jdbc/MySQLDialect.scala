@@ -45,7 +45,5 @@ private case object MySQLDialect extends JdbcDialect {
     s"SELECT 1 FROM $table LIMIT 1"
   }
 
-  override def getTruncateQuery(table: String): String = {
-    s"TRUNCATE $table"
-  }
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 }

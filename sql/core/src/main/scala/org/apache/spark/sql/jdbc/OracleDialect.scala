@@ -83,7 +83,5 @@ private case object OracleDialect extends JdbcDialect {
     case _ => value
   }
 
-  override def getTruncateQuery(table: String): String = {
-    s"TRUNCATE $table"
-  }
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 }

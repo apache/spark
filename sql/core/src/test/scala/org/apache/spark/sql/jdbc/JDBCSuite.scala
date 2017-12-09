@@ -752,17 +752,41 @@ class JDBCSuite extends SparkFunSuite
       override def getSchemaQuery(table: String): String = {
         s"My $table Schema"
       }
-      override def getTruncateQuery(table: String): String = {
-        s"TRUNCATE $table"
-      }
+      override def isCascadingTruncateTable(): Option[Boolean] = Some(true)
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
+    assert(agg.isCascadingTruncateTable() === Some(true))
     assert(agg.quoteIdentifier ("Dummy") === "My Dummy quoteIdentifier")
     assert(agg.getTableExistsQuery ("Dummy") === "My Dummy Table")
     assert(agg.getSchemaQuery ("Dummy") === "My Dummy Schema")
+  }
+
+  test("Aggregated dialects: isCascadingTruncateTable") {
+    def genDialect(cascadingTruncateTable: Option[Boolean]): JdbcDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = true
+      override def getCatalystType(
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = None
+      override def isCascadingTruncateTable(): Option[Boolean] = cascadingTruncateTable
+    }
+
+    def testDialects(cascadings: List[Option[Boolean]], expected: Option[Boolean]): Unit = {
+      val dialects = cascadings.map(genDialect(_))
+      val agg = new AggregatedDialect(dialects)
+      assert(agg.isCascadingTruncateTable() === expected)
+    }
+
+    testDialects(List(Some(true), Some(false), None), Some(true))
+    testDialects(List(Some(true), Some(true), None), Some(true))
+    testDialects(List(Some(false), Some(false), None), None)
+    testDialects(List(Some(true), Some(true)), Some(true))
+    testDialects(List(Some(false), Some(false)), Some(false))
+    testDialects(List(None, None), None)
   }
 
   test("DB2Dialect type mapping") {
@@ -837,13 +861,13 @@ class JDBCSuite extends SparkFunSuite
     val h2 = JdbcDialects.get(url)
     val derby = JdbcDialects.get("jdbc:derby:db")
     val table = "weblogs"
-    val defaultQuery = s"TRUNCATE $table"
-    val postgresQuery = s"TRUNCATE ONLY $table"
-    assert(MySQL.getTableExistsQuery(table) == defaultQuery)
-    assert(Postgres.getTableExistsQuery(table) == postgresQuery)
-    assert(db2.getTableExistsQuery(table) == defaultQuery)
-    assert(h2.getTableExistsQuery(table) == defaultQuery)
-    assert(derby.getTableExistsQuery(table) == defaultQuery)
+    val defaultQuery = s"TRUNCATE TABLE $table"
+    val postgresQuery = s"TRUNCATE TABLE ONLY $table"
+    assert(MySQL.getTruncateQuery(table) == defaultQuery)
+    assert(Postgres.getTruncateQuery(table) == postgresQuery)
+    assert(db2.getTruncateQuery(table) == defaultQuery)
+    assert(h2.getTruncateQuery(table) == defaultQuery)
+    assert(derby.getTruncateQuery(table) == defaultQuery)
   }
 
   test("Test DataFrame.where for Date and Timestamp") {

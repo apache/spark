@@ -41,8 +41,4 @@ private object DerbyDialect extends JdbcDialect {
       Option(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
     case _ => None
   }
-
-  override def getTruncateQuery(table: String): String = {
-    s"TRUNCATE $table"
-  }
 }

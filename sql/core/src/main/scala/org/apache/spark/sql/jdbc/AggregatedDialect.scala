@@ -54,6 +54,16 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
     dialects.head.getSchemaQuery(table)
   }
 
+  override def isCascadingTruncateTable(): Option[Boolean] = {
+    // If any dialect claims cascading truncate, this dialect is also cascading truncate.
+    // Otherwise, if any dialect has unknown cascading truncate, this dialect is also unknown.
+    dialects.flatMap(_.isCascadingTruncateTable()).reduceOption(_ || _) match {
+      case Some(true) => Some(true)
+      case _ if dialects.exists(_.isCascadingTruncateTable().isEmpty) => None
+      case _ => Some(false)
+    }
+  }
+
   override def getTruncateQuery(table: String): String = {
     dialects.head.getTruncateQuery(table)
   }
