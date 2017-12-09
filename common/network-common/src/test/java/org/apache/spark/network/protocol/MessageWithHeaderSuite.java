@@ -23,8 +23,7 @@ import java.nio.channels.WritableByteChannel;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.FileRegion;
-import io.netty.util.AbstractReferenceCounted;
+import org.apache.spark.network.util.AbstractFileRegion;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -108,7 +107,7 @@ public class MessageWithHeaderSuite {
     return Unpooled.wrappedBuffer(channel.getData());
   }
 
-  private static class TestFileRegion extends AbstractReferenceCounted implements FileRegion {
+  private static class TestFileRegion extends AbstractFileRegion {
 
     private final int writeCount;
     private final int writesPerCall;
@@ -130,36 +129,8 @@ public class MessageWithHeaderSuite {
     }
 
     @Override
-    public long transfered() {
-      return 8 * written;
-    }
-
-    @Override
     public long transferred() {
       return 8 * written;
-    }
-
-    @Override
-    public TestFileRegion touch() {
-      super.touch();
-      return this;
-    }
-
-    @Override
-    public TestFileRegion touch(Object o) {
-      return this;
-    }
-
-    @Override
-    public TestFileRegion retain() {
-      super.retain();
-      return this;
-    }
-
-    @Override
-    public TestFileRegion retain(int increment) {
-      super.retain(increment);
-      return this;
     }
 
     @Override
