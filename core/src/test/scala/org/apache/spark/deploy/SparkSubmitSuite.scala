@@ -171,6 +171,16 @@ class SparkSubmitSuite
     appArgs.toString should include ("thequeue")
   }
 
+  test("SPARK-22744 check the default application submit hostname") {
+    val clArgs = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "userjar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, conf, _) = prepareSubmitEnvironment(appArgs)
+    conf.get("spark.submit.hostname") should be (Utils.localHostName())
+  }
+
   test("specify deploy mode through configuration") {
     val clArgs = Seq(
       "--master", "yarn",

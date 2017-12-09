@@ -776,6 +776,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
       sparkConf.set("spark.submit.pyFiles", formattedPyFiles)
     }
 
+    // [SPARK-22744] Cannot get the submit hostname of application
+    sparkConf.set("spark.submit.hostname", Utils.localHostName)
+
     (childArgs, childClasspath, sparkConf, childMainClass)
   }
 
