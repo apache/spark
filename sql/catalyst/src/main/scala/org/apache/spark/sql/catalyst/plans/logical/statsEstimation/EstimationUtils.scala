@@ -115,6 +115,9 @@ object EstimationUtils {
     }
   }
 
+  /**
+   * Returns overlapped ranges between two histograms, in the given value range [newMin, newMax].
+   */
   def getOverlappedRanges(
       leftHistogram: Histogram,
       rightHistogram: Histogram,
@@ -133,14 +136,14 @@ object EstimationUtils {
         val (right, rightHeight) = trimBin(rb, rightHistogram.height, newMin, newMax)
         // Only collect overlapped ranges.
         if (left.lo <= right.hi && left.hi >= right.lo) {
-          // Collect overlapping ranges.
+          // Collect overlapped ranges.
           val range = if (left.lo == left.hi) {
             // Case1: the left bin has only one value
             OverlappedRange(
               lo = left.lo,
               hi = left.lo,
-              minNdv = 1,
-              maxNdv = 1,
+              leftNdv = 1,
+              rightNdv = 1,
               leftNumRows = leftHeight,
               rightNumRows = rightHeight / right.ndv
             )
@@ -149,8 +152,8 @@ object EstimationUtils {
             OverlappedRange(
               lo = right.lo,
               hi = right.lo,
-              minNdv = 1,
-              maxNdv = 1,
+              leftNdv = 1,
+              rightNdv = 1,
               leftNumRows = leftHeight / left.ndv,
               rightNumRows = rightHeight
             )
@@ -161,12 +164,12 @@ object EstimationUtils {
             val leftRatio = (left.hi - right.lo) / (left.hi - left.lo)
             val rightRatio = (left.hi - right.lo) / (right.hi - right.lo)
             if (leftRatio == 0) {
-              // The overlapping range has only one value.
+              // The overlapped range has only one value.
               OverlappedRange(
                 lo = right.lo,
                 hi = right.lo,
-                minNdv = 1,
-                maxNdv = 1,
+                leftNdv = 1,
+                rightNdv = 1,
                 leftNumRows = leftHeight / left.ndv,
                 rightNumRows = rightHeight / right.ndv
               )
@@ -174,8 +177,8 @@ object EstimationUtils {
               OverlappedRange(
                 lo = right.lo,
                 hi = left.hi,
-                minNdv = math.min(left.ndv * leftRatio, right.ndv * rightRatio),
-                maxNdv = math.max(left.ndv * leftRatio, right.ndv * rightRatio),
+                leftNdv = left.ndv * leftRatio,
+                rightNdv = right.ndv * rightRatio,
                 leftNumRows = leftHeight * leftRatio,
                 rightNumRows = rightHeight * rightRatio
               )
@@ -187,12 +190,12 @@ object EstimationUtils {
             val leftRatio = (right.hi - left.lo) / (left.hi - left.lo)
             val rightRatio = (right.hi - left.lo) / (right.hi - right.lo)
             if (leftRatio == 0) {
-              // The overlapping range has only one value.
+              // The overlapped range has only one value.
               OverlappedRange(
                 lo = right.hi,
                 hi = right.hi,
-                minNdv = 1,
-                maxNdv = 1,
+                leftNdv = 1,
+                rightNdv = 1,
                 leftNumRows = leftHeight / left.ndv,
                 rightNumRows = rightHeight / right.ndv
               )
@@ -200,8 +203,8 @@ object EstimationUtils {
               OverlappedRange(
                 lo = left.lo,
                 hi = right.hi,
-                minNdv = math.min(left.ndv * leftRatio, right.ndv * rightRatio),
-                maxNdv = math.max(left.ndv * leftRatio, right.ndv * rightRatio),
+                leftNdv = left.ndv * leftRatio,
+                rightNdv = right.ndv * rightRatio,
                 leftNumRows = leftHeight * leftRatio,
                 rightNumRows = rightHeight * rightRatio
               )
@@ -214,8 +217,8 @@ object EstimationUtils {
             OverlappedRange(
               lo = right.lo,
               hi = right.hi,
-              minNdv = math.min(left.ndv * leftRatio, right.ndv),
-              maxNdv = math.max(left.ndv * leftRatio, right.ndv),
+              leftNdv = left.ndv * leftRatio,
+              rightNdv = right.ndv,
               leftNumRows = leftHeight * leftRatio,
               rightNumRows = rightHeight
             )
@@ -228,8 +231,8 @@ object EstimationUtils {
             OverlappedRange(
               lo = left.lo,
               hi = left.hi,
-              minNdv = math.min(left.ndv, right.ndv * rightRatio),
-              maxNdv = math.max(left.ndv, right.ndv * rightRatio),
+              leftNdv = left.ndv,
+              rightNdv = right.ndv * rightRatio,
               leftNumRows = leftHeight,
               rightNumRows = rightHeight * rightRatio
             )
@@ -241,6 +244,10 @@ object EstimationUtils {
     overlappedRanges
   }
 
+  /**
+   * Given an original bin and a value range [min, max], returns the trimmed bin and its number of
+   * rows.
+   */
   def trimBin(bin: HistogramBin, height: Double, min: Double, max: Double)
     : (HistogramBin, Double) = {
     val (lo, hi) = if (bin.lo <= min && bin.hi >= max) {
@@ -269,11 +276,22 @@ object EstimationUtils {
     }
   }
 
+  /**
+   * A join between two equi-height histograms may produce multiple overlapped ranges.
+   * Each overlapped range is produced by a part of one bin in the left histogram and a part of
+   * one bin in the right histogram.
+   * @param lo lower bound of this overlapped range.
+   * @param hi higher bound of this overlapped range.
+   * @param leftNdv ndv in the left part.
+   * @param rightNdv ndv in the right part.
+   * @param leftNumRows number of rows in the left part.
+   * @param rightNumRows number of rows in the right part.
+   */
   case class OverlappedRange(
       lo: Double,
       hi: Double,
-      minNdv: Double,
-      maxNdv: Double,
+      leftNdv: Double,
+      rightNdv: Double,
       leftNumRows: Double,
       rightNumRows: Double)
 }

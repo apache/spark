@@ -253,13 +253,13 @@ case class JoinEstimation(join: Join) extends Logging {
     for (i <- overlappedRanges.indices) {
       val range = overlappedRanges(i)
       if (i == 0 || range.hi != overlappedRanges(i - 1).hi) {
-        // If range.hi == overlappingRanges(i - 1).hi, that means the current range has only one
+        // If range.hi == overlappedRanges(i - 1).hi, that means the current range has only one
         // value, and this value is already counted in the previous range. So there is no need to
         // count it in this range.
-        totalNdv += range.minNdv
+        totalNdv += math.min(range.leftNdv, range.rightNdv)
       }
-      // Apply the formula in this overlapping range.
-      card += range.leftNumRows * range.rightNumRows / range.maxNdv
+      // Apply the formula in this overlapped range.
+      card += range.leftNumRows * range.rightNumRows / math.max(range.leftNdv, range.rightNdv)
     }
 
     val leftKeyStat = leftStats.attributeStats(leftKey)
