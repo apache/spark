@@ -513,26 +513,28 @@ case class SortMergeJoinExec(
    * the variables should be declared separately from accessing the columns, we can't use the
    * codegen of BoundReference here.
    */
-  private def createLeftVars(ctx: CodegenContext, leftRow: String): Seq[ExprCode] = {
+  private def createLeftVars(ctx: CodegenContext, leftRow: String): (Seq[ExprCode], Seq[String]) = {
     ctx.INPUT_ROW = leftRow
     left.output.zipWithIndex.map { case (a, i) =>
       val value = ctx.freshName("value")
       val valueCode = ctx.getValue(leftRow, a.dataType, i.toString)
-      // declare it as class member, so we can access the column before or in the loop.
-      ctx.addMutableState(ctx.javaType(a.dataType), value)
       if (a.nullable) {
         val isNull = ctx.freshName("isNull")
-        ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
         val code =
           s"""
              |$isNull = $leftRow.isNullAt($i);
              |$value = $isNull ? ${ctx.defaultValue(a.dataType)} : ($valueCode);
            """.stripMargin
-        ExprCode(code, isNull, value)
+        (ExprCode(code, isNull, value),
+          s"""
+             |boolean $isNull = false;
+             |${ctx.javaType(a.dataType)} $value = ${ctx.defaultValue(a.dataType)};
+           """.stripMargin)
       } else {
-        ExprCode(s"$value = $valueCode;", "false", value)
+        (ExprCode(s"$value = $valueCode;", "false", value),
+          s"""${ctx.javaType(a.dataType)} $value = ${ctx.defaultValue(a.dataType)};""")
       }
-    }
+    }.unzip
   }
 
   /**
@@ -580,7 +582,7 @@ case class SortMergeJoinExec(
     val (leftRow, matches) = genScanner(ctx)
 
     // Create variables for row from both sides.
-    val leftVars = createLeftVars(ctx, leftRow)
+    val (leftVars, leftVarDecl) = createLeftVars(ctx, leftRow)
     val rightRow = ctx.freshName("rightRow")
     val rightVars = createRightVar(ctx, rightRow)
 
@@ -617,6 +619,7 @@ case class SortMergeJoinExec(
 
     s"""
        |while (findNextInnerJoinRows($leftInput, $rightInput)) {
+       |  ${leftVarDecl.mkString("\n")}
        |  ${beforeLoop.trim}
        |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
        |  while ($iterator.hasNext()) {
