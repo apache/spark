@@ -409,7 +409,8 @@ setGeneric("as.data.frame",
              standardGeneric("as.data.frame")
            })
 
-#' @rdname attach
+# Do not document the generic because of signature changes across R versions
+#' @noRd
 #' @export
 setGeneric("attach")
 
@@ -1050,6 +1051,11 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @rdname column_datetime_functions
 #' @export
 #' @name NULL
+setGeneric("dayofweek", function(x) { standardGeneric("dayofweek") })
+
+#' @rdname column_datetime_functions
+#' @export
+#' @name NULL
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
 #' @rdname column_string_functions
@@ -1569,12 +1575,9 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("fitted")
 
-#' @param x,y For \code{glm}: logical values indicating whether the response vector
-#'          and model matrix used in the fitting process should be returned as
-#'          components of the returned value.
-#' @inheritParams stats::glm
-#' @rdname glm
+# Do not carry stats::glm usage and param here, and do not document the generic
 #' @export
+#' @noRd
 setGeneric("glm")
 
 #' @param object a fitted ML model object.

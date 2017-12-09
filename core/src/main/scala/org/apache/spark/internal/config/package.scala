@@ -80,6 +80,22 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
+  private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
+    .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
+      "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive.")
+    .withAlternative("spark.unsafe.offHeap")
+    .booleanConf
+    .createWithDefault(false)
+
+  private[spark] val MEMORY_OFFHEAP_SIZE = ConfigBuilder("spark.memory.offHeap.size")
+    .doc("The absolute amount of memory in bytes which can be used for off-heap allocation. " +
+      "This setting has no impact on heap memory usage, so if your executors' total memory " +
+      "consumption must fit within some hard limit then be sure to shrink your JVM heap size " +
+      "accordingly. This must be set to a positive value when spark.memory.offHeap.enabled=true.")
+    .bytesConf(ByteUnit.BYTE)
+    .checkValue(_ >= 0, "The off-heap memory size must not be negative")
+    .createWithDefault(0)
+
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
@@ -193,7 +209,6 @@ package object config {
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
-      .withAlternative("spark.scheduler.listenerbus.eventqueue.size")
       .intConf
       .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
       .createWithDefault(10000)
@@ -307,7 +322,7 @@ package object config {
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
       .regexConf
-      .createWithDefault("(?i)secret|password".r)
+      .createWithDefault("(?i)secret|password|url|user|username".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -388,7 +403,6 @@ package object config {
         "affect both shuffle fetch and block manager remote block fetch. For users who " +
         "enabled external shuffle service, this feature can only be worked when external shuffle" +
         " service is newer than Spark 2.2.")
-      .withAlternative("spark.reducer.maxReqSizeShuffleToMem")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(Long.MaxValue)
 
@@ -475,4 +489,25 @@ package object config {
     .stringConf
     .toSequence
     .createOptional
+
+  private[spark] val SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD =
+    ConfigBuilder("spark.shuffle.spill.numElementsForceSpillThreshold")
+      .internal()
+      .doc("The maximum number of elements in memory before forcing the shuffle sorter to spill. " +
+        "By default it's Integer.MAX_VALUE, which means we never force the sorter to spill, " +
+        "until we reach some limitations, like the max page size limitation for the pointer " +
+        "array in the sorter.")
+      .intConf
+      .createWithDefault(Integer.MAX_VALUE)
+
+  private[spark] val SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD =
+    ConfigBuilder("spark.shuffle.mapOutput.parallelAggregationThreshold")
+      .internal()
+      .doc("Multi-thread is used when the number of mappers * shuffle partitions is greater than " +
+        "or equal to this threshold. Note that the actual parallelism is calculated by number of " +
+        "mappers * shuffle partitions / this threshold + 1, so this threshold should be positive.")
+      .intConf
+      .checkValue(v => v > 0, "The threshold should be positive.")
+      .createWithDefault(10000000)
+
 }

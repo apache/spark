@@ -35,13 +35,13 @@ case class LogicalRelation(
   extends LeafNode with MultiInstanceRelation {
 
   // Only care about relation when canonicalizing.
-  override lazy val canonicalized: LogicalPlan = copy(
+  override def doCanonicalize(): LogicalPlan = copy(
     output = output.map(QueryPlan.normalizeExprId(_, output)),
     catalogTable = None)
 
   override def computeStats(): Statistics = {
     catalogTable
-      .flatMap(_.stats.map(_.toPlanStats(output)))
+      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled)))
       .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
   }
 

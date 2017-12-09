@@ -121,10 +121,10 @@ class ParamsSuite extends SparkFunSuite {
     { // DoubleArrayParam
       val param = new DoubleArrayParam(dummy, "name", "doc")
       val values: Seq[Array[Double]] = Seq(
-         Array(),
-         Array(1.0),
-         Array(Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, 0.0,
-           Double.MinPositiveValue, 1.0, Double.MaxValue, Double.PositiveInfinity))
+        Array(),
+        Array(1.0),
+        Array(Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, 0.0,
+          Double.MinPositiveValue, 1.0, Double.MaxValue, Double.PositiveInfinity))
       for (value <- values) {
         val json = param.jsonEncode(value)
         val decoded = param.jsonDecode(json)
@@ -134,6 +134,36 @@ class ParamsSuite extends SparkFunSuite {
             assert(actual.isNaN)
           } else {
             assert(actual === expected)
+          }
+        }
+      }
+    }
+
+    { // DoubleArrayArrayParam
+      val param = new DoubleArrayArrayParam(dummy, "name", "doc")
+      val values: Seq[Array[Array[Double]]] = Seq(
+        Array(Array()),
+        Array(Array(1.0)),
+        Array(Array(1.0), Array(2.0)),
+        Array(
+          Array(Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, 0.0,
+            Double.MinPositiveValue, 1.0, Double.MaxValue, Double.PositiveInfinity),
+          Array(Double.MaxValue, Double.PositiveInfinity, Double.MinPositiveValue, 1.0,
+            Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, 0.0)
+        ))
+
+      for (value <- values) {
+        val json = param.jsonEncode(value)
+        val decoded = param.jsonDecode(json)
+        assert(decoded.length === value.length)
+        decoded.zip(value).foreach { case (actualArray, expectedArray) =>
+          assert(actualArray.length === expectedArray.length)
+          actualArray.zip(expectedArray).foreach { case (actual, expected) =>
+            if (expected.isNaN) {
+              assert(actual.isNaN)
+            } else {
+              assert(actual === expected)
+            }
           }
         }
       }
