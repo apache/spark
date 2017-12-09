@@ -32,8 +32,8 @@ import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.FileRegion;
 import io.netty.handler.codec.MessageToMessageDecoder;
-import io.netty.util.AbstractReferenceCounted;
 
+import org.apache.spark.network.util.AbstractFileRegion;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
 
@@ -129,7 +129,7 @@ class SaslEncryption {
   }
 
   @VisibleForTesting
-  static class EncryptedMessage extends AbstractReferenceCounted implements FileRegion {
+  static class EncryptedMessage extends AbstractFileRegion {
 
     private final SaslEncryptionBackend backend;
     private final boolean isByteBuf;
@@ -183,41 +183,19 @@ class SaslEncryption {
      * Returns an approximation of the amount of data transferred. See {@link #count()}.
      */
     @Override
-    public long transfered() {
-      return transferred;
-    }
-
-    @Override
     public long transferred() {
       return transferred;
     }
 
-    /**
-     * Override this due to different return types of ReferenceCounted.touch and FileRegion.touch.
-     */
-    @Override
-    public EncryptedMessage touch() {
-      super.touch();
-      return this;
-    }
-
     @Override
     public EncryptedMessage touch(Object o) {
+      super.touch(o);
       if (buf != null) {
         buf.touch(o);
       }
       if (region != null) {
         region.touch(o);
       }
-      return this;
-    }
-
-    /**
-     * Override this due to different return types of ReferenceCounted.retain and FileRegion.retain.
-     */
-    @Override
-    public EncryptedMessage retain() {
-      super.retain();
       return this;
     }
 

@@ -26,12 +26,11 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.ListBuffer
 
 import com.google.common.io.Closeables
-import io.netty.channel.{DefaultFileRegion, FileRegion}
-import io.netty.util.AbstractReferenceCounted
+import io.netty.channel.DefaultFileRegion
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -266,7 +265,7 @@ private class EncryptedBlockData(
 }
 
 private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: Long)
-  extends AbstractReferenceCounted with FileRegion {
+  extends AbstractFileRegion {
 
   private var _transferred = 0L
 
@@ -277,36 +276,7 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
 
   override def position(): Long = 0
 
-  override def transfered(): Long = _transferred
-
   override def transferred(): Long = _transferred
-
-  /**
-   * Override this due to different return types of ReferenceCounted.touch and FileRegion.touch.
-   */
-  override def touch(): this.type = {
-    super.touch()
-    this
-  }
-
-  override def touch(o: Object): this.type = {
-    this
-  }
-
-  /**
-   * Override this due to different return types of ReferenceCounted.retain and FileRegion.retain.
-   */
-  override def retain(): this.type = {
-    super.retain()
-    this
-  }
-
-  override def retain(increment: Int): this.type = {
-    super.retain(increment)
-    this
-  }
-
-  override def release(decrement: Int): Boolean = super.release(decrement)
 
   override def transferTo(target: WritableByteChannel, pos: Long): Long = {
     assert(pos == transfered(), "Invalid position.")

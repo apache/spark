@@ -25,17 +25,17 @@ import javax.annotation.Nullable;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.FileRegion;
-import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCountUtil;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.util.AbstractFileRegion;
 
 /**
  * A wrapper message that holds two separate pieces (a header and a body).
  *
  * The header must be a ByteBuf, while the body can be a ByteBuf or a FileRegion.
  */
-class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
+class MessageWithHeader extends AbstractFileRegion {
 
   @Nullable private final ManagedBuffer managedBuffer;
   private final ByteBuf header;
@@ -88,11 +88,6 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
   @Override
   public long position() {
     return 0;
-  }
-
-  @Override
-  public long transfered() {
-    return totalBytesTransferred;
   }
 
   @Override
@@ -166,24 +161,11 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     return ret;
   }
 
-  /** Override this due to different return types of ReferenceCounted.touch and FileRegion.touch. */
-  @Override
-  public MessageWithHeader touch() {
-    super.touch();
-    return this;
-  }
-
   @Override
   public MessageWithHeader touch(Object o) {
+    super.touch(o);
     header.touch(o);
     ReferenceCountUtil.touch(body, o);
-    return this;
-  }
-
-  /** Override this due to different return types of ReferenceCounted.touch and FileRegion.touch. */
-  @Override
-  public MessageWithHeader retain() {
-    super.retain();
     return this;
   }
 
