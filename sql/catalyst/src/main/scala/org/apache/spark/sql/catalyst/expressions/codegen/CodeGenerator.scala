@@ -169,6 +169,12 @@ class CodegenContext {
     mutable.ArrayBuffer.empty[(String, String, String)]
 
   /**
+   * A set containing the names of the mutable states which have been defined so far using
+   * `addSingleMutableState`.
+   */
+  val singleMutableStates: mutable.Set[String] = mutable.Set.empty[String]
+
+  /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
    *
    * @param javaType Java type of the field. Note that short names can be used for some types,
@@ -182,6 +188,27 @@ class CodegenContext {
    */
   def addMutableState(javaType: String, variableName: String, initCode: String = ""): Unit = {
     mutableStates += ((javaType, variableName, initCode))
+  }
+
+  /**
+   * Add a mutable state as a field to the generated class only if it does not exist yet a field
+   * with that name. This helps reducing the number of the generated class' fields, since the same
+   * variable can be reused by many functions.
+   *
+   * Internally, this method calls `addMutableState`.
+   *
+   * @param javaType Java type of the field.
+   * @param variableName Name of the field.
+   * @param initCode The statement(s) to put into the init() method to initialize this field.
+   */
+  def addSingleMutableState(
+      javaType: String,
+      variableName: String,
+      initCode: String = ""): Unit = {
+    if (!singleMutableStates.contains(variableName)) {
+      addMutableState(javaType, variableName, initCode)
+      singleMutableStates += variableName
+    }
   }
 
   /**

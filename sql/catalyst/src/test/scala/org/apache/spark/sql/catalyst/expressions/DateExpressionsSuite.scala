@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
@@ -740,5 +741,32 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
+  }
+
+  test("SPARK-22750: we should reuse the same UTC timezone object in code generation") {
+    val ctx = new CodegenContext
+    ToUTCTimestamp(
+      Literal.create(ts, TimestampType),
+      Literal.create(gmtId.get, StringType)).genCode(ctx)
+    FromUTCTimestamp(
+      Literal.create(Timestamp.valueOf("2017-12-10 00:00:00"), TimestampType),
+      Literal.create(gmtId.get, StringType)).genCode(ctx)
+    // we should have one mutable state for UTC timezone and one mutable state for each expression
+    // holding the other specific timezone
+    assert(ctx.mutableStates.length == 3)
+  }
+
+  test("SPARK-22750: we should reuse the same calendar for every DayOfWeek") {
+    val ctx = new CodegenContext
+    DayOfWeek(Literal(d)).genCode(ctx)
+    DayOfWeek(Cast(Literal(ts), DateType, gmtId)).genCode(ctx)
+    assert(ctx.mutableStates.length == 1)
+  }
+
+  test("SPARK-22750: we should reuse the same calendar for every WeekOfYear") {
+    val ctx = new CodegenContext
+    WeekOfYear(Literal(d)).genCode(ctx)
+    WeekOfYear(Cast(Literal(ts), DateType, gmtId)).genCode(ctx)
+    assert(ctx.mutableStates.length == 1)
   }
 }

@@ -1148,12 +1148,15 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
-    val serializer = ctx.freshName("serializer")
-    val (serializerClass, serializerInstanceClass) = {
+    val (serializer, serializerClass, serializerInstanceClass) = {
       if (kryo) {
-        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+        ("kryoSerializer",
+          classOf[KryoSerializer].getName,
+          classOf[KryoSerializerInstance].getName)
       } else {
-        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+        ("javaSerializer",
+          classOf[JavaSerializer].getName,
+          classOf[JavaSerializerInstance].getName)
       }
     }
     // try conf from env, otherwise create a new one
@@ -1166,7 +1169,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
          $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
        }
      """
-    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
+    ctx.addSingleMutableState(serializerInstanceClass, serializer, serializerInit)
 
     // Code to serialize.
     val input = child.genCode(ctx)
@@ -1194,12 +1197,15 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
-    val serializer = ctx.freshName("serializer")
-    val (serializerClass, serializerInstanceClass) = {
+    val (serializer, serializerClass, serializerInstanceClass) = {
       if (kryo) {
-        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+        ("kryoSerializer",
+          classOf[KryoSerializer].getName,
+          classOf[KryoSerializerInstance].getName)
       } else {
-        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+        ("javaSerializer",
+          classOf[JavaSerializer].getName,
+          classOf[JavaSerializerInstance].getName)
       }
     }
     // try conf from env, otherwise create a new one
@@ -1212,7 +1218,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
          $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
        }
      """
-    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
+    ctx.addSingleMutableState(serializerInstanceClass, serializer, serializerInit)
 
     // Code to deserialize.
     val input = child.genCode(ctx)

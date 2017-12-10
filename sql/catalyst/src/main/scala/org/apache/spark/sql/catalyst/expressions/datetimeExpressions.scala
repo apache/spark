@@ -442,9 +442,9 @@ case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCas
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, time => {
       val cal = classOf[Calendar].getName
-      val c = ctx.freshName("cal")
+      val c = "calDayOfWeek"
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      ctx.addMutableState(cal, c, s"""$c = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+      ctx.addSingleMutableState(cal, c, s"""$c = $cal.getInstance($dtu.getTimeZone("UTC"));""")
       s"""
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
         ${ev.value} = $c.get($cal.DAY_OF_WEEK);
@@ -484,14 +484,14 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, time => {
       val cal = classOf[Calendar].getName
-      val c = ctx.freshName("cal")
+      val c = "calWeekOfYear"
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      ctx.addMutableState(cal, c,
+      ctx.addSingleMutableState(cal, c,
         s"""
-          $c = $cal.getInstance($dtu.getTimeZone("UTC"));
-          $c.setFirstDayOfWeek($cal.MONDAY);
-          $c.setMinimalDaysInFirstWeek(4);
-         """)
+           |$c = $cal.getInstance($dtu.getTimeZone("UTC"));
+           |$c.setFirstDayOfWeek($cal.MONDAY);
+           |$c.setMinimalDaysInFirstWeek(4);
+         """.stripMargin)
       s"""
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
         ${ev.value} = $c.get($cal.WEEK_OF_YEAR);
@@ -1015,11 +1015,11 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
          """.stripMargin)
       } else {
         val tzTerm = ctx.freshName("tz")
-        val utcTerm = ctx.freshName("utc")
+        val utcTerm = "tzUTC"
         val tzClass = classOf[TimeZone].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $dtu.getTimeZone("$tz");""")
-        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $dtu.getTimeZone("UTC");""")
+        ctx.addSingleMutableState(tzClass, utcTerm, s"""$utcTerm = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
            |${eval.code}
@@ -1191,11 +1191,11 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
          """.stripMargin)
       } else {
         val tzTerm = ctx.freshName("tz")
-        val utcTerm = ctx.freshName("utc")
+        val utcTerm = "tzUTC"
         val tzClass = classOf[TimeZone].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $dtu.getTimeZone("$tz");""")
-        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $dtu.getTimeZone("UTC");""")
+        ctx.addSingleMutableState(tzClass, utcTerm, s"""$utcTerm = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
            |${eval.code}

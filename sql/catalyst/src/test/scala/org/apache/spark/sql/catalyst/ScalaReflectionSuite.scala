@@ -19,10 +19,13 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.classTag
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow, UpCast}
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, DecodeUsingSerializer, EncodeUsingSerializer, NewInstance}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -355,5 +358,34 @@ class ScalaReflectionSuite extends SparkFunSuite {
   test("SPARK-22472: add null check for top-level primitive values") {
     assert(deserializerFor[Int].isInstanceOf[AssertNotNull])
     assert(!deserializerFor[String].isInstanceOf[AssertNotNull])
+  }
+
+  test("SPARK-22750: reuse serializer in DecodeUsingSerializer and EncodeUsingSerializer") {
+    val ctx = new CodegenContext
+    val integerClass = classOf[java.lang.Integer]
+    val enc = EncodeUsingSerializer(
+      NewInstance(integerClass, Seq.empty, ObjectType(integerClass)),
+      kryo = true)
+    DecodeUsingSerializer[java.lang.Integer](
+      enc, classTag[java.lang.Integer], kryo = true).genCode(ctx)
+    assert(ctx.mutableStates.length == 1)
+
+    val ctx2 = new CodegenContext
+    val enc2 = EncodeUsingSerializer(
+      NewInstance(integerClass, Seq.empty, ObjectType(integerClass)),
+      kryo = false)
+    DecodeUsingSerializer[java.lang.Integer](
+      enc2, classTag[java.lang.Integer], kryo = false).genCode(ctx2)
+    assert(ctx2.mutableStates.length == 1)
+
+    val ctx3 = new CodegenContext
+    val enc3 = EncodeUsingSerializer(
+      NewInstance(integerClass, Seq.empty, ObjectType(integerClass)),
+      kryo = false)
+    DecodeUsingSerializer[java.lang.Integer](
+      enc3, classTag[java.lang.Integer], kryo = true).genCode(ctx3)
+    // here we should have 2 because one is using javaSerializer, while the other is using
+    // kryoSerializer
+    assert(ctx3.mutableStates.length == 2)
   }
 }
