@@ -174,8 +174,9 @@ object EstimationUtils {
 
   /**
    * Returns the number of bins for column values in [lowerValue, higherValue].
-   * This is an overloaded method. The column value distribution is saved in an
-   * equi-height histogram.
+   * The column value distribution is saved in an equi-height histogram.  The return values is a
+   * double value is because we may return a portion of a bin. For example, a predicate
+   * "column = 8" may return the number of bins 0.2 if the holding bin has 5 distinct values.
    *
    * @param higherId id of the high end bin holding the high end value of a column range
    * @param lowerId id of the low end bin holding the low end value of a column range
@@ -190,6 +191,8 @@ object EstimationUtils {
       higherEnd: Double,
       lowerEnd: Double,
       histogram: Histogram): Double = {
+    assert(lowerId <= higherId)
+
     if (lowerId == higherId) {
       val curBin = histogram.bins(lowerId)
       getOccupation(higherEnd, lowerEnd, curBin)
@@ -204,54 +207,6 @@ object EstimationUtils {
       // the total length is lowerPart + higherPart + bins between them
       lowerPart + higherPart + higherId - lowerId - 1
     }
-  }
-
-  /**
-   * Returns the number of distinct values, ndv, for column values in [lowerEnd, higherEnd].
-   * The column value distribution is saved in an equi-height histogram.
-   *
-   * @param higherId id of the high end bin holding the high end value of a column range
-   * @param lowerId id of the low end bin holding the low end value of a column range
-   * @param higherEnd a given upper bound value of a specified column value range
-   * @param lowerEnd a given lower bound value of a specified column value range
-   * @param histogram a numeric equi-height histogram
-   * @return the number of distinct values, ndv, for column values in [lowerEnd, higherEnd].
-   */
-  def getOccupationNdv(
-      higherId: Int,
-      lowerId: Int,
-      higherEnd: Double,
-      lowerEnd: Double,
-      histogram: Histogram)
-    : Long = {
-    val ndv: Double = if (higherEnd == lowerEnd) {
-      1
-    } else if (lowerId == higherId) {
-      val curBin = histogram.bins(lowerId)
-      getOccupation(higherEnd, lowerEnd, curBin) * curBin.ndv
-    } else {
-      // compute how much the [lowerEnd, higherEnd] range occupies the bins in a histogram.
-      // Our computation has 3 parts: the smallest/min bin, the middle bins, the largest/max bin.
-      val minCurBin = histogram.bins(lowerId)
-      val minPartNdv = getOccupation(minCurBin.hi, lowerEnd, minCurBin) * minCurBin.ndv
-
-      val maxCurBin = histogram.bins(higherId)
-      val maxPartNdv = getOccupation(higherEnd, maxCurBin.lo, maxCurBin) * maxCurBin.ndv
-
-      // The total ndv is minPartNdv + maxPartNdv + Ndvs between them.
-      // In order to avoid counting same distinct value twice, we check if the upperBound value
-      // of next bin is equal to the hi value of the previous bin.  We bump up
-      // ndv value only if the hi values of two consecutive bins are different.
-      var middleNdv: Long = 0
-      for (i <- histogram.bins.indices) {
-        val bin = histogram.bins(i)
-        if (bin.hi != bin.lo && i >= lowerId + 1 && i <= higherId - 1) {
-          middleNdv += bin.ndv
-        }
-      }
-      minPartNdv + maxPartNdv + middleNdv
-    }
-    math.round(ndv)
   }
 
 }
