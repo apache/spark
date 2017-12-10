@@ -53,7 +53,7 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
    * (default = multinomial)
    * @group param
    */
-  final val modelType: StringParam = new StringParam(this, "modelType", "The model type " +
+  final val modelType: Param[String] = new StringParam(this, "modelType", "The model type " +
     s"which is a string. Default: ${NaiveBayes.Multinomial}", NaiveBayes.supportedModelTypes)
 
   /** @group getParam */
