@@ -60,16 +60,15 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
     val projectionCodes = exprVals.zip(index).map {
       case (ev, i) =>
         val e = expressions(i)
+        val value = ctx.addMutableState(ctx.javaType(e.dataType), "value")
         if (e.nullable) {
-          val isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, s"isNull_$i")
-          val value = ctx.addMutableState(ctx.javaType(e.dataType), s"value_$i")
+          val isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "isNull")
           (s"""
              ${ev.code}
              $isNull = ${ev.isNull};
              $value = ${ev.value};
             """, isNull, value, i)
         } else {
-          val value = ctx.addMutableState(ctx.javaType(e.dataType), s"value_$i")
           (s"""
              ${ev.code}
              $value = ${ev.value};
