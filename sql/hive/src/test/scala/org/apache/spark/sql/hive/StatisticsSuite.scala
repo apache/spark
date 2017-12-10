@@ -213,26 +213,24 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("SPARK- - read Hive's statistics for partition") {
+  test("SPARK-22745 - read Hive's statistics for partition") {
     val tableName = "hive_stats_part_table"
     withTable(tableName) {
-      withTempPath { path =>
-        sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
-        sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2017-01-01') SELECT * FROM src")
-        var partition = spark.sessionState.catalog
-          .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2017-01-01') SELECT * FROM src")
+      var partition = spark.sessionState.catalog
+        .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
 
-        assert(partition.stats.get.sizeInBytes == 5812)
-        assert(partition.stats.get.rowCount.isEmpty)
+      assert(partition.stats.get.sizeInBytes == 5812)
+      assert(partition.stats.get.rowCount.isEmpty)
 
-        hiveClient
-          .runSqlHive(s"ANALYZE TABLE $tableName PARTITION (ds='2017-01-01') COMPUTE STATISTICS")
-        partition = spark.sessionState.catalog
-          .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
+      hiveClient
+        .runSqlHive(s"ANALYZE TABLE $tableName PARTITION (ds='2017-01-01') COMPUTE STATISTICS")
+      partition = spark.sessionState.catalog
+        .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
 
-        assert(partition.stats.get.sizeInBytes == 5812)
-        assert(partition.stats.get.rowCount == Some(500))
-      }
+      assert(partition.stats.get.sizeInBytes == 5812)
+      assert(partition.stats.get.rowCount == Some(500))
     }
   }
 
