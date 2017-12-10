@@ -38,14 +38,16 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
 
   /**
    * Param for how to handle invalid data.
-   * Options are 'keep' (invalid data produces a vector of zeros) or 'error' (throw an error).
+   * Options are 'keep' (invalid data presented as an extra categorical feature) or
+   * 'error' (throw an error).
    * Default: "error"
    * @group param
    */
   @Since("2.3.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "How to handle invalid data " +
-    "Options are 'keep' (invalid data produces a vector of zeros) or error (throw an error).",
+    "Options are 'keep' (invalid data presented as an extra categorical feature) " +
+    "or error (throw an error).",
     ParamValidators.inArray(OneHotEncoderEstimator.supportedHandleInvalids))
 
   setDefault(handleInvalid, OneHotEncoderEstimator.ERROR_INVALID)
@@ -81,10 +83,11 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
 
     // Prepares output columns with proper attributes by examining input columns.
     val inputFields = $(inputCols).map(schema(_))
+    val keepInvalid = $(handleInvalid) == OneHotEncoderEstimator.KEEP_INVALID
 
     val outputFields = inputFields.zip(outputColNames).map { case (inputField, outputColName) =>
       OneHotEncoderCommon.transformOutputColumnSchema(
-        inputField, $(dropLast), outputColName)
+        inputField, $(dropLast), outputColName, keepInvalid)
     }
     StructType(schema.fields ++ outputFields)
   }
@@ -101,6 +104,10 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
  *
  * @note This is different from scikit-learn's OneHotEncoder, which keeps all categories.
  * The output vectors are sparse.
+ *
+ * When `handleInvalid` is configured to 'keep', an extra "category" indicating invalid values is
+ * added as last category. So when `dropLast` is true, invalid values are encoded as all-zeros
+ * vector.
  *
  * @see `StringIndexer` for converting categorical values into category indices
  */
@@ -153,8 +160,9 @@ class OneHotEncoderEstimator @Since("2.3.0") (@Since("2.3.0") override val uid: 
     if (columnToScanIndices.length > 0) {
       val inputColNames = columnToScanIndices.map($(inputCols)(_))
       val outputColNames = columnToScanIndices.map($(outputCols)(_))
+      val keepInvalid = $(handleInvalid) == OneHotEncoderEstimator.KEEP_INVALID
       val attrGroups = OneHotEncoderCommon.getOutputAttrGroupFromData(
-        dataset, $(dropLast), inputColNames, outputColNames)
+        dataset, $(dropLast), inputColNames, outputColNames, keepInvalid)
       attrGroups.zip(columnToScanIndices).foreach { case (attrGroup, idx) =>
         categorySizes(idx) = attrGroup.size
       }
@@ -193,19 +201,29 @@ class OneHotEncoderModel private[ml] (
     val emptyIndices = Array.empty[Int]
     val dropLast = getDropLast
     val handleInvalid = getHandleInvalid
+    val keepInvalid = handleInvalid == OneHotEncoderEstimator.KEEP_INVALID
 
     udf { (label: Double, size: Int) =>
-      if (label < size) {
-        Vectors.sparse(size, Array(label.toInt), oneValue)
-      } else if (label == size && dropLast) {
-        Vectors.sparse(size, emptyIndices, emptyValues)
+      val numCategory = if (!dropLast && keepInvalid) {
+        // When `handleInvalid` is 'keep' and `dropLast` is false, the last category is
+        // for invalid data.
+        size - 1
       } else {
-        if (handleInvalid == OneHotEncoderEstimator.ERROR_INVALID) {
-          throw new SparkException(s"Unseen value: $label. To handle unseen values, " +
-            s"set Param handleInvalid to ${OneHotEncoderEstimator.KEEP_INVALID}.")
-        } else {
-          Vectors.sparse(size, emptyIndices, emptyValues)
-        }
+        size
+      }
+
+      if (label < numCategory) {
+        Vectors.sparse(size, Array(label.toInt), oneValue)
+      } else if (label == numCategory && dropLast && !keepInvalid) {
+        Vectors.sparse(size, emptyIndices, emptyValues)
+      } else if (dropLast && keepInvalid) {
+        Vectors.sparse(size, emptyIndices, emptyValues)
+      } else if (keepInvalid) {
+        Vectors.sparse(size, Array(size - 1), oneValue)
+      } else {
+        assert(handleInvalid == OneHotEncoderEstimator.ERROR_INVALID)
+        throw new SparkException(s"Unseen value: $label. To handle unseen values, " +
+          s"set Param handleInvalid to ${OneHotEncoderEstimator.KEEP_INVALID}.")
       }
     }
   }
@@ -262,12 +280,6 @@ class OneHotEncoderModel private[ml] (
 
   @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    if (getDropLast && getHandleInvalid == OneHotEncoderEstimator.KEEP_INVALID) {
-      throw new IllegalArgumentException("When Param handleInvalid is set to " +
-        s"${OneHotEncoderEstimator.KEEP_INVALID}, Param dropLast can't be true, " +
-        "because last category and invalid values will conflict in encoded vector.")
-    }
-
     val transformedSchema = transformSchema(dataset.schema, logging = true)
 
     val encodedColumns = (0 until $(inputCols).length).map { idx =>
@@ -390,13 +402,16 @@ private[feature] object OneHotEncoderCommon {
   def transformOutputColumnSchema(
       inputCol: StructField,
       dropLast: Boolean,
-      outputColName: String): StructField = {
+      outputColName: String,
+      keepInvalid: Boolean = false): StructField = {
     val outputAttrNames = genOutputAttrNames(inputCol)
     val filteredOutputAttrNames = outputAttrNames.map { names =>
-      if (dropLast) {
+      if (dropLast && !keepInvalid) {
         require(names.length > 1,
           s"The input column ${inputCol.name} should have at least two distinct values.")
         names.dropRight(1)
+      } else if (!dropLast && keepInvalid) {
+        names ++ Seq("invalidValues")
       } else {
         names
       }
@@ -413,7 +428,8 @@ private[feature] object OneHotEncoderCommon {
       dataset: Dataset[_],
       dropLast: Boolean,
       inputColNames: Seq[String],
-      outputColNames: Seq[String]): Seq[AttributeGroup] = {
+      outputColNames: Seq[String],
+      handleInvalid: Boolean = false): Seq[AttributeGroup] = {
     // The RDD approach has advantage of early-stop if any values are invalid. It seems that
     // DataFrame ops don't have equivalent functions.
     val columns = inputColNames.map { inputColName =>
@@ -440,7 +456,7 @@ private[feature] object OneHotEncoderCommon {
     ).map(_.toInt + 1)
 
     outputColNames.zip(numAttrsArray).map { case (outputColName, numAttrs) =>
-      createAttrGroupForAttrNames(outputColName, dropLast, numAttrs)
+      createAttrGroupForAttrNames(outputColName, dropLast, numAttrs, handleInvalid)
     }
   }
 
@@ -448,9 +464,16 @@ private[feature] object OneHotEncoderCommon {
   def createAttrGroupForAttrNames(
       outputColName: String,
       dropLast: Boolean,
-      numAttrs: Int): AttributeGroup = {
+      numAttrs: Int,
+      keepInvalid: Boolean = false): AttributeGroup = {
     val outputAttrNames = Array.tabulate(numAttrs)(_.toString)
-    val filtered = if (dropLast) outputAttrNames.dropRight(1) else outputAttrNames
+    val filtered = if (dropLast && !keepInvalid) {
+      outputAttrNames.dropRight(1)
+    } else if (!dropLast && keepInvalid) {
+      outputAttrNames ++ Seq("invalidValues")
+    } else {
+      outputAttrNames
+    }
     genOutputAttrGroup(Some(filtered), outputColName)
   }
 }

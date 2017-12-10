@@ -251,43 +251,31 @@ class OneHotEncoderEstimatorSuite
   }
 
   test("Keep on invalid values") {
-    val trainingData = Seq((0, 0), (1, 1))
+    val trainingData = Seq((0, 0), (1, 1), (2, 2))
     val trainingDF = trainingData.toDF("id", "a")
-    val testData = Seq((0, 0), (1, 2))
+    val testData = Seq((0, 0), (1, 1), (2, 3))
     val testDF = testData.toDF("id", "a")
 
-    val encoder = new OneHotEncoderEstimator()
-      .setInputCols(Array("a"))
-      .setOutputCols(Array("encoded"))
-      .setHandleInvalid("keep")
-      .setDropLast(false)
+    val dropLasts = Seq(false, true)
+    val expectedOutput = Seq(
+      Set((0, Seq(1.0, 0.0, 0.0, 0.0)), (1, Seq(0.0, 1.0, 0.0, 0.0)), (2, Seq(0.0, 0.0, 0.0, 1.0))),
+      Set((0, Seq(1.0, 0.0, 0.0)), (1, Seq(0.0, 1.0, 0.0)), (2, Seq(0.0, 0.0, 0.0))))
 
-    val model = encoder.fit(trainingDF)
-    val encoded = model.transform(testDF)
+    dropLasts.zipWithIndex.foreach { case (dropLast, idx) =>
+      val encoder = new OneHotEncoderEstimator()
+        .setInputCols(Array("a"))
+        .setOutputCols(Array("encoded"))
+        .setHandleInvalid("keep")
+        .setDropLast(dropLast)
 
-    val output = encoded.select("id", "encoded").rdd.map { r =>
-      val vec = r.getAs[Vector](1)
-      (r.getInt(0), vec(0), vec(1))
-    }.collect().toSet
-    val expected = Set((0, 1.0, 0.0), (1, 0.0, 0.0))
-    assert(output === expected)
-  }
+      val model = encoder.fit(trainingDF)
+      val encoded = model.transform(testDF)
 
-  test("Can't set dropLast as true and keep on invalid values") {
-    val trainingData = Seq((0, 0), (1, 1))
-    val trainingDF = trainingData.toDF("id", "a")
-    val testData = Seq((0, 0), (1, 2))
-    val testDF = testData.toDF("id", "a")
-
-    val encoder = new OneHotEncoderEstimator()
-      .setInputCols(Array("a"))
-      .setOutputCols(Array("encoded"))
-      .setHandleInvalid("keep")
-
-    val model = encoder.fit(trainingDF)
-    val err = intercept[IllegalArgumentException] {
-      model.transform(testDF)
+      val output = encoded.select("id", "encoded").rdd.map { r =>
+        val vec = r.getAs[Vector](1)
+        (r.getInt(0), vec.toArray.toSeq)
+      }.collect().toSet
+      assert(output === expectedOutput(idx))
     }
-    err.getMessage.contains("When Param handleInvalid is set to keep, Param dropLast can't be true")
   }
 }
