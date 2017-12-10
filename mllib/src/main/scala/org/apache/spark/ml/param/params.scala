@@ -18,7 +18,7 @@
 package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
-import java.util.{List => JList, Locale}
+import java.util.{List => JList}
 import java.util.NoSuchElementException
 
 import scala.annotation.varargs
@@ -440,7 +440,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
  * Specialized version of `Param[String]` for Java.
  */
 @DeveloperApi
-private[ml] class StringParam(parent: Params, name: String, doc: String, isValid: String => Boolean)
+class StringParam(parent: Params, name: String, doc: String, isValid: String => Boolean)
   extends Param[String](parent, name, doc, isValid) {
 
   private var options: Option[Array[String]] = None
@@ -457,13 +457,13 @@ private[ml] class StringParam(parent: Params, name: String, doc: String, isValid
 
   private[spark] def getOptions: Option[Array[String]] = options
 
-  /** Creates a param pair with a `java.util.List` of values (for Java and Python). */
+  /** Creates a param pair with given value (for Java). */
   override def w(value: String): ParamPair[String] = super.w(value)
 
   override def validate(value: String): Unit = {
     if (!isValid(value)) {
       val optionStr = options match {
-        case Some(a) => s" Supported options: ${a.mkString(", ")}."
+        case Some(a) => s" Supported options (case-insensitive): ${a.mkString(", ")}."
         case None => ""
       }
       throw new IllegalArgumentException(
@@ -732,12 +732,6 @@ trait Params extends Identifiable with Serializable {
    * An alias for `getOrDefault()`.
    */
   protected final def $[T](param: Param[T]): T = getOrDefault(param)
-
-  /**
-   * Return lower case (Local.ROOT) of `getOrDefault()` for String params.
-   */
-  protected[ml] final def $lc(param: Param[String]): String = getOrDefault(param)
-    .toLowerCase(Locale.ROOT)
 
   /**
    * Sets a default value for a param.

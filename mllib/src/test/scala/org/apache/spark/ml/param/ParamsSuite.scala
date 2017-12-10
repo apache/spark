@@ -169,16 +169,16 @@ class ParamsSuite extends SparkFunSuite {
       }
     }
 
-    { // StringArrayParam
-    // scalastyle:off nonascii
-    val param = new StringParam(dummy, "name", "doc", Array("x", "y"))
+    { // StringParam
+      // scalastyle:off nonascii
+      val param = new StringParam(dummy, "name", "doc")
       val values: Seq[String] = Seq("", "1", "abc", "ABC", "中文", "quote\"", "newline\n")
       for (value <- values) {
         val json = param.jsonEncode(value)
         assert(param.jsonDecode(json) === value)
       }
+      // scalastyle:on nonascii
     }
-    // scalastyle:on nonascii
 
     { // StringArrayParam
       val param = new StringArrayParam(dummy, "name", "doc")
@@ -413,7 +413,6 @@ class ParamsSuite extends SparkFunSuite {
     val objOut = new ObjectOutputStream(new ByteArrayOutputStream())
     objOut.writeObject(filteredParamMap)
   }
-
 }
 
 object ParamsSuite extends SparkFunSuite {
@@ -435,7 +434,7 @@ object ParamsSuite extends SparkFunSuite {
       assert(p.parent === obj.uid)
       assert(obj.getParam(p.name) === p)
       p match {
-        case sp: StringParam => checkStringParamsCI(obj, sp)
+        case sp: StringParam => checkStringParamsCI(obj.copy(ParamMap.empty), sp)
         case _ => // do nothing
       }
       // TODO: Check that setters return self, which needs special handling for generic types.

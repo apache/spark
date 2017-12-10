@@ -53,7 +53,7 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
    * (default = multinomial)
    * @group param
    */
-  final val modelType: Param[String] = new StringParam(this, "modelType", "The model type " +
+  final val modelType: StringParam = new StringParam(this, "modelType", "The model type " +
     s"which is a string. Default: ${NaiveBayes.Multinomial}", NaiveBayes.supportedModelTypes)
 
   /** @group getParam */
@@ -134,12 +134,12 @@ class NaiveBayes @Since("1.5.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val modelTypeValue = $lc(modelType)
+    val modelTypeValue = $(modelType)
     val requireValues: Vector => Unit = {
       modelTypeValue match {
-        case Multinomial =>
+        case m if m.equalsIgnoreCase(Multinomial) =>
           requireNonnegativeValues
-        case Bernoulli =>
+        case b if b.equalsIgnoreCase(Bernoulli) =>
           requireZeroOneBernoulliValues
         case _ =>
           // This should never happen.
@@ -187,9 +187,10 @@ class NaiveBayes @Since("1.5.0") (
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
       labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
-      val thetaLogDenom = $lc(modelType) match {
-        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
-        case Bernoulli => math.log(n + 2.0 * lambda)
+      val thetaLogDenom = modelTypeValue match {
+        case m if m.equalsIgnoreCase(Multinomial) =>
+          math.log(sumTermFreqs.values.sum + numFeatures * lambda)
+        case b if b.equalsIgnoreCase(Bernoulli) => math.log(n + 2.0 * lambda)
         case _ =>
           // This should never happen.
           throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
@@ -216,10 +217,10 @@ class NaiveBayes @Since("1.5.0") (
 @Since("1.6.0")
 object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   /** String name for multinomial model type. */
-  private[classification] val Multinomial: String = "multinomial".toLowerCase(Locale.ROOT)
+  private[classification] val Multinomial: String = "multinomial"
 
   /** String name for Bernoulli model type. */
-  private[classification] val Bernoulli: String = "bernoulli".toLowerCase(Locale.ROOT)
+  private[classification] val Bernoulli: String = "bernoulli"
 
   /* Set of modelTypes that NaiveBayes supports */
   private[classification] val supportedModelTypes = Array(Multinomial, Bernoulli)
@@ -282,9 +283,9 @@ class NaiveBayesModel private[ml] (
    * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
    * application of this condition (in predict function).
    */
-  private lazy val (thetaMinusNegTheta, negThetaSum) = $lc(modelType) match {
-    case Multinomial => (None, None)
-    case Bernoulli =>
+  private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
+    case m if m.equalsIgnoreCase(Multinomial) => (None, None)
+    case b if b.equalsIgnoreCase(Bernoulli) =>
       val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
       val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
       val thetaMinusNegTheta = theta.map { value =>
@@ -320,10 +321,10 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    $lc(modelType) match {
-      case Multinomial =>
+    $(modelType) match {
+      case m if m.equalsIgnoreCase(Multinomial) =>
         multinomialCalculation(features)
-      case Bernoulli =>
+      case b if b.equalsIgnoreCase(Bernoulli) =>
         bernoulliCalculation(features)
       case _ =>
         // This should never happen.
