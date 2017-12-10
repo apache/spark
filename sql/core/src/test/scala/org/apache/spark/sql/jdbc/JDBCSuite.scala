@@ -1064,10 +1064,10 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("unsupported types") {
-    var e = intercept[SparkException] {
+    var e = intercept[SQLException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
     }.getMessage
-    assert(e.contains("java.lang.UnsupportedOperationException: unimplemented"))
+    assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
     e = intercept[SQLException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
     }.getMessage
