@@ -217,7 +217,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
-        for ((_, executorData) <- executorDataMap) {
+        for ((executorId, executorData) <- executorDataMap) {
+          synchronized {
+            executorsPendingToRemove(executorId) = false
+          }
           executorData.executorEndpoint.send(StopExecutor)
         }
         context.reply(true)
