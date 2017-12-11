@@ -507,7 +507,7 @@ case class SortMergeJoinExec(
   }
 
   /**
-   * Creates variables for left part of result row.
+   * Creates variables and declarations for left part of result row.
    *
    * In order to defer the access after condition and also only access once in the loop,
    * the variables should be declared separately from accessing the columns, we can't use the
@@ -518,21 +518,25 @@ case class SortMergeJoinExec(
     left.output.zipWithIndex.map { case (a, i) =>
       val value = ctx.freshName("value")
       val valueCode = ctx.getValue(leftRow, a.dataType, i.toString)
+      val javaType = ctx.javaType(a.dataType)
+      val defaultValue = ctx.defaultValue(a.dataType)
       if (a.nullable) {
         val isNull = ctx.freshName("isNull")
         val code =
           s"""
              |$isNull = $leftRow.isNullAt($i);
-             |$value = $isNull ? ${ctx.defaultValue(a.dataType)} : ($valueCode);
+             |$value = $isNull ? $defaultValue : ($valueCode);
            """.stripMargin
-        (ExprCode(code, isNull, value),
+        val leftVarsDecl =
           s"""
              |boolean $isNull = false;
-             |${ctx.javaType(a.dataType)} $value = ${ctx.defaultValue(a.dataType)};
-           """.stripMargin)
+             |$javaType $value = $defaultValue;
+           """.stripMargin
+        (ExprCode(code, isNull, value), leftVarsDecl)
       } else {
-        (ExprCode(s"$value = $valueCode;", "false", value),
-          s"""${ctx.javaType(a.dataType)} $value = ${ctx.defaultValue(a.dataType)};""")
+        val code = s"$value = $valueCode;"
+        val leftVarsDecl = s"""$javaType $value = $defaultValue;"""
+        (ExprCode(code, "false", value), leftVarsDecl)
       }
     }.unzip
   }
