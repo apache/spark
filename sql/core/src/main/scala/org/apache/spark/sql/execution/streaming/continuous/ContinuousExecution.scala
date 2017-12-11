@@ -165,8 +165,7 @@ class ContinuousExecution(
           s"Invalid reader: ${Utils.truncatedString(output, ",")} != " +
             s"${Utils.truncatedString(newOutput, ",")}")
         replacements ++= output.zip(newOutput)
-
-        // TODO multiple sources maybe? offsets(0) has to be changed to track source id
+        
         reader.setOffset(java.util.Optional.ofNullable(offsets.offsets(0).orNull))
         DataSourceV2Relation(newOutput, reader)
     }
@@ -176,11 +175,9 @@ class ContinuousExecution(
     val triggerLogicalPlan = withNewSources transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) =>
         replacementMap(a).withMetadata(a.metadata)
-      // TODO properly handle timestamp
-      case ct: CurrentTimestamp =>
-        CurrentBatchTimestamp(0, ct.dataType)
-      case cd: CurrentDate =>
-        CurrentBatchTimestamp(0, cd.dataType, cd.timeZoneId)
+      case (_: CurrentTimestamp | _: CurrentDate) =>
+        throw new IllegalStateException(
+          "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
     val writer = sink.createContinuousWriter(
