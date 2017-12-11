@@ -169,10 +169,12 @@ class CodegenContext {
     mutable.ArrayBuffer.empty[(String, String, String)]
 
   /**
-   * A set containing the names of the mutable states which have been defined so far using
-   * `addSingleMutableState`.
+   * A map containing the mutable states which have been defined so far using
+   * `addSingleMutableState`. Each entry contains the name of the mutable state as key and its
+   * Java type and init code as value.
    */
-  val singleMutableStates: mutable.Set[String] = mutable.Set.empty[String]
+  val singleMutableStates: mutable.Map[String, (String, String)] =
+    mutable.Map.empty[String, (String, String)]
 
   /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
@@ -205,9 +207,16 @@ class CodegenContext {
       javaType: String,
       variableName: String,
       initCode: String = ""): Unit = {
-    if (!singleMutableStates.contains(variableName)) {
+    val existingMutableState = singleMutableStates.get(variableName)
+    if (existingMutableState.isEmpty) {
       addMutableState(javaType, variableName, initCode)
-      singleMutableStates += variableName
+      singleMutableStates(variableName) = (javaType, initCode)
+    } else {
+      val (prevJavaType, prevInitCode) = existingMutableState.get
+      assert(prevJavaType == javaType, s"$variableName has already been defined with type " +
+        s"$prevJavaType and now it is tried to define again with type $javaType.")
+      assert(prevInitCode == initCode, s"$variableName has already been defined " +
+        s"with different initialization statements.")
     }
   }
 
