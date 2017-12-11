@@ -481,7 +481,7 @@ pyspark_ml = Module(
 
 sparkr = Module(
     name="sparkr",
-    dependencies=[hive, mllib],
+    dependencies=[hive, mllib, hive_thriftserver],
     source_file_regexes=[
         "R/",
     ],
