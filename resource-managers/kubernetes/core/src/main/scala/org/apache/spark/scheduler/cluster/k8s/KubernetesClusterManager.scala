@@ -20,7 +20,7 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.Config
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
@@ -33,6 +33,10 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
   override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
 
   override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
+    if (masterURL.startsWith("k8s") && sc.deployMode == "client") {
+      throw new SparkException("Client mode is currently not supported for Kubernetes.")
+    }
+
     new TaskSchedulerImpl(sc)
   }
 
@@ -45,7 +49,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
       KUBERNETES_MASTER_INTERNAL_URL,
       Some(sparkConf.get(KUBERNETES_NAMESPACE)),
-      APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+      KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
       sparkConf,
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
