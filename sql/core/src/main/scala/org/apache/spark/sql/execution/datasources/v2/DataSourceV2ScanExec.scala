@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.StreamExecution
-import org.apache.spark.sql.execution.streaming.continuous.{ContinuousDataSourceRDD, EpochCoordinatorRef, SetReaderPartitions}
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousDataSourceRDD, ContinuousExecution, EpochCoordinatorRef, SetReaderPartitions}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.StructType
 
@@ -57,7 +57,7 @@ case class DataSourceV2ScanExec(
     val inputRDD = reader match {
       case _: ContinuousReader =>
         EpochCoordinatorRef.get(
-          sparkContext.getLocalProperty(StreamExecution.QUERY_ID_KEY), sparkContext.env)
+          sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
           .askSync[Unit](SetReaderPartitions(readTasks.size()))
 
         new ContinuousDataSourceRDD(sparkContext, readTasks)

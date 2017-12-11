@@ -59,7 +59,7 @@ class ContinuousDataSourceRDD(
     val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](1024)
 
     val epochEndpoint = EpochCoordinatorRef.get(
-      context.getLocalProperty(StreamExecution.QUERY_ID_KEY), SparkEnv.get)
+      context.getLocalProperty(ContinuousExecution.RUN_ID_KEY), SparkEnv.get)
     val itr = new Iterator[UnsafeRow] {
       private var currentRow: UnsafeRow = _
       private var currentOffset: PartitionOffset =
@@ -117,7 +117,7 @@ class EpochPollThread(
     context: TaskContext)
   extends Thread with Logging {
   private val epochEndpoint = EpochCoordinatorRef.get(
-    context.getLocalProperty(StreamExecution.QUERY_ID_KEY), SparkEnv.get)
+    context.getLocalProperty(ContinuousExecution.RUN_ID_KEY), SparkEnv.get)
   private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
   override def run(): Unit = {

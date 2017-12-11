@@ -208,13 +208,14 @@ class ContinuousExecution(
 
     sparkSession.sparkContext.setLocalProperty(
       ContinuousExecution.START_EPOCH_KEY, currentBatchId.toString)
+    sparkSession.sparkContext.setLocalProperty(
+      ContinuousExecution.RUN_ID_KEY, runId.toString)
 
-    // Use the parent Spark session since it's where this query is registered.
-    // TODO: we should use runId for the endpoint to be safe against cross-contamination
-    // from failed runs
+    // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint =
-    EpochCoordinatorRef.create(
-      writer.get(), reader, currentBatchId, id.toString, sparkSession, SparkEnv.get)
+      EpochCoordinatorRef.create(
+        writer.get(), reader, currentBatchId,
+        id.toString, runId.toString, sparkSession, SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {
@@ -321,4 +322,5 @@ class ContinuousExecution(
 
 object ContinuousExecution {
   val START_EPOCH_KEY = "__continuous_start_epoch"
+  val RUN_ID_KEY = "__run_id"
 }

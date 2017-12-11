@@ -251,7 +251,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     def apply(): AssertOnQuery =
       Execute {
         case s: ContinuousExecution =>
-          val newEpoch = EpochCoordinatorRef.get(s.id.toString, SparkEnv.get)
+          val newEpoch = EpochCoordinatorRef.get(s.runId.toString, SparkEnv.get)
             .askSync[Long](IncrementAndGetEpoch())
           s.awaitEpoch(newEpoch - 1)
         case _ => throw new IllegalStateException("microbatch cannot increment epoch")

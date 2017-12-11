@@ -63,7 +63,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceV2Writer, query: SparkPlan)
       val runTask = writer match {
         case w: ContinuousWriter =>
           EpochCoordinatorRef.get(
-            sparkContext.getLocalProperty(StreamExecution.QUERY_ID_KEY), sparkContext.env)
+            sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
             .askSync[Unit](SetWriterPartitions(rdd.getNumPartitions))
 
           (context: TaskContext, iter: Iterator[InternalRow]) =>
@@ -129,7 +129,7 @@ object DataWritingSparkTask extends Logging {
       context: TaskContext,
       iter: Iterator[InternalRow]): WriterCommitMessage = {
     val dataWriter = writeTask.createDataWriter(context.partitionId(), context.attemptNumber())
-    val queryId = context.getLocalProperty(StreamExecution.QUERY_ID_KEY)
+    val runId = context.getLocalProperty(ContinuousExecution.RUN_ID_KEY)
     val currentMsg: WriterCommitMessage = null
     var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
@@ -141,7 +141,7 @@ object DataWritingSparkTask extends Logging {
           logInfo(s"Writer for partition ${context.partitionId()} is committing.")
           val msg = dataWriter.commit()
           logInfo(s"Writer for partition ${context.partitionId()} committed.")
-          EpochCoordinatorRef.get(queryId, SparkEnv.get).send(
+          EpochCoordinatorRef.get(runId, SparkEnv.get).send(
             CommitPartitionEpoch(context.partitionId(), currentEpoch, msg)
           )
           currentEpoch += 1

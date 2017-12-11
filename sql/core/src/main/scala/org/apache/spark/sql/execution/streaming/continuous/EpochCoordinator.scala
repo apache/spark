@@ -51,10 +51,7 @@ case class IncrementAndGetEpoch()
 
 /** Helper object used to create reference to [[EpochCoordinator]]. */
 object EpochCoordinatorRef extends Logging {
-
-  private val endpointNamePrefix = "EpochCoordinator-"
-
-  private def endpointName(queryId: String) = s"EpochCoordinator-$queryId"
+  private def endpointName(runId: String) = s"EpochCoordinator-$runId"
 
   /**
    * Create a reference to a new [[EpochCoordinator]].
@@ -64,16 +61,17 @@ object EpochCoordinatorRef extends Logging {
       reader: ContinuousReader,
       startEpoch: Long,
       queryId: String,
+      runId: String,
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
     val coordinator = new EpochCoordinator(writer, reader, startEpoch, queryId, session, env.rpcEnv)
-    val ref = env.rpcEnv.setupEndpoint(endpointName(queryId), coordinator)
+    val ref = env.rpcEnv.setupEndpoint(endpointName(runId), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
   }
 
-  def get(queryId: String, env: SparkEnv): RpcEndpointRef = synchronized {
-    val rpcEndpointRef = RpcUtils.makeDriverRef(endpointName(queryId), env.conf, env.rpcEnv)
+  def get(runId: String, env: SparkEnv): RpcEndpointRef = synchronized {
+    val rpcEndpointRef = RpcUtils.makeDriverRef(endpointName(runId), env.conf, env.rpcEnv)
     logDebug("Retrieved existing EpochCoordinator endpoint")
     rpcEndpointRef
   }
