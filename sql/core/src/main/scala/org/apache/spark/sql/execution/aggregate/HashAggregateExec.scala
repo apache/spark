@@ -309,18 +309,11 @@ case class HashAggregateExec(
       subExprs: Map[Expression, SubExprEliminationState],
       otherArgs: Seq[(String, String)] = Seq.empty): Seq[String] = {
     aggExprs.zipWithIndex.map { case (aggExpr, i) =>
-      // The maximum length of parameters in non-static Java methods is 254, but a parameter of
-      // type long or double contributes two units to the length. So, this method gives up
-      // splitting the code if the parameter length goes over 127.
       val args = (getInputVariableReferences(ctx, aggExpr, subExprs) ++ otherArgs).toSeq
 
-      // This is for testing/benchmarking only
-      val maxParamNumInJavaMethod =
-          sqlContext.getConf("spark.sql.codegen.aggregate.maxParamNumInJavaMethod", null) match {
-        case null | "" => 127
-        case param => param.toInt
-      }
-      if (args.size <= maxParamNumInJavaMethod) {
+      // This method gives up splitting the code if the parameter length goes over
+      // `maxParamNumInJavaMethod`.
+      if (args.size <= sqlContext.conf.maxParamNumInJavaMethod) {
         val doAggVal = ctx.freshName(s"doAggregateVal_${aggExpr.prettyName}")
         val argList = args.map(a => s"${a._1} ${a._2}").mkString(", ")
         val doAggValFuncName = ctx.addNewFunction(doAggVal,
