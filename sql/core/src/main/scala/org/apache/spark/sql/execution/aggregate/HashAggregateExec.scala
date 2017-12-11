@@ -946,7 +946,10 @@ case class HashAggregateExec(
       }
 
       val updateAggValCode = splitAggregateExpressions(
-        ctx, boundUpdateExpr, evalAndUpdateCodes, subExprs.states,
+        ctx,
+        boundUpdateExpr,
+        evalAndUpdateCodes,
+        subExprs.states,
         Seq(("InternalRow", unsafeRowBuffer)))
 
       s"""
@@ -988,7 +991,10 @@ case class HashAggregateExec(
         }
 
         val updateAggValCode = splitAggregateExpressions(
-          ctx, boundUpdateExpr, evalAndUpdateCodes, subExprs.states,
+          ctx,
+          boundUpdateExpr,
+          evalAndUpdateCodes,
+          subExprs.states,
           Seq(("InternalRow", fastRowBuffer)))
 
         // If fast hash map is on, we first generate code to update row in fast hash map, if the
