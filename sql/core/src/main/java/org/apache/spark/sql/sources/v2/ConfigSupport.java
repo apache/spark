@@ -30,33 +30,9 @@ import java.util.Map;
 public interface ConfigSupport {
 
     /**
-     * Create a list of key-prefixes, all session configs that match at least one of the prefixes
-     * will be propagated to the data source options.
-     * If the returned list is empty, no session config will be propagated.
+     * Name for the specified data source, will extract all session configs that starts with
+     * `spark.datasource.$name`, turn `spark.datasource.$name.xxx -&gt; yyy` into
+     * `xxx -&gt; yyy`, and propagate them to all data source operations in this session.
      */
-    List<String> getConfigPrefixes();
-
-    /**
-     * Create a mapping from session config names to data source option names. If a propagated
-     * session config's key doesn't exist in this mapping, the "spark.sql.${source}" prefix will
-     * be trimmed. For example, if the data source name is "parquet", perform the following config
-     * key mapping by default:
-     * "spark.sql.parquet.int96AsTimestamp" -&gt; "int96AsTimestamp",
-     * "spark.sql.parquet.compression.codec" -&gt; "compression.codec",
-     * "spark.sql.columnNameOfCorruptRecord" -&gt; "columnNameOfCorruptRecord".
-     *
-     * If the mapping is specified, for example, the returned map contains an entry
-     * ("spark.sql.columnNameOfCorruptRecord" -&gt; "colNameCorrupt"), then the session config
-     * "spark.sql.columnNameOfCorruptRecord" will be converted to "colNameCorrupt" in
-     * {@link DataSourceV2Options}.
-     */
-    Map<String, String> getConfigMapping();
-
-    /**
-     * Create a list of valid data source option names. When the list is specified, a session
-     * config will NOT be propagated if its corresponding option name is not in the list.
-     *
-     * If the returned list is empty, don't check the option names.
-     */
-    List<String> getValidOptions();
+    String name();
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.sources.v2
 
-import java.util
 import java.util.{ArrayList, List => JList}
 
 import test.org.apache.spark.sql.sources.v2._
@@ -35,6 +34,8 @@ import org.apache.spark.sql.types.StructType
 class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  private val dsName = "userDefinedDataSource"
+
   test("simplest implementation") {
     Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
       withClue(cls.getName) {
@@ -47,32 +48,18 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   }
 
   test("simple implementation with config support") {
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false",
-        SQLConf.PARQUET_COMPRESSION.key -> "uncompressed",
-        SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "32",
-        SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM.key -> "10000") {
+    // Only match configs with keys start with "spark.datasource.${dsName}".
+    withSQLConf(s"spark.datasource.$dsName.foo.bar" -> "false",
+        s"spark.datasource.$dsName.whateverConfigName" -> "123",
+        s"spark.sql.$dsName.config.name" -> "false",
+        s"spark.datasource.another.config.name" -> "123") {
       val cs = classOf[DataSourceV2WithConfig].newInstance().asInstanceOf[ConfigSupport]
-      val confs = DataSourceV2ConfigSupport.withSessionConfig(cs, "parquet", SQLConf.get)
-      assert(confs.size == 3)
-      assert(confs.keySet.filter(_.startsWith("spark.sql.parquet")).size == 0)
-      assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
-      assert(confs.keySet.contains("compressionCodec"))
-      assert(confs.keySet.contains("sources.parallelPartitionDiscovery.threshold"))
-    }
-  }
-
-  test("config support with validOptions") {
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false",
-      SQLConf.PARQUET_COMPRESSION.key -> "uncompressed",
-      SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "32",
-      SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM.key -> "10000") {
-      val cs = classOf[DataSourceV2WithValidOptions].newInstance().asInstanceOf[ConfigSupport]
-      val confs = DataSourceV2ConfigSupport.withSessionConfig(cs, "parquet", SQLConf.get)
+      val confs = DataSourceV2ConfigSupport.withSessionConfig(cs.name, SQLConf.get)
       assert(confs.size == 2)
-      assert(confs.keySet.filter(_.startsWith("spark.sql.parquet")).size == 0)
+      assert(confs.keySet.filter(_.startsWith("spark.datasource")).size == 0)
       assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
-      assert(confs.keySet.contains("compressionCodec"))
-      assert(confs.keySet.contains("sources.parallelPartitionDiscovery.threshold"))
+      assert(confs.keySet.contains("foo.bar"))
+      assert(confs.keySet.contains("whateverConfigName"))
     }
   }
 
@@ -214,29 +201,7 @@ class SimpleReadTask(start: Int, end: Int) extends ReadTask[Row] with DataReader
 
 class DataSourceV2WithConfig extends SimpleDataSourceV2 with ConfigSupport {
 
-  override def getConfigPrefixes: JList[String] = {
-    java.util.Arrays.asList(
-      "spark.sql.parquet",
-      "spark.sql.sources.parallelPartitionDiscovery.threshold")
-  }
-
-  override def getConfigMapping: util.Map[String, String] = {
-    val configMap = new util.HashMap[String, String]()
-    configMap.put("spark.sql.parquet.compression.codec", "compressionCodec")
-    configMap
-  }
-
-  override def getValidOptions: JList[String] = new util.ArrayList[String]()
-}
-
-class DataSourceV2WithValidOptions extends DataSourceV2WithConfig {
-
-  override def getValidOptions: JList[String] = {
-    java.util.Arrays.asList(
-      "sources.parallelPartitionDiscovery.threshold",
-      "compressionCodec",
-      "not.exist.option")
-  }
+  override def name: String = "userDefinedDataSource"
 }
 
 class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {

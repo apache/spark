@@ -29,57 +29,29 @@ import org.apache.spark.sql.sources.v2.ConfigSupport
 private[sql] object DataSourceV2ConfigSupport extends Logging {
 
   /**
-   * Helper method to propagate session configs with config key that matches at least one of the
-   * given prefixes to the corresponding data source options.
+   * Helper method that turns session configs with config keys that start with
+   * `spark.datasource.$name` into k/v pairs, the k/v pairs will be used to create data source
+   * options.
+   * A session config `spark.datasource.$name.xxx -> yyy` will be transformed into
+   * `xxx -> yyy`.
    *
-   * @param cs the session config propagate help class
-   * @param source the data source format
+   * @param name the data source name
    * @param conf the session conf
-   * @return an immutable map that contains all the session configs that should be propagated to
-   *         the data source.
+   * @return an immutable map that contains all the extracted and transformed k/v pairs.
    */
   def withSessionConfig(
-      cs: ConfigSupport,
-      source: String,
+      name: String,
       conf: SQLConf): immutable.Map[String, String] = {
-    val prefixes = cs.getConfigPrefixes
-    require(prefixes != null, "The config key-prefixes cann't be null.")
-    val mapping = cs.getConfigMapping.asScala
-    val validOptions = cs.getValidOptions
-    require(validOptions != null, "The valid options list cann't be null.")
+    require(name != null, "The data source name can't be null.")
 
-    val pattern = Pattern.compile(s"spark\\.sql(\\.$source)?\\.(.*)")
+    val pattern = Pattern.compile(s"spark\\.datasource\\.$name\\.(.*)")
     val filteredConfigs = conf.getAllConfs.filterKeys { confKey =>
-      prefixes.asScala.exists(confKey.startsWith(_))
+      confKey.startsWith(s"spark.datasource.$name")
     }
-    val convertedConfigs = filteredConfigs.map{ entry =>
-      val newKey = mapping.get(entry._1).getOrElse {
-        val m = pattern.matcher(entry._1)
-        if (m.matches()) {
-          m.group(2)
-        } else {
-          // Unable to recognize the session config key.
-          logWarning(s"Unrecognizable session config name ${entry._1}.")
-          entry._1
-        }
-      }
-      (newKey, entry._2)
-    }
-    if (validOptions.size == 0) {
-      convertedConfigs
-    } else {
-      // Check whether all the valid options are propagated.
-      validOptions.asScala.foreach { optionName =>
-        if (!convertedConfigs.keySet.contains(optionName)) {
-          logWarning(s"Data source option '$optionName' is required, but not propagated from " +
-            "session config, please check the config settings.")
-        }
-      }
-
-      // Filter the valid options.
-      convertedConfigs.filterKeys { optionName =>
-        validOptions.contains(optionName)
-      }
+    filteredConfigs.map { entry =>
+      val m = pattern.matcher(entry._1)
+      require(m.matches() && m.groupCount() > 0, s"Fail in matching ${entry._1} with $pattern.")
+      (m.group(1), entry._2)
     }
   }
 }
