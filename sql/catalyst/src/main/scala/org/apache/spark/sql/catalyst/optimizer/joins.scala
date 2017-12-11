@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
@@ -151,4 +152,63 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
   }
+}
+
+/**
+ * A rule that eliminates CROSS joins by inferring join conditions from propagated constraints.
+ *
+ * The optimization is applicable only to CROSS joins. For other join types, adding inferred join
+ * conditions would potentially shuffle children as child node's partitioning won't satisfy the JOIN
+ * node's requirements which otherwise could have.
+ *
+ * For instance, given a CROSS join with the constraint 'a = 1' from the left child and the
+ * constraint 'b = 1' from the right child, this rule infers a new join predicate 'a = b' and
+ * converts it to an Inner join.
+ */
+object EliminateCrossJoin extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.constraintPropagationEnabled) {
+      eliminateCrossJoin(plan)
+    } else {
+      plan
+    }
+  }
+
+  private def eliminateCrossJoin(plan: LogicalPlan): LogicalPlan = plan transform {
+    case join @ Join(leftPlan, rightPlan, Cross, None) =>
+      val leftConstraints = join.constraints.filter(_.references.subsetOf(leftPlan.outputSet))
+      val rightConstraints = join.constraints.filter(_.references.subsetOf(rightPlan.outputSet))
+      val inferredJoinPredicates = inferJoinPredicates(leftConstraints, rightConstraints)
+      val joinConditionOpt = inferredJoinPredicates.reduceOption(And)
+      if (joinConditionOpt.isDefined) Join(leftPlan, rightPlan, Inner, joinConditionOpt) else join
+  }
+
+  private def inferJoinPredicates(
+      leftConstraints: Set[Expression],
+      rightConstraints: Set[Expression]): mutable.Set[EqualTo] = {
+
+    val equivalentExpressionMap = new EquivalentExpressionMap()
+
+    leftConstraints.foreach {
+      case EqualTo(attr: Attribute, expr: Expression) =>
+        equivalentExpressionMap.put(expr, attr)
+      case EqualTo(expr: Expression, attr: Attribute) =>
+        equivalentExpressionMap.put(expr, attr)
+      case _ =>
+    }
+
+    val joinConditions = mutable.Set.empty[EqualTo]
+
+    rightConstraints.foreach {
+      case EqualTo(attr: Attribute, expr: Expression) =>
+        joinConditions ++= equivalentExpressionMap.get(expr).map(EqualTo(attr, _))
+      case EqualTo(expr: Expression, attr: Attribute) =>
+        joinConditions ++= equivalentExpressionMap.get(expr).map(EqualTo(attr, _))
+      case _ =>
+    }
+
+    joinConditions
+  }
+
 }

@@ -235,7 +235,7 @@ class SparkSubmitSuite
     childArgsStr should include ("--class org.SomeClass")
     childArgsStr should include ("--arg arg1 --arg arg2")
     childArgsStr should include regex ("--jar .*thejar.jar")
-    mainClass should be ("org.apache.spark.deploy.yarn.Client")
+    mainClass should be (SparkSubmit.YARN_CLUSTER_SUBMIT_CLASS)
 
     // In yarn cluster mode, also adding jars to classpath
     classpath(0) should endWith ("thejar.jar")
@@ -323,11 +323,11 @@ class SparkSubmitSuite
     val childArgsStr = childArgs.mkString(" ")
     if (useRest) {
       childArgsStr should endWith ("thejar.jar org.SomeClass arg1 arg2")
-      mainClass should be ("org.apache.spark.deploy.rest.RestSubmissionClient")
+      mainClass should be (SparkSubmit.REST_CLUSTER_SUBMIT_CLASS)
     } else {
       childArgsStr should startWith ("--supervise --memory 4g --cores 5")
       childArgsStr should include regex "launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2"
-      mainClass should be ("org.apache.spark.deploy.Client")
+      mainClass should be (SparkSubmit.STANDALONE_CLUSTER_SUBMIT_CLASS)
     }
     classpath should have size 0
     sys.props("SPARK_SUBMIT") should be ("true")
@@ -402,7 +402,7 @@ class SparkSubmitSuite
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.master") should be ("yarn")
     conf.get("spark.submit.deployMode") should be ("cluster")
-    mainClass should be ("org.apache.spark.deploy.yarn.Client")
+    mainClass should be (SparkSubmit.YARN_CLUSTER_SUBMIT_CLASS)
   }
 
   test("SPARK-21568 ConsoleProgressBar should be enabled only in shells") {

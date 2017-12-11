@@ -56,9 +56,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val exprs = projectList.map(x =>
-      ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
-    ctx.currentVars = input
+    val exprs = projectList.map(x => BindReferences.bindReference[Expression](x, child.output))
     val resultVars = exprs.map(_.genCode(ctx))
     // Evaluation of non-deterministic expressions can't be deferred.
     val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
@@ -151,8 +149,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
          |if (${nullCheck}!${ev.value}) continue;
        """.stripMargin
     }
-
-    ctx.currentVars = input
 
     // To generate the predicates we will follow this algorithm.
     // For each predicate that is not IsNotNull, we will generate them one by one loading attributes

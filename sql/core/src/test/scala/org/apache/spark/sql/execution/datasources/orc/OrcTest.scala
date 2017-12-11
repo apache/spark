@@ -15,19 +15,50 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.orc
+package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 
-private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
+/**
+ * OrcTest
+ *   -> OrcSuite
+ *       -> OrcSourceSuite
+ *       -> HiveOrcSourceSuite
+ *   -> OrcQueryTests
+ *       -> OrcQuerySuite
+ *       -> HiveOrcQuerySuite
+ *   -> OrcPartitionDiscoveryTest
+ *       -> OrcPartitionDiscoverySuite
+ *       -> HiveOrcPartitionDiscoverySuite
+ *   -> OrcFilterSuite
+ *   -> HiveOrcFilterSuite
+ */
+abstract class OrcTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
   import testImplicits._
+
+  val orcImp: String = "native"
+
+  private var originalConfORCImplementation = "native"
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalConfORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+    spark.conf.set(ORC_IMPLEMENTATION.key, orcImp)
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.conf.set(ORC_IMPLEMENTATION.key, originalConfORCImplementation)
+    super.afterAll()
+  }
 
   /**
    * Writes `data` to a Orc file, which is then passed to `f` and will be deleted after `f`

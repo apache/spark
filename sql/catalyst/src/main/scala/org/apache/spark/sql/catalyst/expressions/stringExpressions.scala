@@ -73,14 +73,10 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
         }
       """
     }
-    val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-      ctx.splitExpressions(
-        expressions = inputs,
-        funcName = "valueConcat",
-        arguments = ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
-    } else {
-      inputs.mkString("\n")
-    }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = inputs,
+      funcName = "valueConcat",
+      extraArguments = ("UTF8String[]", args) :: Nil)
     ev.copy(s"""
       UTF8String[] $args = new UTF8String[${evals.length}];
       $codes
@@ -156,14 +152,10 @@ case class ConcatWs(children: Seq[Expression])
           ""
         }
       }
-      val codes = if (ctx.INPUT_ROW != null && ctx.currentVars == null) {
-        ctx.splitExpressions(
+      val codes = ctx.splitExpressionsWithCurrentInputs(
           expressions = inputs,
           funcName = "valueConcatWs",
-          arguments = ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String[]", args) :: Nil)
-      } else {
-        inputs.mkString("\n")
-      }
+          extraArguments = ("UTF8String[]", args) :: Nil)
       ev.copy(s"""
         UTF8String[] $args = new UTF8String[$numArgs];
         ${separator.code}
@@ -208,31 +200,32 @@ case class ConcatWs(children: Seq[Expression])
         }
       }.unzip
 
-      val codes = ctx.splitExpressions(ctx.INPUT_ROW, evals.map(_.code))
-      val varargCounts = ctx.splitExpressions(
+      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code))
+
+      val varargCounts = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargCount,
         funcName = "varargCountsConcatWs",
-        arguments = ("InternalRow", ctx.INPUT_ROW) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
-           int $varargNum = 0;
-           $body
-           return $varargNum;
-           """,
-        foldFunctions = _.mkString(s"$varargNum += ", s";\n$varargNum += ", ";"))
-      val varargBuilds = ctx.splitExpressions(
+             |int $varargNum = 0;
+             |$body
+             |return $varargNum;
+           """.stripMargin,
+        foldFunctions = _.map(funcCall => s"$varargNum += $funcCall;").mkString("\n"))
+
+      val varargBuilds = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargBuild,
         funcName = "varargBuildsConcatWs",
-        arguments =
-          ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
+        extraArguments = ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
-           $body
-           return $idxInVararg;
-           """,
-        foldFunctions = _.mkString(s"$idxInVararg = ", s";\n$idxInVararg = ", ";"))
+             |$body
+             |return $idxInVararg;
+           """.stripMargin,
+        foldFunctions = _.map(funcCall => s"$idxInVararg = $funcCall;").mkString("\n"))
+
       ev.copy(
         s"""
         $codes
@@ -1372,10 +1365,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val pattern = children.head.genCode(ctx)
 
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
-    val argListCode = argListGen.map(_._2.code + "\n")
-
-    val argListString = argListGen.foldLeft("")((s, v) => {
-      val nullSafeString =
+    val argList = ctx.freshName("argLists")
+    val numArgLists = argListGen.length
+    val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
+      val value =
         if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
           s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
@@ -1383,8 +1376,15 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
         } else {
           s"(${v._2.isNull}) ? null : ${v._2.value}"
         }
-      s + "," + nullSafeString
-    })
+      s"""
+         ${v._2.code}
+         $argList[$index] = $value;
+       """
+    }
+    val argListCodes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = argListCode,
+      funcName = "valueFormatString",
+      extraArguments = ("Object[]", argList) :: Nil)
 
     val form = ctx.freshName("formatter")
     val formatter = classOf[java.util.Formatter].getName
@@ -1395,10 +1395,11 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       boolean ${ev.isNull} = ${pattern.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        ${argListCode.mkString}
         $stringBuffer $sb = new $stringBuffer();
         $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
-        $form.format(${pattern.value}.toString() $argListString);
+        Object[] $argList = new Object[$numArgLists];
+        $argListCodes
+        $form.format(${pattern.value}.toString(), $argList);
         ${ev.value} = UTF8String.fromString($sb.toString());
       }""")
   }

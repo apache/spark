@@ -67,11 +67,11 @@ from pyspark.ml.tuning import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
-from pyspark.sql import DataFrame, Row, SparkSession
+from pyspark.sql import DataFrame, Row, SparkSession, HiveContext
 from pyspark.sql.functions import rand
 from pyspark.sql.types import DoubleType, IntegerType
 from pyspark.storagelevel import *
-from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
+from pyspark.tests import QuietTest, ReusedPySparkTestCase as PySparkTestCase
 
 ser = PickleSerializer()
 
@@ -1835,6 +1835,53 @@ class ImageReaderTest(SparkSessionTestCase):
         expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
         self.assertEqual(ImageSchema.imageFields, expected)
         self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                TypeError,
+                "image argument should be pyspark.sql.types.Row; however",
+                lambda: ImageSchema.toNDArray("a"))
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                ValueError,
+                "image argument should have attributes specified in",
+                lambda: ImageSchema.toNDArray(Row(a=1)))
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                TypeError,
+                "array argument should be numpy.ndarray; however, it got",
+                lambda: ImageSchema.toImage("a"))
+
+
+class ImageReaderTest2(PySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        PySparkTestCase.setUpClass()
+        # Note that here we enable Hive's support.
+        try:
+            cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        except py4j.protocol.Py4JError:
+            cls.tearDownClass()
+            raise unittest.SkipTest("Hive is not available")
+        except TypeError:
+            cls.tearDownClass()
+            raise unittest.SkipTest("Hive is not available")
+        cls.spark = HiveContext._createForTesting(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        PySparkTestCase.tearDownClass()
+        cls.spark.sparkSession.stop()
+
+    def test_read_images_multiple_times(self):
+        # This test case is to check if `ImageSchema.readImages` tries to
+        # initiate Hive client multiple times. See SPARK-22651.
+        data_path = 'data/mllib/images/kittens'
+        ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
+        ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
 
 
 class ALSTest(SparkSessionTestCase):

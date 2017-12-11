@@ -21,6 +21,5 @@ rem Figure out where the Spark framework is installed
 call "%~dp0find-spark-home.cmd"
 
 call "%SPARK_HOME%\bin\load-spark-env.cmd"
-
-
+set _SPARK_CMD_USAGE=Usage: .\bin\sparkR [options]
 call "%SPARK_HOME%\bin\spark-submit2.cmd" sparkr-shell-main %*

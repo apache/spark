@@ -15,19 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.orc
+package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
 
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.TypeTag
-
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.test.SharedSQLContext
 
 // The data where the partitioning key exists only in the directory structure.
 case class OrcParData(intField: Int, stringField: String)
@@ -35,28 +28,8 @@ case class OrcParData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
 case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
-// TODO This test suite duplicates ParquetPartitionDiscoverySuite a lot
-class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
-  import spark._
-  import spark.implicits._
-
-  val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultStrVal
-
-  def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
-  }
-
-  def makeOrcFile[T <: Product: ClassTag: TypeTag](
-      data: Seq[T], path: File): Unit = {
-    data.toDF().write.mode("overwrite").orc(path.getCanonicalPath)
-  }
-
-
-  def makeOrcFile[T <: Product: ClassTag: TypeTag](
-      df: DataFrame, path: File): Unit = {
-    df.write.mode("overwrite").orc(path.getCanonicalPath)
-  }
+abstract class OrcPartitionDiscoveryTest extends OrcTest {
+  val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
 
   protected def withTempTable(tableName: String)(f: => Unit): Unit = {
     try f finally spark.catalog.dropTempView(tableName)
@@ -90,7 +63,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.orc(base.getCanonicalPath).createOrReplaceTempView("t")
+      spark.read.orc(base.getCanonicalPath).createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -137,7 +110,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.orc(base.getCanonicalPath).createOrReplaceTempView("t")
+      spark.read.orc(base.getCanonicalPath).createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -186,8 +159,8 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read
-        .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
+      spark.read
+        .option("hive.exec.default.partition.name", defaultPartitionName)
         .orc(base.getCanonicalPath)
         .createOrReplaceTempView("t")
 
@@ -228,8 +201,8 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read
-        .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
+      spark.read
+        .option("hive.exec.default.partition.name", defaultPartitionName)
         .orc(base.getCanonicalPath)
         .createOrReplaceTempView("t")
 
@@ -253,3 +226,4 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
   }
 }
 
+class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSQLContext
