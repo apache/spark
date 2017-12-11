@@ -43,56 +43,61 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class ContinuousSuite extends StreamTest {
   import testImplicits._
 
-  private def awaitEpoch(query: StreamExecution, epoch: Long): Unit = {
-    query match {
-      case s: ContinuousExecution => s.awaitEpoch(epoch)
-    }
-  }
+  // We need more than the default local[2] to be able to schedule all partitions simultaneously.
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[10]",
+      "continuous-stream-test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")))
 
   private def waitForRateSourceTriggers(query: StreamExecution, numTriggers: Int): Unit = {
     query match {
       case s: ContinuousExecution =>
+        assert(numTriggers >= 2, "must wait for at least 2 triggers to ensure query is initialized")
         val reader = s.lastExecution.executedPlan.collectFirst {
           case DataSourceV2ScanExec(_, r: ContinuousRateStreamReader) => r
         }.get
 
-        while (System.currentTimeMillis < reader.lastStartTime + 9100) {
-          Thread.sleep(reader.lastStartTime + 9100 - System.currentTimeMillis)
+        val deltaMs = (numTriggers - 1) * 1000 + 300
+
+        while (System.currentTimeMillis < reader.lastStartTime + deltaMs) {
+          Thread.sleep(reader.lastStartTime + deltaMs - System.currentTimeMillis)
         }
     }
   }
 
-  private def incrementEpoch(query: StreamExecution): Unit = {
-    query match {
-      case s: ContinuousExecution =>
-        EpochCoordinatorRef.get(s.id.toString, SparkEnv.get)
-          .askSync[Long](IncrementAndGetEpoch())
-        Thread.sleep(200)
-    }
-  }
+  // A continuous trigger that will only fire the initial time for the duration of a test.
+  // This allows clean testing with manual epoch advancement.
+  private val longContinuousTrigger = Trigger.Continuous("1 hour")
 
   test("basic rate source") {
-    val df = spark.readStream.format("rate").load().select('value)
+    val df = spark.readStream
+       .format("rate")
+        .option("numPartitions", "5")
+        .option("rowsPerSecond", "5")
+        .load()
+        .select('value)
 
     // TODO: validate against low trigger interval
     testStream(df, useV2Sink = true)(
-      StartStream(Trigger.Continuous(1000000)),
+      StartStream(longContinuousTrigger),
       AwaitEpoch(0),
-      Execute(waitForRateSourceTriggers(_, 10)),
+      Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 50): _*),
+      CheckAnswer(scala.Range(0, 10): _*),
       StopStream,
-      StartStream(Trigger.Continuous(1000000)),
+      StartStream(longContinuousTrigger),
       AwaitEpoch(2),
-      Execute(waitForRateSourceTriggers(_, 10)),
+      Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 100): _*))
+      CheckAnswer(scala.Range(0, 20): _*))
   }
 
   /* test("repeatedly restart") {
@@ -114,16 +119,21 @@ class ContinuousSuite extends StreamTest {
   } */
 
   test("query without test harness") {
-    val df = spark.readStream.format("rate").load().select('value)
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "2")
+      .option("rowsPerSecond", "2")
+      .load()
+      .select('value)
     val query = df.writeStream
       .format("memory")
       .queryName("noharness")
-      .trigger(Trigger.Continuous(1000))
+      .trigger(Trigger.Continuous(100))
       .start()
-    waitForRateSourceTriggers(query.asInstanceOf[StreamingQueryWrapper].streamingQuery, 0)
+    waitForRateSourceTriggers(query.asInstanceOf[StreamingQueryWrapper].streamingQuery, 2)
     query.stop()
 
     val results = spark.read.table("noharness").collect()
-    assert(!results.isEmpty)
+    assert(results.toSet == Set(0, 1, 2, 3).map(Row(_)))
   }
 }
