@@ -380,9 +380,14 @@ class SparkSession(object):
         Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
         """
         if schema is None or isinstance(schema, (list, tuple)):
-            schema = self._inferSchema(rdd, samplingRatio, names=schema)
-            converter = _create_converter(schema)
+            struct = self._inferSchema(rdd, samplingRatio, names=schema)
+            converter = _create_converter(struct)
             rdd = rdd.map(converter)
+            if isinstance(schema, (list, tuple)):
+                for i, name in enumerate(schema):
+                    struct.fields[i].name = name
+                    struct.names[i] = name
+            schema = struct
 
         elif not isinstance(schema, StructType):
             raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
@@ -401,9 +406,14 @@ class SparkSession(object):
             data = list(data)
 
         if schema is None or isinstance(schema, (list, tuple)):
-            schema = self._inferSchemaFromList(data, names=schema)
-            converter = _create_converter(schema)
+            struct = self._inferSchemaFromList(data, names=schema)
+            converter = _create_converter(struct)
             data = map(converter, data)
+            if isinstance(schema, (list, tuple)):
+                for i, name in enumerate(schema):
+                    struct.fields[i].name = name
+                    struct.names[i] = name
+            schema = struct
 
         elif not isinstance(schema, StructType):
             raise TypeError("schema should be StructType or list or None, but got: %s" % schema)

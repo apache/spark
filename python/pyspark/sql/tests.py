@@ -872,6 +872,10 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(rdd)
         self.assertEqual(Row(field1=1, field2=u'row1'), df.first())
 
+    def test_create_dataframe_from_dict_respects_schema(self):
+        df = self.spark.createDataFrame([{'a': 1}], ["b"])
+        self.assertEqual(df.columns, ['b'])
+
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
         df = self.spark.createDataFrame(data)
