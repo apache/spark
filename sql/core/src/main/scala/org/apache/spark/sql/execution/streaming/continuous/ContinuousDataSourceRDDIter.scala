@@ -35,6 +35,12 @@ import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.util.SystemClock
 
+// There are two types of entry possible:
+// (row, offset, null) - a row with offset
+// (null, null, epoch) - an epoch marker
+// We force both into the same queue to avoid having to synchronize across multiple queues.
+case class ReadQueueEntry(row: UnsafeRow, offset: PartitionOffset, epoch: Long)
+
 class ContinuousDataSourceRDD(
     sc: SparkContext,
     @transient private val readTasks: java.util.List[ReadTask[UnsafeRow]])
@@ -52,25 +58,12 @@ class ContinuousDataSourceRDD(
     // TODO: capacity option
     val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](1024)
 
-    val epochPollThread = new EpochPollThread(queue, context)
-    epochPollThread.setDaemon(true)
-    epochPollThread.start()
-
-    val dataReaderThread = new DataReaderThread(reader, queue, context)
-    dataReaderThread.setDaemon(true)
-    dataReaderThread.start()
-
-    context.addTaskCompletionListener(_ => {
-      reader.close()
-      dataReaderThread.interrupt()
-      epochPollThread.interrupt()
-    })
-
     val epochEndpoint = EpochCoordinatorRef.get(
       context.getLocalProperty(StreamExecution.QUERY_ID_KEY), SparkEnv.get)
-    new Iterator[UnsafeRow] {
+    val itr = new Iterator[UnsafeRow] {
       private var currentRow: UnsafeRow = _
-      private var currentOffset: PartitionOffset = _
+      private var currentOffset: PartitionOffset =
+        ContinuousDataSourceRDD.getBaseReader(reader).getOffset
 
       override def hasNext(): Boolean = {
         val newTuple = queue.take()
@@ -94,6 +87,22 @@ class ContinuousDataSourceRDD(
         r
       }
     }
+
+
+    val epochPollThread = new EpochPollThread(queue, context)
+    epochPollThread.setDaemon(true)
+    epochPollThread.start()
+
+    val dataReaderThread = new DataReaderThread(reader, queue, context)
+    dataReaderThread.setDaemon(true)
+    dataReaderThread.start()
+
+    context.addTaskCompletionListener(_ => {
+      reader.close()
+      dataReaderThread.interrupt()
+      epochPollThread.interrupt()
+    })
+    itr
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
@@ -139,13 +148,7 @@ class DataReaderThread(
     queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
     context: TaskContext) extends Thread {
   override def run(): Unit = {
-    val baseReader = reader match {
-      case r: ContinuousDataReader[UnsafeRow] => r
-      case wrapped: RowToUnsafeDataReader =>
-        wrapped.rowReader.asInstanceOf[ContinuousDataReader[Row]]
-      case _ =>
-        throw new IllegalStateException(s"Unknown continuous reader type ${reader.getClass}")
-    }
+    val baseReader = ContinuousDataSourceRDD.getBaseReader(reader)
     try {
       while (!context.isInterrupted && !context.isCompleted()) {
         if (!reader.next()) {
@@ -159,6 +162,18 @@ class DataReaderThread(
       case _: InterruptedException if context.isInterrupted() =>
         // Continuous shutdown always involves an interrupt; shut down quietly.
         return
+    }
+  }
+}
+
+object ContinuousDataSourceRDD {
+  private[continuous] def getBaseReader(reader: DataReader[UnsafeRow]): ContinuousDataReader[_] = {
+    reader match {
+      case r: ContinuousDataReader[UnsafeRow] => r
+      case wrapped: RowToUnsafeDataReader =>
+        wrapped.rowReader.asInstanceOf[ContinuousDataReader[Row]]
+      case _ =>
+        throw new IllegalStateException(s"Unknown continuous reader type ${reader.getClass}")
     }
   }
 }

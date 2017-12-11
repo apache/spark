@@ -294,11 +294,15 @@ class ContinuousExecution(
   }
 
   /**
-   * Blocks the current thread until execution has received offsets for the specified epoch.
+   * Blocks the current thread until execution has committed past the specified epoch.
    */
-  /* private[sql] def awaitEpoch(epoch: Long): Unit = {
+  private[sql] def awaitEpoch(epoch: Long): Unit = {
     def notDone = {
-      val latestCommit = batchCommitLog.getLatest <= epoch
+      val latestCommit = batchCommitLog.getLatest()
+      latestCommit match {
+        case Some((latestEpoch, _)) => latestEpoch < epoch
+        case None => true
+      }
     }
 
     while (notDone) {
@@ -312,7 +316,7 @@ class ContinuousExecution(
         awaitProgressLock.unlock()
       }
     }
-  } */
+  }
 }
 
 

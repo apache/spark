@@ -33,11 +33,13 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -235,6 +237,25 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   object Execute {
     def apply(func: StreamExecution => Any): AssertOnQuery =
       AssertOnQuery(query => { func(query); true })
+  }
+
+  object AwaitEpoch {
+    def apply(epoch: Long): AssertOnQuery =
+      Execute {
+        case s: ContinuousExecution => s.awaitEpoch(epoch)
+        case _ => throw new IllegalStateException("microbatch cannot await epoch")
+      }
+  }
+
+  object IncrementEpoch {
+    def apply(): AssertOnQuery =
+      Execute {
+        case s: ContinuousExecution =>
+          val newEpoch = EpochCoordinatorRef.get(s.id.toString, SparkEnv.get)
+            .askSync[Long](IncrementAndGetEpoch())
+          s.awaitEpoch(newEpoch - 1)
+        case _ => throw new IllegalStateException("microbatch cannot increment epoch")
+      }
   }
 
   /**

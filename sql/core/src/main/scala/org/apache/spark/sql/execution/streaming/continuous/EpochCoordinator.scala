@@ -128,7 +128,7 @@ class EpochCoordinator(
         resolveCommitsAtEpoch(epoch)
       }
 
-    case ReportPartitionOffset(partitionId, epoch, offset) if offset != null =>
+    case ReportPartitionOffset(partitionId, epoch, offset) =>
       val query = session.streams.get(queryId).asInstanceOf[StreamingQueryWrapper]
         .streamingQuery.asInstanceOf[ContinuousExecution]
       partitionOffsets.put((epoch, partitionId), offset)
@@ -139,10 +139,6 @@ class EpochCoordinator(
         query.addOffset(epoch, reader, thisEpochOffsets.toSeq)
         resolveCommitsAtEpoch(epoch - 1)
       }
-
-    // We can get null offsets reported if the epoch advances before the executor
-    // has read any data. Ignore those, since they don't affect where we'd want to restart.
-    case ReportPartitionOffset(_, _, offset) if offset == null =>
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

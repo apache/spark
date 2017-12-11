@@ -49,11 +49,15 @@ import org.apache.spark.util.Utils
 class ContinuousSuite extends StreamTest {
   import testImplicits._
 
+  private def awaitEpoch(query: StreamExecution, epoch: Long): Unit = {
+    query match {
+      case s: ContinuousExecution => s.awaitEpoch(epoch)
+    }
+  }
+
   private def waitForRateSourceTriggers(query: StreamExecution, numTriggers: Int): Unit = {
     query match {
       case s: ContinuousExecution =>
-        s.awaitInitialization(streamingTimeout.toMillis)
-        Thread.sleep(5000)
         val reader = s.lastExecution.executedPlan.collectFirst {
           case DataSourceV2ScanExec(_, r: ContinuousRateStreamReader) => r
         }.get
@@ -79,13 +83,15 @@ class ContinuousSuite extends StreamTest {
     // TODO: validate against low trigger interval
     testStream(df, useV2Sink = true)(
       StartStream(Trigger.Continuous(1000000)),
+      AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 10)),
-      Execute(incrementEpoch),
+      IncrementEpoch(),
       CheckAnswer(scala.Range(0, 50): _*),
       StopStream,
       StartStream(Trigger.Continuous(1000000)),
+      AwaitEpoch(2),
       Execute(waitForRateSourceTriggers(_, 10)),
-      Execute(incrementEpoch),
+      IncrementEpoch(),
       CheckAnswer(scala.Range(0, 100): _*))
   }
 
