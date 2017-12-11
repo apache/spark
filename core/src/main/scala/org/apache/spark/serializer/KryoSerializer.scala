@@ -187,6 +187,7 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.mllib.linalg.Matrix",
       "org.apache.spark.mllib.linalg.DenseMatrix",
       "org.apache.spark.mllib.linalg.SparseMatrix",
+      "org.apache.spark.mllib.regression.LabeledPoint",
       "org.apache.spark.ml.linalg.Vector",
       "org.apache.spark.ml.linalg.DenseVector",
       "org.apache.spark.ml.linalg.SparseVector",
@@ -194,7 +195,8 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.ml.linalg.DenseMatrix",
       "org.apache.spark.ml.linalg.SparseMatrix",
       "org.apache.spark.ml.feature.Instance",
-      "org.apache.spark.ml.feature.OffsetInstance"
+      "org.apache.spark.ml.feature.OffsetInstance",
+      "org.apache.spark.ml.feature.LabeledPoint"
     ).foreach { name =>
       try {
         val clazz = Utils.classForName(name)
