@@ -291,6 +291,18 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (proxyUser != null && principal != null) {
       SparkSubmit.printErrorAndExit("Only one of --proxy-user or --principal can be provided.")
     }
+
+    val executorTimeoutThreshold = Utils.timeStringAsSeconds(
+      sparkProperties.getOrElse("spark.network.timeout", "120s"))
+    val executorHeartbeatInterval = Utils.timeStringAsSeconds(
+      sparkProperties.getOrElse("spark.executor.heartbeatInterval", "10s"))
+    if (executorHeartbeatInterval > executorTimeoutThreshold) {
+      SparkSubmit.printErrorAndExit(
+        s"""|The heartbeat arguments is incorrect,please do not setting your own arguments
+            | including  spark.network.timeout, spark.executor.heartbeatInterval
+            | check your command remove them and try again.
+            |""".stripMargin.replaceAll("\n", " "))
+    }
   }
 
   private def validateKillArguments(): Unit = {
