@@ -274,6 +274,18 @@ public class SQLOperation extends ExecuteStatementOperation {
     }
   }
 
+  private void registerCurrentOperationLog() {
+    if (isOperationLogEnabled) {
+      if (operationLog == null) {
+        LOG.warn("Failed to get current OperationLog object of Operation: " +
+            getHandle().getHandleIdentifier());
+        isOperationLogEnabled = false;
+        return;
+      }
+      OperationLog.setCurrentOperationLog(operationLog);
+    }
+  }
+
   private void cleanup(OperationState state) throws HiveSQLException {
     setState(state);
     if (shouldRunAsync()) {
