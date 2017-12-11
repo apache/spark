@@ -95,7 +95,7 @@ class EpochCoordinator(
   // (epoch, partition) -> message
   // This is small enough that we don't worry too much about optimizing the shape of the structure.
   private val partitionCommits =
-  mutable.Map[(Long, Int), WriterCommitMessage]()
+    mutable.Map[(Long, Int), WriterCommitMessage]()
 
   private val partitionOffsets =
     mutable.Map[(Long, Int), PartitionOffset]()
@@ -111,10 +111,18 @@ class EpochCoordinator(
       logDebug(s"Epoch $epoch has received commits from all partitions. Committing globally.")
       val query = session.streams.get(queryId).asInstanceOf[StreamingQueryWrapper]
         .streamingQuery.asInstanceOf[ContinuousExecution]
-      // Sequencing is important - writer commits to epoch are required to be replayable
+      // Sequencing is important here. We must commit to the writer before recording the commit
+      // in the query, or we will end up dropping the commit if we restart in the middle.
       writer.commit(epoch, thisEpochCommits.toArray)
       query.commit(epoch)
-      // TODO: cleanup unnecessary state
+
+      // Cleanup state from before this epoch, now that we know all partitions are forever past it.
+      for (k <- partitionCommits.keys.filter { case (e, _) => e < epoch }) {
+        partitionCommits.remove(k)
+      }
+      for (k <- partitionOffsets.keys.filter { case (e, _) => e < epoch }) {
+        partitionCommits.remove(k)
+      }
     }
   }
 

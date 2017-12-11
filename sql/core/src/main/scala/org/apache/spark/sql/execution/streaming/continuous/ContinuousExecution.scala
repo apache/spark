@@ -165,7 +165,7 @@ class ContinuousExecution(
           s"Invalid reader: ${Utils.truncatedString(output, ",")} != " +
             s"${Utils.truncatedString(newOutput, ",")}")
         replacements ++= output.zip(newOutput)
-        
+
         reader.setOffset(java.util.Optional.ofNullable(offsets.offsets(0).orNull))
         DataSourceV2Relation(newOutput, reader)
     }

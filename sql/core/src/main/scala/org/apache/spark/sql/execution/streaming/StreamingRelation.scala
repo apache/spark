@@ -90,7 +90,6 @@ case class StreamingRelationV2(
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
 
-  // TODO: can we get the conf here somehow?
   override def computeStats(): Statistics = Statistics(
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
   )
