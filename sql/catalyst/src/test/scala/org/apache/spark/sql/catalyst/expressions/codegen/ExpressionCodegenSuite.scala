@@ -43,8 +43,10 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     ctx.subExprEliminationExprs.put(subExprs(1), SubExprEliminationState("isNull2", "value2"))
 
     val subExprCodes = ExpressionCodegen.getSubExprCodes(ctx, subExprs)
-    val subAttrs = subExprs.map(e => (e.dataType, e.nullable))
-    val params = ExpressionCodegen.prepareFunctionParams(ctx, subAttrs, subExprCodes)
+    val subVars = subExprs.zip(subExprCodes).map { case (expr, exprCode) =>
+      ExprInputVar(exprCode, expr.dataType, expr.nullable)
+    }
+    val params = ExpressionCodegen.prepareFunctionParams(ctx, subVars)
     assert(params.length == 3)
     assert(params(0) == Tuple2("value1", "int value1"))
     assert(params(1) == Tuple2("value2", "int value2"))
@@ -65,17 +67,15 @@ class ExpressionCodegenSuite extends SparkFunSuite {
           BoundReference(1, IntegerType, nullable = true)),
         BoundReference(2, IntegerType, nullable = true))
 
-    val (inputAttrs, inputVars) = ExpressionCodegen.getInputVarsForChildren(ctx, expr)
+    val inputVars = ExpressionCodegen.getInputVarsForChildren(ctx, expr)
     // Only two evaluated variables included.
-    assert(inputAttrs.length == 2)
-    assert(inputAttrs(0) == Tuple2(IntegerType, false))
-    assert(inputAttrs(1) == Tuple2(IntegerType, true))
-
     assert(inputVars.length == 2)
-    assert(inputVars(0) == currentVars(0))
-    assert(inputVars(1) == currentVars(1))
+    assert(inputVars(0).dataType == IntegerType && inputVars(0).nullable == false)
+    assert(inputVars(1).dataType == IntegerType && inputVars(1).nullable == true)
+    assert(inputVars(0).exprCode == currentVars(0))
+    assert(inputVars(1).exprCode == currentVars(1))
 
-    val params = ExpressionCodegen.prepareFunctionParams(ctx, inputAttrs, inputVars)
+    val params = ExpressionCodegen.prepareFunctionParams(ctx, inputVars)
     assert(params.length == 3)
     assert(params(0) == Tuple2("value1", "int value1"))
     assert(params(1) == Tuple2("value2", "int value2"))
@@ -96,11 +96,11 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     ctx.INPUT_ROW = null
 
     val expr = Add(Literal(1), BoundReference(0, IntegerType, nullable = false))
-    val (inputAttrs, inputVars) = ExpressionCodegen.getInputVarsForChildren(ctx, expr)
-    assert(inputAttrs.length == 1)
-    assert(inputAttrs(0) == Tuple2(IntegerType, true))
+    val inputVars = ExpressionCodegen.getInputVarsForChildren(ctx, expr)
+    assert(inputVars.length == 1)
+    assert(inputVars(0).dataType == IntegerType && inputVars(0).nullable == true)
 
-    val params = ExpressionCodegen.prepareFunctionParams(ctx, inputAttrs, inputVars)
+    val params = ExpressionCodegen.prepareFunctionParams(ctx, inputVars)
     assert(params.length == 2)
     assert(params(0) == Tuple2("value2", "int value2"))
     assert(params(1) == Tuple2("isNull2", "boolean isNull2"))

@@ -81,6 +81,9 @@ case class ExprCode(
       }
     }
   }
+
+  // The code is emptied after evaluation.
+  def isEvaluated(): Boolean = code == ""
 }
 
 /**
@@ -1048,7 +1051,7 @@ class CodegenContext {
 
       // Generate the code for this expression tree and wrap it in a function.
       val eval = expr.genCode(this)
-      val nullValue = if (expr.nullable) {
+      val assignIsNull = if (expr.nullable) {
         s"$isNull = ${eval.isNull};"
       } else {
         ""
@@ -1057,7 +1060,7 @@ class CodegenContext {
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
            |  ${eval.code.trim}
-           |  $nullValue
+           |  $assignIsNull
            |  $value = ${eval.value};
            |}
            """.stripMargin

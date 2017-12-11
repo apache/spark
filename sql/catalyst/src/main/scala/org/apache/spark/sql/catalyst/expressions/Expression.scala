@@ -105,6 +105,7 @@ abstract class Expression extends TreeNode[Expression] {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val eval = doGenCode(ctx, ExprCode("", isNull, value))
+      eval.isNull = if (this.nullable) eval.isNull else "false"
 
       // Records current input row and variables of this expression.
       eval.inputRow = ctx.INPUT_ROW
