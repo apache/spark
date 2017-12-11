@@ -19,16 +19,14 @@ package org.apache.spark.sql.sources
 
 import java.net.URI
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, Metadata, MetadataBuilder, StructType}
 
-class TestOptionsSource extends SchemaRelationProvider with CreatableRelationProvider {
+class TestOptionsSource extends SchemaRelationProvider
+  with CreatableRelationProvider with RelationProvider {
 
   // This is used in the read path.
   override def createRelation(
@@ -44,6 +42,13 @@ class TestOptionsSource extends SchemaRelationProvider with CreatableRelationPro
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
+    new TestOptionsRelation(parameters)(sqlContext.sparkSession)
+  }
+
+  // This is used in the write path while table not exist in CTAS scenario.
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation = {
     new TestOptionsRelation(parameters)(sqlContext.sparkSession)
   }
 }
