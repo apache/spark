@@ -118,10 +118,9 @@ class ContinuousExecution(
           throw new IllegalStateException(
             s"Batch $latestEpochId was committed without next epoch offsets!")
         }
-        // TODO initialize committed offsets
+        committedOffsets = nextOffsets.toStreamProgress(sources)
 
-        logDebug(s"Resuming at epoch $currentBatchId with committed offsets " +
-          s"$committedOffsets and available offsets $availableOffsets")
+        logDebug(s"Resuming at epoch $currentBatchId with committed offsets $committedOffsets")
         nextOffsets
       case None =>
         // We are starting this stream for the first time. Offsets are all None.

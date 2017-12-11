@@ -85,14 +85,14 @@ case class StreamingRelationV2(
     sourceName: String,
     extraOptions: Map[String, String],
     output: Seq[Attribute],
-    v1DataSource: DataSource)
+    v1DataSource: DataSource)(session: SparkSession)
   extends LeafNode {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
 
   // TODO: can we get the conf here somehow?
   override def computeStats(): Statistics = Statistics(
-    sizeInBytes = 0
+    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
   )
 }
 

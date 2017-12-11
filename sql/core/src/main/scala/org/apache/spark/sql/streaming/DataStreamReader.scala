@@ -178,7 +178,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
           sparkSession,
           StreamingRelationV2(
             s, source, extraOptions.toMap,
-            tempReader.readSchema().toAttributes, v1DataSource))
+            tempReader.readSchema().toAttributes, v1DataSource)(sparkSession))
       case _ =>
         // Code path for data source v1.
         Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))

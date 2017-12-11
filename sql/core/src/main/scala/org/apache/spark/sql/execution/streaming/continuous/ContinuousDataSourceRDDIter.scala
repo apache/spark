@@ -121,8 +121,8 @@ class EpochPollThread(
   private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
   override def run(): Unit = {
-    // TODO parameterize
     try {
+      // TODO parameterize processing time
       ProcessingTimeExecutor(ProcessingTime(100), new SystemClock())
         .execute { () =>
             val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch())
