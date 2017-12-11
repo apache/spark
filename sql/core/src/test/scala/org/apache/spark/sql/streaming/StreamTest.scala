@@ -497,10 +497,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                 s"microbatch thread not stopped")
               verify(!currentStream.isActive,
                 "query.isActive() is false even after stopping")
-              // TODO these shouldn't be reported in the first place
-              /* verify(currentStream.exception.isEmpty,
+              verify(currentStream.exception.isEmpty,
                 s"query.exception() is not empty after clean stop: " +
-                  currentStream.exception.map(_.toString()).getOrElse("")) */
+                  currentStream.exception.map(_.toString()).getOrElse(""))
             } catch {
               case _: InterruptedException =>
               case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>

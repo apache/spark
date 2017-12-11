@@ -85,7 +85,7 @@ class ContinuousExecution(
           // swallow exception and run again
           state.set(ACTIVE)
       }
-    } while (true)
+    } while (state.get() == ACTIVE)
   }
 
   /**
