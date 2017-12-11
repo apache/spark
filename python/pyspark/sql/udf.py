@@ -17,6 +17,7 @@
 """
 User-defined function related classes and functions
 """
+import copy
 import functools
 
 from pyspark import SparkContext
@@ -32,7 +33,7 @@ def _wrap_function(sc, func, returnType):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
-def _create_udf(f, returnType, evalType, nullable):
+def _create_udf(f, returnType, evalType):
     if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
         import inspect
         argspec = inspect.getargspec(f)
@@ -52,7 +53,7 @@ def _create_udf(f, returnType, evalType, nullable):
             )
 
     # Set the name of the UserDefinedFunction object to be the name of function f
-    udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, evalType=evalType, nullable=nullable)
+    udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, evalType=evalType)
     return udf_obj._wrapped()
 
 
@@ -64,8 +65,7 @@ class UserDefinedFunction(object):
     """
     def __init__(self, func,
                  returnType=StringType(), name=None,
-                 evalType=PythonEvalType.SQL_BATCHED_UDF,
-                 nullable=True):
+                 evalType=PythonEvalType.SQL_BATCHED_UDF):
         if not callable(func):
             raise TypeError(
                 "Invalid function: not a function or callable (__call__ is not defined): "
@@ -89,7 +89,7 @@ class UserDefinedFunction(object):
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
         self.evalType = evalType
-        self.nullable = nullable
+        self.nullable = True
 
     @property
     def returnType(self):
@@ -107,6 +107,14 @@ class UserDefinedFunction(object):
                              "pandas_udf with function type GROUP_MAP")
 
         return self._returnType_placeholder
+
+    def asNonNullable(self):
+        if not self.nullable:
+            return self
+        else:
+            udf = copy.copy(self)
+            udf.nullable = False
+            return udf
 
     @property
     def _judf(self):
@@ -128,7 +136,7 @@ class UserDefinedFunction(object):
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt, self.evalType)
-        judf = judf.withNullability(self.nullable)
+        judf = judf if self.nullable else judf.asNonNullable()
         return judf
 
     def __call__(self, *cols):
@@ -153,6 +161,9 @@ class UserDefinedFunction(object):
         def wrapper(*args):
             return self(*args)
 
+        def asNonNullable():
+            return self.asNonNullable()._wrapped
+
         wrapper.__name__ = self._name
         wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
                               else self.func.__class__.__module__)
@@ -161,5 +172,6 @@ class UserDefinedFunction(object):
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
         wrapper.nullable = self.nullable
+        wrapper.asNonNullable = asNonNullable
 
         return wrapper

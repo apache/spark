@@ -57,8 +57,8 @@ case class UserDefinedPythonFunction(
   /**
    * Updates UserDefinedFunction with a given nullability.
    */
-  def withNullability(nullable: Boolean): UserDefinedPythonFunction = {
-    if (nullable == _nullable) {
+  def asNonNullable(): UserDefinedPythonFunction = {
+    if (!_nullable) {
       this
     } else {
       val udf = copyAll()

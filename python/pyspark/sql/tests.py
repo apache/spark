@@ -1,3 +1,4 @@
+
 # -*- encoding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -520,13 +521,17 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_udf_no_nulls(self):
         from pyspark.sql.functions import udf
-        plus_four = udf(lambda x: x + 4, IntegerType(), False)
+        plus_four = udf(lambda x: x + 4, IntegerType())
+        plus_four_no_nulls = plus_four.asNonNullable()
         df = self.spark.range(10)
-        res = df.select(plus_four(df['id']).alias('plus_four'))
-        self.assertFalse(res.schema['plus_four'].nullable)
+        res = df.select(plus_four(df['id']).alias('plus_four'),
+                        plus_four_no_nulls(df['id']).alias('plus_four_no_nulls'))
+        self.assertTrue(res.schema['plus_four'].nullable)
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
+        self.assertFalse(res.schema['plus_four_no_nulls'].nullable)
+        self.assertEqual(res.agg({'plus_four_no_nulls': 'sum'}).collect()[0][0], 85)
 
-    def test_udf_no_nulls_with_callable(self):
+    def test_udf_with_callable_no_nulls(self):
         df = self.spark.range(10)
 
         class PlusFour:
@@ -535,13 +540,14 @@ class SQLTests(ReusedSQLTestCase):
                     return col + 4
 
         call = PlusFour()
-        pudf = UserDefinedFunction(call, LongType(), nullable=False)
+        pudf = UserDefinedFunction(call, LongType()).asNonNullable()
         res = df.select(pudf(df['id']).alias('plus_four'))
         self.assertFalse(res.schema['plus_four'].nullable)
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
 
     def test_udf_registration_no_nulls(self):
-        plus_four = self.spark.udf.register("plus_four", lambda x: x + 4, IntegerType(), False)
+        plus_four = udf(lambda x: x + 4, IntegerType(), False).asNonNullable()
+        plus_four = self.spark.udf.registerFunction("plus_four", plus_four)
         df = self.spark.range(10)
         res = df.select(plus_four(df['id']).alias('plus_four'))
         self.assertFalse(res.schema['plus_four'].nullable)
@@ -3420,6 +3426,11 @@ class PandasUDFTests(ReusedSQLTestCase):
                          functionType=PandasUDFType.GROUP_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
         self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+
+        udf = pandas_udf(lambda x: x, DoubleType()).asNonNullable()
+        self.assertEqual(udf.returnType, DoubleType())
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertFalse(udf.nullable)
 
     def test_pandas_udf_decorator(self):
         from pyspark.rdd import PythonEvalType

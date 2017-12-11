@@ -2072,7 +2072,7 @@ class PandasUDFType(object):
 
 
 @since(1.3)
-def udf(f=None, returnType=StringType(), nullable=True):
+def udf(f=None, returnType=StringType()):
     """Creates a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
@@ -2112,14 +2112,14 @@ def udf(f=None, returnType=StringType(), nullable=True):
         # for decorator use it as a returnType
         return_type = f or returnType
         return functools.partial(_create_udf, returnType=return_type,
-                                 evalType=PythonEvalType.SQL_BATCHED_UDF, nullable=nullable)
+                                 evalType=PythonEvalType.SQL_BATCHED_UDF)
     else:
         return _create_udf(f=f, returnType=returnType,
-                           evalType=PythonEvalType.SQL_BATCHED_UDF, nullable=nullable)
+                           evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
 @since(2.3)
-def pandas_udf(f=None, returnType=None, functionType=None, nullable=True):
+def pandas_udf(f=None, returnType=None, functionType=None):
     """
     Creates a vectorized user defined function (UDF).
 
@@ -2230,10 +2230,9 @@ def pandas_udf(f=None, returnType=None, functionType=None, nullable=True):
                          "functionType must be one the values from PandasUDFType")
 
     if is_decorator:
-        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type,
-                                 nullable=nullable)
+        return functools.partial(_create_udf, returnType=return_type, evalType=eval_type)
     else:
-        return _create_udf(f=f, returnType=return_type, evalType=eval_type, nullable=nullable)
+        return _create_udf(f=f, returnType=return_type, evalType=eval_type)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
