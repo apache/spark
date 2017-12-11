@@ -79,13 +79,12 @@ class ContinuousSuite extends StreamTest {
 
   test("basic rate source") {
     val df = spark.readStream
-       .format("rate")
-        .option("numPartitions", "5")
-        .option("rowsPerSecond", "5")
-        .load()
-        .select('value)
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .select('value)
 
-    // TODO: validate against low trigger interval
     testStream(df, useV2Sink = true)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
@@ -100,23 +99,31 @@ class ContinuousSuite extends StreamTest {
       CheckAnswer(scala.Range(0, 20): _*))
   }
 
-  /* test("repeatedly restart") {
-    val df = spark.readStream.format("rate").option("continuous", "true").load().select('value)
+  test("repeatedly restart") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .select('value)
 
-    // TODO: validate against low trigger interval
-    testStream(df)(
-      StartStream(Trigger.Continuous("1 second")),
-      Execute(_ => Thread.sleep(3000)),
+    testStream(df, useV2Sink = true)(
+      StartStream(longContinuousTrigger),
+      AwaitEpoch(0),
+      Execute(waitForRateSourceTriggers(_, 2)),
+      IncrementEpoch(),
       CheckAnswer(scala.Range(0, 10): _*),
       StopStream,
-      StartStream(Trigger.Continuous("1 second")),
+      StartStream(longContinuousTrigger),
       StopStream,
-      StartStream(Trigger.Continuous("1 second")),
+      StartStream(longContinuousTrigger),
       StopStream,
-      StartStream(Trigger.Continuous("1 second")),
-      Execute(_ => Thread.sleep(3000)),
+      StartStream(longContinuousTrigger),
+      AwaitEpoch(2),
+      Execute(waitForRateSourceTriggers(_, 2)),
+      IncrementEpoch(),
       CheckAnswer(scala.Range(0, 20): _*))
-  } */
+  }
 
   test("query without test harness") {
     val df = spark.readStream
