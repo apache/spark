@@ -300,7 +300,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     if (clusterManager == KUBERNETES) {
       args.master = Utils.checkAndGetK8sMasterUrl(args.master)
-      // Make sure YARN is included in our build if we're trying to use it
+      // Make sure KUBERNETES is included in our build if we're trying to use it
       if (!Utils.classIsLoadable(KUBERNETES_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
         printErrorAndExit(
           "Could not load KUBERNETES classes. " +
