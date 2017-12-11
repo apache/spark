@@ -80,6 +80,12 @@ case class StreamingExecutionRelation(
 // continuous processing (which is always V2) but only has V1 microbatch support. We don't
 // know at read time whether the query is conntinuous or not, so we need to be able to
 // swap a V1 relation back in.
+/**
+ * Used to link a [[DataSourceV2]] into a streaming
+ * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]]. This is only used for creating
+ * a streaming [[org.apache.spark.sql.DataFrame]] from [[org.apache.spark.sql.DataFrameReader]],
+ * and should be converted before passing to [[StreamExecution]].
+ */
 case class StreamingRelationV2(
     dataSource: DataSourceV2,
     sourceName: String,
@@ -95,6 +101,9 @@ case class StreamingRelationV2(
   )
 }
 
+/**
+ * Used to link a [[DataSourceV2]] into a continuous processing execution.
+ */
 case class ContinuousExecutionRelation(
     source: ContinuousReadSupport,
     extraOptions: Map[String, String],

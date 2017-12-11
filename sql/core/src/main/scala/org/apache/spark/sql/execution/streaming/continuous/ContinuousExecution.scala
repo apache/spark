@@ -79,7 +79,7 @@ class ContinuousExecution(
   override protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
     do {
       try {
-        runFromOffsets(sparkSessionForStream)
+        runContinuous(sparkSessionForStream)
       } catch {
         case _: Throwable if state.get().equals(RECONFIGURING) =>
           // swallow exception and run again
@@ -94,20 +94,16 @@ class ContinuousExecution(
    * before any processing occurs and will populate the following fields:
    *  - currentBatchId
    *  - committedOffsets
-   *  - availableOffsets
    *  The basic structure of this method is as follows:
    *
-   *  Identify (from the offset log) the offsets used to run the last batch
-   *  IF last batch exists THEN
-   *    Set the next batch to be executed as the last recovered batch
-   *    Check the commit log to see which batch was committed last
-   *    IF the last batch was committed THEN
-   *      Call getBatch using the last batch start and end offsets
-   *      // ^^^^ above line is needed since some sources assume last batch always re-executes
-   *      Setup for a new batch i.e., start = last batch end, and identify new end
+   *  Identify (from the commit log) the latest epoch that has committed
+   *  IF last epoch exists THEN
+   *    Set the next epoch to run as the next epoch after the last commit
+   *    Get the offsets for that epoch from the offset log (guaranteed by invariant to be there)
+   *    Note that offsets up to those are committed
    *    DONE
    *  ELSE
-   *    Identify a brand new batch
+   *    Start a new query log
    *  DONE
    */
   private def getStartOffsets(sparkSessionToRunBatches: SparkSession): OffsetSeq = {
@@ -131,10 +127,10 @@ class ContinuousExecution(
   }
 
   /**
-   * Processes any data available between `availableOffsets` and `committedOffsets`.
-   * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
+   * Do a continuous run.
+   * @param sparkSessionForQuery Isolated [[SparkSession]] to run the continuous query with.
    */
-  private def runFromOffsets(sparkSessionToRunBatch: SparkSession): Unit = {
+  private def runContinuous(sparkSessionForQuery: SparkSession): Unit = {
     import scala.collection.JavaConverters._
     // A list of attributes that will need to be updated.
     val replacements = new ArrayBuffer[(Attribute, Attribute)]
@@ -152,7 +148,7 @@ class ContinuousExecution(
     }
     uniqueSources = continuousSources.distinct
 
-    val offsets = getStartOffsets(sparkSessionToRunBatch)
+    val offsets = getStartOffsets(sparkSessionForQuery)
 
     var insertedSourceId = 0
     val withNewSources = logicalPlan transform {
@@ -193,7 +189,7 @@ class ContinuousExecution(
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
-        sparkSessionToRunBatch,
+        sparkSessionForQuery,
         withSink,
         outputMode,
         checkpointFile("state"),
@@ -250,7 +246,7 @@ class ContinuousExecution(
 
       reportTimeTaken("runContinuous") {
         SQLExecution.withNewExecutionId(
-          sparkSessionToRunBatch, lastExecution)(lastExecution.toRdd)
+          sparkSessionForQuery, lastExecution)(lastExecution.toRdd)
       }
     } finally {
       SparkEnv.get.rpcEnv.stop(epochEndpoint)
@@ -291,7 +287,7 @@ class ContinuousExecution(
   }
 
   /**
-   * Blocks the current thread until execution has committed past the specified epoch.
+   * Blocks the current thread until execution has committed at or after the specified epoch.
    */
   private[sql] def awaitEpoch(epoch: Long): Unit = {
     def notDone = {
@@ -315,7 +311,6 @@ class ContinuousExecution(
     }
   }
 }
-
 
 object ContinuousExecution {
   val START_EPOCH_KEY = "__continuous_start_epoch"
