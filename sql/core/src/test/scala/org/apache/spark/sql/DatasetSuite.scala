@@ -1158,18 +1158,24 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   Seq(true, false).foreach { eager =>
     Seq(true, false).foreach { reliable =>
       def testCheckpointing(testName: String)(f: => Unit): Unit = {
-        test(s"Dataset.checkpoint() - $testName (eager = $eager)") {
-          withTempDir { dir =>
-            val originalCheckpointDir = spark.sparkContext.checkpointDir
+        test(s"Dataset.checkpoint() - $testName (eager = $eager, reliable = $reliable)") {
+          if (reliable) {
+            withTempDir { dir =>
+              val originalCheckpointDir = spark.sparkContext.checkpointDir
 
-            try {
-              spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
-              f
-            } finally {
-              // Since the original checkpointDir can be None, we need
-              // to set the variable directly.
-              spark.sparkContext.checkpointDir = originalCheckpointDir
+              try {
+                spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
+                f
+              } finally {
+                // Since the original checkpointDir can be None, we need
+                // to set the variable directly.
+                spark.sparkContext.checkpointDir = originalCheckpointDir
+              }
             }
+          }
+          else {
+            // Local checkpoints dont require checkpoint_dir
+            f
           }
         }
       }
