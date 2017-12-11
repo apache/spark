@@ -236,6 +236,18 @@ case class InsertIntoHiveTable(
     // expected to be dropped at the normal termination of VM since deleteOnExit is used.
     deleteExternalTmpPath(hadoopConf)
 
+    //delete the tmpLocation dir
+    try {
+      val fs = tmpLocation.getFileSystem(hadoopConf)
+      if (fs.delete(tmpLocation, true)) {
+        // If we successfully delete the tmpLocation dir, remove it from FileSystem's cache.
+        fs.cancelDeleteOnExit(tmpLocation)
+      }
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Unable to delete tmpLocation directory:" + tmpLocation.toString + "\n" + e)
+    }
+
     // un-cache this table.
     sparkSession.catalog.uncacheTable(table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
