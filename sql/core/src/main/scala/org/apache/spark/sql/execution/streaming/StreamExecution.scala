@@ -44,6 +44,7 @@ trait State
 case object INITIALIZING extends State
 case object ACTIVE extends State
 case object TERMINATED extends State
+case object RECONFIGURING extends State
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
@@ -59,7 +60,7 @@ abstract class StreamExecution(
     override val name: String,
     private val checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    val sink: Sink,
+    val sink: BaseStreamingSink,
     val trigger: Trigger,
     val triggerClock: Clock,
     val outputMode: OutputMode,
@@ -151,26 +152,21 @@ abstract class StreamExecution(
     Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
 
   /**
-   * All stream sources present in the query plan. This will be set when generating logical plan.
-   */
-  @volatile protected var sources: Seq[Source] = Seq.empty
-
-  /**
    * A list of unique sources in the query plan. This will be set when generating logical plan.
    */
-  @volatile protected var uniqueSources: Seq[Source] = Seq.empty
+  @volatile protected var uniqueSources: Seq[BaseStreamingSource] = Seq.empty
 
   /** Defines the internal state of execution */
-  private val state = new AtomicReference[State](INITIALIZING)
+  protected val state = new AtomicReference[State](INITIALIZING)
 
   @volatile
   var lastExecution: IncrementalExecution = _
 
   /** Holds the most recent input data for each source. */
-  protected var newData: Map[Source, DataFrame] = _
+  protected var newData: Map[BaseStreamingSource, DataFrame] = _
 
   @volatile
-  private var streamDeathCause: StreamingQueryException = null
+  protected var streamDeathCause: StreamingQueryException = null
 
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
@@ -302,7 +298,7 @@ abstract class StreamExecution(
           e,
           committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
           availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString)
-        logError(s"Query $prettyIdString terminated with error", e)
+        // logError(s"Query $prettyIdString terminated with error", e)
         updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
@@ -389,7 +385,7 @@ abstract class StreamExecution(
   }
 
   /** Stops all streaming sources safely. */
-  private def stopSources(): Unit = {
+  protected def stopSources(): Unit = {
     uniqueSources.foreach { source =>
       try {
         source.stop()

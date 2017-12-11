@@ -66,6 +66,9 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
 
   override def getStartOffset(): Offset = offset
 
+  // Exposed so unit tests can reliably ensure they end after a desired row count.
+  private[sql] var lastStartTime: Long = _
+
   override def createReadTasks(): java.util.List[ReadTask[Row]] = {
     val partitionStartMap = offset match {
       case off: RateStreamOffset => off.partitionToValueAndRunTimeMs
@@ -137,6 +140,7 @@ class RateStreamDataReader(
         return false
     }
 
+    currentValue += increment
     currentRow = Row(
       DateTimeUtils.toJavaTimestamp(DateTimeUtils.fromMillis(nextReadTime)),
       currentValue)

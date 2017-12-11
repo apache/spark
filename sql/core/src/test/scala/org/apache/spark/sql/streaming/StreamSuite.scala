@@ -77,7 +77,7 @@ class StreamSuite extends StreamTest {
   }
 
   test("StreamingRelation.computeStats") {
-    val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
+    val streamingRelation = spark.readStream.format("memory").load().logicalPlan collect {
       case s: StreamingRelation => s
     }
     assert(streamingRelation.nonEmpty, "cannot find StreamingRelation")
