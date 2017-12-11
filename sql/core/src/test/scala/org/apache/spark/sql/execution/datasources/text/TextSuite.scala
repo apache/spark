@@ -39,54 +39,6 @@ class TextSuite extends QueryTest with SharedSQLContext {
     verifyFrame(spark.read.text(testFile))
   }
 
-  test("reading text file with option wholetext=true") {
-    val df = spark.read.option("wholetext", "true")
-      .format("text").load(testFile)
-    // schema
-    assert(df.schema == new StructType().add("value", StringType))
-
-    // verify content
-    val data = df.collect()
-    assert(data(0) ==
-      Row(
-        // scalastyle:off nonascii
-        """This is a test file for the text data source
-          |1+1
-          |数据砖头
-          |"doh"
-          |""".stripMargin))
-    // scalastyle:on nonascii
-    assert(data.length == 1)
-  }
-
-  test("reading multiple text files with option wholetext=true") {
-    import org.apache.spark.sql.catalyst.util._
-    withTempDir { dir =>
-      val file1 = new File(dir, "text1.txt")
-      stringToFile(file1,
-        """text file 1 contents.
-          |From: None to: ??
-        """.stripMargin)
-      val file2 = new File(dir, "text2.txt")
-      stringToFile(file2, "text file 2 contents.")
-      val file3 = new File(dir, "text3.txt")
-      stringToFile(file3, "text file 3 contents.")
-      val df = spark.read.option("wholetext", "true").text(dir.getAbsolutePath)
-      // Since wholetext option reads each file into a single row, df.length should be no. of files.
-      val data = df.sort("value").collect()
-      assert(data.length == 3)
-      // Each files should represent a single Row/element in Dataframe/Dataset
-      assert(data(0) == Row(
-        """text file 1 contents.
-          |From: None to: ??
-        """.stripMargin))
-      assert(data(1) == Row(
-        """text file 2 contents.""".stripMargin))
-      assert(data(2) == Row(
-        """text file 3 contents.""".stripMargin))
-    }
-  }
-
   test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
     val df = spark.read.text(testFile).withColumnRenamed("value", "adwrasdf")
 
