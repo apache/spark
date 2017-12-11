@@ -278,19 +278,21 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
     }
 
-    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-    withTimeZone("PST") {
-      assert(dfRead.collect().toSet ===
-        Set(
-          Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
-          Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
-    }
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
+      val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+      withTimeZone("PST") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
+      }
 
-    withTimeZone("UTC") {
-      assert(dfRead.collect().toSet ===
-        Set(
-          Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
-          Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 20:00:00"))))
+      withTimeZone("UTC") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 20:00:00"))))
+      }
     }
   }
 
