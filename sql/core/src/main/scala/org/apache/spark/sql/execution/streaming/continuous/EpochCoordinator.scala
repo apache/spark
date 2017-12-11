@@ -30,23 +30,41 @@ import org.apache.spark.sql.sources.v2.reader.{ContinuousReader, PartitionOffset
 import org.apache.spark.sql.sources.v2.writer.{ContinuousWriter, WriterCommitMessage}
 import org.apache.spark.util.RpcUtils
 
+private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
+
+// Driver epoch trigger message
+/**
+ * Atomically increment the current epoch and get the new value.
+ */
+case class IncrementAndGetEpoch() extends EpochCoordinatorMessage
+
+// Init messages
+/**
+ * Set the reader and writer partition counts. Tasks may not be started until the coordinator
+ * has acknowledged these messages.
+ */
+case class SetReaderPartitions(numPartitions: Int) extends EpochCoordinatorMessage
+case class SetWriterPartitions(numPartitions: Int) extends EpochCoordinatorMessage
+
+// Partition task messages
+/**
+ * Get the current epoch.
+ */
+case class GetCurrentEpoch() extends EpochCoordinatorMessage
+/**
+ * Commit a partition at the specified epoch with the given message.
+ */
 case class CommitPartitionEpoch(
     partitionId: Int,
     epoch: Long,
-    message: WriterCommitMessage)
-
-case class GetCurrentEpoch()
-
+    message: WriterCommitMessage) extends EpochCoordinatorMessage
+/**
+ * Report that a partition is starting the specified epoch at the specified offset.
+ */
 case class ReportPartitionOffset(
     partitionId: Int,
     epoch: Long,
-    offset: PartitionOffset)
-
-case class SetReaderPartitions(numPartitions: Int)
-case class SetWriterPartitions(numPartitions: Int)
-
-// Should be used only by ContinuousExecution during epoch advancement.
-case class IncrementAndGetEpoch()
+    offset: PartitionOffset) extends EpochCoordinatorMessage
 
 
 /** Helper object used to create reference to [[EpochCoordinator]]. */
