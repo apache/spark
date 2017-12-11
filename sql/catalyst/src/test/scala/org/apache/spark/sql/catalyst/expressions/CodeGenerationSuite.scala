@@ -390,6 +390,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-22696: InitializeJavaBean should not use global variables") {
     val ctx = new CodegenContext
+<<<<<<< HEAD
     InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
       Map("add" -> Literal(1))).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)

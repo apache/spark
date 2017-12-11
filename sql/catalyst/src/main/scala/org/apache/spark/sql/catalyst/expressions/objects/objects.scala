@@ -126,7 +126,8 @@ case class StaticInvoke(
     functionName: String,
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true,
-    returnNullable: Boolean = true) extends InvokeLike {
+    returnNullable: Boolean = true,
+    wrapException: Boolean = false) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
 
@@ -150,16 +151,36 @@ case class StaticInvoke(
       ""
     }
 
+    val wrappedCall = if (wrapException)
+      s"""
+        try {
+          ${ev.value} = $callFunc;
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """ else
+      s"${ev.value} = $callFunc;"
+
     val evaluate = if (returnNullable) {
       if (ctx.defaultValue(dataType) == "null") {
         s"""
-          ${ev.value} = $callFunc;
+          $wrappedCall
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
+        val wrappedCall = if (wrapException)
+          s"""
+             ${ctx.boxedType(dataType)} $boxedResult = ${ctx.defaultValue(dataType)};
+             try {
+               $boxedResult = $callFunc;
+             } catch (Exception e) {
+               org.apache.spark.unsafe.Platform.throwException(e);
+             }
+           """ else
+          s"${ctx.boxedType(dataType)} $boxedResult = $callFunc;"
         s"""
-          ${ctx.boxedType(dataType)} $boxedResult = $callFunc;
+          $wrappedCall
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -167,7 +188,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      s"${ev.value} = $callFunc;"
+      wrappedCall
     }
 
     val code = s"""
@@ -180,6 +201,68 @@ case class StaticInvoke(
      """
     ev.copy(code = code)
   }
+}
+
+/**
+ * Invokes a call to reference to a static field.
+ *
+ *
+ * @param staticObject The target of the static call.  This can either be the object itself
+ *                     (methods defined on scala objects), or the class object
+ *                     (static methods defined in java).
+ * @param dataType The expected return type of the function call.
+ * @param fieldName The field to reference.
+ */
+case class StaticField(
+  staticObject: Class[_],
+  dataType: DataType,
+  fieldName: String) extends Expression with NonSQLExpression {
+
+  val objectName = staticObject.getName.stripSuffix("$")
+
+  override def nullable: Boolean = false
+  override def children: Seq[Expression] = Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+
+    val code = s"""
+      final $javaType ${ev.value} = $objectName.$fieldName;
+    """
+
+    ev.copy(code = code, isNull = "false")
+  }
+}
+
+case class ValueIfType(
+  value: Expression,
+  checkedType: Class[_],
+  dataType: DataType) extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = true
+  override def children: Seq[Expression] = value :: Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+    val obj = value.genCode(ctx)
+
+    val code = s"""
+      ${obj.code}
+      final $javaType ${ev.value} = ${obj.value} instanceof ${checkedType.getName} ?
+        (${checkedType.getName}) ${obj.value} :
+        null;
+    """
+
+    ev.copy(code = code,
+      isNull = s"(${obj.isNull} || !(${obj.value} instanceof ${checkedType.getName}))")
+  }
+
 }
 
 /**
@@ -961,7 +1044,7 @@ object ExternalMapToCatalyst {
  *                       format.
  * @param child An expression that when evaluated returns the input map object.
  */
-case class ExternalMapToCatalyst private(
+case class ExternalMapToCatalyst(
     key: String,
     keyIsNull: String,
     keyType: DataType,
@@ -1237,46 +1320,90 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 }
 
 /**
- * Initialize a Java Bean instance by setting its field values via setters.
+ * Initialize an object by invoking the given sequence of method names and method arguments.
+ *
+ * @param objectInstance An expression evaluating to a new instance of the object to initialize
+ * @param setters A sequence of method names and their sequence of argument expressions to apply in
+ *                series to the object instance
  */
-case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Expression])
+case class InitializeObject(
+  objectInstance: Expression,
+  setters: Seq[(String, Seq[Expression])])
   extends Expression with NonSQLExpression {
 
-  override def nullable: Boolean = beanInstance.nullable
-  override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
-  override def dataType: DataType = beanInstance.dataType
+  override def nullable: Boolean = objectInstance.nullable
+  override def children: Seq[Expression] = null
+  override def dataType: DataType = objectInstance.dataType
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val instanceGen = beanInstance.genCode(ctx)
+    val instanceGen = objectInstance.genCode(ctx)
 
-    val javaBeanInstance = ctx.freshName("javaBean")
-    val beanInstanceJavaType = ctx.javaType(beanInstance.dataType)
+    val objectInstanceName = ctx.freshName("objectInstance")
+    val objectInstanceType = ctx.javaType(objectInstance.dataType)
 
     val initialize = setters.map {
-      case (setterMethod, fieldValue) =>
-        val fieldGen = fieldValue.genCode(ctx)
+      case (setterMethod, args) =>
+        val argGen = args.map {
+          case (arg) =>
+            arg.genCode(ctx)
+        }
+
         s"""
-           |${fieldGen.code}
-           |$javaBeanInstance.$setterMethod(${fieldGen.value});
+           |${argGen.map(arg => arg.code).mkString("\n")}
+           |$objectInstanceName.$setterMethod(${argGen.map(arg => arg.value).mkString(", ")});
          """.stripMargin
     }
+
     val initializeCode = ctx.splitExpressionsWithCurrentInputs(
-      expressions = initialize.toSeq,
-      funcName = "initializeJavaBean",
-      extraArguments = beanInstanceJavaType -> javaBeanInstance :: Nil)
+      expressions = initialize,
+      funcName = "initializeObject",
+      extraArguments = objectInstanceType -> objectInstanceName :: Nil)
 
     val code =
       s"""
          |${instanceGen.code}
-         |$beanInstanceJavaType $javaBeanInstance = ${instanceGen.value};
+         |$objectInstanceType $objectInstanceName = ${instanceGen.value};
          |if (!${instanceGen.isNull}) {
          |  $initializeCode
          |}
        """.stripMargin
+
     ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
+  }
+
+}
+
+/**
+ * Casts the result of an expression to another type.
+ *
+ * @param value The value to cast
+ * @param resultType The type to which the value should be cast
+ */
+case class ObjectCast(value: Expression, resultType: DataType)
+  extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = value.nullable
+  override def dataType: DataType = resultType
+  override def children: Seq[Expression] = value :: Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+
+    val javaType = ctx.javaType(resultType)
+    val obj = value.genCode(ctx)
+
+    val code =
+      s"""
+         ${obj.code}
+         final $javaType ${ev.value} = ($javaType) ${obj.value};
+       """
+
+    ev.copy(code = code, isNull = obj.isNull)
   }
 }
 
