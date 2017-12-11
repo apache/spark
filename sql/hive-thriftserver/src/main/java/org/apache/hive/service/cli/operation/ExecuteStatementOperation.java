@@ -23,7 +23,6 @@ import java.util.Map;
 
 import org.apache.hadoop.hive.ql.processors.CommandProcessor;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory;
-import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.session.HiveSession;
@@ -66,18 +65,6 @@ public abstract class ExecuteStatementOperation extends Operation {
   protected void setConfOverlay(Map<String, String> confOverlay) {
     if (confOverlay != null) {
       this.confOverlay = confOverlay;
-    }
-  }
-
-  protected void registerCurrentOperationLog() {
-    if (isOperationLogEnabled) {
-      if (operationLog == null) {
-        LOG.warn("Failed to get current OperationLog object of Operation: " +
-                getHandle().getHandleIdentifier());
-        isOperationLogEnabled = false;
-        return;
-      }
-      OperationLog.setCurrentOperationLog(operationLog);
     }
   }
 }
