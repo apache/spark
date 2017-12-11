@@ -24,6 +24,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
 import org.apache.spark.util.Utils
 
 /**
@@ -46,8 +47,7 @@ private[spark] trait ExecutorPodFactory {
 private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
   extends ExecutorPodFactory {
 
-  private val executorExtraClasspath =
-    sparkConf.get(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
+  private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
   private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
     sparkConf,
@@ -81,13 +81,12 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
 
   private val executorPodNamePrefix = sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
 
-  private val executorMemoryMiB = sparkConf.get(org.apache.spark.internal.config.EXECUTOR_MEMORY)
+  private val executorMemoryMiB = sparkConf.get(EXECUTOR_MEMORY)
   private val executorMemoryString = sparkConf.get(
-    org.apache.spark.internal.config.EXECUTOR_MEMORY.key,
-    org.apache.spark.internal.config.EXECUTOR_MEMORY.defaultValueString)
+    EXECUTOR_MEMORY.key, EXECUTOR_MEMORY.defaultValueString)
 
   private val memoryOverheadMiB = sparkConf
-    .get(KUBERNETES_EXECUTOR_MEMORY_OVERHEAD)
+    .get(EXECUTOR_MEMORY_OVERHEAD)
     .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
@@ -129,7 +128,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
         .build()
     }
     val executorExtraJavaOptionsEnv = sparkConf
-      .get(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS)
+      .get(EXECUTOR_JAVA_OPTIONS)
       .map { opts =>
         val delimitedOpts = Utils.splitCommandString(opts)
         delimitedOpts.zipWithIndex.map {

@@ -550,6 +550,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("client mode with a k8s master url") {
+    intercept[SparkException] {
+      sc = new SparkContext("k8s://https://host:port", "test", new SparkConf())
+    }
+  }
+
   testCancellingTasks("that raise interrupted exception on cancel") {
     Thread.sleep(9999999)
   }
