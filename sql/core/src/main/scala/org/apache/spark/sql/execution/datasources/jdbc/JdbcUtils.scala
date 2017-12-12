@@ -96,12 +96,13 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Truncates a table from the JDBC database.
+   * Truncates a table from the JDBC database without side effects.
    */
-  def truncateTable(conn: Connection, table: String): Unit = {
+  def truncateTable(conn: Connection, options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
-      statement.executeUpdate(s"TRUNCATE TABLE $table")
+      statement.executeUpdate(dialect.getTruncateQuery(options.table))
     } finally {
       statement.close()
     }
