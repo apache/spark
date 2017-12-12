@@ -22,6 +22,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.orc._
 import org.apache.orc.mapred.OrcInputFormat
 import org.apache.orc.storage.ql.exec.vector._
+import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryMode
@@ -34,6 +35,8 @@ import org.apache.spark.sql.types._
  * To support vectorization in WholeStageCodeGen, this reader returns ColumnarBatch.
  */
 private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBatch] with Logging {
+  import OrcColumnarBatchReader._
+
   /**
    * ORC File Reader.
    */
@@ -125,14 +128,14 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
       resultSchema: StructType,
       requiredSchema: StructType,
       partitionValues: InternalRow): Unit = {
-    batch = orcSchema.createRowBatch(OrcColumnarBatchReader.DEFAULT_SIZE)
+    batch = orcSchema.createRowBatch(DEFAULT_SIZE)
     totalRowCount = reader.getNumberOfRows
     logDebug(s"totalRowCount = $totalRowCount")
 
     this.requiredSchema = requiredSchema
     this.requestedColIds = requestedColIds
 
-    val memMode = OrcColumnarBatchReader.DEFAULT_MEMORY_MODE
+    val memMode = DEFAULT_MEMORY_MODE
     val capacity = ColumnarBatch.DEFAULT_BATCH_SIZE
     if (memMode == MemoryMode.OFF_HEAP) {
       columnVectors = OffHeapColumnVector.allocateColumns(capacity, resultSchema)
@@ -206,7 +209,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
 
               case TimestampType =>
                 val data = fromColumn.asInstanceOf[TimestampColumnVector]
-                toColumn.appendLongs(batchSize, data.time(0) * 1000L + data.nanos(0) / 1000L)
+                toColumn.appendLongs(batchSize, fromTimestampColumnVector(data, 0))
 
               case FloatType =>
                 val data = fromColumn.asInstanceOf[DoubleColumnVector].vector(0).toFloat
@@ -232,20 +235,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
 
               case DecimalType.Fixed(precision, scale) =>
                 val d = fromColumn.asInstanceOf[DecimalColumnVector].vector(0)
-                val value = Decimal(d.getHiveDecimal.bigDecimalValue, d.precision(), d.scale)
-                value.changePrecision(precision, scale)
-                if (precision <= Decimal.MAX_INT_DIGITS) {
-                  toColumn.appendInts(batchSize, value.toUnscaledLong.toInt)
-                } else if (precision <= Decimal.MAX_LONG_DIGITS) {
-                  toColumn.appendLongs(batchSize, value.toUnscaledLong)
-                } else {
-                  val bytes = value.toJavaBigDecimal.unscaledValue.toByteArray
-                  var index = 0
-                  while (index < batchSize) {
-                    toColumn.appendByteArray(bytes, 0, bytes.length)
-                    index += 1
-                  }
-                }
+                appendDecimalWritable(toColumn, precision, scale, d)
 
               case dt =>
                 throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
@@ -275,7 +265,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
                 toColumn.appendShort(data(index).toShort)
                 index += 1
               }
-            case IntegerType =>
+            case IntegerType | DateType =>
               val data = fromColumn.asInstanceOf[LongColumnVector].vector
               var index = 0
               while (index < batchSize) {
@@ -286,19 +276,11 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
               val data = fromColumn.asInstanceOf[LongColumnVector].vector
               toColumn.appendLongs(batchSize, data, 0)
 
-            case DateType =>
-              val data = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                toColumn.appendInt(data(index).toInt)
-                index += 1
-              }
-
             case TimestampType =>
               val data = fromColumn.asInstanceOf[TimestampColumnVector]
               var index = 0
               while (index < batchSize) {
-                toColumn.appendLong(data.time(index) * 1000L + data.nanos(index) / 1000L)
+                toColumn.appendLong(fromTimestampColumnVector(data, index))
                 index += 1
               }
 
@@ -334,16 +316,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
               var index = 0
               while (index < batchSize) {
                 val d = data.vector(index)
-                val value = Decimal(d.getHiveDecimal.bigDecimalValue, d.precision(), d.scale)
-                value.changePrecision(precision, scale)
-                if (precision <= Decimal.MAX_INT_DIGITS) {
-                  toColumn.appendInt(value.toUnscaledLong.toInt)
-                } else if (precision <= Decimal.MAX_LONG_DIGITS) {
-                  toColumn.appendLong(value.toUnscaledLong)
-                } else {
-                  val bytes = value.toJavaBigDecimal.unscaledValue.toByteArray
-                  toColumn.appendByteArray(bytes, 0, bytes.length)
-                }
+                appendDecimalWritable(toColumn, precision, scale, d)
                 index += 1
               }
 
@@ -359,26 +332,23 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
                 case BooleanType =>
                   val data = fromColumn.asInstanceOf[LongColumnVector].vector(index) == 1
                   toColumn.appendBoolean(data)
+
                 case ByteType =>
                   val data = fromColumn.asInstanceOf[LongColumnVector].vector(index).toByte
                   toColumn.appendByte(data)
                 case ShortType =>
                   val data = fromColumn.asInstanceOf[LongColumnVector].vector(index).toShort
                   toColumn.appendShort(data)
-                case IntegerType =>
+                case IntegerType | DateType =>
                   val data = fromColumn.asInstanceOf[LongColumnVector].vector(index).toInt
                   toColumn.appendInt(data)
                 case LongType =>
                   val data = fromColumn.asInstanceOf[LongColumnVector].vector(index)
                   toColumn.appendLong(data)
 
-                case DateType =>
-                  val data = fromColumn.asInstanceOf[LongColumnVector].vector(index).toInt
-                  toColumn.appendInt(data)
-
                 case TimestampType =>
                   val data = fromColumn.asInstanceOf[TimestampColumnVector]
-                  toColumn.appendLong(data.time(index) * 1000L + data.nanos(index) / 1000L)
+                  toColumn.appendLong(fromTimestampColumnVector(data, index))
 
                 case FloatType =>
                   val data = fromColumn.asInstanceOf[DoubleColumnVector].vector(index).toFloat
@@ -397,16 +367,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
 
                 case DecimalType.Fixed(precision, scale) =>
                   val d = fromColumn.asInstanceOf[DecimalColumnVector].vector(index)
-                  val value = Decimal(d.getHiveDecimal.bigDecimalValue, d.precision(), d.scale)
-                  value.changePrecision(precision, scale)
-                  if (precision <= Decimal.MAX_INT_DIGITS) {
-                    toColumn.appendInt(value.toUnscaledLong.toInt)
-                  } else if (precision <= Decimal.MAX_LONG_DIGITS) {
-                    toColumn.appendLong(value.toUnscaledLong)
-                  } else {
-                    val bytes = value.toJavaBigDecimal.unscaledValue.toByteArray
-                    toColumn.appendByteArray(bytes, 0, bytes.length)
-                  }
+                  appendDecimalWritable(toColumn, precision, scale, d)
 
                 case dt =>
                   throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
@@ -438,5 +399,33 @@ object OrcColumnarBatchReader {
    * - Spark's ColumnarBatch.DEFAULT_BATCH_SIZE = 4 * 1024
    */
   val DEFAULT_SIZE: Int = 4 * 1024
+
+  /**
+   * Returns the number of micros since epoch from an element of TimestampColumnVector.
+   */
+  private def fromTimestampColumnVector(vector: TimestampColumnVector, index: Int): Long =
+    vector.time(index) * 1000L + vector.nanos(index) / 1000L
+
+  /**
+   * Append a decimalWritable to a writableColumnVector.
+   */
+  private def appendDecimalWritable(
+      toColumn: WritableColumnVector,
+      precision: Int,
+      scale: Int,
+      decimalWritable: HiveDecimalWritable) = {
+    val decimal = decimalWritable.getHiveDecimal()
+    val value = Decimal(decimal.bigDecimalValue, decimal.precision(), decimal.scale())
+    value.changePrecision(precision, scale)
+
+    if (precision <= Decimal.MAX_INT_DIGITS) {
+      toColumn.appendInt(value.toUnscaledLong.toInt)
+    } else if (precision <= Decimal.MAX_LONG_DIGITS) {
+      toColumn.appendLong(value.toUnscaledLong)
+    } else {
+      val bytes = value.toJavaBigDecimal.unscaledValue.toByteArray
+      toColumn.appendByteArray(bytes, 0, bytes.length)
+    }
+  }
 }
 

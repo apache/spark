@@ -386,7 +386,7 @@ object SQLConf {
     .checkValues(Set("hive", "native"))
     .createWithDefault("native")
 
-  val ORC_VECTORIZED_READER_ENABLED = buildConf("spark.sql.orc.vectorizedReader.enabled")
+  val ORC_VECTORIZED_READER_ENABLED = buildConf("spark.sql.orc.enableVectorizedReader")
     .doc("Enables vectorized orc decoding.")
     .booleanConf
     .createWithDefault(true)
