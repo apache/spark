@@ -129,6 +129,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
       requiredSchema: StructType,
       partitionValues: InternalRow): Unit = {
     batch = orcSchema.createRowBatch(DEFAULT_SIZE)
+    assert(!batch.selectedInUse)
     totalRowCount = reader.getNumberOfRows
     logDebug(s"totalRowCount = $totalRowCount")
 
@@ -413,7 +414,7 @@ object OrcColumnarBatchReader {
       toColumn: WritableColumnVector,
       precision: Int,
       scale: Int,
-      decimalWritable: HiveDecimalWritable) = {
+      decimalWritable: HiveDecimalWritable): Unit = {
     val decimal = decimalWritable.getHiveDecimal()
     val value = Decimal(decimal.bigDecimalValue, decimal.precision(), decimal.scale())
     value.changePrecision(precision, scale)

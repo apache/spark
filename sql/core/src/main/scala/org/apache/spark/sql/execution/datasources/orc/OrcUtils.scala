@@ -110,6 +110,7 @@ object OrcUtils extends Logging {
 
   /**
    * Return a fixed ORC schema with data schema information, if needed.
+   * The schema inside old ORC files might consist of invalid column names like '_col0'.
    */
   def getFixedTypeDescription(
       schema: TypeDescription,
