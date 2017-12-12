@@ -35,12 +35,6 @@ import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.util.SystemClock
 
-// There are two types of entry possible:
-// (row, offset, null) - a row with offset
-// (null, null, epoch) - an epoch marker
-// We force both into the same queue to avoid having to synchronize across multiple queues.
-case class ReadQueueEntry(row: UnsafeRow, offset: PartitionOffset, epoch: Long)
-
 class ContinuousDataSourceRDD(
     sc: SparkContext,
     @transient private val readTasks: java.util.List[ReadTask[UnsafeRow]])
@@ -56,6 +50,7 @@ class ContinuousDataSourceRDD(
     val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createDataReader()
 
     // TODO: capacity option
+    // (null, null) is an allowed input to the queue, representing an epoch boundary.
     val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](1024)
 
     val epochEndpoint = EpochCoordinatorRef.get(
@@ -64,20 +59,24 @@ class ContinuousDataSourceRDD(
       private var currentRow: UnsafeRow = _
       private var currentOffset: PartitionOffset =
         ContinuousDataSourceRDD.getBaseReader(reader).getOffset
+      private var currentEpoch =
+        context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
       override def hasNext(): Boolean = {
-        val newTuple = queue.take()
-        val newOffset = newTuple._2
-        currentRow = newTuple._1
-        if (currentRow == null) {
-          epochEndpoint.send(ReportPartitionOffset(
-            context.partitionId(),
-            newOffset.asInstanceOf[EpochPackedPartitionOffset].epoch - 1,
-            currentOffset))
-          false
-        } else {
-          currentOffset = newOffset
-          true
+        queue.take() match {
+          // epoch boundary marker
+          case (null, null) =>
+            epochEndpoint.send(ReportPartitionOffset(
+              context.partitionId(),
+              currentEpoch,
+              currentOffset))
+            currentEpoch += 1
+            false
+          // real row
+          case (row, offset) =>
+            currentRow = row
+            currentOffset = offset
+            true
         }
       }
 
@@ -127,7 +126,7 @@ class EpochPollThread(
         .execute { () =>
             val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch())
             for (i <- currentEpoch to newEpoch - 1) {
-              queue.put((null, EpochPackedPartitionOffset(i + 1)))
+              queue.put((null, null))
               logDebug(s"Sent marker to start epoch ${i + 1}")
             }
             currentEpoch = newEpoch
@@ -138,7 +137,6 @@ class EpochPollThread(
         // Continuous shutdown might interrupt us, or it might clean up the endpoint before
         // interrupting us. Unfortunately, a missing endpoint just throws a generic SparkException.
         // In either case, as long as the context shows interrupted, we can safely clean shutdown.
-        return
     }
   }
 }
