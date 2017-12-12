@@ -5,7 +5,7 @@ title: Running Spark on Kubernetes
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This features makes use of the new experimental native
+Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This feature makes use of the new experimental native
 Kubernetes scheduler that has been added to Spark.
 
 # Prerequisites
@@ -31,7 +31,7 @@ by running `kubectl auth can-i <list|create|edit|delete> pods`.
 spark-submit can be directly used to submit a Spark application to a Kubernetes cluster. The mechanism by which spark-submit happens is as follows:
 
 * Spark creates a spark driver running within a [Kubernetes pod](https://kubernetes.io/docs/concepts/workloads/pods/pod/).
-* The driver creates executors which are also Kubernetes pods and connects to them, and executes application code.
+* The driver creates executors which are also running within Kubernetes pods and connects to them, and executes application code.
 * When the application completes, the executor pods terminate and are cleaned up, but the driver pod persists
 logs and remains in "completed" state in the Kubernetes API till it's eventually garbage collected or manually cleaned up.
 
@@ -68,16 +68,18 @@ building using the supplied script, or manually.
 
 To launch Spark Pi in cluster mode,
 
-    bin/spark-submit \
-      --deploy-mode cluster \
-      --class org.apache.spark.examples.SparkPi \
-      --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
-      --conf spark.kubernetes.namespace=default \
-      --conf spark.executor.instances=5 \
-      --conf spark.app.name=spark-pi \
-      --conf spark.kubernetes.driver.docker.image=<driver-image> \
-      --conf spark.kubernetes.executor.docker.image=<executor-image> \
-      local:///opt/spark/examples/jars/spark-examples_2.11-2.3.0.jar
+{% highlight bash %}
+$ bin/spark-submit \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.SparkPi \
+    --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
+    --conf spark.kubernetes.namespace=default \
+    --conf spark.executor.instances=5 \
+    --conf spark.app.name=spark-pi \
+    --conf spark.kubernetes.driver.docker.image=<driver-image> \
+    --conf spark.kubernetes.executor.docker.image=<executor-image> \
+    local:///opt/spark/examples/jars/spark-examples_2.11-2.3.0.jar
+{% endhighlight %}
 
 The Spark master, specified either via passing the `--master` command line argument to `spark-submit` or by setting
 `spark.master` in the application's configuration, must be a URL with the format `k8s://<api_server_url>`. Prefixing the
@@ -170,7 +172,7 @@ the spark application.
 ### Namespaces
 
 Kubernetes has the concept of [namespaces](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/).
-Namespaces are a way to divide cluster resources between multiple users (via resource quota). Spark on Kubernetes can
+Namespaces are ways to divide cluster resources between multiple users (via resource quota). Spark on Kubernetes can
 use namespaces to launch spark applications. This is through the `--conf spark.kubernetes.namespace` argument to spark-submit.
 
 Kubernetes allows using [ResourceQuota](https://kubernetes.io/docs/concepts/policy/resource-quotas/) to set limits on
@@ -250,7 +252,7 @@ and provide feedback to the development team.
 
 # Configuration
 
-See the [configuration page](configuration.html) for information on Spark configurations.  The following configuration is
+See the [configuration page](configuration.html) for information on Spark configurations.  The following configurations are
 specific to Spark on Kubernetes.
 
 #### Spark Properties
