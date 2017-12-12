@@ -17,12 +17,14 @@
 
 package org.apache.spark.mllib.clustering
 
+import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
 class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -311,6 +313,22 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(returnModel.clusterCenters(1) === initialModel.clusterCenters(1))
   }
 
+  test("Kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
+    val ser = new KryoSerializer(conf)
+    val serInstance = new KryoSerializer(conf).newInstance()
+
+    def check[T: ClassTag](t: T) {
+      assert(serInstance.deserialize[T](serInstance.serialize(t)) === t)
+    }
+
+    val vec1 = new VectorWithNorm(Vectors.dense(Array(1.0, 2.0)))
+    val vec2 = new VectorWithNorm(Vectors.sparse(10, Array(5, 8), Array(1.0, 2.0)))
+    check(vec1)
+    check(vec2)
+  }
 }
 
 object KMeansSuite extends SparkFunSuite {

@@ -188,6 +188,7 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.mllib.linalg.DenseMatrix",
       "org.apache.spark.mllib.linalg.SparseMatrix",
       "org.apache.spark.mllib.regression.LabeledPoint",
+      "org.apache.spark.mllib.clustering.VectorWithNorm",
       "org.apache.spark.ml.linalg.Vector",
       "org.apache.spark.ml.linalg.DenseVector",
       "org.apache.spark.ml.linalg.SparseVector",
