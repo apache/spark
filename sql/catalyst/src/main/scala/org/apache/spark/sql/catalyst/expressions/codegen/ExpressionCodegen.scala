@@ -110,7 +110,7 @@ object ExpressionCodegen {
         Seq(ctx.INPUT_ROW)
 
       // An expression which is not evaluated yet. Tracks down to find input rows.
-      case BoundReference(ordinal, _, _) if ctx.currentVars(ordinal).code != "" =>
+      case BoundReference(ordinal, _, _) if !ctx.currentVars(ordinal).isEvaluated() =>
         trackDownRow(ctx, ctx.currentVars(ordinal))
 
       case _ => Seq.empty
@@ -130,7 +130,7 @@ object ExpressionCodegen {
         inputRows += curExprCode.inputRow
       }
       curExprCode.inputVars.foreach { inputVar =>
-        if (inputVar.exprCode.code != "") {
+        if (!inputVar.exprCode.isEvaluated()) {
           exprCodes.enqueue(inputVar.exprCode)
         }
       }
