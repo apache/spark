@@ -154,7 +154,7 @@ class DataReaderThread(
             "Continuous reader reported no remaining elements! Reader should have blocked waiting.")
         }
 
-        queue.put((reader.get(), baseReader.getOffset))
+        queue.put((reader.get().copy(), baseReader.getOffset))
       }
     } catch {
       case _: InterruptedException if context.isInterrupted() =>

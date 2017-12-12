@@ -65,8 +65,9 @@ class ContinuousSuite extends StreamTest {
           case DataSourceV2ScanExec(_, r: ContinuousRateStreamReader) => r
         }.get
 
-        val deltaMs = (numTriggers - 1) * 1000 + 300
+        assert(reader.lastStartTime != 0, "reader last start time not initialized yet")
 
+        val deltaMs = (numTriggers - 1) * 1000 + 300
         while (System.currentTimeMillis < reader.lastStartTime + deltaMs) {
           Thread.sleep(reader.lastStartTime + deltaMs - System.currentTimeMillis)
         }
@@ -96,7 +97,8 @@ class ContinuousSuite extends StreamTest {
       AwaitEpoch(2),
       Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 20): _*))
+      CheckAnswer(scala.Range(0, 20): _*),
+      StopStream)
   }
 
   test("repeatedly restart") {
@@ -122,7 +124,31 @@ class ContinuousSuite extends StreamTest {
       AwaitEpoch(2),
       Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 20): _*))
+      CheckAnswer(scala.Range(0, 20): _*),
+      StopStream)
+  }
+
+  test("rate latency") {
+    import org.apache.spark.sql.functions.udf
+    val current_timestamp = udf(() => System.currentTimeMillis())
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "2")
+      .option("rowsPerSecond", "2")
+      .load()
+      .select('timestamp.cast("long") as 'ingest, 'value, current_timestamp() as 'processing)
+    val query = df.writeStream
+      .format("memory")
+      .queryName("latency")
+      .trigger(Trigger.Continuous(100))
+      .start()
+    val continuousExecution =
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.asInstanceOf[ContinuousExecution]
+    continuousExecution.awaitEpoch(0)
+    waitForRateSourceTriggers(continuousExecution, 2)
+    query.stop()
+
+    print(spark.read.table("latency").collect().mkString)
   }
 
   test("query without test harness") {
@@ -137,10 +163,87 @@ class ContinuousSuite extends StreamTest {
       .queryName("noharness")
       .trigger(Trigger.Continuous(100))
       .start()
-    waitForRateSourceTriggers(query.asInstanceOf[StreamingQueryWrapper].streamingQuery, 2)
+    val continuousExecution =
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.asInstanceOf[ContinuousExecution]
+    continuousExecution.awaitEpoch(0)
+    waitForRateSourceTriggers(continuousExecution, 2)
     query.stop()
 
     val results = spark.read.table("noharness").collect()
     assert(results.toSet == Set(0, 1, 2, 3).map(Row(_)))
+  }
+}
+
+class ContinuousStressSuite extends StreamTest {
+
+  import testImplicits._
+
+  // We need more than the default local[2] to be able to schedule all partitions simultaneously.
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[10]",
+      "continuous-stream-test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")))
+
+  private def waitForRateSourceTriggers(query: StreamExecution, numTriggers: Int): Unit = {
+    query match {
+      case s: ContinuousExecution =>
+        assert(numTriggers >= 2, "must wait for at least 2 triggers to ensure query is initialized")
+        val reader = s.lastExecution.executedPlan.collectFirst {
+          case DataSourceV2ScanExec(_, r: ContinuousRateStreamReader) => r
+        }.get
+
+        assert(reader.lastStartTime != 0, "reader last start time not initialized yet")
+
+        val deltaMs = (numTriggers - 1) * 1000 + 300
+        while (System.currentTimeMillis < reader.lastStartTime + deltaMs) {
+          Thread.sleep(reader.lastStartTime + deltaMs - System.currentTimeMillis)
+        }
+    }
+  }
+
+  // A continuous trigger that will only fire the initial time for the duration of a test.
+  // This allows clean testing with manual epoch advancement.
+  private val longContinuousTrigger = Trigger.Continuous("1 hour")
+
+  test("only one epoch") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "1")
+      .option("rowsPerSecond", "100")
+      .load()
+      .select('value)
+
+    testStream(df, useV2Sink = true)(
+      StartStream(longContinuousTrigger),
+      AwaitEpoch(0),
+      Execute(waitForRateSourceTriggers(_, 200)),
+      IncrementEpoch(),
+      CheckAnswer(scala.Range(0, 20000): _*))
+  }
+
+  test("automatic epoch advancement") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "1")
+      .option("rowsPerSecond", "100")
+      .load()
+      .select('value)
+
+    testStream(df, useV2Sink = true)(
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(0),
+      Execute(waitForRateSourceTriggers(_, 200)),
+      IncrementEpoch(),
+      Execute { query =>
+        // Because we have automatic advancement, we can't reliably guarantee another trigger won't
+        // commit more than the 20K rows we expect before we can check. So we simply ensure that:
+        //  * the highest value committed was at least 20000 - 1
+        //  * all values below the highest are present
+        val data = query.sink.asInstanceOf[MemorySinkV2].allData
+        val max = data.map(_.getLong(0)).max
+        assert(max >= 19999)
+        assert(data.toSet == scala.Range(0, max.toInt + 1).map(Row(_)).toSet)
+      })
   }
 }
