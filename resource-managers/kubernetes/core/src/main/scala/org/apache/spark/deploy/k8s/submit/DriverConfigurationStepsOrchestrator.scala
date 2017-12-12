@@ -21,12 +21,14 @@ import java.util.UUID
 import com.google.common.primitives.Longs
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.k8s.{ConfigurationUtils, MountSecretsBootstrapImpl}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.steps._
+import org.apache.spark.deploy.k8s.submit.steps.initcontainer.InitContainerConfigurationStepsOrchestrator
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.SystemClock
+import org.apache.spark.util.Utils
 
 /**
  * Constructs the complete list of driver configuration steps to run to deploy the Spark driver.
@@ -50,6 +52,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
   }
 
   private val imagePullPolicy = submissionSparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
+  private val initContainerConfigMapName = s"$kubernetesResourceNamePrefix-init-config"
   private val jarsDownloadPath = submissionSparkConf.get(JARS_DOWNLOAD_LOCATION)
   private val filesDownloadPath = submissionSparkConf.get(FILES_DOWNLOAD_LOCATION)
 
@@ -63,6 +66,10 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     require(!driverCustomLabels.contains(SPARK_ROLE_LABEL), "Label with key " +
       s"$SPARK_ROLE_LABEL is not allowed as it is reserved for Spark bookkeeping " +
       "operations.")
+
+    val driverSecretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
+      submissionSparkConf,
+      KUBERNETES_DRIVER_SECRETS_PREFIX)
 
     val allDriverLabels = driverCustomLabels ++ Map(
       SPARK_APP_ID_LABEL -> kubernetesAppId,
@@ -116,10 +123,53 @@ private[spark] class DriverConfigurationStepsOrchestrator(
       None
     }
 
+    val mayBeInitContainerBootstrapStep =
+      if (areAnyFilesNonContainerLocal(sparkJars ++ sparkFiles)) {
+        val initContainerConfigurationStepsOrchestrator =
+          new InitContainerConfigurationStepsOrchestrator(
+            namespace,
+            kubernetesResourceNamePrefix,
+            sparkJars,
+            sparkFiles,
+            jarsDownloadPath,
+            filesDownloadPath,
+            imagePullPolicy,
+            allDriverLabels,
+            initContainerConfigMapName,
+            INIT_CONTAINER_PROPERTIES_FILE_NAME,
+            submissionSparkConf)
+        val initContainerConfigurationSteps =
+          initContainerConfigurationStepsOrchestrator.getAllConfigurationSteps()
+        val initContainerBootstrapStep =
+          new DriverInitContainerBootstrapStep(
+            initContainerConfigurationSteps,
+            initContainerConfigMapName,
+            INIT_CONTAINER_PROPERTIES_FILE_NAME)
+
+        Some(initContainerBootstrapStep)
+      } else {
+        None
+      }
+
+    val mayBeMountSecretsStep = if (driverSecretNamesToMountPaths.nonEmpty) {
+      val mountSecretsBootstrap = new MountSecretsBootstrapImpl(driverSecretNamesToMountPaths)
+      Some(new DriverMountSecretsStep(mountSecretsBootstrap))
+    } else {
+      None
+    }
+
     Seq(
       initialSubmissionStep,
       driverAddressStep,
       kubernetesCredentialsStep) ++
-      maybeDependencyResolutionStep.toSeq
+      maybeDependencyResolutionStep.toSeq ++
+      mayBeInitContainerBootstrapStep.toSeq ++
+      mayBeMountSecretsStep.toSeq
+  }
+
+  private def areAnyFilesNonContainerLocal(files: Seq[String]): Boolean = {
+    files.exists { uri =>
+      Option(Utils.resolveURI(uri).getScheme).getOrElse("file") != "local"
+    }
   }
 }

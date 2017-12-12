@@ -21,9 +21,10 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerBootstrap, MountSecretsBootstrap, PodWithDetachedInitContainer}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.InitContainerUtil
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
 import org.apache.spark.util.Utils
 
@@ -44,7 +45,11 @@ private[spark] trait ExecutorPodFactory {
       nodeToLocalTaskCount: Map[String, Int]): Pod
 }
 
-private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
+private[spark] class ExecutorPodFactoryImpl(
+    sparkConf: SparkConf,
+    mountSecretsBootstrap: Option[MountSecretsBootstrap],
+    executorInitContainerBootstrap: Option[InitContainerBootstrap],
+    executorInitContainerMountSecretsBootstrap: Option[MountSecretsBootstrap])
   extends ExecutorPodFactory {
 
   private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
@@ -209,9 +214,33 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
         .build()
     }.getOrElse(executorContainer)
 
-    new PodBuilder(executorPod)
+    val (withMaybeSecretsMountedPod, withMaybeSecretsMountedContainer) =
+      mountSecretsBootstrap.map {bootstrap =>
+        bootstrap.mountSecrets(executorPod, containerWithExecutorLimitCores)
+      }.getOrElse((executorPod, containerWithExecutorLimitCores))
+
+    val (executorPodWithInitContainer, initBootstrappedExecutorContainer) =
+      executorInitContainerBootstrap.map { bootstrap =>
+        val podWithInitContainer = bootstrap.bootstrapInitContainer(
+          PodWithDetachedInitContainer(
+            withMaybeSecretsMountedPod,
+            new ContainerBuilder().build(),
+            withMaybeSecretsMountedContainer))
+
+        val (mayBePodWithSecretsMountedToInitContainer, mayBeInitContainerWithSecretsMounted) =
+          executorInitContainerMountSecretsBootstrap.map { bootstrap =>
+            bootstrap.mountSecrets(podWithInitContainer.pod, podWithInitContainer.initContainer)
+          }.getOrElse((podWithInitContainer.pod, podWithInitContainer.initContainer))
+
+        val podWithAttachedInitContainer = InitContainerUtil.appendInitContainer(
+          mayBePodWithSecretsMountedToInitContainer, mayBeInitContainerWithSecretsMounted)
+
+        (podWithAttachedInitContainer, podWithInitContainer.mainContainer)
+      }.getOrElse((withMaybeSecretsMountedPod, withMaybeSecretsMountedContainer))
+
+    new PodBuilder(executorPodWithInitContainer)
       .editSpec()
-        .addToContainers(containerWithExecutorLimitCores)
+        .addToContainers(initBootstrappedExecutorContainer)
         .endSpec()
       .build()
   }
