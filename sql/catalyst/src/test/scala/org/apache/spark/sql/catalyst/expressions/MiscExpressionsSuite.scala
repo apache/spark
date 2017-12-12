@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
 
 class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -44,11 +43,4 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Length(Uuid()), 36)
     assert(evaluate(Uuid()) !== evaluate(Uuid()))
   }
-
-  test("SPARK-22716: PrintToStderr should not use global variables") {
-    val ctx = new CodegenContext
-    PrintToStderr(Literal(1)).genCode(ctx)
-    assert(ctx.mutableStates.isEmpty)
-  }
-
 }

@@ -22,7 +22,6 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
@@ -741,17 +740,5 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
-  }
-
-  test("SPARK-22716: UnixTimestamp should not use global variables") {
-    val ctx = new CodegenContext
-    UnixTimestamp(Literal("2017-12-07"), Literal("yyyy-MM-dd")).genCode(ctx)
-    assert(ctx.mutableStates.isEmpty)
-  }
-
-  test("SPARK-22716: FromUnixTime should not use global variables") {
-    val ctx = new CodegenContext
-    FromUnixTime(Literal(0), Literal("yyyy-MM-dd")).genCode(ctx)
-    assert(ctx.mutableStates.isEmpty)
   }
 }

@@ -310,7 +310,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case TimestampType | LongType =>
           ev.copy(code = "", value = s"${value}L")
         case _ =>
-          ev.copy(code = "", value = ctx.addReferenceObj("literalValue", value,
+          ev.copy(code = "", value = ctx.addReferenceObj("literal", value,
             ctx.javaType(dataType)))
       }
     }

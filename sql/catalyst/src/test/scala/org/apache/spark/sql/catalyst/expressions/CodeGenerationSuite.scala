@@ -394,4 +394,11 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       Map("add" -> Literal(1))).genCode(ctx)
     assert(ctx.mutableStates.isEmpty)
   }
+
+  test("SPARK-22716: addReferenceObj should not add mutable states") {
+    val ctx = new CodegenContext
+    val foo = new Object()
+    ctx.addReferenceObj("foo", foo)
+    assert(ctx.mutableStates.isEmpty)
+  }
 }
