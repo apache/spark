@@ -51,10 +51,6 @@ private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Orderin
     this
   }
 
-  def poll(): A = {
-    underlying.poll()
-  }
-
   override def +=(elem1: A, elem2: A, elems: A*): this.type = {
     this += elem1 += elem2 ++= elems
   }
