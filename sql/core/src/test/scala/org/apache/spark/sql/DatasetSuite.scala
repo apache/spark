@@ -1426,6 +1426,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       assert(e.getCause.isInstanceOf[NullPointerException])
     }
   }
+
+  test("SPARK-22527: Reuse coordinated ShuffleExchange") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTable("table1") {
+        val df = (0 until 100).map(x => (x, x.toString)).toDF("amount", "name")
+        df.write.saveAsTable("table1")
+
+        val query =
+          """SELECT name, sum(amount) FROM table1 GROUP BY name
+            |UNION ALL SELECT name, sum(amount) FROM table1 GROUP BY name
+            |UNION ALL SELECT name, sum(amount) FROM table1 GROUP BY name
+            |""".stripMargin
+        val union = sql(query)
+        val exchanges = union.queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }
+        assert(exchanges.length == 1)
+      }
+    }
+  }
 }
 
 case class SingleData(id: Int)
