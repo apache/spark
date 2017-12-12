@@ -83,7 +83,7 @@ abstract class StreamExecution(
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
 
-  val resolvedCheckpointRoot: String = {
+  val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
     checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
