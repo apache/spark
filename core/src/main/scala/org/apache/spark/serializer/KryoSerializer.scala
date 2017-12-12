@@ -196,7 +196,9 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.ml.linalg.SparseMatrix",
       "org.apache.spark.ml.feature.Instance",
       "org.apache.spark.ml.feature.OffsetInstance",
-      "org.apache.spark.ml.feature.LabeledPoint"
+      "org.apache.spark.ml.feature.LabeledPoint",
+      "org.apache.spark.ml.tree.impl.TreePoint",
+      "org.apache.spark.ml.tree.impl.BaggedPoint"
     ).foreach { name =>
       try {
         val clazz = Utils.classForName(name)
