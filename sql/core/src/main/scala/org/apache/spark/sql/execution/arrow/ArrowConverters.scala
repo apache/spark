@@ -86,13 +86,9 @@ private[sql] object ArrowConverters {
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val arrowWriter = ArrowWriter.create(root)
 
-    var closed = false
-
     context.addTaskCompletionListener { _ =>
-      if (!closed) {
-        root.close()
-        allocator.close()
-      }
+      root.close()
+      allocator.close()
     }
 
     new Iterator[ArrowPayload] {
@@ -100,7 +96,6 @@ private[sql] object ArrowConverters {
       override def hasNext: Boolean = rowIter.hasNext || {
         root.close()
         allocator.close()
-        closed = true
         false
       }
 
