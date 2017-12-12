@@ -162,7 +162,6 @@ class QuantileDiscretizerSuite
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("result1", "result2"))
       .setNumBuckets(numBuckets)
-    assert(discretizer.isQuantileDiscretizeMultipleColumns())
     val result = discretizer.fit(df).transform(df)
 
     val relativeError = discretizer.getRelativeError
@@ -194,7 +193,6 @@ class QuantileDiscretizerSuite
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("result1", "result2"))
       .setNumBuckets(numBuckets)
-    assert(discretizer.isQuantileDiscretizeMultipleColumns())
     val result = discretizer.fit(df).transform(df)
     for (i <- 1 to 2) {
       val observedNumBuckets = result.select("result" + i).distinct.count
@@ -220,7 +218,6 @@ class QuantileDiscretizerSuite
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("result1", "result2"))
       .setNumBuckets(numBuckets)
-    assert(discretizer.isQuantileDiscretizeMultipleColumns())
 
     withClue("QuantileDiscretizer with handleInvalid=error should throw exception for NaN values") {
       val dataFrame: DataFrame = validData1.zip(validData2).toSeq.toDF("input1", "input2")
@@ -269,8 +266,6 @@ class QuantileDiscretizerSuite
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("result1", "result2", "result3"))
       .setNumBucketsArray(numBucketsArray)
-
-    assert(discretizer.isQuantileDiscretizeMultipleColumns())
 
     discretizer.fit(df).transform(df).
       select("result1", "expected1", "result2", "expected2", "result3", "expected3")
@@ -388,18 +383,22 @@ class QuantileDiscretizerSuite
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("result1", "result2"))
       .setNumBucketsArray(Array(5, 10))
-    assert(discretizer.isQuantileDiscretizeMultipleColumns())
     testDefaultReadWrite(discretizer)
   }
 
   test("Both inputCol and inputCols are set") {
+    val spark = this.spark
+    import spark.implicits._
     val discretizer = new QuantileDiscretizer()
       .setInputCol("input")
       .setOutputCol("result")
       .setNumBuckets(3)
       .setInputCols(Array("input1", "input2"))
-
-    // When both are set, we ignore `inputCols` and just map the column specified by `inputCol`.
-    assert(discretizer.isQuantileDiscretizeMultipleColumns() == false)
+    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+      .map(Tuple1.apply).toDF("input")
+    // When both inputCol and inputCols are set, we throw Exception.
+    intercept[Exception] {
+      discretizer.fit(df)
+    }
   }
 }

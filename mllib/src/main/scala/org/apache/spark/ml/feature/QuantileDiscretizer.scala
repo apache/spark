@@ -108,9 +108,9 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * are too few distinct values of the input to create enough distinct quantiles.
  * Since 2.3.0,
  * `QuantileDiscretizer` can map multiple columns at once by setting the `inputCols` parameter.
- * Note that when both the `inputCol` and `inputCols` parameters are set, a log warning will be
- * printed and only `inputCol` will take effect, while `inputCols` will be ignored. To specify
- * the number of buckets for each column, the `numBucketsArray` parameter can be set, or if the
+ * Note that only one of `inputCol` and `inputCols` parameters can be set. If both of the
+ * `inputCol` and `inputCols` parameters are set, an Exception will be thrown. To specify the
+ * number of buckets for each column, the `numBucketsArray` parameter can be set, or if the
  * number of buckets should be the same across columns, `numBuckets` can be set as a convenience.
  *
  * NaN handling:
@@ -168,20 +168,13 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   @Since("2.3.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  private[feature] def isQuantileDiscretizeMultipleColumns(): Boolean = {
-    if (isSet(inputCols) && isSet(inputCol)) {
-      logWarning("Both `inputCol` and `inputCols` are set, we ignore `inputCols` and this " +
-        "`QuantileDiscretizer` will only map one column specified by `inputCol`")
-      false
-    } else if (isSet(inputCols)) {
-      true
-    } else {
-      false
-    }
-  }
-
   private[feature] def getInOutCols: (Array[String], Array[String]) = {
-    if (!isQuantileDiscretizeMultipleColumns) {
+    require((isSet(inputCol) && isSet(outputCol) && !isSet(inputCols) && !isSet(outputCols)) ||
+      (!isSet(inputCol) && !isSet(outputCol) && isSet(inputCols) && isSet(outputCols)),
+      "Only allow to set either inputCol/outputCol, or inputCols/outputCols"
+    )
+
+    if (isSet(inputCol)) {
       (Array($(inputCol)), Array($(outputCol)))
     } else {
       require($(inputCols).length == $(outputCols).length,
@@ -209,7 +202,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   override def fit(dataset: Dataset[_]): Bucketizer = {
     transformSchema(dataset.schema, logging = true)
     val bucketizer = new Bucketizer(uid).setHandleInvalid($(handleInvalid))
-    if (isQuantileDiscretizeMultipleColumns) {
+    if (isSet(inputCols)) {
       val splitsArray = if (isSet(numBucketsArray)) {
         val probArrayPerCol = $(numBucketsArray).map { numOfBuckets =>
           (0.0 to 1.0 by 1.0 / numOfBuckets).toArray
