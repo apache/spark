@@ -111,7 +111,7 @@ def determine_modules_to_test(changed_modules):
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
     ['sql', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
-     'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
+     'pyspark-sql', 'repl', 'pyspark-mllib', 'sparkr', 'pyspark-ml']
     """
     modules_to_test = set()
     for module in changed_modules:
