@@ -106,12 +106,11 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * categorical features. The number of bins can be set using the `numBuckets` parameter. It is
  * possible that the number of buckets used will be smaller than this value, for example, if there
  * are too few distinct values of the input to create enough distinct quantiles.
- * Since 2.3.0,
- * `QuantileDiscretizer` can map multiple columns at once by setting the `inputCols` parameter.
- * Note that only one of `inputCol` and `inputCols` parameters can be set. If both of the
- * `inputCol` and `inputCols` parameters are set, an Exception will be thrown. To specify the
- * number of buckets for each column, the `numBucketsArray` parameter can be set, or if the
- * number of buckets should be the same across columns, `numBuckets` can be set as a convenience.
+ * Since 2.3.0, `QuantileDiscretizer` can map multiple columns at once by setting the `inputCols`
+ * parameter. If both of the `inputCol` and `inputCols` parameters are set, an Exception will be
+ * thrown. To specify the number of buckets for each column, the `numBucketsArray` parameter can
+ * be set, or if the number of buckets should be the same across columns, `numBuckets` can be
+ * set as a convenience.
  *
  * NaN handling:
  * null and NaN values will be ignored from the column during `QuantileDiscretizer` fitting. This
@@ -171,7 +170,8 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   private[feature] def getInOutCols: (Array[String], Array[String]) = {
     require((isSet(inputCol) && isSet(outputCol) && !isSet(inputCols) && !isSet(outputCols)) ||
       (!isSet(inputCol) && !isSet(outputCol) && isSet(inputCols) && isSet(outputCols)),
-      "Only allow to set either inputCol/outputCol, or inputCols/outputCols"
+      "QuantileDiscretizer only supports setting either inputCol/outputCol or" +
+        "inputCols/outputCols."
     )
 
     if (isSet(inputCol)) {
