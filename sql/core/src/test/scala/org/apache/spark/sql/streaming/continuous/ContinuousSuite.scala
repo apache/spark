@@ -128,29 +128,6 @@ class ContinuousSuite extends StreamTest {
       StopStream)
   }
 
-  test("rate latency") {
-    import org.apache.spark.sql.functions.udf
-    val current_timestamp = udf(() => System.currentTimeMillis())
-    val df = spark.readStream
-      .format("rate")
-      .option("numPartitions", "2")
-      .option("rowsPerSecond", "2")
-      .load()
-      .select('timestamp.cast("long") as 'ingest, 'value, current_timestamp() as 'processing)
-    val query = df.writeStream
-      .format("memory")
-      .queryName("latency")
-      .trigger(Trigger.Continuous(100))
-      .start()
-    val continuousExecution =
-      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.asInstanceOf[ContinuousExecution]
-    continuousExecution.awaitEpoch(0)
-    waitForRateSourceTriggers(continuousExecution, 2)
-    query.stop()
-
-    print(spark.read.table("latency").collect().mkString)
-  }
-
   test("query without test harness") {
     val df = spark.readStream
       .format("rate")
