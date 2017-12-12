@@ -110,7 +110,7 @@ object ExpressionCodegen {
         Seq(ctx.INPUT_ROW)
 
       // An expression which is not evaluated yet. Tracks down to find input rows.
-      case BoundReference(ordinal, _, _) if !ctx.currentVars(ordinal).isEvaluated() =>
+      case BoundReference(ordinal, _, _) if !isEvaluated(ctx.currentVars(ordinal)) =>
         trackDownRow(ctx, ctx.currentVars(ordinal))
 
       case _ => Seq.empty
@@ -130,7 +130,7 @@ object ExpressionCodegen {
         inputRows += curExprCode.inputRow
       }
       curExprCode.inputVars.foreach { inputVar =>
-        if (!inputVar.exprCode.isEvaluated()) {
+        if (!isEvaluated(inputVar.exprCode)) {
           exprCodes.enqueue(inputVar.exprCode)
         }
       }
@@ -160,7 +160,7 @@ object ExpressionCodegen {
     child.flatMap {
       // An evaluated variable.
       case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null &&
-          ctx.currentVars(ordinal).isEvaluated() =>
+          isEvaluated(ctx.currentVars(ordinal)) =>
         Seq(ExprInputVar(ctx.currentVars(ordinal), b.dataType, b.nullable))
 
       // An input variable which is not evaluated yet. Tracks down to find any evaluated variables
@@ -184,7 +184,7 @@ object ExpressionCodegen {
 
     while (exprCodes.nonEmpty) {
       exprCodes.dequeue().inputVars.foreach { inputVar =>
-        if (inputVar.exprCode.isEvaluated()) {
+        if (isEvaluated(inputVar.exprCode)) {
           inputVars += inputVar
         } else {
           exprCodes.enqueue(inputVar.exprCode)
@@ -227,7 +227,7 @@ object ExpressionCodegen {
       val ev = inputVar.exprCode
 
       // Only include the expression value if it is not a literal.
-      if (!ev.isLiteral()) {
+      if (!isLiteral(ev)) {
         val argType = ctx.javaType(inputVar.dataType)
         params += ((ev.value, s"$argType ${ev.value}"))
       }
@@ -240,4 +240,30 @@ object ExpressionCodegen {
       params
     }.distinct
   }
+
+  /**
+   * Only applied to the `ExprCode` in `ctx.currentVars`.
+   * Returns true if this value is a literal.
+   */
+  def isLiteral(exprCode: ExprCode): Boolean = {
+    assert(exprCode.value.nonEmpty, "ExprCode.value can't be empty string.")
+
+    if (exprCode.value == "true" || exprCode.value == "false" || exprCode.value == "null") {
+      true
+    } else {
+      // The valid characters for the first character of a Java variable is [a-zA-Z_$].
+      exprCode.value.head match {
+        case v if v >= 'a' && v <= 'z' => false
+        case v if v >= 'A' && v <= 'Z' => false
+        case '_' | '$' => false
+        case _ => true
+      }
+    }
+  }
+
+  /**
+   * Only applied to the `ExprCode` in `ctx.currentVars`.
+   * The code is emptied after evaluation.
+   */
+  def isEvaluated(exprCode: ExprCode): Boolean = exprCode.code == ""
 }

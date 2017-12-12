@@ -133,4 +133,36 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     assert(inputRows.length == 1)
     assert(inputRows(0) == "inputadaptor_row1")
   }
+
+  test("isLiteral: literals") {
+    val literals = Seq(
+      ExprCode("", "", "true"),
+      ExprCode("", "", "false"),
+      ExprCode("", "", "1"),
+      ExprCode("", "", "-1"),
+      ExprCode("", "", "1L"),
+      ExprCode("", "", "-1L"),
+      ExprCode("", "", "1.0f"),
+      ExprCode("", "", "-1.0f"),
+      ExprCode("", "", "0.1f"),
+      ExprCode("", "", "-0.1f"),
+      ExprCode("", "", """"string""""),
+      ExprCode("", "", "(byte)-1"),
+      ExprCode("", "", "(short)-1"),
+      ExprCode("", "", "null"))
+
+    literals.foreach(l => assert(ExpressionCodegen.isLiteral(l) == true))
+  }
+
+  test("isLiteral: non literals") {
+    val variables = Seq(
+      ExprCode("", "", "var1"),
+      ExprCode("", "", "_var2"),
+      ExprCode("", "", "$var3"),
+      ExprCode("", "", "v1a2r3"),
+      ExprCode("", "", "_1v2a3r"),
+      ExprCode("", "", "$1v2a3r"))
+
+    variables.foreach(v => assert(ExpressionCodegen.isLiteral(v) == false))
+  }
 }
