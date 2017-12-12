@@ -198,11 +198,9 @@ object ExpressionCodegen {
    * Helper function to calculate the size of an expression as function parameter.
    */
   def calculateParamLength(ctx: CodegenContext, input: ExprInputVar): Int = {
-    ctx.javaType(input.dataType) match {
-      case (ctx.JAVA_LONG | ctx.JAVA_DOUBLE) if !input.nullable => 2
-      case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => 3
-      case _ if !input.nullable => 1
-      case _ => 2
+    (if (input.nullable) 1 else 0) + ctx.javaType(input.dataType) match {
+      case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => 2
+      case _ => 1
     }
   }
 

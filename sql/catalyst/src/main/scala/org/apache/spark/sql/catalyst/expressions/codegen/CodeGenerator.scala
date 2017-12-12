@@ -1016,11 +1016,7 @@ class CodegenContext {
       val expr = e.head
       // Generate the code for this expression tree.
       val eval = expr.genCode(this)
-      val state = if (expr.nullable) {
-        SubExprEliminationState(eval.isNull, eval.value)
-      } else {
-        SubExprEliminationState("false", eval.value)
-      }
+      val state = SubExprEliminationState(eval.isNull, eval.value)
       e.foreach(subExprEliminationExprs.put(_, state))
       eval.code.trim
     }
