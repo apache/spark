@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.scalatest.Matchers
-import org.scalatest.concurrent.TimeLimits._
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.security.EncryptionFunSuite
@@ -30,7 +30,10 @@ class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {
 
 
 class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContext
-  with EncryptionFunSuite {
+  with EncryptionFunSuite with TimeLimits {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   val clusterUrl = "local-cluster[2,1,1024]"
 
@@ -153,7 +156,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
     sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
-    sc.jobProgressListener.waitUntilExecutorsUp(2, 30000)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 30000)
     val data = sc.parallelize(1 to 1000, 10)
     val cachedData = data.persist(storageLevel)
     assert(cachedData.count === 1000)
@@ -171,7 +174,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val serializerManager = SparkEnv.get.serializerManager
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
-        blockId.toString)
+        blockId.toString, null)
       val deserialized = serializerManager.dataDeserializeStream(blockId,
         new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)

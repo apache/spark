@@ -21,35 +21,8 @@ import shutil
 import subprocess
 import sys
 
-
-if sys.version_info >= (2, 7):
-    subprocess_check_output = subprocess.check_output
-    subprocess_check_call = subprocess.check_call
-else:
-    # SPARK-8763
-    # backported from subprocess module in Python 2.7
-    def subprocess_check_output(*popenargs, **kwargs):
-        if 'stdout' in kwargs:
-            raise ValueError('stdout argument not allowed, it will be overridden.')
-        process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
-        output, unused_err = process.communicate()
-        retcode = process.poll()
-        if retcode:
-            cmd = kwargs.get("args")
-            if cmd is None:
-                cmd = popenargs[0]
-            raise subprocess.CalledProcessError(retcode, cmd, output=output)
-        return output
-
-    # backported from subprocess module in Python 2.7
-    def subprocess_check_call(*popenargs, **kwargs):
-        retcode = call(*popenargs, **kwargs)
-        if retcode:
-            cmd = kwargs.get("args")
-            if cmd is None:
-                cmd = popenargs[0]
-            raise CalledProcessError(retcode, cmd)
-        return 0
+subprocess_check_output = subprocess.check_output
+subprocess_check_call = subprocess.check_call
 
 
 def exit_from_command_with_retcode(cmd, retcode):

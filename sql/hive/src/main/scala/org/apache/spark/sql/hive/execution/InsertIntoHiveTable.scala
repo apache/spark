@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -91,6 +92,34 @@ case class InsertIntoHiveTable(
     )
     val tableLocation = hiveQlTable.getDataLocation
     val tmpLocation = getExternalTmpPath(sparkSession, hadoopConf, tableLocation)
+
+    try {
+      processInsert(sparkSession, externalCatalog, hadoopConf, tableDesc, tmpLocation)
+    } finally {
+      // Attempt to delete the staging directory and the inclusive files. If failed, the files are
+      // expected to be dropped at the normal termination of VM since deleteOnExit is used.
+      deleteExternalTmpPath(hadoopConf)
+    }
+
+    // un-cache this table.
+    sparkSession.catalog.uncacheTable(table.identifier.quotedString)
+    sparkSession.sessionState.catalog.refreshTable(table.identifier)
+
+    CommandUtils.updateTableStats(sparkSession, table)
+
+    // It would be nice to just return the childRdd unchanged so insert operations could be chained,
+    // however for now we return an empty list to simplify compatibility checks with hive, which
+    // does not return anything for insert operations.
+    // TODO: implement hive compatibility as rules.
+    Seq.empty[Row]
+  }
+
+  private def processInsert(
+      sparkSession: SparkSession,
+      externalCatalog: ExternalCatalog,
+      hadoopConf: Configuration,
+      tableDesc: TableDesc,
+      tmpLocation: Path): Unit = {
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
@@ -231,21 +260,5 @@ case class InsertIntoHiveTable(
         overwrite,
         isSrcLocal = false)
     }
-
-    // Attempt to delete the staging directory and the inclusive files. If failed, the files are
-    // expected to be dropped at the normal termination of VM since deleteOnExit is used.
-    deleteExternalTmpPath(hadoopConf)
-
-    // un-cache this table.
-    sparkSession.catalog.uncacheTable(table.identifier.quotedString)
-    sparkSession.sessionState.catalog.refreshTable(table.identifier)
-
-    CommandUtils.updateTableStats(sparkSession, table)
-
-    // It would be nice to just return the childRdd unchanged so insert operations could be chained,
-    // however for now we return an empty list to simplify compatibility checks with hive, which
-    // does not return anything for insert operations.
-    // TODO: implement hive compatibility as rules.
-    Seq.empty[Row]
   }
 }

@@ -124,9 +124,17 @@ case class SortExec(
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
 
+  // The result rows come from the sort buffer, so this operator doesn't need to copy its result
+  // even if its child does.
+  override def needCopyResult: Boolean = false
+
+  // Sort operator always consumes all the input rows before outputting any result, so we don't need
+  // a stop check before sorting.
+  override def needStopCheck: Boolean = false
+
   override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort = ctx.freshName("needToSort")
-    ctx.addMutableState("boolean", needToSort, s"$needToSort = true;")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, needToSort, s"$needToSort = true;")
 
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.
@@ -147,10 +155,6 @@ case class SortExec(
         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
         | }
       """.stripMargin.trim)
-
-    // The child could change `copyResult` to true, but we had already consumed all the rows,
-    // so `copyResult` should be reset to `false`.
-    ctx.copyResult = false
 
     val outputRow = ctx.freshName("outputRow")
     val peakMemory = metricTerm(ctx, "peakMemory")
@@ -176,8 +180,6 @@ case class SortExec(
        | }
      """.stripMargin.trim
   }
-
-  protected override val shouldStopRequired = false
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     s"""

@@ -408,6 +408,22 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
+  test("Insert overwrite directory using Hive serde without turning on Hive support") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '$path'
+             |STORED AS orc
+             |SELECT 1, 2
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains(
+        "Hive support is required to INSERT OVERWRITE DIRECTORY with the Hive format"))
+    }
+  }
+
   test("insert overwrite directory to data source not providing FileFormat") {
     withTempDir { dir =>
       val path = dir.toURI.getPath

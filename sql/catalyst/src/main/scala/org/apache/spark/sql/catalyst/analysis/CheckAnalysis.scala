@@ -78,8 +78,6 @@ trait CheckAnalysis extends PredicateHelper {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
-      case p if p.analyzed => // Skip already analyzed sub-plans
-
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
@@ -272,10 +270,23 @@ trait CheckAnalysis extends PredicateHelper {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
             val missingAttributes = o.missingInput.mkString(",")
             val input = o.inputSet.mkString(",")
+            val msgForMissingAttributes = s"Resolved attribute(s) $missingAttributes missing " +
+              s"from $input in operator ${operator.simpleString}."
 
-            failAnalysis(
-              s"resolved attribute(s) $missingAttributes missing from $input " +
-                s"in operator ${operator.simpleString}")
+            val resolver = plan.conf.resolver
+            val attrsWithSameName = o.missingInput.filter { missing =>
+              o.inputSet.exists(input => resolver(missing.name, input.name))
+            }
+
+            val msg = if (attrsWithSameName.nonEmpty) {
+              val sameNames = attrsWithSameName.map(_.name).mkString(",")
+              s"$msgForMissingAttributes Attribute(s) with the same name appear in the " +
+                s"operation: $sameNames. Please check if the right attribute(s) are used."
+            } else {
+              msgForMissingAttributes
+            }
+
+            failAnalysis(msg)
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
@@ -340,8 +351,6 @@ trait CheckAnalysis extends PredicateHelper {
       case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
       case _ =>
     }
-
-    plan.foreach(_.setAnalyzed())
   }
 
   /**

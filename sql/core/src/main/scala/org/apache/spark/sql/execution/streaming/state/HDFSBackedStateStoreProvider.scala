@@ -297,17 +297,44 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
   /** Load the required version of the map data from the backing files */
   private def loadMap(version: Long): MapType = {
-    if (version <= 0) return new MapType
-    synchronized { loadedMaps.get(version) }.getOrElse {
-      val mapFromFile = readSnapshotFile(version).getOrElse {
-        val prevMap = loadMap(version - 1)
-        val newMap = new MapType(prevMap)
-        updateFromDeltaFile(version, newMap)
-        newMap
-      }
-      loadedMaps.put(version, mapFromFile)
-      mapFromFile
+
+    // Shortcut if the map for this version is already there to avoid a redundant put.
+    val loadedCurrentVersionMap = synchronized { loadedMaps.get(version) }
+    if (loadedCurrentVersionMap.isDefined) {
+      return loadedCurrentVersionMap.get
     }
+    val snapshotCurrentVersionMap = readSnapshotFile(version)
+    if (snapshotCurrentVersionMap.isDefined) {
+      synchronized { loadedMaps.put(version, snapshotCurrentVersionMap.get) }
+      return snapshotCurrentVersionMap.get
+    }
+
+    // Find the most recent map before this version that we can.
+    // [SPARK-22305] This must be done iteratively to avoid stack overflow.
+    var lastAvailableVersion = version
+    var lastAvailableMap: Option[MapType] = None
+    while (lastAvailableMap.isEmpty) {
+      lastAvailableVersion -= 1
+
+      if (lastAvailableVersion <= 0) {
+        // Use an empty map for versions 0 or less.
+        lastAvailableMap = Some(new MapType)
+      } else {
+        lastAvailableMap =
+          synchronized { loadedMaps.get(lastAvailableVersion) }
+            .orElse(readSnapshotFile(lastAvailableVersion))
+      }
+    }
+
+    // Load all the deltas from the version after the last available one up to the target version.
+    // The last available version is the one with a full snapshot, so it doesn't need deltas.
+    val resultMap = new MapType(lastAvailableMap.get)
+    for (deltaVersion <- lastAvailableVersion + 1 to version) {
+      updateFromDeltaFile(deltaVersion, resultMap)
+    }
+
+    synchronized { loadedMaps.put(version, resultMap) }
+    resultMap
   }
 
   private def writeUpdateToDeltaFile(

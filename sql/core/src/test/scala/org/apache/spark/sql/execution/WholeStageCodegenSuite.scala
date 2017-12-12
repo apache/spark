@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -115,6 +116,37 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
     assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
+  }
+
+  test("cache for primitive type should be in WholeStageCodegen with InMemoryTableScanExec") {
+    import testImplicits._
+
+    val dsInt = spark.range(3).cache
+    dsInt.count
+    val dsIntFilter = dsInt.filter(_ > 0)
+    val planInt = dsIntFilter.queryExecution.executedPlan
+    assert(planInt.find(p =>
+      p.isInstanceOf[WholeStageCodegenExec] &&
+      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec] &&
+      p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
+        .isInstanceOf[InMemoryTableScanExec] &&
+      p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
+        .asInstanceOf[InMemoryTableScanExec].supportCodegen).isDefined
+    )
+    assert(dsIntFilter.collect() === Array(1, 2))
+
+    // cache for string type is not supported for InMemoryTableScanExec
+    val dsString = spark.range(3).map(_.toString).cache
+    dsString.count
+    val dsStringFilter = dsString.filter(_ == "1")
+    val planString = dsStringFilter.queryExecution.executedPlan
+    assert(planString.find(p =>
+      p.isInstanceOf[WholeStageCodegenExec] &&
+      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec] &&
+      !p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
+        .isInstanceOf[InMemoryTableScanExec]).isDefined
+    )
+    assert(dsStringFilter.collect() === Array("1"))
   }
 
   test("SPARK-19512 codegen for comparing structs is incorrect") {

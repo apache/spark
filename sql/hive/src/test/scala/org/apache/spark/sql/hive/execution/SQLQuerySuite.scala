@@ -1376,113 +1376,125 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-8976 Wrong Result for Rollup #1") {
-    checkAnswer(sql(
-      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH ROLLUP"),
-      Seq(
-        (113, 3, 0),
-        (91, 0, 0),
-        (500, null, 1),
-        (84, 1, 0),
-        (105, 2, 0),
-        (107, 4, 0)
-      ).map(i => Row(i._1, i._2, i._3)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"SELECT count(*) AS cnt, key % 5, $gid FROM src GROUP BY key%5 WITH ROLLUP"),
+        Seq(
+          (113, 3, 0),
+          (91, 0, 0),
+          (500, null, 1),
+          (84, 1, 0),
+          (105, 2, 0),
+          (107, 4, 0)
+        ).map(i => Row(i._1, i._2, i._3)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for Rollup #2") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM src GROUP BY key%5, key-5
-        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-      Seq(
-        (1, 0, 5, 0),
-        (1, 0, 15, 0),
-        (1, 0, 25, 0),
-        (1, 0, 60, 0),
-        (1, 0, 75, 0),
-        (1, 0, 80, 0),
-        (1, 0, 100, 0),
-        (1, 0, 140, 0),
-        (1, 0, 145, 0),
-        (1, 0, 150, 0)
-      ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM src GROUP BY key%5, key-5
+          |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, 0, 5, 0),
+          (1, 0, 15, 0),
+          (1, 0, 25, 0),
+          (1, 0, 60, 0),
+          (1, 0, 75, 0),
+          (1, 0, 80, 0),
+          (1, 0, 100, 0),
+          (1, 0, 140, 0),
+          (1, 0, 145, 0),
+          (1, 0, 150, 0)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for Rollup #3") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
-        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-      Seq(
-        (1, 0, 5, 0),
-        (1, 0, 15, 0),
-        (1, 0, 25, 0),
-        (1, 0, 60, 0),
-        (1, 0, 75, 0),
-        (1, 0, 80, 0),
-        (1, 0, 100, 0),
-        (1, 0, 140, 0),
-        (1, 0, 145, 0),
-        (1, 0, 150, 0)
-      ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+          |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, 0, 5, 0),
+          (1, 0, 15, 0),
+          (1, 0, 25, 0),
+          (1, 0, 60, 0),
+          (1, 0, 75, 0),
+          (1, 0, 80, 0),
+          (1, 0, 100, 0),
+          (1, 0, 140, 0),
+          (1, 0, 145, 0),
+          (1, 0, 150, 0)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for CUBE #1") {
-    checkAnswer(sql(
-      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH CUBE"),
-      Seq(
-        (113, 3, 0),
-        (91, 0, 0),
-        (500, null, 1),
-        (84, 1, 0),
-        (105, 2, 0),
-        (107, 4, 0)
-      ).map(i => Row(i._1, i._2, i._3)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"SELECT count(*) AS cnt, key % 5, $gid FROM src GROUP BY key%5 WITH CUBE"),
+        Seq(
+          (113, 3, 0),
+          (91, 0, 0),
+          (500, null, 1),
+          (84, 1, 0),
+          (105, 2, 0),
+          (107, 4, 0)
+        ).map(i => Row(i._1, i._2, i._3)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for CUBE #2") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
-        |WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-    Seq(
-      (1, null, -3, 2),
-      (1, null, -1, 2),
-      (1, null, 3, 2),
-      (1, null, 4, 2),
-      (1, null, 5, 2),
-      (1, null, 6, 2),
-      (1, null, 12, 2),
-      (1, null, 14, 2),
-      (1, null, 15, 2),
-      (1, null, 22, 2)
-    ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+          |WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, null, -3, 2),
+          (1, null, -1, 2),
+          (1, null, 3, 2),
+          (1, null, 4, 2),
+          (1, null, 5, 2),
+          (1, null, 6, 2),
+          (1, null, 12, 2),
+          (1, null, 14, 2),
+          (1, null, 15, 2),
+          (1, null, 22, 2)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for GroupingSet") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
-        |GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-    Seq(
-      (1, null, -3, 2),
-      (1, null, -1, 2),
-      (1, null, 3, 2),
-      (1, null, 4, 2),
-      (1, null, 5, 2),
-      (1, null, 6, 2),
-      (1, null, 12, 2),
-      (1, null, 14, 2),
-      (1, null, 15, 2),
-      (1, null, 22, 2)
-    ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+          |GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, null, -3, 2),
+          (1, null, -1, 2),
+          (1, null, 3, 2),
+          (1, null, 4, 2),
+          (1, null, 5, 2),
+          (1, null, 6, 2),
+          (1, null, 12, 2),
+          (1, null, 14, 2),
+          (1, null, 15, 2),
+          (1, null, 22, 2)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   ignore("SPARK-10562: partition by column with mixed case name") {
@@ -1998,6 +2010,32 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-21101 UDTF should override initialize(ObjectInspector[] args)") {
+    withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack1
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      val cnt =
+        sql("SELECT udtf_stack1(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')").count()
+      assert(cnt === 2)
+
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack2
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        sql("SELECT udtf_stack2(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')")
+      }
+      assert(
+        e.getMessage.contains("public StructObjectInspector initialize(ObjectInspector[] args)"))
+    }
+  }
+
   test("SPARK-21721: Clear FileSystem deleterOnExit cache if path is successfully removed") {
     val table = "test21721"
     withTable(table) {
@@ -2019,8 +2057,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
     Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      withTable("t21912") {
-        Seq("ORC", "PARQUET").foreach { source =>
+      Seq("ORC", "PARQUET").foreach { source =>
+        withTable("t21912") {
           val m = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
           }.getMessage
@@ -2037,15 +2075,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             }.getMessage
             assert(m3.contains(s"contains invalid character(s)"))
           }
-        }
 
-        // TODO: After SPARK-21929, we need to check ORC, too.
-        Seq("PARQUET").foreach { source =>
           sql(s"CREATE TABLE t21912(`col` INT) USING $source")
-          val m = intercept[AnalysisException] {
+          val m4 = intercept[AnalysisException] {
             sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
           }.getMessage
-          assert(m.contains(s"contains invalid character(s)"))
+          assert(m4.contains(s"contains invalid character(s)"))
         }
       }
     }
@@ -2115,6 +2150,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     test(s"Writing empty datasets should not fail - $format") {
       withTempDir { dir =>
         Seq("str").toDS.limit(0).write.format(format).save(dir.getCanonicalPath + "/tmp")
+      }
+    }
+  }
+
+  test("SPARK-22267 Spark SQL incorrectly reads ORC files when column order is different") {
+    Seq("native", "hive").foreach { orcImpl =>
+      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
+        withTempPath { f =>
+          val path = f.getCanonicalPath
+          Seq(1 -> 2).toDF("c1", "c2").write.orc(path)
+          checkAnswer(spark.read.orc(path), Row(1, 2))
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
+            withTable("t") {
+              sql(s"CREATE EXTERNAL TABLE t(c2 INT, c1 INT) STORED AS ORC LOCATION '$path'")
+              checkAnswer(spark.table("t"), Row(2, 1))
+            }
+          }
+        }
       }
     }
   }

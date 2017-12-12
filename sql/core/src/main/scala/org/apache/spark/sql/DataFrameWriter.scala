@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties}
+import java.text.SimpleDateFormat
+import java.util.{Date, Locale, Properties, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -29,7 +30,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options, WriteSupport}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -62,7 +65,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   - `overwrite`: overwrite the existing data.
    *   - `append`: append the data.
    *   - `ignore`: ignore the operation (i.e. no-op).
-   *   - `error`: default option, throw an exception at runtime.
+   *   - `error` or `errorifexists`: default option, throw an exception at runtime.
    *
    * @since 1.4.0
    */
@@ -231,12 +234,33 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    runCommand(df.sparkSession, "save") {
-      DataSource(
-        sparkSession = df.sparkSession,
-        className = source,
-        partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
+    val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
+    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
+      cls.newInstance() match {
+        case ds: WriteSupport =>
+          val options = new DataSourceV2Options(extraOptions.asJava)
+          // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
+          // enough as there won't be tons of writing jobs created at the same second.
+          val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+            .format(new Date()) + "-" + UUID.randomUUID()
+          val writer = ds.createWriter(jobId, df.logicalPlan.schema, mode, options)
+          if (writer.isPresent) {
+            runCommand(df.sparkSession, "save") {
+              WriteToDataSourceV2(writer.get(), df.logicalPlan)
+            }
+          }
+
+        case _ => throw new AnalysisException(s"$cls does not support data writing.")
+      }
+    } else {
+      // Code path for data source v1.
+      runCommand(df.sparkSession, "save") {
+        DataSource(
+          sparkSession = df.sparkSession,
+          className = source,
+          partitionColumns = partitioningColumns.getOrElse(Nil),
+          options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
+      }
     }
   }
 
@@ -520,8 +544,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
    * shorten names(`none`, `snappy`, `zlib`, and `lzo`). This will override
-   * `orc.compress` and `spark.sql.parquet.compression.codec`. If `orc.compress` is given,
-   * it overrides `spark.sql.parquet.compression.codec`.</li>
+   * `orc.compress` and `spark.sql.orc.compression.codec`. If `orc.compress` is given,
+   * it overrides `spark.sql.orc.compression.codec`.</li>
    * </ul>
    *
    * @since 1.5.0
@@ -568,7 +592,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`sep` (default `,`): sets the single character as a separator for each
    * field and value.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the separator can be part of the value.</li>
+   * the separator can be part of the value. If an empty string is set, it uses `u0000`
+   * (null character).</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
