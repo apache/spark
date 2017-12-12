@@ -212,28 +212,28 @@ class CodegenContext {
       mutableStates += ((javaType, varName, initCode))
       varName
     } else {
-      val arrayName = mutableStateArrayCurrentNames.getOrElse(javaType, "")
-      val prevIdx = mutableStateArrayIdx.getOrElse((javaType, arrayName), -1)
-      if (0 <= prevIdx && prevIdx < CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT - 1) {
-        // a mutableStateArray for the given type and name has already been declared,
-        // update the max index of the array and return an array element
-        val idx = prevIdx + 1
-        mutableStateArrayIdx.update((javaType, arrayName), idx)
-        val initCode = codeFunctions(s"$arrayName[$idx]")
-        mutableStateArrayInitCodes += initCode
-        s"$arrayName[$idx]"
-      } else {
-        // mutableStateArray has not been declared yet for the given type and name.
-        // Create a new name for the array, and add an entry to keep track of current array name
-        // for type. In addition, init code is stored for code generation
-        val newArrayName = freshName("mutableStateArray")
-        mutableStateArrayCurrentNames += javaType -> newArrayName
-        val idx = 0
-        mutableStateArrayIdx += (javaType, newArrayName) -> idx
-        val initCode = codeFunctions(s"$newArrayName[$idx]")
-        mutableStateArrayInitCodes += initCode
-        s"$newArrayName[$idx]"
+      // mutableStateArray has not been declared yet for the given type and name. Create a new name
+      // for the array, The mutableStateArray for the given type and name has been declared,
+      // update the max index of the array. Then, add an entry to keep track of current array name
+      // for type and nit code is stored for code generation. Finally, return an array element
+      val (arrayName, newIdx) = {
+        val compactArrayName = "mutableStateArray"
+        var name = mutableStateArrayCurrentNames.getOrElse(javaType, freshName(compactArrayName))
+        var idx = mutableStateArrayIdx.getOrElse((javaType, name), -1)
+        if (idx >= CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT - 1) {
+          // Create a new array name to avoid array index whose number is larger than 32767 that
+          // requires a constant pool entry
+          name = freshName(compactArrayName)
+          idx = -1
+        }
+        (name, idx + 1)
       }
+      mutableStateArrayCurrentNames(javaType) = arrayName
+      mutableStateArrayIdx((javaType, arrayName)) = newIdx
+
+      val initCode = codeFunctions(s"$arrayName[$newIdx]")
+      mutableStateArrayInitCodes += initCode
+      s"$arrayName[$newIdx]"
     }
   }
 
@@ -277,7 +277,7 @@ class CodegenContext {
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    val initCodes = mutableStates.distinct.map(_._3 + "\n")
+    val initCodes = mutableStates.map(_._3).distinct.map(_ + "\n")
     // statements for array element initialization
     val arrayInitCodes = mutableStateArrayInitCodes.distinct.map(_ + "\n")
 
@@ -1256,9 +1256,6 @@ object CodeGenerator extends Logging {
   // 32767 is the maximum integer value that does not require a constant pool entry in a Java
   // bytecode instruction
   val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
-
-  // This is an index variable name used in a loop for initializing global variables
-  val INIT_LOOP_VARIABLE_NAME = "i"
 
   /**
    * Compile the Java source code into a Java class, using Janino.
