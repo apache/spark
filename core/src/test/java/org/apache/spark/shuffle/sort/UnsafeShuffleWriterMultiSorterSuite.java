@@ -19,15 +19,16 @@ package org.apache.spark.shuffle.sort;
 
 import org.junit.Test;
 
-import java.io.*;
+import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
 
-public class UnsafeShuffleWriterSuite extends UnsafeShuffleWriterBaseSuite {
+public class UnsafeShuffleWriterMultiSorterSuite extends UnsafeShuffleWriterBaseSuite {
   @Override
   protected UnsafeShuffleWriter<Object, Object> createWriter(
     boolean transferToEnabled) throws IOException {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
+    conf.set("spark.shuffle.async.num.sorter", "2");
     return new UnsafeShuffleWriter<>(
       blockManager,
       shuffleBlockResolver,
@@ -42,14 +43,17 @@ public class UnsafeShuffleWriterSuite extends UnsafeShuffleWriterBaseSuite {
   @Test
   public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOff() throws Exception {
     conf.set("spark.shuffle.sort.useRadixSort", "false");
-    writeEnoughRecordsToTriggerSortBufferExpansionAndSpill(UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE);
+    writeEnoughRecordsToTriggerSortBufferExpansionAndSpill(
+      (UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE * 3) / 2);
     assertEquals(2, spillFilesCreated.size());
   }
 
   @Test
   public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOn() throws Exception {
     conf.set("spark.shuffle.sort.useRadixSort", "true");
-    writeEnoughRecordsToTriggerSortBufferExpansionAndSpill(UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE);
+    writeEnoughRecordsToTriggerSortBufferExpansionAndSpill(
+      (UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE * 3) / 2);
     assertEquals(3, spillFilesCreated.size());
   }
+
 }

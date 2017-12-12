@@ -85,7 +85,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final int outputBufferSizeInBytes;
 
   @Nullable private MapStatus mapStatus;
-  @Nullable private ShuffleExternalSorter sorter;
+  @Nullable private ShuffleSorter sorter;
   private long peakMemoryUsedBytes = 0;
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
@@ -210,14 +210,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private void open() {
     assert (sorter == null);
-    sorter = new ShuffleExternalSorter(
+    sorter = ShuffleSorterFactory.INSTANCE.create(
       memoryManager,
       blockManager,
-      taskContext,
+      taskContext.taskMetrics(),
       initialSortBufferSize,
       partitioner.numPartitions(),
-      sparkConf,
-      writeMetrics);
+      sparkConf);
     serBuffer = new MyByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE);
     serOutputStream = serializer.serializeStream(serBuffer);
   }
