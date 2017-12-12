@@ -15,48 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.regression
+package org.apache.spark.ml.feature
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.ml.feature.{LabeledPoint => NewLabeledPoint}
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.serializer.KryoSerializer
 
-class LabeledPointSuite extends SparkFunSuite {
-
-  test("parse labeled points") {
-    val points = Seq(
-      LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
-      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))))
-    points.foreach { p =>
-      assert(p === LabeledPoint.parse(p.toString))
-    }
-  }
-
-  test("parse labeled points with whitespaces") {
-    val point = LabeledPoint.parse("(0.0, [1.0, 2.0])")
-    assert(point === LabeledPoint(0.0, Vectors.dense(1.0, 2.0)))
-  }
-
-  test("parse labeled points with v0.9 format") {
-    val point = LabeledPoint.parse("1.0,1.0 0.0 -2.0")
-    assert(point === LabeledPoint(1.0, Vectors.dense(1.0, 0.0, -2.0)))
-  }
-
-  test("conversions between new ml LabeledPoint and mllib LabeledPoint") {
-    val points: Seq[LabeledPoint] = Seq(
-      LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
-      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))))
-
-    val newPoints: Seq[NewLabeledPoint] = points.map(_.asML)
-
-    points.zip(newPoints).foreach { case (p1, p2) =>
-      assert(p1 === LabeledPoint.fromML(p2))
-    }
-  }
-
+class LabeledPointSuite extends SparkFunSuite{
   test("Kryo class register") {
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrationRequired", "true")
