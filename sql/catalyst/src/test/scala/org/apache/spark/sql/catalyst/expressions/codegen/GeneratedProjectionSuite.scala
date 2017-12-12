@@ -233,32 +233,8 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     val nestedSchema = StructType(
       Seq(StructField("", joinedSchema), StructField("", joinedSchema)) ++ joinedSchema)
 
-    // test generated UnsafeProjection
-    val unsafeProj = UnsafeProjection.create(nestedSchema)
-    val unsafe: UnsafeRow = unsafeProj(nested)
-    (0 until N).foreach { i =>
-      val s = UTF8String.fromString(i.toString)
-      assert(i === unsafe.getInt(i + 2))
-      assert(s === unsafe.getUTF8String(i + 2 + N))
-      assert(i === unsafe.getStruct(0, N * 2).getInt(i))
-      assert(s === unsafe.getStruct(0, N * 2).getUTF8String(i + N))
-      assert(i === unsafe.getStruct(1, N * 2).getInt(i))
-      assert(s === unsafe.getStruct(1, N * 2).getUTF8String(i + N))
-    }
-
-    // test generated SafeProjection
     val safeProj = FromUnsafeProjection(nestedSchema)
-    val result = safeProj(unsafe)
-    // Can't compare GenericInternalRow with JoinedRow directly
-    (0 until N).foreach { i =>
-      val s = UTF8String.fromString(i.toString)
-      assert(i === result.getInt(i + 2))
-      assert(s === result.getUTF8String(i + 2 + N))
-      assert(i === result.getStruct(0, N * 2).getInt(i))
-      assert(s === result.getStruct(0, N * 2).getUTF8String(i + N))
-      assert(i === result.getStruct(1, N * 2).getInt(i))
-      assert(s === result.getStruct(1, N * 2).getUTF8String(i + N))
-    }
+    val result = safeProj(nested)
 
     // test generated MutableProjection
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
