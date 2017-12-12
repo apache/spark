@@ -17,4 +17,17 @@
 
 package org.apache.spark.sql.test
 
-trait SharedSQLContext extends SQLTestUtils with SharedSparkSession
+trait SharedSQLContext extends SQLTestUtils with SharedSparkSession {
+
+  override val doThreadAuditInSparkFunSuite = false
+
+  protected override def beforeAll(): Unit = {
+    doThreadPreAudit
+    super.beforeAll
+  }
+
+  protected override def afterAll(): Unit = {
+    super.afterAll
+    doThreadPostAudit
+  }
+}

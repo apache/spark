@@ -20,8 +20,6 @@ package org.apache.spark
 // scalastyle:off
 import java.io.File
 
-import scala.collection.JavaConversions._
-
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
 import org.apache.spark.internal.Logging
@@ -33,38 +31,17 @@ import org.apache.spark.util.AccumulatorContext
 abstract class SparkFunSuite
   extends FunSuite
   with BeforeAndAfterAll
+  with ThreadAudit
   with Logging {
 // scalastyle:on
 
-  val threadWhiteList = Set(
-    /**
-     * Netty related internal threads.
-     * These are excluded because their lifecycle is handled by the netty itself
-     * and spark has no explicit effect on them.
-     */
-    "netty.*",
-
-    /**
-     * Netty related internal threads.
-     * A Single-thread singleton EventExecutor inside netty which creates such threads.
-     * These are excluded because their lifecycle is handled by the netty itself
-     * and spark has no explicit effect on them.
-     */
-    "globalEventExecutor.*",
-
-    /**
-     * Netty related internal threads.
-     * Checks if a thread is alive periodically and runs a task when a thread dies.
-     * These are excluded because their lifecycle is handled by the netty itself
-     * and spark has no explicit effect on them.
-     */
-    "threadDeathWatcher.*"
-  )
-  var beforeAllTestThreadNames: Set[String] = Set.empty
+  protected val doThreadAuditInSparkFunSuite = true
 
   protected override def beforeAll(): Unit = {
-    beforeAllTestThreadNames = runningThreadNames()
-    super.beforeAll()
+    if (doThreadAuditInSparkFunSuite) {
+      doThreadPreAudit()
+    }
+    super.beforeAll
   }
 
   protected override def afterAll(): Unit = {
@@ -73,7 +50,9 @@ abstract class SparkFunSuite
       AccumulatorContext.clear()
     } finally {
       super.afterAll()
-      printRemainingThreadNames()
+      if (doThreadAuditInSparkFunSuite) {
+        doThreadPostAudit()
+      }
     }
   }
 
@@ -84,21 +63,6 @@ abstract class SparkFunSuite
 
   protected final def getTestResourcePath(file: String): String = {
     getTestResourceFile(file).getCanonicalPath
-  }
-
-  private def runningThreadNames(): Set[String] = {
-    Thread.getAllStackTraces.keySet().map(_.getName).toSet
-  }
-
-  private def printRemainingThreadNames(): Unit = {
-    val remainingThreadNames = runningThreadNames.diff(beforeAllTestThreadNames)
-      .filterNot { s => threadWhiteList.exists(s.matches(_)) }
-    if (remainingThreadNames.nonEmpty) {
-      val suiteName = this.getClass.getName
-      val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
-      logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
-        s"thread names: ${remainingThreadNames.mkString(", ")} =====\n")
-    }
   }
 
   /**
