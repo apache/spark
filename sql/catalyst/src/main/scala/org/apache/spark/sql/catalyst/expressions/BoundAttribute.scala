@@ -61,11 +61,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
       val oev = ctx.currentVars(ordinal)
-      if (nullable) {
-        ev.isNull = oev.isNull
-      } else {
-        ev.isNull = "false"
-      }
+      ev.isNull = oev.isNull
       ev.value = oev.value
       ev.copy(code = oev.code)
     } else {
