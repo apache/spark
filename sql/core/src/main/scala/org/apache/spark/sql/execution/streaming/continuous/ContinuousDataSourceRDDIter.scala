@@ -72,7 +72,7 @@ class ContinuousDataSourceRDD(
         if (currentRow == null) {
           epochEndpoint.send(ReportPartitionOffset(
             context.partitionId(),
-            newOffset.asInstanceOf[EpochPackedPartitionOffset].epoch,
+            newOffset.asInstanceOf[EpochPackedPartitionOffset].epoch - 1,
             currentOffset))
           false
         } else {

@@ -59,7 +59,7 @@ case class CommitPartitionEpoch(
     epoch: Long,
     message: WriterCommitMessage) extends EpochCoordinatorMessage
 /**
- * Report that a partition is starting the specified epoch at the specified offset.
+ * Report that a partition is ending the specified epoch at the specified offset.
  */
 case class ReportPartitionOffset(
     partitionId: Int,
@@ -122,7 +122,7 @@ class EpochCoordinator(
     val thisEpochCommits =
       partitionCommits.collect { case ((e, _), msg) if e == epoch => msg }
     val nextEpochOffsets =
-      partitionOffsets.collect { case ((e, _), o) if e == epoch + 1 => o }
+      partitionOffsets.collect { case ((e, _), o) if e == epoch => o }
 
     if (thisEpochCommits.size == numWriterPartitions &&
       nextEpochOffsets.size == numReaderPartitions) {
@@ -161,7 +161,7 @@ class EpochCoordinator(
       if (thisEpochOffsets.size == numReaderPartitions) {
         logDebug(s"Epoch $epoch has offsets reported from all partitions: $thisEpochOffsets")
         query.addOffset(epoch, reader, thisEpochOffsets.toSeq)
-        resolveCommitsAtEpoch(epoch - 1)
+        resolveCommitsAtEpoch(epoch)
       }
   }
 

@@ -98,24 +98,29 @@ class ContinuousExecution(
    *
    *  Identify (from the commit log) the latest epoch that has committed
    *  IF last epoch exists THEN
-   *    Set the next epoch to run as the next epoch after the last commit
-   *    Get the offsets for that epoch from the offset log (guaranteed by invariant to be there)
-   *    Note that offsets up to those are committed
+   *    Get end offsets for the epoch
+   *    Set those offsets as the current commit progress
+   *    Set the next epoch ID as the last + 1
+   *    Return the end offsets of the last epoch as start for the next one
    *    DONE
    *  ELSE
    *    Start a new query log
    *  DONE
    */
   private def getStartOffsets(sparkSessionToRunBatches: SparkSession): OffsetSeq = {
+    // Note that this will need a slight modification for exactly once. If ending offsets were
+    // reported but not committed for any epochs, we must replay exactly to those offsets.
+    // For at least once, we can just ignore those reports and risk duplicates.
     batchCommitLog.getLatest() match {
       case Some((latestEpochId, _)) =>
-        currentBatchId = latestEpochId + 1
-        val nextOffsets = offsetLog.get(currentBatchId).getOrElse {
+        val nextOffsets = offsetLog.get(latestEpochId).getOrElse {
           throw new IllegalStateException(
-            s"Batch $latestEpochId was committed without next epoch offsets!")
+            s"Batch $latestEpochId was committed without end epoch offsets!")
         }
         committedOffsets = nextOffsets.toStreamProgress(sources)
 
+
+        currentBatchId = latestEpochId + 1
         logDebug(s"Resuming at epoch $currentBatchId with committed offsets $committedOffsets")
         nextOffsets
       case None =>
@@ -256,6 +261,9 @@ class ContinuousExecution(
     }
   }
 
+  /**
+   * Report ending partition offsets for the given reader at the given epoch.
+   */
   def addOffset(
       epoch: Long, reader: ContinuousReader, partitionOffsets: Seq[PartitionOffset]): Unit = {
     assert(continuousSources.length == 1, "only one continuous source supported currently")
@@ -270,11 +278,16 @@ class ContinuousExecution(
     }
   }
 
+  /**
+   * Mark the specified epoch as committed. All readers must have reported end offsets for the epoch
+   * before this is called.
+   */
   def commit(epoch: Long): Unit = {
     assert(continuousSources.length == 1, "only one continuous source supported currently")
+    assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
     synchronized {
       batchCommitLog.add(epoch)
-      val offset = offsetLog.get(epoch + 1).get.offsets(0).get
+      val offset = offsetLog.get(epoch).get.offsets(0).get
       committedOffsets ++= Seq(continuousSources(0) -> offset)
     }
 
