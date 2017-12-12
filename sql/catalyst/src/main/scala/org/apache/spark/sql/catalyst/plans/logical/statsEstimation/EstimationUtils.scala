@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
 
 
@@ -111,6 +111,101 @@ object EstimationUtils {
       case FloatType => dec.toFloat
       case DoubleType => dec.toDouble
       case _: DecimalType => dec
+    }
+  }
+
+  /**
+   * Returns the number of the first bin into which a column value falls for a specified
+   * numeric equi-height histogram.
+   *
+   * @param value a literal value of a column
+   * @param bins an array of bins for a given numeric equi-height histogram
+   * @return the id of the first bin into which a column value falls.
+   */
+  def findFirstBinForValue(value: Double, bins: Array[HistogramBin]): Int = {
+    var i = 0
+    while ((i < bins.length) && (value > bins(i).hi)) {
+      i += 1
+    }
+    i
+  }
+
+  /**
+   * Returns the number of the last bin into which a column value falls for a specified
+   * numeric equi-height histogram.
+   *
+   * @param value a literal value of a column
+   * @param bins an array of bins for a given numeric equi-height histogram
+   * @return the id of the last bin into which a column value falls.
+   */
+  def findLastBinForValue(value: Double, bins: Array[HistogramBin]): Int = {
+    var i = bins.length - 1
+    while ((i >= 0) && (value < bins(i).lo)) {
+      i -= 1
+    }
+    i
+  }
+
+  /**
+   * Returns a percentage of a bin holding values for column value in the range of
+   * [lowerValue, higherValue]
+   *
+   * @param higherValue a given upper bound value of a specified column value range
+   * @param lowerValue a given lower bound value of a specified column value range
+   * @param bin a single histogram bin
+   * @return the percentage of a single bin holding values in [lowerValue, higherValue].
+   */
+  private def getOccupation(
+      higherValue: Double,
+      lowerValue: Double,
+      bin: HistogramBin): Double = {
+    assert(bin.lo <= lowerValue && lowerValue <= higherValue && higherValue <= bin.hi)
+    if (bin.hi == bin.lo) {
+      // the entire bin is covered in the range
+      1.0
+    } else if (higherValue == lowerValue) {
+      // set percentage to 1/NDV
+      1.0 / bin.ndv.toDouble
+    } else {
+      // Use proration since the range falls inside this bin.
+      math.min((higherValue - lowerValue) / (bin.hi - bin.lo), 1.0)
+    }
+  }
+
+  /**
+   * Returns the number of bins for column values in [lowerValue, higherValue].
+   * The column value distribution is saved in an equi-height histogram.  The return values is a
+   * double value is because we may return a portion of a bin. For example, a predicate
+   * "column = 8" may return the number of bins 0.2 if the holding bin has 5 distinct values.
+   *
+   * @param higherId id of the high end bin holding the high end value of a column range
+   * @param lowerId id of the low end bin holding the low end value of a column range
+   * @param higherEnd a given upper bound value of a specified column value range
+   * @param lowerEnd a given lower bound value of a specified column value range
+   * @param histogram a numeric equi-height histogram
+   * @return the number of bins for column values in [lowerEnd, higherEnd].
+   */
+  def getOccupationBins(
+      higherId: Int,
+      lowerId: Int,
+      higherEnd: Double,
+      lowerEnd: Double,
+      histogram: Histogram): Double = {
+    assert(lowerId <= higherId)
+
+    if (lowerId == higherId) {
+      val curBin = histogram.bins(lowerId)
+      getOccupation(higherEnd, lowerEnd, curBin)
+    } else {
+      // compute how much lowerEnd/higherEnd occupies its bin
+      val lowerCurBin = histogram.bins(lowerId)
+      val lowerPart = getOccupation(lowerCurBin.hi, lowerEnd, lowerCurBin)
+
+      val higherCurBin = histogram.bins(higherId)
+      val higherPart = getOccupation(higherEnd, higherCurBin.lo, higherCurBin)
+
+      // the total length is lowerPart + higherPart + bins between them
+      lowerPart + higherPart + higherId - lowerId - 1
     }
   }
 
