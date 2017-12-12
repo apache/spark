@@ -847,6 +847,10 @@ class SQLTests(ReusedSQLTestCase):
         result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
 
+    def test_infer_schema_not_enough_names(self):
+        df = self.spark.createDataFrame([["a", "b"]], ["col1"])
+        self.assertEqual(df.columns, ['col1', '_2'])
+
     def test_infer_schema_fails(self):
         with self.assertRaisesRegexp(TypeError, 'field a'):
             self.spark.createDataFrame(self.spark.sparkContext.parallelize([[1, 1], ["x", 1]]),

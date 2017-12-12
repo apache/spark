@@ -1085,6 +1085,9 @@ def _infer_schema(row, names=None):
         else:
             if names is None:
                 names = ['_%d' % i for i in range(1, len(row) + 1)]
+            elif len(names) < len(row):
+                names = names[:]
+                names.extend('_%d' % i for i in range(len(names) + 1, len(row) + 1))
             items = zip(names, row)
 
     elif hasattr(row, "__dict__"):  # object
