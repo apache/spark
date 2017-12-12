@@ -311,40 +311,22 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |  "schema" : {
          |    "fields" : [ {
          |      "name" : "a_d",
-         |      "nullable" : true,
          |      "type" : {
          |        "name" : "decimal",
          |        "precision" : 38,
          |        "scale" : 18
          |      },
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
+         |      "nullable" : true,
+         |      "children" : [ ]
          |    }, {
          |      "name" : "b_d",
-         |      "nullable" : true,
          |      "type" : {
          |        "name" : "decimal",
          |        "precision" : 38,
          |        "scale" : 18
          |      },
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
+         |      "nullable" : true,
+         |      "children" : [ ]
          |    } ]
          |  },
          |  "batches" : [ {
@@ -354,23 +336,23 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |      "count" : 6,
          |      "VALIDITY" : [ 1, 1, 1, 1, 1, 1 ],
          |      "DATA" : [
-         |        1.000000000000000000,
-         |        2.000000000000000000,
-         |        0.010000000000000000,
-         |        200.000000000000000000,
-         |        0.000100000000000000,
-         |        20000.000000000000000000 ]
+         |        "1000000000000000000",
+         |        "2000000000000000000",
+         |        "10000000000000000",
+         |        "200000000000000000000",
+         |        "100000000000000",
+         |        "20000000000000000000000" ]
          |    }, {
          |      "name" : "b_d",
          |      "count" : 6,
          |      "VALIDITY" : [ 1, 0, 0, 1, 0, 1 ],
          |      "DATA" : [
-         |        1.100000000000000000,
-         |        0E-18,
-         |        0E-18,
-         |        2.200000000000000000,
-         |        0E-18,
-         |        3.300000000000000000 ]
+         |        "1100000000000000000",
+         |        "0",
+         |        "0",
+         |        "2200000000000000000",
+         |        "0",
+         |        "3300000000000000000" ]
          |    } ]
          |  } ]
          |}
