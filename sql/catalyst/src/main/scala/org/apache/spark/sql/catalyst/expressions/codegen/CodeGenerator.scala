@@ -63,28 +63,7 @@ case class ExprCode(
     var isNull: String,
     var value: String,
     var inputRow: String = null,
-    var inputVars: Seq[ExprInputVar] = Seq.empty) {
-
-  // Returns true if this value is a literal.
-  def isLiteral(): Boolean = {
-    assert(value.nonEmpty, "ExprCode.value can't be empty string.")
-
-    if (value == "true" || value == "false" || value == "null") {
-      true
-    } else {
-      // The valid characters for the first character of a Java variable is [a-zA-Z_$].
-      value.head match {
-        case v if v >= 'a' && v <= 'z' => false
-        case v if v >= 'A' && v <= 'Z' => false
-        case '_' | '$' => false
-        case _ => true
-      }
-    }
-  }
-
-  // The code is emptied after evaluation.
-  def isEvaluated(): Boolean = code == ""
-}
+    var inputVars: Seq[ExprInputVar] = Seq.empty)
 
 /**
  * Represents an input variable [[ExprCode]] to an evaluation of an [[Expression]].

@@ -134,6 +134,58 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     assert(inputRows(0) == "inputadaptor_row1")
   }
 
+  test("Returns both input rows and variables for expression") {
+    val ctx = new CodegenContext()
+    // 5 input variables in currentVars:
+    //   1 evaluated variable (value1).
+    //   3 not evaluated variables.
+    //     value2 depends on an evaluated column from other operator.
+    //     value3 depends on an input row from other operator.
+    //     value4 depends on a not evaluated yet column from other operator.
+    //   1 null indicating to use input row "i".
+    val currentVars = Seq(
+      ExprCode("", isNull = "false", value = "value1"),
+      ExprCode("fake code;", isNull = "isNull2", value = "value2"),
+      ExprCode("fake code;", isNull = "isNull3", value = "value3"),
+      ExprCode("fake code;", isNull = "isNull4", value = "value4"),
+      null)
+    // value2 depends on this evaluated column.
+    currentVars(1).inputVars = Seq(ExprInputVar(ExprCode("", isNull = "isNull5", value = "value5"),
+      dataType = IntegerType, nullable = true))
+    // value3 depends on an input row "inputadaptor_row1".
+    currentVars(2).inputRow = "inputadaptor_row1"
+    // value4 depends on another not evaluated yet column.
+    currentVars(3).inputVars = Seq(ExprInputVar(ExprCode("fake code;",
+      isNull = "isNull6", value = "value6"), dataType = IntegerType, nullable = true))
+    ctx.currentVars = currentVars
+    ctx.INPUT_ROW = "i"
+
+    // expr: if (false) { value1 + value2 } else { (value3 + value4) + i[5] }
+    val expr = If(Literal(false),
+      Add(BoundReference(0, IntegerType, nullable = false),
+          BoundReference(1, IntegerType, nullable = true)),
+      Add(Add(BoundReference(2, IntegerType, nullable = true),
+              BoundReference(3, IntegerType, nullable = true)),
+          BoundReference(4, IntegerType, nullable = true))) // this is based on input row "i".
+
+    // input rows: "i", "inputadaptor_row1".
+    val inputRows = ExpressionCodegen.getInputRowsForChildren(ctx, expr)
+    assert(inputRows.length == 2)
+    assert(inputRows(0) == "inputadaptor_row1")
+    assert(inputRows(1) == "i")
+
+    // input variables: value1 and value5
+    val inputVars = ExpressionCodegen.getInputVarsForChildren(ctx, expr)
+    assert(inputVars.length == 2)
+
+    // value1 has inlined isNull "false", so don't need to include it in the params.
+    val inputVarParams = ExpressionCodegen.prepareFunctionParams(ctx, inputVars)
+    assert(inputVarParams.length == 3)
+    assert(inputVarParams(0) == Tuple2("value1", "int value1"))
+    assert(inputVarParams(1) == Tuple2("value5", "int value5"))
+    assert(inputVarParams(2) == Tuple2("isNull5", "boolean isNull5"))
+  }
+
   test("isLiteral: literals") {
     val literals = Seq(
       ExprCode("", "", "true"),
