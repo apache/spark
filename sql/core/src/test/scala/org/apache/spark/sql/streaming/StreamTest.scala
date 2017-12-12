@@ -301,6 +301,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     def threadState =
       if (currentStream != null && currentStream.queryExecutionThread.isAlive) "alive" else "dead"
+
     def threadStackTrace =
       if (currentStream != null && currentStream.queryExecutionThread.isAlive) {
         s"Thread stack trace: ${currentStream.queryExecutionThread.getStackTrace.mkString("\n")}"

@@ -78,13 +78,13 @@ abstract class StreamExecution(
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
    */
   protected val awaitProgressLock = new ReentrantLock(true)
-  protected val awaitProgressLockCondition: Condition = awaitProgressLock.newCondition()
+  protected val awaitProgressLockCondition = awaitProgressLock.newCondition()
 
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
 
-  val resolvedCheckpointRoot: String = {
+  val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
     checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
