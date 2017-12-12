@@ -291,6 +291,11 @@ class ContinuousExecution(
       committedOffsets ++= Seq(continuousSources(0) -> offset)
     }
 
+    if (minBatchesToRetain < currentBatchId) {
+      offsetLog.purge(currentBatchId - minBatchesToRetain)
+      batchCommitLog.purge(currentBatchId - minBatchesToRetain)
+    }
+
     awaitProgressLock.lock()
     try {
       awaitProgressLockCondition.signalAll()
