@@ -60,7 +60,7 @@ case class DataSourceV2ScanExec(
           sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
           .askSync[Unit](SetReaderPartitions(readTasks.size()))
 
-        new ContinuousDataSourceRDD(sparkContext, readTasks)
+        new ContinuousDataSourceRDD(sparkContext, sqlContext, readTasks)
 
       case _ =>
         new DataSourceRDD(sparkContext, readTasks)

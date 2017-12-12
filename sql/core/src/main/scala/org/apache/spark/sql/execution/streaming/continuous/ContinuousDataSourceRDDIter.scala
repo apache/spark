@@ -26,7 +26,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, RowToUnsafeDataReader}
 import org.apache.spark.sql.execution.streaming._
@@ -37,8 +37,12 @@ import org.apache.spark.util.SystemClock
 
 class ContinuousDataSourceRDD(
     sc: SparkContext,
+    sqlContext: SQLContext,
     @transient private val readTasks: java.util.List[ReadTask[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
+
+  private val dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize
+  private val epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs
 
   override protected def getPartitions: Array[Partition] = {
     readTasks.asScala.zipWithIndex.map {
@@ -49,9 +53,8 @@ class ContinuousDataSourceRDD(
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
     val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createDataReader()
 
-    // TODO: capacity option
     // (null, null) is an allowed input to the queue, representing an epoch boundary.
-    val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](1024)
+    val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](dataQueueSize)
 
     val epochEndpoint = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.RUN_ID_KEY), SparkEnv.get)
@@ -88,7 +91,7 @@ class ContinuousDataSourceRDD(
     }
 
 
-    val epochPollThread = new EpochPollThread(queue, context)
+    val epochPollThread = new EpochPollThread(queue, context, epochPollIntervalMs)
     epochPollThread.setDaemon(true)
     epochPollThread.start()
 
@@ -113,7 +116,8 @@ case class EpochPackedPartitionOffset(epoch: Long) extends PartitionOffset
 
 class EpochPollThread(
     queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
-    context: TaskContext)
+    context: TaskContext,
+    epochPollIntervalMs: Long)
   extends Thread with Logging {
   private val epochEndpoint = EpochCoordinatorRef.get(
     context.getLocalProperty(ContinuousExecution.RUN_ID_KEY), SparkEnv.get)
@@ -121,8 +125,7 @@ class EpochPollThread(
 
   override def run(): Unit = {
     try {
-      // TODO parameterize processing time
-      ProcessingTimeExecutor(ProcessingTime(100), new SystemClock())
+      ProcessingTimeExecutor(ProcessingTime(epochPollIntervalMs), new SystemClock())
         .execute { () =>
             val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch())
             for (i <- currentEpoch to newEpoch - 1) {
