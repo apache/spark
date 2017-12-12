@@ -262,19 +262,19 @@ case class HashAggregateExec(
   // Extracts all the input variable references for a given `aggExpr`. This result will be used
   // to split aggregation into small functions.
   private def getInputVariableReferences(
-      ctx: CodegenContext,
-      aggExpr: Expression,
+      context: CodegenContext,
+      aggregateExpression: Expression,
       subExprs: Map[Expression, SubExprEliminationState]): Set[(String, String)] = {
     // `argSet` collects all the pairs of variable names and their types, the first in the pair is
     // a type name and the second is a variable name.
     val argSet = mutable.Set[(String, String)]()
-    val stack = mutable.Stack[Expression](aggExpr)
+    val stack = mutable.Stack[Expression](aggregateExpression)
     while (stack.nonEmpty) {
       stack.pop() match {
         case e if subExprs.contains(e) =>
           val exprCode = subExprs(e)
           if (CodegenContext.isJavaIdentifier(exprCode.value)) {
-            argSet += ((ctx.javaType(e.dataType), exprCode.value))
+            argSet += ((context.javaType(e.dataType), exprCode.value))
           }
           if (CodegenContext.isJavaIdentifier(exprCode.isNull)) {
             argSet += (("boolean", exprCode.isNull))
@@ -282,17 +282,17 @@ case class HashAggregateExec(
           // Since the children possibly has common expressions, we push them here
           stack.pushAll(e.children)
         case ref: BoundReference
-            if ctx.currentVars != null && ctx.currentVars(ref.ordinal) != null =>
-          val value = ctx.currentVars(ref.ordinal).value
-          val isNull = ctx.currentVars(ref.ordinal).isNull
+            if context.currentVars != null && context.currentVars(ref.ordinal) != null =>
+          val value = context.currentVars(ref.ordinal).value
+          val isNull = context.currentVars(ref.ordinal).isNull
           if (CodegenContext.isJavaIdentifier(value)) {
-            argSet += ((ctx.javaType(ref.dataType), value))
+            argSet += ((context.javaType(ref.dataType), value))
           }
           if (CodegenContext.isJavaIdentifier(isNull)) {
             argSet += (("boolean", isNull))
           }
         case _: BoundReference =>
-          argSet += (("InternalRow", ctx.INPUT_ROW))
+          argSet += (("InternalRow", context.INPUT_ROW))
         case e =>
           stack.pushAll(e.children)
       }
@@ -303,30 +303,30 @@ case class HashAggregateExec(
 
   // Splits aggregate code into small functions because JVMs does not compile too long functions
   private def splitAggregateExpressions(
-      ctx: CodegenContext,
-      aggExprs: Seq[Expression],
-      evalAndUpdateCodes: Seq[String],
+      context: CodegenContext,
+      aggregateExpressions: Seq[Expression],
+      codes: Seq[String],
       subExprs: Map[Expression, SubExprEliminationState],
       otherArgs: Seq[(String, String)] = Seq.empty): Seq[String] = {
-    aggExprs.zipWithIndex.map { case (aggExpr, i) =>
-      val args = (getInputVariableReferences(ctx, aggExpr, subExprs) ++ otherArgs).toSeq
+    aggregateExpressions.zipWithIndex.map { case (aggExpr, i) =>
+      val args = (getInputVariableReferences(context, aggExpr, subExprs) ++ otherArgs).toSeq
 
       // This method gives up splitting the code if the parameter length goes over
       // `maxParamNumInJavaMethod`.
       if (args.size <= sqlContext.conf.maxParamNumInJavaMethod) {
-        val doAggVal = ctx.freshName(s"doAggregateVal_${aggExpr.prettyName}")
+        val doAggVal = context.freshName(s"doAggregateVal_${aggExpr.prettyName}")
         val argList = args.map(a => s"${a._1} ${a._2}").mkString(", ")
-        val doAggValFuncName = ctx.addNewFunction(doAggVal,
+        val doAggValFuncName = context.addNewFunction(doAggVal,
           s"""
              | private void $doAggVal($argList) throws java.io.IOException {
-             |   ${evalAndUpdateCodes(i)}
+             |   ${codes(i)}
              | }
            """.stripMargin)
 
         val inputVariables = args.map(_._2).mkString(", ")
         s"$doAggValFuncName($inputVariables);"
       } else {
-        evalAndUpdateCodes(i)
+        codes(i)
       }
     }
   }
@@ -377,7 +377,10 @@ case class HashAggregateExec(
     }
 
     val updateAggValCode = splitAggregateExpressions(
-      ctx, boundUpdateExpr, evalAndUpdateCodes, subExprs.states)
+      context = ctx,
+      aggregateExpressions = boundUpdateExpr,
+      codes = evalAndUpdateCodes,
+      subExprs = subExprs.states)
 
     s"""
        | // do aggregate
@@ -946,11 +949,11 @@ case class HashAggregateExec(
       }
 
       val updateAggValCode = splitAggregateExpressions(
-        ctx,
-        boundUpdateExpr,
-        evalAndUpdateCodes,
-        subExprs.states,
-        Seq(("InternalRow", unsafeRowBuffer)))
+        context = ctx,
+        aggregateExpressions = boundUpdateExpr,
+        codes = evalAndUpdateCodes,
+        subExprs = subExprs.states,
+        otherArgs = Seq(("InternalRow", unsafeRowBuffer)))
 
       s"""
          | // do aggregate
@@ -991,11 +994,11 @@ case class HashAggregateExec(
         }
 
         val updateAggValCode = splitAggregateExpressions(
-          ctx,
-          boundUpdateExpr,
-          evalAndUpdateCodes,
-          subExprs.states,
-          Seq(("InternalRow", fastRowBuffer)))
+          context = ctx,
+          aggregateExpressions = boundUpdateExpr,
+          codes = evalAndUpdateCodes,
+          subExprs = subExprs.states,
+          otherArgs = Seq(("InternalRow", fastRowBuffer)))
 
         // If fast hash map is on, we first generate code to update row in fast hash map, if the
         // previous loop up hit fast hash map. Otherwise, update row in regular hash map.
