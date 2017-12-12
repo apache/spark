@@ -77,16 +77,10 @@ private[mesos] class MesosSubmitRequestServlet(
   private def buildDriverDescription(request: CreateSubmissionRequest): MesosDriverDescription = {
     // Required fields, including the main class because python is not yet supported
     val appResource = Option(request.appResource).getOrElse {
-      throw new SubmitRestMissingFieldException("Application jar 'appResource' is missing.")
+      throw new SubmitRestMissingFieldException("Application jar is missing.")
     }
     val mainClass = Option(request.mainClass).getOrElse {
-      throw new SubmitRestMissingFieldException("Main class 'mainClass' is missing.")
-    }
-    val appArgs = Option(request.appArgs).getOrElse {
-      throw new SubmitRestMissingFieldException("Application arguments 'appArgs' are missing.")
-    }
-    val environmentVariables = Option(request.environmentVariables).getOrElse {
-      throw new SubmitRestMissingFieldException("Environment variables 'environmentVariables' are missing.")
+      throw new SubmitRestMissingFieldException("Main class is missing.")
     }
 
     // Optional fields
@@ -97,6 +91,8 @@ private[mesos] class MesosSubmitRequestServlet(
     val superviseDriver = sparkProperties.get("spark.driver.supervise")
     val driverMemory = sparkProperties.get("spark.driver.memory")
     val driverCores = sparkProperties.get("spark.driver.cores")
+    val appArgs = request.appArgs
+    val environmentVariables = request.environmentVariables
     val name = request.sparkProperties.getOrElse("spark.app.name", mainClass)
 
     // Construct driver description
