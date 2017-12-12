@@ -18,7 +18,8 @@ Spark application's configuration (driver, executors, and the AM when running in
 
 There are two deploy modes that can be used to launch Spark applications on YARN. In `cluster` mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In `client` mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
 
-Unlike [Spark standalone](spark-standalone.html) and [Mesos](running-on-mesos.html) modes, in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn`.
+Unlike [Spark standalone](spark-standalone.html), [Mesos](running-on-mesos.html) and [Kubernetes](running-on-kubernetes.html) modes,
+in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn`.
 
 To launch a Spark application in `cluster` mode:
 
