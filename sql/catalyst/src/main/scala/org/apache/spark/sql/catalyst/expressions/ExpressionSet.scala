@@ -27,8 +27,6 @@ object ExpressionSet {
     expressions.foreach(set.add)
     set
   }
-
-  val empty: ExpressionSet = ExpressionSet(Nil)
 }
 
 /**
