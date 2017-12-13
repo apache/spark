@@ -336,43 +336,12 @@ case class FilterEstimation(plan: Filter) extends Logging {
         // returns 1/ndv if there is no histogram
         Some(1.0 / BigDecimal(ndv))
       } else {
-        // We compute filter selectivity using Histogram information.
-        val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
-        val histogram = colStat.histogram.get
-        val hgmBins = histogram.bins
-
-        // find bins where column's current min and max locate.  Note that a column's [min, max]
-        // range may change due to another condition applied earlier.
-        val min = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
-        val max = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
-        val minBinId = EstimationUtils.findFirstBinForValue(min, hgmBins)
-        val maxBinId = EstimationUtils.findLastBinForValue(max, hgmBins)
-
-        // compute how many bins the column's current valid range [min, max] occupies.
-        // Note that a column's [min, max] range may vary after we apply some filter conditions.
-        val validRangeBins = EstimationUtils.getOccupationBins(maxBinId, minBinId, max,
-          min, histogram)
-
-        val lowerBinId = EstimationUtils.findFirstBinForValue(datum, hgmBins)
-        val higherBinId = EstimationUtils.findLastBinForValue(datum, hgmBins)
-        assert(lowerBinId <= higherBinId)
-        val lowerBinNdv = hgmBins(lowerBinId).ndv
-        val higherBinNdv = hgmBins(higherBinId).ndv
-        // assume uniform distribution in each bin
-        val occupiedBins = if (lowerBinId == higherBinId) {
-          1.0 / lowerBinNdv
-        } else {
-          (1.0 / lowerBinNdv) +   // lowest bin
-            (higherBinId - lowerBinId - 1) + // middle bins
-            (1.0 / higherBinNdv)  // highest bin
-        }
-        Some(occupiedBins / validRangeBins)
+        Some(computeEqualityPossibilityByHistogram(literal, colStat))
       }
 
     } else {  // not in interval
       Some(0.0)
     }
-
   }
 
   /**
@@ -542,11 +511,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
             }
         }
       } else {
-        val numericHistogram = colStat.histogram.get
-        val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
-        val max = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
-        val min = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
-        percent = computePercentByEquiHeightHgm(op, numericHistogram, max, min, datum)
+        percent = computeComparisonPossibilityByHistogram(op, literal, colStat)
       }
 
       if (update) {
@@ -574,51 +539,90 @@ case class FilterEstimation(plan: Filter) extends Logging {
   }
 
   /**
-   * Returns the selectivity percentage for binary condition in the column's
-   * current valid range [min, max]
-   *
-   * @param op a binary comparison operator
-   * @param histogram a numeric equi-height histogram
-   * @param max the upper bound of the current valid range for a given column
-   * @param min the lower bound of the current valid range for a given column
-   * @param datumNumber the numeric value of a literal
-   * @return the selectivity percentage for a condition in the current range.
+   * Computes the possibility of an equality predicate using histogram.
    */
+  private def computeEqualityPossibilityByHistogram(
+      literal: Literal, colStat: ColumnStat): Double = {
+    val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
+    val histogram = colStat.histogram.get
 
-  def computePercentByEquiHeightHgm(
-      op: BinaryComparison,
-      histogram: Histogram,
-      max: Double,
-      min: Double,
-      datumNumber: Double): Double = {
     // find bins where column's current min and max locate.  Note that a column's [min, max]
     // range may change due to another condition applied earlier.
-    val minBinId = EstimationUtils.findFirstBinForValue(min, histogram.bins)
-    val maxBinId = EstimationUtils.findLastBinForValue(max, histogram.bins)
+    val min = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
+    val max = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
 
     // compute how many bins the column's current valid range [min, max] occupies.
-    // Note that a column's [min, max] range may vary after we apply some filter conditions.
-    val minToMaxLength = EstimationUtils.getOccupationBins(maxBinId, minBinId, max, min, histogram)
+    val numBinsHoldingEntireRange = EstimationUtils.numBinsHoldingRange(
+      upperBound = max,
+      upperBoundInclusive = true,
+      lowerBound = min,
+      lowerBoundInclusive = true,
+      histogram.bins)
 
-    val datumInBinId = op match {
-      case LessThan(_, _) | GreaterThanOrEqual(_, _) =>
-        EstimationUtils.findFirstBinForValue(datumNumber, histogram.bins)
-      case LessThanOrEqual(_, _) | GreaterThan(_, _) =>
-        EstimationUtils.findLastBinForValue(datumNumber, histogram.bins)
+    val numBinsHoldingDatum = EstimationUtils.numBinsHoldingRange(
+      upperBound = datum,
+      upperBoundInclusive = true,
+      lowerBound = datum,
+      lowerBoundInclusive = true,
+      histogram.bins)
+
+    numBinsHoldingDatum / numBinsHoldingEntireRange
+  }
+
+  /**
+   * Computes the possibility of a comparison predicate using histogram.
+   */
+  private def computeComparisonPossibilityByHistogram(
+      op: BinaryComparison, literal: Literal, colStat: ColumnStat): Double = {
+    val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
+    val histogram = colStat.histogram.get
+
+    // find bins where column's current min and max locate.  Note that a column's [min, max]
+    // range may change due to another condition applied earlier.
+    val min = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
+    val max = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
+
+    // compute how many bins the column's current valid range [min, max] occupies.
+    val numBinsHoldingEntireRange = EstimationUtils.numBinsHoldingRange(
+      max, upperBoundInclusive = true, min, lowerBoundInclusive = true, histogram.bins)
+
+    val numBinsHoldingRange = op match {
+      // LessThan and LessThanOrEqual share the same logic, the only difference is whether to
+      // include the upperBound in the range.
+      case _: LessThan =>
+        EstimationUtils.numBinsHoldingRange(
+          upperBound = datum,
+          upperBoundInclusive = false,
+          lowerBound = min,
+          lowerBoundInclusive = true,
+          histogram.bins)
+      case _: LessThanOrEqual =>
+        EstimationUtils.numBinsHoldingRange(
+          upperBound = datum,
+          upperBoundInclusive = true,
+          lowerBound = min,
+          lowerBoundInclusive = true,
+          histogram.bins)
+
+      // GreaterThan and GreaterThanOrEqual share the same logic, the only difference is whether to
+      // include the lowerBound in the range.
+      case _: GreaterThan =>
+        EstimationUtils.numBinsHoldingRange(
+          upperBound = max,
+          upperBoundInclusive = true,
+          lowerBound = datum,
+          lowerBoundInclusive = false,
+          histogram.bins)
+      case _: GreaterThanOrEqual =>
+        EstimationUtils.numBinsHoldingRange(
+          upperBound = max,
+          upperBoundInclusive = true,
+          lowerBound = datum,
+          lowerBoundInclusive = true,
+          histogram.bins)
     }
 
-    op match {
-      // LessThan and LessThanOrEqual share the same logic,
-      // but their datumInBinId may be different
-      case LessThan(_, _) | LessThanOrEqual(_, _) =>
-        EstimationUtils.getOccupationBins(datumInBinId, minBinId, datumNumber, min,
-          histogram) / minToMaxLength
-      // GreaterThan and GreaterThanOrEqual share the same logic,
-      // but their datumInBinId may be different
-      case GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-        EstimationUtils.getOccupationBins(maxBinId, datumInBinId, max, datumNumber,
-          histogram) / minToMaxLength
-    }
+    numBinsHoldingRange / numBinsHoldingEntireRange
   }
 
   /**
