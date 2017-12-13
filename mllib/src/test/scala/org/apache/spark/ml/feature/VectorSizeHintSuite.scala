@@ -18,11 +18,11 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.StreamTest
 
@@ -36,6 +36,18 @@ class VectorSizeHintSuite
     intercept[IllegalArgumentException] (new VectorSizeHint().setSize(-3))
   }
 
+  test("Required params must be set before transform.") {
+    val data = Seq((Vectors.dense(1, 2), 0)).toDF("vector", "intValue")
+
+    val noSizeTransformer = new VectorSizeHint().setInputCol("vector")
+    intercept[NoSuchElementException] (noSizeTransformer.transform(data))
+    intercept[NoSuchElementException] (noSizeTransformer.transformSchema(data.schema))
+
+    val noInputColTransformer = new VectorSizeHint().setSize(2)
+    intercept[NoSuchElementException] (noInputColTransformer.transform(data))
+    intercept[NoSuchElementException] (noInputColTransformer.transformSchema(data.schema))
+  }
+
   test("Adding size to column of vectors.") {
 
     val size = 3
@@ -47,7 +59,7 @@ class VectorSizeHintSuite
     val dataFrame = data.toDF(vectorColName)
     assert(
       AttributeGroup.fromStructField(dataFrame.schema(vectorColName)).size == -1,
-      "Transformer did not add expected size data.")
+      s"This test requires that column '$vectorColName' not have size metadata.")
 
     for (handleInvalid <- VectorSizeHint.supportedHandleInvalids) {
       val transformer = new VectorSizeHint()
@@ -58,7 +70,8 @@ class VectorSizeHintSuite
       assert(
         AttributeGroup.fromStructField(withSize.schema(vectorColName)).size == size,
         "Transformer did not add expected size data.")
-      withSize.collect
+      val numRows = withSize.collect().length
+      assert(numRows === data.length, s"Expecting ${data.length} rows, got $numRows.")
     }
   }
 
@@ -83,15 +96,15 @@ class VectorSizeHintSuite
       val withSize = transformer.transform(dataFrameWithMetadata)
 
       val newGroup = AttributeGroup.fromStructField(withSize.schema(vectorColName))
-      assert(newGroup.size === size, "Transformer did not add expected size data.")
+      assert(newGroup.size === size, "Column has incorrect size metadata.")
       assert(
-        newGroup.attributes.get.deep === group.attributes.get.deep,
-        "SizeHintTransformer did not preserve attributes.")
+        newGroup.attributes.get === group.attributes.get,
+        "VectorSizeHint did not preserve attributes.")
       withSize.collect
     }
   }
 
-  test("Size miss-match between current and target size raises an error.") {
+  test("Size mismatch between current and target size raises an error.") {
     val size = 4
     val vectorColName = "vector"
     val data = Seq((1, 2, 3), (2, 3, 3))
@@ -107,7 +120,7 @@ class VectorSizeHintSuite
         .setInputCol(vectorColName)
         .setSize(size)
         .setHandleInvalid(handleInvalid)
-      intercept[SparkException](transformer.transform(dataFrameWithMetadata))
+      intercept[IllegalArgumentException](transformer.transform(dataFrameWithMetadata))
     }
   }
 
@@ -123,8 +136,8 @@ class VectorSizeHintSuite
       .setHandleInvalid("error")
       .setSize(3)
 
-    intercept[SparkException](sizeHint.transform(dataWithNull).collect)
-    intercept[SparkException](sizeHint.transform(dataWithShort).collect)
+    intercept[SparkException](sizeHint.transform(dataWithNull).collect())
+    intercept[SparkException](sizeHint.transform(dataWithShort).collect())
 
     sizeHint.setHandleInvalid("skip")
     assert(sizeHint.transform(dataWithNull).count() === 1)
@@ -144,7 +157,7 @@ class VectorSizeHintStreamingSuite extends StreamTest {
 
   import testImplicits._
 
-  test("Test assemble vectors with size hint in steaming.") {
+  test("Test assemble vectors with size hint in streaming.") {
     val a = Vectors.dense(0, 1, 2)
     val b = Vectors.sparse(4, Array(0, 3), Array(3, 6))
 
@@ -159,9 +172,13 @@ class VectorSizeHintStreamingSuite extends StreamTest {
     val vectorAssembler = new VectorAssembler()
       .setInputCols(Array("a", "b"))
       .setOutputCol("assembled")
+    val pipeline = new Pipeline().setStages(Array(sizeHintA, sizeHintB, vectorAssembler))
+    /**
     val output = Seq(sizeHintA, sizeHintB, vectorAssembler).foldLeft(streamingDF) {
       case (data, transformer) => transformer.transform(data)
     }.select("assembled")
+    */
+    val output = pipeline.fit(streamingDF).transform(streamingDF).select("assembled")
 
     val expected = Vectors.dense(0, 1, 2, 3, 0, 0, 6)
 

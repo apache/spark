@@ -30,7 +30,11 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
 
 /**
- * A feature transformer that adds vector size information to a vector column.
+ * :: Experimental ::
+ * A feature transformer that adds size information to the metadata of a vector column.
+ * VectorAssembler needs size information for its input columns and cannot be used on streaming
+ * dataframes without this metadata.
+ *
  */
 @Experimental
 @Since("2.3.0")
@@ -40,9 +44,18 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   @Since("2.3.0")
   def this() = this(Identifiable.randomUID("vectSizeHint"))
 
+  /**
+   * The size of Vectors in `inputCol`.
+   * @group param
+   */
   @Since("2.3.0")
-  val size = new IntParam(this, "size", "Size of vectors in column.", {s: Int => s >= 0})
+  val size: IntParam = new IntParam(
+    this,
+    "size",
+    "Size of vectors in column.",
+    {s: Int => s >= 0})
 
+  /** group getParam */
   @Since("2.3.0")
   def getSize: Int = getOrDefault(size)
 
@@ -54,13 +67,20 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   @Since("2.3.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
+  /**
+   * Param for how to handle invalid entries. Invalid vectors include nulls and vectors with the
+   * wrong size. The options are `skip` (filter out rows with invalid vectors), `error` (throw an
+   * error) and `keep` (do not check the vector size, and keep all rows). `error` by default.
+   * @group param
+   */
   @Since("2.3.0")
   override val handleInvalid: Param[String] = new Param[String](
     this,
     "handleInvalid",
-    "How to handle invalid vectors in inputCol, (invalid vectors include nulls and vectors with " +
-      "the wrong size. The options are `skip` (filter out rows with invalid vectors), `error` " +
-      "(throw an error) and `optimistic` (don't check the vector size).",
+    "How to handle invalid vectors in inputCol. Invalid vectors include nulls and vectors with " +
+      "the wrong size. The options are skip (filter out rows with invalid vectors), error " +
+      "(throw an error) and keep (do not check the vector size, and keep all rows). `error` by " +
+      "default.",
     ParamValidators.inArray(VectorSizeHint.supportedHandleInvalids))
 
   /** @group setParam */
@@ -75,18 +95,10 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
     val localHandleInvalid = getHandleInvalid
 
     val group = AttributeGroup.fromStructField(dataset.schema(localInputCol))
+    val newGroup = validateSchemaAndSize(dataset.schema, group)
     if (localHandleInvalid == VectorSizeHint.OPTIMISTIC_INVALID && group.size == localSize) {
-      dataset.toDF
+      dataset.toDF()
     } else {
-      val newGroup = group.size match {
-        case `localSize` => group
-        case -1 => new AttributeGroup(localInputCol, localSize)
-        case _ =>
-          val msg = s"Trying to set size of vectors in `$localInputCol` to $localSize but size " +
-            s"already set to ${group.size}."
-          throw new SparkException(msg)
-      }
-
       val newCol: Column = localHandleInvalid match {
         case VectorSizeHint.OPTIMISTIC_INVALID => col(localInputCol)
         case VectorSizeHint.ERROR_INVALID =>
@@ -100,7 +112,7 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
                 s" got ${vector.size}")
             }
             vector
-          }.asNondeterministic
+          }.asNondeterministic()
           checkVectorSizeUDF(col(localInputCol))
         case VectorSizeHint.SKIP_INVALID =>
           val checkVectorSizeUDF = udf { vector: Vector =>
@@ -113,7 +125,7 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
           checkVectorSizeUDF(col(localInputCol))
       }
 
-      val res = dataset.withColumn(localInputCol, newCol.as(localInputCol, newGroup.toMetadata))
+      val res = dataset.withColumn(localInputCol, newCol.as(localInputCol, newGroup.toMetadata()))
       if (localHandleInvalid == VectorSizeHint.SKIP_INVALID) {
         res.na.drop(Array(localInputCol))
       } else {
@@ -122,14 +134,39 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
     }
   }
 
-  @Since("2.3.0")
-  override def transformSchema(schema: StructType): StructType = {
+  /**
+   * Checks that schema can be updated with new size and returns a new attribute group with
+   * updated size.
+   */
+  private def validateSchemaAndSize(schema: StructType, group: AttributeGroup): AttributeGroup = {
+    // This will throw a NoSuchElementException if params are not set.
+    val localSize = getSize
+    val localInputCol = getInputCol
+
     val inputColType = schema(getInputCol).dataType
     require(
       inputColType.isInstanceOf[VectorUDT],
       s"Input column, $getInputCol must be of Vector type, got $inputColType"
     )
-    schema
+    group.size match {
+      case `localSize` => group
+      case -1 => new AttributeGroup(localInputCol, localSize)
+      case _ =>
+        val msg = s"Trying to set size of vectors in `$localInputCol` to $localSize but size " +
+          s"already set to ${group.size}."
+        throw new IllegalArgumentException(msg)
+    }
+  }
+
+  @Since("2.3.0")
+  override def transformSchema(schema: StructType): StructType = {
+    val fieldIndex = schema.fieldIndex(getInputCol)
+    val fields = schema.fields.clone()
+    val inputField = fields(fieldIndex)
+    val group = AttributeGroup.fromStructField(inputField)
+    val newGroup = validateSchemaAndSize(schema, group)
+    fields(fieldIndex) = inputField.copy(metadata = newGroup.toMetadata())
+    StructType(fields)
   }
 
   @Since("2.3.0")
