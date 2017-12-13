@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -319,11 +318,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val ser = new KryoSerializer(conf).newInstance()
 
-    def check[T: ClassTag](t: T) {
-      assert(ser.deserialize[T](ser.serialize(t)) === t)
-    }
-
-    def check2(v: VectorWithNorm): Unit = {
+    def check(v: VectorWithNorm): Unit = {
       val v2 = ser.deserialize[VectorWithNorm](ser.serialize(v))
       assert(v2.norm === v.norm)
       assert(v2.vector === v.vector)
@@ -331,8 +326,6 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val vec1 = new VectorWithNorm(Vectors.dense(Array(1.0, 2.0)))
     val vec2 = new VectorWithNorm(Vectors.sparse(10, Array(5, 8), Array(1.0, 2.0)))
-    check2(vec1)
-    check2(vec2)
     check(vec1)
     check(vec2)
   }
