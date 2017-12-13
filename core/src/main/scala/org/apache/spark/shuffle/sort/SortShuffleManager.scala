@@ -96,7 +96,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       // having multiple files open at a time and thus more memory allocated to buffers.
       new BypassMergeSortShuffleHandle[K, V](
         shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
-    } else if (SortShuffleManager.canUseSerializedShuffle(dependency)) {
+    } else if (SortShuffleManager.canUseSerializedShuffle(conf, dependency)) {
       // Otherwise, try to buffer map outputs in a serialized form, since this is more efficient:
       new SerializedShuffleHandle[K, V](
         shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
@@ -189,10 +189,14 @@ private[spark] object SortShuffleManager extends Logging {
    * Helper method for determining whether a shuffle should use an optimized serialized shuffle
    * path or whether it should fall back to the original path that operates on deserialized objects.
    */
-  def canUseSerializedShuffle(dependency: ShuffleDependency[_, _, _]): Boolean = {
+  def canUseSerializedShuffle(conf: SparkConf, dependency: ShuffleDependency[_, _, _]): Boolean = {
     val shufId = dependency.shuffleId
     val numPartitions = dependency.partitioner.numPartitions
-    if (!dependency.serializer.supportsRelocationOfSerializedObjects) {
+    if (!conf.getBoolean("spark.shuffle.sort.openSerializedShuffle", true)) {
+      log.debug(s"Don't use serialized shuffle for config: " +
+        s"spark.shuffle.sort.openSerializedShuffle")
+      false
+    } else if (!dependency.serializer.supportsRelocationOfSerializedObjects) {
       log.debug(s"Can't use serialized shuffle for shuffle $shufId because the serializer, " +
         s"${dependency.serializer.getClass.getName}, does not support object relocation")
       false
