@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.DataType
 
 /**
  * Defines util methods used in expression code generation.
