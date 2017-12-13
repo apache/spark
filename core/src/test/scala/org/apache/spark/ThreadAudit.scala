@@ -73,7 +73,29 @@ trait ThreadAudit extends Logging {
      * These are excluded because their lifecycle is handled by the netty itself
      * and spark has no explicit effect on them.
      */
-    "threadDeathWatcher.*"
+    "threadDeathWatcher.*",
+
+    /**
+     * During [[SparkContext]] creation [[org.apache.spark.rpc.netty.NettyRpcEnv]]
+     * creates event loops. One is wrapped inside
+     * [[org.apache.spark.network.server.TransportServer]]
+     * the other one is inside [[org.apache.spark.network.client.TransportClient]].
+     * The thread pools behind shut down asynchronously triggered by [[SparkContext#close]].
+     * Manually checked and all of them stopped properly.
+     */
+    "rpc-client.*",
+    "rpc-server.*",
+
+    /**
+     * During [[SparkContext]] creation [[org.apache.spark.storage.BlockManager]]
+     * creates event loops. One is wrapped inside
+     * [[org.apache.spark.network.server.TransportServer]]
+     * the other one is inside [[org.apache.spark.network.client.TransportClient]].
+     * The thread pools behind shut down asynchronously triggered by [[SparkContext#close]].
+     * Manually checked and all of them stopped properly.
+     */
+    "shuffle-client.*",
+    "shuffle-server.*"
   )
   private var threadNamesSnapshot: Set[String] = Set.empty
 
@@ -85,13 +107,19 @@ trait ThreadAudit extends Logging {
   }
 
   private def printRemainingThreadNames(): Unit = {
-    val remainingThreadNames = runningThreadNames.diff(threadNamesSnapshot)
-      .filterNot { s => threadWhiteList.exists(s.matches(_)) }
-    if (remainingThreadNames.nonEmpty) {
-      val suiteName = this.getClass.getName
-      val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
-      logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
-        s"thread names: ${remainingThreadNames.mkString(", ")} =====\n")
+    val suiteName = this.getClass.getName
+    val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
+
+    if (threadNamesSnapshot.nonEmpty) {
+      val remainingThreadNames = runningThreadNames.diff(threadNamesSnapshot)
+        .filterNot { s => threadWhiteList.exists(s.matches(_)) }
+      if (remainingThreadNames.nonEmpty) {
+        logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
+          s"thread names: ${remainingThreadNames.mkString(", ")} =====\n")
+      }
+    } else {
+      logWarning(s"\n\n===== THREAD AUDIT POST ACTION CALLED " +
+        s"WITHOUT PRE ACTION IN SUITE $shortSuiteName =====\n")
     }
   }
 
