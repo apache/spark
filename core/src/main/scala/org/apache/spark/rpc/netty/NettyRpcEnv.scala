@@ -649,6 +649,7 @@ private[netty] class NettyRpcHandler(
       dispatcher.postOneWayMessage(messageToDispatch)
     } catch {
       case e: RpcEnvStoppedException => logWarning(e.getMessage)
+      case e: RpcEndpointStoppedException => logWarning(e.getMessage)
     }
   }
 
