@@ -146,7 +146,7 @@ public final class UnsafeExternalRowSorter {
     final UnsafeSorterIterator[] sortedIterator = new UnsafeSorterIterator[1];
     sortedIterator[0] = sorter.getSortedIterator();
     return new AbstractIterator<UnsafeRow>() {
-      // inputIterator == null means the rows has been inserted
+      // inputIterator is null means the rows has already been inserted
       boolean inserted = inputIterator == null;
       private final int numFields = schema.length();
       private UnsafeRow row = new UnsafeRow(numFields);
