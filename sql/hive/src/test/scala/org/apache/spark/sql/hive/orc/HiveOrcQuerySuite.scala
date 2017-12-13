@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.hive.orc
 
-import org.apache.spark.sql.AnalysisException
+import java.io.File
+
+import com.google.common.io.Files
+
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
@@ -160,6 +164,48 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             assert(fileFormat == Some(format))
           }
         }
+    }
+  }
+
+  // Since Hive 1.2.1 library code path still has this problem, users may hit this
+  // when spark.sql.hive.convertMetastoreOrc=false. However, after SPARK-22279,
+  // Apache Spark with the default configuration doesn't hit this bug.
+  test("SPARK-22267 Spark SQL incorrectly reads ORC files when column order is different") {
+    Seq("native", "hive").foreach { orcImpl =>
+      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
+        withTempPath { f =>
+          val path = f.getCanonicalPath
+          Seq(1 -> 2).toDF("c1", "c2").write.orc(path)
+          checkAnswer(spark.read.orc(path), Row(1, 2))
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
+            withTable("t") {
+              sql(s"CREATE EXTERNAL TABLE t(c2 INT, c1 INT) STORED AS ORC LOCATION '$path'")
+              checkAnswer(spark.table("t"), Row(2, 1))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Since Hive 1.2.1 library code path still has this problem, users may hit this
+  // when spark.sql.hive.convertMetastoreOrc=false. However, after SPARK-22279,
+  // Apache Spark with the default configuration doesn't hit this bug.
+  test("SPARK-19809 NullPointerException on zero-size ORC file") {
+    Seq("native", "hive").foreach { orcImpl =>
+      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
+        withTempPath { dir =>
+          withTable("spark_19809") {
+            sql(s"CREATE TABLE spark_19809(a int) STORED AS ORC LOCATION '$dir'")
+            Files.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
+
+            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
+              checkAnswer(spark.table("spark_19809"), Seq.empty)
+            }
+          }
+        }
+      }
     }
   }
 }

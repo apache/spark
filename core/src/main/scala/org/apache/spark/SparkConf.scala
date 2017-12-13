@@ -668,7 +668,11 @@ private[spark] object SparkConf extends Logging {
     MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
       AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
     LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
-      AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3"))
+      AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
+    DRIVER_MEMORY_OVERHEAD.key -> Seq(
+      AlternateConfig("spark.yarn.driver.memoryOverhead", "2.3")),
+    EXECUTOR_MEMORY_OVERHEAD.key -> Seq(
+      AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3"))
   )
 
   /**
