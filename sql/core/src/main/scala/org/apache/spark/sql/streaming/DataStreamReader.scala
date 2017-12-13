@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceV2Options, MicroBatchReadSupport}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
@@ -166,11 +167,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       options = extraOptions.toMap)
     ds match {
       case s: ContinuousReadSupport =>
-        // TODO: What do we pass as the metadata log path? We just need some scratch space, the
-        // schema can't depend on it
         val tempReader = s.createContinuousReader(
           java.util.Optional.ofNullable(userSpecifiedSchema.orNull),
-          "scratch/path/for/schema",
+          Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
           options)
         // Generate the V1 node to catch errors thrown within generation.
         StreamingRelation(v1DataSource)
