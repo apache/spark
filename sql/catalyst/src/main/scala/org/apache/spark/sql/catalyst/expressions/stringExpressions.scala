@@ -289,11 +289,6 @@ case class Elt(children: Seq[Expression])
     val index = indexExpr.genCode(ctx)
     val strings = stringExprs.map(_.genCode(ctx))
     val indexVal = ctx.freshName("index")
-
-    // -1 means the given index doesn't match indices of strings in split function.
-    val NOT_MATCHED = -1
-    // 0 means the given index matches one of indices of strings in split function.
-    val MATCHED = 0
     val resultState = ctx.freshName("eltResultState")
 
     val stringVal = ctx.freshName("stringVal")
@@ -304,7 +299,7 @@ case class Elt(children: Seq[Expression])
          |if ($indexVal == ${index + 1}) {
          |  ${eval.code}
          |  $stringVal = ${eval.isNull} ? null : ${eval.value};
-         |  $resultState = (byte)$MATCHED;
+         |  $resultState = true;
          |  continue;
          |}
       """.stripMargin
@@ -314,10 +309,10 @@ case class Elt(children: Seq[Expression])
       expressions = assignStringValue,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
-      returnType = ctx.JAVA_BYTE,
+      returnType = ctx.JAVA_BOOLEAN,
       makeSplitFunction = body =>
         s"""
-           |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
+           |${ctx.JAVA_BOOLEAN} $resultState = false;
            |do {
            |  $body
            |} while (false);
@@ -326,7 +321,7 @@ case class Elt(children: Seq[Expression])
       foldFunctions = _.map { funcCall =>
         s"""
            |$resultState = $funcCall;
-           |if ($resultState != $NOT_MATCHED) {
+           |if ($resultState) {
            |  continue;
            |}
          """.stripMargin
@@ -336,7 +331,7 @@ case class Elt(children: Seq[Expression])
       s"""
          |${index.code}
          |final int $indexVal = ${index.value};
-         |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
+         |${ctx.JAVA_BOOLEAN} $resultState = false;
          |$stringVal = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
