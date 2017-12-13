@@ -41,7 +41,7 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
   protected override def afterAll(): Unit = {
     try {
       // For debugging dump some statistics about how much time was spent in various optimizer rules
-      logInfo(RuleExecutor.dumpTimeSpent())
+      logWarning(RuleExecutor.dumpTimeSpent())
       spark.sessionState.catalog.reset()
     } finally {
       super.afterAll()
