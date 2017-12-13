@@ -113,7 +113,7 @@ options for deployment:
   * [Mesos](running-on-mesos.html): deploy a private cluster using
       [Apache Mesos](http://mesos.apache.org)
   * [YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
-  * [Kubernetes (experimental)](running-on-kubernetes.html): deploy Spark on top of Kubernetes
+  * [Kubernetes](running-on-kubernetes.html): deploy Spark on top of Kubernetes
 
 **Other Documents:**
 

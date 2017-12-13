@@ -15,7 +15,7 @@ Kubernetes scheduler that has been added to Spark.
 [kubectl](https://kubernetes.io/docs/user-guide/prereqs/).  If you do not already have a working Kubernetes cluster,
 you may setup a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
-  * We recommend using the latest releases of minikube be updated to the most recent version with the DNS addon enabled.
+  * We recommend using the latest release of minikube with the DNS addon enabled.
 * You must have appropriate permissions to list, create, edit and delete
 [pods](https://kubernetes.io/docs/user-guide/pods/) in your cluster. You can verify that you can list these resources
 by running `kubectl auth can-i <list|create|edit|delete> pods`.
@@ -28,12 +28,13 @@ by running `kubectl auth can-i <list|create|edit|delete> pods`.
   <img src="img/k8s-cluster-mode.png" title="Spark cluster components" alt="Spark cluster components" />
 </p>
 
-spark-submit can be directly used to submit a Spark application to a Kubernetes cluster. The mechanism by which spark-submit happens is as follows:
+<code>spark-submit</code> can be directly used to submit a Spark application to a Kubernetes cluster.
+The submission mechanism works as follows:
 
-* Spark creates a spark driver running within a [Kubernetes pod](https://kubernetes.io/docs/concepts/workloads/pods/pod/).
+* Spark creates a Spark driver running within a [Kubernetes pod](https://kubernetes.io/docs/concepts/workloads/pods/pod/).
 * The driver creates executors which are also running within Kubernetes pods and connects to them, and executes application code.
 * When the application completes, the executor pods terminate and are cleaned up, but the driver pod persists
-logs and remains in "completed" state in the Kubernetes API till it's eventually garbage collected or manually cleaned up.
+logs and remains in "completed" state in the Kubernetes API until it's eventually garbage collected or manually cleaned up.
 
 Note that in the completed state, the driver pod does *not* use any computational or memory resources.
 
@@ -54,7 +55,7 @@ and built for your usage.
 
 You may build these docker images from sources.
 There is a script, `sbin/build-push-docker-images.sh` that you can use to build and push
-customized spark distribution images consisting of all the above components.
+customized Spark distribution images consisting of all the above components.
 
 Example usage is:
 
@@ -95,14 +96,14 @@ kubectl cluster-info
 Kubernetes master is running at http://127.0.0.1:6443
 ```
 
-In the above example, the specific Kubernetes cluster can be used with spark submit by specifying
+In the above example, the specific Kubernetes cluster can be used with <code>spark-submit</code> by specifying
 `--master k8s://http://127.0.0.1:6443` as an argument to spark-submit. Additionally, it is also possible to use the
 authenticating proxy, `kubectl proxy` to communicate to the Kubernetes API.
 
 The local proxy can be started by:
 
 ```bash
- kubectl proxy
+kubectl proxy
 ```
 
 If the local proxy is running at localhost:8001, `--master k8s://http://127.0.0.1:8001` can be used as the argument to
@@ -123,7 +124,7 @@ take actions.
 
 ### Accessing Logs
 
-Logs can be accessed using the kubernetes API and the `kubectl` CLI. When a Spark application is running, it's possible
+Logs can be accessed using the Kubernetes API and the `kubectl` CLI. When a Spark application is running, it's possible
 to stream logs from the application using:
 
 ```bash
@@ -131,7 +132,7 @@ kubectl -n=<namespace> logs -f <driver-pod-name>
 ```
 
 The same logs can also be accessed through the
-[kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
+[Kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
 the cluster.
 
 ### Accessing Driver UI
@@ -143,13 +144,13 @@ The UI associated with any application can be accessed locally using
 kubectl port-forward <driver-pod-name> 4040:4040
 ```
 
-Then, the spark driver UI can be accessed on `http://localhost:4040`.
+Then, the Spark driver UI can be accessed on `http://localhost:4040`.
 
 ### Debugging 
 
 There may be several kinds of failures. If the Kubernetes API server rejects the request made from spark-submit, or the
 connection is refused for a different reason, the submission logic should indicate the error encountered. However, if there
-are errors during the running of the application, often, the best way to investigate may be through the kubernetes CLI.
+are errors during the running of the application, often, the best way to investigate may be through the Kubernetes CLI.
 
 To get some basic information about the scheduling decisions made around the driver pod, you can run:
 
@@ -165,7 +166,7 @@ kubectl logs <spark-driver-pod>
 
 Status and logs of failed executor pods can be checked in similar ways. Finally, deleting the driver pod will clean up the entire spark 
 application, includling all executors, associated service, etc. The driver pod can be thought of as the Kubernetes representation of 
-the spark application.
+the Spark application.
 
 ## Kubernetes Features
 
@@ -173,7 +174,7 @@ the spark application.
 
 Kubernetes has the concept of [namespaces](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/).
 Namespaces are ways to divide cluster resources between multiple users (via resource quota). Spark on Kubernetes can
-use namespaces to launch spark applications. This is through the `--conf spark.kubernetes.namespace` argument to spark-submit.
+use namespaces to launch Spark applications. This can be made use of through the `spark.kubernetes.namespace` configuration.
 
 Kubernetes allows using [ResourceQuota](https://kubernetes.io/docs/concepts/policy/resource-quotas/) to set limits on
 resources, number of objects, etc on individual namespaces. Namespaces and ResourceQuota can be used in combination by
@@ -198,7 +199,7 @@ that allows driver pods to create pods and services under the default Kubernetes
 service account that has the right role granted. Spark on Kubernetes supports specifying a custom service account to
 be used by the driver pod through the configuration property
 `spark.kubernetes.authenticate.driver.serviceAccountName=<service account name>`. For example to make the driver pod
-to use the `spark` service account, a user simply adds the following option to the `spark-submit` command:
+use the `spark` service account, a user simply adds the following option to the `spark-submit` command:
 
 ```
 --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark
@@ -272,6 +273,7 @@ specific to Spark on Kubernetes.
   <td>
     Docker image to use for the driver. Specify this using the standard
     <a href="https://docs.docker.com/engine/reference/commandline/tag/">Docker tag</a> format.
+    This configuration is required and must be provided by the user.
   </td>
 </tr>
 <tr>
@@ -280,6 +282,7 @@ specific to Spark on Kubernetes.
   <td>
     Docker image to use for the executors. Specify this using the standard
     <a href="https://docs.docker.com/engine/reference/commandline/tag/">Docker tag</a> format.
+    This configuration is required and must be provided by the user.
   </td>
 </tr>
 <tr>
@@ -365,7 +368,7 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.authenticate.driver.oauthToken</code></td>
   <td>(none)</td>
   <td>
-    OAuth token to use when authenticating against the against the Kubernetes API server from the driver pod when
+    OAuth token to use when authenticating against the Kubernetes API server from the driver pod when
     requesting executors. Note that unlike the other authentication options, this must be the exact string value of
     the token to use for the authentication. This token value is uploaded to the driver pod. If this is specified, it is
     highly recommended to set up TLS for the driver submission server, as this value is sensitive information that would
@@ -483,7 +486,8 @@ specific to Spark on Kubernetes.
    <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
    <td>(none)</td>
    <td>
-     Mounts the Kubernetes secret named <code>SecretName</code> onto the path specified by the value
+     Mounts the [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/)
+     named <code>SecretName</code> onto the path specified by the value
      in the driver Pod. The user can specify multiple instances of this for multiple secrets.
    </td>
  </tr>
@@ -491,7 +495,8 @@ specific to Spark on Kubernetes.
    <td><code>spark.kubernetes.executor.secrets.[SecretName]</code></td>
    <td>(none)</td>
    <td>
-     Mounts the Kubernetes secret named <code>SecretName</code> onto the path specified by the value
+     Mounts the [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/)
+     named <code>SecretName</code> onto the path specified by the value
      in the executor Pods. The user can specify multiple instances of this for multiple secrets.
    </td>
  </tr>
