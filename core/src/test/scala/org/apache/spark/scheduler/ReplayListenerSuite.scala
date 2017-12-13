@@ -132,8 +132,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     val logFilePath = Utils.getFilePath(testDir, "incompatible.txt")
     val fstream = fileSystem.create(logFilePath)
     val writer = new PrintWriter(fstream)
-    val applicationStart = SparkListenerApplicationStart("Worst App (N)ever", None,
-      125L, "Donald", None)
+    val applicationStart = SparkListenerApplicationStart("Incompatible App", None,
+      125L, "UserUsingIncompatibleVersion", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
     // scalastyle:off println
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
