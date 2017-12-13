@@ -22,6 +22,7 @@ import java.util.Arrays;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * A column backed by an in memory JVM array. This stores the NULLs as a byte per value
@@ -77,15 +78,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
     reserveInternal(capacity);
     reset();
-  }
-
-  @Override
-  public long valuesNativeAddress() {
-    throw new RuntimeException("Cannot get native address for on heap column");
-  }
-  @Override
-  public long nullsNativeAddress() {
-    throw new RuntimeException("Cannot get native address for on heap column");
   }
 
   @Override
@@ -210,6 +202,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     byte[] array = new byte[count];
     System.arraycopy(byteData, rowId, array, 0, count);
     return array;
+  }
+
+  @Override
+  protected UTF8String getBytesAsUTF8String(int rowId, int count) {
+    return UTF8String.fromBytes(byteData, rowId, count);
   }
 
   //
@@ -493,12 +490,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     arrayLengths[rowId] = length;
   }
 
-  @Override
-  public void loadBytes(ColumnVector.Array array) {
-    array.byteArray = byteData;
-    array.byteArrayOffset = array.offset;
-  }
-
   //
   // APIs dealing with Byte Arrays
   //
@@ -514,7 +505,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
+    if (isArray()) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {
@@ -567,7 +558,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
         if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, capacity);
         doubleData = newData;
       }
-    } else if (resultStruct != null) {
+    } else if (childColumns != null) {
       // Nothing to store.
     } else {
       throw new RuntimeException("Unhandled " + type);

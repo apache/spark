@@ -23,7 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.types._
 
@@ -265,7 +265,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
    * @return an optional double value to show the percentage of rows meeting a given condition
-    *         It returns None if no statistics exists for a given column or wrong value.
+   *         It returns None if no statistics exists for a given column or wrong value.
    */
   def evaluateBinary(
       op: BinaryComparison,
@@ -332,8 +332,44 @@ case class FilterEstimation(plan: Filter) extends Logging {
         colStatsMap.update(attr, newStats)
       }
 
-      Some(1.0 / BigDecimal(ndv))
-    } else {
+      if (colStat.histogram.isEmpty) {
+        // returns 1/ndv if there is no histogram
+        Some(1.0 / BigDecimal(ndv))
+      } else {
+        // We compute filter selectivity using Histogram information.
+        val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
+        val histogram = colStat.histogram.get
+        val hgmBins = histogram.bins
+
+        // find bins where column's current min and max locate.  Note that a column's [min, max]
+        // range may change due to another condition applied earlier.
+        val min = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
+        val max = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
+        val minBinId = EstimationUtils.findFirstBinForValue(min, hgmBins)
+        val maxBinId = EstimationUtils.findLastBinForValue(max, hgmBins)
+
+        // compute how many bins the column's current valid range [min, max] occupies.
+        // Note that a column's [min, max] range may vary after we apply some filter conditions.
+        val validRangeBins = EstimationUtils.getOccupationBins(maxBinId, minBinId, max,
+          min, histogram)
+
+        val lowerBinId = EstimationUtils.findFirstBinForValue(datum, hgmBins)
+        val higherBinId = EstimationUtils.findLastBinForValue(datum, hgmBins)
+        assert(lowerBinId <= higherBinId)
+        val lowerBinNdv = hgmBins(lowerBinId).ndv
+        val higherBinNdv = hgmBins(higherBinId).ndv
+        // assume uniform distribution in each bin
+        val occupiedBins = if (lowerBinId == higherBinId) {
+          1.0 / lowerBinNdv
+        } else {
+          (1.0 / lowerBinNdv) +   // lowest bin
+            (higherBinId - lowerBinId - 1) + // middle bins
+            (1.0 / higherBinNdv)  // highest bin
+        }
+        Some(occupiedBins / validRangeBins)
+      }
+
+    } else {  // not in interval
       Some(0.0)
     }
 
@@ -471,37 +507,46 @@ case class FilterEstimation(plan: Filter) extends Logging {
       percent = 1.0
     } else {
       // This is the partial overlap case:
-      // Without advanced statistics like histogram, we assume uniform data distribution.
-      // We just prorate the adjusted range over the initial range to compute filter selectivity.
-      assert(max > min)
-      percent = op match {
-        case _: LessThan =>
-          if (numericLiteral == max) {
-            // If the literal value is right on the boundary, we can minus the part of the
-            // boundary value (1/ndv).
-            1.0 - 1.0 / ndv
-          } else {
-            (numericLiteral - min) / (max - min)
-          }
-        case _: LessThanOrEqual =>
-          if (numericLiteral == min) {
-            // The boundary value is the only satisfying value.
-            1.0 / ndv
-          } else {
-            (numericLiteral - min) / (max - min)
-          }
-        case _: GreaterThan =>
-          if (numericLiteral == min) {
-            1.0 - 1.0 / ndv
-          } else {
-            (max - numericLiteral) / (max - min)
-          }
-        case _: GreaterThanOrEqual =>
-          if (numericLiteral == max) {
-            1.0 / ndv
-          } else {
-            (max - numericLiteral) / (max - min)
-          }
+
+      if (colStat.histogram.isEmpty) {
+        // Without advanced statistics like histogram, we assume uniform data distribution.
+        // We just prorate the adjusted range over the initial range to compute filter selectivity.
+        assert(max > min)
+        percent = op match {
+          case _: LessThan =>
+            if (numericLiteral == max) {
+              // If the literal value is right on the boundary, we can minus the part of the
+              // boundary value (1/ndv).
+              1.0 - 1.0 / ndv
+            } else {
+              (numericLiteral - min) / (max - min)
+            }
+          case _: LessThanOrEqual =>
+            if (numericLiteral == min) {
+              // The boundary value is the only satisfying value.
+              1.0 / ndv
+            } else {
+              (numericLiteral - min) / (max - min)
+            }
+          case _: GreaterThan =>
+            if (numericLiteral == min) {
+              1.0 - 1.0 / ndv
+            } else {
+              (max - numericLiteral) / (max - min)
+            }
+          case _: GreaterThanOrEqual =>
+            if (numericLiteral == max) {
+              1.0 / ndv
+            } else {
+              (max - numericLiteral) / (max - min)
+            }
+        }
+      } else {
+        val numericHistogram = colStat.histogram.get
+        val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
+        val max = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
+        val min = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
+        percent = computePercentByEquiHeightHgm(op, numericHistogram, max, min, datum)
       }
 
       if (update) {
@@ -513,10 +558,9 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
         op match {
           case _: GreaterThan | _: GreaterThanOrEqual =>
-            // If new ndv is 1, then new max must be equal to new min.
-            newMin = if (newNdv == 1) newMax else newValue
+            newMin = newValue
           case _: LessThan | _: LessThanOrEqual =>
-            newMax = if (newNdv == 1) newMin else newValue
+            newMax = newValue
         }
 
         val newStats =
@@ -527,6 +571,54 @@ case class FilterEstimation(plan: Filter) extends Logging {
     }
 
     Some(percent)
+  }
+
+  /**
+   * Returns the selectivity percentage for binary condition in the column's
+   * current valid range [min, max]
+   *
+   * @param op a binary comparison operator
+   * @param histogram a numeric equi-height histogram
+   * @param max the upper bound of the current valid range for a given column
+   * @param min the lower bound of the current valid range for a given column
+   * @param datumNumber the numeric value of a literal
+   * @return the selectivity percentage for a condition in the current range.
+   */
+
+  def computePercentByEquiHeightHgm(
+      op: BinaryComparison,
+      histogram: Histogram,
+      max: Double,
+      min: Double,
+      datumNumber: Double): Double = {
+    // find bins where column's current min and max locate.  Note that a column's [min, max]
+    // range may change due to another condition applied earlier.
+    val minBinId = EstimationUtils.findFirstBinForValue(min, histogram.bins)
+    val maxBinId = EstimationUtils.findLastBinForValue(max, histogram.bins)
+
+    // compute how many bins the column's current valid range [min, max] occupies.
+    // Note that a column's [min, max] range may vary after we apply some filter conditions.
+    val minToMaxLength = EstimationUtils.getOccupationBins(maxBinId, minBinId, max, min, histogram)
+
+    val datumInBinId = op match {
+      case LessThan(_, _) | GreaterThanOrEqual(_, _) =>
+        EstimationUtils.findFirstBinForValue(datumNumber, histogram.bins)
+      case LessThanOrEqual(_, _) | GreaterThan(_, _) =>
+        EstimationUtils.findLastBinForValue(datumNumber, histogram.bins)
+    }
+
+    op match {
+      // LessThan and LessThanOrEqual share the same logic,
+      // but their datumInBinId may be different
+      case LessThan(_, _) | LessThanOrEqual(_, _) =>
+        EstimationUtils.getOccupationBins(datumInBinId, minBinId, datumNumber, min,
+          histogram) / minToMaxLength
+      // GreaterThan and GreaterThanOrEqual share the same logic,
+      // but their datumInBinId may be different
+      case GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
+        EstimationUtils.getOccupationBins(maxBinId, datumInBinId, max, datumNumber,
+          histogram) / minToMaxLength
+    }
   }
 
   /**
@@ -784,11 +876,16 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
   def outputColumnStats(rowsBeforeFilter: BigInt, rowsAfterFilter: BigInt)
     : AttributeMap[ColumnStat] = {
     val newColumnStats = originalMap.map { case (attr, oriColStat) =>
-      // Update ndv based on the overall filter selectivity: scale down ndv if the number of rows
-      // decreases; otherwise keep it unchanged.
-      val newNdv = EstimationUtils.updateNdv(oldNumRows = rowsBeforeFilter,
-        newNumRows = rowsAfterFilter, oldNdv = oriColStat.distinctCount)
       val colStat = updatedMap.get(attr.exprId).map(_._2).getOrElse(oriColStat)
+      val newNdv = if (colStat.distinctCount > 1) {
+        // Update ndv based on the overall filter selectivity: scale down ndv if the number of rows
+        // decreases; otherwise keep it unchanged.
+        EstimationUtils.updateNdv(oldNumRows = rowsBeforeFilter,
+          newNumRows = rowsAfterFilter, oldNdv = oriColStat.distinctCount)
+      } else {
+        // no need to scale down since it is already down to 1 (for skewed distribution case)
+        colStat.distinctCount
+      }
       attr -> colStat.copy(distinctCount = newNdv)
     }
     AttributeMap(newColumnStats.toSeq)

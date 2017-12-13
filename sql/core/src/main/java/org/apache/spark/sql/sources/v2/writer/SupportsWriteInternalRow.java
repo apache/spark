@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.sources.v2.writer;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -29,8 +28,6 @@ import org.apache.spark.sql.catalyst.InternalRow;
  * changed in the future Spark versions.
  */
 
-@InterfaceStability.Evolving
-@Experimental
 @InterfaceStability.Unstable
 public interface SupportsWriteInternalRow extends DataSourceV2Writer {
 

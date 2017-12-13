@@ -31,7 +31,6 @@ import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
-import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -140,6 +139,13 @@ object SQLConf {
       .doc("When true, enable partition pruning for in-memory columnar tables.")
       .booleanConf
       .createWithDefault(true)
+
+  val COLUMN_VECTOR_OFFHEAP_ENABLED =
+    buildConf("spark.sql.columnVector.offheap.enabled")
+      .internal()
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .booleanConf
+      .createWithDefault(false)
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
@@ -285,8 +291,31 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_INT96_TIMESTAMP_CONVERSION = buildConf("spark.sql.parquet.int96TimestampConversion")
+    .doc("This controls whether timestamp adjustments should be applied to INT96 data when " +
+      "converting to timestamps, for data written by Impala.  This is necessary because Impala " +
+      "stores INT96 data with a different timezone offset than Hive & Spark.")
+    .booleanConf
+    .createWithDefault(false)
+
+  object ParquetOutputTimestampType extends Enumeration {
+    val INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
+  }
+
+  val PARQUET_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.parquet.outputTimestampType")
+    .doc("Sets which Parquet timestamp type to use when Spark writes data to Parquet files. " +
+      "INT96 is a non-standard but commonly used timestamp type in Parquet. TIMESTAMP_MICROS " +
+      "is a standard timestamp type in Parquet, which stores number of microseconds from the " +
+      "Unix epoch. TIMESTAMP_MILLIS is also standard, but with millisecond precision, which " +
+      "means Spark has to truncate the microsecond portion of its timestamp value.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(ParquetOutputTimestampType.values.map(_.toString))
+    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+
   val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
-    .doc("When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
+    .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
+      "When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
       "extended type. In this mode, the microsecond portion of the timestamp value will be" +
       "truncated.")
     .booleanConf
@@ -308,6 +337,13 @@ object SQLConf {
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("Whether to follow Parquet's format specification when converting Parquet schema to " +
       "Spark SQL schema and vice versa.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
+    .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
+      "filters. This configuration only has an effect when 'spark.sql.parquet.filterPushdown' " +
+      "is enabled.")
     .booleanConf
     .createWithDefault(false)
 
@@ -333,6 +369,14 @@ object SQLConf {
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
     .createWithDefault("snappy")
+
+  val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
+    .doc("When native, use the native version of ORC support instead of the ORC library in Hive " +
+      "1.2.1. It is 'hive' by default prior to Spark 2.3.")
+    .internal()
+    .stringConf
+    .checkValues(Set("hive", "native"))
+    .createWithDefault("native")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
@@ -570,12 +614,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val MAX_CASES_BRANCHES = buildConf("spark.sql.codegen.maxCaseBranches")
-    .internal()
-    .doc("The maximum number of switches supported with codegen.")
-    .intConf
-    .createWithDefault(20)
-
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
     .internal()
     .doc("The maximum number of codegen lines to log when errors occur. Use -1 for unlimited.")
@@ -812,8 +850,35 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
-  val AUTO_UPDATE_SIZE =
-    buildConf("spark.sql.statistics.autoUpdate.size")
+  val HISTOGRAM_ENABLED =
+    buildConf("spark.sql.statistics.histogram.enabled")
+      .doc("Generates histograms when computing column statistics if enabled. Histograms can " +
+        "provide better estimation accuracy. Currently, Spark only supports equi-height " +
+        "histogram. Note that collecting histograms takes extra cost. For example, collecting " +
+        "column statistics usually takes only one table scan, but generating equi-height " +
+        "histogram will cause an extra table scan.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val HISTOGRAM_NUM_BINS =
+    buildConf("spark.sql.statistics.histogram.numBins")
+      .internal()
+      .doc("The number of bins when generating histograms.")
+      .intConf
+      .checkValue(num => num > 1, "The number of bins must be large than 1.")
+      .createWithDefault(254)
+
+  val PERCENTILE_ACCURACY =
+    buildConf("spark.sql.statistics.percentile.accuracy")
+      .internal()
+      .doc("Accuracy of percentile approximation when generating equi-height histograms. " +
+        "Larger value means better accuracy. The relative error can be deduced by " +
+        "1.0 / PERCENTILE_ACCURACY.")
+      .intConf
+      .createWithDefault(10000)
+
+  val AUTO_SIZE_UPDATE_ENABLED =
+    buildConf("spark.sql.statistics.size.autoUpdate.enabled")
       .doc("Enables automatic update for table size once table's data is changed. Note that if " +
         "the total number of files of the table is very large, this can be expensive and slow " +
         "down data change commands.")
@@ -947,6 +1012,15 @@ object SQLConf {
         "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
       .intConf
       .createWithDefault(10000)
+
+  val PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE =
+    buildConf("spark.sql.execution.pandas.respectSessionTimeZone")
+      .internal()
+      .doc("When true, make Pandas DataFrame with timestamp type respecting session local " +
+        "timezone when converting to/from Pandas DataFrame. This configuration will be " +
+        "deprecated in the future releases.")
+      .booleanConf
+      .createWithDefault(true)
 
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
@@ -1084,8 +1158,6 @@ class SQLConf extends Serializable with Logging {
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
-  def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
-
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
@@ -1141,11 +1213,29 @@ class SQLConf extends Serializable with Logging {
 
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
+  def isParquetINT96TimestampConversion: Boolean = getConf(PARQUET_INT96_TIMESTAMP_CONVERSION)
+
   def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
+
+  def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
+    val isOutputTimestampTypeSet = settings.containsKey(PARQUET_OUTPUT_TIMESTAMP_TYPE.key)
+    if (!isOutputTimestampTypeSet && isParquetINT64AsTimestampMillis) {
+      // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_INT64_AS_TIMESTAMP_MILLIS is set,
+      // respect PARQUET_INT64_AS_TIMESTAMP_MILLIS and use TIMESTAMP_MILLIS. Otherwise,
+      // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
+      ParquetOutputTimestampType.TIMESTAMP_MILLIS
+    } else {
+      ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
+    }
+  }
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
+  def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
+
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
+
+  def offHeapColumnVectorEnabled: Boolean = getConf(COLUMN_VECTOR_OFFHEAP_ENABLED)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
@@ -1204,9 +1294,15 @@ class SQLConf extends Serializable with Logging {
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
+  def histogramEnabled: Boolean = getConf(HISTOGRAM_ENABLED)
+
+  def histogramNumBins: Int = getConf(HISTOGRAM_NUM_BINS)
+
+  def percentileAccuracy: Int = getConf(PERCENTILE_ACCURACY)
+
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
-  def autoUpdateSize: Boolean = getConf(SQLConf.AUTO_UPDATE_SIZE)
+  def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
 
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
@@ -1245,6 +1341,8 @@ class SQLConf extends Serializable with Logging {
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

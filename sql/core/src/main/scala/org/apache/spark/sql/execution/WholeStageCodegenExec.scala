@@ -108,20 +108,22 @@ trait CodegenSupport extends SparkPlan {
 
   /**
    * Consume the generated columns or row from current SparkPlan, call its parent's `doConsume()`.
+   *
+   * Note that `outputVars` and `row` can't both be null.
    */
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
     val inputVars =
-      if (row != null) {
+      if (outputVars != null) {
+        assert(outputVars.length == output.length)
+        // outputVars will be used to generate the code for UnsafeRow, so we should copy them
+        outputVars.map(_.copy())
+      } else {
+        assert(row != null, "outputVars and row cannot both be null.")
         ctx.currentVars = null
         ctx.INPUT_ROW = row
         output.zipWithIndex.map { case (attr, i) =>
           BoundReference(i, attr.dataType, attr.nullable).genCode(ctx)
         }
-      } else {
-        assert(outputVars != null)
-        assert(outputVars.length == output.length)
-        // outputVars will be used to generate the code for UnsafeRow, so we should copy them
-        outputVars.map(_.copy())
       }
 
     val rowVar = if (row != null) {
@@ -147,6 +149,11 @@ trait CodegenSupport extends SparkPlan {
       }
     }
 
+    // Set up the `currentVars` in the codegen context, as we generate the code of `inputVars`
+    // before calling `parent.doConsume`. We can't set up `INPUT_ROW`, because parent needs to
+    // generate code of `rowVar` manually.
+    ctx.currentVars = inputVars
+    ctx.INPUT_ROW = null
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
     s"""
@@ -193,7 +200,8 @@ trait CodegenSupport extends SparkPlan {
   def usedInputs: AttributeSet = references
 
   /**
-   * Generate the Java source code to process the rows from child SparkPlan.
+   * Generate the Java source code to process the rows from child SparkPlan. This should only be
+   * called from `consume`.
    *
    * This should be override by subclass to support codegen.
    *
@@ -207,25 +215,43 @@ trait CodegenSupport extends SparkPlan {
    *   }
    *
    * Note: A plan can either consume the rows as UnsafeRow (row), or a list of variables (input).
+   *       When consuming as a listing of variables, the code to produce the input is already
+   *       generated and `CodegenContext.currentVars` is already set. When consuming as UnsafeRow,
+   *       implementations need to put `row.code` in the generated code and set
+   *       `CodegenContext.INPUT_ROW` manually. Some plans may need more tweaks as they have
+   *       different inputs(join build side, aggregate buffer, etc.), or other special cases.
    */
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     throw new UnsupportedOperationException
   }
 
   /**
-   * For optimization to suppress shouldStop() in a loop of WholeStageCodegen.
-   * Returning true means we need to insert shouldStop() into the loop producing rows, if any.
+   * Whether or not the result rows of this operator should be copied before putting into a buffer.
+   *
+   * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
+   * example, Join), this should be true.
+   *
+   * If an operator starts a new pipeline, this should be false.
    */
-  def isShouldStopRequired: Boolean = {
-    return shouldStopRequired && (this.parent == null || this.parent.isShouldStopRequired)
+  def needCopyResult: Boolean = {
+    if (children.isEmpty) {
+      false
+    } else if (children.length == 1) {
+      children.head.asInstanceOf[CodegenSupport].needCopyResult
+    } else {
+      throw new UnsupportedOperationException
+    }
   }
 
   /**
-   * Set to false if this plan consumes all rows produced by children but doesn't output row
-   * to buffer by calling append(), so the children don't require shouldStop()
-   * in the loop of producing rows.
+   * Whether or not the children of this operator should generate a stop check when consuming input
+   * rows. This is used to suppress shouldStop() in a loop of WholeStageCodegen.
+   *
+   * This should be false if an operator starts a new pipeline, which means it consumes all rows
+   * produced by children but doesn't output row to buffer by calling append(),  so the children
+   * don't require shouldStop() in the loop of producing rows.
    */
-  protected def shouldStopRequired: Boolean = true
+  def needStopCheck: Boolean = parent.needStopCheck
 }
 
 
@@ -278,6 +304,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "")
   }
+
+  override def needCopyResult: Boolean = false
 }
 
 object WholeStageCodegenExec {
@@ -467,7 +495,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val doCopy = if (ctx.copyResult) {
+    val doCopy = if (needCopyResult) {
       ".copy()"
     } else {
       ""
@@ -487,6 +515,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "*")
   }
+
+  override def needStopCheck: Boolean = true
 }
 
 

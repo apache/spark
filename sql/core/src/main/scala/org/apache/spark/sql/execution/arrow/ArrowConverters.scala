@@ -29,6 +29,8 @@ import org.apache.arrow.vector.schema.ArrowRecordBatch
 import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
 
 import org.apache.spark.TaskContext
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.sql.types._
@@ -203,5 +205,17 @@ private[sql] object ArrowConverters {
     } {
       reader.close()
     }
+  }
+
+  private[sql] def toDataFrame(
+      payloadRDD: JavaRDD[Array[Byte]],
+      schemaString: String,
+      sqlContext: SQLContext): DataFrame = {
+    val rdd = payloadRDD.rdd.mapPartitions { iter =>
+      val context = TaskContext.get()
+      ArrowConverters.fromPayloadIterator(iter.map(new ArrowPayload(_)), context)
+    }
+    val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
+    sqlContext.internalCreateDataFrame(rdd, schema)
   }
 }

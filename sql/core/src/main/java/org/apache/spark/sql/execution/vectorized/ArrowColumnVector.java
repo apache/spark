@@ -60,16 +60,6 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public long nullsNativeAddress() {
-    throw new RuntimeException("Cannot get native address for arrow column");
-  }
-
-  @Override
-  public long valuesNativeAddress() {
-    throw new RuntimeException("Cannot get native address for arrow column");
-  }
-
-  @Override
   public void close() {
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
@@ -250,11 +240,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return accessor.getArrayOffset(rowId);
   }
 
-  @Override
-  public void loadBytes(ColumnVector.Array array) {
-    throw new UnsupportedOperationException();
-  }
-
   //
   // APIs dealing with Decimals
   //
@@ -330,7 +315,6 @@ public final class ArrowColumnVector extends ColumnVector {
 
       childColumns = new ArrowColumnVector[1];
       childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
-      resultArray = new ColumnVector.Array(childColumns[0]);
     } else if (vector instanceof MapVector) {
       MapVector mapVector = (MapVector) vector;
       accessor = new StructAccessor(mapVector);
@@ -339,7 +323,6 @@ public final class ArrowColumnVector extends ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         childColumns[i] = new ArrowColumnVector(mapVector.getVectorById(i));
       }
-      resultStruct = new ColumnarBatch.Row(childColumns);
     } else {
       throw new UnsupportedOperationException();
     }

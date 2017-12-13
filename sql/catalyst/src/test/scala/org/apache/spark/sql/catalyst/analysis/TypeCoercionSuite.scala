@@ -1152,6 +1152,9 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(PromoteStrings,
       EqualTo(Literal(Array(1, 2)), Literal("123")),
       EqualTo(Literal(Array(1, 2)), Literal("123")))
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal("1.5"), Literal(BigDecimal("0.5"))),
+      GreaterThan(Cast(Literal("1.5"), DoubleType), Cast(Literal(BigDecimal("0.5")), DoubleType)))
   }
 
   test("cast WindowFrame boundaries to the type they operate upon") {

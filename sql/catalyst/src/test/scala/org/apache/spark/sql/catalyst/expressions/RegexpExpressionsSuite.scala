@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.types.StringType
 
 /**
  * Unit tests for regular expression (regexp) related SQL expressions.
@@ -176,6 +177,14 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
     checkEvaluation(nonNullExpr, "num-num", row1)
+  }
+
+  test("SPARK-22570: RegExpReplace should not create a lot of global variables") {
+    val ctx = new CodegenContext
+    RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num")).genCode(ctx)
+    // four global variables (lastRegex, pattern, lastReplacement, and lastReplacementInUTF8)
+    // are always required
+    assert(ctx.mutableStates.length == 4)
   }
 
   test("RegexExtract") {
