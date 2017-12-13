@@ -470,15 +470,17 @@ trait HasAggregationDepth extends Params {
 }
 
 /**
- * Trait for shared param collectSubModels (default: false).
+ * Trait for shared param collectSubModels (default: false). This trait may be changed or
+ * removed between minor versions.
  */
-private[ml] trait HasCollectSubModels extends Params {
+@DeveloperApi
+trait HasCollectSubModels extends Params {
 
   /**
-   * Param for whether to collect a list of sub-models trained during tuning.
+   * Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
    * @group expertParam
    */
-  final val collectSubModels: BooleanParam = new BooleanParam(this, "collectSubModels", "whether to collect a list of sub-models trained during tuning")
+  final val collectSubModels: BooleanParam = new BooleanParam(this, "collectSubModels", "whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver")
 
   setDefault(collectSubModels, false)
 
