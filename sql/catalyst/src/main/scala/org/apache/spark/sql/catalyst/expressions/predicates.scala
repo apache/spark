@@ -328,7 +328,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     }
   }
 
-  @transient private[this] lazy val set = child.dataType match {
+  @transient lazy val set: Set[Any] = child.dataType match {
     case _: AtomicType => hset
     case _: NullType => hset
     case _ =>
@@ -336,20 +336,11 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ hset
   }
 
-  def getSet(): Set[Any] = set
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val setName = classOf[Set[Any]].getName
-    val InSetName = classOf[InSet].getName
+    val setTerm = ctx.addReferenceObj("set", set)
     val childGen = child.genCode(ctx)
-    ctx.references += this
-    val setTerm = ctx.freshName("set")
-    val setNull = if (hasNull) {
-      s"""
-         |if (!${ev.value}) {
-         |  ${ev.isNull} = true;
-         |}
-       """.stripMargin
+    val setIsNull = if (hasNull) {
+      s"${ev.isNull} = !${ev.value};"
     } else {
       ""
     }
@@ -359,9 +350,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
          |${ctx.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
          |${ctx.JAVA_BOOLEAN} ${ev.value} = false;
          |if (!${ev.isNull}) {
-         |  $setName $setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();
          |  ${ev.value} = $setTerm.contains(${childGen.value});
-         |  $setNull
+         |  $setIsNull
          |}
        """.stripMargin)
   }
