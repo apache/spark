@@ -113,7 +113,7 @@ private[ml] class HuberAggregator(
       val linearLoss = label - margin
 
       if (math.abs(linearLoss) <= sigma * epsilon) {
-        lossSum += 0.5 * weight * (sigma +  math.pow(linearLoss, 2.0) / sigma)
+        lossSum += 0.5 * weight * (sigma + math.pow(linearLoss, 2.0) / sigma)
         val linearLossDivSigma = linearLoss / sigma
 
         features.foreachActive { (index, value) =>
