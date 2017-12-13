@@ -186,8 +186,8 @@ class ContinuousStressSuite extends StreamTest {
   test("only one epoch") {
     val df = spark.readStream
       .format("rate")
-      .option("numPartitions", "1")
-      .option("rowsPerSecond", "100")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "500")
       .load()
       .select('value)
 
@@ -196,14 +196,14 @@ class ContinuousStressSuite extends StreamTest {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 200)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 20000): _*))
+      CheckAnswer(scala.Range(0, 100000): _*))
   }
 
   test("automatic epoch advancement") {
     val df = spark.readStream
       .format("rate")
-      .option("numPartitions", "1")
-      .option("rowsPerSecond", "100")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "500")
       .load()
       .select('value)
 
@@ -214,13 +214,54 @@ class ContinuousStressSuite extends StreamTest {
       IncrementEpoch(),
       Execute { query =>
         // Because we have automatic advancement, we can't reliably guarantee another trigger won't
-        // commit more than the 20K rows we expect before we can check. So we simply ensure that:
-        //  * the highest value committed was at least 20000 - 1
+        // commit more than the 100K rows we expect before we can check. So we simply ensure that:
+        //  * the highest value committed was at least 100000 - 1
         //  * all values below the highest are present
         val data = query.sink.asInstanceOf[MemorySinkV2].allData
         val max = data.map(_.getLong(0)).max
-        assert(max >= 19999)
+        assert(max >= 99999)
         assert(data.toSet == scala.Range(0, max.toInt + 1).map(Row(_)).toSet)
+      })
+  }
+
+  test("restarts") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "500")
+      .load()
+      .select('value)
+
+    testStream(df, useV2Sink = true)(
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(10),
+      StopStream,
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(20),
+      StopStream,
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(21),
+      StopStream,
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(22),
+      StopStream,
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(25),
+      StopStream,
+      StartStream(Trigger.Continuous(2012)),
+      StopStream,
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(50),
+      Execute { query =>
+        // Because we have automatic advancement, we can't reliably check where precisely the last
+        // commit happened. And we don't have exactly once processing, meaning values may be
+        // duplicated. So we just check all values below the highest are present, and as a
+        // sanity check that we got at least up to the 50th trigger.
+        val data = query.sink.asInstanceOf[MemorySinkV2].allData
+        val max = data.map(_.getLong(0)).max
+        assert(max > 25000)
+        val setDiff = data.toSet.diff(scala.Range(0, max.toInt + 1).map(Row(_)).toSet)
+        assert(setDiff.isEmpty, s"sets differed by $setDiff")
       })
   }
 }
