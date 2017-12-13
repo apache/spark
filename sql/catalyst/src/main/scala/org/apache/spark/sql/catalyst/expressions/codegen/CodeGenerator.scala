@@ -309,12 +309,17 @@ class CodegenContext {
       funcCode: String,
       inlineToOuterClass: Boolean = false): String = {
     val newFunction = addNewFunctionInternal(funcName, funcCode, inlineToOuterClass)
-    newFunction match {
+    qualifiedFunctionName(newFunction)
+  }
+
+  // Returns the name of the function, qualified by class if it will be inlined to a private,
+  // inner class
+  private[this] def qualifiedFunctionName(functionSpec: NewFunctionSpec): String =
+    functionSpec match {
       case NewFunctionSpec(functionName, None, None) => functionName
       case NewFunctionSpec(functionName, Some(_), Some(innerClassInstance)) =>
         innerClassInstance + "." + functionName
     }
-  }
 
   private[this] def addNewFunctionInternal(
       funcName: String,
@@ -795,6 +800,9 @@ class CodegenContext {
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
    * @param foldFunctions folds the split function calls.
+   * @param makeFunctionCallback a callback function that is called after each function split.
+   *                             The name of split function will be passed into the callback.
+   * @param mergeSplit When true, try to merge split methods.
    */
   def splitExpressionsWithCurrentInputs(
       expressions: Seq[String],
@@ -802,7 +810,9 @@ class CodegenContext {
       extraArguments: Seq[(String, String)] = Nil,
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
-      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";"),
+      makeFunctionCallback: String => Unit = identity,
+      mergeSplit: Boolean = true): String = {
     // TODO: support whole stage codegen
     if (INPUT_ROW == null || currentVars != null) {
       expressions.mkString("\n")
@@ -813,7 +823,9 @@ class CodegenContext {
         ("InternalRow", INPUT_ROW) +: extraArguments,
         returnType,
         makeSplitFunction,
-        foldFunctions)
+        foldFunctions,
+        makeFunctionCallback,
+        mergeSplit)
     }
   }
 
@@ -829,6 +841,9 @@ class CodegenContext {
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
    * @param foldFunctions folds the split function calls.
+   * @param makeFunctionCallback a callback function that is called after each function split.
+   *                             The name of split function will be passed into the callback.
+   * @param mergeSplit When true, try to merge split methods.
    */
   def splitExpressions(
       expressions: Seq[String],
@@ -836,7 +851,9 @@ class CodegenContext {
       arguments: Seq[(String, String)],
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
-      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";"),
+      makeFunctionCallback: String => Unit = identity,
+      mergeSplit: Boolean = true): String = {
     val blocks = buildCodeBlocks(expressions)
 
     if (blocks.length == 1) {
@@ -852,7 +869,9 @@ class CodegenContext {
            |  ${makeSplitFunction(body)}
            |}
          """.stripMargin
-        addNewFunctionInternal(name, code, inlineToOuterClass = false)
+        val functionSpec = addNewFunctionInternal(name, code, inlineToOuterClass = false)
+        makeFunctionCallback(qualifiedFunctionName(functionSpec))
+        functionSpec
       }
 
       val (outerClassFunctions, innerClassFunctions) = functions.partition(_.innerClassName.isEmpty)
@@ -866,7 +885,8 @@ class CodegenContext {
         arguments,
         returnType,
         makeSplitFunction,
-        foldFunctions)
+        foldFunctions,
+        mergeSplit)
 
       foldFunctions(outerClassFunctionCalls ++ innerClassFunctionCalls)
     }
@@ -914,6 +934,7 @@ class CodegenContext {
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
    * @param foldFunctions folds the split function calls.
+   * @param mergeSplit When true, try to merge split methods.
    * @return an [[Iterable]] containing the methods' invocations
    */
   private def generateInnerClassesFunctionCalls(
@@ -922,7 +943,8 @@ class CodegenContext {
       arguments: Seq[(String, String)],
       returnType: String,
       makeSplitFunction: String => String,
-      foldFunctions: Seq[String] => String): Iterable[String] = {
+      foldFunctions: Seq[String] => String,
+      mergeSplit: Boolean = true): Iterable[String] = {
     val innerClassToFunctions = mutable.LinkedHashMap.empty[(String, String), Seq[String]]
     functions.foreach(f => {
       val key = (f.innerClassName.get, f.innerClassInstance.get)
@@ -938,7 +960,7 @@ class CodegenContext {
         // for performance reasons, the functions are prepended, instead of appended,
         // thus here they are in reversed order
         val orderedFunctions = innerClassFunctions.reverse
-        if (orderedFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
+        if (mergeSplit && orderedFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
           // Adding a new function to each inner class which contains the invocation of all the
           // ones which have been added to that inner class. For example,
           //   private class NestedClass {

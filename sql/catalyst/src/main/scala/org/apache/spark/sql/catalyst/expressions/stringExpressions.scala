@@ -299,33 +299,35 @@ case class Elt(children: Seq[Expression])
       """
     }
 
-    val cases = ctx.buildCodeBlocks(assignStringValue)
-    val codes = if (cases.length == 1) {
-      s"""
-        UTF8String $stringVal = null;
-        switch ($indexVal) {
-          ${cases.head}
-        }
-       """
-    } else {
-      var prevFunc = "null"
-      for (c <- cases.reverse) {
-        val funcName = ctx.freshName("eltFunc")
-        val funcBody = s"""
-         private UTF8String $funcName(InternalRow ${ctx.INPUT_ROW}, int $indexVal) {
-           UTF8String $stringVal = null;
-           switch ($indexVal) {
-             $c
-             default:
-               return $prevFunc;
-           }
-           return $stringVal;
-         }
-        """
-        val fullFuncName = ctx.addNewFunction(funcName, funcBody)
-        prevFunc = s"$fullFuncName(${ctx.INPUT_ROW}, $indexVal)"
-      }
-      s"UTF8String $stringVal = $prevFunc;"
+    var prevFunc = "null"
+    var codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = assignStringValue,
+      funcName = "eltFunc",
+      extraArguments = ("int", indexVal) :: Nil,
+      returnType = "UTF8String",
+      makeSplitFunction = body =>
+        s"""
+           |UTF8String $stringVal = null;
+           |switch ($indexVal) {
+           |  $body
+           |  default:
+           |    return $prevFunc;
+           |}
+           |return $stringVal;
+        """.stripMargin,
+      foldFunctions = funcs => s"UTF8String $stringVal = ${funcs.last};",
+      makeFunctionCallback = f => prevFunc = s"$f(${ctx.INPUT_ROW}, $indexVal)",
+      mergeSplit = false)
+
+    // If no any functions split, wraps all cases in a single switch.
+    if (prevFunc == "null") {
+      codes =
+        s"""
+           |UTF8String $stringVal = null;
+           |switch ($indexVal) {
+           |  $codes
+           |}
+        """.stripMargin
     }
 
     ev.copy(
