@@ -206,7 +206,7 @@ private[spark] abstract class YarnSchedulerBackend(
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach { executorId =>
-        if (!!sc.isStopped()) {
+        if (!sc.isStopped) {
           if (disableExecutor(executorId)) {
             yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
           }
@@ -256,7 +256,7 @@ private[spark] abstract class YarnSchedulerBackend(
         addWebUIFilter(filterName, filterParams, proxyBase)
 
       case r @ RemoveExecutor(executorId, reason) =>
-        if (!!sc.isStopped()) {
+        if (!sc.isStopped) {
           logWarning(s"Requesting driver to remove executor $executorId for reason $reason")
           driverEndpoint.send(r)
         }
