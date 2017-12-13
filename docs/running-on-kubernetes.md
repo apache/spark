@@ -5,7 +5,7 @@ title: Running Spark on Kubernetes
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This feature makes use of the new experimental native
+Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This feature makes use of native
 Kubernetes scheduler that has been added to Spark.
 
 # Prerequisites
@@ -71,15 +71,14 @@ To launch Spark Pi in cluster mode,
 
 {% highlight bash %}
 $ bin/spark-submit \
+    --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
     --deploy-mode cluster \
     --class org.apache.spark.examples.SparkPi \
-    --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
-    --conf spark.kubernetes.namespace=default \
     --conf spark.executor.instances=5 \
     --conf spark.app.name=spark-pi \
     --conf spark.kubernetes.driver.docker.image=<driver-image> \
     --conf spark.kubernetes.executor.docker.image=<executor-image> \
-    local:///opt/spark/examples/jars/spark-examples_2.11-2.3.0.jar
+    local:///path/to/examples.jar
 {% endhighlight %}
 
 The Spark master, specified either via passing the `--master` command line argument to `spark-submit` or by setting
