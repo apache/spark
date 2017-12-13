@@ -138,22 +138,28 @@ public final class UnsafeExternalRowSorter {
     sorter.cleanupResources();
   }
 
-  public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
+  public Iterator<UnsafeRow> sort() throws IOException {
+    return sort(null);
+  }
+
+  public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator)
+    throws IOException {
     try {
       final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
       return new AbstractIterator<UnsafeRow>() {
-        boolean alreadyCalculated = false;
+        // inputIterator == null means the rows has been inserted
+        boolean inserted = inputIterator == null;
         private final int numFields = schema.length();
         private UnsafeRow row = new UnsafeRow(numFields);
 
         @Override
         public boolean hasNext() {
           try {
-            if (!alreadyCalculated) {
+            if (!inserted) {
               while (inputIterator.hasNext()) {
                 insertRow(inputIterator.next());
               }
-              alreadyCalculated = true;
+              inserted = true;
               if (!sortedIterator.hasNext()) {
                 // Since we won't ever call next() on an empty iterator, we need to clean up resources
                 // here in order to prevent memory leaks.

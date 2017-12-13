@@ -105,7 +105,7 @@ case class SortExec(
       // Remember spill data size of this task before execute this operator so that we can
       // figure out how many bytes we spilled for this operator.
       val spillSizeBefore = metrics.memoryBytesSpilled
-      val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
+      val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]], false)
       sortTime += sorter.getSortTimeNanos / 1000000
       peakMemory += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
