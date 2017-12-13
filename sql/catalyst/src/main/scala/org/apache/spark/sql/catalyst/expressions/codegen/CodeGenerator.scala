@@ -878,7 +878,7 @@ class CodegenContext {
    *
    * @param expressions the codes to evaluate expressions.
    */
-  def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
+  private def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     var length = 0
