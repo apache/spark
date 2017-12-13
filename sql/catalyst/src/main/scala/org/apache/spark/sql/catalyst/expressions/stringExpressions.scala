@@ -332,7 +332,7 @@ case class Elt(children: Seq[Expression])
          |${index.code}
          |final int $indexVal = ${index.value};
          |${ctx.JAVA_BOOLEAN} $indexMatched = false;
-         |$stringVal = ${ctx.defaultValue(dataType)};
+         |$stringVal = null;
          |do {
          |  $codes
          |} while (false);
