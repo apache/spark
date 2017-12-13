@@ -569,9 +569,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     val executorHeartbeatInterval = getTimeAsSeconds("spark.executor.heartbeatInterval", "10s")
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
-    require(executorTimeoutThreshold > executorHeartbeatInterval, s"The value of " +
-      "spark.network.timeout' must be no less than the value of " +
-      "'spark.executor.heartbeatInterval'.")
+    require(executorTimeoutThreshold > executorHeartbeatInterval, "The value of " +
+      s"'spark.network.timeout=${executorTimeoutThreshold}' must be no less than the value of " +
+      s"'spark.executor.heartbeatInterval=${executorHeartbeatInterval}'.")
   }
 
   /**
