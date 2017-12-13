@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
+import java.io.Serializable;
+
 /**
  * Used for per-partition offsets in continuous processing. ContinuousReader implementations will
  * provide a method to merge these into a global Offset.
  *
  * These offsets must be serializable.
  */
-public interface PartitionOffset {
+public interface PartitionOffset extends Serializable {
     
 }

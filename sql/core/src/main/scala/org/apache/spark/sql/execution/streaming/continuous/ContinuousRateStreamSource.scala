@@ -61,11 +61,7 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
     ContinuousRateStreamOffset(Serialization.read[Map[Int, Long]](json))
   }
 
-  override def readSchema(): StructType = {
-    StructType(
-        StructField("timestamp", TimestampType, false) ::
-        StructField("value", LongType, false) :: Nil)
-  }
+  override def readSchema(): StructType = RateSourceProvider.SCHEMA
 
   private var offset: java.util.Optional[Offset] = _
 
@@ -77,12 +73,16 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
 
   override def createReadTasks(): java.util.List[ReadTask[Row]] = {
     val partitionStartMap = Option(offset.orElse(null)).map {
-      case o: ContinuousRateStreamOffset => o.partitionToStartValue
-      case s: SerializedOffset => Serialization.read[Map[Int, Long]](s.json)
-      case _ => throw new IllegalArgumentException("invalid offset type for ContinuousRateSource")
+      case off: ContinuousRateStreamOffset => off.partitionToStartValue
+      case off =>
+        throw new IllegalArgumentException(
+          s"invalid offset type ${off.getClass()} for ContinuousRateSource")
     }
-    if (partitionStartMap.exists(_.keySet.size > numPartitions)) {
-      throw new IllegalArgumentException("Start offset contained too many partitions.")
+    if (partitionStartMap.exists(_.keySet.size != numPartitions)) {
+      throw new IllegalArgumentException(
+        s"The previous run contained ${partitionStartMap.get.keySet.size} partitions, but" +
+        s" $numPartitions partitions are currently configured. The numPartitions option" +
+        " cannot be changed.")
     }
     val perPartitionRate = rowsPerSecond.toDouble / numPartitions.toDouble
 

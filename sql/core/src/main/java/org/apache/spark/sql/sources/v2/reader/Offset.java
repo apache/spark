@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
+/**
+ * An abstract representation of progress through a [[MicroBatchReader]] or [[ContinuousReader]].
+ * During execution, Offsets provided by the data source implementation will be logged and used as
+ * restart checkpoints. Sources should provide an Offset implementation which they can use to
+ * reconstruct the stream position where the offset was taken.
+ */
 public abstract class Offset {
     /**
      * A JSON-serialized representation of an Offset that is
