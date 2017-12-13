@@ -44,7 +44,6 @@ class MicroBatchExecution(
   override val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
   override val batchCommitLog = new BatchCommitLog(sparkSession, checkpointFile("commits"))
 
-
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
     case OneTimeTrigger => OneTimeExecutor()
