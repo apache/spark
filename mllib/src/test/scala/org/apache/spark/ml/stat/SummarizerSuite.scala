@@ -33,6 +33,16 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   import Summarizer._
   import SummaryBuilderImpl._
 
+  private case class ExpectedMetrics(
+      mean: Vector,
+      variance: Vector,
+      count: Long,
+      numNonZeros: Vector,
+      max: Vector,
+      min: Vector,
+      normL2: Vector,
+      normL1: Vector)
+
   /**
    * The input is expected to be either a sparse vector, a dense vector.
    *
@@ -40,7 +50,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
    * `mllib.stat.MultivariateOnlineSummarizer`. They currently test against some fixed subset
    * of the metrics, but should be made fuzzy in the future.
    */
-  private def testExample(name: String, inputVec: Seq[(Vector, Double)]): Unit = {
+  private def testExample(name: String, inputVec: Seq[(Vector, Double)],
+      exp: ExpectedMetrics = null): Unit = {
 
     val summarizer = {
       val _summarizer = new MultivariateOnlineSummarizer
@@ -66,96 +77,112 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("mean").summary(c, weight), mean(c, weight)),
         Seq(Row(summarizer.mean), summarizer.mean))
+      println(s"${name} mean ${summarizer.mean}")
     }
 
     registerTest(s"$name - mean only w/o weight") {
       val (df, c, _) = wrappedInit()
       compare(df.select(metrics("mean").summary(c), mean(c)),
         Seq(Row(summarizerWithoutWeight.mean), summarizerWithoutWeight.mean))
+      println(s"${name} mean wo ${summarizerWithoutWeight.mean}")
     }
 
     registerTest(s"$name - variance only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("variance").summary(c, weight), variance(c, weight)),
         Seq(Row(summarizer.variance), summarizer.variance))
+      println(s"${name} var ${summarizer.variance}")
     }
 
     registerTest(s"$name - variance only w/o weight") {
       val (df, c, _) = wrappedInit()
       compare(df.select(metrics("variance").summary(c), variance(c)),
         Seq(Row(summarizerWithoutWeight.variance), summarizerWithoutWeight.variance))
+      println(s"${name} var wo ${summarizerWithoutWeight.variance}")
     }
 
     registerTest(s"$name - count only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("count").summary(c, weight), count(c, weight)),
         Seq(Row(summarizer.count), summarizer.count))
+      println(s"${name} count ${summarizer.count}")
     }
 
     registerTest(s"$name - count only w/o weight") {
       val (df, c, _) = wrappedInit()
       compare(df.select(metrics("count").summary(c), count(c)),
         Seq(Row(summarizerWithoutWeight.count), summarizerWithoutWeight.count))
+      println(s"${name} count wo ${summarizerWithoutWeight.count}")
     }
 
     registerTest(s"$name - numNonZeros only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("numNonZeros").summary(c, weight), numNonZeros(c, weight)),
         Seq(Row(summarizer.numNonzeros), summarizer.numNonzeros))
+      println(s"${name} nnz ${summarizer.numNonzeros}")
     }
 
     registerTest(s"$name - numNonZeros only w/o weight") {
       val (df, c, _) = wrappedInit()
       compare(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)),
         Seq(Row(summarizerWithoutWeight.numNonzeros), summarizerWithoutWeight.numNonzeros))
+      println(s"${name} nnz wo ${summarizerWithoutWeight.numNonzeros}")
     }
 
     registerTest(s"$name - min only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("min").summary(c, weight), min(c, weight)),
         Seq(Row(summarizer.min), summarizer.min))
+      println(s"${name} min ${summarizer.min}")
     }
 
     registerTest(s"$name - min only w/o weight") {
       val (df, c, _) = wrappedInit()
       compare(df.select(metrics("min").summary(c), min(c)),
         Seq(Row(summarizerWithoutWeight.min), summarizerWithoutWeight.min))
+      println(s"${name} min wo ${summarizerWithoutWeight.min}")
     }
 
     registerTest(s"$name - max only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("max").summary(c, weight), max(c, weight)),
         Seq(Row(summarizer.max), summarizer.max))
+      println(s"${name} max ${summarizer.max}")
     }
 
     registerTest(s"$name - max only w/o weight") {
       val (df, c, _) = wrappedInit()
       compare(df.select(metrics("max").summary(c), max(c)),
         Seq(Row(summarizerWithoutWeight.max), summarizerWithoutWeight.max))
+      println(s"${name} max wo ${summarizerWithoutWeight.max}")
     }
 
     registerTest(s"$name - normL1 only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("normL1").summary(c, weight), normL1(c, weight)),
         Seq(Row(summarizer.normL1), summarizer.normL1))
+      println(s"${name} l1 ${summarizer.normL1}")
     }
 
     registerTest(s"$name - normL1 only w/o weight") {
       val (df, c, _) = wrappedInit()
       compare(df.select(metrics("normL1").summary(c), normL1(c)),
         Seq(Row(summarizerWithoutWeight.normL1), summarizerWithoutWeight.normL1))
+      println(s"${name} l1 wo ${summarizerWithoutWeight.normL1}")
     }
 
     registerTest(s"$name - normL2 only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("normL2").summary(c, weight), normL2(c, weight)),
         Seq(Row(summarizer.normL2), summarizer.normL2))
+      println(s"${name} l2 ${summarizer.normL2}")
     }
 
     registerTest(s"$name - normL2 only w/o weight") {
       val (df, c, _) = wrappedInit()
       compare(df.select(metrics("normL2").summary(c), normL2(c)),
         Seq(Row(summarizerWithoutWeight.normL2), summarizerWithoutWeight.normL2))
+      println(s"${name} l2 wo ${summarizerWithoutWeight.normL2}")
     }
 
     registerTest(s"$name - multiple metrics at once") {
