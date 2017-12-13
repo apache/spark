@@ -864,8 +864,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       store.read(classOf[JobDataWrapper], 2)
     }
 
-    // Start 3 stages, all should be kept. Stop 2 of them, the oldest stopped one should be
-    // deleted. Start a new attempt of the second stopped one, and verify that the stage graph
+    // Start 3 stages, all should be kept. Stop 2 of them, the stopped one with the lowest id should
+    // be deleted. Start a new attempt of the second stopped one, and verify that the stage graph
     // data is not deleted.
     time += 1
     val stages = Seq(
@@ -912,25 +912,31 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
     store.read(classOf[StageDataWrapper], Array(3, 1))
 
-    // Start 3 tasks and stop two of them. The oldest should be deleted.
+    // Start 2 tasks. Finish the second one.
     time += 1
-    val tasks = createTasks(3, Array("1"))
+    val tasks = createTasks(2, Array("1"))
     tasks.foreach { task =>
       listener.onTaskStart(SparkListenerTaskStart(attempt2.stageId, attempt2.attemptId, task))
     }
-    assert(store.count(classOf[TaskDataWrapper]) === 3)
+    assert(store.count(classOf[TaskDataWrapper]) === 2)
 
-    tasks.drop(1).foreach { task =>
-      time += 1
-      task.markFinished(TaskState.FINISHED, time)
-      listener.onTaskEnd(SparkListenerTaskEnd(attempt2.stageId, attempt2.attemptId,
-        "taskType", TaskResultLost, task, null))
+    // Start a 3rd task. The finished tasks should be deleted.
+    createTasks(1, Array("1")).foreach { task =>
+      listener.onTaskStart(SparkListenerTaskStart(attempt2.stageId, attempt2.attemptId, task))
     }
     assert(store.count(classOf[TaskDataWrapper]) === 2)
     intercept[NoSuchElementException] {
-      store.read(classOf[TaskDataWrapper], tasks.drop(1).head.id)
+      store.read(classOf[TaskDataWrapper], tasks.last.id)
     }
 
+    // Start a 4th task. The first task should be deleted, even if it's still running.
+    createTasks(1, Array("1")).foreach { task =>
+      listener.onTaskStart(SparkListenerTaskStart(attempt2.stageId, attempt2.attemptId, task))
+    }
+    assert(store.count(classOf[TaskDataWrapper]) === 2)
+    intercept[NoSuchElementException] {
+      store.read(classOf[TaskDataWrapper], tasks.head.id)
+    }
   }
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptId)

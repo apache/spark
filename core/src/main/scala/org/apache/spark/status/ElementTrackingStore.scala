@@ -21,6 +21,8 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
+import com.google.common.util.concurrent.MoreExecutors
+
 import org.apache.spark.SparkConf
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.kvstore._
@@ -38,8 +40,8 @@ import org.apache.spark.util.kvstore._
  * - a generic flush mechanism so that listeners can be notified about when they should flush
  *   internal state to the store (e.g. after the SHS finishes parsing an event log).
  *
- * The configured triggers are run on the same thread that triggered the write, after the write
- * has completed.
+ * The configured triggers are run on a separate thread by default; they can be forced to run on
+ * the calling thread by setting the `ASYNC_TRACKING_ENABLED` configuration to `false`.
  */
 private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) extends KVStore {
 
@@ -48,9 +50,9 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
   private val triggers = new HashMap[Class[_], Seq[Trigger[_]]]()
   private val flushTriggers = new ListBuffer[() => Unit]()
   private val executor = if (conf.get(ASYNC_TRACKING_ENABLED)) {
-    Some(ThreadUtils.newDaemonSingleThreadExecutor("element-tracking-store-worker"))
+    ThreadUtils.newDaemonSingleThreadExecutor("element-tracking-store-worker")
   } else {
-    None
+    MoreExecutors.sameThreadExecutor()
   }
 
   @volatile private var stopped = false
@@ -58,9 +60,6 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
   /**
    * Register a trigger that will be fired once the number of elements of a given type reaches
    * the given threshold.
-   *
-   * Triggers are fired in a separate thread, so that they can do more expensive operations
-   * than would be allowed on the main threads populating the store.
    *
    * @param klass The type to monitor.
    * @param threshold The number of elements that should trigger the action.
@@ -84,18 +83,13 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
   }
 
   /**
-   * Enqueues an action to be executed asynchronously.
+   * Enqueues an action to be executed asynchronously. The task will run on the calling thread if
+   * `ASYNC_TRACKING_ENABLED` is `false`.
    */
   def doAsync(fn: => Unit): Unit = {
-    executor match {
-      case Some(exec) =>
-        exec.submit(new Runnable() {
-          override def run(): Unit = Utils.tryLog { fn }
-        })
-
-      case _ =>
-        fn
-    }
+    executor.submit(new Runnable() {
+      override def run(): Unit = Utils.tryLog { fn }
+    })
   }
 
   override def read[T](klass: Class[T], naturalKey: Any): T = store.read(klass, naturalKey)
@@ -145,11 +139,9 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
     }
 
     stopped = true
-    executor.foreach { exec =>
-      exec.shutdown()
-      if (!exec.awaitTermination(5, TimeUnit.SECONDS)) {
-        exec.shutdownNow()
-      }
+    executor.shutdown()
+    if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+      executor.shutdownNow()
     }
 
     flushTriggers.foreach { trigger =>

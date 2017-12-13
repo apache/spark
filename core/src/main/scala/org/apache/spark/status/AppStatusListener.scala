@@ -898,19 +898,28 @@ private[spark] class AppStatusListener(
   }
 
   private def cleanupTasks(stage: LiveStage): Unit = {
-    val countToDelete = calculateNumberToRemove(stage.savedTasks.get(), maxTasksPerStage)
-    if (countToDelete > 0L) {
+    val countToDelete = calculateNumberToRemove(stage.savedTasks.get(), maxTasksPerStage).toInt
+    if (countToDelete > 0) {
       val stageKey = Array(stage.info.stageId, stage.info.attemptId)
       val view = kvstore.view(classOf[TaskDataWrapper]).index("stage").first(stageKey)
         .last(stageKey)
 
-      // On live applications, try to delete finished tasks only; when in the SHS, treat all
-      // tasks as the same.
-      val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt) { t =>
+      // Try to delete finished tasks only.
+      val toDelete = KVUtils.viewToSeq(view, countToDelete) { t =>
         !live || t.info.status != TaskState.RUNNING.toString()
       }
       toDelete.foreach { t => kvstore.delete(t.getClass(), t.info.taskId) }
       stage.savedTasks.addAndGet(-toDelete.size)
+
+      // If there are more running tasks than the configured limit, delete running tasks. This
+      // should be extremely rare since the limit should generally far exceed the number of tasks
+      // that can run in parallel.
+      val remaining = countToDelete - toDelete.size
+      if (remaining > 0) {
+        val runningTasksToDelete = view.max(remaining).iterator().asScala.toList
+        runningTasksToDelete.foreach { t => kvstore.delete(t.getClass(), t.info.taskId) }
+        stage.savedTasks.addAndGet(-remaining)
+      }
     }
     stage.cleaning = false
   }

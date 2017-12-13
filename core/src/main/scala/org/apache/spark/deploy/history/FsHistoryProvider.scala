@@ -320,11 +320,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val trackingStore = new ElementTrackingStore(kvstore, conf)
-    val listener = if (needReplay) {
+    if (needReplay) {
       val replayBus = new ReplayListenerBus()
-      val _listener = new AppStatusListener(trackingStore, conf, false,
+      val listener = new AppStatusListener(trackingStore, conf, false,
         lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
-      replayBus.addListener(_listener)
+      replayBus.addListener(listener)
       AppStatusPlugin.loadPlugins().foreach { plugin =>
         plugin.setupListeners(conf, trackingStore, l => replayBus.addListener(l), false)
       }
