@@ -80,18 +80,18 @@ trait ThreadAudit extends Logging {
      * creates event loops. One is wrapped inside
      * [[org.apache.spark.network.server.TransportServer]]
      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
-     * The thread pools behind shut down asynchronously triggered by [[SparkContext.close]].
+     * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
      * Manually checked and all of them stopped properly.
      */
     "rpc-client.*",
     "rpc-server.*",
 
     /**
-     * During [[SparkContext]] creation [[org.apache.spark.storage.BlockManager]]
+     * During [[SparkContext]] creation BlockManager
      * creates event loops. One is wrapped inside
      * [[org.apache.spark.network.server.TransportServer]]
      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
-     * The thread pools behind shut down asynchronously triggered by [[SparkContext.close]].
+     * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
      * Manually checked and all of them stopped properly.
      */
     "shuffle-client.*",
