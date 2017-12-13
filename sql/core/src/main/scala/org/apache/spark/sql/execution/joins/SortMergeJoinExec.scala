@@ -422,8 +422,8 @@ case class SortMergeJoinExec(
    */
   private def genScanner(ctx: CodegenContext): (String, String) = {
     // Create class member for next row from both sides.
-    val leftRow = ctx.addMutableState("InternalRow", "leftRow")
-    val rightRow = ctx.addMutableState("InternalRow", "rightRow")
+    val leftRow = ctx.addMutableState("InternalRow", "leftRow", inline = true)
+    val rightRow = ctx.addMutableState("InternalRow", "rightRow", inline = true)
 
     // Create variables for join keys from both sides.
     val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
