@@ -413,7 +413,6 @@ private[hive] class HiveClientImpl(
         case (key, _) => excludedTableProperties.contains(key)
       }
       val comment = properties.get("comment")
-      val hiveStats = readHiveStats(properties)
 
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
@@ -453,7 +452,7 @@ private[hive] class HiveClientImpl(
         // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
         // in the function toHiveTable.
         properties = filteredProperties,
-        stats = hiveStats,
+        stats = readHiveStats(properties),
         comment = comment,
         // In older versions of Spark(before 2.2.0), we expand the view original text and store
         // that into `viewExpandedText`, and that should be used in view resolution. So we get
@@ -986,8 +985,11 @@ private[hive] object HiveClientImpl {
    */
   def fromHivePartition(hp: HivePartition): CatalogTablePartition = {
     val apiPartition = hp.getTPartition
-    val properties: Map[String, String] =
-      if (hp.getParameters != null) hp.getParameters.asScala.toMap else Map.empty
+    val properties: Map[String, String] = if (hp.getParameters != null) {
+      hp.getParameters.asScala.toMap
+    } else {
+      Map.empty
+    }
     CatalogTablePartition(
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
@@ -1010,7 +1012,6 @@ private[hive] object HiveClientImpl {
     val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
     val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
     val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_))
-    // TODO: check if this estimate is valid for tables after partition pruning.
     // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
     // relatively cheap if parameters for the table are populated into the metastore.
     // Currently, only totalSize, rawDataSize, and rowCount are used to build the field `stats`
