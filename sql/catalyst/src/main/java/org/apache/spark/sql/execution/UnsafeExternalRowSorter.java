@@ -144,6 +144,7 @@ public final class UnsafeExternalRowSorter {
 
   public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
     final UnsafeSorterIterator[] sortedIterator = new UnsafeSorterIterator[1];
+    sortedIterator[0] = sorter.getSortedIterator();
     return new AbstractIterator<UnsafeRow>() {
       // inputIterator == null means the rows has been inserted
       boolean inserted = inputIterator == null;
