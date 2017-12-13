@@ -86,7 +86,8 @@ private[mesos] class MesosSubmitRequestServlet(
       throw new SubmitRestMissingFieldException("Application arguments 'appArgs' are missing.")
     }
     val environmentVariables = Option(request.environmentVariables).getOrElse {
-      throw new SubmitRestMissingFieldException("Environment variables 'environmentVariables' are missing.")
+      throw new SubmitRestMissingFieldException("Environment variables 'environmentVariables' " +
+        "are missing.")
     }
 
     // Optional fields
