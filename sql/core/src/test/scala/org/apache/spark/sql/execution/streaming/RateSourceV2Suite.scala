@@ -99,7 +99,7 @@ class RateSourceV2Suite extends StreamTest {
 
   test("continuous data") {
     val reader = new ContinuousRateStreamReader(
-      new DataSourceV2Options(Map("numPartitions" -> "2", "rowsPerSecond" -> "10").asJava))
+      new DataSourceV2Options(Map("numPartitions" -> "2", "rowsPerSecond" -> "20").asJava))
     reader.setOffset(Optional.empty())
     val tasks = reader.createReadTasks()
     assert(tasks.size == 2)
@@ -107,28 +107,22 @@ class RateSourceV2Suite extends StreamTest {
     val data = scala.collection.mutable.ListBuffer[Row]()
     tasks.asScala.foreach {
       case t: RateStreamReadTask =>
+        // Read the first 11 rows. Each partition should be outputting 10 rows per second, so
+        // the 11th row should come 1 second (within a confidence interval) after the first.
         val startTime = System.currentTimeMillis()
         val r = t.createDataReader().asInstanceOf[RateStreamDataReader]
-        // The first set of (rowsPerSecond / numPartitions) should come ~immediately, but the
-        // next should only come after 1 second.
-        for (i <- 1 to 5) {
+        for (_ <- 1 to 11) {
           r.next()
           data.append(r.get())
           assert(r.getOffset() ==
             ContinuousRateStreamPartitionOffset(t.partitionIndex, r.get.getLong(1)))
         }
-        assert(System.currentTimeMillis() < startTime + 100)
-        for (i <- 1 to 5) {
-          r.next()
-          data.append(r.get())
-          assert(r.getOffset() ==
-            ContinuousRateStreamPartitionOffset(t.partitionIndex, r.get.getLong(1)))
-        }
-        assert(System.currentTimeMillis() >= startTime + 1000)
+        assert(System.currentTimeMillis() < startTime + 1100)
+        assert(System.currentTimeMillis() > startTime + 900)
 
       case _ => throw new IllegalStateException("Unexpected task type")
     }
 
-    assert(data.map(_.getLong(1)).toSeq.sorted == Range(0, 20))
+    assert(data.map(_.getLong(1)).toSeq.sorted == Range(0, 22))
   }
 }

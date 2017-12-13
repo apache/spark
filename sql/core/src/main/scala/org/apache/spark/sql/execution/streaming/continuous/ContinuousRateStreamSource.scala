@@ -106,43 +106,37 @@ case class RateStreamReadTask(
     startValue: Long, partitionIndex: Int, increment: Long, rowsPerSecond: Double)
   extends ReadTask[Row] {
   override def createDataReader(): DataReader[Row] =
-    new RateStreamDataReader(startValue, partitionIndex, increment, rowsPerSecond.toLong)
+    new RateStreamDataReader(startValue, partitionIndex, increment, rowsPerSecond)
 }
 
 class RateStreamDataReader(
-    startValue: Long, partitionIndex: Int, increment: Long, rowsPerSecond: Long)
+    startValue: Long, partitionIndex: Int, increment: Long, rowsPerSecond: Double)
   extends ContinuousDataReader[Row] {
-  private var nextReadTime = 0L
-  private var numReadRows = 0L
+  private var nextReadTime: Long = _
+  private val readTimeIncrement: Long = (1000 / rowsPerSecond).toLong
 
   private var currentValue = startValue
   private var currentRow: Row = null
 
   override def next(): Boolean = {
     // Set the timestamp for the first time.
-    if (currentRow == null) nextReadTime = System.currentTimeMillis() + 1000
+    if (currentRow == null) nextReadTime = System.currentTimeMillis()
 
-    if (numReadRows == rowsPerSecond) {
-      // Sleep until we reach the next second.
-
-      try {
-        while (System.currentTimeMillis < nextReadTime) {
-          Thread.sleep(nextReadTime - System.currentTimeMillis)
-        }
-      } catch {
-        case _: InterruptedException =>
-          // Someone's trying to end the task; just let them.
-          return false
+    try {
+      while (System.currentTimeMillis < nextReadTime) {
+        Thread.sleep(nextReadTime - System.currentTimeMillis)
       }
-      numReadRows = 0
-      nextReadTime += 1000
+    } catch {
+      case _: InterruptedException =>
+        // Someone's trying to end the task; just let them.
+        return false
     }
+    nextReadTime += readTimeIncrement
 
     currentValue += increment
     currentRow = Row(
       DateTimeUtils.toJavaTimestamp(DateTimeUtils.fromMillis(System.currentTimeMillis)),
       currentValue)
-    numReadRows += 1
 
     true
   }
