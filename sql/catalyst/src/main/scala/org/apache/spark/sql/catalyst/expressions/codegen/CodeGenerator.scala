@@ -55,8 +55,24 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  *                 to null.
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
+ * @param inputRow A term that holds the input row name when generating this code.
+ * @param inputVars A list of [[ExprInputVar]] that holds input variables when generating this code.
  */
-case class ExprCode(var code: String, var isNull: String, var value: String)
+case class ExprCode(
+    var code: String,
+    var isNull: String,
+    var value: String,
+    var inputRow: String = null,
+    var inputVars: Seq[ExprInputVar] = Seq.empty)
+
+/**
+ * Represents an input variable [[ExprCode]] to an evaluation of an [[Expression]].
+ *
+ * @param exprCode The [[ExprCode]] that represents the evaluation result for the input variable.
+ * @param dataType The data type of the input variable.
+ * @param nullable Whether the input variable can be null or not.
+ */
+case class ExprInputVar(exprCode: ExprCode, dataType: DataType, nullable: Boolean)
 
 /**
  * State used for subexpression elimination.
@@ -1012,16 +1028,25 @@ class CodegenContext {
     commonExprs.foreach { e =>
       val expr = e.head
       val fnName = freshName("evalExpr")
-      val isNull = s"${fnName}IsNull"
+      val isNull = if (expr.nullable) {
+        s"${fnName}IsNull"
+      } else {
+        ""
+      }
       val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
       val eval = expr.genCode(this)
+      val assignIsNull = if (expr.nullable) {
+        s"$isNull = ${eval.isNull};"
+      } else {
+        ""
+      }
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
            |  ${eval.code.trim}
-           |  $isNull = ${eval.isNull};
+           |  $assignIsNull
            |  $value = ${eval.value};
            |}
            """.stripMargin
@@ -1039,12 +1064,17 @@ class CodegenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-      addMutableState(JAVA_BOOLEAN, isNull, s"$isNull = false;")
-      addMutableState(javaType(expr.dataType), value,
-        s"$value = ${defaultValue(expr.dataType)};")
+      if (expr.nullable) {
+        addMutableState(JAVA_BOOLEAN, isNull)
+      }
+      addMutableState(javaType(expr.dataType), value)
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
+      val state = if (expr.nullable) {
+        SubExprEliminationState(isNull, value)
+      } else {
+        SubExprEliminationState("false", value)
+      }
       e.foreach(subExprEliminationExprs.put(_, state))
     }
   }
