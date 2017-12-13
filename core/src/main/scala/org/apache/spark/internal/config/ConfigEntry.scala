@@ -158,7 +158,7 @@ private class FallbackConfigEntry[T] (
   extends ConfigEntry[T](key, alternatives,
     fallback.valueConverter, fallback.stringConverter, doc, isPublic) {
 
-  override def defaultValueString: String = s"<value of ${fallback.key}>"
+  override def defaultValueString: String = fallback.defaultValueString
 
   override def readFrom(reader: ConfigReader): T = {
     readString(reader).map(valueConverter).getOrElse(fallback.readFrom(reader))
