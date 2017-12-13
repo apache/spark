@@ -565,12 +565,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
 
-    val executorTimeoutThreshold = Utils.timeStringAsSeconds(get("spark.network.timeout", "120s"))
-    val executorHeartbeatInterval = Utils.timeStringAsSeconds(
-      get("spark.executor.heartbeatInterval", "10s"))
+    val executorTimeoutThreshold = getTimeAsSeconds("spark.network.timeout", "120s")
+    val executorHeartbeatInterval = getTimeAsSeconds("spark.executor.heartbeatInterval", "10s")
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
-    // it will almost always cause ExecutorLostFailure.See SPARK-22754.
-    require(executorHeartbeatInterval > executorTimeoutThreshold, s"The value of " +
+    // it will almost always cause ExecutorLostFailure. See SPARK-22754.
+    require(executorTimeoutThreshold > executorHeartbeatInterval, s"The value of " +
       "spark.network.timeout' must be no less than the value of " +
       "'spark.executor.heartbeatInterval'.")
   }
