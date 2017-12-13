@@ -389,6 +389,20 @@ class ParamsSuite extends SparkFunSuite {
     assert(t3.isSet(t3.maxIter))
   }
 
+  test("StringParam reports error when given invalid option") {
+    val params1 = new MyParams("my_params1")
+    val options = params1.stringParam2.getOptions.get
+    assert(params1.stringParam2.doc.contains(
+      s"options (case-insensitive): ${options.mkString(", ")}"))
+    params1.set(params1.stringParam2, "A")
+    withClue("StringParam ") {
+      val e = intercept[IllegalArgumentException] {
+        params1.set(params1.stringParam2, "AnInvalidOption")
+      }
+      assert(e.getMessage.contains(s"options (case-insensitive): ${options.mkString(", ")}"))
+    }
+  }
+
   test("Filtering ParamMap") {
     val params1 = new MyParams("my_params1")
     val params2 = new MyParams("my_params2")

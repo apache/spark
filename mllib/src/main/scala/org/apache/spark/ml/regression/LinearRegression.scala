@@ -222,8 +222,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
-    if (($(solver).equalsIgnoreCase(Auto) && numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES)
-      || $(solver).equalsIgnoreCase(Normal)) {
+    if ($lc(solver) == Auto && numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES
+      || $lc(solver) == Normal) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 

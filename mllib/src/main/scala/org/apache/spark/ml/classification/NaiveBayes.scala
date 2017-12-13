@@ -134,12 +134,11 @@ class NaiveBayes @Since("1.5.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val modelTypeValue = $(modelType)
     val requireValues: Vector => Unit = {
-      modelTypeValue match {
-        case m if m.equalsIgnoreCase(Multinomial) =>
+      $lc(modelType) match {
+        case Multinomial =>
           requireNonnegativeValues
-        case b if b.equalsIgnoreCase(Bernoulli) =>
+        case Bernoulli =>
           requireZeroOneBernoulliValues
         case _ =>
           // This should never happen.
@@ -187,10 +186,10 @@ class NaiveBayes @Since("1.5.0") (
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
       labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
-      val thetaLogDenom = modelTypeValue match {
-        case m if m.equalsIgnoreCase(Multinomial) =>
+      val thetaLogDenom = $lc(modelType) match {
+        case Multinomial =>
           math.log(sumTermFreqs.values.sum + numFeatures * lambda)
-        case b if b.equalsIgnoreCase(Bernoulli) => math.log(n + 2.0 * lambda)
+        case Bernoulli => math.log(n + 2.0 * lambda)
         case _ =>
           // This should never happen.
           throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
@@ -283,9 +282,9 @@ class NaiveBayesModel private[ml] (
    * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
    * application of this condition (in predict function).
    */
-  private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
-    case m if m.equalsIgnoreCase(Multinomial) => (None, None)
-    case b if b.equalsIgnoreCase(Bernoulli) =>
+  private lazy val (thetaMinusNegTheta, negThetaSum) = $lc(modelType) match {
+    case Multinomial => (None, None)
+    case Bernoulli =>
       val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
       val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
       val thetaMinusNegTheta = theta.map { value =>
@@ -321,10 +320,10 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    $(modelType) match {
-      case m if m.equalsIgnoreCase(Multinomial) =>
+    $lc(modelType) match {
+      case Multinomial =>
         multinomialCalculation(features)
-      case b if b.equalsIgnoreCase(Bernoulli) =>
+      case Bernoulli =>
         bernoulliCalculation(features)
       case _ =>
         // This should never happen.

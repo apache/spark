@@ -18,8 +18,7 @@
 package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
-import java.util.{List => JList}
-import java.util.NoSuchElementException
+import java.util.{List => JList, Locale, NoSuchElementException}
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
@@ -438,6 +437,9 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
 /**
  * :: DeveloperApi ::
  * Specialized version of `Param[String]` for Java.
+ * StringParam supports both limited options and custom validation. For StringParam with
+ * enum-like options, conventionally it's required that every candidate value is lowercase, to allow
+ * direct comparison in algorithms with $lc defined in PipelineStage.
  */
 @DeveloperApi
 class StringParam(parent: Params, name: String, doc: String, isValid: String => Boolean)
@@ -451,7 +453,9 @@ class StringParam(parent: Params, name: String, doc: String, isValid: String => 
   /** construct a StringParam with limited options (case-insensitive) */
   def this(parent: Params, name: String, doc: String, options: Array[String]) = {
     this(parent, name, doc + s" Supported options (case-insensitive): ${options.mkString(", ")}.",
-      s => options.exists(s.equalsIgnoreCase))
+      s => options.contains(s.toLowerCase(Locale.ROOT)))
+    require(options.forall(opt => opt == opt.toLowerCase(Locale.ROOT)),
+      "conventionally it's required that every candidate value is lowercase")
     this.options = Some(options)
   }
 
@@ -460,14 +464,14 @@ class StringParam(parent: Params, name: String, doc: String, isValid: String => 
   /** Creates a param pair with given value (for Java). */
   override def w(value: String): ParamPair[String] = super.w(value)
 
-  override def validate(value: String): Unit = {
+  private[param] override def validate(value: String): Unit = {
     if (!isValid(value)) {
       val optionStr = options match {
-        case Some(a) => s" Supported options (case-insensitive): ${a.mkString(", ")}."
+        case Some(a) => s"Supported options (case-insensitive): ${a.mkString(", ")}."
         case None => ""
       }
       throw new IllegalArgumentException(
-        s"$parent parameter $name given invalid value $value.$optionStr")
+        s"$parent parameter $name given invalid value $value. $optionStr")
     }
   }
 }

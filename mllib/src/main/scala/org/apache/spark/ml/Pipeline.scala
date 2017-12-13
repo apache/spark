@@ -18,6 +18,7 @@
 package org.apache.spark.ml
 
 import java.{util => ju}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
@@ -77,6 +78,13 @@ abstract class PipelineStage extends Params with Logging {
     }
     outputSchema
   }
+
+  /**
+   * return String Param value in lowercase.
+   * TODO: move this to Params when binary compatibility is tolerable.
+   */
+  private[ml] final def $lc(param: Param[String]): String =
+    getOrDefault(param).toLowerCase(Locale.ROOT)
 
   override def copy(extra: ParamMap): PipelineStage
 }
