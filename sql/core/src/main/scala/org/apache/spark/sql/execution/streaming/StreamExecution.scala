@@ -71,8 +71,8 @@ abstract class StreamExecution(
 
   protected val pollingDelayMs: Long = sparkSession.sessionState.conf.streamingPollingDelay
 
-  protected val minBatchesToRetain: Int = sparkSession.sessionState.conf.minBatchesToRetain
-  require(minBatchesToRetain > 0, "minBatchesToRetain has to be positive")
+  protected val minLogEntriesToMaintain: Int = sparkSession.sessionState.conf.minBatchesToRetain
+  require(minLogEntriesToMaintain > 0, "minBatchesToRetain has to be positive")
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
@@ -201,14 +201,14 @@ abstract class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
+  abstract def offsetLog
 
   /**
    * A log that records the batch ids that have completed. This is used to check if a batch was
    * fully processed, and its output was committed to the sink, hence no need to process it again.
    * This is used (for instance) during restart, to help identify which batch to run next.
    */
-  val batchCommitLog = new BatchCommitLog(sparkSession, checkpointFile("commits"))
+  abstract def batchCommitLog
 
   /** Whether all fields of the query have been initialized */
   private def isInitialized: Boolean = state.get != INITIALIZING

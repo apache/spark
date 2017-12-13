@@ -41,6 +41,10 @@ class MicroBatchExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
+  override val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
+  override val batchCommitLog = new BatchCommitLog(sparkSession, checkpointFile("commits"))
+
+
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
     case OneTimeTrigger => OneTimeExecutor()
@@ -307,9 +311,9 @@ class MicroBatchExecution(
 
         // It is now safe to discard the metadata beyond the minimum number to retain.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
-        if (minBatchesToRetain < currentBatchId) {
-          offsetLog.purge(currentBatchId - minBatchesToRetain)
-          batchCommitLog.purge(currentBatchId - minBatchesToRetain)
+        if (minLogEntriesToMaintain < currentBatchId) {
+          offsetLog.purge(currentBatchId - minLogEntriesToMaintain)
+          batchCommitLog.purge(currentBatchId - minLogEntriesToMaintain)
         }
       }
     } else {
