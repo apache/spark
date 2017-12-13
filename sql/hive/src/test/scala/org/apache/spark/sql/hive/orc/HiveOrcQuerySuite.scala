@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.io.File
+
+import com.google.common.io.Files
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -160,6 +164,26 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             assert(fileFormat == Some(format))
           }
         }
+    }
+  }
+
+  // Since Hive 1.2.1 library code path still has this problem, users may hit this
+  // when spark.sql.hive.convertMetastoreOrc=false. However, after SPARK-22279,
+  // Apache Spark with the default configuration doesn't hit this bug.
+  test("SPARK-19809 NullPointerException on zero-size ORC file") {
+    Seq("native", "hive").foreach { orcImpl =>
+      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
+        withTempPath { dir =>
+          withTable("spark_19809") {
+            sql(s"CREATE TABLE spark_19809(a int) STORED AS ORC LOCATION '$dir'")
+            Files.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
+
+            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
+              checkAnswer(spark.table("spark_19809"), Seq.empty)
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -2172,21 +2172,4 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
-
-  test("SPARK-19809 NullPointerException on zero-size ORC file") {
-    Seq("native", "hive").foreach { orcImpl =>
-      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
-        withTempPath { dir =>
-          withTable("spark_19809") {
-            sql(s"CREATE TABLE spark_19809(a int) STORED AS ORC LOCATION '$dir'")
-            Files.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
-
-            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
-              checkAnswer(sql("SELECT * FROM spark_19809"), Seq.empty)
-            }
-          }
-        }
-      }
-    }
-  }
 }
