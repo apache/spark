@@ -69,6 +69,8 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       eventsFilter: ReplayEventsFilter): Unit = {
     var currentLine: String = null
     var lineNumber: Int = 0
+    val unrecognizedEvents = new scala.collection.mutable.HashSet[String]
+    val unrecognizedProperties = new scala.collection.mutable.HashSet[String]
 
     try {
       val lineEntries = lines
@@ -84,9 +86,22 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
 
           postToAll(JsonProtocol.sparkEventFromJson(parse(currentLine)))
         } catch {
-          case _: ClassNotFoundException | _: UnrecognizedPropertyException =>
-            // Ignore unknown events or unrecognized properties, parse through the event log file.
-            logWarning(s"Drop incompatible event log: $currentLine")
+          case e: ClassNotFoundException =>
+            // Ignore unknown events, parse through the event log file.
+            // To avoid spamming, warnings are only displayed once for each unknown event.
+            if (!unrecognizedEvents.contains(e.getMessage)) {
+              logWarning(s"Drop unrecognized event: ${e.getMessage}")
+              unrecognizedEvents.add(e.getMessage)
+            }
+            logDebug(s"Drop incompatible event log: $currentLine")
+          case e: UnrecognizedPropertyException =>
+            // Ignore unrecognized properties, parse through the event log file.
+            // To avoid spamming, warnings are only displayed once for each unrecognized property.
+            if (!unrecognizedProperties.contains(e.getMessage)) {
+              logWarning(s"Drop unrecognized property: ${e.getMessage}")
+              unrecognizedProperties.add(e.getMessage)
+            }
+            logDebug(s"Drop incompatible event log: $currentLine")
           case jpe: JsonParseException =>
             // We can only ignore exception from last line of the file that might be truncated
             // the last entry may not be the very last line in the event log, but we treat it
