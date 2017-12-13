@@ -195,9 +195,12 @@ class CodegenContext {
   }
 
   /**
-   * Add a mutable state as a field to the generated class only if it does not exist yet a field
+   * Add an immutable state as a field to the generated class only if it does not exist yet a field
    * with that name. This helps reducing the number of the generated class' fields, since the same
    * variable can be reused by many functions.
+   *
+   * Even though the added variables are not declared as final, they should never be reassigned in
+   * the generated code to prevent errors and unexpected behaviors.
    *
    * Internally, this method calls `addMutableState`.
    *
@@ -205,7 +208,7 @@ class CodegenContext {
    * @param variableName Name of the field.
    * @param initCode The statement(s) to put into the init() method to initialize this field.
    */
-  def addSingleMutableState(
+  def addImmutableStateIfNotExists(
       javaType: String,
       variableName: String,
       initCode: String = ""): Unit = {

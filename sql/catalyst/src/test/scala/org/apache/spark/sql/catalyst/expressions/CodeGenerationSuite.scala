@@ -406,11 +406,11 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ctx = new CodegenContext
     val mutableState1 = "field1"
     val mutableState2 = "field2"
-    ctx.addSingleMutableState("int", mutableState1)
-    ctx.addSingleMutableState("int", mutableState1)
-    ctx.addSingleMutableState("String", mutableState2)
-    ctx.addSingleMutableState("int", mutableState1)
-    ctx.addSingleMutableState("String", mutableState2)
+    ctx.addImmutableStateIfNotExists("int", mutableState1)
+    ctx.addImmutableStateIfNotExists("int", mutableState1)
+    ctx.addImmutableStateIfNotExists("String", mutableState2)
+    ctx.addImmutableStateIfNotExists("int", mutableState1)
+    ctx.addImmutableStateIfNotExists("String", mutableState2)
     assert(ctx.mutableStates.length == 2)
   }
 }

@@ -1169,7 +1169,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
          $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
        }
      """
-    ctx.addSingleMutableState(serializerInstanceClass, serializer, serializerInit)
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, serializerInit)
 
     // Code to serialize.
     val input = child.genCode(ctx)
@@ -1218,7 +1218,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
          $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
        }
      """
-    ctx.addSingleMutableState(serializerInstanceClass, serializer, serializerInit)
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, serializerInit)
 
     // Code to deserialize.
     val input = child.genCode(ctx)
