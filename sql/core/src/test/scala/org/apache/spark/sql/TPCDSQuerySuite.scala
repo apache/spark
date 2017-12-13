@@ -19,8 +19,10 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.resourceToString
+import org.apache.spark.sql.execution.debug
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -353,8 +355,11 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
       withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-        // Just check the plans can be properly generated
-        sql(queryString).queryExecution.executedPlan
+        // check the plans can be properly generated
+        val p = sql(queryString).queryExecution.executedPlan
+        // check the generated code can be properly compiled
+        val codes = debug.codegenCodeAndCommentSeq(p)
+        codes.map(c => CodeGenerator.compile(c))
       }
     }
   }
@@ -368,8 +373,11 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
     val queryString = resourceToString(s"tpcds-modifiedQueries/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(s"modified-$name") {
-      // Just check the plans can be properly generated
-      sql(queryString).queryExecution.executedPlan
+      // check the plans can be properly generated
+      val p = sql(queryString).queryExecution.executedPlan
+      // check the generated code can be properly compiled
+      val codes = debug.codegenCodeAndCommentSeq(p)
+      codes.map(c => CodeGenerator.compile(c))
     }
   }
 }
