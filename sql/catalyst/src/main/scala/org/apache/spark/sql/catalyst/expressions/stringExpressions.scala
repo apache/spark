@@ -289,55 +289,61 @@ case class Elt(children: Seq[Expression])
     val index = indexExpr.genCode(ctx)
     val strings = stringExprs.map(_.genCode(ctx))
     val indexVal = ctx.freshName("index")
+
+    // -1 means the given index doesn't match indices of strings in split function.
+    val NOT_MATCHED = -1
+    // 0 means the given index matches one of indices of strings in split function.
+    val MATCHED = 0
+    val resultState = ctx.freshName("eltResultState")
+
     val stringVal = ctx.freshName("stringVal")
+    ctx.addMutableState(ctx.javaType(dataType), stringVal)
+
     val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
       s"""
-        case ${index + 1}:
-          ${eval.code}
-          $stringVal = ${eval.isNull} ? null : ${eval.value};
-          break;
-      """
+         |if ($indexVal == ${index + 1}) {
+         |  ${eval.code}
+         |  $stringVal = ${eval.isNull} ? null : ${eval.value};
+         |  $resultState = (byte)$MATCHED;
+         |  continue;
+         |}
+      """.stripMargin
     }
 
-    var prevFunc = "null"
-    var codes = ctx.splitExpressionsWithCurrentInputs(
+    val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignStringValue,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
-      returnType = "UTF8String",
+      returnType = ctx.JAVA_BYTE,
       makeSplitFunction = body =>
         s"""
-           |UTF8String $stringVal = null;
-           |switch ($indexVal) {
+           |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
+           |do {
            |  $body
-           |  default:
-           |    return $prevFunc;
-           |}
-           |return $stringVal;
-        """.stripMargin,
-      foldFunctions = funcs => s"UTF8String $stringVal = ${funcs.last};",
-      makeFunctionCallback = f => prevFunc = s"$f(${ctx.INPUT_ROW}, $indexVal)",
-      mergeSplit = false)
-
-    // If no any functions split, wraps all cases in a single switch.
-    if (prevFunc == "null") {
-      codes =
+           |} while (false);
+           |return $resultState;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
         s"""
-           |UTF8String $stringVal = null;
-           |switch ($indexVal) {
-           |  $codes
+           |$resultState = $funcCall;
+           |if ($resultState != $NOT_MATCHED) {
+           |  continue;
            |}
-        """.stripMargin
-    }
+         """.stripMargin
+      }.mkString)
 
     ev.copy(
       s"""
-      ${index.code}
-      final int $indexVal = ${index.value};
-      $codes
-      UTF8String ${ev.value} = $stringVal;
-      final boolean ${ev.isNull} = ${ev.value} == null;
-    """)
+         |${index.code}
+         |final int $indexVal = ${index.value};
+         |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
+         |$stringVal = ${ctx.defaultValue(dataType)};
+         |do {
+         |  $codes
+         |} while (false);
+         |final UTF8String ${ev.value} = $stringVal;
+         |final boolean ${ev.isNull} = ${ev.value} == null;
+       """.stripMargin)
   }
 }
 
