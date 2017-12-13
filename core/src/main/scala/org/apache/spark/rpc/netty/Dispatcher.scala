@@ -49,6 +49,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     new ConcurrentHashMap[String, EndpointData]
   private val endpointRefs: ConcurrentMap[RpcEndpoint, RpcEndpointRef] =
     new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
+  private val endpointsIsStopped: ConcurrentMap[String, Boolean] =
+    new ConcurrentHashMap[String, Boolean]
 
   // Track the receivers whose inboxes may contain messages.
   private val receivers = new LinkedBlockingQueue[EndpointData]
@@ -100,6 +102,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
         return
       }
       unregisterRpcEndpoint(rpcEndpointRef.name)
+      endpointsIsStopped.putIfAbsent(rpcEndpointRef.name, true)
     }
   }
 
@@ -156,6 +159,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
       val data = endpoints.get(endpointName)
       if (stopped) {
         Some(new RpcEnvStoppedException())
+      } else if (endpointsIsStopped.get(endpointName)) {
+        Some(new RpcEndpointStoppedException(endpointName))
       } else if (data == null) {
         Some(new SparkException(s"Could not find $endpointName."))
       } else {
