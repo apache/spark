@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.io.ByteArrayInputStream
+import java.lang.Character._
 import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConverters._
@@ -1100,6 +1101,29 @@ class CodegenContext {
     } else {
       ""
     }
+  }
+}
+
+object CodegenContext {
+
+  private val javaKeywords = Set(
+    "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
+    "continue", "default", "do", "double", "else", "extends", "false", "final", "finally", "float",
+    "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long", "native",
+    "new", "null", "package", "private", "protected", "public", "return", "short", "static",
+    "strictfp", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true",
+    "try", "void", "volatile", "while"
+  )
+
+  /**
+   * Returns true if the given `str` is a valid java identifier.
+   */
+  def isJavaIdentifier(str: String): Boolean = str match {
+    case null | "" =>
+      false
+    case _ =>
+      !javaKeywords.contains(str) && isJavaIdentifierStart(str.charAt(0)) &&
+        (1 until str.length).forall(i => isJavaIdentifierPart(str.charAt(i)))
   }
 }
 

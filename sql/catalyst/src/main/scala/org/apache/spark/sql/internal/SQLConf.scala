@@ -607,6 +607,17 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val MAX_PARAM_NUM_IN_JAVA_METHOD =
+     buildConf("spark.sql.codegen.maxParamNumInJavaMethod")
+      .internal()
+      .doc("The maximum number of parameters in codegened Java functions. When a function " +
+         "exceeds this threshold, the code generator gives up splitting the function code. " +
+         "This default value is 127 because the maximum length of parameters in non-static Java " +
+         "methods is 254 and a parameter of type long or double contributes " +
+         "two units to the length.")
+      .intConf
+      .createWithDefault(127)
+
   val CODEGEN_FALLBACK = buildConf("spark.sql.codegen.fallback")
     .internal()
     .doc("When true, (whole stage) codegen could be temporary disabled for the part of query that" +
@@ -1155,6 +1166,8 @@ class SQLConf extends Serializable with Logging {
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
+
+  def maxParamNumInJavaMethod: Int = getConf(MAX_PARAM_NUM_IN_JAVA_METHOD)
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
