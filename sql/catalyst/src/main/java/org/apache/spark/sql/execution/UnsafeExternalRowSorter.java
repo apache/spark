@@ -142,65 +142,64 @@ public final class UnsafeExternalRowSorter {
     return sort(null);
   }
 
-  public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator)
-    throws IOException {
-    try {
-      final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
-      return new AbstractIterator<UnsafeRow>() {
-        // inputIterator == null means the rows has been inserted
-        boolean inserted = inputIterator == null;
-        private final int numFields = schema.length();
-        private UnsafeRow row = new UnsafeRow(numFields);
+  public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
+    final UnsafeSorterIterator[] sortedIterator = new UnsafeSorterIterator[1];
+    return new AbstractIterator<UnsafeRow>() {
+      // inputIterator == null means the rows has been inserted
+      boolean inserted = inputIterator == null;
+      private final int numFields = schema.length();
+      private UnsafeRow row = new UnsafeRow(numFields);
 
-        @Override
-        public boolean hasNext() {
-          try {
-            if (!inserted) {
-              while (inputIterator.hasNext()) {
-                insertRow(inputIterator.next());
-              }
-              inserted = true;
-              if (!sortedIterator.hasNext()) {
-                // Since we won't ever call next() on an empty iterator, we need to clean up resources
-                // here in order to prevent memory leaks.
-                cleanupResources();
-              }
+      @Override
+      public boolean hasNext() {
+        try {
+          if (!inserted) {
+            while (inputIterator.hasNext()) {
+              insertRow(inputIterator.next());
             }
-          } catch (IOException e) {
-            return false;
-          }
-          return sortedIterator.hasNext();
-        }
-
-        @Override
-        public UnsafeRow next() {
-          try {
-            sortedIterator.loadNext();
-            row.pointTo(
-              sortedIterator.getBaseObject(),
-              sortedIterator.getBaseOffset(),
-              sortedIterator.getRecordLength());
-            if (!hasNext()) {
-              UnsafeRow copy = row.copy(); // so that we don't have dangling pointers to freed page
-              row = null; // so that we don't keep references to the base object
+            sortedIterator[0] = sorter.getSortedIterator();
+            inserted = true;
+            if (!sortedIterator[0].hasNext()) {
+              // Since we won't ever call next() on an empty iterator, we need to clean up resources
+              // here in order to prevent memory leaks.
               cleanupResources();
-              return copy;
-            } else {
-              return row;
             }
-          } catch (IOException e) {
-            cleanupResources();
-            // Scala iterators don't declare any checked exceptions, so we need to use this hack
-            // to re-throw the exception:
-            Platform.throwException(e);
           }
-          throw new RuntimeException("Exception should have been re-thrown in next()");
+        } catch (IOException e) {
+          cleanupResources();
+          // Scala iterators don't declare any checked exceptions, so we need to use this hack
+          // to re-throw the exception:
+          Platform.throwException(e);
         }
-      };
-    } catch (IOException e) {
-      cleanupResources();
-      throw e;
-    }
+        return sortedIterator[0].hasNext();
+      }
+
+      @Override
+      public UnsafeRow next() {
+        UnsafeSorterIterator sortedIter = sortedIterator[0];
+        try {
+          sortedIter.loadNext();
+          row.pointTo(
+            sortedIter.getBaseObject(),
+            sortedIter.getBaseOffset(),
+            sortedIter.getRecordLength());
+          if (!hasNext()) {
+            UnsafeRow copy = row.copy(); // so that we don't have dangling pointers to freed page
+            row = null; // so that we don't keep references to the base object
+            cleanupResources();
+            return copy;
+          } else {
+            return row;
+          }
+        } catch (IOException e) {
+          cleanupResources();
+          // Scala iterators don't declare any checked exceptions, so we need to use this hack
+          // to re-throw the exception:
+          Platform.throwException(e);
+        }
+        throw new RuntimeException("Exception should have been re-thrown in next()");
+      }
+    };
   }
 
   private static final class RowComparator extends RecordComparator {
