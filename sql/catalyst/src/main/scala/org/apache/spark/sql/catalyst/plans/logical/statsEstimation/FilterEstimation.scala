@@ -539,7 +539,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
   }
 
   /**
-   * Computes the possibility of a equal predicate using histogram.
+   * Computes the possibility of an equality predicate using histogram.
    */
   private def computeEqualityPossibilityByHistogram(
       literal: Literal, colStat: ColumnStat): Double = {
@@ -557,14 +557,14 @@ case class FilterEstimation(plan: Filter) extends Logging {
       upperBoundInclusive = true,
       lowerBound = min,
       lowerBoundInclusive = true,
-      histogram)
+      histogram.bins)
 
     val numBinsHoldingDatum = EstimationUtils.numBinsHoldingRange(
       upperBound = datum,
       upperBoundInclusive = true,
       lowerBound = datum,
       lowerBoundInclusive = true,
-      histogram)
+      histogram.bins)
 
     numBinsHoldingDatum / numBinsHoldingEntireRange
   }
@@ -584,9 +584,9 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
     // compute how many bins the column's current valid range [min, max] occupies.
     val numBinsHoldingEntireRange = EstimationUtils.numBinsHoldingRange(
-      max, upperBoundInclusive = true, min, lowerBoundInclusive = true, histogram)
+      max, upperBoundInclusive = true, min, lowerBoundInclusive = true, histogram.bins)
 
-    val numBinsHoldingDatum = op match {
+    val numBinsHoldingRange = op match {
       // LessThan and LessThanOrEqual share the same logic, the only difference is whether to
       // include the upperBound in the range.
       case _: LessThan =>
@@ -595,14 +595,14 @@ case class FilterEstimation(plan: Filter) extends Logging {
           upperBoundInclusive = false,
           lowerBound = min,
           lowerBoundInclusive = true,
-          histogram)
+          histogram.bins)
       case _: LessThanOrEqual =>
         EstimationUtils.numBinsHoldingRange(
           upperBound = datum,
           upperBoundInclusive = true,
           lowerBound = min,
           lowerBoundInclusive = true,
-          histogram)
+          histogram.bins)
 
       // GreaterThan and GreaterThanOrEqual share the same logic, the only difference is whether to
       // include the lowerBound in the range.
@@ -612,17 +612,17 @@ case class FilterEstimation(plan: Filter) extends Logging {
           upperBoundInclusive = true,
           lowerBound = datum,
           lowerBoundInclusive = false,
-          histogram)
+          histogram.bins)
       case _: GreaterThanOrEqual =>
         EstimationUtils.numBinsHoldingRange(
           upperBound = max,
           upperBoundInclusive = true,
           lowerBound = datum,
           lowerBoundInclusive = true,
-          histogram)
+          histogram.bins)
     }
 
-    numBinsHoldingDatum / numBinsHoldingEntireRange
+    numBinsHoldingRange / numBinsHoldingEntireRange
   }
 
   /**
