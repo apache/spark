@@ -96,3 +96,11 @@ select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11);
 -- pmod
 select pmod(-7, 2), pmod(0, 2), pmod(7, 0), pmod(7, null), pmod(null, 2), pmod(null, null);
 select pmod(cast(3.13 as decimal), cast(0 as decimal)), pmod(cast(2 as smallint), cast(0 as smallint));
+
+-- trunc
+select trunc(1234567891.1234567891, 4), trunc(1234567891.1234567891, -4), trunc(1234567891.1234567891, 0), trunc(1234567891.1234567891);
+select trunc(1234567891.1234567891, null), trunc(null, 4), trunc(null, null);
+select trunc(1234567891.1234567891, 'yyyy');
+select trunc(to_date('2015-07-22'), 4);
+select trunc('2015-07-22', 4);
+select trunc(false, 4);

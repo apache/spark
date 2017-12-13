@@ -2090,6 +2090,20 @@ object functions {
    */
   def radians(columnName: String): Column = radians(Column(columnName))
 
+  /**
+   * Returns numeric truncated by specified decimal places.
+   * If scale is positive or 0, numeric is truncated to the absolute value of scale number
+   * of places to the right of the decimal point.
+   * If scale is negative, numeric is truncated to the absolute value of scale + 1 number
+   * of places to the left of the decimal point.
+   *
+   * @group math_funcs
+   * @since 2.3.0
+   */
+  def trunc(numeric: Column, scale: Int): Column = withExpr {
+    Trunc(numeric.expr, Literal(scale))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2794,7 +2808,7 @@ object functions {
    * @since 1.5.0
    */
   def trunc(date: Column, format: String): Column = withExpr {
-    TruncDate(date.expr, Literal(format))
+    Trunc(date.expr, Literal(format))
   }
 
   /**

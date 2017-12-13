@@ -1097,15 +1097,24 @@ def to_timestamp(col, format=None):
 @since(1.5)
 def trunc(date, format):
     """
-    Returns date truncated to the unit specified by the format.
+    Returns date truncated to the unit specified by the format or
+    numeric truncated by specified decimal places.
 
-    :param format: 'year', 'YYYY', 'yy' or 'month', 'mon', 'mm'
+    :param format: 'year', 'YYYY', 'yy' or 'month', 'mon', 'mm' for date
+        and any int for numeric.
 
     >>> df = spark.createDataFrame([('1997-02-28',)], ['d'])
     >>> df.select(trunc(df.d, 'year').alias('year')).collect()
     [Row(year=datetime.date(1997, 1, 1))]
     >>> df.select(trunc(df.d, 'mon').alias('month')).collect()
     [Row(month=datetime.date(1997, 2, 1))]
+    >>> df = spark.createDataFrame([(1234567891.1234567891,)], ['d'])
+    >>> df.select(trunc(df.d, 4).alias('positive')).collect()
+    [Row(positive=1234567891.1234)]
+    >>> df.select(trunc(df.d, -4).alias('negative')).collect()
+    [Row(negative=1234560000.0)]
+    >>> df.select(trunc(df.d, 0).alias('zero')).collect()
+    [Row(zero=1234567891.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
