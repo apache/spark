@@ -289,7 +289,7 @@ case class Elt(children: Seq[Expression])
     val index = indexExpr.genCode(ctx)
     val strings = stringExprs.map(_.genCode(ctx))
     val indexVal = ctx.freshName("index")
-    val resultState = ctx.freshName("eltResultState")
+    val indexMatched = ctx.freshName("eltIndexMatched")
 
     val stringVal = ctx.freshName("stringVal")
     ctx.addMutableState(ctx.javaType(dataType), stringVal)
@@ -299,7 +299,7 @@ case class Elt(children: Seq[Expression])
          |if ($indexVal == ${index + 1}) {
          |  ${eval.code}
          |  $stringVal = ${eval.isNull} ? null : ${eval.value};
-         |  $resultState = true;
+         |  $indexMatched = true;
          |  continue;
          |}
       """.stripMargin
@@ -312,16 +312,16 @@ case class Elt(children: Seq[Expression])
       returnType = ctx.JAVA_BOOLEAN,
       makeSplitFunction = body =>
         s"""
-           |${ctx.JAVA_BOOLEAN} $resultState = false;
+           |${ctx.JAVA_BOOLEAN} $indexMatched = false;
            |do {
            |  $body
            |} while (false);
-           |return $resultState;
+           |return $indexMatched;
          """.stripMargin,
       foldFunctions = _.map { funcCall =>
         s"""
-           |$resultState = $funcCall;
-           |if ($resultState) {
+           |$indexMatched = $funcCall;
+           |if ($indexMatched) {
            |  continue;
            |}
          """.stripMargin
@@ -331,7 +331,7 @@ case class Elt(children: Seq[Expression])
       s"""
          |${index.code}
          |final int $indexVal = ${index.value};
-         |${ctx.JAVA_BOOLEAN} $resultState = false;
+         |${ctx.JAVA_BOOLEAN} $indexMatched = false;
          |$stringVal = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
