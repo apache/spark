@@ -997,16 +997,15 @@ case class ScalaUDF(
     // such as IntegerType, its javaType is `int` and the returned type of user-defined
     // function is Object. Trying to convert an Object to `int` will cause casting exception.
     val evalCode = evals.map(_.code).mkString("\n")
-    val initFuncArgs = scala.collection.mutable.ListBuffer.empty[String]
-    val funcArguments = evals.zipWithIndex.map { case (eval, i) =>
+    val (funcArgs, initArgs) = evals.zipWithIndex.map { case (eval, i) =>
       val argTerm = ctx.freshName("arg")
-      initFuncArgs +=
-        s"Object $argTerm = ${eval.isNull} ? null : $convertersTerm[$i].apply(${eval.value});"
-      argTerm
-    }
+      val convert = s"$convertersTerm[$i].apply(${eval.value})"
+      val initArg = s"Object $argTerm = ${eval.isNull} ? null : $convert;"
+      (argTerm, initArg)
+    }.unzip
 
-    val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.size}")
-    val getFuncResult = s"$udf.apply(${funcArguments.mkString(", ")})"
+    val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
+    val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
     val resultConverter = s"$convertersTerm[${children.length}]"
     val callFunc =
       s"""
@@ -1021,7 +1020,7 @@ case class ScalaUDF(
     ev.copy(code =
       s"""
          |$evalCode
-         |${initFuncArgs.mkString("\n")}
+         |${initArgs.mkString("\n")}
          |$callFunc
          |
          |boolean ${ev.isNull} = $resultTerm == null;
