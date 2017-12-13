@@ -1000,7 +1000,7 @@ case class ScalaUDF(
       ctx: CodegenContext,
       ev: ExprCode): ExprCode = {
     val scalaUDF = ctx.freshName("scalaUDF")
-    val scalaUDFRef = ctx.addReferenceMinorObj(this, scalaUDFClassName)
+    val scalaUDFRef = ctx.addReferenceObj("scalaUDFRef", this, scalaUDFClassName)
 
     // Object to convert the returned value of user-defined functions to Catalyst type
     val catalystConverterTerm = ctx.freshName("catalystConverter")
