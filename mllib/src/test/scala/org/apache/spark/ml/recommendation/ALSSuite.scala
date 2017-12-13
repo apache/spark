@@ -401,7 +401,8 @@ class ALSSuite
       implicitPrefs: Boolean = false,
       numUserBlocks: Int = 2,
       numItemBlocks: Int = 3,
-      targetRMSE: Double = 0.05): Unit = {
+      targetRMSE: Double = 0.05,
+      threshold: Int = 1024): Unit = {
     val spark = this.spark
     import spark.implicits._
     val als = new ALS()
@@ -411,6 +412,7 @@ class ALSSuite
       .setNumUserBlocks(numUserBlocks)
       .setNumItemBlocks(numItemBlocks)
       .setSeed(0)
+      .setThreshold(threshold)
     val alpha = als.getAlpha
     val model = als.fit(training.toDF())
     val predictions = model.transform(test.toDF()).select("rating", "prediction").rdd.map {
@@ -479,6 +481,12 @@ class ALSSuite
       genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
     testALS(training, test, maxIter = 2, rank = 1, regParam = 1e-4, targetRMSE = 0.002,
      numItemBlocks = 5, numUserBlocks = 5)
+  }
+
+  test("do stacking factors in matrices") {
+    val (training, test) = genExplicitTestData(numUsers = 200, numItems = 20, rank = 1)
+    testALS(training, test, maxIter = 1, rank = 129, regParam = 0.01, targetRMSE = 0.02,
+      threshold = 128)
   }
 
   test("implicit feedback") {
