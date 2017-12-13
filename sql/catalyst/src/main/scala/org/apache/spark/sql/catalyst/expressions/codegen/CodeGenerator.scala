@@ -169,6 +169,22 @@ class CodegenContext {
     mutable.ArrayBuffer.empty[String]
 
   /**
+   * Return true if a given variable has been described as a global variable
+   */
+  def isDeclaredMutableState(varName: String): Boolean = {
+    val j = varName.indexOf("[")
+    val qualifiedName = if (j < 0) varName else varName.substring(0, j)
+    mutableStates.exists { case s =>
+      val i = s._2.indexOf("[")
+      qualifiedName == (if (i < 0) s._2 else s._2.substring(0, i))
+    } ||
+    mutableStateArrayIdx.keys.exists { case key =>
+      val i = key._2.indexOf("[")
+      qualifiedName == (if (i < 0) key._2 else key._2.substring(0, i))
+    }
+  }
+
+  /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
    *
    * @param javaType Java type of the field. Note that short names can be used for some types,

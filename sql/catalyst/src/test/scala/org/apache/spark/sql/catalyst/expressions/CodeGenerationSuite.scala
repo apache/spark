@@ -401,4 +401,45 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     ctx.addReferenceObj("foo", foo)
     assert(ctx.mutableStates.isEmpty)
   }
+
+  test("SPARK-18016: Compact mutable states by using an array") {
+    val ctx1 = new CodegenContext
+    for (i <- 1 to CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10) {
+      ctx1.addMutableState(ctx1.JAVA_INT, "i", v => s"$v = $i;")
+    }
+    assert(ctx1.mutableStates.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
+    // When the number of primitive type mutable states is over the threshold, others are
+    // allocated into an array
+    assert(ctx1.mutableStateArrayIdx.size == 1)
+    assert(ctx1.mutableStateArrayInitCodes.size == 10)
+
+    val ctx2 = new CodegenContext
+    for (i <- 1 to CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10) {
+      ctx2.addMutableState("InternalRow[]", "r", v => s"$v = new InternalRow[$i];")
+    }
+    // When the number of non-primitive type mutable states is over the threshold, others are
+    // allocated into a new array
+    assert(ctx2.mutableStateArrayIdx.size == 2)
+    assert(ctx2.mutableStateArrayInitCodes.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
+  }
+
+  test("SPARK-18016: check whether a varible is declared as mutable") {
+    val ctx = new CodegenContext
+    val var1 = ctx.addMutableState(ctx.JAVA_INT, "ij")
+    val var2 = ctx.addMutableState("int[]", "array")
+    val var3 = ctx.addMutableState("int[][]", "b")
+
+    assert(ctx.isDeclaredMutableState(var1))
+    assert(ctx.isDeclaredMutableState(var2))
+    assert(ctx.isDeclaredMutableState(s"$var2[1]"))
+    assert(ctx.isDeclaredMutableState(var3))
+    assert(ctx.isDeclaredMutableState(s"$var3[]"))
+    assert(ctx.isDeclaredMutableState(s"$var3[1][]"))
+
+    assert(!ctx.isDeclaredMutableState("i"))
+    assert(!ctx.isDeclaredMutableState("j"))
+    assert(!ctx.isDeclaredMutableState("ij99"))
+    assert(!ctx.isDeclaredMutableState("arr"))
+    assert(!ctx.isDeclaredMutableState("bb[]"))
+  }
 }
