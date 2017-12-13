@@ -34,7 +34,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.hadoop.io.{DataOutputBuffer, Text}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
@@ -45,6 +45,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
+import org.apache.hadoop.yarn.security.AMRMTokenIdentifier
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -68,6 +69,10 @@ private[spark] class Client(
   private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
   private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
+
+  private val isClientUnmanagedAMEnabled =
+    sparkConf.getBoolean("spark.yarn.un-managed-am", false) && !isClusterMode
+  private var amServiceStarted = false
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {
@@ -282,7 +287,10 @@ private[spark] class Client(
             "does not support it", e)
       }
     }
-
+    if (isClientUnmanagedAMEnabled) {
+      // Set Unmanaged AM to true in Application Submission Context
+      appContext.setUnmanagedAM(true)
+    }
     appContext
   }
 
@@ -656,7 +664,9 @@ private[spark] class Client(
     // Clear the cache-related entries from the configuration to avoid them polluting the
     // UI's environment page. This works for client mode; for cluster mode, this is handled
     // by the AM.
-    CACHE_CONFIGS.foreach(sparkConf.remove)
+    if (!isClientUnmanagedAMEnabled) {
+      CACHE_CONFIGS.foreach(sparkConf.remove)
+    }
 
     localResources
   }
@@ -784,6 +794,9 @@ private[spark] class Client(
     val env = new HashMap[String, String]()
     populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
+    if (isClientUnmanagedAMEnabled) {
+      System.setProperty("SPARK_YARN_STAGING_DIR", stagingDirPath.toString)
+    }
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
     if (loginFromKeytab) {
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
@@ -1104,12 +1117,37 @@ private[spark] class Client(
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
         return (state, report.getFinalApplicationStatus)
       }
-
+      if (state == YarnApplicationState.ACCEPTED && isClientUnmanagedAMEnabled
+        && !amServiceStarted && report.getAMRMToken != null) {
+        amServiceStarted = true
+        startApplicationMasterService(report)
+      }
       lastState = state
     }
 
     // Never reached, but keeps compiler happy
     throw new SparkException("While loop is depleted! This should never happen...")
+  }
+
+  private def startApplicationMasterService(report: ApplicationReport) = {
+    // Add AMRMToken to establish connection between RM and AM
+    val token = report.getAMRMToken
+    val amRMToken: org.apache.hadoop.security.token.Token[AMRMTokenIdentifier] =
+      new org.apache.hadoop.security.token.Token[AMRMTokenIdentifier](token
+        .getIdentifier().array(), token.getPassword().array, new Text(
+        token.getKind()), new Text(token.getService()))
+    val currentUGI = UserGroupInformation.getCurrentUser
+    currentUGI.addToken(amRMToken)
+
+    System.setProperty(
+      ApplicationConstants.Environment.CONTAINER_ID.name(),
+      ContainerId.newContainerId(report.getCurrentApplicationAttemptId, 1).toString)
+    val amArgs = new ApplicationMasterArguments(Array("--arg",
+      sparkConf.get("spark.driver.host") + ":" + sparkConf.get("spark.driver.port")))
+    // Start Application Service in a separate thread and continue with application monitoring
+    new Thread() {
+      override def run(): Unit = new ApplicationMaster(amArgs, sparkConf, hadoopConf).run()
+    }.start()
   }
 
   private def formatReportDetails(report: ApplicationReport): String = {
