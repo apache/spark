@@ -177,9 +177,9 @@ class CodegenContext {
    *                 the list of default imports available.
    *                 Also, generic type arguments are accepted but ignored.
    * @param variableName Name of the field.
-   * @param codeFunctions Function includes statement(s) to put into the init() method to
-   *                 initialize this field. An argument is the name of the mutable state variable
-   *                 If left blank, the field will be default-initialized.
+   * @param initFunc Function includes statement(s) to put into the init() method to initialize
+   *            this field. An argument is the name of the mutable state variable.
+   *            If left blank, the field will be default-initialized.
    * @param inline whether the declaration and initialization code may be inlined rather than
    *               compacted.
    * @param useFreshName If false and inline is true, the name is not changed
@@ -197,7 +197,7 @@ class CodegenContext {
   def addMutableState(
       javaType: String,
       variableName: String,
-      codeFunctions: String => String = _ => "",
+      initFunc: String => String = _ => "",
       inline: Boolean = false,
       useFreshName: Boolean = true): String = {
     val varName = if (useFreshName) freshName(variableName) else variableName
@@ -208,7 +208,7 @@ class CodegenContext {
           (mutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD) ||
         // type is multi-dimensional array
         javaType.contains("[][]")) {
-      val initCode = codeFunctions(varName)
+      val initCode = initFunc(varName)
       mutableStates += ((javaType, varName, initCode))
       varName
     } else {
@@ -231,7 +231,7 @@ class CodegenContext {
       mutableStateArrayCurrentNames(javaType) = arrayName
       mutableStateArrayIdx((javaType, arrayName)) = newIdx
 
-      val initCode = codeFunctions(s"$arrayName[$newIdx]")
+      val initCode = initFunc(s"$arrayName[$newIdx]")
       mutableStateArrayInitCodes += initCode
       s"$arrayName[$newIdx]"
     }
@@ -279,7 +279,7 @@ class CodegenContext {
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
     val initCodes = mutableStates.map(_._3).distinct.map(_ + "\n")
     // statements for array element initialization
-    val arrayInitCodes = mutableStateArrayInitCodes.distinct.map(_ + "\n")
+    val arrayInitCodes = mutableStateArrayInitCodes.distinct
 
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
