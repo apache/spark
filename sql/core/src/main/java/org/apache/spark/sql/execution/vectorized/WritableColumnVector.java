@@ -36,8 +36,10 @@ import org.apache.spark.unsafe.types.UTF8String;
  * elements. This means that the put() APIs do not check as in common cases (i.e. flat schemas),
  * the lengths are known up front.
  *
- * A ColumnVector should be considered immutable once originally created. In other words, it is not
- * valid to call put APIs after reads until reset() is called.
+ * A WritableColumnVector should be considered immutable once originally created. In other words,
+ * it is not valid to call put APIs after reads until reset() is called.
+ *
+ * WritableColumnVector are intended to be reused.
  */
 public abstract class WritableColumnVector extends ColumnVector {
 
@@ -104,6 +106,37 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public boolean anyNullsSet() { return anyNullsSet; }
+
+  /**
+   * Returns the dictionary Id for rowId.
+   * This should only be called when the ColumnVector is dictionaryIds.
+   * We have this separate method for dictionaryIds as per SPARK-16928.
+   */
+  public abstract int getDictId(int rowId);
+
+  /**
+   * The Dictionary for this column.
+   *
+   * If it's not null, will be used to decode the value in getXXX().
+   */
+  protected Dictionary dictionary;
+
+  /**
+   * Reusable column for ids of dictionary.
+   */
+  protected WritableColumnVector dictionaryIds;
+
+  /**
+   * Returns true if this column has a dictionary.
+   */
+  public boolean hasDictionary() { return this.dictionary != null; }
+
+  /**
+   * Returns the underlying integer column for ids of dictionary.
+   */
+  public WritableColumnVector getDictionaryIds() {
+    return dictionaryIds;
+  }
 
   /**
    * Ensures that there is enough storage to store capacity elements. That is, the put() APIs
@@ -633,14 +666,6 @@ public abstract class WritableColumnVector extends ColumnVector {
       dictionaryIds.reserve(capacity);
     }
     return dictionaryIds;
-  }
-
-  /**
-   * Returns the underlying integer column for ids of dictionary.
-   */
-  @Override
-  public WritableColumnVector getDictionaryIds() {
-    return (WritableColumnVector) dictionaryIds;
   }
 
   /**
