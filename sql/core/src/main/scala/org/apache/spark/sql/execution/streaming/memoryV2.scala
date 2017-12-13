@@ -125,14 +125,8 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
   def commit(messages: Array[WriterCommitMessage]): Unit = {
-    val newRows = messages.flatMap { message =>
-      // TODO remove
-      if (message != null) {
-        assert(message.isInstanceOf[MemoryWriterCommitMessage])
-        message.asInstanceOf[MemoryWriterCommitMessage].data
-      } else {
-        Seq()
-      }
+    val newRows = messages.flatMap {
+      case message: MemoryWriterCommitMessage => message.data
     }
     sink.write(batchId, outputMode, newRows)
   }
@@ -150,7 +144,6 @@ class ContinuousMemoryWriter(val sink: MemorySinkV2, outputMode: OutputMode)
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data
-      case _ => Seq()
     }
     sink.write(epochId, outputMode, newRows)
   }

@@ -88,7 +88,8 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
 
     Range(0, numPartitions).map { n =>
       // If the offset doesn't have a value for this partition, start from the beginning.
-      val start = partitionStartMap.flatMap(_.get(n)).getOrElse(0L + n)
+      // Start offset is exclusive, so we actually pass negative values when we want to start at 0.
+      val start = partitionStartMap.flatMap(_.get(n)).getOrElse(0L + n - numPartitions)
       // Have each partition advance by numPartitions each row, with starting points staggered
       // by their partition index.
       RateStreamReadTask(start, n, numPartitions, perPartitionRate)
@@ -137,10 +138,10 @@ class RateStreamDataReader(
       nextReadTime += 1000
     }
 
+    currentValue += increment
     currentRow = Row(
       DateTimeUtils.toJavaTimestamp(DateTimeUtils.fromMillis(System.currentTimeMillis)),
       currentValue)
-    currentValue += increment
     numReadRows += 1
 
     true
@@ -151,5 +152,5 @@ class RateStreamDataReader(
   override def close(): Unit = {}
 
   override def getOffset(): PartitionOffset =
-    ContinuousRateStreamPartitionOffset(partitionIndex, currentValue - increment)
+    ContinuousRateStreamPartitionOffset(partitionIndex, currentValue)
 }
