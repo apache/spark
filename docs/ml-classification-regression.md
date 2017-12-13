@@ -723,14 +723,6 @@ Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
 {% include_example regression r/ml/decisionTree.R %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
-
-{% include_example classification r/ml/decisionTree.R %}
-
-</div>
-
 </div>
 
 
