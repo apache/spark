@@ -27,14 +27,20 @@ class TreePointSuite extends SparkFunSuite{
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrationRequired", "true")
 
-    val ser = new KryoSerializer(conf)
-    val serInstance = new KryoSerializer(conf).newInstance()
+    val ser = new KryoSerializer(conf).newInstance()
 
     def check[T: ClassTag](t: T) {
-      assert(serInstance.deserialize[T](serInstance.serialize(t)) === t)
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+
+    def check2(p: TreePoint): Unit = {
+      val p2 = ser.deserialize[TreePoint](ser.serialize(p))
+      assert(p2.label === p.label)
+      assert(p2.binnedFeatures === p.binnedFeatures)
     }
 
     val point = new TreePoint(1.0, Array(1, 2, 3))
+    check2(point)
     check(point)
   }
 }

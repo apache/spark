@@ -61,11 +61,10 @@ class LabeledPointSuite extends SparkFunSuite {
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrationRequired", "true")
 
-    val ser = new KryoSerializer(conf)
-    val serInstance = new KryoSerializer(conf).newInstance()
+    val ser = new KryoSerializer(conf).newInstance()
 
     def check[T: ClassTag](t: T) {
-      assert(serInstance.deserialize[T](serInstance.serialize(t)) === t)
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
 
     val labeled1 = LabeledPoint(1.0, Vectors.dense(Array(1.0, 2.0)))
