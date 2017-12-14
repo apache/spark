@@ -60,17 +60,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkCo
 
   private val isClusterMode = args.userClass != null
 
-
   private val securityMgr = new SecurityManager(sparkConf)
-
-  // Set system properties for each config entry. This covers two use cases:
-  // - The default configuration stored by the SparkHadoopUtil class
-  // - The user application creating a new SparkConf in cluster mode
-  //
-  // Both cases create a new SparkConf object which reads these configs from system properties.
-  sparkConf.getAll.foreach { case (k, v) =>
-    sys.props(k) = v
-  }
 
   private val ugi = {
     val original = UserGroupInformation.getCurrentUser()
@@ -831,8 +821,16 @@ object ApplicationMaster extends Logging {
         sparkConf.set(k, v)
       }
     }
-    val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
-      .asInstanceOf[YarnConfiguration]
+    // Set system properties for each config entry. This covers two use cases:
+    // - The default configuration stored by the SparkHadoopUtil class
+    // - The user application creating a new SparkConf in cluster mode
+    //
+    // Both cases create a new SparkConf object which reads these configs from system properties.
+    sparkConf.getAll.foreach { case (k, v) =>
+      sys.props(k) = v
+    }
+
+    val yarnConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
     master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
     System.exit(master.run())
   }
