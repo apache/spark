@@ -17,27 +17,34 @@
 
 package org.apache.spark.sql.sources.v2
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, SparkSession}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
 
-class DataSourceV2UtilsSuite extends QueryTest with SharedSQLContext {
+class DataSourceV2UtilsSuite extends QueryTest {
+
+  protected var spark: SparkSession = null
 
   private val keyPrefix = "userDefinedDataSource"
 
   test("method withSessionConfig() should propagate session configs correctly") {
     // Only match configs with keys start with "spark.datasource.${keyPrefix}".
-    withSQLConf(s"spark.datasource.$keyPrefix.foo.bar" -> "false",
-      s"spark.datasource.$keyPrefix.whateverConfigName" -> "123",
-      s"spark.sql.$keyPrefix.config.name" -> "false",
-      s"spark.datasource.another.config.name" -> "123") {
-      val confs = DataSourceV2Utils.withSessionConfig(keyPrefix, SQLConf.get)
-      assert(confs.size == 2)
-      assert(confs.keySet.filter(_.startsWith("spark.datasource")).size == 0)
-      assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
-      assert(confs.keySet.contains("foo.bar"))
-      assert(confs.keySet.contains("whateverConfigName"))
-    }
+    val conf = new SQLConf
+    conf.setConfString(s"spark.datasource.$keyPrefix.foo.bar", "false")
+    conf.setConfString(s"spark.datasource.$keyPrefix.whateverConfigName", "123")
+    conf.setConfString(s"spark.sql.$keyPrefix.config.name", "false")
+    conf.setConfString("spark.datasource.another.config.name", "123")
+    val cs = classOf[DataSourceV2WithSessionConfig].newInstance()
+    val confs = DataSourceV2Utils.extractSessionConfigs(cs.asInstanceOf[DataSourceV2], conf)
+    assert(confs.size == 2)
+    assert(confs.keySet.filter(_.startsWith("spark.datasource")).size == 0)
+    assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
+    assert(confs.keySet.contains("foo.bar"))
+    assert(confs.keySet.contains("whateverConfigName"))
   }
+}
+
+class DataSourceV2WithSessionConfig extends SimpleDataSourceV2 with SessionConfigSupport {
+
+  override def keyPrefix: String = "userDefinedDataSource"
 }

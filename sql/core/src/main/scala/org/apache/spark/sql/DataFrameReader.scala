@@ -185,18 +185,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val cls = DataSource.lookupDataSource(source)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val dataSource = cls.newInstance()
-      val options = dataSource match {
-        case cs: SessionConfigSupport =>
-          val confs = DataSourceV2Utils.withSessionConfig(
-            keyPrefix = cs.keyPrefix,
-            conf = sparkSession.sessionState.conf)
-          new DataSourceV2Options((confs ++ extraOptions).asJava)
-        case _ =>
-          new DataSourceV2Options(extraOptions.asJava)
-      }
+      val ds = cls.newInstance()
+      val options = new DataSourceV2Options((extraOptions ++
+        DataSourceV2Utils.extractSessionConfigs(
+          ds = ds.asInstanceOf[DataSourceV2],
+          conf = sparkSession.sessionState.conf)).asJava)
 
-      val reader = (dataSource, userSpecifiedSchema) match {
+      val reader = (ds, userSpecifiedSchema) match {
         case (ds: ReadSupportWithSchema, Some(schema)) =>
           ds.createReader(schema, options)
 
