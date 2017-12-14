@@ -28,8 +28,8 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 /**
- * This test suite ensures all the TPC-DS queries can be successfully analyzed and optimized
- * without hitting the max iteration threshold.
+ * This test suite ensures all the TPC-DS queries can be successfully analyzed, optimized
+ * and compiled without hitting the max iteration threshold.
  */
 class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
 
@@ -52,6 +52,8 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
 
   override def beforeAll() {
     super.beforeAll()
+    RuleExecutor.resetTime()
+
     sql(
       """
         |CREATE TABLE `catalog_page` (

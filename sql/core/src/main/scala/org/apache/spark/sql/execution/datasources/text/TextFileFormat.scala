@@ -116,9 +116,10 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions.wholeText)
   }
 
-  private def readToUnsafeMem(conf: Broadcast[SerializableConfiguration],
-      requiredSchema: StructType, wholeTextMode: Boolean):
-  (PartitionedFile) => Iterator[UnsafeRow] = {
+  private def readToUnsafeMem(
+      conf: Broadcast[SerializableConfiguration],
+      requiredSchema: StructType,
+      wholeTextMode: Boolean): (PartitionedFile) => Iterator[UnsafeRow] = {
 
     (file: PartitionedFile) => {
       val confValue = conf.value.value
