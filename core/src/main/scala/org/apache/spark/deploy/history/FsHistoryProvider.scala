@@ -24,6 +24,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.io.Source
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -93,6 +94,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Interval between each cleaner checks for event logs to delete
   private val CLEAN_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.cleaner.interval", "1d")
+
+  // Buffer size for strings inside events reader
+  private val BUFFER_SIZE = conf.getInt("spark.history.fs.buffer.size", Source.DefaultBufSize)
 
   // Number of threads used to replay event logs.
   private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_REPLAY_THREADS,
@@ -319,7 +323,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     if (needReplay) {
-      val replayBus = new ReplayListenerBus()
+      val replayBus = new ReplayListenerBus(BUFFER_SIZE)
       val listener = new AppStatusListener(kvstore, conf, false,
         lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
       replayBus.addListener(listener)
@@ -567,7 +571,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     val logPath = fileStatus.getPath()
 
-    val bus = new ReplayListenerBus()
+    val bus = new ReplayListenerBus(BUFFER_SIZE)
     val listener = new AppListingListener(fileStatus, clock)
     bus.addListener(listener)
 
@@ -652,6 +656,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       bus: ReplayListenerBus,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
     val logPath = eventLog.getPath()
+    val replayStart = System.currentTimeMillis()
     logInfo(s"Replaying log path: $logPath")
     // Note that the eventLog may have *increased* in size since when we grabbed the filestatus,
     // and when we read the file here.  That is OK -- it may result in an unnecessary refresh
@@ -664,6 +669,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       bus.replay(logInput, logPath.toString, !appCompleted, eventsFilter)
       logInfo(s"Finished replaying $logPath")
     } finally {
+      val replayTimeS = (System.currentTimeMillis() - replayStart) / 1000.0
+      logInfo(s"Done replaying log path $logPath in " + replayTimeS + " s")
       logInput.close()
     }
   }

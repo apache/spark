@@ -211,6 +211,14 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
+    <td>spark.history.fs.buffer.size</td>
+    <td>scala.io.Source.DefaultBufSize</td>
+    <td>
+      Specifies bufferSize for BufferedReader during event log reading. 
+      20 times more than average line size gives the optimal speedup</code>
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.fs.cleaner.maxAge</td>
     <td>7d</td>
     <td>

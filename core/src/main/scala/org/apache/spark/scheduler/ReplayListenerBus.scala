@@ -32,7 +32,8 @@ import org.apache.spark.util.JsonProtocol
 /**
  * A SparkListenerBus that can be used to replay events from serialized event data.
  */
-private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
+private[spark] class ReplayListenerBus(val bufferSize: Int = Source.DefaultBufSize)
+  extends SparkListenerBus with Logging {
 
   /**
    * Replay each event in the order maintained in the given stream. The stream is expected to
@@ -54,13 +55,15 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       sourceName: String,
       maybeTruncated: Boolean = false,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
-    val lines = Source.fromInputStream(logData).getLines()
-    replay(lines, sourceName, maybeTruncated, eventsFilter)
+    val source = Source.createBufferedSource(logData, bufferSize, close = () => logData.close())
+    replay(source.getLines(), sourceName, maybeTruncated, eventsFilter)
   }
 
   /**
    * Overloaded variant of [[replay()]] which accepts an iterator of lines instead of an
    * [[InputStream]]. Exposed for use by custom ApplicationHistoryProvider implementations.
+   *
+   * Logs events count and average size of lines.
    */
   def replay(
       lines: Iterator[String],
@@ -72,8 +75,15 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
     val unrecognizedEvents = new scala.collection.mutable.HashSet[String]
     val unrecognizedProperties = new scala.collection.mutable.HashSet[String]
 
+    var unfilteredLinesLength: Long = 0
+    var unfilteredLinesCount: Long = 0
     try {
       val lineEntries = lines
+        .map(line => {
+          unfilteredLinesLength += line.length
+          unfilteredLinesCount += 1
+          line
+        })
         .zipWithIndex
         .filter { case (line, _) => eventsFilter(line) }
 
@@ -122,6 +132,9 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
         logError(s"Exception parsing Spark event log: $sourceName", e)
         logError(s"Malformed line #$lineNumber: $currentLine\n")
     }
+    val avgLineSize = unfilteredLinesLength.toDouble / unfilteredLinesCount
+    log.debug(s"Log $sourceName has $unfilteredLinesCount events " +
+      s"with average event size of $avgLineSize")
   }
 
 }
