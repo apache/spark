@@ -53,7 +53,7 @@ class CommitLog(sparkSession: SparkSession, path: String)
 
   override def add(batchId: Long, metadata: String): Boolean = {
     throw new UnsupportedOperationException(
-      "BatchCommitLog does not take any metadata, use 'add(batchId)' instead")
+      "CommitLog does not take any metadata, use 'add(batchId)' instead")
   }
 
   override protected def deserialize(in: InputStream): String = {
