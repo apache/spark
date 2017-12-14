@@ -212,13 +212,12 @@ case class Stack(children: Seq[Expression]) extends Generator {
       s"${eval.code}\n$rowData[$row] = ${eval.value};"
     })
 
-    // Create the collection. Inline to outer class.
+    // Create the collection.
     val wrapperClass = classOf[mutable.WrappedArray[_]].getName
     ctx.addMutableState(
       s"$wrapperClass<InternalRow>",
       ev.value,
-      v => s"$v = $wrapperClass$$.MODULE$$.make($rowData);",
-      inline = true, useFreshName = false)
+      v => s"$v = $wrapperClass$$.MODULE$$.make($rowData);", useFreshName = false)
     ev.copy(code = code, isNull = "false")
   }
 }

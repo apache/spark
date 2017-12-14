@@ -422,8 +422,8 @@ case class SortMergeJoinExec(
    */
   private def genScanner(ctx: CodegenContext): (String, String) = {
     // Create class member for next row from both sides.
-    val leftRow = ctx.addMutableState("InternalRow", "leftRow", inline = true)
-    val rightRow = ctx.addMutableState("InternalRow", "rightRow", inline = true)
+    val leftRow = ctx.addMutableState("InternalRow", "leftRow", forceInline = true)
+    val rightRow = ctx.addMutableState("InternalRow", "rightRow", forceInline = true)
 
     // Create variables for join keys from both sides.
     val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
@@ -576,9 +576,9 @@ case class SortMergeJoinExec(
 
   override def doProduce(ctx: CodegenContext): String = {
     val leftInput = ctx.addMutableState("scala.collection.Iterator", "leftInput",
-      v => s"$v = inputs[0];", inline = true)
+      v => s"$v = inputs[0];", forceInline = true)
     val rightInput = ctx.addMutableState("scala.collection.Iterator", "rightInput",
-      v => s"$v = inputs[1];", inline = true)
+      v => s"$v = inputs[1];", forceInline = true)
 
     val (leftRow, matches) = genScanner(ctx)
 

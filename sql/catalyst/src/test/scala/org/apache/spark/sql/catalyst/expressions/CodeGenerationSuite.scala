@@ -402,7 +402,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx.mutableStates.isEmpty)
   }
 
-  test("SPARK-18016: Compact mutable states by using an array") {
+  test("SPARK-18016: def  mutable states by using an array") {
     val ctx1 = new CodegenContext
     for (i <- 1 to CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10) {
       ctx1.addMutableState(ctx1.JAVA_INT, "i", v => s"$v = $i;")
@@ -411,7 +411,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     // When the number of primitive type mutable states is over the threshold, others are
     // allocated into an array
     assert(ctx1.mutableStateArrayMap.get(ctx1.JAVA_INT).get.arrayNames.size == 1)
-    assert(ctx1.mutableStateArrayInitCodes.size == 10)
+    assert(ctx1.mutableStateInitCodes.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10)
 
     val ctx2 = new CodegenContext
     for (i <- 1 to CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10) {
@@ -420,7 +420,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     // When the number of non-primitive type mutable states is over the threshold, others are
     // allocated into a new array
     assert(ctx2.mutableStateArrayMap.get("InternalRow[]").get.arrayNames.size == 2)
-    assert(ctx2.mutableStateArrayInitCodes.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
+    assert(ctx2.mutableStateInitCodes.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
   }
 }
 

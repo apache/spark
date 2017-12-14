@@ -74,7 +74,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       isTopLevel: Boolean = false): String = {
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
-      v => s"$v = new $rowWriterClass($bufferHolder, ${inputs.length});", inline = true)
+      v => s"$v = new $rowWriterClass($bufferHolder, ${inputs.length});")
 
     val resetWriter = if (isTopLevel) {
       // For top level row writer, it always writes to the beginning of the global buffer holder,
@@ -317,11 +317,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val result = ctx.addMutableState("UnsafeRow", "result",
-      v => s"$v = new UnsafeRow(${expressions.length});", inline = true)
+      v => s"$v = new UnsafeRow(${expressions.length});")
 
     val holderClass = classOf[BufferHolder].getName
     val holder = ctx.addMutableState(holderClass, "holder",
-      v => s"$v = new $holderClass($result, ${numVarLenFields * 32});", inline = true)
+      v => s"$v = new $holderClass($result, ${numVarLenFields * 32});")
 
     val resetBufferHolder = if (numVarLenFields == 0) {
       ""

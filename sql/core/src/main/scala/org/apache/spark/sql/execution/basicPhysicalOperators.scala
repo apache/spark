@@ -301,7 +301,7 @@ case class SampleExec(
               | }
            """.stripMargin.trim)
           s"$initSamplerFuncName();"
-        }, inline = true)
+        }, forceInline = true)
 
       val samplingCount = ctx.freshName("samplingCount")
       s"""
@@ -317,7 +317,7 @@ case class SampleExec(
         v => s"""
           | $v = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
           | $v.setSeed(${seed}L + partitionIndex);
-         """.stripMargin.trim, inline = true)
+         """.stripMargin.trim, forceInline = true)
 
       s"""
          | if ($sampler.sample() != 0) {
@@ -371,9 +371,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val BigInt = classOf[java.math.BigInteger].getName
 
     val taskContext = ctx.addMutableState("TaskContext", "taskContext",
-      v => s"$v = TaskContext.get();", inline = true)
+      v => s"$v = TaskContext.get();", forceInline = true)
     val inputMetrics = ctx.addMutableState("InputMetrics", "inputMetrics",
-      v => s"$v = $taskContext.taskMetrics().inputMetrics();", inline = true)
+      v => s"$v = $taskContext.taskMetrics().inputMetrics();", forceInline = true)
 
     // In order to periodically update the metrics without inflicting performance penalty, this
     // operator produces elements in batches. After a batch is complete, the metrics are updated
@@ -437,7 +437,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
     // Right now, Range is only used when there is one upstream.
     val input = ctx.addMutableState("scala.collection.Iterator", "input",
-      v => s"$v = inputs[0];", inline = true)
+      v => s"$v = inputs[0];", forceInline = true)
 
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")

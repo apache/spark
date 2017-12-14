@@ -111,7 +111,7 @@ case class RowDataSourceScanExec(
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     // PhysicalRDD always just has one input
     val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
-      inline = true)
+      forceInline = true)
     val exprRows = output.zipWithIndex.map{ case (a, i) =>
       BoundReference(i, a.dataType, a.nullable)
     }
@@ -354,7 +354,7 @@ case class FileSourceScanExec(
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     // PhysicalRDD always just has one input
     val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
-      inline = true)
+      forceInline = true)
     val row = ctx.freshName("row")
 
     ctx.INPUT_ROW = row

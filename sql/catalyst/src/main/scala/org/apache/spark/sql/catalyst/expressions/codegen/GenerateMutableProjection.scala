@@ -57,22 +57,22 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       case _ => true
     }.unzip
     val exprVals = ctx.generateExpressions(validExpr, useSubexprElimination)
-    val projectionCodes = exprVals.zip(index).map {
+    val projectionCodes: Seq[(String, String, String, Int)] = exprVals.zip(index).map {
       case (ev, i) =>
         val e = expressions(i)
         val value = ctx.addMutableState(ctx.javaType(e.dataType), "value")
         if (e.nullable) {
           val isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "isNull")
           (s"""
-             ${ev.code}
-             $isNull = ${ev.isNull};
-             $value = ${ev.value};
-            """, isNull, value, i)
+              |${ev.code}
+              |$isNull = ${ev.isNull};
+              |$value = ${ev.value};
+            """.stripMargin, isNull, value, i)
         } else {
           (s"""
-             ${ev.code}
-             $value = ${ev.value};
-            """, ev.isNull, value, i)
+              |${ev.code}
+              |$value = ${ev.value};
+            """.stripMargin, ev.isNull, value, i)
         }
     }
 

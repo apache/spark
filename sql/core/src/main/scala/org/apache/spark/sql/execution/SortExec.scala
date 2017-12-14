@@ -143,7 +143,7 @@ case class SortExec(
     val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",
       v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();")
     val sortedIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "sortedIter",
-      inline = true)
+      forceInline = true)
 
     val addToSorter = ctx.freshName("addToSorter")
     val addToSorterFuncName = ctx.addNewFunction(addToSorter,
