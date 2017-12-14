@@ -1145,7 +1145,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       Utils.loadExtensions(classOf[Seq[_]], wrongType, conf)
     }
   }
-
+  
   test("parseHostPort") {
     assert(Utils.parseHostPort("abc:123")          === (("abc", 123)))
     assert(Utils.parseHostPort("example.com")      === (("example.com", 0)))
@@ -1159,6 +1159,27 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.parseHostPort("::1")              === (("::1", 0)))
     assert(Utils.parseHostPort("[::1]:123")        === (("[::1]", 123)))
     assert(Utils.parseHostPort("[2001:db8:42::1]:123")  === (("[2001:db8:42::1]", 123)))
+
+  test("check Kubernetes master URL") {
+    val k8sMasterURLHttps = Utils.checkAndGetK8sMasterUrl("k8s://https://host:port")
+    assert(k8sMasterURLHttps === "k8s://https://host:port")
+
+    val k8sMasterURLHttp = Utils.checkAndGetK8sMasterUrl("k8s://http://host:port")
+    assert(k8sMasterURLHttp === "k8s://http://host:port")
+
+    val k8sMasterURLWithoutScheme = Utils.checkAndGetK8sMasterUrl("k8s://127.0.0.1:8443")
+    assert(k8sMasterURLWithoutScheme === "k8s://https://127.0.0.1:8443")
+
+    val k8sMasterURLWithoutScheme2 = Utils.checkAndGetK8sMasterUrl("k8s://127.0.0.1")
+    assert(k8sMasterURLWithoutScheme2 === "k8s://https://127.0.0.1")
+
+    intercept[IllegalArgumentException] {
+      Utils.checkAndGetK8sMasterUrl("k8s:https://host:port")
+    }
+
+    intercept[IllegalArgumentException] {
+      Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
+    }
   }
 }
 

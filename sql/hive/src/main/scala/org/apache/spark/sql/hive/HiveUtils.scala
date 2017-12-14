@@ -66,6 +66,14 @@ private[spark] object HiveUtils extends Logging {
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
+  // A fake config which is only here for backward compatibility reasons. This config has no effect
+  // to Spark, just for reporting the builtin Hive version of Spark to existing applications that
+  // already rely on this config.
+  val FAKE_HIVE_VERSION = buildConf("spark.sql.hive.version")
+    .doc(s"deprecated, please use ${HIVE_METASTORE_VERSION.key} to get the Hive version in Spark.")
+    .stringConf
+    .createWithDefault(builtinHiveVersion)
+
   val HIVE_METASTORE_JARS = buildConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
@@ -101,7 +109,7 @@ private[spark] object HiveUtils extends Logging {
     .doc("When set to true, the built-in ORC reader and writer are used to process " +
       "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +

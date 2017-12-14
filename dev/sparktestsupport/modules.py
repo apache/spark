@@ -466,6 +466,7 @@ pyspark_ml = Module(
         "pyspark.ml.evaluation",
         "pyspark.ml.feature",
         "pyspark.ml.fpm",
+        "pyspark.ml.image",
         "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",
         "pyspark.ml.regression",
@@ -529,6 +530,14 @@ mesos = Module(
     source_file_regexes=["resource-managers/mesos/"],
     build_profile_flags=["-Pmesos"],
     sbt_test_goals=["mesos/test"]
+)
+
+kubernetes = Module(
+    name="kubernetes",
+    dependencies=[],
+    source_file_regexes=["resource-managers/kubernetes/core"],
+    build_profile_flags=["-Pkubernetes"],
+    sbt_test_goals=["kubernetes/test"]
 )
 
 # The root module is a dummy module which is used to run all of the tests.

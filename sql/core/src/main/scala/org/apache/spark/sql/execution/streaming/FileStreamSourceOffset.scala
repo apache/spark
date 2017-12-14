@@ -22,8 +22,11 @@ import scala.util.control.Exception._
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.sql.sources.v2.reader.Offset
+
 /**
  * Offset for the [[FileStreamSource]].
+ *
  * @param logOffset  Position in the [[FileStreamSourceLog]]
  */
 case class FileStreamSourceOffset(logOffset: Long) extends Offset {

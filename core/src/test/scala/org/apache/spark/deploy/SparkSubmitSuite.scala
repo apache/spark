@@ -31,7 +31,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.TimeLimits
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
@@ -101,6 +101,9 @@ class SparkSubmitSuite
   with TestPrematureExit {
 
   import SparkSubmitSuite._
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   override def beforeEach() {
     super.beforeEach()
@@ -232,7 +235,7 @@ class SparkSubmitSuite
     childArgsStr should include ("--class org.SomeClass")
     childArgsStr should include ("--arg arg1 --arg arg2")
     childArgsStr should include regex ("--jar .*thejar.jar")
-    mainClass should be ("org.apache.spark.deploy.yarn.Client")
+    mainClass should be (SparkSubmit.YARN_CLUSTER_SUBMIT_CLASS)
 
     // In yarn cluster mode, also adding jars to classpath
     classpath(0) should endWith ("thejar.jar")
@@ -320,11 +323,11 @@ class SparkSubmitSuite
     val childArgsStr = childArgs.mkString(" ")
     if (useRest) {
       childArgsStr should endWith ("thejar.jar org.SomeClass arg1 arg2")
-      mainClass should be ("org.apache.spark.deploy.rest.RestSubmissionClient")
+      mainClass should be (SparkSubmit.REST_CLUSTER_SUBMIT_CLASS)
     } else {
       childArgsStr should startWith ("--supervise --memory 4g --cores 5")
       childArgsStr should include regex "launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2"
-      mainClass should be ("org.apache.spark.deploy.Client")
+      mainClass should be (SparkSubmit.STANDALONE_CLUSTER_SUBMIT_CLASS)
     }
     classpath should have size 0
     sys.props("SPARK_SUBMIT") should be ("true")
@@ -385,6 +388,33 @@ class SparkSubmitSuite
     conf.get("spark.ui.enabled") should be ("false")
   }
 
+  test("handles k8s cluster mode") {
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "k8s://host:port",
+      "--executor-memory", "5g",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "--conf", "spark.kubernetes.namespace=spark",
+      "--conf", "spark.kubernetes.driver.docker.image=bar",
+      "/home/thejar.jar",
+      "arg1")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, conf, mainClass) = prepareSubmitEnvironment(appArgs)
+
+    val childArgsMap = childArgs.grouped(2).map(a => a(0) -> a(1)).toMap
+    childArgsMap.get("--primary-java-resource") should be (Some("file:/home/thejar.jar"))
+    childArgsMap.get("--main-class") should be (Some("org.SomeClass"))
+    childArgsMap.get("--arg") should be (Some("arg1"))
+    mainClass should be (KUBERNETES_CLUSTER_SUBMIT_CLASS)
+    classpath should have length (0)
+    conf.get("spark.master") should be ("k8s://https://host:port")
+    conf.get("spark.executor.memory") should be ("5g")
+    conf.get("spark.driver.memory") should be ("4g")
+    conf.get("spark.kubernetes.namespace") should be ("spark")
+    conf.get("spark.kubernetes.driver.docker.image") should be ("bar")
+  }
+
   test("handles confs with flag equivalents") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",
@@ -399,7 +429,7 @@ class SparkSubmitSuite
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.master") should be ("yarn")
     conf.get("spark.submit.deployMode") should be ("cluster")
-    mainClass should be ("org.apache.spark.deploy.yarn.Client")
+    mainClass should be (SparkSubmit.YARN_CLUSTER_SUBMIT_CLASS)
   }
 
   test("SPARK-21568 ConsoleProgressBar should be enabled only in shells") {
@@ -1016,6 +1046,10 @@ class SparkSubmitSuite
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   def runSparkSubmit(args: Seq[String], root: String = ".."): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))

@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, JaninoRuntimeException, SimpleCompiler}
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
@@ -109,29 +109,26 @@ class CodegenContext {
    *
    * Returns the code to access it.
    *
-   * This is for minor objects not to store the object into field but refer it from the references
-   * field at the time of use because number of fields in class is limited so we should reduce it.
+   * This does not to store the object into field but refer it from the references field at the
+   * time of use because number of fields in class is limited so we should reduce it.
    */
-  def addReferenceMinorObj(obj: Any, className: String = null): String = {
+  def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
     val clsName = Option(className).getOrElse(obj.getClass.getName)
-    s"(($clsName) references[$idx])"
+    s"(($clsName) references[$idx] /* $objName */)"
   }
 
   /**
-   * Add an object to `references`, create a class member to access it.
+   * Holding the variable name of the input row of the current operator, will be used by
+   * `BoundReference` to generate code.
    *
-   * Returns the name of class member.
+   * Note that if `currentVars` is not null, `BoundReference` prefers `currentVars` over `INPUT_ROW`
+   * to generate code. If you want to make sure the generated code use `INPUT_ROW`, you need to set
+   * `currentVars` to null, or set `currentVars(i)` to null for certain columns, before calling
+   * `Expression.genCode`.
    */
-  def addReferenceObj(name: String, obj: Any, className: String = null): String = {
-    val term = freshName(name)
-    val idx = references.length
-    references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
-    addMutableState(clsName, term, s"$term = ($clsName) references[$idx];")
-    term
-  }
+  final var INPUT_ROW = "i"
 
   /**
    * Holding a list of generated columns as input of current operator, will be used by
@@ -157,7 +154,19 @@ class CodegenContext {
   val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
     mutable.ArrayBuffer.empty[(String, String, String)]
 
-  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
+  /**
+   * Add a mutable state as a field to the generated class. c.f. the comments above.
+   *
+   * @param javaType Java type of the field. Note that short names can be used for some types,
+   *                 e.g. InternalRow, UnsafeRow, UnsafeArrayData, etc. Other types will have to
+   *                 specify the fully-qualified Java type name. See the code in doCompile() for
+   *                 the list of default imports available.
+   *                 Also, generic type arguments are accepted but ignored.
+   * @param variableName Name of the field.
+   * @param initCode The statement(s) to put into the init() method to initialize this field.
+   *                 If left blank, the field will be default-initialized.
+   */
+  def addMutableState(javaType: String, variableName: String, initCode: String = ""): Unit = {
     mutableStates += ((javaType, variableName, initCode))
   }
 
@@ -191,7 +200,7 @@ class CodegenContext {
     val initCodes = mutableStates.distinct.map(_._3 + "\n")
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
-    splitExpressions(initCodes, "init", Nil)
+    splitExpressions(expressions = initCodes, funcName = "init", arguments = Nil)
   }
 
   /**
@@ -373,9 +382,6 @@ class CodegenContext {
   final val JAVA_LONG = "long"
   final val JAVA_FLOAT = "float"
   final val JAVA_DOUBLE = "double"
-
-  /** The variable name of the input row in generated code. */
-  final var INPUT_ROW = "i"
 
   /**
    * The map from a variable name to it's next ID.
@@ -761,20 +767,45 @@ class CodegenContext {
    * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
    * instead, because classes have a constant pool limit of 65,536 named values.
    *
-   * @param row the variable name of row that is used by expressions
+   * Note that different from `splitExpressions`, we will extract the current inputs of this
+   * context and pass them to the generated functions. The input is `INPUT_ROW` for normal codegen
+   * path, and `currentVars` for whole stage codegen path. Whole stage codegen path is not
+   * supported yet.
+   *
    * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param extraArguments the list of (type, name) of the arguments of the split function,
+   *                       except for the current inputs like `ctx.INPUT_ROW`.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
    */
-  def splitExpressions(row: String, expressions: Seq[String]): String = {
-    if (row == null || currentVars != null) {
-      // Cannot split these expressions because they are not created from a row object.
-      return expressions.mkString("\n")
+  def splitExpressionsWithCurrentInputs(
+      expressions: Seq[String],
+      funcName: String = "apply",
+      extraArguments: Seq[(String, String)] = Nil,
+      returnType: String = "void",
+      makeSplitFunction: String => String = identity,
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
+    // TODO: support whole stage codegen
+    if (INPUT_ROW == null || currentVars != null) {
+      expressions.mkString("\n")
+    } else {
+      splitExpressions(
+        expressions,
+        funcName,
+        ("InternalRow", INPUT_ROW) +: extraArguments,
+        returnType,
+        makeSplitFunction,
+        foldFunctions)
     }
-    splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
   }
 
   /**
    * Splits the generated code of expressions into multiple functions, because function has
-   * 64kb code size limit in JVM
+   * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
+   * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
+   * instead, because classes have a constant pool limit of 65,536 named values.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
@@ -790,23 +821,7 @@ class CodegenContext {
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
       foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
-    val blocks = new ArrayBuffer[String]()
-    val blockBuilder = new StringBuilder()
-    var length = 0
-    for (code <- expressions) {
-      // We can't know how many bytecode will be generated, so use the length of source code
-      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
-      // also not be too small, or it will have many function calls (for wide table), see the
-      // results in BenchmarkWideTable.
-      if (length > 1024) {
-        blocks += blockBuilder.toString()
-        blockBuilder.clear()
-        length = 0
-      }
-      blockBuilder.append(code)
-      length += CodeFormatter.stripExtraNewLinesAndComments(code).length
-    }
-    blocks += blockBuilder.toString()
+    val blocks = buildCodeBlocks(expressions)
 
     if (blocks.length == 1) {
       // inline execution if only one block
@@ -839,6 +854,32 @@ class CodegenContext {
 
       foldFunctions(outerClassFunctionCalls ++ innerClassFunctionCalls)
     }
+  }
+
+  /**
+   * Splits the generated code of expressions into multiple sequences of String
+   * based on a threshold of length of a String
+   *
+   * @param expressions the codes to evaluate expressions.
+   */
+  private def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
+    val blocks = new ArrayBuffer[String]()
+    val blockBuilder = new StringBuilder()
+    var length = 0
+    for (code <- expressions) {
+      // We can't know how many bytecode will be generated, so use the length of source code
+      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
+      // also not be too small, or it will have many function calls (for wide table), see the
+      // results in BenchmarkWideTable.
+      if (length > 1024) {
+        blocks += blockBuilder.toString()
+        blockBuilder.clear()
+        length = 0
+      }
+      blockBuilder.append(code)
+      length += CodeFormatter.stripExtraNewLinesAndComments(code).length
+    }
+    blocks += blockBuilder.toString()
   }
 
   /**
@@ -906,36 +947,6 @@ class CodegenContext {
           orderedFunctions.map(f => s"$innerClassInstance.$f($argInvocationString)")
         }
     }
-  }
-
-  /**
-   * Wrap the generated code of expression, which was created from a row object in INPUT_ROW,
-   * by a function. ev.isNull and ev.value are passed by global variables
-   *
-   * @param ev the code to evaluate expressions.
-   * @param dataType the data type of ev.value.
-   * @param baseFuncName the split function name base.
-   */
-  def createAndAddFunction(
-      ev: ExprCode,
-      dataType: DataType,
-      baseFuncName: String): (String, String, String) = {
-    val globalIsNull = freshName("isNull")
-    addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
-    val globalValue = freshName("value")
-    addMutableState(javaType(dataType), globalValue,
-      s"$globalValue = ${defaultValue(dataType)};")
-    val funcName = freshName(baseFuncName)
-    val funcBody =
-      s"""
-         |private void $funcName(InternalRow ${INPUT_ROW}) {
-         |  ${ev.code.trim}
-         |  $globalIsNull = ${ev.isNull};
-         |  $globalValue = ${ev.value};
-         |}
-         """.stripMargin
-    val fullFuncName = addNewFunction(funcName, funcBody)
-    (fullFuncName, globalIsNull, globalValue)
   }
 
   /**
@@ -1028,7 +1039,7 @@ class CodegenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-      addMutableState("boolean", isNull, s"$isNull = false;")
+      addMutableState(JAVA_BOOLEAN, isNull, s"$isNull = false;")
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
@@ -1043,7 +1054,8 @@ class CodegenContext {
    * elimination will be performed. Subexpression elimination assumes that the code for each
    * expression will be combined in the `expressions` order.
    */
-  def generateExpressions(expressions: Seq[Expression],
+  def generateExpressions(
+      expressions: Seq[Expression],
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
     expressions.map(e => e.genCode(this))
@@ -1214,12 +1226,12 @@ object CodeGenerator extends Logging {
       evaluator.cook("generated.java", code.body)
       updateAndGetCompilationStats(evaluator)
     } catch {
-      case e: JaninoRuntimeException =>
+      case e: InternalCompilerException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
         val maxLines = SQLConf.get.loggingMaxLinesForCodegen
         logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
-        throw new JaninoRuntimeException(msg, e)
+        throw new InternalCompilerException(msg, e)
       case e: CompileException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)

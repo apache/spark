@@ -488,11 +488,11 @@ private[spark] class TaskSetManager(
             abort(s"$msg Exception during serialization: $e")
             throw new TaskNotSerializableException(e)
         }
-        if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+        if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
           !emittedTaskSizeWarning) {
           emittedTaskSizeWarning = true
           logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-            s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+            s"(${serializedTask.limit() / 1024} KB). The maximum recommended task size is " +
             s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
         }
         addRunningTask(taskId)
@@ -502,7 +502,7 @@ private[spark] class TaskSetManager(
         // val timeTaken = clock.getTime() - startTime
         val taskName = s"task ${info.id} in stage ${taskSet.id}"
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
-          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit} bytes)")
+          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(

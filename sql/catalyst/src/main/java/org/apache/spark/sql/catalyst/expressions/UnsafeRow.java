@@ -69,10 +69,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     return ((numFields + 63)/ 64) * 8;
   }
 
-  public static int calculateFixedPortionByteSize(int numFields) {
-    return 8 * numFields + calculateBitSetWidthInBytes(numFields);
-  }
-
   /**
    * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
    */

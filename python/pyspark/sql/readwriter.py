@@ -304,7 +304,7 @@ class DataFrameReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, paths):
+    def text(self, paths, wholetext=False):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -313,11 +313,16 @@ class DataFrameReader(OptionUtils):
         Each line in the text file is a new row in the resulting DataFrame.
 
         :param paths: string, or list of strings, for input path(s).
+        :param wholetext: if true, read each file from input path(s) as a single row.
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
+        >>> df = spark.read.text('python/test_support/sql/text-test.txt', wholetext=True)
+        >>> df.collect()
+        [Row(value=u'hello\\nthis')]
         """
+        self._set_opts(wholetext=wholetext)
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
@@ -828,8 +833,7 @@ class DataFrameWriter(OptionUtils):
                     set, it uses the default value, ``,``.
         :param quote: sets the single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
-                      value, ``"``. If you would like to turn off quotations, you need to set an
-                      empty string.
+                      value, ``"``. If an empty string is set, it uses ``u0000`` (null character).
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
         :param escapeQuotes: a flag indicating whether values containing quotes should always
