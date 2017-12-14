@@ -111,7 +111,7 @@ class ContinuousExecution(
     // Note that this will need a slight modification for exactly once. If ending offsets were
     // reported but not committed for any epochs, we must replay exactly to those offsets.
     // For at least once, we can just ignore those reports and risk duplicates.
-    batchCommitLog.getLatest() match {
+    commitLog.getLatest() match {
       case Some((latestEpochId, _)) =>
         val nextOffsets = offsetLog.get(latestEpochId).getOrElse {
           throw new IllegalStateException(
@@ -287,14 +287,14 @@ class ContinuousExecution(
     assert(continuousSources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
     synchronized {
-      batchCommitLog.add(epoch)
+      commitLog.add(epoch)
       val offset = offsetLog.get(epoch).get.offsets(0).get
       committedOffsets ++= Seq(continuousSources(0) -> offset)
     }
 
     if (minLogEntriesToMaintain < currentBatchId) {
       offsetLog.purge(currentBatchId - minLogEntriesToMaintain)
-      batchCommitLog.purge(currentBatchId - minLogEntriesToMaintain)
+      commitLog.purge(currentBatchId - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()
@@ -310,7 +310,7 @@ class ContinuousExecution(
    */
   private[sql] def awaitEpoch(epoch: Long): Unit = {
     def notDone = {
-      val latestCommit = batchCommitLog.getLatest()
+      val latestCommit = commitLog.getLatest()
       latestCommit match {
         case Some((latestEpoch, _)) =>
           latestEpoch < epoch
