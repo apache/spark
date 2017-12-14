@@ -111,7 +111,7 @@ This URI is the location of the example jar that is already in the Docker image.
 
 ## Dependency Management
 
-If your application's dependencies are all hosted in remote locations like HDFS or http servers, they may be referred to
+If your application's dependencies are all hosted in remote locations like HDFS or HTTP servers, they may be referred to
 by their appropriate remote URIs. Also, application dependencies can be pre-mounted into custom-built Docker images.
 Those dependencies can be added to the classpath by referencing them with `local://` URIs and/or setting the
 `SPARK_EXTRA_CLASSPATH` environment variable in your Dockerfiles.
