@@ -48,6 +48,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 import scala.collection.JavaConversions;
 
@@ -60,6 +62,8 @@ class MultiShuffleSorter extends ShuffleSorter {
   private LinkedBlockingDeque<ShuffleSorter> availableSorters;
   private ShuffleSorter currentSorter;
   private ExecutorService executorService;
+  private ReentrantLock spillCompleteLock = new ReentrantLock();
+  private final Condition spillCompleteCondition = spillCompleteLock.newCondition();
 
   private TaskMetrics taskMetrics;
   private boolean cleanedUp;
@@ -280,6 +284,7 @@ class MultiShuffleSorter extends ShuffleSorter {
         } finally {
           logger.info("Sorter {} finished spilling and is available.", sorter);
           availableSorters.add(sorter);
+          signalAsyncSpillComplete();
         }
       }
     });
@@ -339,10 +344,31 @@ class MultiShuffleSorter extends ShuffleSorter {
   protected void waitForAvailableSorters(int numSorters) throws IOException {
     while (availableSorters.size() < numSorters) {
       try {
-        Thread.sleep(waitingIntervalMs);
-      } catch (InterruptedException e) {
-        throw new IOException("Waiting for available sorter interrupted", e);
+        spillCompleteLock.lock();
+        waitForAsyncSpillComplete();
+      } finally {
+        spillCompleteLock.unlock();
       }
+    }
+  }
+
+  private void waitForAsyncSpillComplete() throws IOException {
+    spillCompleteLock.lock();
+    try {
+      spillCompleteCondition.await();
+    } catch (InterruptedException e) {
+      throw new IOException("Waiting for available sorter interrupted", e);
+    } finally {
+      spillCompleteLock.unlock();
+    }
+  }
+
+  private void signalAsyncSpillComplete() {
+    spillCompleteLock.lock();
+    try {
+      spillCompleteCondition.signalAll();
+    } finally {
+      spillCompleteLock.unlock();
     }
   }
 

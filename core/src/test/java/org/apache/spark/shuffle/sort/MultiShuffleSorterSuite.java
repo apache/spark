@@ -493,9 +493,9 @@ public class MultiShuffleSorterSuite {
     when(factory.createShuffleExternalSorter(any(TaskMemoryManager.class),
       any(BlockManager.class), any(TaskMetrics.class), anyInt(), anyInt(),
       any(SparkConf.class), anyBoolean()))
-      .thenAnswer(new Answer<Object>() {
+      .thenAnswer(new Answer<ShuffleSorter>() {
         @Override
-        public Object answer(InvocationOnMock invocation) throws Throwable {
+        public ShuffleSorter answer(InvocationOnMock invocation) throws Throwable {
           ShuffleSorter sorter = sorters[sorterIndex.get()];
           sorterIndex.incrementAndGet();
           return sorter;
