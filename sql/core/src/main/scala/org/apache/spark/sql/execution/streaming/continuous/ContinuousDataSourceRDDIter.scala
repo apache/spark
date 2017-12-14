@@ -153,8 +153,13 @@ class DataReaderThread(
     try {
       while (!context.isInterrupted && !context.isCompleted()) {
         if (!reader.next()) {
-          throw new IllegalStateException(
-            "Continuous reader reported no remaining elements! Reader should have blocked waiting.")
+          // Check again, since reader.next() might have blocked through an incoming interrupt.
+          if (!context.isInterrupted && !context.isCompleted()) {
+            throw new IllegalStateException(
+              "Continuous reader reported no elements! Reader should have blocked waiting.")
+          } else {
+            return
+          }
         }
 
         queue.put((reader.get().copy(), baseReader.getOffset))

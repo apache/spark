@@ -71,7 +71,7 @@ class RateStreamV2Reader(options: DataSourceV2Options)
       val currentTime = clock.getTimeMillis()
       RateStreamOffset(
         this.start.partitionToValueAndRunTimeMs.map {
-          case startOffset @ (part, (currentVal, currentReadTime)) =>
+          case startOffset @ (part, ValueRunTimeMsPair(currentVal, currentReadTime)) =>
             // Calculate the number of rows we should advance in this partition (based on the
             // current time), and output a corresponding offset.
             val readInterval = currentTime - currentReadTime
@@ -79,9 +79,9 @@ class RateStreamV2Reader(options: DataSourceV2Options)
             if (numNewRows <= 0) {
               startOffset
             } else {
-              (part,
-                (currentVal + (numNewRows * numPartitions),
-                currentReadTime + (numNewRows * msPerPartitionBetweenRows)))
+              (part, ValueRunTimeMsPair(
+                  currentVal + (numNewRows * numPartitions),
+                  currentReadTime + (numNewRows * msPerPartitionBetweenRows)))
             }
         }
       )
@@ -98,15 +98,15 @@ class RateStreamV2Reader(options: DataSourceV2Options)
   }
 
   override def deserializeOffset(json: String): Offset = {
-    RateStreamOffset(Serialization.read[Map[Int, (Long, Long)]](json))
+    RateStreamOffset(Serialization.read[Map[Int, ValueRunTimeMsPair]](json))
   }
 
   override def createReadTasks(): java.util.List[ReadTask[Row]] = {
     val startMap = start.partitionToValueAndRunTimeMs
     val endMap = end.partitionToValueAndRunTimeMs
     endMap.keys.toSeq.map { part =>
-      val (endVal, _) = endMap(part)
-      val (startVal, startTimeMs) = startMap(part)
+      val ValueRunTimeMsPair(endVal, _) = endMap(part)
+      val ValueRunTimeMsPair(startVal, startTimeMs) = startMap(part)
 
       val packedRows = mutable.ListBuffer[(Long, Long)]()
       var outVal = startVal + numPartitions
@@ -158,7 +158,8 @@ object RateStreamSourceV2 {
         // by the increment that will later be applied. The first row output in each
         // partition will have a value equal to the partition index.
         (i,
-          ((i - numPartitions).toLong,
+          ValueRunTimeMsPair(
+            (i - numPartitions).toLong,
             creationTimeMs))
       }.toMap)
   }

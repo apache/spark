@@ -49,8 +49,8 @@ class RateSourceV2Suite extends StreamTest {
 
   test("microbatch - set offset") {
     val reader = new RateStreamV2Reader(DataSourceV2Options.empty())
-    val startOffset = RateStreamOffset(Map((0, (0, 1000))))
-    val endOffset = RateStreamOffset(Map((0, (0, 2000))))
+    val startOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(0, 1000))))
+    val endOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(0, 2000))))
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
     assert(reader.getStartOffset() == startOffset)
     assert(reader.getEndOffset() == endOffset)
@@ -63,15 +63,15 @@ class RateSourceV2Suite extends StreamTest {
     reader.setOffsetRange(Optional.empty(), Optional.empty())
     reader.getStartOffset() match {
       case r: RateStreamOffset =>
-        assert(r.partitionToValueAndRunTimeMs(0)._2 == reader.creationTimeMs)
+        assert(r.partitionToValueAndRunTimeMs(0).runTimeMs == reader.creationTimeMs)
       case _ => throw new IllegalStateException("unexpected offset type")
     }
     reader.getEndOffset() match {
       case r: RateStreamOffset =>
         // End offset may be a bit beyond 100 ms/9 rows after creation if the wait lasted
         // longer than 100ms. It should never be early.
-        assert(r.partitionToValueAndRunTimeMs(0)._1 >= 9)
-        assert(r.partitionToValueAndRunTimeMs(0)._2 >= reader.creationTimeMs + 100)
+        assert(r.partitionToValueAndRunTimeMs(0).value >= 9)
+        assert(r.partitionToValueAndRunTimeMs(0).runTimeMs >= reader.creationTimeMs + 100)
 
       case _ => throw new IllegalStateException("unexpected offset type")
     }
@@ -80,8 +80,8 @@ class RateSourceV2Suite extends StreamTest {
   test("microbatch - predetermined batch size") {
     val reader = new RateStreamV2Reader(
       new DataSourceV2Options(Map("numPartitions" -> "1", "rowsPerSecond" -> "20").asJava))
-    val startOffset = RateStreamOffset(Map((0, (0, 1000))))
-    val endOffset = RateStreamOffset(Map((0, (20, 2000))))
+    val startOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(0, 1000))))
+    val endOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(20, 2000))))
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
     val tasks = reader.createReadTasks()
     assert(tasks.size == 1)
@@ -93,8 +93,8 @@ class RateSourceV2Suite extends StreamTest {
       new DataSourceV2Options(Map("numPartitions" -> "11", "rowsPerSecond" -> "33").asJava))
     val startOffset = RateStreamSourceV2.createInitialOffset(11, reader.creationTimeMs)
     val endOffset = RateStreamOffset(startOffset.partitionToValueAndRunTimeMs.toSeq.map {
-      case (part, (currentVal, currentReadTime)) =>
-        (part, (currentVal + 33, currentReadTime + 1000))
+      case (part, ValueRunTimeMsPair(currentVal, currentReadTime)) =>
+        (part, ValueRunTimeMsPair(currentVal + 33, currentReadTime + 1000))
     }.toMap)
 
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
@@ -135,7 +135,7 @@ class RateSourceV2Suite extends StreamTest {
         val startTimeMs = reader.getStartOffset()
           .asInstanceOf[RateStreamOffset]
           .partitionToValueAndRunTimeMs(t.partitionIndex)
-          ._2
+          .runTimeMs
         val r = t.createDataReader().asInstanceOf[RateStreamDataReader]
         for (rowIndex <- 0 to 9) {
           r.next()

@@ -65,7 +65,7 @@ class ContinuousSuite extends StreamTest {
           case DataSourceV2ScanExec(_, r: ContinuousRateStreamReader) => r
         }.get
 
-        val deltaMs = (numTriggers - 1) * 1000 + 300
+        val deltaMs = numTriggers * 1000 + 300
         while (System.currentTimeMillis < reader.creationTime + deltaMs) {
           Thread.sleep(reader.creationTime + deltaMs - System.currentTimeMillis)
         }
@@ -190,9 +190,15 @@ class ContinuousStressSuite extends StreamTest {
     testStream(df, useV2Sink = true)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
-      Execute(waitForRateSourceTriggers(_, 200)),
+      Execute(waitForRateSourceTriggers(_, 201)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 100000): _*))
+      Execute { query =>
+        val data = query.sink.asInstanceOf[MemorySinkV2].allData
+        val vals = data.map(_.getLong(0)).toSet
+        assert(scala.Range(0, 25000).forall { i =>
+          vals.contains(i)
+        })
+      })
   }
 
   test("automatic epoch advancement") {
@@ -206,7 +212,7 @@ class ContinuousStressSuite extends StreamTest {
     testStream(df, useV2Sink = true)(
       StartStream(Trigger.Continuous(2012)),
       AwaitEpoch(0),
-      Execute(waitForRateSourceTriggers(_, 200)),
+      Execute(waitForRateSourceTriggers(_, 201)),
       IncrementEpoch(),
       Execute { query =>
         // Because we have automatic advancement, we can't reliably guarantee another trigger won't
@@ -214,9 +220,10 @@ class ContinuousStressSuite extends StreamTest {
         //  * the highest value committed was at least 100000 - 1
         //  * all values below the highest are present
         val data = query.sink.asInstanceOf[MemorySinkV2].allData
-        val max = data.map(_.getLong(0)).max
-        assert(max >= 99999)
-        assert(data.toSet == scala.Range(0, max.toInt + 1).map(Row(_)).toSet)
+        val vals = data.map(_.getLong(0)).toSet
+        assert(scala.Range(0, 25000).forall { i =>
+          vals.contains(i)
+        })
       })
   }
 
@@ -254,10 +261,10 @@ class ContinuousStressSuite extends StreamTest {
         // duplicated. So we just check all values below the highest are present, and as a
         // sanity check that we got at least up to the 50th trigger.
         val data = query.sink.asInstanceOf[MemorySinkV2].allData
-        val max = data.map(_.getLong(0)).max
-        assert(max > 25000)
-        val setDiff = data.toSet.diff(scala.Range(0, max.toInt + 1).map(Row(_)).toSet)
-        assert(setDiff.isEmpty, s"sets differed by $setDiff")
+        val vals = data.map(_.getLong(0)).toSet
+        assert(scala.Range(0, 25000).forall { i =>
+          vals.contains(i)
+        })
       })
   }
 }

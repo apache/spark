@@ -414,7 +414,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         case s: MemorySink => (s.latestBatchData, s.allData)
         case s: MemorySinkV2 => (s.latestBatchData, s.allData)
       }
-      val sparkAnswer = try if (lastOnly) latestBatchData else allData catch {
+      try if (lastOnly) latestBatchData else allData catch {
         case e: Exception =>
           failTest("Exception while getting data from sink", e)
       }

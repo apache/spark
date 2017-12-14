@@ -42,8 +42,6 @@ class MicroBatchExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
-  override val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
-  override val batchCommitLog = new BatchCommitLog(sparkSession, checkpointFile("commits"))
   @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
 
   private val triggerExecutor = trigger match {

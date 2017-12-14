@@ -47,13 +47,14 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
   override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
     assert(offsets.length == numPartitions)
     val tuples = offsets.map {
-      case ContinuousRateStreamPartitionOffset(i, currVal, nextRead) => (i, (currVal, nextRead))
+      case ContinuousRateStreamPartitionOffset(i, currVal, nextRead) =>
+        (i, ValueRunTimeMsPair(currVal, nextRead))
     }
     RateStreamOffset(Map(tuples: _*))
   }
 
   override def deserializeOffset(json: String): Offset = {
-    RateStreamOffset(Serialization.read[Map[Int, (Long, Long)]](json))
+    RateStreamOffset(Serialization.read[Map[Int, ValueRunTimeMsPair]](json))
   }
 
   override def readSchema(): StructType = RateSourceProvider.SCHEMA
@@ -85,8 +86,8 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
       // Have each partition advance by numPartitions each row, with starting points staggered
       // by their partition index.
       RateStreamReadTask(
-        start._1, // starting row value
-        start._2, // starting time in ms
+        start.value,
+        start.runTimeMs,
         i,
         numPartitions,
         perPartitionRate)

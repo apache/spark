@@ -119,7 +119,6 @@ class ContinuousExecution(
         }
         committedOffsets = nextOffsets.toStreamProgress(sources)
 
-
         currentBatchId = latestEpochId + 1
         logDebug(s"Resuming at epoch $currentBatchId with committed offsets $committedOffsets")
         nextOffsets
@@ -167,7 +166,9 @@ class ContinuousExecution(
             s"${Utils.truncatedString(newOutput, ",")}")
         replacements ++= output.zip(newOutput)
 
-        reader.setOffset(java.util.Optional.ofNullable(offsets.offsets(0).orNull))
+        val loggedOffset = offsets.offsets(0)
+        val realOffset = loggedOffset.map(off => reader.deserializeOffset(off.json))
+        reader.setOffset(java.util.Optional.ofNullable(realOffset.orNull))
         DataSourceV2Relation(newOutput, reader)
     }
 
@@ -291,9 +292,9 @@ class ContinuousExecution(
       committedOffsets ++= Seq(continuousSources(0) -> offset)
     }
 
-    if (minBatchesToRetain < currentBatchId) {
-      offsetLog.purge(currentBatchId - minBatchesToRetain)
-      batchCommitLog.purge(currentBatchId - minBatchesToRetain)
+    if (minLogEntriesToMaintain < currentBatchId) {
+      offsetLog.purge(currentBatchId - minLogEntriesToMaintain)
+      batchCommitLog.purge(currentBatchId - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()
@@ -311,7 +312,8 @@ class ContinuousExecution(
     def notDone = {
       val latestCommit = batchCommitLog.getLatest()
       latestCommit match {
-        case Some((latestEpoch, _)) => latestEpoch < epoch
+        case Some((latestEpoch, _)) =>
+          latestEpoch < epoch
         case None => true
       }
     }

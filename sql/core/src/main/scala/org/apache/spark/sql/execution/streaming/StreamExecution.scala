@@ -196,7 +196,7 @@ abstract class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  def offsetLog: OffsetSeqLog
+  val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
 
   /**
    * A log that records the batch ids that have completed. This is used to check if a batch was
