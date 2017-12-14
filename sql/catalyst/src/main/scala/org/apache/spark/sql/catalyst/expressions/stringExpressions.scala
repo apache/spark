@@ -38,7 +38,8 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 
 /**
- * An expression that concatenates multiple input strings into a single string.
+ * An expression that concatenates multiple inputs into a single output.
+ * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
  * If any input is null, concat returns null.
  */
 @ExpressionDescription(
@@ -50,15 +51,23 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
   """)
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
-  override def dataType: DataType = StringType
+  private lazy val isBinaryMode = children.forall(_.dataType == BinaryType)
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq.fill(children.size)(if (isBinaryMode) BinaryType else StringType)
+  override def dataType: DataType = if (isBinaryMode) BinaryType else StringType
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def eval(input: InternalRow): Any = {
-    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-    UTF8String.concat(inputs : _*)
+    if (isBinaryMode) {
+      val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
+      ByteArray.concat(inputs: _*)
+    } else {
+      val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+      UTF8String.concat(inputs : _*)
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -73,14 +82,20 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
         }
       """
     }
+
+    val (javaClass, initCode) = if (isBinaryMode) {
+      (classOf[ByteArray].getName, s"byte[][] $args = new byte[${evals.length}][];")
+    } else {
+      ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
+    }
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = inputs,
       funcName = "valueConcat",
-      extraArguments = ("UTF8String[]", args) :: Nil)
+      extraArguments = (s"${ctx.javaType(dataType)}[]", args) :: Nil)
     ev.copy(s"""
-      UTF8String[] $args = new UTF8String[${evals.length}];
+      $initCode
       $codes
-      UTF8String ${ev.value} = UTF8String.concat($args);
+      ${ctx.javaType(dataType)} ${ev.value} = $javaClass.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }

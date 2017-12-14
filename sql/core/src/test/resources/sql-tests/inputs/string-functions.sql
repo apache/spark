@@ -24,3 +24,25 @@ select left("abcd", 2), left("abcd", 5), left("abcd", '2'), left("abcd", null);
 select left(null, -2), left("abcd", -2), left("abcd", 0), left("abcd", 'a');
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null);
 select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a');
+
+-- Concatenate binary inputs
+SELECT (col1 || col2 || col3 || col4) col
+FROM (
+  SELECT
+    CAST('a' || id AS BINARY) col1,
+    CAST('b' || id AS BINARY) col2,
+    CAST('c' || id AS BINARY) col3,
+    CAST('d' || id AS BINARY) col4
+  FROM range(10)
+);
+
+-- Concatenate mixed inputs between strings and binary
+SELECT (col1 || col2 || col3 || col4) col
+FROM (
+  SELECT
+    'a' || id col1,
+    'b' || id col2,
+    CAST('c' || id AS BINARY) col3,
+    CAST('d' || id AS BINARY) col4
+  FROM range(10)
+);
