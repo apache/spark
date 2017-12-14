@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
+import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.collection.JavaConverters._
@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.streaming.ProcessingTime
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{SystemClock, ThreadUtils}
 
 class ContinuousDataSourceRDD(
     sc: SparkContext,
@@ -53,11 +53,12 @@ class ContinuousDataSourceRDD(
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
     val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createDataReader()
 
+    val runId = context.getLocalProperty(ContinuousExecution.RUN_ID_KEY)
+
     // (null, null) is an allowed input to the queue, representing an epoch boundary.
     val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](dataQueueSize)
 
-    val epochEndpoint = EpochCoordinatorRef.get(
-      context.getLocalProperty(ContinuousExecution.RUN_ID_KEY), SparkEnv.get)
+    val epochEndpoint = EpochCoordinatorRef.get(runId, SparkEnv.get)
     val itr = new Iterator[UnsafeRow] {
       private var currentRow: UnsafeRow = _
       private var currentOffset: PartitionOffset =
@@ -90,10 +91,13 @@ class ContinuousDataSourceRDD(
       }
     }
 
-
-    val epochPollThread = new EpochPollThread(queue, context, epochPollIntervalMs)
-    epochPollThread.setDaemon(true)
-    epochPollThread.start()
+    val epochPollExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      s"epoch-poll--${runId}--${context.partitionId()}")
+    epochPollExecutor.scheduleWithFixedDelay(
+      new EpochPollRunnable(queue, context),
+      0,
+      epochPollIntervalMs,
+      TimeUnit.MILLISECONDS)
 
     val dataReaderThread = new DataReaderThread(reader, queue, context)
     dataReaderThread.setDaemon(true)
@@ -102,7 +106,7 @@ class ContinuousDataSourceRDD(
     context.addTaskCompletionListener(_ => {
       reader.close()
       dataReaderThread.interrupt()
-      epochPollThread.interrupt()
+      epochPollExecutor.shutdown()
     })
     itr
   }
@@ -114,33 +118,21 @@ class ContinuousDataSourceRDD(
 
 case class EpochPackedPartitionOffset(epoch: Long) extends PartitionOffset
 
-class EpochPollThread(
+class EpochPollRunnable(
     queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
-    context: TaskContext,
-    epochPollIntervalMs: Long)
+    context: TaskContext)
   extends Thread with Logging {
   private val epochEndpoint = EpochCoordinatorRef.get(
     context.getLocalProperty(ContinuousExecution.RUN_ID_KEY), SparkEnv.get)
   private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
   override def run(): Unit = {
-    try {
-      ProcessingTimeExecutor(ProcessingTime(epochPollIntervalMs), new SystemClock())
-        .execute { () =>
-            val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch())
-            for (i <- currentEpoch to newEpoch - 1) {
-              queue.put((null, null))
-              logDebug(s"Sent marker to start epoch ${i + 1}")
-            }
-            currentEpoch = newEpoch
-            true
-        }
-    } catch {
-      case (_: InterruptedException | _: SparkException) if context.isInterrupted() =>
-        // Continuous shutdown might interrupt us, or it might clean up the endpoint before
-        // interrupting us. Unfortunately, a missing endpoint just throws a generic SparkException.
-        // In either case, as long as the context shows interrupted, we can safely clean shutdown.
+    val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch())
+    for (i <- currentEpoch to newEpoch - 1) {
+      queue.put((null, null))
+      logDebug(s"Sent marker to start epoch ${i + 1}")
     }
+    currentEpoch = newEpoch
   }
 }
 
