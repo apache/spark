@@ -42,10 +42,10 @@ import org.apache.spark.sql.SparkSession
  * line 1: version
  * line 2: metadata (optional json string)
  */
-class BatchCommitLog(sparkSession: SparkSession, path: String)
+class CommitLog(sparkSession: SparkSession, path: String)
   extends HDFSMetadataLog[String](sparkSession, path) {
 
-  import BatchCommitLog._
+  import CommitLog._
 
   def add(batchId: Long): Unit = {
     super.add(batchId, EMPTY_JSON)
@@ -76,7 +76,7 @@ class BatchCommitLog(sparkSession: SparkSession, path: String)
   }
 }
 
-object BatchCommitLog {
+object CommitLog {
   private val VERSION = 1
   private val EMPTY_JSON = "{}"
 }

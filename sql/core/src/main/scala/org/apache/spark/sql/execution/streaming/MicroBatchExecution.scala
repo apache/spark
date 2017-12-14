@@ -42,9 +42,6 @@ class MicroBatchExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
-  override val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
-  override val batchCommitLog = new BatchCommitLog(sparkSession, checkpointFile("commits"))
-
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
     case OneTimeTrigger => OneTimeExecutor()
@@ -101,7 +98,7 @@ class MicroBatchExecution(
         finishTrigger(dataAvailable)
         if (dataAvailable) {
           // Update committed offsets.
-          batchCommitLog.add(currentBatchId)
+          commitLog.add(currentBatchId)
           committedOffsets ++= availableOffsets
           logDebug(s"batch ${currentBatchId} committed")
           // We'll increase currentBatchId after we complete processing current batch's data
@@ -166,7 +163,7 @@ class MicroBatchExecution(
         /* identify the current batch id: if commit log indicates we successfully processed the
          * latest batch id in the offset log, then we can safely move to the next batch
          * i.e., committedBatchId + 1 */
-        batchCommitLog.getLatest() match {
+        commitLog.getLatest() match {
           case Some((latestCommittedBatchId, _)) =>
             if (latestBatchId == latestCommittedBatchId) {
               /* The last batch was successfully committed, so we can safely process a
@@ -313,7 +310,7 @@ class MicroBatchExecution(
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
         if (minLogEntriesToMaintain < currentBatchId) {
           offsetLog.purge(currentBatchId - minLogEntriesToMaintain)
-          batchCommitLog.purge(currentBatchId - minLogEntriesToMaintain)
+          commitLog.purge(currentBatchId - minLogEntriesToMaintain)
         }
       }
     } else {
