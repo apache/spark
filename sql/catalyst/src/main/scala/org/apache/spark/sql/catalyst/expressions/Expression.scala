@@ -105,6 +105,12 @@ abstract class Expression extends TreeNode[Expression] {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val eval = doGenCode(ctx, ExprCode("", isNull, value))
+      eval.isNull = if (this.nullable) eval.isNull else "false"
+
+      // Records current input row and variables of this expression.
+      eval.inputRow = ctx.INPUT_ROW
+      eval.inputVars = findInputVars(ctx, eval)
+
       reduceCodeSize(ctx, eval)
       if (eval.code.nonEmpty) {
         // Add `this` in the comment.
@@ -115,9 +121,29 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
+  /**
+   * Returns the input variables to this expression.
+   */
+  private def findInputVars(ctx: CodegenContext, eval: ExprCode): Seq[ExprInputVar] = {
+    if (ctx.currentVars != null) {
+      this.collect {
+        case b @ BoundReference(ordinal, _, _) if ctx.currentVars(ordinal) != null =>
+          ExprInputVar(exprCode = ctx.currentVars(ordinal),
+            dataType = b.dataType, nullable = b.nullable)
+      }
+    } else {
+      Seq.empty
+    }
+  }
+
+  /**
+   * In order to prevent 64kb compile error, reducing the size of generated codes by
+   * separating it into a function if the size exceeds a threshold.
+   */
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
-    // TODO: support whole stage codegen too
-    if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+    lazy val funcParams = ExpressionCodegen.getExpressionInputParams(ctx, this)
+
+    if (eval.code.trim.length > 1024 && funcParams.isDefined) {
       val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
         val globalIsNull = ctx.freshName("globalIsNull")
         ctx.addMutableState(ctx.JAVA_BOOLEAN, globalIsNull)
@@ -132,9 +158,12 @@ abstract class Expression extends TreeNode[Expression] {
       val newValue = ctx.freshName("value")
 
       val funcName = ctx.freshName(nodeName)
+      val callParams = funcParams.map(_._1.mkString(", ")).get
+      val declParams = funcParams.map(_._2.mkString(", ")).get
+
       val funcFullName = ctx.addNewFunction(funcName,
         s"""
-           |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
+           |private $javaType $funcName($declParams) {
            |  ${eval.code.trim}
            |  $setIsNull
            |  return ${eval.value};
@@ -142,7 +171,7 @@ abstract class Expression extends TreeNode[Expression] {
            """.stripMargin)
 
       eval.value = newValue
-      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
+      eval.code = s"$javaType $newValue = $funcFullName($callParams);"
     }
   }
 

@@ -87,7 +87,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
-      EliminateCrossJoin,
       InferFiltersFromConstraints,
       BooleanSimplification,
       PushPredicateThroughJoin,
@@ -695,7 +694,9 @@ object CombineUnions extends Rule[LogicalPlan] {
  */
 object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Filter(fc, nf @ Filter(nc, grandChild)) =>
+    // The query execution/optimization does not guarantee the expressions are evaluated in order.
+    // We only can combine them if and only if both are deterministic.
+    case Filter(fc, nf @ Filter(nc, grandChild)) if fc.deterministic && nc.deterministic =>
       (ExpressionSet(splitConjunctivePredicates(fc)) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>

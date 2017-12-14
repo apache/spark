@@ -289,53 +289,56 @@ case class Elt(children: Seq[Expression])
     val index = indexExpr.genCode(ctx)
     val strings = stringExprs.map(_.genCode(ctx))
     val indexVal = ctx.freshName("index")
+    val indexMatched = ctx.freshName("eltIndexMatched")
+
     val stringVal = ctx.freshName("stringVal")
+    ctx.addMutableState(ctx.javaType(dataType), stringVal)
+
     val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
       s"""
-        case ${index + 1}:
-          ${eval.code}
-          $stringVal = ${eval.isNull} ? null : ${eval.value};
-          break;
-      """
+         |if ($indexVal == ${index + 1}) {
+         |  ${eval.code}
+         |  $stringVal = ${eval.isNull} ? null : ${eval.value};
+         |  $indexMatched = true;
+         |  continue;
+         |}
+      """.stripMargin
     }
 
-    val cases = ctx.buildCodeBlocks(assignStringValue)
-    val codes = if (cases.length == 1) {
-      s"""
-        UTF8String $stringVal = null;
-        switch ($indexVal) {
-          ${cases.head}
-        }
-       """
-    } else {
-      var prevFunc = "null"
-      for (c <- cases.reverse) {
-        val funcName = ctx.freshName("eltFunc")
-        val funcBody = s"""
-         private UTF8String $funcName(InternalRow ${ctx.INPUT_ROW}, int $indexVal) {
-           UTF8String $stringVal = null;
-           switch ($indexVal) {
-             $c
-             default:
-               return $prevFunc;
-           }
-           return $stringVal;
-         }
-        """
-        val fullFuncName = ctx.addNewFunction(funcName, funcBody)
-        prevFunc = s"$fullFuncName(${ctx.INPUT_ROW}, $indexVal)"
-      }
-      s"UTF8String $stringVal = $prevFunc;"
-    }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = assignStringValue,
+      funcName = "eltFunc",
+      extraArguments = ("int", indexVal) :: Nil,
+      returnType = ctx.JAVA_BOOLEAN,
+      makeSplitFunction = body =>
+        s"""
+           |${ctx.JAVA_BOOLEAN} $indexMatched = false;
+           |do {
+           |  $body
+           |} while (false);
+           |return $indexMatched;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$indexMatched = $funcCall;
+           |if ($indexMatched) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
 
     ev.copy(
       s"""
-      ${index.code}
-      final int $indexVal = ${index.value};
-      $codes
-      UTF8String ${ev.value} = $stringVal;
-      final boolean ${ev.isNull} = ${ev.value} == null;
-    """)
+         |${index.code}
+         |final int $indexVal = ${index.value};
+         |${ctx.JAVA_BOOLEAN} $indexMatched = false;
+         |$stringVal = null;
+         |do {
+         |  $codes
+         |} while (false);
+         |final UTF8String ${ev.value} = $stringVal;
+         |final boolean ${ev.isNull} = ${ev.value} == null;
+       """.stripMargin)
   }
 }
 
