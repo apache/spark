@@ -51,7 +51,7 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
   """)
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
-  private lazy val isBinaryMode = children.forall(_.dataType == BinaryType)
+  private lazy val isBinaryMode = children.nonEmpty && children.forall(_.dataType == BinaryType)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq.fill(children.size)(if (isBinaryMode) BinaryType else StringType)
