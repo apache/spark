@@ -1024,7 +1024,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         expectedCompactInterval: Int): Boolean = {
       import CompactibleFileStreamLog._
 
-      val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
+      val fileSource = getSourcesFromStreamingQuery(execution).head
       val metadataLog = fileSource invokePrivate _metadataLog()
 
       if (isCompactionBatch(batchId, expectedCompactInterval)) {
@@ -1100,8 +1100,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           CheckAnswer("keep1", "keep2", "keep3"),
           AssertOnQuery("check getBatch") { execution: StreamExecution =>
             val _sources = PrivateMethod[Seq[Source]]('sources)
-            val fileSource =
-              (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
+            val fileSource = getSourcesFromStreamingQuery(execution).head
 
             def verify(startId: Option[Int], endId: Int, expected: String*): Unit = {
               val start = startId.map(new FileStreamSourceOffset(_))
