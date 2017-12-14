@@ -498,9 +498,9 @@ case class DataSource(
     }
 
     providingClass.newInstance() match {
-      case dataSource: RelationProvider =>
+      case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(
-          sparkSession.sqlContext, caseInsensitiveOptions)
+          sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()

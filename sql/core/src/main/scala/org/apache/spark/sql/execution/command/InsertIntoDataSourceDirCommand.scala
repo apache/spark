@@ -67,9 +67,7 @@ case class InsertIntoDataSourceDirCommand(
 
     val saveMode = if (overwrite) SaveMode.Overwrite else SaveMode.ErrorIfExists
     try {
-      Dataset.ofRows(sparkSession, query).write
-        .runCommand(sparkSession, "insertIntoDataSourceDir")(
-          dataSource.planForWriting(saveMode, query))
+      sparkSession.sessionState.executePlan(dataSource.planForWriting(saveMode, query)).toRdd
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to directory " + storage.locationUri.toString, ex)
