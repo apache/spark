@@ -91,18 +91,18 @@ class WholeTextFileSuite extends QueryTest with SharedSQLContext {
   test("Correctness of wholetext option with gzip compression mode.") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
-      val df1 = spark.range(0, 1000).selectExpr("CAST(id AS STRING) AS s")
+      val df1 = spark.range(0, 1000).selectExpr("CAST(id AS STRING) AS s").repartition(1)
       df1.write.option("compression", "gzip").mode("overwrite").text(path)
-
-      val expected = df1.collect()
+      // On reading through wholetext mode, one file will be read as a single row, i.e. not
+      // delimited by "next line" character.
+      val expected = Row(Range(0, 1000).mkString("", "\n", "\n"))
       Seq(10, 100, 1000).foreach { bytes =>
         withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> bytes.toString) {
           val df2 = spark.read.option("wholetext", "true").format("text").load(path)
-          checkAnswer(df2, expected)
+          val result = df2.collect().head
+          assert(result === expected)
         }
       }
     }
   }
-
-
 }
