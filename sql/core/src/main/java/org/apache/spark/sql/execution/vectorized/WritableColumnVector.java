@@ -139,6 +139,26 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
+   * Update the dictionary.
+   */
+  public void setDictionary(Dictionary dictionary) {
+    this.dictionary = dictionary;
+  }
+
+  /**
+   * Reserve a integer column for ids of dictionary.
+   */
+  public WritableColumnVector reserveDictionaryIds(int capacity) {
+    if (dictionaryIds == null) {
+      dictionaryIds = reserveNewColumn(capacity, DataTypes.IntegerType);
+    } else {
+      dictionaryIds.reset();
+      dictionaryIds.reserve(capacity);
+    }
+    return dictionaryIds;
+  }
+
+  /**
    * Ensures that there is enough storage to store capacity elements. That is, the put() APIs
    * must work for all rowIds < capacity.
    */
@@ -645,28 +665,6 @@ public abstract class WritableColumnVector extends ColumnVector {
    * If this is a nested type (array or struct), the column for the child data.
    */
   protected WritableColumnVector[] childColumns;
-
-  /**
-   * Update the dictionary.
-   */
-  public void setDictionary(Dictionary dictionary) {
-    this.dictionary = dictionary;
-  }
-
-  /**
-   * Reserve a integer column for ids of dictionary.
-   */
-  public WritableColumnVector reserveDictionaryIds(int capacity) {
-    WritableColumnVector dictionaryIds = (WritableColumnVector) this.dictionaryIds;
-    if (dictionaryIds == null) {
-      dictionaryIds = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.dictionaryIds = dictionaryIds;
-    } else {
-      dictionaryIds.reset();
-      dictionaryIds.reserve(capacity);
-    }
-    return dictionaryIds;
-  }
 
   /**
    * Reserve a new column.
