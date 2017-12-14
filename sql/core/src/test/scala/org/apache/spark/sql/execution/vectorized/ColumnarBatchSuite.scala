@@ -65,27 +65,22 @@ class ColumnarBatchSuite extends SparkFunSuite {
     column =>
       val reference = mutable.ArrayBuffer.empty[Boolean]
       var idx = 0
-      assert(!column.anyNullsSet())
       assert(column.numNulls() == 0)
 
       column.appendNotNull()
       reference += false
-      assert(!column.anyNullsSet())
       assert(column.numNulls() == 0)
 
       column.appendNotNulls(3)
       (1 to 3).foreach(_ => reference += false)
-      assert(!column.anyNullsSet())
       assert(column.numNulls() == 0)
 
       column.appendNull()
       reference += true
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 1)
 
       column.appendNulls(3)
       (1 to 3).foreach(_ => reference += true)
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 4)
 
       idx = column.elementsAppended
@@ -93,13 +88,11 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putNotNull(idx)
       reference += false
       idx += 1
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 4)
 
       column.putNull(idx)
       reference += true
       idx += 1
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 5)
 
       column.putNulls(idx, 3)
@@ -107,7 +100,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reference += true
       reference += true
       idx += 3
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 8)
 
       column.putNotNulls(idx, 4)
@@ -116,7 +108,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reference += false
       reference += false
       idx += 4
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 8)
 
       reference.zipWithIndex.foreach { v =>
