@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGen
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.resourceToString
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -153,11 +152,9 @@ class TPCHQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfter
     val queryString = resourceToString(s"tpch/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
-      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-        // check the plans can be properly generated
-        val plan = sql(queryString).queryExecution.executedPlan
-        checkGeneratedCode(plan)
-      }
+      // check the plans can be properly generated
+      val plan = sql(queryString).queryExecution.executedPlan
+      checkGeneratedCode(plan)
     }
   }
 }
