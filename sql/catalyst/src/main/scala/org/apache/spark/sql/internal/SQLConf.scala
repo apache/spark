@@ -27,6 +27,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
@@ -70,7 +71,10 @@ object SQLConf {
    * Default config. Only used when there is no active SparkSession for the thread.
    * See [[get]] for more information.
    */
-  private val fallbackConf = new ThreadLocal[SQLConf] {
+  private lazy val fallbackConf = new ThreadLocal[SQLConf] {
+    // assert that we're only accessing it on the driver.
+    assert(SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER)
+
     override def initialValue: SQLConf = new SQLConf
   }
 
