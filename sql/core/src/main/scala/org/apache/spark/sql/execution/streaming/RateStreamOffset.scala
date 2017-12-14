@@ -15,32 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.streaming.{LongOffset, SerializedOffset}
+import org.json4s.DefaultFormats
+import org.json4s.jackson.Serialization
+
 import org.apache.spark.sql.sources.v2.reader.Offset
 
-trait OffsetSuite extends SparkFunSuite {
-  /** Creates test to check all the comparisons of offsets given a `one` that is less than `two`. */
-  def compare(one: Offset, two: Offset): Unit = {
-    test(s"comparison $one <=> $two") {
-      assert(one == one)
-      assert(two == two)
-      assert(one != two)
-      assert(two != one)
-    }
-  }
+case class RateStreamOffset(partitionToValueAndRunTimeMs: Map[Int, (Long, Long)])
+  extends Offset {
+  implicit val defaultFormats: DefaultFormats = DefaultFormats
+  override val json = Serialization.write(partitionToValueAndRunTimeMs)
 }
-
-class LongOffsetSuite extends OffsetSuite {
-  val one = LongOffset(1)
-  val two = LongOffset(2)
-  val three = LongOffset(3)
-  compare(one, two)
-
-  compare(LongOffset(SerializedOffset(one.json)),
-          LongOffset(SerializedOffset(three.json)))
-}
-
-

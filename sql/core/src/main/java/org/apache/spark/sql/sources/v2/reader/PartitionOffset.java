@@ -15,18 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.sql.sources.v2.reader.Offset
-
+import java.io.Serializable;
 
 /**
- * Used when loading a JSON serialized offset from external storage.
- * We are currently not responsible for converting JSON serialized
- * data into an internal (i.e., object) representation. Sources should
- * define a factory method in their source Offset companion objects
- * that accepts a [[SerializedOffset]] for doing the conversion.
+ * Used for per-partition offsets in continuous processing. ContinuousReader implementations will
+ * provide a method to merge these into a global Offset.
+ *
+ * These offsets must be serializable.
  */
-case class SerializedOffset(override val json: String) extends Offset
-
-
+public interface PartitionOffset extends Serializable {
+    
+}
