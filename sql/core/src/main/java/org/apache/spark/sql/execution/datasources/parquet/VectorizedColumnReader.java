@@ -239,7 +239,7 @@ public class VectorizedColumnReader {
       int rowId,
       int num,
       WritableColumnVector column,
-      ColumnVector dictionaryIds) {
+      WritableColumnVector dictionaryIds) {
     switch (descriptor.getType()) {
       case INT32:
         if (column.dataType() == DataTypes.IntegerType ||
