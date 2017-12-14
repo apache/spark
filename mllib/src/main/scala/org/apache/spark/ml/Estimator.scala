@@ -86,7 +86,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    * Return any Params that the estimator provides optimized training for.
    * @return Array of optimized Params
    */
-  private[ml] def getOptimizedParams: Array[Param[Any]] = Array.empty
+  private[ml] def getOptimizedParams: Array[Param[_]] = Array.empty
 
   override def copy(extra: ParamMap): Estimator[M]
 }

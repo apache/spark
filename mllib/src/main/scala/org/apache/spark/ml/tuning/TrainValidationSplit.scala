@@ -126,18 +126,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val optimizedParams = est.getOptimizedParams
 
     // Create 2 Array[ParamMap]s, 1 with optimized params and 1 to parallelize over
-    val optimizedParamMapsAll = new ArrayBuffer[ParamMap]
-    val parallelParamMaps = epm.map { paramMap =>
-      val optimizedParamMap = ParamMap.empty
-      val paramMapCopy = paramMap.copy
-      optimizedParams.foreach { param =>
-        val valueOption = paramMapCopy.remove(param)
-        valueOption.foreach(optimizedParamMap.put(param, _))
-      }
-      optimizedParamMapsAll.append(optimizedParamMap)
-      paramMapCopy
-    }.distinct
-    val optimizedParamMaps = optimizedParamMapsAll.filter(_.size != 0).distinct.toArray
+    val (optimizedParamMaps, parallelParamMaps) = ParamGridBuilder.splitOnParams(epm, optimizedParams)
 
     // Add the optimized params to each parallel paramMap
     val trainingParamMaps = parallelParamMaps.map { paramMap =>

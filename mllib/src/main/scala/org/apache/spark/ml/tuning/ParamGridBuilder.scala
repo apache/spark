@@ -19,15 +19,17 @@ package org.apache.spark.ml.tuning
 
 import scala.annotation.varargs
 import scala.collection.mutable
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
+
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * Builder for a param grid used in grid search-based model selection.
  */
 @Since("1.2.0")
-class ParamGridBuilder @Since("1.2.0") {
+class ParamGridBuilder {
+// class ParamGridBuilder @Since("1.2.0") { TODO
 
   private val paramGrid = mutable.Map.empty[Param[_], Iterable[_]]
 
@@ -116,5 +118,33 @@ class ParamGridBuilder @Since("1.2.0") {
       paramMaps = newParamMaps.toArray
     }
     paramMaps
+  }
+}
+
+/**
+  *
+  */
+object ParamGridBuilder {
+
+  /**
+    *
+    * @param paramMaps
+    * @param params
+    * @return
+    */
+  def splitOnParams(paramMaps: Array[ParamMap], params: Array[Param[_]]): (Array[ParamMap], Array[ParamMap])  = {
+    val leftParamMapsTemp = new ArrayBuffer[ParamMap]
+    val rightParamMaps = paramMaps.map { paramMap =>
+      val leftParamMap = ParamMap.empty
+      val paramMapCopy = paramMap.copy
+      params.foreach { param =>
+        val valueOption = paramMapCopy.remove(param)
+        valueOption.foreach(leftParamMap.put(param, _))
+      }
+      leftParamMapsTemp.append(leftParamMap)
+      paramMapCopy
+    }.distinct
+    val leftParamMaps = leftParamMapsTemp.filter(_.size != 0).distinct.toArray
+    (leftParamMaps, rightParamMaps)
   }
 }
