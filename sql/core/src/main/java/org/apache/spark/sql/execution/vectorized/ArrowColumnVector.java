@@ -159,11 +159,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return array;
   }
 
-  @Override
-  public int getDictId(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
   //
   // APIs dealing with Longs
   //
