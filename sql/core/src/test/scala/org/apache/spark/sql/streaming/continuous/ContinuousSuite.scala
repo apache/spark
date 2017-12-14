@@ -65,11 +65,9 @@ class ContinuousSuite extends StreamTest {
           case DataSourceV2ScanExec(_, r: ContinuousRateStreamReader) => r
         }.get
 
-        assert(reader.lastStartTime != 0, "reader last start time not initialized yet")
-
         val deltaMs = (numTriggers - 1) * 1000 + 300
-        while (System.currentTimeMillis < reader.lastStartTime + deltaMs) {
-          Thread.sleep(reader.lastStartTime + deltaMs - System.currentTimeMillis)
+        while (System.currentTimeMillis < reader.creationTime + deltaMs) {
+          Thread.sleep(reader.creationTime + deltaMs - System.currentTimeMillis)
         }
     }
   }
@@ -170,11 +168,9 @@ class ContinuousStressSuite extends StreamTest {
           case DataSourceV2ScanExec(_, r: ContinuousRateStreamReader) => r
         }.get
 
-        assert(reader.lastStartTime != 0, "reader last start time not initialized yet")
-
         val deltaMs = (numTriggers - 1) * 1000 + 300
-        while (System.currentTimeMillis < reader.lastStartTime + deltaMs) {
-          Thread.sleep(reader.lastStartTime + deltaMs - System.currentTimeMillis)
+        while (System.currentTimeMillis < reader.creationTime + deltaMs) {
+          Thread.sleep(reader.creationTime + deltaMs - System.currentTimeMillis)
         }
     }
   }
