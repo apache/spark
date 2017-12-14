@@ -173,12 +173,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       StopStream, // clears out StreamTest state
       AssertOnQuery { q =>
         // both commit log and offset log contain the same (latest) batch id
-        q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) ==
+        q.commitLog.getLatest().map(_._1).getOrElse(-1L) ==
           q.offsetLog.getLatest().map(_._1).getOrElse(-2L)
       },
       AssertOnQuery { q =>
         // blow away commit log and sink result
-        q.batchCommitLog.purge(1)
+        q.commitLog.purge(1)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },

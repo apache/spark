@@ -276,7 +276,7 @@ class StreamSuite extends StreamTest {
 
     // Check the latest batchid in the commit log
     def CheckCommitLogLatestBatchId(expectedId: Int): AssertOnQuery =
-      AssertOnQuery(_.batchCommitLog.getLatest().get._1 == expectedId,
+      AssertOnQuery(_.commitLog.getLatest().get._1 == expectedId,
         s"commitLog's latest should be $expectedId")
 
     // Ensure that there has not been an incremental execution after restart
