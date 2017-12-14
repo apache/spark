@@ -358,7 +358,7 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
         codegenSubtrees += s
       case s => s
     }
-    codegenSubtrees.toSeq.map { subtree =>
+    codegenSubtrees.toSeq.foreach { subtree =>
       val code = subtree.doCodeGen()._2
       try {
         // Just check the generated code can be properly compiled
@@ -369,8 +369,7 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
           val msg =
             s"Subtree:\n$subtree\n" +
             s"Generated code:\n${CodeFormatter.format(code)}\n"
-          logDebug(msg)
-          throw e
+          throw new Exception(msg, e)
       }
     }
   }
