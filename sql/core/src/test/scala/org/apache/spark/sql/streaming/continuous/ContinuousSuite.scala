@@ -99,6 +99,57 @@ class ContinuousSuite extends StreamTest {
       StopStream)
   }
 
+  test("map") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .select('value)
+      .map(r => r.getLong(0) * 2)
+
+    testStream(df, useV2Sink = true)(
+      StartStream(longContinuousTrigger),
+      AwaitEpoch(0),
+      Execute(waitForRateSourceTriggers(_, 2)),
+      IncrementEpoch(),
+      CheckAnswer(scala.Range(0, 20, 2): _*))
+  }
+
+  test("flatMap") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .select('value)
+      .flatMap(r => Seq(0, r.getLong(0), r.getLong(0) * 2))
+
+    testStream(df, useV2Sink = true)(
+      StartStream(longContinuousTrigger),
+      AwaitEpoch(0),
+      Execute(waitForRateSourceTriggers(_, 2)),
+      IncrementEpoch(),
+      CheckAnswer(scala.Range(0, 10).flatMap(n => Seq(0, n, n * 2)): _*))
+  }
+
+  test("filter") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .select('value)
+      .where('value > 5)
+
+    testStream(df, useV2Sink = true)(
+      StartStream(longContinuousTrigger),
+      AwaitEpoch(0),
+      Execute(waitForRateSourceTriggers(_, 2)),
+      IncrementEpoch(),
+      CheckAnswer(scala.Range(6, 10): _*))
+  }
+
   test("repeatedly restart") {
     val df = spark.readStream
       .format("rate")
