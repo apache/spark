@@ -29,7 +29,6 @@ import org.apache.spark._
 import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
 import org.apache.spark.api.conda.CondaEnvironmentManager
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CONDA_BOOTSTRAP_PACKAGES
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
@@ -62,20 +61,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
 
   private[this] val condaEnv = {
     // Set up conda environment if there are any conda packages requested
-    condaInstructions.map { instructions =>
-      val condaPackages = instructions.packages
-
-      val env = SparkEnv.get
-      val condaEnvManager = CondaEnvironmentManager.fromConf(env.conf)
-      val envDir = {
-        // Which local dir to create it in?
-        val localDirs = env.blockManager.diskBlockManager.localDirs
-        val hash = Utils.nonNegativeHash(condaPackages)
-        val dirId = hash % localDirs.length
-        Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
-      }
-      condaEnvManager.create(envDir, condaPackages, instructions.channels)
-    }
+    condaInstructions.map(CondaEnvironmentManager.createCondaEnvironment)
   }
 
   private[this] val envVars: Map[String, String] = {

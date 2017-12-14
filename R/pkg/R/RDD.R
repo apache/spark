@@ -168,6 +168,7 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    serializedFuncArr,
                                    rdd@env$prev_serializedMode,
                                    packageNamesArr,
+                                   spark.buildCondaInstructions(),
                                    broadcastArr,
                                    callJMethod(prev_jrdd, "classTag"))
             } else {
@@ -177,6 +178,7 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    rdd@env$prev_serializedMode,
                                    serializedMode,
                                    packageNamesArr,
+                                   spark.buildCondaInstructions(),
                                    broadcastArr,
                                    callJMethod(prev_jrdd, "classTag"))
             }

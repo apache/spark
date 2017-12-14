@@ -36,7 +36,9 @@ import org.json4s.jackson.Json4sScalaModule
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkEnv
 import org.apache.spark.SparkException
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CONDA_BINARY_PATH
 import org.apache.spark.internal.config.CONDA_GLOBAL_PACKAGE_DIRS
@@ -216,4 +218,23 @@ object CondaEnvironmentManager extends Logging {
     val packageDirs = sparkConf.get(CONDA_GLOBAL_PACKAGE_DIRS)
     new CondaEnvironmentManager(condaBinaryPath, verbosity, packageDirs)
   }
+
+  /**
+   * Helper method to create a conda environment from [[CondaEnvironment.CondaSetupInstructions]].
+   * This is intended to be called on the executor with serialized instructions.
+   */
+  def createCondaEnvironment(instructions: CondaSetupInstructions): CondaEnvironment = {
+    val condaPackages = instructions.packages
+    val env = SparkEnv.get
+    val condaEnvManager = CondaEnvironmentManager.fromConf(env.conf)
+    val envDir = {
+      // Which local dir to create it in?
+      val localDirs = env.blockManager.diskBlockManager.localDirs
+      val hash = Utils.nonNegativeHash(condaPackages)
+      val dirId = hash % localDirs.length
+      Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
+    }
+    condaEnvManager.create(envDir, condaPackages, instructions.channels)
+  }
+
 }

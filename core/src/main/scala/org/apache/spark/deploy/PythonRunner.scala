@@ -27,6 +27,7 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkUserAppException}
 import org.apache.spark.api.conda.CondaEnvironment
 import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.deploy.Common.Provenance
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.RedirectThread
@@ -37,18 +38,6 @@ import org.apache.spark.util.Utils
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */
 object PythonRunner extends CondaRunner with Logging {
-  private[this] case class Provenance(from: String, value: String) {
-    override def toString: String = s"Provenance(from = $from, value = $value)"
-  }
-
-  private[this] object Provenance {
-    def fromConf(sparkConf: SparkConf, conf: ConfigEntry[Option[String]]): Option[Provenance] = {
-      sparkConf.get(conf).map(Provenance(s"Spark config ${conf.key}", _))
-    }
-    def fromEnv(name: String): Option[Provenance] = {
-      sys.env.get(name).map(Provenance(s"Environment variable $name", _))
-    }
-  }
 
   override def run(args: Array[String], maybeConda: Option[CondaEnvironment]): Unit = {
     val pythonFile = args(0)

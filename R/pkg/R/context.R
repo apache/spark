@@ -319,6 +319,13 @@ spark.addFile <- function(path, recursive = FALSE) {
   invisible(callJMethod(sc, "addFile", suppressWarnings(normalizePath(path)), recursive))
 }
 
+#' Construct condaBuildInstructions used to re-create the driver's conda
+#' environment on executors.
+spark.buildCondaInstructions <- function() {
+  sc <- callJMethod(getSparkContext(), "sc")
+  callJMethod(sc, "buildCondaInstructions")
+}
+
 #' Get the root directory that contains files added through spark.addFile.
 #'
 #' @rdname spark.getSparkFilesRootDirectory

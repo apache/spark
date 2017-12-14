@@ -23,7 +23,7 @@ FAILED=0
 LOGFILE=$FWDIR/unit-tests.out
 rm -f $LOGFILE
 
-SPARK_TESTING=1 NOT_CRAN=true $FWDIR/../bin/spark-submit --driver-java-options "-Dlog4j.configuration=file:$FWDIR/log4j.properties" --conf spark.hadoop.fs.defaultFS="file:///" $FWDIR/pkg/tests/run-all.R 2>&1 | tee -a $LOGFILE
+SPARK_TESTING=1 NOT_CRAN=true $FWDIR/../bin/spark-submit --driver-java-options "-Dlog4j.configuration=file:$FWDIR/log4j.properties" --num-executors 1 --conf spark.hadoop.fs.defaultFS="file:///" --conf spark.conda.binaryPath=$CONDA_BIN --conf spark.conda.bootstrapPackages="r,r-essentials,r-plyr,r-testthat" --conf spark.conda.channelUrls="https://repo.continuum.io/pkgs/r,https://repo.continuum.io/pkgs/main,https://repo.continuum.io/pkgs/free,https://repo.continuum.io/pkgs/pro" $FWDIR/pkg/tests/run-all.R 2>&1 | tee -a $LOGFILE
 FAILED=$((PIPESTATUS[0]||$FAILED))
 
 NUM_TEST_WARNING="$(grep -c -e 'Warnings ----------------' $LOGFILE)"

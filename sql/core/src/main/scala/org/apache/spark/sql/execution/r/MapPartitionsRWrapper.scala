@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.r
 
+import org.apache.spark.SparkContext
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
 import org.apache.spark.api.r._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.Row
@@ -32,6 +34,13 @@ case class MapPartitionsRWrapper(
     broadcastVars: Array[Broadcast[Object]],
     inputSchema: StructType,
     outputSchema: StructType) extends (Iterator[Any] => Iterator[Any]) {
+
+  /**
+   * Get the conda instructions eagerly - when the RDD is created.
+   */
+  val condaInstructions: Option[CondaSetupInstructions] =
+    SparkContext.getActive.flatMap(_.buildCondaInstructions())
+
   def apply(iter: Iterator[Any]): Iterator[Any] = {
     // If the content of current DataFrame is serialized R data?
     val isSerializedRData = inputSchema == SERIALIZED_R_DATA_SCHEMA
@@ -53,7 +62,8 @@ case class MapPartitionsRWrapper(
 
     val runner = new RRunner[Array[Byte]](
       func, deserializer, serializer, packageNames, broadcastVars,
-      isDataFrame = true, colNames = colNames, mode = RRunnerModes.DATAFRAME_DAPPLY)
+      isDataFrame = true, colNames = colNames, mode = RRunnerModes.DATAFRAME_DAPPLY,
+      condaSetupInstructions = condaInstructions)
     // Partition index is ignored. Dataset has no support for mapPartitionsWithIndex.
     val outputIter = runner.compute(newIter, -1)
 

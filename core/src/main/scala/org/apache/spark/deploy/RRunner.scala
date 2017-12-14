@@ -18,38 +18,56 @@
 package org.apache.spark.deploy
 
 import java.io._
-import java.util.concurrent.{Semaphore, TimeUnit}
+import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkUserAppException}
-import org.apache.spark.api.r.{RBackend, RUtils, SparkRDefaults}
+import org.apache.spark.SparkException
+import org.apache.spark.SparkUserAppException
+import org.apache.spark.api.conda.CondaEnvironment
+import org.apache.spark.api.r.RBackend
+import org.apache.spark.api.r.RUtils
+import org.apache.spark.api.r.SparkRDefaults
+import org.apache.spark.deploy.Common.Provenance
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.RedirectThread
 
 /**
  * Main class used to launch SparkR applications using spark-submit. It executes R as a
  * subprocess and then has it connect back to the JVM to access system properties etc.
  */
-object RRunner {
-  def main(args: Array[String]): Unit = {
+object RRunner extends CondaRunner with Logging {
+  override def run(args: Array[String], maybeConda: Option[CondaEnvironment]): Unit = {
     val rFile = PythonRunner.formatPath(args(0))
 
     val otherArgs = args.slice(1, args.length)
 
     // Time to wait for SparkR backend to initialize in seconds
     val backendTimeout = sys.env.getOrElse("SPARKR_BACKEND_TIMEOUT", "120").toInt
-    val rCommand = {
+
+    val presetRCommand = {
+      val driverPreset = if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
+        Provenance.fromConf("spark.r.driver.command")
+      } else {
+        None
+      }
       // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
       // but kept here for backward compatibility.
-      var cmd = sys.props.getOrElse("spark.sparkr.r.command", "Rscript")
-      cmd = sys.props.getOrElse("spark.r.command", cmd)
-      if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
-        cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
-      }
-      cmd
+      driverPreset
+        .orElse(Provenance.fromConf("spark.r.command"))
+        .orElse(Provenance.fromConf("spark.sparkr.r.command"))
     }
+
+    val rCommand: String = maybeConda.map { conda =>
+      presetRCommand.foreach { exec =>
+        sys.error(s"It's forbidden to configure the r command when using conda, but found: $exec")
+      }
+      conda.condaEnvDir + "/bin/Rscript"
+    }.orElse(presetRCommand.map(_.value))
+     .getOrElse("Rscript")
 
     //  Connection timeout set by R process on its connection to RBackend in seconds.
     val backendConnectionTimeout = sys.props.getOrElse(
@@ -84,6 +102,8 @@ object RRunner {
       val returnCode = try {
         val builder = new ProcessBuilder((Seq(rCommand, rFileNormalized) ++ otherArgs).asJava)
         val env = builder.environment()
+        // If there is a CondaEnvironment set up, initialise our process' env from that
+        maybeConda.foreach(_.initializeJavaEnvironment(env))
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
         env.put("SPARKR_BACKEND_CONNECTION_TIMEOUT", backendConnectionTimeout)
         val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)
