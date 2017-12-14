@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
@@ -68,8 +68,13 @@ package object debug {
     output
   }
 
-  private def codegenSubtreeSourceSeq(plan: SparkPlan):
-      Seq[(WholeStageCodegenExec, CodeAndComment)] = {
+  /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan
+   *
+   * @param plan the query plan for codegen
+   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   */
+  def codegenStringSeq(plan: SparkPlan): Seq[(String, String)] = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan transform {
       case s: WholeStageCodegenExec =>
@@ -79,29 +84,8 @@ package object debug {
     }
     codegenSubtrees.toSeq.map { subtree =>
       val (_, source) = subtree.doCodeGen()
-      (subtree, source)
+      (subtree.toString, CodeFormatter.format(source))
     }
-  }
-
-  /**
-   * Get WholeStageCodegenExec subtrees and the codegen in a query plan
-   *
-   * @param plan the query plan for codegen
-   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
-   */
-  def codegenStringSeq(plan: SparkPlan): Seq[(String, String)] = {
-    codegenSubtreeSourceSeq(plan).map(s => (s._1.toString, CodeFormatter.format(s._2)))
-  }
-
-
-  /**
-   * Get WholeStageCodegenExec subtrees' CodeAndComment in a query plan
-   *
-   * @param plan the query plan for CodeAndComment
-   * @return Sequence of WholeStageCodegen subtrees' `CodeAndComment`
-   */
-  def codegenCodeAndCommentSeq(plan: SparkPlan): Seq[CodeAndComment] = {
-    codegenSubtreeSourceSeq(plan).map(_._2)
   }
 
   /**

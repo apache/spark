@@ -19,10 +19,11 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.resourceToString
-import org.apache.spark.sql.execution.debug
+import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -31,7 +32,7 @@ import org.apache.spark.util.Utils
  * This test suite ensures all the TPC-DS queries can be successfully analyzed and optimized
  * without hitting the max iteration threshold.
  */
-class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
+class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll with Logging {
 
   // When Utils.isTesting is true, the RuleExecutor will issue an exception when hitting
   // the max iteration of analyzer/optimizer batches.
@@ -350,16 +351,38 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
     "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
     "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
+  private def checkGeneratedCode(plan: SparkPlan): Unit = {
+    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
+    plan foreach {
+      case s: WholeStageCodegenExec =>
+        codegenSubtrees += s
+      case s => s
+    }
+    codegenSubtrees.toSeq.map { subtree =>
+      val code = subtree.doCodeGen()._2
+      try {
+        // Just check the generated code can be properly compiled
+        CodeGenerator.compile(code)
+      } catch {
+        case e: Exception =>
+          logError(s"failed to compile: $e", e)
+          val msg =
+            s"Subtree:\n$subtree\n" +
+            s"Generated code:\n${CodeFormatter.format(code)}\n"
+          logDebug(msg)
+          throw e
+      }
+    }
+  }
+
   tpcdsQueries.foreach { name =>
     val queryString = resourceToString(s"tpcds/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
       withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
         // check the plans can be properly generated
-        val p = sql(queryString).queryExecution.executedPlan
-        // check the generated code can be properly compiled
-        val codes = debug.codegenCodeAndCommentSeq(p)
-        codes.map(c => CodeGenerator.compile(c))
+        val plan = sql(queryString).queryExecution.executedPlan
+        checkGeneratedCode(plan)
       }
     }
   }
@@ -374,10 +397,8 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
       classLoader = Thread.currentThread().getContextClassLoader)
     test(s"modified-$name") {
       // check the plans can be properly generated
-      val p = sql(queryString).queryExecution.executedPlan
-      // check the generated code can be properly compiled
-      val codes = debug.codegenCodeAndCommentSeq(p)
-      codes.map(c => CodeGenerator.compile(c))
+      val plan = sql(queryString).queryExecution.executedPlan
+      checkGeneratedCode(plan)
     }
   }
 }
