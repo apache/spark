@@ -88,7 +88,8 @@ private[shared] object SharedParamsCodeGen {
         "during tuning. If set to false, then only the single best sub-model will be available " +
         "after fitting. If set to true, then all sub-models will be available. Warning: For " +
         "large models, collecting all sub-models can cause OOMs on the Spark driver",
-        Some("false"), isExpertParam = true)
+        Some("false"), isExpertParam = true),
+      ParamDesc[String]("loss", "the loss function to be optimized", finalFields = false)
     )
 
     val code = genSharedParams(params)
