@@ -192,7 +192,7 @@ case class BroadcastHashJoinExec(
           |  $value = ${ev.value};
           |}
          """.stripMargin
-        ExprCode(code, isNull, value, inputRow = matched)
+        ExprCode(code, isNull, value)
       }
     }
   }
