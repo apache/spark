@@ -54,12 +54,11 @@ public abstract class WritableColumnVector extends ColumnVector {
         ((WritableColumnVector) c).reset();
       }
     }
-    numNulls = 0;
     elementsAppended = 0;
-    if (anyNullsSet) {
+    if (numNulls > 0) {
       putNotNulls(0, capacity);
-      anyNullsSet = false;
     }
+    numNulls = 0;
   }
 
   @Override
@@ -103,9 +102,6 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public int numNulls() { return numNulls; }
-
-  @Override
-  public boolean anyNullsSet() { return anyNullsSet; }
 
   /**
    * Returns the dictionary Id for rowId.
@@ -639,12 +635,6 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
    */
   protected int numNulls;
-
-  /**
-   * True if there is at least one NULL byte set. This is an optimization for the writer, to skip
-   * having to clear NULL bits.
-   */
-  protected boolean anyNullsSet;
 
   /**
    * True if this column's values are fixed. This means the column values never change, even
