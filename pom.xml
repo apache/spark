@@ -2959,6 +2959,12 @@
       </properties>
       <dependencyManagement>
         <dependencies>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-azure-datalake</artifactId>
+            <version>${hadoop.version}</version>
+            <scope>${hadoop.deps.scope}</scope>
+          </dependency>
           <!--
           Hadoop-Azure isn't in Hadoop 2.6, so this has to be made
           a 2.7+ moodule.
