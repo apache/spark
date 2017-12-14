@@ -29,14 +29,12 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.status.LiveEntity
 import org.apache.spark.status.config._
-import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.kvstore.KVStore
 
-private[sql] class SQLAppStatusListener(
+class SQLAppStatusListener(
     conf: SparkConf,
     kvstore: KVStore,
-    live: Boolean,
-    ui: Option[SparkUI] = None)
+    live: Boolean)
   extends SparkListener with Logging {
 
   // How often to flush intermediate state of a live execution to the store. When replaying logs,
@@ -46,10 +44,11 @@ private[sql] class SQLAppStatusListener(
   // Live tracked data is needed by the SQL status store to calculate metrics for in-flight
   // executions; that means arbitrary threads may be querying these maps, so they need to be
   // thread-safe.
-  private val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
-  private val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
+  // Exposed for testing only.
+  private[sql] val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
 
-  private var uiInitialized = false
+  // Exposed for testing only.
+  private[sql] val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
     val executionIdString = event.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -212,14 +211,6 @@ private[sql] class SQLAppStatusListener(
   }
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
-    // Install the SQL tab in a live app if it hasn't been initialized yet.
-    if (!uiInitialized) {
-      ui.foreach { _ui =>
-        new SQLTab(new SQLAppStatusStore(kvstore, Some(this)), _ui)
-      }
-      uiInitialized = true
-    }
-
     val SparkListenerSQLExecutionStart(executionId, description, details,
       physicalPlanDescription, sparkPlanInfo, time) = event
 
@@ -319,7 +310,7 @@ private[sql] class SQLAppStatusListener(
 
 }
 
-private class LiveExecutionData(val executionId: Long) extends LiveEntity {
+class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
   var description: String = null
   var details: String = null
@@ -354,13 +345,13 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
 }
 
-private class LiveStageMetrics(
+class LiveStageMetrics(
     val stageId: Int,
     var attemptId: Int,
     val accumulatorIds: Array[Long],
     val taskMetrics: ConcurrentHashMap[Long, LiveTaskMetrics])
 
-private[sql] class LiveTaskMetrics(
+class LiveTaskMetrics(
     val ids: Array[Long],
     val values: Array[Long],
     val succeeded: Boolean)

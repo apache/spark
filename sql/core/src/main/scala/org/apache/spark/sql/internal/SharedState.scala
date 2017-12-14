@@ -28,10 +28,10 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.LiveListenerBus
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
@@ -81,6 +81,19 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    * Class for caching query results reused in future executions.
    */
   val cacheManager: CacheManager = new CacheManager
+
+  /**
+   * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
+   * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
+   */
+  val statusStore: SQLAppStatusStore = {
+    val kvStore = sparkContext.statusStore.store
+    val listener = new SQLAppStatusListener(sparkContext.conf, kvStore, live = true)
+    sparkContext.listenerBus.addToStatusQueue(listener)
+    val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
+    sparkContext.ui.foreach(new SQLTab(statusStore, _))
+    statusStore
+  }
 
   /**
    * A catalog that interacts with external systems.

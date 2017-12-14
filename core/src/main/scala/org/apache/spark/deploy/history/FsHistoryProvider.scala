@@ -318,14 +318,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         (new InMemoryStore(), true)
     }
 
+    val plugins = ServiceLoader.load(
+      classOf[SparkHistoryUIPlugin], Utils.getContextOrSparkClassLoader).asScala
+
     if (needReplay) {
       val replayBus = new ReplayListenerBus()
       val listener = new AppStatusListener(kvstore, conf, false,
         lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
       replayBus.addListener(listener)
-      AppStatusPlugin.loadPlugins().foreach { plugin =>
-        plugin.setupListeners(conf, kvstore, l => replayBus.addListener(l), false)
-      }
+      for {
+        plugin <- plugins
+        listener <- plugin.createListeners(conf, kvstore)
+      } replayBus.addListener(listener)
       try {
         val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
         replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
@@ -350,9 +354,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
       attempt.info.startTime.getTime(),
       attempt.info.appSparkVersion)
-    AppStatusPlugin.loadPlugins().foreach { plugin =>
-      plugin.setupUI(ui)
-    }
+    plugins.foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
 
