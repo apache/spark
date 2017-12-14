@@ -301,6 +301,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads a ORC file stream, returning the result as a `DataFrame`.
    *
+   * You can set the following ORC-specific option(s) for reading ORC files:
+   * <ul>
+   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
+   * considered in every trigger.</li>
+   * </ul>
+   *
    * @since 2.3.0
    */
   def orc(path: String): DataFrame = {
