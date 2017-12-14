@@ -305,6 +305,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val (kvstore, needReplay) = uiStorePath match {
       case Some(path) =>
         try {
+          // The store path is not guaranteed to exist - maybe it hasn't been created, or was
+          // invalidated because changes to the event log were detected. Need to replay in that
+          // case.
           val _replay = !path.isDirectory()
           (createDiskStore(path, conf), _replay)
         } catch {
