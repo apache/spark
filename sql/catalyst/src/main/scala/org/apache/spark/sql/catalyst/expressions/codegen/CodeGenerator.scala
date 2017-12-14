@@ -154,10 +154,9 @@ class CodegenContext {
   val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
     mutable.ArrayBuffer.empty[(String, String, String)]
 
-  // An map keyed by the tuple of mutable states' types and array name, holds the current max
-  // index of the array
-  var mutableStateArrayIdx: mutable.Map[(String, String), Int] =
-    mutable.Map.empty[(String, String), Int]
+  // An map keyed by mutable states' types holds the status of mutableStateArray
+  var mutableStateArrayMap: mutable.Map[String, MutableStateArrays] =
+    mutable.Map.empty[String, MutableStateArrays]
 
   // An map keyed by mutable states' types holds the current name of the mutableStateArray
   // into which state of the given key will be compacted
@@ -168,20 +167,29 @@ class CodegenContext {
   var mutableStateArrayInitCodes: mutable.ArrayBuffer[String] =
     mutable.ArrayBuffer.empty[String]
 
-  /**
-   * Return true if a given variable has been described as a global variable
-   */
-  def isDeclaredMutableState(varName: String): Boolean = {
-    val j = varName.indexOf("[")
-    val qualifiedName = if (j < 0) varName else varName.substring(0, j)
-    mutableStates.exists { case s =>
-      val i = s._2.indexOf("[")
-      qualifiedName == (if (i < 0) s._2 else s._2.substring(0, i))
-    } ||
-    mutableStateArrayIdx.keys.exists { case key =>
-      val i = key._2.indexOf("[")
-      qualifiedName == (if (i < 0) key._2 else key._2.substring(0, i))
+  // Holding names and current index of mutableStateArrays for a certain type
+  class MutableStateArrays {
+    val arrayNames = mutable.ListBuffer.empty[String]
+    createNewArray()
+
+    private[this] var currentIndex = 0
+
+    private def createNewArray() = arrayNames.append(freshName("mutableStateArray"))
+
+    def getCurrentIndex: Int = { currentIndex }
+
+    def getNextSlot(): String = {
+      if (currentIndex < CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT) {
+        val res = s"${arrayNames.last}[$currentIndex]"
+        currentIndex += 1
+        res
+      } else {
+        createNewArray()
+        currentIndex = 1
+        s"${arrayNames.last}[0]"
+      }
     }
+
   }
 
   /**
@@ -194,8 +202,8 @@ class CodegenContext {
    *                 Also, generic type arguments are accepted but ignored.
    * @param variableName Name of the field.
    * @param initFunc Function includes statement(s) to put into the init() method to initialize
-   *            this field. An argument is the name of the mutable state variable.
-   *            If left blank, the field will be default-initialized.
+   *                 this field. The argument is the name of the mutable state variable.
+   *                 If left blank, the field will be default-initialized.
    * @param inline whether the declaration and initialization code may be inlined rather than
    *               compacted.
    * @param useFreshName If false and inline is true, the name is not changed
@@ -228,28 +236,16 @@ class CodegenContext {
       mutableStates += ((javaType, varName, initCode))
       varName
     } else {
-      // mutableStateArray has not been declared yet for the given type and name. Create a new name
-      // for the array, The mutableStateArray for the given type and name has been declared,
-      // update the max index of the array. Then, add an entry to keep track of current array name
-      // for type and nit code is stored for code generation. Finally, return an array element
-      val (arrayName, newIdx) = {
-        val compactArrayName = "mutableStateArray"
-        var name = mutableStateArrayCurrentNames.getOrElse(javaType, freshName(compactArrayName))
-        var idx = mutableStateArrayIdx.getOrElse((javaType, name), -1)
-        if (idx >= CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT - 1) {
-          // Create a new array name to avoid array index whose number is larger than 32767 that
-          // requires a constant pool entry
-          name = freshName(compactArrayName)
-          idx = -1
-        }
-        (name, idx + 1)
-      }
-      mutableStateArrayCurrentNames(javaType) = arrayName
-      mutableStateArrayIdx((javaType, arrayName)) = newIdx
+      // If mutableStateArray has not been declared yet for the given type, create a new
+      // name for the array, If the mutableStateArray for the given type has been declared,
+      // update the current index of the array.
+      // Then, initialization code is stored for code generation.
+      val arrays = mutableStateArrayMap.getOrElseUpdate(javaType, new MutableStateArrays)
+      val element = arrays.getNextSlot()
 
-      val initCode = initFunc(s"$arrayName[$newIdx]")
+      val initCode = initFunc(element)
       mutableStateArrayInitCodes += initCode
-      s"$arrayName[$newIdx]"
+      element
     }
   }
 
@@ -275,15 +271,22 @@ class CodegenContext {
       s"private $javaType $variableName;"
     }
 
-    val arrayStates = mutableStateArrayIdx.keys.map { case (javaType, arrayName) =>
-      val length = mutableStateArrayIdx((javaType, arrayName)) + 1
-      if (javaType.matches("^.*\\[\\]$")) {
-        // initializer had an one-dimensional array variable
-        val baseType = javaType.substring(0, javaType.length - 2)
-        s"private $javaType[] $arrayName = new $baseType[$length][];"
-      } else {
-        // initializer had a scalar variable
-        s"private $javaType[] $arrayName = new $javaType[$length];"
+    val arrayStates = mutableStateArrayMap.flatMap { case (javaType, mutableStateArrays) =>
+      val numElements = mutableStateArrays.arrayNames.size
+      mutableStateArrays.arrayNames.zipWithIndex.map { case (arrayName, index) =>
+        val length = if (index + 1 == numElements) {
+          mutableStateArrays.getCurrentIndex
+        } else {
+          CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT
+        }
+        if (javaType.contains("[]")) {
+          // initializer had an one-dimensional array variable
+          val baseType = javaType.substring(0, javaType.length - 2)
+          s"private $javaType[] $arrayName = new $baseType[$length][];"
+        } else {
+          // initializer had a scalar variable
+          s"private $javaType[] $arrayName = new $javaType[$length];"
+        }
       }
     }
 
