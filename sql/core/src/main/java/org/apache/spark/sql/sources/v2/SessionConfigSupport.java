@@ -24,15 +24,16 @@ import java.util.Map;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
- * propagate session configs with chosen key-prefixes to the particular data source.
+ * propagate session configs with the specified key-prefix to all data source operations in this
+ * session.
  */
 @InterfaceStability.Evolving
-public interface ConfigSupport {
+public interface SessionConfigSupport {
 
     /**
      * Name for the specified data source, will extract all session configs that starts with
-     * `spark.datasource.$name`, turn `spark.datasource.$name.xxx -&gt; yyy` into
+     * `spark.datasource.$keyPrefix`, turn `spark.datasource.$keyPrefix.xxx -&gt; yyy` into
      * `xxx -&gt; yyy`, and propagate them to all data source operations in this session.
      */
-    String name();
+    String keyPrefix();
 }

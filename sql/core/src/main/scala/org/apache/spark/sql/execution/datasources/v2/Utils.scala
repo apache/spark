@@ -19,39 +19,36 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.regex.Pattern
 
-import scala.collection.JavaConverters._
-import scala.collection.immutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.ConfigSupport
 
-private[sql] object DataSourceV2ConfigSupport extends Logging {
+private[sql] object Utils extends Logging {
 
   /**
    * Helper method that turns session configs with config keys that start with
-   * `spark.datasource.$name` into k/v pairs, the k/v pairs will be used to create data source
+   * `spark.datasource.$keyPrefix` into k/v pairs, the k/v pairs will be used to create data source
    * options.
-   * A session config `spark.datasource.$name.xxx -> yyy` will be transformed into
+   * A session config `spark.datasource.$keyPrefix.xxx -> yyy` will be transformed into
    * `xxx -> yyy`.
    *
-   * @param name the data source name
+   * @param keyPrefix the data source config key prefix to be matched
    * @param conf the session conf
    * @return an immutable map that contains all the extracted and transformed k/v pairs.
    */
   def withSessionConfig(
-      name: String,
-      conf: SQLConf): immutable.Map[String, String] = {
-    require(name != null, "The data source name can't be null.")
+      keyPrefix: String,
+      conf: SQLConf): Map[String, String] = {
+    require(keyPrefix != null, "The data source config key prefix can't be null.")
 
-    val pattern = Pattern.compile(s"spark\\.datasource\\.$name\\.(.*)")
-    val filteredConfigs = conf.getAllConfs.filterKeys { confKey =>
-      confKey.startsWith(s"spark.datasource.$name")
-    }
-    filteredConfigs.map { entry =>
-      val m = pattern.matcher(entry._1)
-      require(m.matches() && m.groupCount() > 0, s"Fail in matching ${entry._1} with $pattern.")
-      (m.group(1), entry._2)
+    val pattern = Pattern.compile(s"^spark\\.datasource\\.$keyPrefix\\.(.*)")
+
+    conf.getAllConfs.flatMap { case (key, value) =>
+      val m = pattern.matcher(key)
+      if (m.matches() && m.groupCount() > 0) {
+        Seq((m.group(1), value))
+      } else {
+        Seq.empty
+      }
     }
   }
 }

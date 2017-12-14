@@ -32,8 +32,8 @@ import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ConfigSupport
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.Utils
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -170,7 +170,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     option("path", path).load(Seq.empty: _*) // force invocation of `load(...varargs...)`
   }
 
-  import DataSourceV2ConfigSupport._
+  import Utils._
 
   /**
    * Loads input in as a `DataFrame`, for data sources that support multiple paths.
@@ -189,8 +189,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val dataSource = cls.newInstance()
       val options = dataSource match {
-        case cs: ConfigSupport =>
-          val confs = withSessionConfig(cs.name, sparkSession.sessionState.conf)
+        case cs: SessionConfigSupport =>
+          val confs = withSessionConfig(cs.keyPrefix, sparkSession.sessionState.conf)
           new DataSourceV2Options((confs ++ extraOptions).asJava)
         case _ =>
           new DataSourceV2Options(extraOptions.asJava)

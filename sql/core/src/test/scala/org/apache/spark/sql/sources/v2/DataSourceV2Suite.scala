@@ -24,7 +24,7 @@ import test.org.apache.spark.sql.sources.v2._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ConfigSupport
+import org.apache.spark.sql.execution.datasources.v2.Utils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.sources.v2.reader._
@@ -53,8 +53,9 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         s"spark.datasource.$dsName.whateverConfigName" -> "123",
         s"spark.sql.$dsName.config.name" -> "false",
         s"spark.datasource.another.config.name" -> "123") {
-      val cs = classOf[DataSourceV2WithConfig].newInstance().asInstanceOf[ConfigSupport]
-      val confs = DataSourceV2ConfigSupport.withSessionConfig(cs.name, SQLConf.get)
+      val cs = classOf[DataSourceV2WithSessionConfig].newInstance()
+        .asInstanceOf[SessionConfigSupport]
+      val confs = Utils.withSessionConfig(cs.keyPrefix, SQLConf.get)
       assert(confs.size == 2)
       assert(confs.keySet.filter(_.startsWith("spark.datasource")).size == 0)
       assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
@@ -199,9 +200,9 @@ class SimpleReadTask(start: Int, end: Int) extends ReadTask[Row] with DataReader
   override def close(): Unit = {}
 }
 
-class DataSourceV2WithConfig extends SimpleDataSourceV2 with ConfigSupport {
+class DataSourceV2WithSessionConfig extends SimpleDataSourceV2 with SessionConfigSupport {
 
-  override def name: String = "userDefinedDataSource"
+  override def keyPrefix: String = "userDefinedDataSource"
 }
 
 class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
