@@ -365,10 +365,14 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
         CodeGenerator.compile(code)
       } catch {
         case e: Exception =>
-          logError(s"failed to compile: $e", e)
           val msg =
-            s"Subtree:\n$subtree\n" +
-            s"Generated code:\n${CodeFormatter.format(code)}\n"
+            s"""
+               |failed to compile:
+               |Subtree:
+               |$subtree
+               |Generated code:
+               |${CodeFormatter.format(code)}
+             """
           throw new Exception(msg, e)
       }
     }
