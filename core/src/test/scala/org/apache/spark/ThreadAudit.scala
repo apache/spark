@@ -17,11 +17,9 @@
 
 package org.apache.spark
 
-// scalastyle:off
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
-// scalastyle:on
 
 /**
  * Thread audit for test suites.
@@ -124,6 +122,6 @@ trait ThreadAudit extends Logging {
   }
 
   private def runningThreadNames(): Set[String] = {
-    Thread.getAllStackTraces.keySet().map(_.getName).toSet
+    Thread.getAllStackTraces.keySet().asScala.map(_.getName).toSet
   }
 }
