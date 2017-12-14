@@ -22,7 +22,7 @@ import java.util.regex.Pattern
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 
-private[sql] object Utils extends Logging {
+private[sql] object DataSourceV2Utils extends Logging {
 
   /**
    * Helper method that turns session configs with config keys that start with

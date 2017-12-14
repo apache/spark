@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.datasources.v2.Utils
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -170,8 +170,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     option("path", path).load(Seq.empty: _*) // force invocation of `load(...varargs...)`
   }
 
-  import Utils._
-
   /**
    * Loads input in as a `DataFrame`, for data sources that support multiple paths.
    * Only works if the source is a HadoopFsRelationProvider.
@@ -190,7 +188,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val dataSource = cls.newInstance()
       val options = dataSource match {
         case cs: SessionConfigSupport =>
-          val confs = withSessionConfig(cs.keyPrefix, sparkSession.sessionState.conf)
+          val confs = DataSourceV2Utils.withSessionConfig(
+            keyPrefix = cs.keyPrefix,
+            conf = sparkSession.sessionState.conf)
           new DataSourceV2Options((confs ++ extraOptions).asJava)
         case _ =>
           new DataSourceV2Options(extraOptions.asJava)

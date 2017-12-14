@@ -24,8 +24,6 @@ import test.org.apache.spark.sql.sources.v2._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.datasources.v2.Utils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -33,8 +31,6 @@ import org.apache.spark.sql.types.StructType
 
 class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   import testImplicits._
-
-  private val dsName = "userDefinedDataSource"
 
   test("simplest implementation") {
     Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
@@ -44,23 +40,6 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         checkAnswer(df.select('j), (0 until 10).map(i => Row(-i)))
         checkAnswer(df.filter('i > 5), (6 until 10).map(i => Row(i, -i)))
       }
-    }
-  }
-
-  test("simple implementation with config support") {
-    // Only match configs with keys start with "spark.datasource.${dsName}".
-    withSQLConf(s"spark.datasource.$dsName.foo.bar" -> "false",
-        s"spark.datasource.$dsName.whateverConfigName" -> "123",
-        s"spark.sql.$dsName.config.name" -> "false",
-        s"spark.datasource.another.config.name" -> "123") {
-      val cs = classOf[DataSourceV2WithSessionConfig].newInstance()
-        .asInstanceOf[SessionConfigSupport]
-      val confs = Utils.withSessionConfig(cs.keyPrefix, SQLConf.get)
-      assert(confs.size == 2)
-      assert(confs.keySet.filter(_.startsWith("spark.datasource")).size == 0)
-      assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
-      assert(confs.keySet.contains("foo.bar"))
-      assert(confs.keySet.contains("whateverConfigName"))
     }
   }
 
@@ -200,10 +179,7 @@ class SimpleReadTask(start: Int, end: Int) extends ReadTask[Row] with DataReader
   override def close(): Unit = {}
 }
 
-class DataSourceV2WithSessionConfig extends SimpleDataSourceV2 with SessionConfigSupport {
 
-  override def keyPrefix: String = "userDefinedDataSource"
-}
 
 class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
 
