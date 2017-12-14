@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.sql.sources.v2.reader.Offset
+import org.apache.spark.sql.sources.v2.reader.PartitionOffset;
 
+import java.io.IOException;
 
 /**
- * Used when loading a JSON serialized offset from external storage.
- * We are currently not responsible for converting JSON serialized
- * data into an internal (i.e., object) representation. Sources should
- * define a factory method in their source Offset companion objects
- * that accepts a [[SerializedOffset]] for doing the conversion.
+ * A variation on {@link DataReader} for use with streaming in continuous processing mode.
  */
-case class SerializedOffset(override val json: String) extends Offset
-
-
+public interface ContinuousDataReader<T> extends DataReader<T> {
+    /**
+     * Get the offset of the current record, or the start offset if no records have been read.
+     *
+     * The execution engine will call this method along with get() to keep track of the current
+     * offset. When an epoch ends, the offset of the previous record in each partition will be saved
+     * as a restart checkpoint.
+     */
+    PartitionOffset getOffset();
+}

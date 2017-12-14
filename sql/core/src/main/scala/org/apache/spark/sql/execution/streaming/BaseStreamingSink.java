@@ -15,18 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
-
-import org.apache.spark.sql.sources.v2.reader.Offset
-
+package org.apache.spark.sql.execution.streaming;
 
 /**
- * Used when loading a JSON serialized offset from external storage.
- * We are currently not responsible for converting JSON serialized
- * data into an internal (i.e., object) representation. Sources should
- * define a factory method in their source Offset companion objects
- * that accepts a [[SerializedOffset]] for doing the conversion.
+ * The shared interface between V1 and V2 streaming sinks.
+ *
+ * This is a temporary interface for compatibility during migration. It should not be implemented
+ * directly, and will be removed in future versions.
  */
-case class SerializedOffset(override val json: String) extends Offset
-
-
+public interface BaseStreamingSink {
+}
