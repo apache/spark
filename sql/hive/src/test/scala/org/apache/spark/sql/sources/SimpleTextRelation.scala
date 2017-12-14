@@ -95,7 +95,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
       val projection = new InterpretedProjection(outputAttributes, inputAttributes)
 
       val unsafeRowIterator =
-        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map { line =>
+        new HadoopFileLinesReader(file, "\n", broadcastedHadoopConf.value.value).map { line =>
           val record = line.toString
           new GenericInternalRow(record.split(",", -1).zip(fieldTypes).map {
             case (v, dataType) =>

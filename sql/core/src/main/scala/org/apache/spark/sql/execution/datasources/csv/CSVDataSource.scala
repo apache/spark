@@ -32,9 +32,8 @@ import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.execution.datasources.text.{TextFileFormat, TextOptions}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -129,7 +128,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       parser: UnivocityParser,
       schema: StructType): Iterator[InternalRow] = {
     val lines = {
-      val linesReader = new HadoopFileLinesReader(file, conf)
+      val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparator, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
@@ -178,13 +177,16 @@ object TextInputCSVDataSource extends CSVDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       options: CSVOptions): Dataset[String] = {
+    val textOptions = Map(TextOptions.LINE_SEPARATOR -> options.lineSeparator)
+
     val paths = inputPaths.map(_.getPath.toString)
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
       sparkSession.baseRelationToDataFrame(
         DataSource.apply(
           sparkSession,
           paths = paths,
-          className = classOf[TextFileFormat].getName
+          className = classOf[TextFileFormat].getName,
+          options = textOptions
         ).resolveRelation(checkFilesExist = false))
         .select("value").as[String](Encoders.STRING)
     } else {

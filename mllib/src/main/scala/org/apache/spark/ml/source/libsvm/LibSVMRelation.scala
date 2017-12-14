@@ -41,6 +41,7 @@ import org.apache.spark.util.SerializableConfiguration
 private[libsvm] class LibSVMOutputWriter(
     path: String,
     dataSchema: StructType,
+    lineSeparator: String,
     context: TaskAttemptContext)
   extends OutputWriter {
 
@@ -57,7 +58,7 @@ private[libsvm] class LibSVMOutputWriter(
       writer.write(s" ${i + 1}:$v")
     }
 
-    writer.write('\n')
+    writer.write(lineSeparator)
   }
 
   override def close(): Unit = {
@@ -100,7 +101,7 @@ private[libsvm] class LibSVMFileFormat
         "'numFeatures' option to avoid the extra scan.")
 
       val paths = files.map(_.getPath.toUri.toString)
-      val parsed = MLUtils.parseLibSVMFile(sparkSession, paths)
+      val parsed = MLUtils.parseLibSVMFile(sparkSession, paths, libSVMOptions.lineSeparator)
       MLUtils.computeNumFeatures(parsed)
     }
 
@@ -120,12 +121,13 @@ private[libsvm] class LibSVMFileFormat
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     verifySchema(dataSchema, true)
+    val libSVMOptions = new LibSVMOptions(options)
     new OutputWriterFactory {
       override def newInstance(
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new LibSVMOutputWriter(path, dataSchema, context)
+        new LibSVMOutputWriter(path, dataSchema, libSVMOptions.lineSeparator, context)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
@@ -153,7 +155,8 @@ private[libsvm] class LibSVMFileFormat
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      val linesReader = new HadoopFileLinesReader(
+        file, libSVMOptions.lineSeparator, broadcastedHadoopConf.value.value)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
 
       val points = linesReader

@@ -30,7 +30,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.execution.datasources.text.{TextFileFormat, TextOptions}
 import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
@@ -105,12 +105,17 @@ object MLUtils extends Logging {
   }
 
   private[spark] def parseLibSVMFile(
-      sparkSession: SparkSession, paths: Seq[String]): RDD[(Double, Array[Int], Array[Double])] = {
+      sparkSession: SparkSession,
+      paths: Seq[String],
+      lineSeparator: String): RDD[(Double, Array[Int], Array[Double])] = {
+    val textOptions = Map(TextOptions.LINE_SEPARATOR -> lineSeparator)
+
     val lines = sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
         paths = paths,
-        className = classOf[TextFileFormat].getName
+        className = classOf[TextFileFormat].getName,
+        options = textOptions
       ).resolveRelation(checkFilesExist = false))
       .select("value")
 

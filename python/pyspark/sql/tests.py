@@ -523,11 +523,50 @@ class SQLTests(ReusedSQLTestCase):
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
                                 lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
 
-    def test_multiLine_json(self):
+    def test_linesep_text(self):
+        df = self.spark.read.text("python/test_support/sql/ages_newlines.csv", lineSep=",")
+        expected = [Row(value=u'Joe'), Row(value=u'20'), Row(value=u'"Hi'),
+                    Row(value=u'\nI am Jeo"\nTom'), Row(value=u'30'),
+                    Row(value=u'"My name is Tom"\nHyukjin'), Row(value=u'25'),
+                    Row(value=u'"I am Hyukjin\n\nI love Spark!"\n')]
+        self.assertEqual(df.collect(), expected)
+
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            df.write.text(tpath, lineSep="!")
+            expected = [Row(value=u'Joe!20!"Hi!'), Row(value=u'I am Jeo"'),
+                        Row(value=u'Tom!30!"My name is Tom"'),
+                        Row(value=u'Hyukjin!25!"I am Hyukjin'),
+                        Row(value=u''), Row(value=u'I love Spark!"'),
+                        Row(value=u'!')]
+            readback = self.spark.read.text(tpath)
+            self.assertEqual(readback.collect(), expected)
+        finally:
+            shutil.rmtree(tpath)
+
+    def test_multiline_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")
         people_array = self.spark.read.json("python/test_support/sql/people_array.json",
                                             multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
+
+    def test_linesep_json(self):
+        df = self.spark.read.json("python/test_support/sql/people.json", lineSep=",")
+        expected = [Row(_corrupt_record=None, name=u'Michael'),
+                    Row(_corrupt_record=u' "age":30}\n{"name":"Justin"', name=None),
+                    Row(_corrupt_record=u' "age":19}\n', name=None)]
+        self.assertEqual(df.collect(), expected)
+
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            df = self.spark.read.json("python/test_support/sql/people.json")
+            df.write.json(tpath, lineSep="!!")
+            readback = self.spark.read.json(tpath, lineSep="!!")
+            self.assertEqual(readback.collect(), df.collect())
+        finally:
+            shutil.rmtree(tpath)
 
     def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(

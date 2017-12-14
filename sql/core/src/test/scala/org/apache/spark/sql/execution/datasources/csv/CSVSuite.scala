@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.UnsupportedCharsetException
+import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -30,10 +31,10 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.functions.{col, regexp_replace}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   import testImplicits._
@@ -1247,5 +1248,56 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       df.select(columnNameOfCorruptRecord),
       Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
     )
+  }
+
+  def testLineSeparator(lineSep: String, multiLine: Boolean): Unit = {
+    test(s"SPARK-21289: Support line separator - lineSep: '$lineSep' and multiLine: $multiLine") {
+      // Read
+      val data = Seq("a,b", "1,\"a\nd\"", "1,f").mkString(lineSep)
+      val dataWithTrailingLineSep = s"$data$lineSep"
+
+      Seq(data, dataWithTrailingLineSep).foreach { lines =>
+        withTempPath { path =>
+          Files.write(path.toPath, lines.getBytes(StandardCharsets.UTF_8))
+          val df = spark.read
+            .option("multiLine", multiLine)
+            .option("lineSep", lineSep)
+            .option("header", true)
+            .option("inferSchema", true)
+            .csv(path.getAbsolutePath)
+
+          val expectedSchema =
+            StructType(StructField("a", IntegerType) :: StructField("b", StringType) :: Nil)
+          checkAnswer(df, Seq((1, "a\nd"), (1, "f")).toDF())
+          assert(df.schema === expectedSchema)
+        }
+      }
+
+      // Write
+      withTempPath { path =>
+        Seq("a", "b", "c").toDF().coalesce(1)
+          .write.option("lineSep", lineSep).csv(path.getAbsolutePath)
+        val partFile = Utils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+        val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
+        assert(readBack === s"a${lineSep}b${lineSep}c$lineSep")
+      }
+
+      // Roundtrip
+      withTempPath { path =>
+        val df = Seq("a", "b", "c").toDF()
+        df.write.option("lineSep", lineSep).csv(path.getAbsolutePath)
+        val readBack = spark.read
+          .option("multiLine", multiLine)
+          .option("lineSep", lineSep)
+          .csv(path.getAbsolutePath)
+        checkAnswer(df, readBack)
+      }
+    }
+  }
+
+  Seq("|", "^", "::", "\r\n").foreach { lineSep =>
+    Seq(true, false).foreach { multiLine =>
+      testLineSeparator(lineSep, multiLine)
+    }
   }
 }

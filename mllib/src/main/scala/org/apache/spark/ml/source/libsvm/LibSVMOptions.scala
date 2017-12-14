@@ -41,6 +41,9 @@ private[libsvm] class LibSVMOptions(@transient private val parameters: CaseInsen
     case o => throw new IllegalArgumentException(s"Invalid value `$o` for parameter " +
       s"`$VECTOR_TYPE`. Expected types are `sparse` and `dense`.")
   }
+
+  val lineSeparator: String = parameters.getOrElse(LINE_SEPARATOR, "\n")
+  require(lineSeparator.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
 }
 
 private[libsvm] object LibSVMOptions {
@@ -48,4 +51,5 @@ private[libsvm] object LibSVMOptions {
   val VECTOR_TYPE = "vectorType"
   val DENSE_VECTOR_TYPE = "dense"
   val SPARSE_VECTOR_TYPE = "sparse"
+  val LINE_SEPARATOR = "lineSep"
 }

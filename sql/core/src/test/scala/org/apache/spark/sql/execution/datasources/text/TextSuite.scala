@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.datasources.text
 
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -170,6 +172,43 @@ class TextSuite extends QueryTest with SharedSQLContext {
         }
       }
     }
+  }
+
+  def testLineSeparator(lineSep: String): Unit = {
+    test(s"SPARK-21289: Support line separator - lineSep: '$lineSep'") {
+      // Read
+      val values = Seq("a", "b", "\nc")
+      val data = values.mkString(lineSep)
+      val dataWithTrailingLineSep = s"$data$lineSep"
+      Seq(data, dataWithTrailingLineSep).foreach { lines =>
+        withTempPath { path =>
+          Files.write(path.toPath, lines.getBytes(StandardCharsets.UTF_8))
+          val df = spark.read.option("lineSep", lineSep).text(path.getAbsolutePath)
+          checkAnswer(df, Seq("a", "b", "\nc").toDF())
+        }
+      }
+
+      // Write
+      withTempPath { path =>
+        values.toDF().coalesce(1)
+          .write.option("lineSep", lineSep).text(path.getAbsolutePath)
+        val partFile = Utils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+        val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
+        assert(readBack === s"a${lineSep}b${lineSep}\nc${lineSep}")
+      }
+
+      // Roundtrip
+      withTempPath { path =>
+        val df = values.toDF()
+        df.write.option("lineSep", lineSep).text(path.getAbsolutePath)
+        val readBack = spark.read.option("lineSep", lineSep).text(path.getAbsolutePath)
+        checkAnswer(df, readBack)
+      }
+    }
+  }
+
+  Seq("|", "^", "::", "!!!@3").foreach { lineSep =>
+    testLineSeparator(lineSep)
   }
 
   private def testFile: String = {

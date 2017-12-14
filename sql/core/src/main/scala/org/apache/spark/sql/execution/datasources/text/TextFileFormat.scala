@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -77,7 +79,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new TextOutputWriter(path, dataSchema, context)
+        new TextOutputWriter(path, dataSchema, textOptions.lineSeparator, context)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
@@ -98,11 +100,14 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       requiredSchema.length <= 1,
       "Text data source only produces a single data column named \"value\".")
 
+    val textOptions = new TextOptions(options)
+
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val reader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      val reader = new HadoopFileLinesReader(
+        file, textOptions.lineSeparator, broadcastedHadoopConf.value.value)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => reader.close()))
 
       if (requiredSchema.isEmpty) {
@@ -128,8 +133,11 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 class TextOutputWriter(
     path: String,
     dataSchema: StructType,
+    lineSeparator: String,
     context: TaskAttemptContext)
   extends OutputWriter {
+
+  private val lineSep = lineSeparator.getBytes(StandardCharsets.UTF_8)
 
   private val writer = CodecStreams.createOutputStream(context, new Path(path))
 
@@ -138,7 +146,7 @@ class TextOutputWriter(
       val utf8string = row.getUTF8String(0)
       utf8string.writeTo(writer)
     }
-    writer.write('\n')
+    writer.write(lineSep)
   }
 
   override def close(): Unit = {

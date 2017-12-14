@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.io.Writer
+import java.nio.charset.StandardCharsets
 
 import com.fasterxml.jackson.core._
 
@@ -73,6 +74,8 @@ private[sql] class JacksonGenerator(
   }
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+
+  private val lineSep = options.lineSeparator
 
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
@@ -251,5 +254,5 @@ private[sql] class JacksonGenerator(
       mapType = dataType.asInstanceOf[MapType]))
   }
 
-  def writeLineEnding(): Unit = gen.writeRaw('\n')
+  def writeLineEnding(): Unit = gen.writeRaw(lineSep)
 }

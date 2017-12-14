@@ -33,8 +33,12 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
    * Compression codec to use.
    */
   val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
+
+  val lineSeparator: String = parameters.getOrElse(LINE_SEPARATOR, "\n")
+  require(lineSeparator.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
 }
 
-private[text] object TextOptions {
+private[spark] object TextOptions {
   val COMPRESSION = "compression"
+  val LINE_SEPARATOR = "lineSep"
 }
