@@ -70,17 +70,17 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
   override protected def doProduce(ctx: CodegenContext): String = {
     // PhysicalRDD always just has one input
     val input = ctx.addMutableState("scala.collection.Iterator", "input",
-      v => s"$v = inputs[0];", forceInline = true)
+      v => s"$v = inputs[0];")
 
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
-    val scanTimeTotalNs = ctx.addMutableState(ctx.JAVA_LONG, "scanTime")
+    val scanTimeTotalNs = ctx.addMutableState(ctx.JAVA_LONG, "scanTime") // init as scanTime = 0
 
     val columnarBatchClz = classOf[ColumnarBatch].getName
     val batch = ctx.addMutableState(columnarBatchClz, "batch")
 
-    val idx = ctx.addMutableState(ctx.JAVA_INT, "batchIdx")
+    val idx = ctx.addMutableState(ctx.JAVA_INT, "batchIdx") // init as batchIdx = 0
     val columnVectorClzs = vectorTypes.getOrElse(
       Seq.fill(output.indices.size)(classOf[ColumnVector].getName))
     val (colVars, columnAssigns) = columnVectorClzs.zipWithIndex.map {

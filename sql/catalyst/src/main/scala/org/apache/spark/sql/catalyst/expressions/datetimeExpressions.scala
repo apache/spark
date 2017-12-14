@@ -490,11 +490,11 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
            |$v = $cal.getInstance($dtu.getTimeZone("UTC"));
            |$v.setFirstDayOfWeek($cal.MONDAY);
            |$v.setMinimalDaysInFirstWeek(4);
-         """)
+         """.stripMargin)
       s"""
          |$c.setTimeInMillis($time * 1000L * 3600L * 24L);
          |${ev.value} = $c.get($cal.WEEK_OF_YEAR);
-       """
+       """.stripMargin
     })
   }
 }

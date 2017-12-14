@@ -57,6 +57,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       case _ => true
     }.unzip
     val exprVals = ctx.generateExpressions(validExpr, useSubexprElimination)
+
+    // 4-tuples: (code for projection, isNull variable name, value variable name, column index)
     val projectionCodes: Seq[(String, String, String, Int)] = exprVals.zip(index).map {
       case (ev, i) =>
         val e = expressions(i)

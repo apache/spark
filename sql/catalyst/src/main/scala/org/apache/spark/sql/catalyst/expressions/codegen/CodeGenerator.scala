@@ -147,15 +147,15 @@ class CodegenContext {
    *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
    */
-  val mutableStates: mutable.ArrayBuffer[(String, String)] =
+  val inlinedMutableStates: mutable.ArrayBuffer[(String, String)] =
     mutable.ArrayBuffer.empty[(String, String)]
 
   // An map keyed by mutable states' types holds the status of mutableStateArray
-  val mutableStateArrayMap: mutable.Map[String, MutableStateArrays] =
+  val arrayCompactedMutableStates: mutable.Map[String, MutableStateArrays] =
     mutable.Map.empty[String, MutableStateArrays]
 
   // An array holds the code that will initialize each state
-  val mutableStateInitCodes: mutable.ArrayBuffer[String] =
+  val mutableStateInitCode: mutable.ArrayBuffer[String] =
     mutable.ArrayBuffer.empty[String]
 
   // Holding names and current index of mutableStateArrays for a certain type
@@ -202,7 +202,7 @@ class CodegenContext {
    * @param useFreshName If false and inline is true, the name is not changed
    * @return the name of the mutable state variable, which is either the original name if the
    *         variable is inlined to the outer class, or an array access if the variable is to be
-   *         stored in an array of variables of the same type and initialization.
+   *         stored in an array of variables of the same type.
    *         There are two use cases. One is to use the original name for global variable instead
    *         of fresh name. Second is to use the original initialization statement since it is
    *         complex (e.g. allocate multi-dimensional array or object constructor has varibles).
@@ -217,22 +217,22 @@ class CodegenContext {
       initFunc: String => String = _ => "",
       forceInline: Boolean = false,
       useFreshName: Boolean = true): String = {
-    val varName = if (useFreshName) freshName(variableName) else variableName
 
     // want to put a primitive type variable at outerClass for performance
     val canInlinePrimitive = isPrimitiveType(javaType) &&
-      (mutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
+      (inlinedMutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
     if (forceInline || canInlinePrimitive || javaType.contains("[][]")) {
+      val varName = if (useFreshName) freshName(variableName) else variableName
       val initCode = initFunc(varName)
-      mutableStates += ((javaType, varName))
-      mutableStateInitCodes += initCode
+      inlinedMutableStates += ((javaType, varName))
+      mutableStateInitCode += initCode
       varName
     } else {
-      val arrays = mutableStateArrayMap.getOrElseUpdate(javaType, new MutableStateArrays)
+      val arrays = arrayCompactedMutableStates.getOrElseUpdate(javaType, new MutableStateArrays)
       val element = arrays.getNextSlot()
 
       val initCode = initFunc(element)
-      mutableStateInitCodes += initCode
+      mutableStateInitCode += initCode
       element
     }
   }
@@ -255,11 +255,11 @@ class CodegenContext {
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    val inlinedStates = mutableStates.distinct.map { case (javaType, variableName) =>
+    val inlinedStates = inlinedMutableStates.distinct.map { case (javaType, variableName) =>
       s"private $javaType $variableName;"
     }
 
-    val arrayStates = mutableStateArrayMap.flatMap { case (javaType, mutableStateArrays) =>
+    val arrayStates = arrayCompactedMutableStates.flatMap { case (javaType, mutableStateArrays) =>
       val numArrays = mutableStateArrays.arrayNames.size
       mutableStateArrays.arrayNames.zipWithIndex.map { case (arrayName, index) =>
         val length = if (index + 1 == numArrays) {
@@ -284,7 +284,7 @@ class CodegenContext {
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    val initCodes = mutableStateInitCodes.distinct
+    val initCodes = mutableStateInitCode.distinct
 
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.

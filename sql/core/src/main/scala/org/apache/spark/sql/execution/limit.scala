@@ -71,7 +71,7 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val stopEarly = ctx.addMutableState(ctx.JAVA_BOOLEAN, "stopEarly")
+    val stopEarly = ctx.addMutableState(ctx.JAVA_BOOLEAN, "stopEarly") // init as stopEarly = 0
 
     ctx.addNewFunction("stopEarly", s"""
       @Override
@@ -79,7 +79,7 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
         return $stopEarly;
       }
     """, inlineToOuterClass = true)
-    val countTerm = ctx.addMutableState(ctx.JAVA_INT, "count")
+    val countTerm = ctx.addMutableState(ctx.JAVA_INT, "count") // init as count = 0
     s"""
        | if ($countTerm < $limit) {
        |   $countTerm += 1;

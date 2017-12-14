@@ -1165,7 +1165,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
          |} else {
          |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
          |}
-       """, forceInline = true)
+       """.stripMargin)
 
     // Code to serialize.
     val input = child.genCode(ctx)
@@ -1203,14 +1203,14 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializer = ctx.addMutableState(serializerInstanceClass, "serializerForDecode",
-      v => s"""
-       if ($env == null) {
-         $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-       } else {
-         $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-       }
-     """, forceInline = true)
+    val serializer = ctx.addMutableState(serializerInstanceClass, "serializerForDecode", v =>
+      s"""
+         |if ($env == null) {
+         |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+         |} else {
+         |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+         |}
+       """.stripMargin)
 
     // Code to deserialize.
     val input = child.genCode(ctx)
