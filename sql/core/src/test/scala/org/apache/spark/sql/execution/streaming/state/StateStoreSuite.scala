@@ -164,12 +164,10 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val snapshotVersion = (0 to 10).find( version =>
       fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
 
-    // Corrupt snapshot file and verify that it throws error
+    // Corrupt snapshot file and verify that it doesn't throw an error
     assert(getData(provider, snapshotVersion) === Set("a" -> snapshotVersion))
     corruptFile(provider, snapshotVersion, isSnapshot = true)
-    intercept[Exception] {
-      getData(provider, snapshotVersion)
-    }
+    getData(provider, snapshotVersion)
 
     // Corrupt delta file and verify that it throws error
     assert(getData(provider, snapshotVersion - 1) === Set("a" -> (snapshotVersion - 1)))

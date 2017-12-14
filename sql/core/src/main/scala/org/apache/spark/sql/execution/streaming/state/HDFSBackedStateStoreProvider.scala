@@ -486,6 +486,10 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     } catch {
       case _: FileNotFoundException =>
         None
+      case e: IOException =>
+        logWarning(s"Corrupted snapshot file for version $version of $this: $fileToRead", e)
+        fs.delete(fileToRead, true)
+        None
     } finally {
       if (input != null) input.close()
     }
