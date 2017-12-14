@@ -35,12 +35,20 @@ class MLTestSuite extends MLTest {
     testTransformerOnStreamData[(Int, String)](data, indexerModel, "id", "indexed") {
       case Row(id: Int, indexed: Double) =>
         assert(id === indexed.toInt)
+    } { rows: Seq[Row] =>
+      assert(rows.map(_.getDouble(1)).max === 5.0)
     }
 
     intercept[Exception] {
       testTransformerOnStreamData[(Int, String)](data, indexerModel, "id", "indexed") {
         case Row(id: Int, indexed: Double) =>
           assert(id != indexed.toInt)
+      } (null)
+    }
+    intercept[Exception] {
+      testTransformerOnStreamData[(Int, String)](data, indexerModel, "id", "indexed") (null) {
+        rows: Seq[Row] =>
+          assert(rows.map(_.getDouble(1)).max === 1.0)
       }
     }
   }

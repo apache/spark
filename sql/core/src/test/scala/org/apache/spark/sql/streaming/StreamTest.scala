@@ -134,8 +134,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, false, false)
 
-    def apply(checkFunction: Row => Unit): CheckAnswerRowsByFunc =
-      CheckAnswerRowsByFunc(checkFunction, false)
+    def apply(checkFunction: Row => Unit,
+        globalCheckFunction: Seq[Row] => Unit): CheckAnswerRowsByFunc =
+      CheckAnswerRowsByFunc(checkFunction, globalCheckFunction, false)
   }
 
   /**
@@ -158,8 +159,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, true, false)
 
-    def apply(checkFunction: Row => Unit): CheckAnswerRowsByFunc =
-      CheckAnswerRowsByFunc(checkFunction, true)
+    def apply(checkFunction: Row => Unit,
+        globalCheckFunction: Seq[Row] => Unit): CheckAnswerRowsByFunc =
+      CheckAnswerRowsByFunc(checkFunction, globalCheckFunction, true)
   }
 
   case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean, isSorted: Boolean)
@@ -168,9 +170,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
 
-  case class CheckAnswerRowsByFunc(checkFunction: Row => Unit, lastOnly: Boolean)
+  case class CheckAnswerRowsByFunc(
+      checkFunction: Row => Unit,
+      globalCheckFunction: Seq[Row] => Unit,
+      lastOnly: Boolean)
       extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"$operatorName: ${checkFunction.toString()}"
+    override def toString: String = s"$operatorName"
     private def operatorName = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
   }
 
@@ -592,11 +597,20 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
               error => failTest(error)
             }
 
-          case CheckAnswerRowsByFunc(checkFunction, lastOnly) =>
+          case CheckAnswerRowsByFunc(checkFunction, globalCheckFunction, lastOnly) =>
             val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
-            sparkAnswer.foreach { row =>
+            if (checkFunction != null) {
+              sparkAnswer.foreach { row =>
+                try {
+                  checkFunction(row)
+                } catch {
+                  case e: Throwable => failTest(e.toString)
+                }
+              }
+            }
+            if (globalCheckFunction != null) {
               try {
-                checkFunction(row)
+                globalCheckFunction(sparkAnswer)
               } catch {
                 case e: Throwable => failTest(e.toString)
               }
