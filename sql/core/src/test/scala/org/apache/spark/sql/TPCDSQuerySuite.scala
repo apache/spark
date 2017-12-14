@@ -19,8 +19,10 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.resourceToString
+import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -348,13 +350,41 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
     "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
     "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
+  private def checkGeneratedCode(plan: SparkPlan): Unit = {
+    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
+    plan foreach {
+      case s: WholeStageCodegenExec =>
+        codegenSubtrees += s
+      case s => s
+    }
+    codegenSubtrees.toSeq.foreach { subtree =>
+      val code = subtree.doCodeGen()._2
+      try {
+        // Just check the generated code can be properly compiled
+        CodeGenerator.compile(code)
+      } catch {
+        case e: Exception =>
+          val msg =
+            s"""
+               |failed to compile:
+               |Subtree:
+               |$subtree
+               |Generated code:
+               |${CodeFormatter.format(code)}
+             """.stripMargin
+          throw new Exception(msg, e)
+      }
+    }
+  }
+
   tpcdsQueries.foreach { name =>
     val queryString = resourceToString(s"tpcds/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
       withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-        // Just check the plans can be properly generated
-        sql(queryString).queryExecution.executedPlan
+        // check the plans can be properly generated
+        val plan = sql(queryString).queryExecution.executedPlan
+        checkGeneratedCode(plan)
       }
     }
   }
@@ -368,8 +398,9 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
     val queryString = resourceToString(s"tpcds-modifiedQueries/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(s"modified-$name") {
-      // Just check the plans can be properly generated
-      sql(queryString).queryExecution.executedPlan
+      // check the plans can be properly generated
+      val plan = sql(queryString).queryExecution.executedPlan
+      checkGeneratedCode(plan)
     }
   }
 }
