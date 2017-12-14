@@ -291,8 +291,7 @@ case class Elt(children: Seq[Expression])
     val indexVal = ctx.freshName("index")
     val indexMatched = ctx.freshName("eltIndexMatched")
 
-    val stringVal = ctx.freshName("stringVal")
-    ctx.addMutableState(ctx.javaType(dataType), stringVal)
+    val stringVal = ctx.addMutableState(ctx.javaType(dataType), "stringVal")
 
     val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
       s"""
