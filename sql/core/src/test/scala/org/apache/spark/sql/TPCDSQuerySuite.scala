@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.resourceToString
@@ -32,7 +31,7 @@ import org.apache.spark.util.Utils
  * This test suite ensures all the TPC-DS queries can be successfully analyzed and optimized
  * without hitting the max iteration threshold.
  */
-class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll with Logging {
+class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
 
   // When Utils.isTesting is true, the RuleExecutor will issue an exception when hitting
   // the max iteration of analyzer/optimizer batches.
@@ -372,7 +371,7 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
                |$subtree
                |Generated code:
                |${CodeFormatter.format(code)}
-             """
+             """.stripMargin
           throw new Exception(msg, e)
       }
     }
