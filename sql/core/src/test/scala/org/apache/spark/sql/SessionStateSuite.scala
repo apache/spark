@@ -31,6 +31,8 @@ import org.apache.spark.sql.util.QueryExecutionListener
 class SessionStateSuite extends SparkFunSuite
     with BeforeAndAfterEach with BeforeAndAfterAll {
 
+  protected override val doThreadAuditInSparkFunSuite = false
+
   /**
    * A shared SparkSession for all tests in this suite. Make sure you reset any changes to this
    * session as this is a singleton HiveSparkSession in HiveSessionStateSuite and it's shared
@@ -39,6 +41,7 @@ class SessionStateSuite extends SparkFunSuite
   protected var activeSession: SparkSession = _
 
   override def beforeAll(): Unit = {
+    doThreadPreAudit()
     activeSession = SparkSession.builder().master("local").getOrCreate()
   }
 
@@ -48,6 +51,7 @@ class SessionStateSuite extends SparkFunSuite
       activeSession = null
     }
     super.afterAll()
+    doThreadPostAudit()
   }
 
   test("fork new session and inherit RuntimeConfig options") {

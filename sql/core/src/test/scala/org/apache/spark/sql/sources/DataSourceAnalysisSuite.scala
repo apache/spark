@@ -29,14 +29,22 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
 class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
 
+  protected override val doThreadAuditInSparkFunSuite = false
+
   private var targetAttributes: Seq[Attribute] = _
   private var targetPartitionSchema: StructType = _
 
   override def beforeAll(): Unit = {
+    doThreadPreAudit()
     targetAttributes = Seq('a.int, 'd.int, 'b.int, 'c.int)
     targetPartitionSchema = new StructType()
       .add("b", IntegerType)
       .add("c", IntegerType)
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    doThreadPostAudit()
   }
 
   private def checkProjectList(actual: Seq[Expression], expected: Seq[Expression]): Unit = {
