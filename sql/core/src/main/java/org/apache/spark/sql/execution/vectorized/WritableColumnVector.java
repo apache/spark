@@ -109,7 +109,8 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   /**
    * Returns the dictionary Id for rowId.
-   * This should only be called when the ColumnVector is dictionaryIds.
+   *
+   * This should only be called when this `WritableColumnVector` represents dictionaryIds.
    * We have this separate method for dictionaryIds as per SPARK-16928.
    */
   public abstract int getDictId(int rowId);
