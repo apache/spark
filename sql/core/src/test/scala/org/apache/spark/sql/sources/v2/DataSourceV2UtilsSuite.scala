@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.sources.v2
 
-import org.apache.spark.sql.{QueryTest, SparkSession}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.SQLConf
 
-class DataSourceV2UtilsSuite extends QueryTest {
+class DataSourceV2UtilsSuite extends SparkFunSuite {
 
-  protected var spark: SparkSession = null
-
-  private val keyPrefix = "userDefinedDataSource"
+  private val keyPrefix = new DataSourceV2WithSessionConfig().keyPrefix
 
   test("method withSessionConfig() should propagate session configs correctly") {
     // Only match configs with keys start with "spark.datasource.${keyPrefix}".
