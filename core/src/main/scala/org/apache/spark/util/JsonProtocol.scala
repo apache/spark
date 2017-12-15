@@ -444,11 +444,20 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> rddInfo.diskSize)
   }
 
-  def storageLevelToJson(storageLevel: StorageLevel): JValue = {
-    ("Use Disk" -> storageLevel.useDisk) ~
-    ("Use Memory" -> storageLevel.useMemory) ~
-    ("Deserialized" -> storageLevel.deserialized) ~
-    ("Replication" -> storageLevel.replication)
+  def storageLevelToJson(storageLevel: StorageLevel): JValue = storageLevel match {
+    case StorageLevel.NONE => "NONE"
+    case StorageLevel.DISK_ONLY => "DISK_ONLY"
+    case StorageLevel.DISK_ONLY_2 => "DISK_ONLY_2"
+    case StorageLevel.MEMORY_ONLY => "MEMORY_ONLY"
+    case StorageLevel.MEMORY_ONLY_2 => "MEMORY_ONLY_2"
+    case StorageLevel.MEMORY_ONLY_SER => "MEMORY_ONLY_SER"
+    case StorageLevel.MEMORY_ONLY_SER_2 => "MEMORY_ONLY_SER_2"
+    case StorageLevel.MEMORY_AND_DISK => "MEMORY_AND_DISK"
+    case StorageLevel.MEMORY_AND_DISK_2 => "MEMORY_AND_DISK_2"
+    case StorageLevel.MEMORY_AND_DISK_SER => "MEMORY_AND_DISK_SER"
+    case StorageLevel.MEMORY_AND_DISK_SER_2 => "MEMORY_AND_DISK_SER_2"
+    case StorageLevel.OFF_HEAP => "OFF_HEAP"
+    case _ => throw new IllegalArgumentException(s"unexpected storage level: $storageLevel")
   }
 
   def blockStatusToJson(blockStatus: BlockStatus): JValue = {
@@ -988,12 +997,16 @@ private[spark] object JsonProtocol {
     rddInfo
   }
 
-  def storageLevelFromJson(json: JValue): StorageLevel = {
-    val useDisk = (json \ "Use Disk").extract[Boolean]
-    val useMemory = (json \ "Use Memory").extract[Boolean]
-    val deserialized = (json \ "Deserialized").extract[Boolean]
-    val replication = (json \ "Replication").extract[Int]
-    StorageLevel(useDisk, useMemory, deserialized, replication)
+  def storageLevelFromJson(json: JValue): StorageLevel = json match {
+    case _: JString => StorageLevel.fromString(json.extract[String])
+    case _: JObject =>
+      val useDisk = (json \ "Use Disk").extract[Boolean]
+      val useMemory = (json \ "Use Memory").extract[Boolean]
+      val deserialized = (json \ "Deserialized").extract[Boolean]
+      val replication = (json \ "Replication").extract[Int]
+      StorageLevel(useDisk, useMemory, deserialized, replication)
+    case _ =>
+      throw new IllegalArgumentException(json.toString)
   }
 
   def blockStatusFromJson(json: JValue): BlockStatus = {
