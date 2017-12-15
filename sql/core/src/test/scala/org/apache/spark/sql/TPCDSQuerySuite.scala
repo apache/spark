@@ -17,41 +17,18 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.resourceToString
-import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.Utils
 
 /**
- * This test suite ensures all the TPC-DS queries can be successfully analyzed and optimized
- * without hitting the max iteration threshold.
+ * This test suite ensures all the TPC-DS queries can be successfully analyzed, optimized
+ * and compiled without hitting the max iteration threshold.
  */
-class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
-
-  // When Utils.isTesting is true, the RuleExecutor will issue an exception when hitting
-  // the max iteration of analyzer/optimizer batches.
-  assert(Utils.isTesting, "spark.testing is not set to true")
-
-  /**
-   * Drop all the tables
-   */
-  protected override def afterAll(): Unit = {
-    try {
-      // For debugging dump some statistics about how much time was spent in various optimizer rules
-      logWarning(RuleExecutor.dumpTimeSpent())
-      spark.sessionState.catalog.reset()
-    } finally {
-      super.afterAll()
-    }
-  }
+class TPCDSQuerySuite extends BenchmarkQueryTest {
 
   override def beforeAll() {
     super.beforeAll()
+
     sql(
       """
         |CREATE TABLE `catalog_page` (
@@ -349,33 +326,6 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
     "q71", "q72", "q73", "q74", "q75", "q76", "q77", "q78", "q79", "q80",
     "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
     "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
-
-  private def checkGeneratedCode(plan: SparkPlan): Unit = {
-    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
-    plan foreach {
-      case s: WholeStageCodegenExec =>
-        codegenSubtrees += s
-      case s => s
-    }
-    codegenSubtrees.toSeq.foreach { subtree =>
-      val code = subtree.doCodeGen()._2
-      try {
-        // Just check the generated code can be properly compiled
-        CodeGenerator.compile(code)
-      } catch {
-        case e: Exception =>
-          val msg =
-            s"""
-               |failed to compile:
-               |Subtree:
-               |$subtree
-               |Generated code:
-               |${CodeFormatter.format(code)}
-             """.stripMargin
-          throw new Exception(msg, e)
-      }
-    }
-  }
 
   tpcdsQueries.foreach { name =>
     val queryString = resourceToString(s"tpcds/$name.sql",
