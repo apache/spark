@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.resourceToString
-import org.apache.spark.util.Utils
 
 /**
  * This test suite ensures all the TPC-H queries can be successfully analyzed, optimized
