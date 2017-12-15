@@ -17,24 +17,15 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.resourceToString
-import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 /**
  * This test suite ensures all the TPC-H queries can be successfully analyzed, optimized
  * and compiled without hitting the max iteration threshold.
  */
-class TPCHQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
-
-  // When Utils.isTesting is true, the RuleExecutor will issue an exception when hitting
-  // the max iteration of analyzer/optimizer batches.
-  assert(Utils.isTesting, "spark.testing is not set to true")
+class TPCHQuerySuite extends BenchmarkQueryTest {
 
   /**
    * Drop all the tables
@@ -43,7 +34,6 @@ class TPCHQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfter
     try {
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
-      spark.sessionState.catalog.reset()
     } finally {
       super.afterAll()
     }
@@ -51,7 +41,6 @@ class TPCHQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfter
 
   override def beforeAll() {
     super.beforeAll()
-    RuleExecutor.resetTime()
 
     sql(
       """
@@ -120,33 +109,6 @@ class TPCHQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfter
   val tpchQueries = Seq(
     "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11",
     "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22")
-
-  private def checkGeneratedCode(plan: SparkPlan): Unit = {
-    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
-    plan foreach {
-      case s: WholeStageCodegenExec =>
-        codegenSubtrees += s
-      case s => s
-    }
-    codegenSubtrees.toSeq.foreach { subtree =>
-      val code = subtree.doCodeGen()._2
-      try {
-        // Just check the generated code can be properly compiled
-        CodeGenerator.compile(code)
-      } catch {
-        case e: Exception =>
-          val msg =
-            s"""
-               |failed to compile:
-               |Subtree:
-               |$subtree
-               |Generated code:
-               |${CodeFormatter.format(code)}
-             """.stripMargin
-          throw new Exception(msg, e)
-      }
-    }
-  }
 
   tpchQueries.foreach { name =>
     val queryString = resourceToString(s"tpch/$name.sql",
