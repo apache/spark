@@ -232,9 +232,7 @@ class QuantileDiscretizerSuite
         val dataFrame: DataFrame = validData1.zip(validData2).zip(v).zip(w).map {
           case (((a, b), c), d) => (a, b, c, d)
         }.toSeq.toDF("input1", "input2", "expected1", "expected2")
-        dataFrame.show
         val result = discretizer.fit(dataFrame).transform(dataFrame)
-        result.show
         result.select("result1", "expected1", "result2", "expected2").collect().foreach {
           case Row(x: Double, y: Double, z: Double, w: Double) =>
             assert(x === y && w === z)
@@ -342,8 +340,6 @@ class QuantileDiscretizerSuite
     val spark = this.spark
     import spark.implicits._
 
-    val datasetSize = 20
-    val numBucketsArray: Array[Int] = Array(2, 5, 10)
     val data1 = Array.range(1, 21, 1).map(_.toDouble)
     val data2 = Array.range(1, 40, 2).map(_.toDouble)
     val data3 = Array.range(1, 60, 3).map(_.toDouble)
@@ -386,19 +382,16 @@ class QuantileDiscretizerSuite
     testDefaultReadWrite(discretizer)
   }
 
-  test("Both inputCol and inputCols are set") {
-    val spark = this.spark
-    import spark.implicits._
-    val discretizer = new QuantileDiscretizer()
-      .setInputCol("input")
-      .setOutputCol("result")
-      .setNumBuckets(3)
-      .setInputCols(Array("input1", "input2"))
-    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
-      .map(Tuple1.apply).toDF("input")
-    // When both inputCol and inputCols are set, we throw Exception.
-    intercept[Exception] {
-      discretizer.fit(df)
+  test("multiple columns: Both inputCol and inputCols are set") {
+    intercept[IllegalArgumentException] {
+      new QuantileDiscretizer().setInputCol("in").setInputCols(Array("in1", "in2")).getInOutCols
+    }
+  }
+
+  test("multiple columns: Mismatched sizes of inputCols / outputCols") {
+    intercept[IllegalArgumentException] {
+      new QuantileDiscretizer().setInputCols(Array("in1", "in2"))
+        .setOutputCols(Array("out1")).getInOutCols
     }
   }
 }
