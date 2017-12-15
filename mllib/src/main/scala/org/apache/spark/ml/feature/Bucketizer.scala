@@ -140,10 +140,10 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * by `inputCol`. A warning will be printed if both are set.
    */
   private[feature] def isBucketizeMultipleColumns(): Boolean = {
-    if (isSet(inputCols) && isSet(inputCol)) {
-      logWarning("Both `inputCol` and `inputCols` are set, we ignore `inputCols` and this " +
-        "`Bucketizer` only map one column specified by `inputCol`")
-      false
+    if (isSet(inputCols) && isSet(inputCol) || isSet(inputCols) && isSet(outputCol) ||
+      isSet(inputCol) && isSet(outputCols)) {
+      throw new IllegalArgumentException("Both `inputCol` and `inputCols` are set, `Bucketizer` " +
+        "only supports setting either `inputCol` or `inputCols`.")
     } else if (isSet(inputCols)) {
       true
     } else {

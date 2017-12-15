@@ -402,14 +402,33 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   }
 
   test("Both inputCol and inputCols are set") {
-    val bucket = new Bucketizer()
+    val feature1 = Array(-0.5, -0.3, 0.0, 0.2)
+    val feature2 = Array(-0.3, -0.2, 0.5, 0.0)
+    val df = feature1.zip(feature2).toSeq.toDF("feature1", "feature2")
+
+    val invalid1 = new Bucketizer()
       .setInputCol("feature1")
       .setOutputCol("result")
       .setSplits(Array(-0.5, 0.0, 0.5))
       .setInputCols(Array("feature1", "feature2"))
 
-    // When both are set, we ignore `inputCols` and just map the column specified by `inputCol`.
-    assert(bucket.isBucketizeMultipleColumns() == false)
+    val invalid2 = new Bucketizer()
+      .setOutputCol("result")
+      .setSplits(Array(-0.5, 0.0, 0.5))
+      .setInputCols(Array("feature1", "feature2"))
+
+    val invalid3 = new Bucketizer()
+      .setInputCol("feature1")
+      .setSplits(Array(-0.5, 0.0, 0.5))
+      .setOutputCols(Array("result1", "result2"))
+
+    Seq(invalid1, invalid2, invalid3).foreach { bucketizer =>
+      // When both inputCol and inputCols are set, we throw Exception.
+      val e = intercept[IllegalArgumentException] {
+        bucketizer.transform(df)
+      }
+      assert(e.getMessage.contains("Both `inputCol` and `inputCols` are set"))
+    }
   }
 }
 
