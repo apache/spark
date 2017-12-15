@@ -170,7 +170,6 @@ private[hive] class SparkExecuteStatementOperation(
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
-              registerCurrentOperationLog()
               try {
                 execute()
               } catch {
