@@ -132,6 +132,23 @@ class StorageLevel private(
 
   override def hashCode(): Int = toInt * 41 + replication
 
+  /** Name of the storage level if it is predefined or [[None]] otherwise. */
+  def name: Option[String] = this match {
+    case StorageLevel.NONE => Some("NONE")
+    case StorageLevel.DISK_ONLY => Some("DISK_ONLY")
+    case StorageLevel.DISK_ONLY_2 => Some("DISK_ONLY_2")
+    case StorageLevel.MEMORY_ONLY => Some("MEMORY_ONLY")
+    case StorageLevel.MEMORY_ONLY_2 => Some("MEMORY_ONLY_2")
+    case StorageLevel.MEMORY_ONLY_SER => Some("MEMORY_ONLY_SER")
+    case StorageLevel.MEMORY_ONLY_SER_2 => Some("MEMORY_ONLY_SER_2")
+    case StorageLevel.MEMORY_AND_DISK => Some("MEMORY_AND_DISK")
+    case StorageLevel.MEMORY_AND_DISK_2 => Some("MEMORY_AND_DISK_2")
+    case StorageLevel.MEMORY_AND_DISK_SER => Some("MEMORY_AND_DISK_SER")
+    case StorageLevel.MEMORY_AND_DISK_SER_2 => Some("MEMORY_AND_DISK_SER_2")
+    case StorageLevel.OFF_HEAP => Some("OFF_HEAP")
+    case _ => None
+  }
+  
   def description: String = {
     var result = ""
     result += (if (useDisk) "Disk " else "")

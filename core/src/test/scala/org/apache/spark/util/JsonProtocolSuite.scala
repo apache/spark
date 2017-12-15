@@ -148,6 +148,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testStorageLevel(StorageLevel.MEMORY_AND_DISK_2)
     testStorageLevel(StorageLevel.MEMORY_AND_DISK_SER)
     testStorageLevel(StorageLevel.MEMORY_AND_DISK_SER_2)
+    testStorageLevel(StorageLevel(true, false, false, false, 3))
 
     // JobResult
     val exception = new Exception("Out of Memory! Please restock film.")

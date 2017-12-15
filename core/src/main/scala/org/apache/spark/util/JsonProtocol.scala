@@ -444,21 +444,15 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> rddInfo.diskSize)
   }
 
-  def storageLevelToJson(storageLevel: StorageLevel): JValue = storageLevel match {
-    case StorageLevel.NONE => "NONE"
-    case StorageLevel.DISK_ONLY => "DISK_ONLY"
-    case StorageLevel.DISK_ONLY_2 => "DISK_ONLY_2"
-    case StorageLevel.MEMORY_ONLY => "MEMORY_ONLY"
-    case StorageLevel.MEMORY_ONLY_2 => "MEMORY_ONLY_2"
-    case StorageLevel.MEMORY_ONLY_SER => "MEMORY_ONLY_SER"
-    case StorageLevel.MEMORY_ONLY_SER_2 => "MEMORY_ONLY_SER_2"
-    case StorageLevel.MEMORY_AND_DISK => "MEMORY_AND_DISK"
-    case StorageLevel.MEMORY_AND_DISK_2 => "MEMORY_AND_DISK_2"
-    case StorageLevel.MEMORY_AND_DISK_SER => "MEMORY_AND_DISK_SER"
-    case StorageLevel.MEMORY_AND_DISK_SER_2 => "MEMORY_AND_DISK_SER_2"
-    case StorageLevel.OFF_HEAP => "OFF_HEAP"
-    case _ => throw new IllegalArgumentException(s"unexpected storage level: $storageLevel")
-  }
+  def storageLevelToJson(storageLevel: StorageLevel): JValue =
+    storageLevel.name match {
+      case Some(name) => name
+      case None =>
+        ("Use Disk" -> storageLevel.useDisk) ~
+        ("Use Memory" -> storageLevel.useMemory) ~
+        ("Deserialized" -> storageLevel.deserialized) ~
+        ("Replication" -> storageLevel.replication)
+    }
 
   def blockStatusToJson(blockStatus: BlockStatus): JValue = {
     val storageLevel = storageLevelToJson(blockStatus.storageLevel)
@@ -998,8 +992,12 @@ private[spark] object JsonProtocol {
   }
 
   def storageLevelFromJson(json: JValue): StorageLevel = json match {
-    case _: JString => StorageLevel.fromString(json.extract[String])
+    case _: JString =>
+      // One of the predefined storage levels, e.g. "DISK_ONLY".
+      StorageLevel.fromString(json.extract[String])
     case _: JObject =>
+      // Generic case for compatibility with older event logs and for
+      // use-defined storage levels.
       val useDisk = (json \ "Use Disk").extract[Boolean]
       val useMemory = (json \ "Use Memory").extract[Boolean]
       val deserialized = (json \ "Deserialized").extract[Boolean]
