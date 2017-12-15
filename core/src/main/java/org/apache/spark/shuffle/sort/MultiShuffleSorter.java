@@ -108,7 +108,7 @@ class MultiShuffleSorter extends ShuffleSorter {
     this.allSorters = new ArrayList<>(numSorters);
     this.availableSorters = new LinkedBlockingDeque<>(numSorters);
 
-    for (int i=0; i<numSorters; i++) {
+    for (int i=0; i < numSorters; i++) {
       sorterMetrics[i] = TaskMetrics.empty();
       ShuffleSorter sorter = factory.createShuffleExternalSorter(
         memoryManager, blockManager, sorterMetrics[i], initialSize, numPartitions, conf, true);
@@ -342,13 +342,13 @@ class MultiShuffleSorter extends ShuffleSorter {
 
   @VisibleForTesting
   protected void waitForAvailableSorters(int numSorters) throws IOException {
-    while (availableSorters.size() < numSorters) {
-      try {
-        spillCompleteLock.lock();
+    try {
+      spillCompleteLock.lock();
+      while (availableSorters.size() < numSorters) {
         waitForAsyncSpillComplete();
-      } finally {
-        spillCompleteLock.unlock();
       }
+    } finally {
+      spillCompleteLock.unlock();
     }
   }
 
