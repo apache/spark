@@ -139,9 +139,9 @@ case class SortExec(
     // the iterator to return sorted rows.
     val thisPlan = ctx.addReferenceObj("plan", this)
     sorterVariable = ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, "sorter",
-      v => s"$v = $thisPlan.createSorter();")
+      v => s"$v = $thisPlan.createSorter();", forceInline = true)
     val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",
-      v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();")
+      v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();", forceInline = true)
     val sortedIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "sortedIter",
       forceInline = true)
 
