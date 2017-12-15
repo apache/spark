@@ -47,9 +47,7 @@ import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class ContinuousSuite extends StreamTest {
-  import testImplicits._
-
+class ContinuousSuiteBase extends StreamTest {
   // We need more than the default local[2] to be able to schedule all partitions simultaneously.
   override protected def createSparkSession = new TestSparkSession(
     new SparkContext(
@@ -57,7 +55,7 @@ class ContinuousSuite extends StreamTest {
       "continuous-stream-test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
 
-  private def waitForRateSourceTriggers(query: StreamExecution, numTriggers: Int): Unit = {
+  protected def waitForRateSourceTriggers(query: StreamExecution, numTriggers: Int): Unit = {
     query match {
       case s: ContinuousExecution =>
         assert(numTriggers >= 2, "must wait for at least 2 triggers to ensure query is initialized")
@@ -74,7 +72,11 @@ class ContinuousSuite extends StreamTest {
 
   // A continuous trigger that will only fire the initial time for the duration of a test.
   // This allows clean testing with manual epoch advancement.
-  private val longContinuousTrigger = Trigger.Continuous("1 hour")
+  protected val longContinuousTrigger = Trigger.Continuous("1 hour")
+}
+
+class ContinuousSuite extends ContinuousSuiteBase {
+  import testImplicits._
 
   test("basic rate source") {
     val df = spark.readStream
@@ -167,6 +169,22 @@ class ContinuousSuite extends StreamTest {
       "Continuous processing does not support Deduplicate operations."))
   }
 
+  test("timestamp") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .select(current_timestamp())
+
+    val except = intercept[AnalysisException] {
+      testStream(df, useV2Sink = true)(StartStream(longContinuousTrigger))
+    }
+
+    assert(except.message.contains(
+      "Continuous processing does not support current time operations."))
+  }
+
   test("repeatedly restart") {
     val df = spark.readStream
       .format("rate")
@@ -217,35 +235,8 @@ class ContinuousSuite extends StreamTest {
   }
 }
 
-class ContinuousStressSuite extends StreamTest {
-
+class ContinuousStressSuite extends ContinuousSuiteBase {
   import testImplicits._
-
-  // We need more than the default local[2] to be able to schedule all partitions simultaneously.
-  override protected def createSparkSession = new TestSparkSession(
-    new SparkContext(
-      "local[10]",
-      "continuous-stream-test-sql-context",
-      sparkConf.set("spark.sql.testkey", "true")))
-
-  private def waitForRateSourceTriggers(query: StreamExecution, numTriggers: Int): Unit = {
-    query match {
-      case s: ContinuousExecution =>
-        assert(numTriggers >= 2, "must wait for at least 2 triggers to ensure query is initialized")
-        val reader = s.lastExecution.executedPlan.collectFirst {
-          case DataSourceV2ScanExec(_, r: ContinuousRateStreamReader) => r
-        }.get
-
-        val deltaMs = (numTriggers - 1) * 1000 + 300
-        while (System.currentTimeMillis < reader.creationTime + deltaMs) {
-          Thread.sleep(reader.creationTime + deltaMs - System.currentTimeMillis)
-        }
-    }
-  }
-
-  // A continuous trigger that will only fire the initial time for the duration of a test.
-  // This allows clean testing with manual epoch advancement.
-  private val longContinuousTrigger = Trigger.Continuous("1 hour")
 
   test("only one epoch") {
     val df = spark.readStream
