@@ -42,7 +42,7 @@ private[sql] object DataSourceV2Utils extends Logging {
       val keyPrefix = cs.keyPrefix()
       require(keyPrefix != null, "The data source config key prefix can't be null.")
 
-      val pattern = Pattern.compile(s"^spark\\.datasource\\.$keyPrefix\\.(.*)")
+      val pattern = Pattern.compile(s"^spark\\.datasource\\.$keyPrefix\\.(.+)")
 
       conf.getAllConfs.flatMap { case (key, value) =>
         val m = pattern.matcher(key)
