@@ -27,18 +27,6 @@ import org.apache.spark.util.Utils
  */
 class TPCHQuerySuite extends BenchmarkQueryTest {
 
-  /**
-   * Drop all the tables
-   */
-  protected override def afterAll(): Unit = {
-    try {
-      // For debugging dump some statistics about how much time was spent in various optimizer rules
-      logWarning(RuleExecutor.dumpTimeSpent())
-    } finally {
-      super.afterAll()
-    }
-  }
-
   override def beforeAll() {
     super.beforeAll()
 
