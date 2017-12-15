@@ -194,13 +194,13 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     }
   }
 
-  def simpleString: String = {
+  def simpleString: String = withRedaction {
     s"""== Physical Plan ==
        |${stringOrError(executedPlan.treeString(verbose = false))}
       """.stripMargin.trim
   }
 
-  override def toString: String = {
+  override def toString: String = withRedaction {
     def output = Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(
@@ -219,7 +219,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     """.stripMargin.trim
   }
 
-  def stringWithStats: String = {
+  def stringWithStats: String = withRedaction {
     // trigger to compute stats for logical plans
     optimizedPlan.stats
 
@@ -229,6 +229,13 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         |== Physical Plan ==
         |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim
+  }
+
+  /**
+   * Redact the sensitive information in the given string.
+   */
+  private def withRedaction(message: => String): String = {
+    Utils.redact(SparkSession.getActiveSession.map(_.sparkContext.conf).orNull, message)
   }
 
   /** A special namespace for commands that can be used to debug query execution. */
