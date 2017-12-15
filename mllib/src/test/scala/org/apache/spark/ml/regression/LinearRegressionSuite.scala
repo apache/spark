@@ -24,13 +24,12 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.{DataFrame, Row}
 
-class LinearRegressionSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -233,7 +232,8 @@ class LinearRegressionSuite
       assert(model2.intercept ~== interceptR relTol 1E-3)
       assert(model2.coefficients ~= coefficientsR relTol 1E-3)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -764,6 +764,11 @@ class LinearRegressionSuite
           (Intercept) 6.3022157  0.0018600    3388   <2e-16 ***
           V2          4.6982442  0.0011805    3980   <2e-16 ***
           V3          7.1994344  0.0009044    7961   <2e-16 ***
+
+          # R code for r2adj
+          lm_fit <- lm(V1 ~ V2 + V3, data = d1)
+          summary(lm_fit)$adj.r.squared
+          [1] 0.9998736
           ---
 
           ....
@@ -771,6 +776,7 @@ class LinearRegressionSuite
       assert(model.summary.meanSquaredError ~== 0.00985449 relTol 1E-4)
       assert(model.summary.meanAbsoluteError ~== 0.07961668 relTol 1E-4)
       assert(model.summary.r2 ~== 0.9998737 relTol 1E-4)
+      assert(model.summary.r2adj ~== 0.9998736  relTol 1E-4)
 
       // Normal solver uses "WeightedLeastSquares". If no regularization is applied or only L2
       // regularization is applied, this algorithm uses a direct solver and does not generate an

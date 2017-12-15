@@ -25,7 +25,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, GetExternalRowField, ValidateExternalType}
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -77,7 +77,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-13242: case-when expression with large number of branches (or cases)") {
-    val cases = 50
+    val cases = 500
     val clauses = 20
 
     // Generate an individual case
@@ -88,16 +88,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       (condition, Literal(n))
     }
 
-    val expression = CaseWhen((1 to cases).map(generateCase(_)))
+    val expression = CaseWhen((1 to cases).map(generateCase))
 
     val plan = GenerateMutableProjection.generate(Seq(expression))
-    val input = new GenericInternalRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
+    val input = new GenericInternalRow(Array[Any](UTF8String.fromString(s"$clauses:$cases")))
     val actual = plan(input).toSeq(Seq(expression.dataType))
 
-    assert(actual(0) == cases)
+    assert(actual.head == cases)
   }
 
-  test("SPARK-18091: split large if expressions into blocks due to JVM code size limit") {
+  test("SPARK-22543: split large if expressions into blocks due to JVM code size limit") {
     var strExpr: Expression = Literal("abc")
     for (_ <- 1 to 150) {
       strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
@@ -342,7 +342,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     projection(row)
   }
 
-  test("SPARK-21720: split large predications into blocks due to JVM code size limit") {
+  test("SPARK-22543: split large predicates into blocks due to JVM code size limit") {
     val length = 600
 
     val input = new GenericInternalRow(length)
@@ -379,5 +379,26 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       fail(
         s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
     }
+  }
+
+  test("SPARK-22696: CreateExternalRow should not use global variables") {
+    val ctx = new CodegenContext
+    val schema = new StructType().add("a", IntegerType).add("b", StringType)
+    CreateExternalRow(Seq(Literal(1), Literal("x")), schema).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
+  test("SPARK-22696: InitializeJavaBean should not use global variables") {
+    val ctx = new CodegenContext
+    InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
+      Map("add" -> Literal(1))).genCode(ctx)
+    assert(ctx.mutableStates.isEmpty)
+  }
+
+  test("SPARK-22716: addReferenceObj should not add mutable states") {
+    val ctx = new CodegenContext
+    val foo = new Object()
+    ctx.addReferenceObj("foo", foo)
+    assert(ctx.mutableStates.isEmpty)
   }
 }

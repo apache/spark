@@ -226,7 +226,7 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getHours($c, $tz)")
   }
@@ -257,7 +257,7 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c, $tz)")
   }
@@ -288,7 +288,7 @@ case class Second(child: Expression, timeZoneId: Option[String] = None)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c, $tz)")
   }
@@ -529,7 +529,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     defineCodeGen(ctx, ev, (timestamp, format) => {
       s"""UTF8String.fromString($dtu.newDateFormat($format.toString(), $tz)
           .format(new java.util.Date($timestamp / 1000)))"""
@@ -691,7 +691,7 @@ abstract class UnixTime
             }""")
         }
       case StringType =>
-        val tz = ctx.addReferenceMinorObj(timeZone)
+        val tz = ctx.addReferenceObj("timeZone", timeZone)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
@@ -715,7 +715,7 @@ abstract class UnixTime
             ${ev.value} = ${eval1.value} / 1000000L;
           }""")
       case DateType =>
-        val tz = ctx.addReferenceMinorObj(timeZone)
+        val tz = ctx.addReferenceObj("timeZone", timeZone)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
         ev.copy(code = s"""
@@ -827,7 +827,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           }""")
       }
     } else {
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
@@ -969,7 +969,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
       s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds, $tz)"""
@@ -1065,7 +1065,7 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
       s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds, $tz)"""
@@ -1143,7 +1143,7 @@ case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Optio
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (l, r) => {
       s"""$dtu.monthsBetween($l, $r, $tz)"""

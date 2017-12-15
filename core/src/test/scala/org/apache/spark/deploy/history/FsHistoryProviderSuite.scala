@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util.Date
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
@@ -42,6 +43,7 @@ import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
@@ -114,9 +116,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           end: Long,
           lastMod: Long,
           user: String,
-          completed: Boolean): ApplicationHistoryInfo = {
-        ApplicationHistoryInfo(id, name,
-          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed, "")))
+          completed: Boolean): ApplicationInfo = {
+
+        val duration = if (end > 0) end - start else 0
+        new ApplicationInfo(id, name, None, None, None, None,
+          List(ApplicationAttemptInfo(None, new Date(start),
+            new Date(end), new Date(lastMod), duration, user, completed, "")))
       }
 
       // For completed files, lastUpdated would be lastModified time.
@@ -667,7 +672,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
    *     }
    */
   private def updateAndCheck(provider: FsHistoryProvider)
-      (checkFn: Seq[ApplicationHistoryInfo] => Unit): Unit = {
+      (checkFn: Seq[ApplicationInfo] => Unit): Unit = {
     provider.checkForLogs()
     provider.cleanLogs()
     checkFn(provider.getListing().toSeq)

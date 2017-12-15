@@ -18,7 +18,10 @@
 package org.apache.spark.status
 
 import java.util.Date
+import java.util.concurrent.ConcurrentHashMap
+import java.util.function.Function
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
@@ -59,7 +62,7 @@ private[spark] class AppStatusListener(
 
   // Keep track of live entities, so that task metrics can be efficiently updated (without
   // causing too many writes to the underlying store, and other expensive operations).
-  private val liveStages = new HashMap[(Int, Int), LiveStage]()
+  private val liveStages = new ConcurrentHashMap[(Int, Int), LiveStage]()
   private val liveJobs = new HashMap[Int, LiveJob]()
   private val liveExecutors = new HashMap[String, LiveExecutor]()
   private val liveTasks = new HashMap[Long, LiveTask]()
@@ -74,7 +77,7 @@ private[spark] class AppStatusListener(
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     assert(event.appId.isDefined, "Application without IDs are not supported.")
 
-    val attempt = new v1.ApplicationAttemptInfo(
+    val attempt = v1.ApplicationAttemptInfo(
       event.appAttemptId,
       new Date(event.time),
       new Date(-1),
@@ -84,7 +87,7 @@ private[spark] class AppStatusListener(
       false,
       sparkVersion)
 
-    appInfo = new v1.ApplicationInfo(
+    appInfo = v1.ApplicationInfo(
       event.appId.get,
       event.appName,
       None,
@@ -119,7 +122,7 @@ private[spark] class AppStatusListener(
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     val old = appInfo.attempts.head
-    val attempt = new v1.ApplicationAttemptInfo(
+    val attempt = v1.ApplicationAttemptInfo(
       old.attemptId,
       old.startTime,
       new Date(event.time),
@@ -129,7 +132,7 @@ private[spark] class AppStatusListener(
       true,
       old.appSparkVersion)
 
-    appInfo = new v1.ApplicationInfo(
+    appInfo = v1.ApplicationInfo(
       appInfo.id,
       appInfo.name,
       None,
@@ -268,13 +271,15 @@ private[spark] class AppStatusListener(
       val now = System.nanoTime()
 
       // Check if there are any pending stages that match this job; mark those as skipped.
-      job.stageIds.foreach { sid =>
-        val pending = liveStages.filter { case ((id, _), _) => id == sid }
-        pending.foreach { case (key, stage) =>
+      val it = liveStages.entrySet.iterator()
+      while (it.hasNext()) {
+        val e = it.next()
+        if (job.stageIds.contains(e.getKey()._1)) {
+          val stage = e.getValue()
           stage.status = v1.StageStatus.SKIPPED
           job.skippedStages += stage.info.stageId
           job.skippedTasks += stage.info.numTasks
-          liveStages.remove(key)
+          it.remove()
           update(stage, now)
         }
       }
@@ -336,7 +341,7 @@ private[spark] class AppStatusListener(
     liveTasks.put(event.taskInfo.taskId, task)
     liveUpdate(task, now)
 
-    liveStages.get((event.stageId, event.stageAttemptId)).foreach { stage =>
+    Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
       stage.activeTasks += 1
       stage.firstLaunchTime = math.min(stage.firstLaunchTime, event.taskInfo.launchTime)
       maybeUpdate(stage, now)
@@ -403,7 +408,7 @@ private[spark] class AppStatusListener(
         (0, 1, 0)
     }
 
-    liveStages.get((event.stageId, event.stageAttemptId)).foreach { stage =>
+    Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
       if (metricsDelta != null) {
         stage.metrics.update(metricsDelta)
       }
@@ -466,12 +471,19 @@ private[spark] class AppStatusListener(
         }
       }
 
-      maybeUpdate(exec, now)
+      // Force an update on live applications when the number of active tasks reaches 0. This is
+      // checked in some tests (e.g. SQLTestUtilsBase) so it needs to be reliably up to date.
+      if (exec.activeTasks == 0) {
+        liveUpdate(exec, now)
+      } else {
+        maybeUpdate(exec, now)
+      }
     }
   }
 
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
-    liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptId)).foreach { stage =>
+    val maybeStage = Option(liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptId)))
+    maybeStage.foreach { stage =>
       val now = System.nanoTime()
       stage.info = event.stageInfo
 
@@ -540,7 +552,7 @@ private[spark] class AppStatusListener(
         val delta = task.updateMetrics(metrics)
         maybeUpdate(task, now)
 
-        liveStages.get((sid, sAttempt)).foreach { stage =>
+        Option(liveStages.get((sid, sAttempt))).foreach { stage =>
           stage.metrics.update(delta)
           maybeUpdate(stage, now)
 
@@ -563,7 +575,7 @@ private[spark] class AppStatusListener(
   /** Flush all live entities' data to the underlying store. */
   def flush(): Unit = {
     val now = System.nanoTime()
-    liveStages.values.foreach { stage =>
+    liveStages.values.asScala.foreach { stage =>
       update(stage, now)
       stage.executorSummaries.values.foreach(update(_, now))
     }
@@ -572,6 +584,18 @@ private[spark] class AppStatusListener(
     liveTasks.values.foreach(update(_, now))
     liveRDDs.values.foreach(update(_, now))
     pools.values.foreach(update(_, now))
+  }
+
+  /**
+   * Shortcut to get active stages quickly in a live application, for use by the console
+   * progress bar.
+   */
+  def activeStages(): Seq[v1.StageData] = {
+    liveStages.values.asScala
+      .filter(_.info.submissionTime.isDefined)
+      .map(_.toApi())
+      .toList
+      .sortBy(_.stageId)
   }
 
   private def updateRDDBlock(event: SparkListenerBlockUpdated, block: RDDBlockId): Unit = {
@@ -708,7 +732,10 @@ private[spark] class AppStatusListener(
   }
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {
-    val stage = liveStages.getOrElseUpdate((info.stageId, info.attemptId), new LiveStage())
+    val stage = liveStages.computeIfAbsent((info.stageId, info.attemptId),
+      new Function[(Int, Int), LiveStage]() {
+        override def apply(key: (Int, Int)): LiveStage = new LiveStage()
+      })
     stage.info = info
     stage
   }
