@@ -19,7 +19,6 @@ CREATE TEMPORARY VIEW t AS SELECT 1;
 
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as float) END FROM t;
@@ -33,7 +32,6 @@ SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast('2017-12-11 09:30:00' as
 
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as float) END FROM t;
@@ -45,23 +43,8 @@ SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as boolean) END FROM 
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast('2017-12-11 09:30:00.0' as timestamp) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast('2017-12-11 09:30:00' as date) END FROM t;
 
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as tinyint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as short) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as int) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as bigint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as float) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as double) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as decimal(10, 0)) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as string) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast('2' as binary) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast(2 as boolean) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast('2017-12-11 09:30:00.0' as timestamp) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as short) ELSE cast('2017-12-11 09:30:00' as date) END FROM t;
-
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as float) END FROM t;
@@ -75,7 +58,6 @@ SELECT CASE WHEN true THEN cast(1 as int) ELSE cast('2017-12-11 09:30:00' as dat
 
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as float) END FROM t;
@@ -89,7 +71,6 @@ SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast('2017-12-11 09:30:00' as 
 
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as float) END FROM t;
@@ -103,7 +84,6 @@ SELECT CASE WHEN true THEN cast(1 as float) ELSE cast('2017-12-11 09:30:00' as d
 
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as float) END FROM t;
@@ -117,7 +97,6 @@ SELECT CASE WHEN true THEN cast(1 as double) ELSE cast('2017-12-11 09:30:00' as 
 
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as float) END FROM t;
@@ -131,7 +110,6 @@ SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast('2017-12-11 09:30
 
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as float) END FROM t;
@@ -145,7 +123,6 @@ SELECT CASE WHEN true THEN cast(1 as string) ELSE cast('2017-12-11 09:30:00' as 
 
 SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as float) END FROM t;
@@ -159,7 +136,6 @@ SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast('2017-12-11 09:30:00' a
 
 SELECT CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as float) END FROM t;
@@ -173,7 +149,6 @@ SELECT CASE WHEN true THEN cast(1 as boolean) ELSE cast('2017-12-11 09:30:00' as
 
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(2 as float) END FROM t;
@@ -187,7 +162,6 @@ SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(
 
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast(2 as tinyint) END FROM t;
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast(2 as smallint) END FROM t;
-SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast(2 as short) END FROM t;
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast(2 as int) END FROM t;
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast(2 as bigint) END FROM t;
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast(2 as float) END FROM t;
