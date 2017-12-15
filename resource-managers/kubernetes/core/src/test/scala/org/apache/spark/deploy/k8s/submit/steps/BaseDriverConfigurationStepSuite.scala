@@ -30,7 +30,7 @@ class BaseDriverConfigurationStepSuite extends SparkFunSuite {
   private val APP_ID = "spark-app-id"
   private val RESOURCE_NAME_PREFIX = "spark"
   private val DRIVER_LABELS = Map("labelkey" -> "labelvalue")
-  private val DOCKER_IMAGE_PULL_POLICY = "IfNotPresent"
+  private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val APP_NAME = "spark-test"
   private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
   private val APP_ARGS = Array("arg1", "arg2", "arg 3")
@@ -56,7 +56,7 @@ class BaseDriverConfigurationStepSuite extends SparkFunSuite {
       APP_ID,
       RESOURCE_NAME_PREFIX,
       DRIVER_LABELS,
-      DOCKER_IMAGE_PULL_POLICY,
+      CONTAINER_IMAGE_PULL_POLICY,
       APP_NAME,
       MAIN_CLASS,
       APP_ARGS,
@@ -71,7 +71,7 @@ class BaseDriverConfigurationStepSuite extends SparkFunSuite {
 
     assert(preparedDriverSpec.driverContainer.getName === DRIVER_CONTAINER_NAME)
     assert(preparedDriverSpec.driverContainer.getImage === "spark-driver:latest")
-    assert(preparedDriverSpec.driverContainer.getImagePullPolicy === DOCKER_IMAGE_PULL_POLICY)
+    assert(preparedDriverSpec.driverContainer.getImagePullPolicy === CONTAINER_IMAGE_PULL_POLICY)
 
     assert(preparedDriverSpec.driverContainer.getEnv.size === 7)
     val envs = preparedDriverSpec.driverContainer
