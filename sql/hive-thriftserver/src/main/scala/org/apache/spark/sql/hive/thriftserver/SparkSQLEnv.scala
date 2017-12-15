@@ -58,10 +58,10 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext = sparkSession.sparkContext
       sqlContext = sparkSession.sqlContext
 
-      val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
-      sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
-      sessionState.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
-      sessionState.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
+      val metadataHive = sparkSession.sessionState.asInstanceOf[HiveSessionState].metadataHive
+      metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
+      metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
+      metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
       sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     }
   }
