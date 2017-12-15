@@ -60,7 +60,7 @@ private[spark] class KubernetesSparkDependencyDownloadInitContainer(
         remoteJars,
         jarsDownloadDir,
         s"Remote jars download directory specified at $jarsDownloadDir does not exist " +
-          s"or is not a directory.")
+          "or is not a directory.")
     }
     val remoteFilesDownload = Future[Unit] {
       logInfo(s"Downloading remote files: $remoteFiles")
@@ -68,7 +68,7 @@ private[spark] class KubernetesSparkDependencyDownloadInitContainer(
         remoteFiles,
         filesDownloadDir,
         s"Remote files download directory specified at $filesDownloadDir does not exist " +
-          s"or is not a directory.")
+          "or is not a directory.")
     }
     waitForFutures(
       remoteJarsDownload,

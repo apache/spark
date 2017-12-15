@@ -215,7 +215,7 @@ private[spark] class ExecutorPodFactoryImpl(
     }.getOrElse(executorContainer)
 
     val (withMaybeSecretsMountedPod, withMaybeSecretsMountedContainer) =
-      mountSecretsBootstrap.map {bootstrap =>
+      mountSecretsBootstrap.map { bootstrap =>
         bootstrap.mountSecrets(executorPod, containerWithExecutorLimitCores)
       }.getOrElse((executorPod, containerWithExecutorLimitCores))
 

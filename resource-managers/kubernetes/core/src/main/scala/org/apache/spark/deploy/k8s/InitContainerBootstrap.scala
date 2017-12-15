@@ -75,7 +75,7 @@ private[spark] class InitContainerBootstrapImpl(
           .build())
 
     val initContainer = new ContainerBuilder(podWithDetachedInitContainer.initContainer)
-      .withName(s"spark-init")
+      .withName("spark-init")
       .withImage(initContainerImage)
       .withImagePullPolicy(dockerImagePullPolicy)
       .addAllToEnv(initContainerCustomEnvVars.asJava)
@@ -124,5 +124,4 @@ private[spark] class InitContainerBootstrapImpl(
       initContainer,
       mainContainerWithMountedFiles)
   }
-
 }
