@@ -17,10 +17,10 @@
 
 package org.apache.spark.memory;
 
-import java.io.IOException;
-
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
+
+import java.io.IOException;
 
 /**
  * A memory consumer of {@link TaskMemoryManager} that supports spilling.
@@ -154,6 +154,6 @@ public abstract class MemoryConsumer {
       taskMemoryManager.freePage(page, this);
     }
     taskMemoryManager.showMemoryUsage();
-    throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
+    throw new SparkOutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
   }
 }
