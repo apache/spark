@@ -84,7 +84,7 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
 
     require((isSet(inputCol) && isSet(outputCol) && !isSet(inputCols) && !isSet(outputCols)) ||
       (!isSet(inputCol) && !isSet(outputCol) && isSet(inputCols) && isSet(outputCols)),
-      "Only allow to set either inputCol/outputCol, or inputCols/outputCols"
+      "StringIndexer only supports setting either inputCol/outputCol or inputCols/outputCols."
     )
 
     if (isSet(inputCol)) {

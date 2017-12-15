@@ -37,6 +37,29 @@ class StringIndexerSuite
     val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
     ParamsSuite.checkParams(model)
     ParamsSuite.checkParams(modelWithoutUid)
+
+    val stringIndexerSingleCol = new StringIndexer()
+      .setInputCol("in").setOutputCol("out")
+    val inOutCols1 = stringIndexerSingleCol.getInOutCols
+    assert(inOutCols1._1 === Array("in"))
+    assert(inOutCols1._2 === Array("out"))
+
+    val stringIndexerMultiCol = new StringIndexer()
+      .setInputCols(Array("in1", "in2")).setOutputCols(Array("out1", "out2"))
+    val inOutCols2 = stringIndexerMultiCol.getInOutCols
+    assert(inOutCols2._1 === Array("in1", "in2"))
+    assert(inOutCols2._2 === Array("out1", "out2"))
+
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCol("in").setOutputCols(Array("out1", "out2")).getInOutCols
+    }
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCols(Array("in1", "in2")).setOutputCol("out1").getInOutCols
+    }
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCols(Array("in1", "in2"))
+        .setOutputCols(Array("out1", "out2", "out3")).getInOutCols
+    }
   }
 
   test("StringIndexer") {
