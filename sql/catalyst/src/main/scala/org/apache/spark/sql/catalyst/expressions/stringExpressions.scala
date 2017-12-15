@@ -24,7 +24,6 @@ import java.util.regex.Pattern
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -49,9 +48,10 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
       > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
   """)
-case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
+case class Concat(children: Seq[Expression], isBinaryMode: Boolean = false)
+  extends Expression with ImplicitCastInputTypes {
 
-  private lazy val isBinaryMode = children.nonEmpty && children.forall(_.dataType == BinaryType)
+  def this(children: Seq[Expression]) = this(children, false)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq.fill(children.size)(if (isBinaryMode) BinaryType else StringType)
@@ -99,6 +99,8 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
+
+  override def toString: String = s"concat(${children.mkString(", ")})"
 }
 
 

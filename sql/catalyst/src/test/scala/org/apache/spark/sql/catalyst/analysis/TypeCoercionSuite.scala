@@ -528,7 +528,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("coalesce casts") {
-    val rule = TypeCoercion.FunctionArgumentConversion
+    val rule = new TypeCoercion.FunctionArgumentConversion(conf)
 
     val intLit = Literal(1)
     val longLit = Literal.create(1L)
@@ -575,7 +575,9 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("CreateArray casts") {
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    val rule = new TypeCoercion.FunctionArgumentConversion(conf)
+
+    ruleTest(rule,
       CreateArray(Literal(1.0)
         :: Literal(1)
         :: Literal.create(1.0, FloatType)
@@ -585,7 +587,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Cast(Literal.create(1.0, FloatType), DoubleType)
         :: Nil))
 
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       CreateArray(Literal(1.0)
         :: Literal(1)
         :: Literal("a")
@@ -595,7 +597,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Cast(Literal("a"), StringType)
         :: Nil))
 
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       CreateArray(Literal.create(null, DecimalType(5, 3))
         :: Literal(1)
         :: Nil),
@@ -603,7 +605,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Literal(1).cast(DecimalType(13, 3))
         :: Nil))
 
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       CreateArray(Literal.create(null, DecimalType(5, 3))
         :: Literal.create(null, DecimalType(22, 10))
         :: Literal.create(null, DecimalType(38, 38))
@@ -615,8 +617,10 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("CreateMap casts") {
+    val rule = new TypeCoercion.FunctionArgumentConversion(conf)
+
     // type coercion for map keys
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       CreateMap(Literal(1)
         :: Literal("a")
         :: Literal.create(2.0, FloatType)
@@ -627,7 +631,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Cast(Literal.create(2.0, FloatType), FloatType)
         :: Literal("b")
         :: Nil))
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       CreateMap(Literal.create(null, DecimalType(5, 3))
         :: Literal("a")
         :: Literal.create(2.0, FloatType)
@@ -639,7 +643,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Literal("b")
         :: Nil))
     // type coercion for map values
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       CreateMap(Literal(1)
         :: Literal("a")
         :: Literal(2)
@@ -650,7 +654,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Literal(2)
         :: Cast(Literal(3.0), StringType)
         :: Nil))
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       CreateMap(Literal(1)
         :: Literal.create(null, DecimalType(38, 0))
         :: Literal(2)
@@ -662,7 +666,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
         :: Nil))
     // type coercion for both map keys and values
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       CreateMap(Literal(1)
         :: Literal("a")
         :: Literal(2.0)
@@ -676,8 +680,10 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("greatest/least cast") {
+    val rule = new TypeCoercion.FunctionArgumentConversion(conf)
+
     for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
-      ruleTest(TypeCoercion.FunctionArgumentConversion,
+      ruleTest(rule,
         operator(Literal(1.0)
           :: Literal(1)
           :: Literal.create(1.0, FloatType)
@@ -686,7 +692,7 @@ class TypeCoercionSuite extends AnalysisTest {
           :: Cast(Literal(1), DoubleType)
           :: Cast(Literal.create(1.0, FloatType), DoubleType)
           :: Nil))
-      ruleTest(TypeCoercion.FunctionArgumentConversion,
+      ruleTest(rule,
         operator(Literal(1L)
           :: Literal(1)
           :: Literal(new java.math.BigDecimal("1000000000000000000000"))
@@ -695,7 +701,7 @@ class TypeCoercionSuite extends AnalysisTest {
           :: Cast(Literal(1), DecimalType(22, 0))
           :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
           :: Nil))
-      ruleTest(TypeCoercion.FunctionArgumentConversion,
+      ruleTest(rule,
         operator(Literal(1.0)
           :: Literal.create(null, DecimalType(10, 5))
           :: Literal(1)
@@ -704,7 +710,7 @@ class TypeCoercionSuite extends AnalysisTest {
           :: Literal.create(null, DecimalType(10, 5)).cast(DoubleType)
           :: Literal(1).cast(DoubleType)
           :: Nil))
-      ruleTest(TypeCoercion.FunctionArgumentConversion,
+      ruleTest(rule,
         operator(Literal.create(null, DecimalType(15, 0))
           :: Literal.create(null, DecimalType(10, 5))
           :: Literal(1)
@@ -713,7 +719,7 @@ class TypeCoercionSuite extends AnalysisTest {
           :: Literal.create(null, DecimalType(10, 5)).cast(DecimalType(20, 5))
           :: Literal(1).cast(DecimalType(20, 5))
           :: Nil))
-      ruleTest(TypeCoercion.FunctionArgumentConversion,
+      ruleTest(rule,
         operator(Literal.create(2L, LongType)
           :: Literal(1)
           :: Literal.create(null, DecimalType(10, 5))
@@ -726,19 +732,21 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("nanvl casts") {
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    val rule = new TypeCoercion.FunctionArgumentConversion(conf)
+
+    ruleTest(rule,
       NaNvl(Literal.create(1.0f, FloatType), Literal.create(1.0, DoubleType)),
       NaNvl(Cast(Literal.create(1.0f, FloatType), DoubleType), Literal.create(1.0, DoubleType)))
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0f, FloatType)),
       NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(1.0f, FloatType), DoubleType)))
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)),
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)))
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       NaNvl(Literal.create(1.0f, FloatType), Literal.create(null, NullType)),
       NaNvl(Literal.create(1.0f, FloatType), Cast(Literal.create(null, NullType), FloatType)))
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
+    ruleTest(rule,
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(null, NullType)),
       NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(null, NullType), DoubleType)))
   }
@@ -1117,7 +1125,7 @@ class TypeCoercionSuite extends AnalysisTest {
 
   test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
     "in aggregation function like sum") {
-    val rules = Seq(FunctionArgumentConversion, Division)
+    val rules = Seq(new FunctionArgumentConversion(conf), Division)
     // Casts Integer to Double
     ruleTest(rules, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
     // Left expression is Double, right expression is Int. Another rule ImplicitTypeCasts will
@@ -1136,7 +1144,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("SPARK-17117 null type coercion in divide") {
-    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
+    val rules = Seq(new FunctionArgumentConversion(conf), Division, ImplicitTypeCasts)
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))

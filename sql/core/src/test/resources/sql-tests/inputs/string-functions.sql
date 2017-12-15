@@ -29,10 +29,10 @@ select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 SELECT (col1 || col2 || col3 || col4) col
 FROM (
   SELECT
-    CAST('a' || id AS BINARY) col1,
-    CAST('b' || id AS BINARY) col2,
-    CAST('c' || id AS BINARY) col3,
-    CAST('d' || id AS BINARY) col4
+    encode(string(id), 'utf-8') col1,
+    encode(string(id + 1), 'utf-8') col2,
+    encode(string(id + 2), 'utf-8') col3,
+    encode(string(id + 3), 'utf-8') col4
   FROM range(10)
 );
 
@@ -40,9 +40,9 @@ FROM (
 SELECT (col1 || col2 || col3 || col4) col
 FROM (
   SELECT
-    'a' || id col1,
-    'b' || id col2,
-    CAST('c' || id AS BINARY) col3,
-    CAST('d' || id AS BINARY) col4
+    string(id) col1,
+    string(id + 1) col2,
+    encode(string(id + 2), 'utf-8') col3,
+    encode(string(id + 3), 'utf-8') col4
   FROM range(10)
 );

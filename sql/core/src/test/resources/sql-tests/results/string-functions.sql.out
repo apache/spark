@@ -124,47 +124,47 @@ NULL			NULL
 SELECT (col1 || col2 || col3 || col4) col
 FROM (
   SELECT
-    CAST('a' || id AS BINARY) col1,
-    CAST('b' || id AS BINARY) col2,
-    CAST('c' || id AS BINARY) col3,
-    CAST('d' || id AS BINARY) col4
+    encode(string(id), 'utf-8') col1,
+    encode(string(id + 1), 'utf-8') col2,
+    encode(string(id + 2), 'utf-8') col3,
+    encode(string(id + 3), 'utf-8') col4
   FROM range(10)
 )
 -- !query 12 schema
 struct<col:binary>
 -- !query 12 output
-a0b0c0d0
-a1b1c1d1
-a2b2c2d2
-a3b3c3d3
-a4b4c4d4
-a5b5c5d5
-a6b6c6d6
-a7b7c7d7
-a8b8c8d8
-a9b9c9d9
+0123
+1234
+2345
+3456
+4567
+5678
+6789
+78910
+891011
+9101112
 
 
 -- !query 13
 SELECT (col1 || col2 || col3 || col4) col
 FROM (
   SELECT
-    'a' || id col1,
-    'b' || id col2,
-    CAST('c' || id AS BINARY) col3,
-    CAST('d' || id AS BINARY) col4
+    string(id) col1,
+    string(id + 1) col2,
+    encode(string(id + 2), 'utf-8') col3,
+    encode(string(id + 3), 'utf-8') col4
   FROM range(10)
 )
 -- !query 13 schema
 struct<col:string>
 -- !query 13 output
-a0b0c0d0
-a1b1c1d1
-a2b2c2d2
-a3b3c3d3
-a4b4c4d4
-a5b5c5d5
-a6b6c6d6
-a7b7c7d7
-a8b8c8d8
-a9b9c9d9
+0123
+1234
+2345
+3456
+4567
+5678
+6789
+78910
+891011
+9101112

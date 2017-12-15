@@ -641,15 +641,17 @@ object CombineConcats extends Rule[LogicalPlan] {
   private def flattenConcats(concat: Concat): Concat = {
     val stack = Stack[Expression](concat)
     val flattened = ArrayBuffer.empty[Expression]
+    var isBinaryMode = concat.isBinaryMode
     while (stack.nonEmpty) {
       stack.pop() match {
-        case Concat(children) =>
+        case Concat(children, binary) =>
+          isBinaryMode &= binary
           stack.pushAll(children.reverse)
         case child =>
           flattened += child
       }
     }
-    Concat(flattened)
+    Concat(flattened, isBinaryMode)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {

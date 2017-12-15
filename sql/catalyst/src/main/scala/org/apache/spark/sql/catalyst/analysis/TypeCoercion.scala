@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -45,13 +46,13 @@ import org.apache.spark.sql.types._
  */
 object TypeCoercion {
 
-  val typeCoercionRules =
+  def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
     InConversion ::
       WidenSetOperationTypes ::
       PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
-      FunctionArgumentConversion ::
+      new FunctionArgumentConversion(conf) ::
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
@@ -479,9 +480,9 @@ object TypeCoercion {
   /**
    * This ensure that the types for various functions are as expected.
    */
-  object FunctionArgumentConversion extends TypeCoercionRule {
+  class FunctionArgumentConversion(conf: SQLConf) extends TypeCoercionRule {
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -563,6 +564,16 @@ object TypeCoercion {
       case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
+    }
+    // This group needs to be transformed in a post order
+    .transformExpressionsUp {
+      // When all inputs in [[Concat]] are binary, coerces an output type to binary
+      case c @ Concat(children, _)
+          if conf.concatBinaryModeEnabled &&
+            c.childrenResolved &&
+            children.nonEmpty &&
+            children.forall(_.dataType == BinaryType) =>
+        c.copy(children, isBinaryMode = true)
     }
   }
 

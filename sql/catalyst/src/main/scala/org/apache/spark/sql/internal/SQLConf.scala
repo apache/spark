@@ -1043,6 +1043,12 @@ object SQLConf {
         "dummy value. This is currently used to redact the output of SQL explain commands. " +
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
+  
+  val CONCAT_BINARY_MODE_ENABLED = buildConf("spark.sql.expression.concat.binaryMode.enabled")
+    .doc("When this option is set to true and all inputs are binary, `functions.concat` returns " +
+      "an output as binary. Otherwise, it returns as string. ")
+    .booleanConf
+    .createWithDefault(true)
 
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.executorQueueSize")
@@ -1377,6 +1383,8 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
+
+  def concatBinaryModeEnabled: Boolean = getConf(CONCAT_BINARY_MODE_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
