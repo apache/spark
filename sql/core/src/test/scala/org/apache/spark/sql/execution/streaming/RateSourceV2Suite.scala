@@ -29,16 +29,6 @@ import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceV2Optio
 import org.apache.spark.sql.streaming.StreamTest
 
 class RateSourceV2Suite extends StreamTest {
-  test("microbatch in registry") {
-    DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
-      case ds: MicroBatchReadSupport =>
-        val reader = ds.createMicroBatchReader(Optional.empty(), "", DataSourceV2Options.empty())
-        assert(reader.isInstanceOf[RateStreamV2Reader])
-      case _ =>
-        throw new IllegalStateException("Could not find v2 read support for rate")
-    }
-  }
-
   test("microbatch - numPartitions propagated") {
     val reader = new RateStreamV2Reader(
       new DataSourceV2Options(Map("numPartitions" -> "11", "rowsPerSecond" -> "33").asJava))
