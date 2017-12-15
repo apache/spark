@@ -186,6 +186,14 @@ class Pipeline @Since("1.4.0") (
 
   @Since("1.6.0")
   override def write: MLWriter = new Pipeline.PipelineWriter(this)
+
+  override private[ml] def getOptimizedParams: Array[Param[_]] = {
+    val theStages = $(stages)
+    theStages.flatMap(_ match {
+        case estimator: Estimator[_] => estimator.getOptimizedParams
+        case _ => Array.empty
+    })
+  }
 }
 
 @Since("1.6.0")
