@@ -402,7 +402,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx.mutableStates.isEmpty)
   }
 
-  test("SPARK-22750: addSingleMutableState") {
+  test("SPARK-22750: addImmutableStateIfNotExists") {
     val ctx = new CodegenContext
     val mutableState1 = "field1"
     val mutableState2 = "field2"

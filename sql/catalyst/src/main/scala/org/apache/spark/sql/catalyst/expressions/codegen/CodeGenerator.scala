@@ -172,8 +172,8 @@ class CodegenContext {
 
   /**
    * A map containing the mutable states which have been defined so far using
-   * `addSingleMutableState`. Each entry contains the name of the mutable state as key and its
-   * Java type and init code as value.
+   * `addImmutableStateIfNotExists`. Each entry contains the name of the mutable state as key and
+   * its Java type and init code as value.
    */
   val singleMutableStates: mutable.Map[String, (String, String)] =
     mutable.Map.empty[String, (String, String)]
