@@ -113,7 +113,7 @@ public class Trigger {
    *
    * {{{
    *    import java.util.concurrent.TimeUnit
-   *    df.writeStream.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   *    df.writeStream.trigger(Trigger.Continuous(10, TimeUnit.SECONDS))
    * }}}
    *
    * @since 2.3.0
@@ -131,7 +131,7 @@ public class Trigger {
    *    import scala.concurrent.duration._
    *    df.writeStream.trigger(Trigger.Continuous(10.seconds))
    * }}}
-   * @since 2.2.0
+   * @since 2.3.0
    */
   public static Trigger Continuous(Duration interval) {
     return ContinuousTrigger.apply(interval);
@@ -144,7 +144,7 @@ public class Trigger {
    * {{{
    *    df.writeStream.trigger(Trigger.Continuous("10 seconds"))
    * }}}
-   * @since 2.2.0
+   * @since 2.3.0
    */
   public static Trigger Continuous(String interval) {
     return ContinuousTrigger.apply(interval);

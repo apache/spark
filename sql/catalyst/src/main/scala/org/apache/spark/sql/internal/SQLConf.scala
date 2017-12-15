@@ -1057,7 +1057,7 @@ object SQLConf {
       .internal()
       .doc("The interval at which continuous execution readers will poll to check whether" +
         " the epoch has advanced on the driver.")
-      .intConf
+      .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
   object Deprecated {
@@ -1375,7 +1375,7 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
-  def continuousStreamingExecutorPollIntervalMs: Int =
+  def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
   /** ********************** SQLConf functionality methods ************ */
