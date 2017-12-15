@@ -47,7 +47,7 @@ To install Apache Mesos from source, follow these steps:
 
 1. Download a Mesos release from a
    [mirror](http://www.apache.org/dyn/closer.lua/mesos/{{site.MESOS_VERSION}}/)
-2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
+2. Follow the Mesos [Getting Started](http://mesos.apache.org/getting-started) page for compiling and
    installing Mesos
 
 **Note:** If you want to run Mesos without installing it into the default paths on your system
