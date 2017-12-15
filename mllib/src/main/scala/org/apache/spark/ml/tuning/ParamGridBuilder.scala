@@ -133,18 +133,30 @@ object ParamGridBuilder {
     * @return
     */
   def splitOnParams(paramMaps: Array[ParamMap], params: Array[Param[_]]): (Array[ParamMap], Array[ParamMap])  = {
-    val leftParamMapsTemp = new ArrayBuffer[ParamMap]
-    val rightParamMaps = paramMaps.map { paramMap =>
-      val leftParamMap = ParamMap.empty
-      val paramMapCopy = paramMap.copy
-      params.foreach { param =>
-        val valueOption = paramMapCopy.remove(param)
-        valueOption.foreach(leftParamMap.put(param, _))
+    val leftValues = mutable.Map.empty[Param[_], mutable.LinkedHashSet[Any]]
+    val rightValues = mutable.Map.empty[Param[_], mutable.LinkedHashSet[Any]]
+
+    paramMaps.foreach { paramMap =>
+      paramMap.toSeq.foreach { case ParamPair(p, v) =>
+        if (params.contains(p)) {
+          leftValues.getOrElseUpdate(p, mutable.LinkedHashSet.empty[Any]) += v
+        } else {
+          rightValues.getOrElseUpdate(p, mutable.LinkedHashSet.empty[Any]) += v
+        }
       }
-      leftParamMapsTemp.append(leftParamMap)
-      paramMapCopy
-    }.distinct
-    val leftParamMaps = leftParamMapsTemp.filter(_.size != 0).distinct.toArray
-    (leftParamMaps, rightParamMaps)
+    }
+
+    val leftGrid = new ParamGridBuilder
+    val rightGrid = new ParamGridBuilder
+
+    leftValues.foreach { case (param, values) =>
+      leftGrid.addGrid(param.asInstanceOf[Param[Any]], values.toArray)
+    }
+
+    rightValues.foreach { case (param, values) =>
+      rightGrid.addGrid(param.asInstanceOf[Param[Any]], values.toArray)
+    }
+
+    (leftGrid.build(), rightGrid.build())
   }
 }
