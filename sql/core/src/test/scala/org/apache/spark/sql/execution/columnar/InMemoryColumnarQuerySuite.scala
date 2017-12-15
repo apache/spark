@@ -42,7 +42,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val storageLevel = MEMORY_ONLY
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
     val inMemoryRelation = InMemoryRelation(useCompression = true, 5, storageLevel, plan, None,
-      None)
+      data.logicalPlan.stats)
 
     assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
     inMemoryRelation.cachedColumnBuffers.collect().head match {
@@ -118,7 +118,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("simple columnar query") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
-    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None, None)
+    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
+      testData.logicalPlan.stats)
 
     checkAnswer(scan, testData.collect().toSeq)
   }
@@ -134,8 +135,10 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("projection") {
-    val plan = spark.sessionState.executePlan(testData.select('value, 'key).logicalPlan).sparkPlan
-    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None, None)
+    val logicalPlan = testData.select('value, 'key).logicalPlan
+    val plan = spark.sessionState.executePlan(logicalPlan).sparkPlan
+    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
+      logicalPlan.stats)
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
@@ -151,7 +154,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
-    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None, None)
+    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
+      testData.logicalPlan.stats)
 
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)
@@ -325,7 +329,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-17549: cached table size should be correctly calculated") {
     val data = spark.sparkContext.parallelize(1 to 10, 5).toDF()
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
-    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None, None)
+    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None, data.logicalPlan.stats)
 
     // Materialize the data.
     val expectedAnswer = data.collect()
@@ -450,8 +454,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-22249: buildFilter should not throw exception when In contains an empty list") {
     val attribute = AttributeReference("a", IntegerType)()
-    val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY,
-      LocalTableScanExec(Seq(attribute), Nil), None, None)
+    val localTableScanExec = LocalTableScanExec(Seq(attribute), Nil)
+    val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY, localTableScanExec, None, null)
     val tableScanExec = InMemoryTableScanExec(Seq(attribute),
       Seq(In(attribute, Nil)), testRelation)
     assert(tableScanExec.partitionFilters.isEmpty)
@@ -482,7 +486,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-22673: InMemoryRelation should utilize existing stats whenever possible") {
+  test("SPARK-22673: InMemoryRelation should utilize existing stats of the plan to be cached") {
     withSQLConf("spark.sql.cbo.enabled" -> "true") {
       val workDir = s"${Utils.createTempDir()}/table1"
       val data = Seq(100, 200, 300, 400).toDF("count")
@@ -491,8 +495,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       val inMemoryRelation = dfFromFile.queryExecution.optimizedPlan.collect {
         case plan: InMemoryRelation => plan
       }.head
-      // InMemoryRelation's stats is Long.MaxValue before the underlying RDD is materialized
-      assert(inMemoryRelation.computeStats().sizeInBytes === Long.MaxValue)
+      // InMemoryRelation's stats is file size before the underlying RDD is materialized
+      assert(inMemoryRelation.computeStats().sizeInBytes === 740)
 
       // InMemoryRelation's stats is updated after materializing RDD
       dfFromFile.collect()
@@ -503,9 +507,9 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       val inMemoryRelation2 = dfFromTable.queryExecution.optimizedPlan.
         collect { case plan: InMemoryRelation => plan }.head
 
-      // Even CBO enabled, InMemoryRelation's stats keeps as the default one before table's stats
+      // Even CBO enabled, InMemoryRelation's stats keeps as the file size before table's stats
       // is calculated
-      assert(inMemoryRelation2.computeStats().sizeInBytes === Long.MaxValue)
+      assert(inMemoryRelation2.computeStats().sizeInBytes === 740)
 
       // InMemoryRelation's stats should be updated after calculating stats of the table
       spark.sql("ANALYZE TABLE table1 COMPUTE STATISTICS")

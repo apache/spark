@@ -80,14 +80,6 @@ class CacheManager extends Logging {
     cachedData.isEmpty
   }
 
-  private def extractStatsOfPlanForCache(plan: LogicalPlan): Option[Statistics] = {
-    if (plan.stats.rowCount.isDefined) {
-      Some(plan.stats)
-    } else {
-      None
-    }
-  }
-
   /**
    * Caches the data produced by the logical representation of the given [[Dataset]].
    * Unlike `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because
@@ -107,7 +99,7 @@ class CacheManager extends Logging {
         sparkSession.sessionState.conf.columnBatchSize, storageLevel,
         sparkSession.sessionState.executePlan(planToCache).executedPlan,
         tableName,
-        extractStatsOfPlanForCache(planToCache))
+        planToCache.stats)
       cachedData.add(CachedData(planToCache, inMemoryRelation))
     }
   }
@@ -156,7 +148,7 @@ class CacheManager extends Logging {
           storageLevel = cd.cachedRepresentation.storageLevel,
           child = spark.sessionState.executePlan(cd.plan).executedPlan,
           tableName = cd.cachedRepresentation.tableName,
-          statsOfPlanToCache = extractStatsOfPlanForCache(cd.plan))
+          statsOfPlanToCache = cd.plan.stats)
         needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }

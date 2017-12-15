@@ -38,7 +38,7 @@ object InMemoryRelation {
       storageLevel: StorageLevel,
       child: SparkPlan,
       tableName: Option[String],
-      statsOfPlanToCache: Option[Statistics]): InMemoryRelation =
+      statsOfPlanToCache: Statistics): InMemoryRelation =
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)(
       statsOfPlanToCache = statsOfPlanToCache)
 }
@@ -63,7 +63,7 @@ case class InMemoryRelation(
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
     val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
-    statsOfPlanToCache: Option[Statistics] = None)
+    statsOfPlanToCache: Statistics = null)
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[SparkPlan] = Seq(child)
@@ -74,10 +74,8 @@ case class InMemoryRelation(
 
   override def computeStats(): Statistics = {
     if (batchStats.value == 0L) {
-      // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache when
-      // applicable
-      statsOfPlanToCache.getOrElse(Statistics(sizeInBytes =
-        child.sqlContext.conf.defaultSizeInBytes))
+      // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache
+      statsOfPlanToCache
     } else {
       Statistics(sizeInBytes = batchStats.value.longValue)
     }
