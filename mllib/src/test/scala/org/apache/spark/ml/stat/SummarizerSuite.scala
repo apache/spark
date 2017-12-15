@@ -75,146 +75,131 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     registerTest(s"$name - mean only") {
       val (df, c, w) = wrappedInit()
-      compare(df.select(metrics("mean").summary(c, w), mean(c, w)),
-        Seq(Row(summarizer.mean), exp.mean))
+      compareRow(df.select(metrics("mean").summary(c, w), mean(c, w)).first(),
+        Row(Row(summarizer.mean), exp.mean))
     }
 
     registerTest(s"$name - mean only w/o weight") {
       val (df, c, _) = wrappedInit()
-      compare(df.select(metrics("mean").summary(c), mean(c)),
-        Seq(Row(summarizerWithoutWeight.mean), expWithoutWeight.mean))
+      compareRow(df.select(metrics("mean").summary(c), mean(c)).first(),
+        Row(Row(summarizerWithoutWeight.mean), expWithoutWeight.mean))
     }
 
     registerTest(s"$name - variance only") {
       val (df, c, w) = wrappedInit()
-      compare(df.select(metrics("variance").summary(c, w), variance(c, w)),
-        Seq(Row(summarizer.variance), exp.variance))
+      compareRow(df.select(metrics("variance").summary(c, w), variance(c, w)).first(),
+        Row(Row(summarizer.variance), exp.variance))
     }
 
     registerTest(s"$name - variance only w/o weight") {
       val (df, c, _) = wrappedInit()
-      compare(df.select(metrics("variance").summary(c), variance(c)),
-        Seq(Row(summarizerWithoutWeight.variance), expWithoutWeight.variance))
+      compareRow(df.select(metrics("variance").summary(c), variance(c)).first(),
+        Row(Row(summarizerWithoutWeight.variance), expWithoutWeight.variance))
     }
 
     registerTest(s"$name - count only") {
       val (df, c, w) = wrappedInit()
-      compare(df.select(metrics("count").summary(c, w), count(c, w)),
-        Seq(Row(summarizer.count), exp.count))
+      compareRow(df.select(metrics("count").summary(c, w), count(c, w)).first(),
+        Row(Row(summarizer.count), exp.count))
     }
 
     registerTest(s"$name - count only w/o weight") {
       val (df, c, _) = wrappedInit()
-      compare(df.select(metrics("count").summary(c), count(c)),
-        Seq(Row(summarizerWithoutWeight.count), expWithoutWeight.count))
+      compareRow(df.select(metrics("count").summary(c), count(c)).first(),
+        Row(Row(summarizerWithoutWeight.count), expWithoutWeight.count))
     }
 
     registerTest(s"$name - numNonZeros only") {
       val (df, c, w) = wrappedInit()
-      compare(df.select(metrics("numNonZeros").summary(c, w), numNonZeros(c, w)),
-        Seq(Row(summarizer.numNonzeros), exp.numNonZeros))
+      compareRow(df.select(metrics("numNonZeros").summary(c, w), numNonZeros(c, w)).first(),
+        Row(Row(summarizer.numNonzeros), exp.numNonZeros))
     }
 
     registerTest(s"$name - numNonZeros only w/o weight") {
       val (df, c, _) = wrappedInit()
-      compare(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)),
-        Seq(Row(summarizerWithoutWeight.numNonzeros), expWithoutWeight.numNonZeros))
+      compareRow(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)).first(),
+        Row(Row(summarizerWithoutWeight.numNonzeros), expWithoutWeight.numNonZeros))
     }
 
     registerTest(s"$name - min only") {
       val (df, c, w) = wrappedInit()
-      compare(df.select(metrics("min").summary(c, w), min(c, w)),
-        Seq(Row(summarizer.min), exp.min))
+      compareRow(df.select(metrics("min").summary(c, w), min(c, w)).first(),
+        Row(Row(summarizer.min), exp.min))
     }
 
     registerTest(s"$name - min only w/o weight") {
       val (df, c, _) = wrappedInit()
-      compare(df.select(metrics("min").summary(c), min(c)),
-        Seq(Row(summarizerWithoutWeight.min), expWithoutWeight.min))
+      compareRow(df.select(metrics("min").summary(c), min(c)).first(),
+        Row(Row(summarizerWithoutWeight.min), expWithoutWeight.min))
     }
 
     registerTest(s"$name - max only") {
       val (df, c, w) = wrappedInit()
-      compare(df.select(metrics("max").summary(c, w), max(c, w)),
-        Seq(Row(summarizer.max), exp.max))
+      compareRow(df.select(metrics("max").summary(c, w), max(c, w)).first(),
+        Row(Row(summarizer.max), exp.max))
     }
 
     registerTest(s"$name - max only w/o weight") {
       val (df, c, _) = wrappedInit()
-      compare(df.select(metrics("max").summary(c), max(c)),
-        Seq(Row(summarizerWithoutWeight.max), expWithoutWeight.max))
+      compareRow(df.select(metrics("max").summary(c), max(c)).first(),
+        Row(Row(summarizerWithoutWeight.max), expWithoutWeight.max))
     }
 
     registerTest(s"$name - normL1 only") {
       val (df, c, w) = wrappedInit()
-      compare(df.select(metrics("normL1").summary(c, w), normL1(c, w)),
-        Seq(Row(summarizer.normL1), exp.normL1))
+      compareRow(df.select(metrics("normL1").summary(c, w), normL1(c, w)).first(),
+        Row(Row(summarizer.normL1), exp.normL1))
     }
 
     registerTest(s"$name - normL1 only w/o weight") {
       val (df, c, _) = wrappedInit()
-      compare(df.select(metrics("normL1").summary(c), normL1(c)),
-        Seq(Row(summarizerWithoutWeight.normL1), expWithoutWeight.normL1))
+      compareRow(df.select(metrics("normL1").summary(c), normL1(c)).first(),
+        Row(Row(summarizerWithoutWeight.normL1), expWithoutWeight.normL1))
     }
 
     registerTest(s"$name - normL2 only") {
       val (df, c, w) = wrappedInit()
-      compare(df.select(metrics("normL2").summary(c, w), normL2(c, w)),
-        Seq(Row(summarizer.normL2), exp.normL2))
+      compareRow(df.select(metrics("normL2").summary(c, w), normL2(c, w)).first(),
+        Row(Row(summarizer.normL2), exp.normL2))
     }
 
     registerTest(s"$name - normL2 only w/o weight") {
       val (df, c, _) = wrappedInit()
-      compare(df.select(metrics("normL2").summary(c), normL2(c)),
-        Seq(Row(summarizerWithoutWeight.normL2), expWithoutWeight.normL2))
+      compareRow(df.select(metrics("normL2").summary(c), normL2(c)).first(),
+        Row(Row(summarizerWithoutWeight.normL2), expWithoutWeight.normL2))
     }
 
     registerTest(s"$name - multiple metrics at once") {
       val (df, c, w) = wrappedInit()
-      compare(df.select(
-        metrics("mean", "variance", "count", "numNonZeros").summary(c, w)),
-        Seq(Row(exp.mean, exp.variance, exp.count, exp.numNonZeros))
+      compareRow(df.select(
+        metrics("mean", "variance", "count", "numNonZeros").summary(c, w)).first(),
+        Row(Row(exp.mean, exp.variance, exp.count, exp.numNonZeros))
       )
     }
 
     registerTest(s"$name - multiple metrics at once w/o weight") {
       val (df, c, _) = wrappedInit()
-      compare(df.select(
-        metrics("mean", "variance", "count", "numNonZeros").summary(c)),
-        Seq(Row(expWithoutWeight.mean, expWithoutWeight.variance,
+      compareRow(df.select(
+        metrics("mean", "variance", "count", "numNonZeros").summary(c)).first(),
+        Row(Row(expWithoutWeight.mean, expWithoutWeight.variance,
           expWithoutWeight.count, expWithoutWeight.numNonZeros))
       )
     }
   }
 
-  private def compare(df: DataFrame, exp: Seq[Any]): Unit = {
-    val res = df.head().toSeq
-    val names = df.schema.fieldNames.zipWithIndex.map { case (n, idx) => s"$n ($idx)" }
-    assert(res.size === exp.size, (res.size, exp.size))
-    for (((x1, x2), name) <- res.zip(exp).zip(names)) {
-      compareStructures(x1, x2, name)
-    }
-  }
-
-  // Compares structured content.
-  private def compareStructures(x1: Any, x2: Any, name: String): Unit = (x1, x2) match {
-    case (r1: Row, r2: Row) =>
-      assert(r1.size === r2.size, (r1, r2))
-      for ((x1, x2) <- r1.toSeq.zip(r2.toSeq)) { compareStructures(x1, x2, name) }
-    case (v1: Vector, v2: Vector) =>
-      assertWithHint(v1 ~== v2 absTol 1e-4, name)
-    case (v1: Vector, v2: OldVector) =>
-      compareStructures(v1, v2.asML, name)
-    case (l1: Long, l2: Long) => assert(l1 === l2)
-    case _ => throw new Exception(s"$name: ${x1.getClass} ${x2.getClass} $x1 $x2")
-  }
-
-  private def assertWithHint(x: => Boolean, hint: String): Unit = {
-    try {
-      assert(x, hint)
-    } catch {
-      case tfe: TestFailedException =>
-        throw new TestFailedException(Some(s"Failure with hint $hint"), Some(tfe), 1)
+  private def compareRow(r1: Row, r2: Row): Unit = {
+    assert(r1.size === r2.size, (r1, r2))
+    r1.toSeq.zip(r2.toSeq).foreach {
+      case (v1: Vector, v2: Vector) =>
+        assert(v1 ~== v2 absTol 1e-4)
+      case (v1: Vector, v2: OldVector) =>
+        assert(v1 ~== v2.asML absTol 1e-4)
+      case (l1: Long, l2: Long) =>
+        assert(l1 === l2)
+      case (r1: Row, r2: Row) =>
+        compareRow(r1, r2)
+      case (x1: Any, x2: Any) =>
+        throw new Exception(s"type mismatch: ${x1.getClass} ${x2.getClass} $x1 $x2")
     }
   }
 
@@ -228,7 +213,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max = singleElem,
       min = singleElem,
       normL1 = Vectors.dense(0.0, 2.0, 4.0),
-      normL2 = Vectors.dense(0.0, 1.4142135623730951, 2.8284271247461903)
+      normL2 = Vectors.dense(0.0, 1.414213, 2.828427)
     ),
     ExpectedMetrics(
       mean = singleElem,
@@ -249,14 +234,14 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Vectors.dense(1.0, -3.0, 0.0), 0.0)
     ),
     ExpectedMetrics(
-      mean = Vectors.dense(2.393939393939394, -2.545454545454545, 0.9090909090909092),
+      mean = Vectors.dense(2.393939, -2.545454, 0.909090),
       variance = Vectors.dense(8.0, 4.5, 18.0),
       count = 2L,
       numNonZeros = Vectors.dense(2.0, 1.0, 1.0),
       max = Vectors.dense(3.0, 0.0, 6.0),
       min = Vectors.dense(-1.0, -3.0, 0.0),
       normL1 = Vectors.dense(8.9, 8.4, 3.0),
-      normL2 = Vectors.dense(5.06951674225463, 5.0199601592044525, 4.242640687119285)
+      normL2 = Vectors.dense(5.069516, 5.019960, 4.242640)
     ),
     ExpectedMetrics(
       mean = Vectors.dense(1.0, -2.0, 2.0),
@@ -266,7 +251,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max = Vectors.dense(3.0, 0.0, 6.0),
       min = Vectors.dense(-1.0, -3.0, 0.0),
       normL1 = Vectors.dense(5.0, 6.0, 6.0),
-      normL2 = Vectors.dense(3.3166247903554, 4.242640687119285, 6.0)
+      normL2 = Vectors.dense(3.316624, 4.242640, 6.0)
     )
   )
 
@@ -277,14 +262,14 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Vectors.dense(1.0, -3.0, 0.0).toSparse, 0.0)
     ),
     ExpectedMetrics(
-      mean = Vectors.dense(2.393939393939394, -2.545454545454545, 0.9090909090909092),
+      mean = Vectors.dense(2.393939, -2.545454, 0.909090),
       variance = Vectors.dense(8.0, 4.5, 18.0),
       count = 2L,
       numNonZeros = Vectors.dense(2.0, 1.0, 1.0),
       max = Vectors.dense(3.0, 0.0, 6.0),
       min = Vectors.dense(-1.0, -3.0, 0.0),
       normL1 = Vectors.dense(8.9, 8.4, 3.0),
-      normL2 = Vectors.dense(5.06951674225463, 5.0199601592044525, 4.242640687119285)
+      normL2 = Vectors.dense(5.069516, 5.019960, 4.242640)
     ),
     ExpectedMetrics(
       mean = Vectors.dense(1.0, -2.0, 2.0),
@@ -294,7 +279,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max = Vectors.dense(3.0, 0.0, 6.0),
       min = Vectors.dense(-1.0, -3.0, 0.0),
       normL1 = Vectors.dense(5.0, 6.0, 6.0),
-      normL2 = Vectors.dense(3.3166247903554, 4.242640687119285, 6.0)
+      normL2 = Vectors.dense(3.316624, 4.242640, 6.0)
     )
   )
 
