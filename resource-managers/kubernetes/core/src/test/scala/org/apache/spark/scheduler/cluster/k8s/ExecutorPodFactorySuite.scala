@@ -50,7 +50,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     baseConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, executorPrefix)
-      .set(EXECUTOR_DOCKER_IMAGE, executorImage)
+      .set(EXECUTOR_CONTAINER_IMAGE, executorImage)
   }
 
   test("basic executor pod has reasonable defaults") {
