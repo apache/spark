@@ -197,12 +197,10 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     withTable("tab") {
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
-      assert(commands.length == 6)
-      assert(commands(4)._1 == "saveDataIntoTable")
-      assert(commands(4)._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
-      assert(commands(5)._1 == "saveAsTable")
-      assert(commands(5)._2.isInstanceOf[CreateTable])
-      assert(commands(5)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
+      assert(commands.length == 5)
+      assert(commands(4)._1 == "saveAsTable")
+      assert(commands(4)._2.isInstanceOf[CreateTable])
+      assert(commands(4)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
     }
 
     withTable("tab") {

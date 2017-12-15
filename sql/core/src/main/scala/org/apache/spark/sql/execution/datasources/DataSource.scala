@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -489,10 +490,10 @@ case class DataSource(
   }
 
   /**
-   * Returns a [[BaseRelation]] for creating table after `planForWriting`. Only use
-   * in `CreateDataSourceTableAsSelectCommand` while saving data to non-existing table.
+   * Writes the given [[LogicalPlan]] out to this [[DataSource]] and returns a [[BaseRelation]] for
+   * the following reading.
    */
-  def getRelation(mode: SaveMode, data: LogicalPlan): BaseRelation = {
+  def writeAndRead(mode: SaveMode, data: LogicalPlan): BaseRelation = {
     if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
@@ -502,6 +503,7 @@ case class DataSource(
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
+        sparkSession.sessionState.executePlan(planForWritingFileFormat(format, mode, data)).toRdd
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
       case _ =>
