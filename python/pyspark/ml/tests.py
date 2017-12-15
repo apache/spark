@@ -177,6 +177,9 @@ class ParamTypeConversionTests(PySparkTestCase):
     Test that param type conversion happens.
     """
 
+    def test_fail(self):
+        self.assert_(False)
+
     def test_int(self):
         lr = LogisticRegression(maxIter=5.0)
         self.assertEqual(lr.getMaxIter(), 5)
@@ -1859,6 +1862,7 @@ class ImageReaderTest2(PySparkTestCase):
 
     @classmethod
     def setUpClass(cls):
+        # import py4j
         PySparkTestCase.setUpClass()
         # Note that here we enable Hive's support.
         try:
