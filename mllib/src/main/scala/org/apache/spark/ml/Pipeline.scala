@@ -191,7 +191,7 @@ class Pipeline @Since("1.4.0") (
     val theStages = $(stages)
     theStages.flatMap(_ match {
         case estimator: Estimator[_] => estimator.getOptimizedParams
-        case _ => Array.empty
+        case _ => Array.empty[Param[_]]
     })
   }
 }

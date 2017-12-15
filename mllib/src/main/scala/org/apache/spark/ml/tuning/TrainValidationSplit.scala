@@ -122,16 +122,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     transformSchema(schema, logging = true)
     val est = $(estimator)
     val eval = $(evaluator)
-    val epm = $(estimatorParamMaps)
-    val optimizedParams = est.getOptimizedParams
-
-    // Create 2 Array[ParamMap]s, 1 with optimized params and 1 to parallelize over
-    val (optimizedParamMaps, parallelParamMaps) = ParamGridBuilder.splitOnParams(epm, optimizedParams)
-
-    // Add the optimized params to each parallel paramMap
-    val trainingParamMaps = parallelParamMaps.map { paramMap =>
-      if (optimizedParamMaps.isEmpty) Array(paramMap) else optimizedParamMaps.map(_ ++ paramMap)
-    }
+    val epmGrouped = ParamGridBuilder.groupByParams($(estimatorParamMaps), est.getOptimizedParams)
 
     // Create execution context based on $(parallelism)
     val executionContext = getExecutionContext
@@ -147,21 +138,21 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     // Fit models in a Future for training in parallel
     logDebug(s"Train split with multiple sets of parameters.")
-    val modelFutures = trainingParamMaps.map { paramMaps =>
+    val modelsFutures = epmGrouped.map { paramMaps =>
       Future[Seq[Model[_]]] {
         est.fit(trainingDataset, paramMaps).asInstanceOf[Seq[Model[_]]]
       } (executionContext)
     }
 
     // Unpersist training data only when all models have trained
-    Future.sequence[Seq[Model[_]], Iterable](modelFutures)(implicitly, executionContext)
+    Future.sequence[Seq[Model[_]], Iterable](modelsFutures)(implicitly, executionContext)
       .onComplete { _ => trainingDataset.unpersist() } (executionContext)
 
     // Evaluate models in a Future that will calulate a metric and allow model to be cleaned up
-    val metricFutures = modelFutures.zip(epm).map { case (modelFuture, paramMap) =>
-      modelFuture.map { models =>
+    val metricFutures = modelsFutures.zip(epmGrouped).map { case (modelsFuture, paramMaps) =>
+      modelsFuture.map { models =>
         // TODO: duplicate evaluator to take extra params from input
-        models.map { model =>
+        models.zip(paramMaps).map { case (model, paramMap) =>
           val metric = eval.evaluate(model.transform(validationDataset, paramMap))
           logDebug(s"Got metric $metric for model trained with $paramMap.")
           metric
@@ -178,13 +169,14 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     // Collect sub-models if needed
     val collectSubModelsParam = $(collectSubModels)
     val subModels: Option[Array[Model[_]]] = if (collectSubModelsParam) {
-      Some(modelFutures.flatMap(ThreadUtils.awaitResult(_, Duration.Inf)))
+      Some(modelsFutures.flatMap(ThreadUtils.awaitResult(_, Duration.Inf)))
     } else None
 
     logInfo(s"Train validation split metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
+    val epm = epmGrouped.flatten
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]

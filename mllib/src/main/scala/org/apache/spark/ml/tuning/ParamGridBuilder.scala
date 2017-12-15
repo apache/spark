@@ -159,4 +159,19 @@ object ParamGridBuilder {
 
     (leftGrid.build(), rightGrid.build())
   }
+
+  /**
+   *
+   * @param paramMaps
+   * @param params
+   * @return
+   */
+  def groupByParams(paramMaps: Array[ParamMap], params: Array[Param[_]]): Array[Array[ParamMap]] = {
+    val (leftParamMaps, rightParamMaps) = ParamGridBuilder.splitOnParams(paramMaps, params)
+
+    // Add the left paramMaps to each right paramMap
+    rightParamMaps.map { paramMap =>
+      if (leftParamMaps.isEmpty) Array(paramMap) else leftParamMaps.map(_ ++ paramMap)
+    }
+  }
 }
