@@ -1159,6 +1159,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.parseHostPort("::1")              === (("::1", 0)))
     assert(Utils.parseHostPort("[::1]:123")        === (("[::1]", 123)))
     assert(Utils.parseHostPort("[2001:db8:42::1]:123")  === (("[2001:db8:42::1]", 123)))
+  }
 
   test("check Kubernetes master URL") {
     val k8sMasterURLHttps = Utils.checkAndGetK8sMasterUrl("k8s://https://host:port")
