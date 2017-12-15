@@ -21,6 +21,8 @@ import scala.collection.mutable
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vectors}
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 
@@ -79,7 +81,7 @@ private[optim] class QuasiNewtonSolver(
     fitIntercept: Boolean,
     maxIter: Int,
     tol: Double,
-    l1RegFunc: Option[(Int) => Double]) extends NormalEquationSolver {
+    l1RegFunc: Option[(Int) => Double]) extends NormalEquationSolver with Logging {
 
   override def solve(
       bBar: Double,
@@ -108,6 +110,12 @@ private[optim] class QuasiNewtonSolver(
     while (states.hasNext) {
       state = states.next()
       arrayBuilder += state.adjustedValue
+    }
+    if (state == null || state.searchFailed) {
+      val msg = s"${optimizer.getClass.getName} failed" +
+        s"${if (state.searchFailed) " due to line search failure" else ""}."
+      logWarning(msg)
+      throw new SparkException(msg)
     }
     val x = state.x.toArray.clone()
     new NormalEquationSolution(x, None, Some(arrayBuilder.result()))

@@ -811,9 +811,10 @@ class LogisticRegression @Since("1.2.0") (
         }
         bcFeaturesStd.destroy(blocking = false)
 
-        if (state == null) {
-          val msg = s"${optimizer.getClass.getName} failed."
-          logError(msg)
+        if (state == null || state.searchFailed) {
+          val msg = s"${optimizer.getClass.getName} failed" +
+            s"${if (state.searchFailed) " due to line search failure" else ""}."
+          logWarning(msg)
           throw new SparkException(msg)
         }
 
