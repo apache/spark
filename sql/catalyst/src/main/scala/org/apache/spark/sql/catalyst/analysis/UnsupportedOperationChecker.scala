@@ -339,6 +339,18 @@ object UnsupportedOperationChecker {
     }
   }
 
+  def checkForContinuous(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    checkForStreaming(plan, outputMode)
+
+    plan.foreachUp {
+      case (_: Project | _: Filter | _: MapElements | _: MapPartitions |
+            _: DeserializeToObject | _: SerializeFromObject) =>
+      case node if node.nodeName == "StreamingRelationV2" =>
+      case node =>
+        throwError(s"Continuous processing does not support ${node.nodeName} operations.")(node)
+    }
+  }
+
   private def throwErrorIf(
       condition: Boolean,
       msg: String)(implicit operator: LogicalPlan): Unit = {

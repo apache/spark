@@ -253,6 +253,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           outputMode,
           deleteCheckpointOnStop))
       case v2Sink: ContinuousWriteSupport =>
+        UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
         new StreamingQueryWrapper(new ContinuousExecution(
           sparkSession,
           userSpecifiedName.orNull,

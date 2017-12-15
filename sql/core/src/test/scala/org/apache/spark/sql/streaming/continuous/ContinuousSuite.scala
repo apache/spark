@@ -150,6 +150,23 @@ class ContinuousSuite extends StreamTest {
       CheckAnswer(scala.Range(6, 10): _*))
   }
 
+  test("deduplicate") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .select('value)
+      .dropDuplicates()
+
+    val except = intercept[AnalysisException] {
+      testStream(df, useV2Sink = true)(StartStream(longContinuousTrigger))
+    }
+
+    assert(except.message.contains(
+      "Continuous processing does not support Deduplicate operations."))
+  }
+
   test("repeatedly restart") {
     val df = spark.readStream
       .format("rate")
