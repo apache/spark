@@ -55,11 +55,6 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public boolean anyNullsSet() {
-    return numNulls() > 0;
-  }
-
-  @Override
   public void close() {
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
@@ -157,11 +152,6 @@ public final class ArrowColumnVector extends ColumnVector {
       array[i] = accessor.getInt(rowId + i);
     }
     return array;
-  }
-
-  @Override
-  public int getDictId(int rowId) {
-    throw new UnsupportedOperationException();
   }
 
   //
