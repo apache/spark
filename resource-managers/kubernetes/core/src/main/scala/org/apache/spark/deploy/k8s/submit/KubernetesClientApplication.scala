@@ -210,7 +210,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val loggingPodStatusWatcher = new LoggingPodStatusWatcherImpl(
       kubernetesAppId, loggingInterval)
 
-    val configurationStepsOrchestrator = new DriverConfigurationStepsOrchestrator(
+    val configurationStepsOrchestrator = new DriverConfigOrchestrator(
       namespace,
       kubernetesAppId,
       launchTime,

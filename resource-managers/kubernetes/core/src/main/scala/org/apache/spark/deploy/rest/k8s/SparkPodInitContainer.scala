@@ -36,7 +36,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * with different configurations for different download sources, or using the same container to
  * download everything at once.
  */
-private[spark] class KubernetesSparkDependencyDownloadInitContainer(
+private[spark] class SparkPodInitContainer(
     sparkConf: SparkConf,
     fileFetcher: FileFetcher) extends Logging {
 
@@ -70,9 +70,10 @@ private[spark] class KubernetesSparkDependencyDownloadInitContainer(
         s"Remote files download directory specified at $filesDownloadDir does not exist " +
           "or is not a directory.")
     }
-    waitForFutures(
-      remoteJarsDownload,
-      remoteFilesDownload)
+
+    Seq(remoteJarsDownload, remoteFilesDownload).foreach {
+      ThreadUtils.awaitResult(_, Duration.create(downloadTimeoutMinutes, TimeUnit.MINUTES))
+    }
   }
 
   private def downloadFiles(
@@ -86,16 +87,9 @@ private[spark] class KubernetesSparkDependencyDownloadInitContainer(
       fileFetcher.fetchFile(file, downloadDir)
     }
   }
-
-  private def waitForFutures(futures: Future[_]*) {
-    futures.foreach {
-      ThreadUtils.awaitResult(_, Duration.create(downloadTimeoutMinutes, TimeUnit.MINUTES))
-    }
-  }
 }
 
-private class FileFetcherImpl(sparkConf: SparkConf, securityManager: SparkSecurityManager)
-  extends FileFetcher {
+private class FileFetcher(sparkConf: SparkConf, securityManager: SparkSecurityManager) {
 
   def fetchFile(uri: String, targetDir: File): Unit = {
     Utils.fetchFile(
@@ -109,7 +103,7 @@ private class FileFetcherImpl(sparkConf: SparkConf, securityManager: SparkSecuri
   }
 }
 
-object KubernetesSparkDependencyDownloadInitContainer extends Logging {
+object SparkPodInitContainer extends Logging {
 
   def main(args: Array[String]): Unit = {
     logInfo("Starting init-container to download Spark application dependencies.")
@@ -120,10 +114,8 @@ object KubernetesSparkDependencyDownloadInitContainer extends Logging {
     }
 
     val securityManager = new SparkSecurityManager(sparkConf)
-    val fileFetcher = new FileFetcherImpl(sparkConf, securityManager)
-    new KubernetesSparkDependencyDownloadInitContainer(
-      sparkConf,
-      fileFetcher).run()
+    val fileFetcher = new FileFetcher(sparkConf, securityManager)
+    new SparkPodInitContainer(sparkConf, fileFetcher).run()
     logInfo("Finished downloading application dependencies.")
   }
 }

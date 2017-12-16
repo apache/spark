@@ -76,7 +76,8 @@ private[spark] class DriverInitContainerBootstrapStep(
       config: Map[String, String]): ConfigMap = {
     val properties = new Properties()
     config.foreach { entry =>
-      properties.setProperty(entry._1, entry._2) }
+      properties.setProperty(entry._1, entry._2)
+    }
     val propertiesWriter = new StringWriter()
     properties.store(propertiesWriter,
       s"Java properties built from Kubernetes config map with name: $configMapName " +

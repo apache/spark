@@ -29,10 +29,10 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.util.Utils
 
-class KubernetesSparkDependencyDownloadInitContainerSuite
+class SparkPodInitContainerSuite
   extends SparkFunSuite with BeforeAndAfter {
 
-  import KubernetesSparkDependencyDownloadInitContainerSuite.createTempFile
+  import SparkPodInitContainerSuite.createTempFile
 
   private val DOWNLOAD_JARS_SECRET_LOCATION = createTempFile("txt")
   private val DOWNLOAD_FILES_SECRET_LOCATION = createTempFile("txt")
@@ -63,9 +63,7 @@ class KubernetesSparkDependencyDownloadInitContainerSuite
 
   test("Downloads from remote server should invoke the file fetcher") {
     val sparkConf = getSparkConfForRemoteFileDownloads
-    val initContainerUnderTest = new KubernetesSparkDependencyDownloadInitContainer(
-      sparkConf,
-      fileFetcher)
+    val initContainerUnderTest = new SparkPodInitContainer(sparkConf, fileFetcher)
     initContainerUnderTest.run()
     Mockito.verify(fileFetcher).fetchFile("http://localhost:9000/jar1.jar", downloadJarsDir)
     Mockito.verify(fileFetcher).fetchFile("hdfs://localhost:9000/jar2.jar", downloadJarsDir)
@@ -84,7 +82,7 @@ class KubernetesSparkDependencyDownloadInitContainerSuite
   }
 }
 
-private object KubernetesSparkDependencyDownloadInitContainerSuite {
+private object SparkPodInitContainerSuite {
   def createTempFile(extension: String): String = {
     val dir = Utils.createTempDir()
     val file = new File(dir, s"${UUID.randomUUID().toString}.$extension")

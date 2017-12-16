@@ -20,7 +20,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
-class InitContainerConfigurationStepsOrchestratorSuite extends SparkFunSuite {
+class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
 
   private val NAMESPACE = "namespace"
   private val DOCKER_IMAGE = "init-container"
@@ -50,10 +50,10 @@ class InitContainerConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test ("including basic configuration step") {
     val sparkConf = new SparkConf(true)
-      .set(INIT_CONTAINER_DOCKER_IMAGE, DOCKER_IMAGE)
+      .set(INIT_CONTAINER_IMAGE, DOCKER_IMAGE)
       .set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$CUSTOM_LABEL_KEY", CUSTOM_LABEL_VALUE)
 
-    val orchestrator = new InitContainerConfigurationStepsOrchestrator(
+    val orchestrator = new InitContainerConfigOrchestrator(
       NAMESPACE,
       APP_RESOURCE_PREFIX,
       SPARK_JARS.take(1),
@@ -73,11 +73,11 @@ class InitContainerConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test("including step to mount user-specified secrets") {
     val sparkConf = new SparkConf(false)
-      .set(INIT_CONTAINER_DOCKER_IMAGE, DOCKER_IMAGE)
+      .set(INIT_CONTAINER_IMAGE, DOCKER_IMAGE)
       .set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$SECRET_FOO", SECRET_MOUNT_PATH)
       .set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$SECRET_BAR", SECRET_MOUNT_PATH)
 
-    val orchestrator = new InitContainerConfigurationStepsOrchestrator(
+    val orchestrator = new InitContainerConfigOrchestrator(
       NAMESPACE,
       APP_RESOURCE_PREFIX,
       SPARK_JARS.take(1),

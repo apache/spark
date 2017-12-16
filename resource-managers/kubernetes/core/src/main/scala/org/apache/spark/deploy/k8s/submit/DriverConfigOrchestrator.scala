@@ -25,7 +25,7 @@ import org.apache.spark.deploy.k8s.{ConfigurationUtils, MountSecretsBootstrapImp
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.steps._
-import org.apache.spark.deploy.k8s.submit.steps.initcontainer.InitContainerConfigurationStepsOrchestrator
+import org.apache.spark.deploy.k8s.submit.steps.initcontainer.InitContainerConfigOrchestrator
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
 /**
  * Constructs the complete list of driver configuration steps to run to deploy the Spark driver.
  */
-private[spark] class DriverConfigurationStepsOrchestrator(
+private[spark] class DriverConfigOrchestrator(
     namespace: String,
     kubernetesAppId: String,
     launchTime: Long,
@@ -125,6 +125,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
 
     val mayBeInitContainerBootstrapStep =
       if (areAnyFilesNonContainerLocal(sparkJars ++ sparkFiles)) {
+<<<<<<< HEAD:resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/submit/DriverConfigurationStepsOrchestrator.scala
         val initContainerConfigurationStepsOrchestrator =
           new InitContainerConfigurationStepsOrchestrator(
             namespace,
@@ -147,6 +148,26 @@ private[spark] class DriverConfigurationStepsOrchestrator(
             INIT_CONTAINER_PROPERTIES_FILE_NAME)
 
         Some(initContainerBootstrapStep)
+=======
+        val orchestrator = new InitContainerConfigOrchestrator(
+          namespace,
+          kubernetesResourceNamePrefix,
+          sparkJars,
+          sparkFiles,
+          jarsDownloadPath,
+          filesDownloadPath,
+          dockerImagePullPolicy,
+          allDriverLabels,
+          initContainerConfigMapName,
+          INIT_CONTAINER_PROPERTIES_FILE_NAME,
+          submissionSparkConf)
+        val bootstrapStep = new DriverInitContainerBootstrapStep(
+          orchestrator.getAllConfigurationSteps(),
+          initContainerConfigMapName,
+          INIT_CONTAINER_PROPERTIES_FILE_NAME)
+
+        Some(bootstrapStep)
+>>>>>>> Addressed the second round of comments:resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/submit/DriverConfigOrchestrator.scala
       } else {
         None
       }
@@ -169,7 +190,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
 
   private def areAnyFilesNonContainerLocal(files: Seq[String]): Boolean = {
     files.exists { uri =>
-      Option(Utils.resolveURI(uri).getScheme).getOrElse("file") != "local"
+      Utils.resolveURI(uri).getScheme != "local"
     }
   }
 }

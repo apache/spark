@@ -20,7 +20,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.submit.steps._
 
-class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
+class DriverConfigOrchestratorSuite extends SparkFunSuite {
 
   private val NAMESPACE = "default"
   private val DRIVER_IMAGE = "driver-image"
@@ -38,7 +38,7 @@ class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
     val sparkConf = new SparkConf(false)
       .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
-    val orchestrator = new DriverConfigurationStepsOrchestrator(
+    val orchestrator = new DriverConfigOrchestrator(
       NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
@@ -58,8 +58,13 @@ class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test("Base submission steps without a main app resource.") {
     val sparkConf = new SparkConf(false)
+<<<<<<< HEAD:resource-managers/kubernetes/core/src/test/scala/org/apache/spark/deploy/k8s/submit/DriverConfigurationStepsOrchestratorSuite.scala
       .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
     val orchestrator = new DriverConfigurationStepsOrchestrator(
+=======
+      .set(DRIVER_DOCKER_IMAGE, DRIVER_IMAGE)
+    val orchestrator = new DriverConfigOrchestrator(
+>>>>>>> Addressed the second round of comments:resource-managers/kubernetes/core/src/test/scala/org/apache/spark/deploy/k8s/submit/DriverConfigOrchestratorSuite.scala
       NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
@@ -78,11 +83,16 @@ class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test("Submission steps with an init-container.") {
     val sparkConf = new SparkConf(false)
+<<<<<<< HEAD:resource-managers/kubernetes/core/src/test/scala/org/apache/spark/deploy/k8s/submit/DriverConfigurationStepsOrchestratorSuite.scala
       .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
       .set(INIT_CONTAINER_DOCKER_IMAGE, INIT_CONTAINER_IMAGE)
+=======
+      .set(DRIVER_DOCKER_IMAGE, DRIVER_IMAGE)
+      .set(INIT_CONTAINER_IMAGE, INIT_CONTAINER_IMAGE)
+>>>>>>> Addressed the second round of comments:resource-managers/kubernetes/core/src/test/scala/org/apache/spark/deploy/k8s/submit/DriverConfigOrchestratorSuite.scala
       .set("spark.jars", "hdfs://localhost:9000/var/apps/jars/jar1.jar")
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
-    val orchestrator = new DriverConfigurationStepsOrchestrator(
+    val orchestrator = new DriverConfigOrchestrator(
       NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
@@ -106,7 +116,7 @@ class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
       .set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$SECRET_FOO", SECRET_MOUNT_PATH)
       .set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$SECRET_BAR", SECRET_MOUNT_PATH)
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
-    val orchestrator = new DriverConfigurationStepsOrchestrator(
+    val orchestrator = new DriverConfigOrchestrator(
       NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
@@ -125,8 +135,8 @@ class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
   }
 
   private def validateStepTypes(
-      orchestrator: DriverConfigurationStepsOrchestrator,
-      types: Class[_ <: DriverConfigurationStep]*): Unit = {
+                                 orchestrator: DriverConfigOrchestrator,
+                                 types: Class[_ <: DriverConfigurationStep]*): Unit = {
     val steps = orchestrator.getAllConfigurationSteps()
     assert(steps.size === types.size)
     assert(steps.map(_.getClass) === types)

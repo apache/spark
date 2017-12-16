@@ -145,9 +145,9 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("/var/spark-data/spark-files")
 
-  val INIT_CONTAINER_DOCKER_IMAGE =
-    ConfigBuilder("spark.kubernetes.initContainer.docker.image")
-      .doc("Image for the driver and executor's init-container that downloads dependencies.")
+  val INIT_CONTAINER_IMAGE =
+    ConfigBuilder("spark.kubernetes.initContainer.image")
+      .doc("Image for the driver and executor's init-container for downloading dependencies.")
       .stringConf
       .createOptional
 

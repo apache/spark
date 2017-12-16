@@ -66,9 +66,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       configMapKey <- maybeInitContainerConfigMapKey
     } yield {
       val initContainerImage = sparkConf
-        .get(INIT_CONTAINER_DOCKER_IMAGE)
+        .get(INIT_CONTAINER_IMAGE)
         .getOrElse(throw new SparkException(
-          "Must specify the init-container Docker image when there are remote dependencies"))
+          "Must specify the init-container image when there are remote dependencies"))
       new InitContainerBootstrapImpl(
         initContainerImage,
         sparkConf.get(CONTAINER_IMAGE_PULL_POLICY),

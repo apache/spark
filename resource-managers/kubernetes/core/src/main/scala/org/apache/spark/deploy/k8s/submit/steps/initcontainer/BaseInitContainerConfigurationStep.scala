@@ -34,15 +34,15 @@ private[spark] class BaseInitContainerConfigurationStep(
     val remoteJarsConf = if (remoteJarsToDownload.nonEmpty) {
       Map(INIT_CONTAINER_REMOTE_JARS.key -> remoteJarsToDownload.mkString(","))
     } else {
-      Map.empty[String, String]
+      Map()
     }
     val remoteFilesConf = if (remoteFilesToDownload.nonEmpty) {
       Map(INIT_CONTAINER_REMOTE_FILES.key -> remoteFilesToDownload.mkString(","))
     } else {
-      Map.empty[String, String]
+      Map()
     }
 
-    val baseInitContainerConfig = Map[String, String](
+    val baseInitContainerConfig = Map(
       JARS_DOWNLOAD_LOCATION.key -> jarsDownloadPath,
       FILES_DOWNLOAD_LOCATION.key -> filesDownloadPath) ++
       remoteJarsConf ++

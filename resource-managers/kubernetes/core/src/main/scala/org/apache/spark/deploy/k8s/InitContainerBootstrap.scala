@@ -68,11 +68,12 @@ private[spark] class InitContainerBootstrapImpl(
     }
     val initContainerCustomEnvVars = sparkConf.getAllWithPrefix(initContainerCustomEnvVarKeyPrefix)
       .toSeq
-      .map(env =>
+      .map { env =>
         new EnvVarBuilder()
           .withName(env._1)
           .withValue(env._2)
-          .build())
+          .build()
+      }
 
     val initContainer = new ContainerBuilder(podWithDetachedInitContainer.initContainer)
       .withName("spark-init")

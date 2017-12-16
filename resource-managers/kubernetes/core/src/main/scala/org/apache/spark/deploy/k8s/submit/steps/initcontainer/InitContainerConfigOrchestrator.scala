@@ -25,7 +25,7 @@ import org.apache.spark.deploy.k8s.Constants._
  * Returns the complete ordered list of steps required to configure the init-container. This is
  * only used when there are remote application dependencies to localize.
  */
-private[spark] class InitContainerConfigurationStepsOrchestrator(
+private[spark] class InitContainerConfigOrchestrator(
     namespace: String,
     kubernetesResourceNamePrefix: String,
     sparkJars: Seq[String],
@@ -39,9 +39,9 @@ private[spark] class InitContainerConfigurationStepsOrchestrator(
     submissionSparkConf: SparkConf) {
 
   private val initContainerImage = submissionSparkConf
-    .get(INIT_CONTAINER_DOCKER_IMAGE)
+    .get(INIT_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException(
-      "Must specify the init-container Docker image when there are remote dependencies"))
+      "Must specify the init-container image when there are remote dependencies"))
   private val downloadTimeoutMinutes = submissionSparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT)
 
   def getAllConfigurationSteps(): Seq[InitContainerConfigurationStep] = {
