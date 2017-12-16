@@ -245,8 +245,8 @@ case class JoinEstimation(join: Join) extends Logging {
       leftHistogram = leftHistogram,
       rightHistogram = rightHistogram,
       // Only numeric values have equi-height histograms.
-      newMin = newMin.get.toString.toDouble,
-      newMax = newMax.get.toString.toDouble)
+      lowerBound = newMin.get.toString.toDouble,
+      upperBound = newMax.get.toString.toDouble)
 
     var card: BigDecimal = 0
     var totalNdv: Double = 0

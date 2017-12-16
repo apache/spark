@@ -214,24 +214,25 @@ object EstimationUtils {
   }
 
   /**
-   * Returns overlapped ranges between two histograms, in the given value range [newMin, newMax].
+   * Returns overlapped ranges between two histograms, in the given value range
+   * [lowerBound, upperBound].
    */
   def getOverlappedRanges(
     leftHistogram: Histogram,
     rightHistogram: Histogram,
-    newMin: Double,
-    newMax: Double): Seq[OverlappedRange] = {
+    lowerBound: Double,
+    upperBound: Double): Seq[OverlappedRange] = {
     val overlappedRanges = new ArrayBuffer[OverlappedRange]()
-    // Only bins whose range intersect [newMin, newMax] have join possibility.
+    // Only bins whose range intersect [lowerBound, upperBound] have join possibility.
     val leftBins = leftHistogram.bins
-      .filter(b => b.lo <= newMax && b.hi >= newMin)
+      .filter(b => b.lo <= upperBound && b.hi >= lowerBound)
     val rightBins = rightHistogram.bins
-      .filter(b => b.lo <= newMax && b.hi >= newMin)
+      .filter(b => b.lo <= upperBound && b.hi >= lowerBound)
 
     leftBins.foreach { lb =>
       rightBins.foreach { rb =>
-        val (left, leftHeight) = trimBin(lb, leftHistogram.height, newMin, newMax)
-        val (right, rightHeight) = trimBin(rb, rightHistogram.height, newMin, newMax)
+        val (left, leftHeight) = trimBin(lb, leftHistogram.height, lowerBound, upperBound)
+        val (right, rightHeight) = trimBin(rb, rightHistogram.height, lowerBound, upperBound)
         // Only collect overlapped ranges.
         if (left.lo <= right.hi && left.hi >= right.lo) {
           // Collect overlapped ranges.
@@ -259,9 +260,7 @@ object EstimationUtils {
             // Case3: the left bin is "smaller" than the right bin
             //      left.lo            right.lo     left.hi          right.hi
             // --------+------------------+------------+----------------+------->
-            val leftRatio = (left.hi - right.lo) / (left.hi - left.lo)
-            val rightRatio = (left.hi - right.lo) / (right.hi - right.lo)
-            if (leftRatio == 0) {
+            if (left.hi == right.lo) {
               // The overlapped range has only one value.
               OverlappedRange(
                 lo = right.lo,
@@ -272,6 +271,8 @@ object EstimationUtils {
                 rightNumRows = rightHeight / right.ndv
               )
             } else {
+              val leftRatio = (left.hi - right.lo) / (left.hi - left.lo)
+              val rightRatio = (left.hi - right.lo) / (right.hi - right.lo)
               OverlappedRange(
                 lo = right.lo,
                 hi = left.hi,
@@ -285,9 +286,7 @@ object EstimationUtils {
             // Case4: the left bin is "larger" than the right bin
             //      right.lo           left.lo      right.hi         left.hi
             // --------+------------------+------------+----------------+------->
-            val leftRatio = (right.hi - left.lo) / (left.hi - left.lo)
-            val rightRatio = (right.hi - left.lo) / (right.hi - right.lo)
-            if (leftRatio == 0) {
+            if (right.hi == left.lo) {
               // The overlapped range has only one value.
               OverlappedRange(
                 lo = right.hi,
@@ -298,6 +297,8 @@ object EstimationUtils {
                 rightNumRows = rightHeight / right.ndv
               )
             } else {
+              val leftRatio = (right.hi - left.lo) / (left.hi - left.lo)
+              val rightRatio = (right.hi - left.lo) / (right.hi - right.lo)
               OverlappedRange(
                 lo = left.lo,
                 hi = right.hi,
@@ -343,24 +344,26 @@ object EstimationUtils {
   }
 
   /**
-   * Given an original bin and a value range [min, max], returns the trimmed bin and its number of
-   * rows.
+   * Given an original bin and a value range [lowerBound, upperBound], returns the trimmed part
+   * of the bin in that range and its number of rows.
    */
-  def trimBin(bin: HistogramBin, height: Double, min: Double, max: Double)
+  def trimBin(bin: HistogramBin, height: Double, lowerBound: Double, upperBound: Double)
   : (HistogramBin, Double) = {
-    val (lo, hi) = if (bin.lo <= min && bin.hi >= max) {
-      //       bin.lo              min          max          bin.hi
+    val (lo, hi) = if (bin.lo <= lowerBound && bin.hi >= upperBound) {
+      //       bin.lo          lowerBound     upperBound      bin.hi
       // --------+------------------+------------+-------------+------->
-      (min, max)
-    } else if (bin.lo <= min && bin.hi >= min) {
-      //       bin.lo              min        bin.hi
-      // --------+------------------+-----------+------->
-      (min, bin.hi)
-    } else if (bin.lo <= max && bin.hi >= max) {
-      //        bin.lo             max        bin.hi
-      // --------+------------------+-----------+------->
-      (bin.lo, max)
+      (lowerBound, upperBound)
+    } else if (bin.lo <= lowerBound && bin.hi >= lowerBound) {
+      //       bin.lo          lowerBound      bin.hi      upperBound
+      // --------+------------------+------------+-------------+------->
+      (lowerBound, bin.hi)
+    } else if (bin.lo <= upperBound && bin.hi >= upperBound) {
+      //    lowerBound            bin.lo     upperBound       bin.hi
+      // --------+------------------+------------+-------------+------->
+      (bin.lo, upperBound)
     } else {
+      //    lowerBound            bin.lo        bin.hi     upperBound
+      // --------+------------------+------------+-------------+------->
       (bin.lo, bin.hi)
     }
 
