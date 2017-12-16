@@ -20,7 +20,6 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.Duration
 
 import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -54,26 +53,22 @@ private[spark] class SparkPodInitContainer(
   private val downloadTimeoutMinutes = sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT)
 
   def run(): Unit = {
-    val remoteJarsDownload = Future[Unit] {
-      logInfo(s"Downloading remote jars: $remoteJars")
-      downloadFiles(
-        remoteJars,
-        jarsDownloadDir,
-        s"Remote jars download directory specified at $jarsDownloadDir does not exist " +
-          "or is not a directory.")
-    }
-    val remoteFilesDownload = Future[Unit] {
-      logInfo(s"Downloading remote files: $remoteFiles")
-      downloadFiles(
-        remoteFiles,
-        filesDownloadDir,
-        s"Remote files download directory specified at $filesDownloadDir does not exist " +
-          "or is not a directory.")
-    }
+    logInfo(s"Downloading remote jars: $remoteJars")
+    downloadFiles(
+      remoteJars,
+      jarsDownloadDir,
+      s"Remote jars download directory specified at $jarsDownloadDir does not exist " +
+        "or is not a directory.")
 
-    Seq(remoteJarsDownload, remoteFilesDownload).foreach {
-      ThreadUtils.awaitResult(_, Duration.create(downloadTimeoutMinutes, TimeUnit.MINUTES))
-    }
+    logInfo(s"Downloading remote files: $remoteFiles")
+    downloadFiles(
+      remoteFiles,
+      filesDownloadDir,
+      s"Remote files download directory specified at $filesDownloadDir does not exist " +
+        "or is not a directory.")
+
+    downloadExecutor.shutdown()
+    downloadExecutor.awaitTermination(downloadTimeoutMinutes, TimeUnit.MINUTES)
   }
 
   private def downloadFiles(
@@ -84,7 +79,9 @@ private[spark] class SparkPodInitContainer(
       require(downloadDir.isDirectory, errMessageOnDestinationNotADirectory)
     }
     filesCommaSeparated.map(_.split(",")).toSeq.flatten.foreach { file =>
-      fileFetcher.fetchFile(file, downloadDir)
+      Future[Unit] {
+        fileFetcher.fetchFile(file, downloadDir)
+      }
     }
   }
 }

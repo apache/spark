@@ -24,7 +24,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
 
   private val NAMESPACE = "default"
   private val DRIVER_IMAGE = "driver-image"
-  private val INIT_CONTAINER_IMAGE = "init-container-image"
+  private val IC_IMAGE = "init-container-image"
   private val APP_ID = "spark-app-id"
   private val LAUNCH_TIME = 975256L
   private val APP_NAME = "spark"
@@ -58,13 +58,8 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
 
   test("Base submission steps without a main app resource.") {
     val sparkConf = new SparkConf(false)
-<<<<<<< HEAD:resource-managers/kubernetes/core/src/test/scala/org/apache/spark/deploy/k8s/submit/DriverConfigurationStepsOrchestratorSuite.scala
       .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
-    val orchestrator = new DriverConfigurationStepsOrchestrator(
-=======
-      .set(DRIVER_DOCKER_IMAGE, DRIVER_IMAGE)
     val orchestrator = new DriverConfigOrchestrator(
->>>>>>> Addressed the second round of comments:resource-managers/kubernetes/core/src/test/scala/org/apache/spark/deploy/k8s/submit/DriverConfigOrchestratorSuite.scala
       NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
@@ -83,13 +78,8 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
 
   test("Submission steps with an init-container.") {
     val sparkConf = new SparkConf(false)
-<<<<<<< HEAD:resource-managers/kubernetes/core/src/test/scala/org/apache/spark/deploy/k8s/submit/DriverConfigurationStepsOrchestratorSuite.scala
       .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
-      .set(INIT_CONTAINER_DOCKER_IMAGE, INIT_CONTAINER_IMAGE)
-=======
-      .set(DRIVER_DOCKER_IMAGE, DRIVER_IMAGE)
-      .set(INIT_CONTAINER_IMAGE, INIT_CONTAINER_IMAGE)
->>>>>>> Addressed the second round of comments:resource-managers/kubernetes/core/src/test/scala/org/apache/spark/deploy/k8s/submit/DriverConfigOrchestratorSuite.scala
+      .set(INIT_CONTAINER_IMAGE, IC_IMAGE)
       .set("spark.jars", "hdfs://localhost:9000/var/apps/jars/jar1.jar")
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigOrchestrator(

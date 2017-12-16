@@ -125,30 +125,6 @@ private[spark] class DriverConfigOrchestrator(
 
     val mayBeInitContainerBootstrapStep =
       if (areAnyFilesNonContainerLocal(sparkJars ++ sparkFiles)) {
-<<<<<<< HEAD:resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/submit/DriverConfigurationStepsOrchestrator.scala
-        val initContainerConfigurationStepsOrchestrator =
-          new InitContainerConfigurationStepsOrchestrator(
-            namespace,
-            kubernetesResourceNamePrefix,
-            sparkJars,
-            sparkFiles,
-            jarsDownloadPath,
-            filesDownloadPath,
-            imagePullPolicy,
-            allDriverLabels,
-            initContainerConfigMapName,
-            INIT_CONTAINER_PROPERTIES_FILE_NAME,
-            submissionSparkConf)
-        val initContainerConfigurationSteps =
-          initContainerConfigurationStepsOrchestrator.getAllConfigurationSteps()
-        val initContainerBootstrapStep =
-          new DriverInitContainerBootstrapStep(
-            initContainerConfigurationSteps,
-            initContainerConfigMapName,
-            INIT_CONTAINER_PROPERTIES_FILE_NAME)
-
-        Some(initContainerBootstrapStep)
-=======
         val orchestrator = new InitContainerConfigOrchestrator(
           namespace,
           kubernetesResourceNamePrefix,
@@ -156,7 +132,7 @@ private[spark] class DriverConfigOrchestrator(
           sparkFiles,
           jarsDownloadPath,
           filesDownloadPath,
-          dockerImagePullPolicy,
+          imagePullPolicy,
           allDriverLabels,
           initContainerConfigMapName,
           INIT_CONTAINER_PROPERTIES_FILE_NAME,
@@ -167,7 +143,6 @@ private[spark] class DriverConfigOrchestrator(
           INIT_CONTAINER_PROPERTIES_FILE_NAME)
 
         Some(bootstrapStep)
->>>>>>> Addressed the second round of comments:resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/submit/DriverConfigOrchestrator.scala
       } else {
         None
       }

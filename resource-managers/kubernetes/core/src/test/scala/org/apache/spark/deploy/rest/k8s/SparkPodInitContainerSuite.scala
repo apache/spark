@@ -68,7 +68,6 @@ class SparkPodInitContainerSuite
     Mockito.verify(fileFetcher).fetchFile("http://localhost:9000/jar1.jar", downloadJarsDir)
     Mockito.verify(fileFetcher).fetchFile("hdfs://localhost:9000/jar2.jar", downloadJarsDir)
     Mockito.verify(fileFetcher).fetchFile("http://localhost:9000/file.txt", downloadFilesDir)
-
   }
 
   private def getSparkConfForRemoteFileDownloads: SparkConf = {
