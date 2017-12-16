@@ -257,7 +257,7 @@ def kill_zinc_on_port(zinc_port):
     try:
         subprocess.check_call(cmd % ("lsof", zinc_port), shell=True)
     except:
-        subprocess.call(cmd % ("/usr/sbin/lsof", zinc_port), shell=True)
+        subprocess.check_call(cmd % ("/usr/sbin/lsof", zinc_port), shell=True)
 
 
 def exec_maven(mvn_args=()):
