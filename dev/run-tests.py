@@ -253,14 +253,11 @@ def kill_zinc_on_port(zinc_port):
     """
     Kill the Zinc process running on the given port, if one exists.
     """
+    cmd = "%s -P |grep %s | grep LISTEN | awk '{ print $2; }' | xargs kill"
     try:
-        cmd = ("lsof -P |grep %s | grep LISTEN "
-               "| awk '{ print $2; }' | xargs kill") % zinc_port
-        subprocess.check_call(cmd, shell=True)
+        subprocess.check_call(cmd % ("lsof", zinc_port), shell=True)
     except:
-        cmd = ("/usr/sbin/lsof -P |grep %s | grep LISTEN "
-               "| awk '{ print $2; }' | xargs kill") % zinc_port
-        subprocess.call(cmd, shell=True)
+        subprocess.call(cmd % ("/usr/sbin/lsof", zinc_port), shell=True)
 
 
 def exec_maven(mvn_args=()):
