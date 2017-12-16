@@ -438,10 +438,12 @@ class StreamSuite extends StreamTest {
       val explainWithoutExtended = q.explainInternal(false)
       assert(explainWithoutExtended.contains(replacement))
       assert(explainWithoutExtended.contains("StateStoreRestore"))
+      assert(!explainWithoutExtended.contains("file:/"))
 
       val explainWithExtended = q.explainInternal(true)
       assert(explainWithExtended.contains(replacement))
       assert(explainWithExtended.contains("StateStoreRestore"))
+      assert(!explainWithoutExtended.contains("file:/"))
     } finally {
       q.stop()
     }

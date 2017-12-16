@@ -235,7 +235,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
    * Redact the sensitive information in the given string.
    */
   private def withRedaction(message: => String): String = {
-    Utils.redact(SparkSession.getActiveSession.map(_.sparkContext.conf).orNull, message)
+    Utils.redact(sparkSession.sessionState.conf.stringRedationPattern, message)
   }
 
   /** A special namespace for commands that can be used to debug query execution. */
