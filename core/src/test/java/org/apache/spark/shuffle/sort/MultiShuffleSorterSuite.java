@@ -202,8 +202,8 @@ public class MultiShuffleSorterSuite {
 
   @Test
   public void testCalculateNewSpillOnOOMWithNoAsyncSpilling() throws IOException {
-    ShuffleSorter sorter1 = Mockito.mock(ShuffleSorter.class);
-    ShuffleSorter sorter2 = Mockito.mock(ShuffleSorter.class);
+    ShuffleSorter sorter1 = Mockito.mock(ShuffleExternalSorter.class);
+    ShuffleSorter sorter2 = Mockito.mock(ShuffleExternalSorter.class);
 
     MultiShuffleSorter msorter = createMultiShuffleSorter(
       Long.MAX_VALUE / RECORD_SIZE, sorter1, sorter2);
@@ -241,9 +241,9 @@ public class MultiShuffleSorterSuite {
 
   @Test
   public void testCalculateNewSpillOnOOMWithAsyncSpilling() throws IOException {
-    final ShuffleSorter sorter1 = Mockito.mock(ShuffleSorter.class);
-    final ShuffleSorter sorter2 = Mockito.mock(ShuffleSorter.class);
-    final ShuffleSorter sorter3 = Mockito.mock(ShuffleSorter.class);
+    final ShuffleSorter sorter1 = Mockito.mock(ShuffleExternalSorter.class);
+    final ShuffleSorter sorter2 = Mockito.mock(ShuffleExternalSorter.class);
+    final ShuffleSorter sorter3 = Mockito.mock(ShuffleExternalSorter.class);
 
     long maxMemory = (Long.MAX_VALUE / RECORD_SIZE) * RECORD_SIZE;
 

@@ -53,7 +53,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import scala.collection.JavaConversions;
 
-class MultiShuffleSorter extends ShuffleSorter {
+public class MultiShuffleSorter extends ShuffleSorter {
   private final Logger logger = LoggerFactory.getLogger(MultiShuffleSorter.class);
 
   private int numSorters;
