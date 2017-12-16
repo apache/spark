@@ -259,6 +259,27 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     val partitioner = new RangePartitioner(22, rdd)
     assert(partitioner.numPartitions === 3)
   }
+
+  test("defaultPartitioner") {
+    val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
+    val rdd2 = sc
+      .parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+      .partitionBy(new HashPartitioner(10))
+    val rdd3 = sc
+      .parallelize(Array((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
+      .partitionBy(new HashPartitioner(100))
+
+    val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2)
+    val partitioner2 = Partitioner.defaultPartitioner(rdd2, rdd3)
+    val partitioner3 = Partitioner.defaultPartitioner(rdd3, rdd1)
+    val partitioner4 = Partitioner.defaultPartitioner(rdd1, rdd2, rdd3)
+
+    assert(partitioner1.numPartitions == rdd1.getNumPartitions)
+    assert(partitioner2.numPartitions == rdd3.getNumPartitions)
+    assert(partitioner3.numPartitions == rdd3.getNumPartitions)
+    assert(partitioner4.numPartitions == rdd3.getNumPartitions)
+
+  }
 }
 
 

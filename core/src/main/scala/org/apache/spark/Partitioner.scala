@@ -21,6 +21,7 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.math.log10
 import scala.reflect.ClassTag
 import scala.util.hashing.byteswap32
 
@@ -42,7 +43,9 @@ object Partitioner {
   /**
    * Choose a partitioner to use for a cogroup-like operation between a number of RDDs.
    *
-   * If any of the RDDs already has a partitioner, choose that one.
+   * If any of the RDDs already has a partitioner, and the number of partitions of the
+   * partitioner is either greater than or is less than and within a single order of
+   * magnitude of the max number of upstream partitions, choose that one.
    *
    * Otherwise, we use a default HashPartitioner. For the number of partitions, if
    * spark.default.parallelism is set, then we'll use the value from SparkContext
@@ -57,7 +60,7 @@ object Partitioner {
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
     val rdds = (Seq(rdd) ++ others)
     val hasPartitioner = rdds.filter(_.partitioner.exists(_.numPartitions > 0))
-    if (hasPartitioner.nonEmpty) {
+    if (hasPartitioner.nonEmpty && isEligiblePartitioner(hasPartitioner.maxBy(_.partitions.length), rdds)) {
       hasPartitioner.maxBy(_.partitions.length).partitioner.get
     } else {
       if (rdd.context.conf.contains("spark.default.parallelism")) {
@@ -66,6 +69,16 @@ object Partitioner {
         new HashPartitioner(rdds.map(_.partitions.length).max)
       }
     }
+  }
+
+  /**
+   * Returns true if the number of partitions of the RDD is either greater than or is
+   * less than and within a single order of magnitude of the max number of upstream partitions;
+   * otherwise, returns false
+   */
+  private def isEligiblePartitioner(hasMaxPartitioner: RDD[_], rdds: Seq[RDD[_]]): Boolean = {
+    val maxPartitions = rdds.map(_.partitions.length).max
+    log10(maxPartitions).floor - log10(hasMaxPartitioner.getNumPartitions).floor < 1
   }
 }
 
