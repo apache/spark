@@ -125,7 +125,6 @@ SELECT pmod(cast(1 as float)         , '1') FROM t;
 SELECT pmod(cast(1 as double)        , '1') FROM t;
 SELECT pmod(cast(1 as decimal(10, 0)), '1') FROM t;
 
-
 -- Equality
 SELECT '1' = cast(1 as tinyint)                         FROM t;
 SELECT '1' = cast(1 as smallint)                        FROM t;

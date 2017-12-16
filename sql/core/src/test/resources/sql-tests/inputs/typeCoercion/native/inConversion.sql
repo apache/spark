@@ -210,7 +210,6 @@ SELECT cast(1 as string) in (cast(1 as string), cast(1 as double)) FROM t;
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as decimal(10, 0))) FROM t;
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as string)) FROM t;
 
--- tinyint, smallint, int, bigint, float, double, decimal(10, 0), string, binary, boolean, timestamp, date
 SELECT cast('1' as binary) in (cast('1' as binary), cast('1' as binary)) FROM t;
 -- Hive and Spark SQL doesn't support below operations:
 -- SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as tinyint)) FROM t;
