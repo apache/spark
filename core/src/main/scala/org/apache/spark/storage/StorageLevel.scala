@@ -132,7 +132,7 @@ class StorageLevel private(
 
   override def hashCode(): Int = toInt * 41 + replication
 
-  /** Name of the storage level if it is predefined or [[None]] otherwise. */
+  /** Name of the storage level if it is predefined or `None` otherwise. */
   def name: Option[String] = StorageLevel.PREDEFINED
     .collectFirst { case (storageLevel, name) if storageLevel == this => name }
 
