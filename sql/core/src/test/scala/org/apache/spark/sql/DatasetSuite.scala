@@ -1172,8 +1172,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
                 spark.sparkContext.checkpointDir = originalCheckpointDir
               }
             }
-          }
-          else {
+          } else {
             // Local checkpoints dont require checkpoint_dir
             f
           }
