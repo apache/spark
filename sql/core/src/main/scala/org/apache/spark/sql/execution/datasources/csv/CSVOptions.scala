@@ -137,8 +137,6 @@ class CSVOptions(
 
   val escapeQuotes = getBool("escapeQuotes", true)
 
-  val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
-
   val quoteAll = getBool("quoteAll", false)
 
   val inputBufferSize = 128
