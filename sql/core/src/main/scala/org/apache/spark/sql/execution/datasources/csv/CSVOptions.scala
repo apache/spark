@@ -137,8 +137,6 @@ class CSVOptions(
 
   val escapeQuotes = getBool("escapeQuotes", true)
 
-  val escapeUnquotedValues = getBool("escapeUnquotedValues", false)
-
   val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
 
   val quoteAll = getBool("quoteAll", false)
@@ -162,7 +160,6 @@ class CSVOptions(
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
-    writerSettings.setEscapeUnquotedValues(escapeUnquotedValues)
     writerSettings
   }
 
@@ -182,7 +179,6 @@ class CSVOptions(
     settings.setNullValue(nullValue)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
-    settings.setEscapeUnquotedValues(escapeUnquotedValues)
     settings
   }
 }
