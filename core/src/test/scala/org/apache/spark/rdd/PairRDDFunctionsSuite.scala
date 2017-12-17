@@ -26,10 +26,11 @@ import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistr
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
-import org.apache.hadoop.mapreduce.{JobContext => NewJobContext,
+import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext,
   OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat,
   RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
 import org.apache.hadoop.util.Progressable
+import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.Partitioner
@@ -524,6 +525,15 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
   }
 
+  test("The JobId on the driver and executors should be the same during the commit") {
+    // Create more than one rdd to mimic stageId not equal to rddId
+    val pairs = sc.parallelize(Array((1, 2), (2, 3)), 2)
+      .map { p => (new Integer(p._1 + 1), new Integer(p._2 + 1)) }
+      .filter { p => p._1 > 0 }
+    pairs.saveAsNewAPIHadoopFile[YetAnotherFakeFormat]("ignored")
+    assert(JobID.jobid != -1)
+  }
+
   test("saveAsHadoopFile should respect configured output committers") {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
     val conf = new JobConf()
@@ -561,11 +571,55 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       pairs.saveAsHadoopFile(
         "ignored", pairs.keyClass, pairs.valueClass, classOf[FakeFormatWithCallback], conf)
     }
-    assert(e.getMessage contains "failed to write")
+    assert(e.getCause.getMessage contains "failed to write")
 
     assert(FakeWriterWithCallback.calledBy === "write,callback,close")
     assert(FakeWriterWithCallback.exception != null, "exception should be captured")
     assert(FakeWriterWithCallback.exception.getMessage contains "failed to write")
+  }
+
+  test("saveAsNewAPIHadoopDataset should support invalid output paths when " +
+    "there are no files to be committed to an absolute output location") {
+    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+
+    def saveRddWithPath(path: String): Unit = {
+      val job = NewJob.getInstance(new Configuration(sc.hadoopConfiguration))
+      job.setOutputKeyClass(classOf[Integer])
+      job.setOutputValueClass(classOf[Integer])
+      job.setOutputFormatClass(classOf[NewFakeFormat])
+      if (null != path) {
+        job.getConfiguration.set("mapred.output.dir", path)
+      } else {
+        job.getConfiguration.unset("mapred.output.dir")
+      }
+      val jobConfiguration = job.getConfiguration
+
+      // just test that the job does not fail with java.lang.IllegalArgumentException.
+      pairs.saveAsNewAPIHadoopDataset(jobConfiguration)
+    }
+
+    saveRddWithPath(null)
+    saveRddWithPath("")
+    saveRddWithPath("::invalid::")
+  }
+
+  // In spark 2.1, only null was supported - not other invalid paths.
+  // org.apache.hadoop.mapred.FileOutputFormat.getOutputPath fails with IllegalArgumentException
+  // for non-null invalid paths.
+  test("saveAsHadoopDataset should respect empty output directory when " +
+    "there are no files to be committed to an absolute output location") {
+    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+
+    val conf = new JobConf()
+    conf.setOutputKeyClass(classOf[Integer])
+    conf.setOutputValueClass(classOf[Integer])
+    conf.setOutputFormat(classOf[FakeOutputFormat])
+    conf.setOutputCommitter(classOf[FakeOutputCommitter])
+
+    FakeOutputCommitter.ran = false
+    pairs.saveAsHadoopDataset(conf)
+
+    assert(FakeOutputCommitter.ran, "OutputCommitter was never called")
   }
 
   test("lookup") {
@@ -862,6 +916,40 @@ class NewFakeFormatWithCallback() extends NewFakeFormat {
   override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     new NewFakeWriterWithCallback()
   }
+}
+
+class YetAnotherFakeCommitter extends NewOutputCommitter with Assertions {
+  def setupJob(j: NewJobContext): Unit = {
+    JobID.jobid = j.getJobID().getId
+  }
+
+  def needsTaskCommit(t: NewTaskAttempContext): Boolean = false
+
+  def setupTask(t: NewTaskAttempContext): Unit = {
+    val jobId = t.getTaskAttemptID().getJobID().getId
+    assert(jobId === JobID.jobid)
+  }
+
+  def commitTask(t: NewTaskAttempContext): Unit = {}
+
+  def abortTask(t: NewTaskAttempContext): Unit = {}
+}
+
+class YetAnotherFakeFormat() extends NewOutputFormat[Integer, Integer]() {
+
+  def checkOutputSpecs(j: NewJobContext): Unit = {}
+
+  def getRecordWriter(t: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
+    new NewFakeWriter()
+  }
+
+  def getOutputCommitter(t: NewTaskAttempContext): NewOutputCommitter = {
+    new YetAnotherFakeCommitter()
+  }
+}
+
+object JobID {
+  var jobid = -1
 }
 
 class ConfigTestFormat() extends NewFakeFormat() with Configurable {

@@ -18,30 +18,33 @@
 package org.apache.spark.storage
 
 import java.io._
+import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
+import com.codahale.metrics.{MetricRegistry, MetricSet}
 
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.ExternalShuffleClient
+import org.apache.spark.network.shuffle.{ExternalShuffleClient, TempFileManager}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
@@ -66,7 +69,7 @@ private[spark] trait BlockData {
   /**
    * Returns a Netty-friendly wrapper for the block's data.
    *
-   * @see [[ManagedBuffer#convertToNetty()]]
+   * Please see `ManagedBuffer.convertToNetty()` for more details.
    */
   def toNetty(): Object
 
@@ -177,7 +180,8 @@ private[spark] class BlockManager(
   // standard BlockTransferService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
     val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
-    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled())
+    new ExternalShuffleClient(transConf, securityManager,
+      securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
   } else {
     blockTransferService
   }
@@ -201,6 +205,13 @@ private[spark] class BlockManager(
   private var lastPeerFetchTime = 0L
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
+
+  // A TempFileManager used to track all the files of remote blocks which above the
+  // specified memory threshold. Files will be deleted automatically based on weak reference.
+  // Exposed for test
+  private[storage] val remoteBlockTempFileManager =
+    new BlockManager.RemoteBlockTempFileManager(this)
+  private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -250,6 +261,16 @@ private[spark] class BlockManager(
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
 
+  def shuffleMetricsSource: Source = {
+    import BlockManager._
+
+    if (externalShuffleServiceEnabled) {
+      new ShuffleMetricsSource("ExternalShuffle", shuffleClient.shuffleMetrics())
+    } else {
+      new ShuffleMetricsSource("NettyBlockTransfer", shuffleClient.shuffleMetrics())
+    }
+  }
+
   private def registerWithExternalShuffleServer() {
     logInfo("Registering executor with local external shuffle service.")
     val shuffleConfig = new ExecutorShuffleInfo(
@@ -257,7 +278,7 @@ private[spark] class BlockManager(
       diskBlockManager.subDirsPerLocalDir,
       shuffleManager.getClass.getName)
 
-    val MAX_ATTEMPTS = 3
+    val MAX_ATTEMPTS = conf.get(config.SHUFFLE_REGISTRATION_MAX_ATTEMPTS)
     val SLEEP_TIME_SECS = 5
 
     for (i <- 1 to MAX_ATTEMPTS) {
@@ -337,7 +358,7 @@ private[spark] class BlockManager(
     val task = asyncReregisterTask
     if (task != null) {
       try {
-        Await.ready(task, Duration.Inf)
+        ThreadUtils.awaitReady(task, Duration.Inf)
       } catch {
         case NonFatal(t) =>
           throw new Exception("Error occurred while waiting for async. reregistration", t)
@@ -504,6 +525,7 @@ private[spark] class BlockManager(
       case Some(info) =>
         val level = info.level
         logDebug(s"Level for block $blockId is $level")
+        val taskAttemptId = Option(TaskContext.get()).map(_.taskAttemptId())
         if (level.useMemory && memoryStore.contains(blockId)) {
           val iter: Iterator[Any] = if (level.deserialized) {
             memoryStore.getValues(blockId).get
@@ -511,7 +533,12 @@ private[spark] class BlockManager(
             serializerManager.dataDeserializeStream(
               blockId, memoryStore.getBytes(blockId).get.toInputStream())(info.classTag)
           }
-          val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
+          // We need to capture the current taskId in case the iterator completion is triggered
+          // from a different thread which does not have TaskContext set; see SPARK-18406 for
+          // discussion.
+          val ci = CompletionIterator[Any, Iterator[Any]](iter, {
+            releaseLock(blockId, taskAttemptId)
+          })
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
           val diskData = diskStore.getBytes(blockId)
@@ -528,8 +555,9 @@ private[spark] class BlockManager(
               serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
             }
           }
-          val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn,
-            releaseLockAndDispose(blockId, diskData))
+          val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
+            releaseLockAndDispose(blockId, diskData, taskAttemptId)
+          })
           Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
           handleLocalReadFailure(blockId)
@@ -612,12 +640,19 @@ private[spark] class BlockManager(
 
   /**
    * Return a list of locations for the given block, prioritizing the local machine since
-   * multiple block managers can share the same host.
+   * multiple block managers can share the same host, followed by hosts on the same rack.
    */
-  private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
-    val locs = Random.shuffle(master.getLocations(blockId))
+  private def sortLocations(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
+    val locs = Random.shuffle(locations)
     val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
-    preferredLocs ++ otherLocs
+    blockManagerId.topologyInfo match {
+      case None => preferredLocs ++ otherLocs
+      case Some(_) =>
+        val (sameRackLocs, differentRackLocs) = otherLocs.partition {
+          loc => blockManagerId.topologyInfo == loc.topologyInfo
+        }
+        preferredLocs ++ sameRackLocs ++ differentRackLocs
+    }
   }
 
   /**
@@ -628,7 +663,25 @@ private[spark] class BlockManager(
     require(blockId != null, "BlockId is null")
     var runningFailureCount = 0
     var totalFailureCount = 0
-    val locations = getLocations(blockId)
+
+    // Because all the remote blocks are registered in driver, it is not necessary to ask
+    // all the slave executors to get block status.
+    val locationsAndStatus = master.getLocationsAndStatus(blockId)
+    val blockSize = locationsAndStatus.map { b =>
+      b.status.diskSize.max(b.status.memSize)
+    }.getOrElse(0L)
+    val blockLocations = locationsAndStatus.map(_.locations).getOrElse(Seq.empty)
+
+    // If the block size is above the threshold, we should pass our FileManger to
+    // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
+    // null value means the block will be persisted in memory.
+    val tempFileManager = if (blockSize > maxRemoteBlockToMem) {
+      remoteBlockTempFileManager
+    } else {
+      null
+    }
+
+    val locations = sortLocations(blockLocations)
     val maxFetchFailures = locations.size
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
@@ -636,7 +689,7 @@ private[spark] class BlockManager(
       logDebug(s"Getting remote block $blockId from $loc")
       val data = try {
         blockTransferService.fetchBlockSync(
-          loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
+          loc.host, loc.port, loc.executorId, blockId.toString, tempFileManager).nioByteBuffer()
       } catch {
         case NonFatal(e) =>
           runningFailureCount += 1
@@ -659,7 +712,7 @@ private[spark] class BlockManager(
           // take a significant amount of time. To get rid of these stale entries
           // we refresh the block locations after a certain number of fetch failures
           if (runningFailureCount >= maxFailuresBeforeLocationRefresh) {
-            locationIterator = getLocations(blockId).iterator
+            locationIterator = sortLocations(master.getLocations(blockId)).iterator
             logDebug(s"Refreshed locations from the driver " +
               s"after ${runningFailureCount} fetch failures.")
             runningFailureCount = 0
@@ -707,10 +760,13 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Release a lock on the given block.
+   * Release a lock on the given block with explicit TID.
+   * The param `taskAttemptId` should be passed in case we can't get the correct TID from
+   * TaskContext, for example, the input iterator of a cached RDD iterates to the end in a child
+   * thread.
    */
-  def releaseLock(blockId: BlockId): Unit = {
-    blockInfoManager.unlock(blockId)
+  def releaseLock(blockId: BlockId, taskAttemptId: Option[Long] = None): Unit = {
+    blockInfoManager.unlock(blockId, taskAttemptId)
   }
 
   /**
@@ -912,7 +968,7 @@ private[spark] class BlockManager(
       if (level.replication > 1) {
         // Wait for asynchronous replication to finish
         try {
-          Await.ready(replicationFuture, Duration.Inf)
+          ThreadUtils.awaitReady(replicationFuture, Duration.Inf)
         } catch {
           case NonFatal(t) =>
             throw new Exception("Error occurred while waiting for replication to finish", t)
@@ -973,11 +1029,16 @@ private[spark] class BlockManager(
         logWarning(s"Putting block $blockId failed")
       }
       res
+    } catch {
+      // Since removeBlockInternal may throw exception,
+      // we should print exception first to show root cause.
+      case NonFatal(e) =>
+        logWarning(s"Putting block $blockId failed due to exception $e.")
+        throw e
     } finally {
       // This cleanup is performed in a finally block rather than a `catch` to avoid having to
       // catch and properly re-throw InterruptedException.
       if (exceptionWasThrown) {
-        logWarning(s"Putting block $blockId failed due to an exception")
         // If an exception was thrown then it's possible that the code in `putBody` has already
         // notified the master about the availability of this block, so we need to send an update
         // to remove this block location.
@@ -1260,11 +1321,11 @@ private[spark] class BlockManager(
     val numPeersToReplicateTo = level.replication - 1
     val startTime = System.nanoTime
 
-    var peersReplicatedTo = mutable.HashSet.empty ++ existingReplicas
-    var peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
+    val peersReplicatedTo = mutable.HashSet.empty ++ existingReplicas
+    val peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
     var numFailures = 0
 
-    val initialPeers = getPeers(false).filterNot(existingReplicas.contains(_))
+    val initialPeers = getPeers(false).filterNot(existingReplicas.contains)
 
     var peersForReplication = blockReplicationPolicy.prioritize(
       blockManagerId,
@@ -1458,13 +1519,18 @@ private[spark] class BlockManager(
   }
 
   private def addUpdatedBlockStatusToTaskMetrics(blockId: BlockId, status: BlockStatus): Unit = {
-    Option(TaskContext.get()).foreach { c =>
-      c.taskMetrics().incUpdatedBlockStatuses(blockId -> status)
+    if (conf.get(config.TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES)) {
+      Option(TaskContext.get()).foreach { c =>
+        c.taskMetrics().incUpdatedBlockStatuses(blockId -> status)
+      }
     }
   }
 
-  def releaseLockAndDispose(blockId: BlockId, data: BlockData): Unit = {
-    blockInfoManager.unlock(blockId)
+  def releaseLockAndDispose(
+      blockId: BlockId,
+      data: BlockData,
+      taskAttemptId: Option[Long] = None): Unit = {
+    releaseLock(blockId, taskAttemptId)
     data.dispose()
   }
 
@@ -1474,6 +1540,7 @@ private[spark] class BlockManager(
       // Closing should be idempotent, but maybe not for the NioBlockTransferService.
       shuffleClient.close()
     }
+    remoteBlockTempFileManager.stop()
     diskBlockManager.stop()
     rpcEnv.stop(slaveEndpoint)
     blockInfoManager.clear()
@@ -1505,5 +1572,74 @@ private[spark] object BlockManager {
       blockManagers(blockIds(i)) = blockLocations(i).map(_.host)
     }
     blockManagers.toMap
+  }
+
+  private class ShuffleMetricsSource(
+      override val sourceName: String,
+      metricSet: MetricSet) extends Source {
+
+    override val metricRegistry = new MetricRegistry
+    metricRegistry.registerAll(metricSet)
+  }
+
+  class RemoteBlockTempFileManager(blockManager: BlockManager)
+      extends TempFileManager with Logging {
+
+    private class ReferenceWithCleanup(file: File, referenceQueue: JReferenceQueue[File])
+        extends WeakReference[File](file, referenceQueue) {
+      private val filePath = file.getAbsolutePath
+
+      def cleanUp(): Unit = {
+        logDebug(s"Clean up file $filePath")
+
+        if (!new File(filePath).delete()) {
+          logDebug(s"Fail to delete file $filePath")
+        }
+      }
+    }
+
+    private val referenceQueue = new JReferenceQueue[File]
+    private val referenceBuffer = Collections.newSetFromMap[ReferenceWithCleanup](
+      new ConcurrentHashMap)
+
+    private val POLL_TIMEOUT = 1000
+    @volatile private var stopped = false
+
+    private val cleaningThread = new Thread() { override def run() { keepCleaning() } }
+    cleaningThread.setDaemon(true)
+    cleaningThread.setName("RemoteBlock-temp-file-clean-thread")
+    cleaningThread.start()
+
+    override def createTempFile(): File = {
+      blockManager.diskBlockManager.createTempLocalBlock()._2
+    }
+
+    override def registerTempFileToClean(file: File): Boolean = {
+      referenceBuffer.add(new ReferenceWithCleanup(file, referenceQueue))
+    }
+
+    def stop(): Unit = {
+      stopped = true
+      cleaningThread.interrupt()
+      cleaningThread.join()
+    }
+
+    private def keepCleaning(): Unit = {
+      while (!stopped) {
+        try {
+          Option(referenceQueue.remove(POLL_TIMEOUT))
+            .map(_.asInstanceOf[ReferenceWithCleanup])
+            .foreach { ref =>
+              referenceBuffer.remove(ref)
+              ref.cleanUp()
+            }
+        } catch {
+          case _: InterruptedException =>
+            // no-op
+          case NonFatal(e) =>
+            logError("Error in cleaning thread", e)
+        }
+      }
+    }
   }
 }

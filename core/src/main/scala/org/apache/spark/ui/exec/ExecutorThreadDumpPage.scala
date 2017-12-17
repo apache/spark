@@ -17,18 +17,22 @@
 
 package org.apache.spark.ui.exec
 
+import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Text}
 
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.SparkContext
+import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
 
-private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage("threadDump") {
+private[ui] class ExecutorThreadDumpPage(
+    parent: SparkUITab,
+    sc: Option[SparkContext]) extends WebUIPage("threadDump") {
 
-  private val sc = parent.sc
-
+  // stripXSS is called first to remove suspicious characters used in XSS attacks
   def render(request: HttpServletRequest): Seq[Node] = {
-    val executorId = Option(request.getParameter("executorId")).map { executorId =>
+    val executorId =
+      Option(UIUtils.stripXSS(request.getParameter("executorId"))).map { executorId =>
       UIUtils.decodeURLParameter(executorId)
     }.getOrElse {
       throw new IllegalArgumentException(s"Missing executorId parameter")
@@ -42,7 +46,8 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
           val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
           if (v1 == v2) {
-            threadTrace1.threadName.toLowerCase < threadTrace2.threadName.toLowerCase
+            threadTrace1.threadName.toLowerCase(Locale.ROOT) <
+              threadTrace2.threadName.toLowerCase(Locale.ROOT)
           } else {
             v1 > v2
           }

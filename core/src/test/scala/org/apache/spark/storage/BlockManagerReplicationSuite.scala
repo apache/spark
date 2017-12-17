@@ -17,6 +17,8 @@
 
 package org.apache.spark.storage
 
+import java.util.Locale
+
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
@@ -29,6 +31,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
@@ -67,7 +70,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     conf.set("spark.testing.memory", maxMem.toString)
-    conf.set("spark.memory.offHeap.size", maxMem.toString)
+    conf.set(MEMORY_OFFHEAP_SIZE.key, maxMem.toString)
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
@@ -98,7 +101,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     sc = new SparkContext("local", "test", conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(sc))), conf, true)
+        new LiveListenerBus(conf))), conf, true)
     allStores.clear()
   }
 
@@ -194,55 +197,6 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
       testReplication(1,
         Seq(StorageLevel.MEMORY_AND_DISK_2, StorageLevel(true, false, false, false, 3)))
     }
-  }
-
-  test("block replication - deterministic node selection") {
-    val blockSize = 1000
-    val storeSize = 10000
-    val stores = (1 to 5).map {
-      i => makeBlockManager(storeSize, s"store$i")
-    }
-    val storageLevel2x = StorageLevel.MEMORY_AND_DISK_2
-    val storageLevel3x = StorageLevel(true, true, false, true, 3)
-    val storageLevel4x = StorageLevel(true, true, false, true, 4)
-
-    def putBlockAndGetLocations(blockId: String, level: StorageLevel): Set[BlockManagerId] = {
-      stores.head.putSingle(blockId, new Array[Byte](blockSize), level)
-      val locations = master.getLocations(blockId).sortBy { _.executorId }.toSet
-      stores.foreach { _.removeBlock(blockId) }
-      master.removeBlock(blockId)
-      locations
-    }
-
-    // Test if two attempts to 2x replication returns same set of locations
-    val a1Locs = putBlockAndGetLocations("a1", storageLevel2x)
-    assert(putBlockAndGetLocations("a1", storageLevel2x) === a1Locs,
-      "Inserting a 2x replicated block second time gave different locations from the first")
-
-    // Test if two attempts to 3x replication returns same set of locations
-    val a2Locs3x = putBlockAndGetLocations("a2", storageLevel3x)
-    assert(putBlockAndGetLocations("a2", storageLevel3x) === a2Locs3x,
-      "Inserting a 3x replicated block second time gave different locations from the first")
-
-    // Test if 2x replication of a2 returns a strict subset of the locations of 3x replication
-    val a2Locs2x = putBlockAndGetLocations("a2", storageLevel2x)
-    assert(
-      a2Locs2x.subsetOf(a2Locs3x),
-      "Inserting a with 2x replication gave locations that are not a subset of locations" +
-        s" with 3x replication [3x: ${a2Locs3x.mkString(",")}; 2x: ${a2Locs2x.mkString(",")}"
-    )
-
-    // Test if 4x replication of a2 returns a strict superset of the locations of 3x replication
-    val a2Locs4x = putBlockAndGetLocations("a2", storageLevel4x)
-    assert(
-      a2Locs3x.subsetOf(a2Locs4x),
-      "Inserting a with 4x replication gave locations that are not a superset of locations " +
-        s"with 3x replication [3x: ${a2Locs3x.mkString(",")}; 4x: ${a2Locs4x.mkString(",")}"
-    )
-
-    // Test if 3x replication of two different blocks gives two different sets of locations
-    val a3Locs3x = putBlockAndGetLocations("a3", storageLevel3x)
-    assert(a3Locs3x !== a2Locs3x, "Two blocks gave same locations with 3x replication")
   }
 
   test("block replication - replication failures") {
@@ -374,8 +328,8 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
     storageLevels.foreach { storageLevel =>
       // Put the block into one of the stores
-      val blockId = new TestBlockId(
-        "block-with-" + storageLevel.description.replace(" ", "-").toLowerCase)
+      val blockId = TestBlockId(
+        "block-with-" + storageLevel.description.replace(" ", "-").toLowerCase(Locale.ROOT))
       val testValue = Array.fill[Byte](blockSize)(1)
       stores(0).putSingle(blockId, testValue, storageLevel)
 

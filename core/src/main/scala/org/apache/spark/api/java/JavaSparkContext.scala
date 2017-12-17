@@ -757,6 +757,12 @@ class JavaSparkContext(val sc: SparkContext)
    */
   def getLocalProperty(key: String): String = sc.getLocalProperty(key)
 
+  /**
+   *  Set a human readable description of the current job.
+   *  @since 2.3.0
+   */
+  def setJobDescription(value: String): Unit = sc.setJobDescription(value)
+
   /** Control our logLevel. This overrides any user-defined log settings.
    * @param logLevel The desired log level as a string.
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN

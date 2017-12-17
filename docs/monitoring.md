@@ -27,8 +27,8 @@ in the UI to persisted storage.
 
 ## Viewing After the Fact
 
-If Spark is run on Mesos or YARN, it is still possible to construct the UI of an
-application through Spark's history server, provided that the application's event logs exist.
+It is still possible to construct the UI of an application through Spark's history server, 
+provided that the application's event logs exist.
 You can start the history server by executing:
 
     ./sbin/start-history-server.sh
@@ -60,6 +60,10 @@ The history server can be configured as follows:
   <tr>
     <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>
     <td>JVM options for the history server (default: none).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_DAEMON_CLASSPATH</code></td>
+    <td>Classpath for the history server (default: none).</td>
   </tr>
   <tr>
     <td><code>SPARK_PUBLIC_DNS</code></td>
@@ -220,6 +224,15 @@ The history server can be configured as follows:
       Number of threads that will be used by history server to process event logs.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.store.path</td>
+    <td>(none)</td>
+    <td>
+        Local directory where to cache application history data. If set, the history
+        server will store application data on disk instead of keeping it in memory. The data
+        written to disk will be re-used in the event of a history server restart.
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -298,8 +311,10 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages</code></td>
-    <td>A list of all stages for a given application.</td>
-    <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
+    <td>
+      A list of all stages for a given application.
+      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
@@ -385,7 +400,11 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>
     <td>Environment details of the given application.</td>
-  </tr>       
+  </tr>
+  <tr>
+    <td><code>/version</code></td>
+    <td>Get the current spark version.</td>
+  </tr>
 </table>
 
 The number of jobs and stages which can retrieved is constrained by the same retention
@@ -451,6 +470,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
 * `GraphiteSink`: Sends metrics to a Graphite node.
 * `Slf4jSink`: Sends metrics to slf4j as log entries.
+* `StatsdSink`: Sends metrics to a StatsD node.
 
 Spark also supports a Ganglia sink which is not included in the default build due to
 licensing restrictions:

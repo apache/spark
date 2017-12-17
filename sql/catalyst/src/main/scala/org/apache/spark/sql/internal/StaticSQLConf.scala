@@ -81,4 +81,18 @@ object StaticSQLConf {
         "SQL configuration and the current database.")
       .booleanConf
       .createWithDefault(false)
+
+  val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
+    .doc("Name of the class used to configure Spark Session extensions. The class should " +
+      "implement Function1[SparkSessionExtension, Unit], and must have a no-args constructor.")
+    .stringConf
+    .createOptional
+
+  val QUERY_EXECUTION_LISTENERS = buildStaticConf("spark.sql.queryExecutionListeners")
+    .doc("List of class names implementing QueryExecutionListener that will be automatically " +
+      "added to newly created sessions. The classes should have either a no-arg constructor, " +
+      "or a constructor that expects a SparkConf argument.")
+    .stringConf
+    .toSequence
+    .createOptional
 }

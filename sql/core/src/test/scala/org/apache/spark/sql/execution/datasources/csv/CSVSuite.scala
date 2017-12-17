@@ -24,8 +24,8 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.commons.lang3.time.FastDateFormat
-import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.hadoop.io.SequenceFile.CompressionType
+import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
@@ -261,10 +261,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test for DROPMALFORMED parsing mode") {
-    Seq(false, true).foreach { wholeFile =>
+    Seq(false, true).foreach { multiLine =>
       val cars = spark.read
         .format("csv")
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .options(Map("header" -> "true", "mode" -> "dropmalformed"))
         .load(testFile(carsFile))
 
@@ -284,11 +284,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test for FAILFAST parsing mode") {
-    Seq(false, true).foreach { wholeFile =>
+    Seq(false, true).foreach { multiLine =>
       val exception = intercept[SparkException] {
         spark.read
           .format("csv")
-          .option("wholeFile", wholeFile)
+          .option("multiLine", multiLine)
           .options(Map("header" -> "true", "mode" -> "failfast"))
           .load(testFile(carsFile)).collect()
       }
@@ -535,18 +535,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("commented lines in CSV data") {
-    val results = spark.read
-      .format("csv")
-      .options(Map("comment" -> "~", "header" -> "false"))
-      .load(testFile(commentsFile))
-      .collect()
+    Seq("false", "true").foreach { multiLine =>
 
-    val expected =
-      Seq(Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
-        Seq("6", "7", "8", "9", "0", "2015-08-21 16:58:01"),
-        Seq("1", "2", "3", "4", "5", "2015-08-23 18:00:42"))
+      val results = spark.read
+        .format("csv")
+        .options(Map("comment" -> "~", "header" -> "false", "multiLine" -> multiLine))
+        .load(testFile(commentsFile))
+        .collect()
 
-    assert(results.toSeq.map(_.toSeq) === expected)
+      val expected =
+        Seq(Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
+          Seq("6", "7", "8", "9", "0", "2015-08-21 16:58:01"),
+          Seq("1", "2", "3", "4", "5", "2015-08-23 18:00:42"))
+
+      assert(results.toSeq.map(_.toSeq) === expected)
+    }
   }
 
   test("inferring schema with commented lines in CSV data") {
@@ -1042,13 +1045,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
-    Seq(false, true).foreach { wholeFile =>
+    Seq(false, true).foreach { multiLine =>
       val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
       // We use `PERMISSIVE` mode by default if invalid string is given.
       val df1 = spark
         .read
         .option("mode", "abcd")
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .schema(schema)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df1,
@@ -1063,7 +1066,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .read
         .option("mode", "Permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .schema(schemaWithCorrField1)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df2,
@@ -1080,7 +1083,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .read
         .option("mode", "permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .schema(schemaWithCorrField2)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df3,
@@ -1093,7 +1096,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .read
           .option("mode", "PERMISSIVE")
           .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-          .option("wholeFile", wholeFile)
+          .option("multiLine", multiLine)
           .schema(schema.add(columnNameOfCorruptRecord, IntegerType))
           .csv(testFile(valueMalformedFile))
           .collect
@@ -1125,7 +1128,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       val df = spark.read
         .option("header", true)
-        .option("wholeFile", true)
+        .option("multiLine", true)
         .csv(path.getAbsolutePath)
 
       // Check if headers have new lines in the names.
@@ -1148,10 +1151,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("Empty file produces empty dataframe with empty schema") {
-    Seq(false, true).foreach { wholeFile =>
+    Seq(false, true).foreach { multiLine =>
       val df = spark.read.format("csv")
         .option("header", true)
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .load(testFile(emptyFile))
 
       assert(df.schema === spark.emptyDataFrame.schema)
@@ -1225,5 +1228,76 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           checkAnswer(readBack, Row(expected))
         }
       }
+  }
+
+  test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
+    val exception = intercept[SparkException] {
+      spark.read.schema("a DOUBLE")
+        .option("mode", "FAILFAST")
+        .csv(Seq("10u12").toDS())
+        .collect()
+    }
+    assert(exception.getMessage.contains("""input string: "10u12""""))
+
+    val count = spark.read.schema("a FLOAT")
+      .option("mode", "DROPMALFORMED")
+      .csv(Seq("10u12").toDS())
+      .count()
+    assert(count == 0)
+
+    val results = spark.read.schema("a FLOAT")
+      .option("mode", "PERMISSIVE")
+      .csv(Seq("10u12").toDS())
+    checkAnswer(results, Row(null))
+  }
+
+  test("SPARK-20978: Fill the malformed column when the number of tokens is less than schema") {
+    val df = spark.read
+      .schema("a string, b string, unparsed string")
+      .option("columnNameOfCorruptRecord", "unparsed")
+      .csv(Seq("a").toDS())
+    checkAnswer(df, Row("a", null, "a"))
+  }
+
+  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
+    "from a file") {
+    val columnNameOfCorruptRecord = "_corrupt_record"
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", TimestampType)
+      .add(columnNameOfCorruptRecord, StringType)
+    // negative cases
+    val msg = intercept[AnalysisException] {
+      spark
+        .read
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .csv(testFile(valueMalformedFile))
+        .select(columnNameOfCorruptRecord)
+        .collect()
+    }.getMessage
+    assert(msg.contains("only include the internal corrupt record column"))
+    intercept[org.apache.spark.sql.catalyst.errors.TreeNodeException[_]] {
+      spark
+        .read
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .csv(testFile(valueMalformedFile))
+        .filter($"_corrupt_record".isNotNull)
+        .count()
+    }
+    // workaround
+    val df = spark
+      .read
+      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+      .schema(schema)
+      .csv(testFile(valueMalformedFile))
+      .cache()
+    assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
+    assert(df.filter($"_corrupt_record".isNull).count() == 1)
+    checkAnswer(
+      df.select(columnNameOfCorruptRecord),
+      Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
+    )
   }
 }

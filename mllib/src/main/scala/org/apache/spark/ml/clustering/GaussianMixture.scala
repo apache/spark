@@ -64,8 +64,8 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
-    SchemaUtils.appendColumn(schema, $(probabilityCol), new VectorUDT)
+    val schemaWithPredictionCol = SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
+    SchemaUtils.appendColumn(schemaWithPredictionCol, $(probabilityCol), new VectorUDT)
   }
 }
 
@@ -472,7 +472,7 @@ class GaussianMixture @Since("2.0.0") (
        */
       val cov = {
         val ss = new DenseVector(new Array[Double](numFeatures)).asBreeze
-        slice.foreach(xi => ss += (xi.asBreeze - mean.asBreeze) :^ 2.0)
+        slice.foreach(xi => ss += (xi.asBreeze - mean.asBreeze) ^:^ 2.0)
         val diagVec = Vectors.fromBreeze(ss)
         BLAS.scal(1.0 / numSamples, diagVec)
         val covVec = new DenseVector(Array.fill[Double](

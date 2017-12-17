@@ -22,19 +22,20 @@ import java.util.concurrent.CountDownLatch
 import org.apache.commons.lang3.RandomStringUtils
 import org.mockito.Mockito._
 import org.scalactic.TolerantNumerics
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ManualClock
 
 
@@ -172,12 +173,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       StopStream, // clears out StreamTest state
       AssertOnQuery { q =>
         // both commit log and offset log contain the same (latest) batch id
-        q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) ==
+        q.commitLog.getLatest().map(_._1).getOrElse(-1L) ==
           q.offsetLog.getLatest().map(_._1).getOrElse(-2L)
       },
       AssertOnQuery { q =>
         // blow away commit log and sink result
-        q.batchCommitLog.purge(1)
+        q.commitLog.purge(1)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
@@ -466,7 +467,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         CheckAnswer(6, 3, 6, 3, 1, 1),
 
         AssertOnQuery("metadata log should contain only two files") { q =>
-          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toUri)
           val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
           val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
           assert(toTest.size == 2 && toTest.head == "1")
@@ -492,7 +493,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         CheckAnswer(1, 2, 1, 2, 3, 4, 5, 6, 7, 8),
 
         AssertOnQuery("metadata log should contain three files") { q =>
-          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toUri)
           val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
           val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
           assert(toTest.size == 3 && toTest.head == "2")
@@ -613,6 +614,58 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("get the query id in source") {
+    @volatile var queryId: String = null
+    val source = new Source {
+      override def stop(): Unit = {}
+      override def getOffset: Option[Offset] = {
+        queryId = spark.sparkContext.getLocalProperty(StreamExecution.QUERY_ID_KEY)
+        None
+      }
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = spark.emptyDataFrame
+      override def schema: StructType = MockSourceProvider.fakeSchema
+    }
+
+    MockSourceProvider.withMockSources(source) {
+      val df = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.MockSourceProvider")
+        .load()
+      testStream(df)(
+        AssertOnQuery { sq =>
+          sq.processAllAvailable()
+          assert(sq.id.toString === queryId)
+          assert(sq.runId.toString !== queryId)
+          true
+        }
+      )
+    }
+  }
+
+  test("processAllAvailable should not block forever when a query is stopped") {
+    val input = MemoryStream[Int]
+    input.addData(1)
+    val query = input.toDF().writeStream
+      .trigger(Trigger.Once())
+      .format("console")
+      .start()
+    failAfter(streamingTimeout) {
+      query.processAllAvailable()
+    }
+  }
+
+  test("SPARK-22238: don't check for RDD partitions during streaming aggregation preparation") {
+    val stream = MemoryStream[(Int, Int)]
+    val baseDf = Seq((1, "A"), (2, "b")).toDF("num", "char").where("char = 'A'")
+    val otherDf = stream.toDF().toDF("num", "numSq")
+      .join(broadcast(baseDf), "num")
+      .groupBy('char)
+      .agg(sum('numSq))
+
+    testStream(otherDf, OutputMode.Complete())(
+      AddData(stream, (1, 1), (2, 4)),
+      CheckLastBatch(("A", 1)))
+  }
+
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */
   private def createSingleTriggerStreamingDF(triggerDF: DataFrame): DataFrame = {
     require(!triggerDF.isStreaming)
@@ -620,10 +673,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val source = new Source() {
       override def schema: StructType = triggerDF.schema
       override def getOffset: Option[Offset] = Some(LongOffset(0))
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = triggerDF
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        sqlContext.internalCreateDataFrame(
+          triggerDF.queryExecution.toRdd, triggerDF.schema, isStreaming = true)
+      }
       override def stop(): Unit = {}
     }
-    StreamingExecutionRelation(source)
+    StreamingExecutionRelation(source, spark)
   }
 
   /** Returns the query progress at the end of the first trigger of streaming DF */
@@ -642,8 +698,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
    *
    * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
    * @param timeoutMs         Timeout in milliseconds
-   *                          When timeoutMs <= 0, awaitTermination() is tested (i.e. w/o timeout)
-   *                          When timeoutMs > 0, awaitTermination(timeoutMs) is tested
+   *                          When timeoutMs is less than or equal to 0, awaitTermination() is
+   *                          tested (i.e. w/o timeout)
+   *                          When timeoutMs is greater than 0, awaitTermination(timeoutMs) is
+   *                          tested
    * @param expectedReturnValue Expected return value when awaitTermination(timeoutMs) is used
    */
   case class TestAwaitTermination(
@@ -667,8 +725,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
      *
      * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
      * @param timeoutMs         Timeout in milliseconds
-     *                          When timeoutMs <= 0, awaitTermination() is tested (i.e. w/o timeout)
-     *                          When timeoutMs > 0, awaitTermination(timeoutMs) is tested
+     *                          When timeoutMs is less than or equal to 0, awaitTermination() is
+     *                          tested (i.e. w/o timeout)
+     *                          When timeoutMs is greater than 0, awaitTermination(timeoutMs) is
+     *                          tested
      * @param expectedReturnValue Expected return value when awaitTermination(timeoutMs) is used
      */
     def assertOnQueryCondition(
@@ -685,7 +745,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           assert(returnedValue === expectedReturnValue, "Returned value does not match expected")
         }
       }
-      AwaitTerminationTester.test(expectedBehavior, awaitTermFunc)
+      AwaitTerminationTester.test(expectedBehavior, () => awaitTermFunc())
       true // If the control reached here, then everything worked as expected
     }
   }

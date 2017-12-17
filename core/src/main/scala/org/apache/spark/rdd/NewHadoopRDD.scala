@@ -21,6 +21,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
+import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -34,7 +35,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
@@ -89,6 +90,8 @@ class NewHadoopRDD[K, V](
 
   private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
+  private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
+
   def getConf: Configuration = {
     val conf: Configuration = confBroadcast.value.value
     if (shouldCloneJobConf) {
@@ -121,8 +124,12 @@ class NewHadoopRDD[K, V](
         configurable.setConf(_conf)
       case _ =>
     }
-    val jobContext = new JobContextImpl(_conf, jobId)
-    val rawSplits = inputFormat.getSplits(jobContext).toArray
+    val allRowSplits = inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
+    val rawSplits = if (ignoreEmptySplits) {
+      allRowSplits.filter(_.getLength > 0)
+    } else {
+      allRowSplits
+    }
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
       result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
@@ -191,7 +198,13 @@ class NewHadoopRDD[K, V](
         }
 
       // Register an on-task-completion callback to close the input stream.
-      context.addTaskCompletionListener(context => close())
+      context.addTaskCompletionListener { context =>
+        // Update the bytesRead before closing is to make sure lingering bytesRead statistics in
+        // this thread get correctly added.
+        updateBytesRead()
+        close()
+      }
+
       private var havePair = false
       private var recordsSinceMetricsUpdate = 0
 

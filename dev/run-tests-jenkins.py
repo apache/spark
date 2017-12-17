@@ -137,7 +137,9 @@ def run_tests(tests_timeout):
     if test_result_code == 0:
         test_result_note = ' * This patch passes all tests.'
     else:
-        test_result_note = ' * This patch **fails %s**.' % failure_note_by_errcode[test_result_code]
+        note = failure_note_by_errcode.get(
+            test_result_code, "due to an unknown error code, %s" % test_result_code)
+        test_result_note = ' * This patch **fails %s**.' % note
 
     return [test_result_code, test_result_note]
 

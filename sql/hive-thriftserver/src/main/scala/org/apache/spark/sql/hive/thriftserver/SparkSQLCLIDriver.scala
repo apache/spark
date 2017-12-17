@@ -37,6 +37,8 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.log4j.{Level, Logger}
 import org.apache.thrift.transport.TSocket
 
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
@@ -47,9 +49,10 @@ import org.apache.spark.util.ShutdownHookManager
  * has dropped its support.
  */
 private[hive] object SparkSQLCLIDriver extends Logging {
-  private var prompt = "spark-sql"
-  private var continuedPrompt = "".padTo(prompt.length, ' ')
+  private val prompt = "spark-sql"
+  private val continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport: TSocket = _
+  private final val SPARK_HADOOP_PROP_PREFIX = "spark.hadoop."
 
   installSignalHandler()
 
@@ -80,11 +83,17 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       System.exit(1)
     }
 
+    val sparkConf = new SparkConf(loadDefaults = true)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
+
     val cliConf = new HiveConf(classOf[SessionState])
-    // Override the location of the metastore since this is only used for local execution.
-    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
-      case (key, value) => cliConf.set(key, value)
+    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
+      ++ sparkConf.getAll.toMap ++ extraConfigs).foreach {
+      case (k, v) =>
+        cliConf.set(k, v)
     }
+
     val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in
@@ -134,6 +143,16 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // Hive 1.2 + not supported in CLI
       throw new RuntimeException("Remote operations not supported")
     }
+    // Respect the configurations set by --hiveconf from the command line
+    // (based on Hive's CliDriver).
+    val hiveConfFromCmd = sessionState.getOverriddenConfigurations.entrySet().asScala
+    val newHiveConf = hiveConfFromCmd.map { kv =>
+      // If the same property is configured by spark.hadoop.xxx, we ignore it and
+      // obey settings from spark properties
+      val k = kv.getKey
+      val v = sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + k, kv.getValue)
+      (k, v)
+    }
 
     val cli = new SparkSQLCLIDriver
     cli.setHiveVariables(oproc.getHiveVariables)
@@ -157,12 +176,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
 
-    // Respect the configurations set by --hiveconf from the command line
-    // (based on Hive's CliDriver).
-    val it = sessionState.getOverriddenConfigurations.entrySet().iterator()
-    while (it.hasNext) {
-      val kv = it.next()
-      SparkSQLEnv.sqlContext.setConf(kv.getKey, kv.getValue)
+    newHiveConf.foreach { kv =>
+      SparkSQLEnv.sqlContext.setConf(kv._1, kv._2)
     }
 
     if (sessionState.execString != null) {
@@ -272,7 +287,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
-  private val LOG = LogFactory.getLog("CliDriver")
+  private val LOG = LogFactory.getLog(classOf[SparkSQLCLIDriver])
 
   private val console = new SessionState.LogHelper(LOG)
 
@@ -302,7 +317,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   override def processCmd(cmd: String): Int = {
     val cmd_trimmed: String = cmd.trim()
-    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ENGLISH)
+    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ROOT)
     val tokens: Array[String] = cmd_trimmed.split("\\s+")
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
     if (cmd_lower.equals("quit") ||
@@ -310,7 +325,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       sessionState.close()
       System.exit(0)
     }
-    if (tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
+    if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
       cmd_trimmed.startsWith("!") || isRemoteMode) {
       val start = System.currentTimeMillis()
       super.processCmd(cmd)

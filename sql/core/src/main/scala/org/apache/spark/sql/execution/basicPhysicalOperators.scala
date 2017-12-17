@@ -20,14 +20,13 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
-import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
+import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
@@ -57,9 +56,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val exprs = projectList.map(x =>
-      ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
-    ctx.currentVars = input
+    val exprs = projectList.map(x => BindReferences.bindReference[Expression](x, child.output))
     val resultVars = exprs.map(_.genCode(ctx))
     // Evaluation of non-deterministic expressions can't be deferred.
     val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
@@ -153,8 +150,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
        """.stripMargin
     }
 
-    ctx.currentVars = input
-
     // To generate the predicates we will follow this algorithm.
     // For each predicate that is not IsNotNull, we will generate them one by one loading attributes
     // as necessary. For each of both attributes, if there is an IsNotNull predicate we will
@@ -202,11 +197,14 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       ev
     }
 
+    // Note: wrap in "do { } while(false);", so the generated checks can jump out with "continue;"
     s"""
-       |$generated
-       |$nullChecks
-       |$numOutput.add(1);
-       |${consume(ctx, resultVars)}
+       |do {
+       |  $generated
+       |  $nullChecks
+       |  $numOutput.add(1);
+       |  ${consume(ctx, resultVars)}
+       |} while(false);
      """.stripMargin
   }
 
@@ -265,6 +263,10 @@ case class SampleExec(
     }
   }
 
+  // Mark this as empty. This plan doesn't need to evaluate any inputs and can defer the evaluation
+  // to the parent operator.
+  override def usedInputs: AttributeSet = AttributeSet.empty
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
@@ -273,6 +275,8 @@ case class SampleExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def needCopyResult: Boolean = withReplacement
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
     val sampler = ctx.freshName("sampler")
@@ -280,11 +284,8 @@ case class SampleExec(
     if (withReplacement) {
       val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
       val initSampler = ctx.freshName("initSampler")
-      ctx.copyResult = true
-      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
-        s"$initSampler();")
 
-      ctx.addNewFunction(initSampler,
+      val initSamplerFuncName = ctx.addNewFunction(initSampler,
         s"""
           | private void $initSampler() {
           |   $sampler = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
@@ -298,6 +299,9 @@ case class SampleExec(
           |   $sampler.setSeed(randomSeed);
           | }
          """.stripMargin.trim)
+
+      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
+        s"$initSamplerFuncName();")
 
       val samplingCount = ctx.freshName("samplingCount")
       s"""
@@ -316,9 +320,10 @@ case class SampleExec(
          """.stripMargin.trim)
 
       s"""
-         | if ($sampler.sample() == 0) continue;
-         | $numOutput.add(1);
-         | ${consume(ctx, input)}
+         | if ($sampler.sample() != 0) {
+         |   $numOutput.add(1);
+         |   ${consume(ctx, input)}
+         | }
        """.stripMargin.trim
     }
   }
@@ -331,33 +336,37 @@ case class SampleExec(
 case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   extends LeafExecNode with CodegenSupport {
 
-  def start: Long = range.start
-  def step: Long = range.step
-  def numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
-  def numElements: BigInt = range.numElements
+  val start: Long = range.start
+  val end: Long = range.end
+  val step: Long = range.step
+  val numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
+  val numElements: BigInt = range.numElements
 
   override val output: Seq[Attribute] = range.output
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numGeneratedRows" -> SQLMetrics.createMetric(sparkContext, "number of generated rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  // output attributes should not affect the results
-  override lazy val cleanArgs: Seq[Any] = Seq(start, step, numSlices, numElements)
+  override def doCanonicalize(): SparkPlan = {
+    RangeExec(range.canonicalized.asInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Range])
+  }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
-      .map(i => InternalRow(i)) :: Nil
+    val rdd = if (start == end || (start < end ^ 0 < step)) {
+      new EmptyRDD[InternalRow](sqlContext.sparkContext)
+    } else {
+      sqlContext.sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
+    }
+    rdd :: Nil
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val numGenerated = metricTerm(ctx, "numGeneratedRows")
 
     val initTerm = ctx.freshName("initRange")
-    ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
+    ctx.addMutableState(ctx.JAVA_BOOLEAN, initTerm, s"$initTerm = false;")
     val number = ctx.freshName("number")
-    ctx.addMutableState("long", number, s"$number = 0L;")
+    ctx.addMutableState(ctx.JAVA_LONG, number, s"$number = 0L;")
 
     val value = ctx.freshName("value")
     val ev = ExprCode("", "false", value)
@@ -378,11 +387,11 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
     // Once number == batchEnd, it's time to progress to the next batch.
     val batchEnd = ctx.freshName("batchEnd")
-    ctx.addMutableState("long", batchEnd, s"$batchEnd = 0;")
+    ctx.addMutableState(ctx.JAVA_LONG, batchEnd, s"$batchEnd = 0;")
 
     // How many values should still be generated by this range operator.
     val numElementsTodo = ctx.freshName("numElementsTodo")
-    ctx.addMutableState("long", numElementsTodo, s"$numElementsTodo = 0L;")
+    ctx.addMutableState(ctx.JAVA_LONG, numElementsTodo, s"$numElementsTodo = 0L;")
 
     // How many values should be generated in the next batch.
     val nextBatchTodo = ctx.freshName("nextBatchTodo")
@@ -390,7 +399,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // The default size of a batch, which must be positive integer
     val batchSize = 1000
 
-    ctx.addNewFunction("initRange",
+    val initRangeFuncName = ctx.addNewFunction("initRange",
       s"""
         | private void initRange(int idx) {
         |   $BigInt index = $BigInt.valueOf(idx);
@@ -438,7 +447,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
     val range = ctx.freshName("range")
-    val shouldStop = if (isShouldStopRequired) {
+    val shouldStop = if (parent.needStopCheck) {
       s"if (shouldStop()) { $number = $value + ${step}L; return; }"
     } else {
       "// shouldStop check is eliminated"
@@ -447,7 +456,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
-      |   initRange(partitionIndex);
+      |   $initRangeFuncName(partitionIndex);
       | }
       |
       | while (true) {
@@ -462,9 +471,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     $number = $batchEnd;
       |   }
       |
-      |   if ($taskContext.isInterrupted()) {
-      |     throw new TaskKilledException();
-      |   }
+      |   $taskContext.killTaskIfInterrupted();
       |
       |   long $nextBatchTodo;
       |   if ($numElementsTodo > ${batchSize}L) {
@@ -539,11 +546,14 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       }
   }
 
-  override def simpleString: String = range.simpleString
+  override def simpleString: String = s"Range ($start, $end, step=$step, splits=$numSlices)"
 }
 
 /**
  * Physical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * If we change how this is implemented physically, we'd need to update
+ * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
 case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
   override def output: Seq[Attribute] =
@@ -577,19 +587,31 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().coalesce(numPartitions, shuffle = false)
+    if (numPartitions == 1 && child.execute().getNumPartitions < 1) {
+      // Make sure we don't output an RDD with 0 partitions, when claiming that we have a
+      // `SinglePartition`.
+      new CoalesceExec.EmptyRDDWithPartitions(sparkContext, numPartitions)
+    } else {
+      child.execute().coalesce(numPartitions, shuffle = false)
+    }
   }
 }
 
-/**
- * A plan node that does nothing but lie about the output of its child.  Used to spice a
- * (hopefully structurally equivalent) tree from a different optimization sequence into an already
- * resolved tree.
- */
-case class OutputFakerExec(output: Seq[Attribute], child: SparkPlan) extends SparkPlan {
-  def children: Seq[SparkPlan] = child :: Nil
+object CoalesceExec {
+  /** A simple RDD with no data, but with the given number of partitions. */
+  class EmptyRDDWithPartitions(
+      @transient private val sc: SparkContext,
+      numPartitions: Int) extends RDD[InternalRow](sc, Nil) {
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute()
+    override def getPartitions: Array[Partition] =
+      Array.tabulate(numPartitions)(i => EmptyPartition(i))
+
+    override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+      Iterator.empty
+    }
+  }
+
+  case class EmptyPartition(index: Int) extends Partition
 }
 
 /**
@@ -606,11 +628,6 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def sameResult(o: SparkPlan): Boolean = o match {
-    case s: SubqueryExec => child.sameResult(s.child)
-    case _ => false
-  }
 
   @transient
   private lazy val relationFuture: Future[Array[InternalRow]] = {

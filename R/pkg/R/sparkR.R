@@ -113,7 +113,7 @@ sparkR.stop <- function() {
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("one.jar", "two.jar", "three.jar"),
-#'                  c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                  c("com.databricks:spark-avro_2.11:2.0.1"))
 #'}
 #' @note sparkR.init since 1.4.0
 sparkR.init <- function(
@@ -357,7 +357,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' sparkR.session("yarn-client", "SparkR", "/home/spark",
 #'                list(spark.executor.memory="4g"),
 #'                c("one.jar", "two.jar", "three.jar"),
-#'                c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                c("com.databricks:spark-avro_2.11:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
 #' @note sparkR.session since 2.0.0
@@ -420,6 +420,18 @@ sparkR.session <- function(
                                 enableHiveSupport)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
+
+  # Check if version number of SparkSession matches version number of SparkR package
+  jvmVersion <- callJMethod(sparkSession, "version")
+  # Remove -SNAPSHOT from jvm versions
+  jvmVersionStrip <- gsub("-SNAPSHOT", "", jvmVersion)
+  rPackageVersion <- paste0(packageVersion("SparkR"))
+
+  if (jvmVersionStrip != rPackageVersion) {
+    warning(paste("Version mismatch between Spark JVM and SparkR package. JVM version was",
+                  jvmVersion, ", while R package version was", rPackageVersion))
+  }
+
   sparkSession
 }
 
@@ -533,6 +545,23 @@ cancelJobGroup <- function(sc, groupId) {
     groupIdToUse <- sc
     cancelJobGroup.default(groupIdToUse)
   }
+}
+
+#' Set a human readable description of the current job.
+#'
+#' Set a description that is shown as a job description in UI.
+#'
+#' @param value The job description of the current job.
+#' @rdname setJobDescription
+#' @name setJobDescription
+#' @examples
+#'\dontrun{
+#' setJobDescription("This is an example job.")
+#'}
+#' @note setJobDescription since 2.3.0
+setJobDescription <- function(value) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setJobDescription", value))
 }
 
 sparkConfToSubmitOps <- new.env()

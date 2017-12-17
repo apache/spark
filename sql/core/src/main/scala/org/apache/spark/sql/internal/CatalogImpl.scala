@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -98,14 +100,27 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     CatalogImpl.makeDataset(tables, sparkSession)
   }
 
+  /**
+   * Returns a Table for the given table/view or temporary view.
+   *
+   * Note that this function requires the table already exists in the Catalog.
+   *
+   * If the table metadata retrieval failed due to any reason (e.g., table serde class
+   * is not accessible or the table type is not accepted by Spark SQL), this function
+   * still returns the corresponding Table without the description and tableType)
+   */
   private def makeTable(tableIdent: TableIdentifier): Table = {
-    val metadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
+    val metadata = try {
+      Some(sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent))
+    } catch {
+      case NonFatal(_) => None
+    }
     val isTemp = sessionCatalog.isTemporaryTable(tableIdent)
     new Table(
       name = tableIdent.table,
-      database = metadata.identifier.database.orNull,
-      description = metadata.comment.orNull,
-      tableType = if (isTemp) "TEMPORARY" else metadata.tableType.name,
+      database = metadata.map(_.identifier.database).getOrElse(tableIdent.database).orNull,
+      description = metadata.map(_.comment.orNull).orNull,
+      tableType = if (isTemp) "TEMPORARY" else metadata.map(_.tableType.name).orNull,
       isTemporary = isTemp)
   }
 
@@ -197,7 +212,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * `AnalysisException` when no `Table` can be found.
    */
   override def getTable(dbName: String, tableName: String): Table = {
-    makeTable(TableIdentifier(tableName, Option(dbName)))
+    if (tableExists(dbName, tableName)) {
+      makeTable(TableIdentifier(tableName, Option(dbName)))
+    } else {
+      throw new AnalysisException(s"Table or view '$tableName' not found in database '$dbName'")
+    }
   }
 
   /**
@@ -402,6 +421,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Caches the specified table or view with the given storage level.
+   *
+   * @group cachemgmt
+   * @since 2.3.0
+   */
+  override def cacheTable(tableName: String, storageLevel: StorageLevel): Unit = {
+    sparkSession.sharedState.cacheManager.cacheQuery(
+      sparkSession.table(tableName), Some(tableName), storageLevel)
+  }
+
+  /**
    * Removes the specified table or view from the in-memory cache.
    *
    * @group cachemgmt
@@ -444,13 +474,20 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    // Temp tables: refresh (or invalidate) any metadata/data cached in the plan recursively.
-    // Non-temp tables: refresh the metadata cache.
-    sessionCatalog.refreshTable(tableIdent)
+    val tableMetadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
+    val table = sparkSession.table(tableIdent)
+
+    if (tableMetadata.tableType == CatalogTableType.VIEW) {
+      // Temp or persistent views: refresh (or invalidate) any metadata/data cached
+      // in the plan recursively.
+      table.queryExecution.analyzed.refresh()
+    } else {
+      // Non-temp tables: refresh the metadata cache.
+      sessionCatalog.refreshTable(tableIdent)
+    }
 
     // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
-    val table = sparkSession.table(tableIdent)
     if (isCached(table)) {
       // Uncache the logicalPlan.
       sparkSession.sharedState.cacheManager.uncacheQuery(table, blocking = true)

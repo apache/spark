@@ -144,4 +144,18 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       ColumnType(DecimalType(19, 0))
     }
   }
+
+  test("show type name in type mismatch error") {
+    val invalidType = new DataType {
+        override def defaultSize: Int = 1
+        override private[spark] def asNullable: DataType = this
+        override def typeName: String = "invalid type name"
+    }
+
+    val message = intercept[java.lang.Exception] {
+      ColumnType(invalidType)
+    }.getMessage
+
+    assert(message.contains("Unsupported type: invalid type name"))
+  }
 }

@@ -46,7 +46,7 @@ class BlockManagerId private (
   def executorId: String = executorId_
 
   if (null != host_) {
-    Utils.checkHost(host_, "Expected hostname")
+    Utils.checkHost(host_)
     assert (port_ > 0)
   }
 

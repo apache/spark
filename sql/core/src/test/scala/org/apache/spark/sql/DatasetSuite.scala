@@ -20,17 +20,30 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
-import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
+import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
+
+object TestForTypeAlias {
+  type TwoInt = (Int, Int)
+  type ThreeInt = (TwoInt, Int)
+  type SeqOfTwoInt = Seq[TwoInt]
+
+  def tupleTypeAlias: TwoInt = (1, 1)
+  def nestedTupleTypeAlias: ThreeInt = ((1, 1), 2)
+  def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
+}
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -243,6 +256,85 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", ClassData("a", 1)), ("b", ClassData("b", 2)), ("c", ClassData("c", 3)))
   }
 
+  test("REGEX column specification") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      var e = intercept[AnalysisException] {
+        ds.select(expr("`(_1)?+.+`").as[Int])
+      }.getMessage
+      assert(e.contains("cannot resolve '`(_1)?+.+`'"))
+
+      e = intercept[AnalysisException] {
+        ds.select(expr("`(_1|_2)`").as[Int])
+      }.getMessage
+      assert(e.contains("cannot resolve '`(_1|_2)`'"))
+
+      e = intercept[AnalysisException] {
+        ds.select(ds("`(_1)?+.+`"))
+      }.getMessage
+      assert(e.contains("Cannot resolve column name \"`(_1)?+.+`\""))
+
+      e = intercept[AnalysisException] {
+        ds.select(ds("`(_1|_2)`"))
+      }.getMessage
+      assert(e.contains("Cannot resolve column name \"`(_1|_2)`\""))
+    }
+
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
+      checkDataset(
+        ds.select(ds.col("_2")).as[Int],
+        1, 2, 3)
+
+      checkDataset(
+        ds.select(ds.colRegex("`(_1)?+.+`")).as[Int],
+        1, 2, 3)
+
+      checkDataset(
+        ds.select(ds("`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+
+      checkDataset(
+        ds.alias("g")
+          .select(ds("g.`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+
+      checkDataset(
+        ds.select(ds("`(_1)?+.+`"))
+          .select(expr("_2").as[Int]),
+        1, 2, 3)
+
+      checkDataset(
+        ds.alias("g")
+          .select(ds("g.`(_1)?+.+`"))
+          .select(expr("_2").as[Int]),
+        1, 2, 3)
+
+      checkDataset(
+        ds.select(expr("`(_1)?+.+`").as[Int]),
+        1, 2, 3)
+      val m = ds.select(expr("`(_1|_2)`"))
+
+      checkDataset(
+        ds.select(expr("`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+
+      checkDataset(
+        ds.alias("g")
+          .select(expr("g.`(_1)?+.+`").as[Int]),
+        1, 2, 3)
+
+      checkDataset(
+        ds.alias("g")
+          .select(expr("g.`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+    }
+  }
+
   test("filter") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(
@@ -273,13 +365,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("foreachPartition") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val acc = sparkContext.longAccumulator
-    ds.foreachPartition(_.foreach(v => acc.add(v._2)))
+    ds.foreachPartition((it: Iterator[(String, Int)]) => it.foreach(v => acc.add(v._2)))
     assert(acc.value == 6)
   }
 
   test("reduce") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
+    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == (("sum", 6)))
   }
 
   test("joinWith, flat schema") {
@@ -318,6 +410,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds1.joinWith(ds2, $"a._2" === $"b._2").as("ab").joinWith(ds3, $"ab._1._2" === $"c._2"),
       ((("a", 1), ("a", 1)), ("a", 1)),
       ((("b", 2), ("b", 2)), ("b", 2)))
+  }
+
+  test("joinWith join types") {
+    val ds1 = Seq(1, 2, 3).toDS().as("a")
+    val ds2 = Seq(1, 2).toDS().as("b")
+
+    val e1 = intercept[AnalysisException] {
+      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_semi")
+    }.getMessage
+    assert(e1.contains("Invalid join type in joinWith: " + LeftSemi.sql))
+
+    val e2 = intercept[AnalysisException] {
+      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_anti")
+    }.getMessage
+    assert(e2.contains("Invalid join type in joinWith: " + LeftAnti.sql))
   }
 
   test("groupBy function, keys") {
@@ -454,6 +561,34 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       data.sample(withReplacement = false, 0.05, seed = 13),
       3, 17, 27, 58, 62)
+  }
+
+  test("sample fraction should not be negative with replacement") {
+    val data = sparkContext.parallelize(1 to 2, 1).toDS()
+    val errMsg = intercept[IllegalArgumentException] {
+      data.sample(withReplacement = true, -0.1, 0)
+    }.getMessage
+    assert(errMsg.contains("Sampling fraction (-0.1) must be nonnegative with replacement"))
+
+    // Sampling fraction can be greater than 1 with replacement.
+    checkDataset(
+      data.sample(withReplacement = true, 1.05, seed = 13),
+      1, 2)
+  }
+
+  test("sample fraction should be on interval [0, 1] without replacement") {
+    val data = sparkContext.parallelize(1 to 2, 1).toDS()
+    val errMsg1 = intercept[IllegalArgumentException] {
+      data.sample(withReplacement = false, -0.1, 0)
+    }.getMessage()
+    assert(errMsg1.contains(
+      "Sampling fraction (-0.1) must be on interval [0, 1] without replacement"))
+
+    val errMsg2 = intercept[IllegalArgumentException] {
+      data.sample(withReplacement = false, 1.1, 0)
+    }.getMessage()
+    assert(errMsg2.contains(
+      "Sampling fraction (1.1) must be on interval [0, 1] without replacement"))
   }
 
   test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
@@ -676,7 +811,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-14000: case class with tuple type field") {
     checkDataset(
       Seq(TupleClass((1, "a"))).toDS(),
-      TupleClass(1, "a")
+      TupleClass((1, "a"))
     )
   }
 
@@ -1072,7 +1207,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       val agg = cp.groupBy('id % 2).agg(count('id))
 
       agg.queryExecution.executedPlan.collectFirst {
-        case ShuffleExchange(_, _: RDDScanExec, _) =>
+        case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
         case BroadcastExchangeExec(_, _: RDDScanExec) =>
       }.foreach { _ =>
         fail(
@@ -1117,7 +1252,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // instead of Int for avoiding possible overflow.
     val ds = (0 to 10000).map( i =>
       (i, Seq((i, Seq((i, "This is really not that long of a string")))))).toDS()
-    val sizeInBytes = ds.logicalPlan.stats(sqlConf).sizeInBytes
+    val sizeInBytes = ds.logicalPlan.stats.sizeInBytes
     // sizeInBytes is 2404280404, before the fix, it overflows to a negative number
     assert(sizeInBytes > 0)
   }
@@ -1139,8 +1274,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(spark.range(1).map { x => scala.math.BigDecimal(1, 18) }.head ==
       scala.math.BigDecimal(1, 18))
 
-    assert(spark.range(1).map { x => new java.sql.Date(2016, 12, 12) }.head ==
-      new java.sql.Date(2016, 12, 12))
+    assert(spark.range(1).map { x => java.sql.Date.valueOf("2016-12-12") }.head ==
+      java.sql.Date.valueOf("2016-12-12"))
 
     assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
       new java.sql.Timestamp(100000))
@@ -1168,7 +1303,134 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(WithMapInOption(Some(Map(1 -> 1)))).toDS()
     checkDataset(ds, WithMapInOption(Some(Map(1 -> 1))))
   }
+
+  test("SPARK-20399: do not unescaped regex pattern when ESCAPED_STRING_LITERALS is enabled") {
+    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+      val data = Seq("\u0020\u0021\u0023", "abc")
+      val df = data.toDF()
+      val rlike1 = df.filter("value rlike '^\\x20[\\x20-\\x23]+$'")
+      val rlike2 = df.filter($"value".rlike("^\\x20[\\x20-\\x23]+$"))
+      val rlike3 = df.filter("value rlike '^\\\\x20[\\\\x20-\\\\x23]+$'")
+      checkAnswer(rlike1, rlike2)
+      assert(rlike3.count() == 0)
+    }
+  }
+
+  test("SPARK-21538: Attribute resolution inconsistency in Dataset API") {
+    val df = spark.range(3).withColumnRenamed("id", "x")
+    val expected = Row(0) :: Row(1) :: Row (2) :: Nil
+    checkAnswer(df.sort("id"), expected)
+    checkAnswer(df.sort(col("id")), expected)
+    checkAnswer(df.sort($"id"), expected)
+    checkAnswer(df.sort('id), expected)
+    checkAnswer(df.orderBy("id"), expected)
+    checkAnswer(df.orderBy(col("id")), expected)
+    checkAnswer(df.orderBy($"id"), expected)
+    checkAnswer(df.orderBy('id), expected)
+  }
+
+  test("SPARK-21567: Dataset should work with type alias") {
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.tupleTypeAlias)),
+      ("", (1, 1)))
+
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.nestedTupleTypeAlias)),
+      ("", ((1, 1), 2)))
+
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
+      ("", Seq((1, 1), (2, 2))))
+  }
+
+  test("Check RelationalGroupedDataset toString: Single data") {
+    val kvDataset = (1 to 3).toDF("id").groupBy("id")
+    val expected = "RelationalGroupedDataset: [" +
+      "grouping expressions: [id: int], value: [id: int], type: GroupBy]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+  test("Check RelationalGroupedDataset toString: over length schema ") {
+    val kvDataset = (1 to 3).map( x => (x, x.toString, x.toLong))
+      .toDF("id", "val1", "val2").groupBy("id")
+    val expected = "RelationalGroupedDataset:" +
+      " [grouping expressions: [id: int]," +
+      " value: [id: int, val1: string ... 1 more field]," +
+      " type: GroupBy]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+
+  test("Check KeyValueGroupedDataset toString: Single data") {
+    val kvDataset = (1 to 3).toDF("id").as[SingleData].groupByKey(identity)
+    val expected = "KeyValueGroupedDataset: [key: [id: int], value: [id: int]]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+  test("Check KeyValueGroupedDataset toString: Unnamed KV-pair") {
+    val kvDataset = (1 to 3).map(x => (x, x.toString))
+      .toDF("id", "val1").as[DoubleData].groupByKey(x => (x.id, x.val1))
+    val expected = "KeyValueGroupedDataset:" +
+      " [key: [_1: int, _2: string]," +
+      " value: [id: int, val1: string]]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+  test("Check KeyValueGroupedDataset toString: Named KV-pair") {
+    val kvDataset = (1 to 3).map( x => (x, x.toString))
+      .toDF("id", "val1").as[DoubleData].groupByKey(x => DoubleData(x.id, x.val1))
+    val expected = "KeyValueGroupedDataset:" +
+      " [key: [id: int, val1: string]," +
+      " value: [id: int, val1: string]]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+  test("Check KeyValueGroupedDataset toString: over length schema ") {
+    val kvDataset = (1 to 3).map( x => (x, x.toString, x.toLong))
+      .toDF("id", "val1", "val2").as[TripleData].groupByKey(identity)
+    val expected = "KeyValueGroupedDataset:" +
+      " [key: [id: int, val1: string ... 1 more field(s)]," +
+      " value: [id: int, val1: string ... 1 more field(s)]]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+  test("SPARK-22442: Generate correct field names for special characters") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val data = """{"field.1": 1, "field 2": 2}"""
+      Seq(data).toDF().repartition(1).write.text(path)
+      val ds = spark.read.json(path).as[SpecialCharClass]
+      checkDataset(ds, SpecialCharClass("1", "2"))
+    }
+  }
+
+  test("SPARK-22472: add null check for top-level primitive values") {
+    // If the primitive values are from Option, we need to do runtime null check.
+    val ds = Seq(Some(1), None).toDS().as[Int]
+    intercept[NullPointerException](ds.collect())
+    val e = intercept[SparkException](ds.map(_ * 2).collect())
+    assert(e.getCause.isInstanceOf[NullPointerException])
+
+    withTempPath { path =>
+      Seq(new Integer(1), null).toDF("i").write.parquet(path.getCanonicalPath)
+      // If the primitive values are from files, we need to do runtime null check.
+      val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
+      intercept[NullPointerException](ds.collect())
+      val e = intercept[SparkException](ds.map(_ * 2).collect())
+      assert(e.getCause.isInstanceOf[NullPointerException])
+    }
+  }
 }
+
+case class SingleData(id: Int)
+case class DoubleData(id: Int, val1: String)
+case class TripleData(id: Int, val1: String, val2: Long)
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
 case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
@@ -1253,3 +1515,5 @@ case class CircularReferenceClassB(cls: CircularReferenceClassA)
 case class CircularReferenceClassC(ar: Array[CircularReferenceClassC])
 case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
+
+case class SpecialCharClass(`field.1`: String, `field 2`: String)

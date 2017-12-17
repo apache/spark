@@ -20,20 +20,21 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.{Locale, Set}
 
 import com.google.common.io.Files
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -97,46 +98,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
   }
 
-  test("UDTF") {
-    withUserDefinedFunction("udtf_count2" -> true) {
-      sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
-      // The function source code can be found at:
-      // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
-      sql(
-        """
-          |CREATE TEMPORARY FUNCTION udtf_count2
-          |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-        """.stripMargin)
-
-      checkAnswer(
-        sql("SELECT key, cc FROM src LATERAL VIEW udtf_count2(value) dd AS cc"),
-        Row(97, 500) :: Row(97, 500) :: Nil)
-
-      checkAnswer(
-        sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
-        Row(3) :: Row(3) :: Nil)
-    }
-  }
-
-  test("permanent UDTF") {
-    withUserDefinedFunction("udtf_count_temp" -> false) {
-      sql(
-        s"""
-          |CREATE FUNCTION udtf_count_temp
-          |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-          |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
-        """.stripMargin)
-
-      checkAnswer(
-        sql("SELECT key, cc FROM src LATERAL VIEW udtf_count_temp(value) dd AS cc"),
-        Row(97, 500) :: Row(97, 500) :: Nil)
-
-      checkAnswer(
-        sql("SELECT udtf_count_temp(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
-        Row(3) :: Row(3) :: Nil)
-    }
-  }
-
   test("SPARK-6835: udtf in lateral view") {
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.createOrReplaceTempView("table1")
@@ -175,53 +136,55 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     orders.toDF.createOrReplaceTempView("orders1")
     orderUpdates.toDF.createOrReplaceTempView("orderupdates1")
 
-    sql(
-      """CREATE TABLE orders(
-        |  id INT,
-        |  make String,
-        |  type String,
-        |  price INT,
-        |  pdate String,
-        |  customer String,
-        |  city String)
-        |PARTITIONED BY (state STRING, month INT)
-        |STORED AS PARQUET
-      """.stripMargin)
-
-    sql(
-      """CREATE TABLE orderupdates(
-        |  id INT,
-        |  make String,
-        |  type String,
-        |  price INT,
-        |  pdate String,
-        |  customer String,
-        |  city String)
-        |PARTITIONED BY (state STRING, month INT)
-        |STORED AS PARQUET
-      """.stripMargin)
-
-    sql("set hive.exec.dynamic.partition.mode=nonstrict")
-    sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
-    sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
-
-    checkAnswer(
+    withTable("orders", "orderupdates") {
       sql(
-        """
-          |select orders.state, orders.month
-          |from orders
-          |join (
-          |  select distinct orders.state,orders.month
-          |  from orders
-          |  join orderupdates
-          |    on orderupdates.id = orders.id) ao
-          |  on ao.state = orders.state and ao.month = orders.month
-        """.stripMargin),
-      (1 to 6).map(_ => Row("CA", 20151)))
+        """CREATE TABLE orders(
+          |  id INT,
+          |  make String,
+          |  type String,
+          |  price INT,
+          |  pdate String,
+          |  customer String,
+          |  city String)
+          |PARTITIONED BY (state STRING, month INT)
+          |STORED AS PARQUET
+        """.stripMargin)
+
+      sql(
+        """CREATE TABLE orderupdates(
+          |  id INT,
+          |  make String,
+          |  type String,
+          |  price INT,
+          |  pdate String,
+          |  customer String,
+          |  city String)
+          |PARTITIONED BY (state STRING, month INT)
+          |STORED AS PARQUET
+        """.stripMargin)
+
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
+      sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
+
+      checkAnswer(
+        sql(
+          """
+            |select orders.state, orders.month
+            |from orders
+            |join (
+            |  select distinct orders.state,orders.month
+            |  from orders
+            |  join orderupdates
+            |    on orderupdates.id = orders.id) ao
+            |  on ao.state = orders.state and ao.month = orders.month
+          """.stripMargin),
+        (1 to 6).map(_ => Row("CA", 20151)))
+    }
   }
 
   test("show functions") {
-    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().toSet[String].toList.sorted
+    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().map(_.unquotedString)
     val allFunctions = sql("SHOW functions").collect().map(r => r(0))
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))
@@ -388,21 +351,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS with WITH clause") {
+
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.createOrReplaceTempView("table1")
-
-    sql(
-      """
-        |CREATE TABLE with_table1 AS
-        |WITH T AS (
-        |  SELECT *
-        |  FROM table1
-        |)
-        |SELECT *
-        |FROM T
-      """.stripMargin)
-    val query = sql("SELECT * FROM with_table1")
-    checkAnswer(query, Row(1, 1) :: Nil)
+    withTable("with_table1") {
+      sql(
+        """
+          |CREATE TABLE with_table1 AS
+          |WITH T AS (
+          |  SELECT *
+          |  FROM table1
+          |)
+          |SELECT *
+          |FROM T
+        """.stripMargin)
+      val query = sql("SELECT * FROM with_table1")
+      checkAnswer(query, Row(1, 1) :: Nil)
+    }
   }
 
   test("explode nested Field") {
@@ -450,10 +415,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val catalogTable =
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
-      case LogicalRelation(r: HadoopFsRelation, _, _) =>
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
         if (!isDataSourceTable) {
           fail(
-            s"${classOf[CatalogRelation].getCanonicalName} is expected, but found " +
+            s"${classOf[HiveTableRelation].getCanonicalName} is expected, but found " +
               s"${HadoopFsRelation.getClass.getCanonicalName}.")
         }
         userSpecifiedLocation match {
@@ -463,11 +428,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         assert(catalogTable.provider.get === format)
 
-      case r: CatalogRelation =>
+      case r: HiveTableRelation =>
         if (isDataSourceTable) {
           fail(
             s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
-              s"${classOf[CatalogRelation].getCanonicalName}.")
+              s"${classOf[HiveTableRelation].getCanonicalName}.")
         }
         userSpecifiedLocation match {
           case Some(location) =>
@@ -475,13 +440,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.
-        assert(catalogTable.storage.inputFormat.get.toLowerCase.contains(format))
-        assert(catalogTable.storage.outputFormat.get.toLowerCase.contains(format))
+        assert(catalogTable.storage.inputFormat.get.toLowerCase(Locale.ROOT).contains(format))
+        assert(catalogTable.storage.outputFormat.get.toLowerCase(Locale.ROOT).contains(format))
         val serde = catalogTable.storage.serde.get
         format match {
           case "sequence" | "text" => assert(serde.contains("LazySimpleSerDe"))
           case "rcfile" => assert(serde.contains("LazyBinaryColumnarSerDe"))
-          case _ => assert(serde.toLowerCase.contains(format))
+          case _ => assert(serde.toLowerCase(Locale.ROOT).contains(format))
         }
     }
 
@@ -603,86 +568,90 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS with serde") {
-    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    sql(
-      """CREATE TABLE ctas2
-        | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
-        | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
-        | STORED AS RCFile
-        | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
-        | AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin)
-
-    val storageCtas2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("ctas2")).storage
-    assert(storageCtas2.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(storageCtas2.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(storageCtas2.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
-
-    sql(
-      """CREATE TABLE ctas3
-        | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
-        | STORED AS textfile AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin)
-
-    // the table schema may like (key: integer, value: string)
-    sql(
-      """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin)
-    // do nothing cause the table ctas4 already existed.
-    sql(
-      """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
-
-    checkAnswer(
-      sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
-      sql("SELECT key, value FROM src ORDER BY key, value"))
-    checkAnswer(
-      sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
+    withTable("ctas1", "ctas2", "ctas3", "ctas4", "ctas5") {
+      sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       sql(
-        """
-          SELECT key, value
-          FROM src
-          ORDER BY key, value"""))
-    checkAnswer(
-      sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
+        """CREATE TABLE ctas2
+          | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+          | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+          | STORED AS RCFile
+          | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+          | AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin)
+
+      val storageCtas2 = spark.sessionState.catalog.
+        getTableMetadata(TableIdentifier("ctas2")).storage
+      assert(storageCtas2.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+      assert(storageCtas2.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+      assert(storageCtas2.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
+
       sql(
-        """
-          SELECT key, value
-          FROM src
-          ORDER BY key, value"""))
-    intercept[AnalysisException] {
+        """CREATE TABLE ctas3
+          | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
+          | STORED AS textfile AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin)
+
+      // the table schema may like (key: integer, value: string)
       sql(
-        """CREATE TABLE ctas4 AS
+        """CREATE TABLE IF NOT EXISTS ctas4 AS
+          | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin)
+      // do nothing cause the table ctas4 already existed.
+      sql(
+        """CREATE TABLE IF NOT EXISTS ctas4 AS
           | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
-    }
-    checkAnswer(
-      sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
-      sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
 
-    sql(
-      """CREATE TABLE ctas5
-        | STORED AS parquet AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin)
-    val storageCtas5 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("ctas5")).storage
-    assert(storageCtas5.inputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
-    assert(storageCtas5.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
-    assert(storageCtas5.serde ==
-      Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
-
-
-    // use the Hive SerDe for parquet tables
-    withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
       checkAnswer(
-        sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+        sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
         sql("SELECT key, value FROM src ORDER BY key, value"))
+      checkAnswer(
+        sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
+        sql(
+          """
+          SELECT key, value
+          FROM src
+          ORDER BY key, value"""))
+      checkAnswer(
+        sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
+        sql(
+          """
+          SELECT key, value
+          FROM src
+          ORDER BY key, value"""))
+      intercept[AnalysisException] {
+        sql(
+          """CREATE TABLE ctas4 AS
+            | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
+      }
+      checkAnswer(
+        sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
+        sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
+
+      sql(
+        """CREATE TABLE ctas5
+          | STORED AS parquet AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin)
+      val storageCtas5 = spark.sessionState.catalog.
+        getTableMetadata(TableIdentifier("ctas5")).storage
+      assert(storageCtas5.inputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+      assert(storageCtas5.outputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      assert(storageCtas5.serde ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+
+
+      // use the Hive SerDe for parquet tables
+      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+        checkAnswer(
+          sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+          sql("SELECT key, value FROM src ORDER BY key, value"))
+      }
     }
   }
 
@@ -755,40 +724,46 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("double nested data") {
-    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
-      .toDF().createOrReplaceTempView("nested")
-    checkAnswer(
-      sql("SELECT f1.f2.f3 FROM nested"),
-      Row(1))
+    withTable("test_ctas_1234") {
+      sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
+        .toDF().createOrReplaceTempView("nested")
+      checkAnswer(
+        sql("SELECT f1.f2.f3 FROM nested"),
+        Row(1))
 
-    sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
-    checkAnswer(
-      sql("SELECT * FROM test_ctas_1234"),
-      sql("SELECT * FROM nested").collect().toSeq)
+      sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
+      checkAnswer(
+        sql("SELECT * FROM test_ctas_1234"),
+        sql("SELECT * FROM nested").collect().toSeq)
 
-    intercept[AnalysisException] {
-      sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+      intercept[AnalysisException] {
+        sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+      }
     }
   }
 
   test("test CTAS") {
-    sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
-    checkAnswer(
-      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
-      sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+    withTable("test_ctas_1234") {
+      sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
+      checkAnswer(
+        sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
+        sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+    }
   }
 
   test("SPARK-4825 save join to table") {
-    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
-    sql("CREATE TABLE test1 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).insertInto("test1")
-    sql("CREATE TABLE test2 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).insertInto("test2")
-    testData.write.mode(SaveMode.Append).insertInto("test2")
-    sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
-    checkAnswer(
-      table("test"),
-      sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
+    withTable("test1", "test2", "test") {
+      val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
+      sql("CREATE TABLE test1 (key INT, value STRING)")
+      testData.write.mode(SaveMode.Append).insertInto("test1")
+      sql("CREATE TABLE test2 (key INT, value STRING)")
+      testData.write.mode(SaveMode.Append).insertInto("test2")
+      testData.write.mode(SaveMode.Append).insertInto("test2")
+      sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
+      checkAnswer(
+        table("test"),
+        sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
+    }
   }
 
   test("SPARK-3708 Backticks aren't handled correctly is aliases") {
@@ -947,7 +922,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
       sql("CREATE TABLE explodeTest (key bigInt)")
       table("explodeTest").queryExecution.analyzed match {
-        case SubqueryAlias(_, r: CatalogRelation) => // OK
+        case SubqueryAlias(_, r: HiveTableRelation) => // OK
         case _ =>
           fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
       }
@@ -964,14 +939,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("sanity test for SPARK-6618") {
-    (1 to 100).par.map { i =>
-      val tableName = s"SPARK_6618_table_$i"
-      sql(s"CREATE TABLE $tableName (col1 string)")
-      sessionState.catalog.lookupRelation(TableIdentifier(tableName))
-      table(tableName)
-      tables()
-      sql(s"DROP TABLE $tableName")
+    val threads: Seq[Thread] = (1 to 10).map { i =>
+      new Thread("test-thread-" + i) {
+        override def run(): Unit = {
+          val tableName = s"SPARK_6618_table_$i"
+          sql(s"CREATE TABLE $tableName (col1 string)")
+          sessionState.catalog.lookupRelation(TableIdentifier(tableName))
+          table(tableName)
+          tables()
+          sql(s"DROP TABLE $tableName")
+        }
+      }
     }
+    threads.foreach(_.start())
+    threads.foreach(_.join(10000))
   }
 
   test("SPARK-5203 union with different decimal precision") {
@@ -1395,113 +1376,125 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-8976 Wrong Result for Rollup #1") {
-    checkAnswer(sql(
-      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH ROLLUP"),
-      Seq(
-        (113, 3, 0),
-        (91, 0, 0),
-        (500, null, 1),
-        (84, 1, 0),
-        (105, 2, 0),
-        (107, 4, 0)
-      ).map(i => Row(i._1, i._2, i._3)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"SELECT count(*) AS cnt, key % 5, $gid FROM src GROUP BY key%5 WITH ROLLUP"),
+        Seq(
+          (113, 3, 0),
+          (91, 0, 0),
+          (500, null, 1),
+          (84, 1, 0),
+          (105, 2, 0),
+          (107, 4, 0)
+        ).map(i => Row(i._1, i._2, i._3)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for Rollup #2") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM src GROUP BY key%5, key-5
-        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-      Seq(
-        (1, 0, 5, 0),
-        (1, 0, 15, 0),
-        (1, 0, 25, 0),
-        (1, 0, 60, 0),
-        (1, 0, 75, 0),
-        (1, 0, 80, 0),
-        (1, 0, 100, 0),
-        (1, 0, 140, 0),
-        (1, 0, 145, 0),
-        (1, 0, 150, 0)
-      ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM src GROUP BY key%5, key-5
+          |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, 0, 5, 0),
+          (1, 0, 15, 0),
+          (1, 0, 25, 0),
+          (1, 0, 60, 0),
+          (1, 0, 75, 0),
+          (1, 0, 80, 0),
+          (1, 0, 100, 0),
+          (1, 0, 140, 0),
+          (1, 0, 145, 0),
+          (1, 0, 150, 0)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for Rollup #3") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
-        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-      Seq(
-        (1, 0, 5, 0),
-        (1, 0, 15, 0),
-        (1, 0, 25, 0),
-        (1, 0, 60, 0),
-        (1, 0, 75, 0),
-        (1, 0, 80, 0),
-        (1, 0, 100, 0),
-        (1, 0, 140, 0),
-        (1, 0, 145, 0),
-        (1, 0, 150, 0)
-      ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+          |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, 0, 5, 0),
+          (1, 0, 15, 0),
+          (1, 0, 25, 0),
+          (1, 0, 60, 0),
+          (1, 0, 75, 0),
+          (1, 0, 80, 0),
+          (1, 0, 100, 0),
+          (1, 0, 140, 0),
+          (1, 0, 145, 0),
+          (1, 0, 150, 0)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for CUBE #1") {
-    checkAnswer(sql(
-      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH CUBE"),
-      Seq(
-        (113, 3, 0),
-        (91, 0, 0),
-        (500, null, 1),
-        (84, 1, 0),
-        (105, 2, 0),
-        (107, 4, 0)
-      ).map(i => Row(i._1, i._2, i._3)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"SELECT count(*) AS cnt, key % 5, $gid FROM src GROUP BY key%5 WITH CUBE"),
+        Seq(
+          (113, 3, 0),
+          (91, 0, 0),
+          (500, null, 1),
+          (84, 1, 0),
+          (105, 2, 0),
+          (107, 4, 0)
+        ).map(i => Row(i._1, i._2, i._3)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for CUBE #2") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
-        |WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-    Seq(
-      (1, null, -3, 2),
-      (1, null, -1, 2),
-      (1, null, 3, 2),
-      (1, null, 4, 2),
-      (1, null, 5, 2),
-      (1, null, 6, 2),
-      (1, null, 12, 2),
-      (1, null, 14, 2),
-      (1, null, 15, 2),
-      (1, null, 22, 2)
-    ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+          |WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, null, -3, 2),
+          (1, null, -1, 2),
+          (1, null, 3, 2),
+          (1, null, 4, 2),
+          (1, null, 5, 2),
+          (1, null, 6, 2),
+          (1, null, 12, 2),
+          (1, null, 14, 2),
+          (1, null, 15, 2),
+          (1, null, 22, 2)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("SPARK-8976 Wrong Result for GroupingSet") {
-    checkAnswer(sql(
-      """
-        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
-        |GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
-      """.stripMargin),
-    Seq(
-      (1, null, -3, 2),
-      (1, null, -1, 2),
-      (1, null, 3, 2),
-      (1, null, 4, 2),
-      (1, null, 5, 2),
-      (1, null, 6, 2),
-      (1, null, 12, 2),
-      (1, null, 14, 2),
-      (1, null, 15, 2),
-      (1, null, 22, 2)
-    ).map(i => Row(i._1, i._2, i._3, i._4)))
+    Seq("grouping_id()", "grouping__id").foreach { gid =>
+      checkAnswer(sql(
+        s"""
+          |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, $gid AS k3
+          |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+          |GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
+        """.stripMargin),
+        Seq(
+          (1, null, -3, 2),
+          (1, null, -1, 2),
+          (1, null, 3, 2),
+          (1, null, 4, 2),
+          (1, null, 5, 2),
+          (1, null, 6, 2),
+          (1, null, 12, 2),
+          (1, null, 14, 2),
+          (1, null, 15, 2),
+          (1, null, 22, 2)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   ignore("SPARK-10562: partition by column with mixed case name") {
@@ -1876,14 +1869,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
 
   test("SPARK-17108: Fix BIGINT and INT comparison failure in spark sql") {
-    sql("create table t1(a map<bigint, array<string>>)")
-    sql("select * from t1 where a[1] is not null")
+    withTable("t1", "t2", "t3") {
+      sql("create table t1(a map<bigint, array<string>>)")
+      sql("select * from t1 where a[1] is not null")
 
-    sql("create table t2(a map<int, array<string>>)")
-    sql("select * from t2 where a[1] is not null")
+      sql("create table t2(a map<int, array<string>>)")
+      sql("select * from t2 where a[1] is not null")
 
-    sql("create table t3(a map<bigint, array<string>>)")
-    sql("select * from t3 where a[1L] is not null")
+      sql("create table t3(a map<bigint, array<string>>)")
+      sql("select * from t3 where a[1L] is not null")
+    }
   }
 
   test("SPARK-17796 Support wildcard character in filename for LOAD DATA LOCAL INPATH") {
@@ -1975,6 +1970,30 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("Auto alias construction of get_json_object") {
+    val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
+    val expectedMsg = "Cannot create a table having a column whose name contains commas " +
+      "in Hive metastore. Table: `default`.`t`; Column: get_json_object(jstring, $.f1)"
+
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        df.select($"key", functions.get_json_object($"jstring", "$.f1"))
+          .write.format("hive").saveAsTable("t")
+      }.getMessage
+      assert(e.contains(expectedMsg))
+    }
+
+    withTempView("tempView") {
+      withTable("t") {
+        df.createTempView("tempView")
+        val e = intercept[AnalysisException] {
+          sql("CREATE TABLE t AS SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
+        }.getMessage
+        assert(e.contains(expectedMsg))
+      }
+    }
+  }
+
   test("SPARK-19912 String literals should be escaped for Hive metastore partition pruning") {
     withTable("spark_19912") {
       Seq(
@@ -1988,6 +2007,150 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(table.filter($"p" === "'").select($"a"), Row(2))
       checkAnswer(table.filter($"p" === "\"").select($"a"), Row(3))
       checkAnswer(table.filter($"p" === "p1\" and q=\"q1").select($"a"), Row(4))
+    }
+  }
+
+  test("SPARK-21101 UDTF should override initialize(ObjectInspector[] args)") {
+    withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack1
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      val cnt =
+        sql("SELECT udtf_stack1(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')").count()
+      assert(cnt === 2)
+
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack2
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        sql("SELECT udtf_stack2(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')")
+      }
+      assert(
+        e.getMessage.contains("public StructObjectInspector initialize(ObjectInspector[] args)"))
+    }
+  }
+
+  test("SPARK-21721: Clear FileSystem deleterOnExit cache if path is successfully removed") {
+    val table = "test21721"
+    withTable(table) {
+      val deleteOnExitField = classOf[FileSystem].getDeclaredField("deleteOnExit")
+      deleteOnExitField.setAccessible(true)
+
+      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val setOfPath = deleteOnExitField.get(fs).asInstanceOf[Set[Path]]
+
+      val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
+      sql(s"CREATE TABLE $table (key INT, value STRING)")
+      val pathSizeToDeleteOnExit = setOfPath.size()
+
+      (0 to 10).foreach(_ => testData.write.mode(SaveMode.Append).insertInto(table))
+
+      assert(setOfPath.size() == pathSizeToDeleteOnExit)
+    }
+  }
+
+  test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
+    Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+      Seq("ORC", "PARQUET").foreach { source =>
+        withTable("t21912") {
+          val m = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
+          }.getMessage
+          assert(m.contains(s"contains invalid character(s)"))
+
+          val m2 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
+          }.getMessage
+          assert(m2.contains(s"contains invalid character(s)"))
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+            val m3 = intercept[AnalysisException] {
+              sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
+            }.getMessage
+            assert(m3.contains(s"contains invalid character(s)"))
+          }
+
+          sql(s"CREATE TABLE t21912(`col` INT) USING $source")
+          val m4 = intercept[AnalysisException] {
+            sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
+          }.getMessage
+          assert(m4.contains(s"contains invalid character(s)"))
+        }
+      }
+    }
+  }
+
+  Seq("orc", "parquet").foreach { format =>
+    test(s"SPARK-18355 Read data from a hive table with a new column - $format") {
+      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+
+      Seq("true", "false").foreach { value =>
+        withSQLConf(
+          HiveUtils.CONVERT_METASTORE_ORC.key -> value,
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> value) {
+          withTempDatabase { db =>
+            client.runSqlHive(
+              s"""
+                 |CREATE TABLE $db.t(
+                 |  click_id string,
+                 |  search_id string,
+                 |  uid bigint)
+                 |PARTITIONED BY (
+                 |  ts string,
+                 |  hour string)
+                 |STORED AS $format
+              """.stripMargin)
+
+            client.runSqlHive(
+              s"""
+                 |INSERT INTO TABLE $db.t
+                 |PARTITION (ts = '98765', hour = '01')
+                 |VALUES (12, 2, 12345)
+              """.stripMargin
+            )
+
+            checkAnswer(
+              sql(s"SELECT click_id, search_id, uid, ts, hour FROM $db.t"),
+              Row("12", "2", 12345, "98765", "01"))
+
+            client.runSqlHive(s"ALTER TABLE $db.t ADD COLUMNS (dummy string)")
+
+            checkAnswer(
+              sql(s"SELECT click_id, search_id FROM $db.t"),
+              Row("12", "2"))
+
+            checkAnswer(
+              sql(s"SELECT search_id, click_id FROM $db.t"),
+              Row("2", "12"))
+
+            checkAnswer(
+              sql(s"SELECT search_id FROM $db.t"),
+              Row("2"))
+
+            checkAnswer(
+              sql(s"SELECT dummy, click_id FROM $db.t"),
+              Row(null, "12"))
+
+            checkAnswer(
+              sql(s"SELECT click_id, search_id, uid, dummy, ts, hour FROM $db.t"),
+              Row("12", "2", 12345, null, "98765", "01"))
+          }
+        }
+      }
+    }
+  }
+
+  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
+    test(s"Writing empty datasets should not fail - $format") {
+      withTempDir { dir =>
+        Seq("str").toDS.limit(0).write.format(format).save(dir.getCanonicalPath + "/tmp")
+      }
     }
   }
 }

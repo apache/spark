@@ -27,6 +27,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
+import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -47,8 +48,9 @@ class FileStreamSource(
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
+  @transient private val fs = new Path(path).getFileSystem(hadoopConf)
+
   private val qualifiedBasePath: Path = {
-    val fs = new Path(path).getFileSystem(hadoopConf)
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
@@ -171,7 +173,7 @@ class FileStreamSource(
         className = fileFormatClassName,
         options = optionsWithPartitionBasePath)
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
-      checkFilesExist = false)))
+      checkFilesExist = false), isStreaming = true))
   }
 
   /**
@@ -187,7 +189,7 @@ class FileStreamSource(
     if (SparkHadoopUtil.get.isGlobPath(new Path(path))) Some(false) else None
 
   private def allFilesUsingInMemoryFileIndex() = {
-    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
+    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(fs, qualifiedBasePath)
     val fileIndex = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
     fileIndex.allFiles()
   }
@@ -195,7 +197,7 @@ class FileStreamSource(
   private def allFilesUsingMetadataLogFileIndex() = {
     // Note if `sourceHasMetadata` holds, then `qualifiedBasePath` is guaranteed to be a
     // non-glob path
-    new MetadataLogFileIndex(sparkSession, qualifiedBasePath).allFiles()
+    new MetadataLogFileIndex(sparkSession, qualifiedBasePath, None).allFiles()
   }
 
   /**

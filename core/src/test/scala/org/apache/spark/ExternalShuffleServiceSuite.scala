@@ -27,7 +27,7 @@ import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalSh
 /**
  * This suite creates an external shuffle server and routes all shuffle fetches through it.
  * Note that failures in this suite may arise due to changes in Spark that invalidate expectations
- * set up in [[ExternalShuffleBlockHandler]], such as changing the format of shuffle files or how
+ * set up in `ExternalShuffleBlockHandler`, such as changing the format of shuffle files or how
  * we hash files into folders.
  */
 class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
@@ -66,7 +66,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     // local blocks from the local BlockManager and won't send requests to ExternalShuffleService.
     // In this case, we won't receive FetchFailed. And it will make this test fail.
     // Therefore, we should wait until all slaves are up
-    sc.jobProgressListener.waitUntilExecutorsUp(2, 60000)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val rdd = sc.parallelize(0 until 1000, 10).map(i => (i, 1)).reduceByKey(_ + _)
 

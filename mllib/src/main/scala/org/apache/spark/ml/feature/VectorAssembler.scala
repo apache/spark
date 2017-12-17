@@ -97,7 +97,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     // Data transformation.
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(r.toSeq: _*)
-    }
+    }.asNondeterministic()
     val args = $(inputCols).map { c =>
       schema(c).dataType match {
         case DoubleType => dataset(c)
@@ -113,12 +113,15 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
-    val inputDataTypes = inputColNames.map(name => schema(name).dataType)
-    inputDataTypes.foreach {
-      case _: NumericType | BooleanType =>
-      case t if t.isInstanceOf[VectorUDT] =>
-      case other =>
-        throw new IllegalArgumentException(s"Data type $other is not supported.")
+    val incorrectColumns = inputColNames.flatMap { name =>
+      schema(name).dataType match {
+        case _: NumericType | BooleanType => None
+        case t if t.isInstanceOf[VectorUDT] => None
+        case other => Some(s"Data type $other of column $name is not supported.")
+      }
+    }
+    if (incorrectColumns.nonEmpty) {
+      throw new IllegalArgumentException(incorrectColumns.mkString("\n"))
     }
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")

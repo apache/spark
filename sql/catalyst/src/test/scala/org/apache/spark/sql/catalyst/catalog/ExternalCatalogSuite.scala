@@ -245,15 +245,22 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("alter table schema") {
     val catalog = newBasicCatalog()
-    val tbl1 = catalog.getTable("db2", "tbl1")
-    val newSchema = StructType(Seq(
-      StructField("new_field_1", IntegerType),
-      StructField("new_field_2", StringType),
-      StructField("a", IntegerType),
-      StructField("b", StringType)))
-    catalog.alterTableSchema("db2", "tbl1", newSchema)
+    val newDataSchema = StructType(Seq(
+      StructField("col1", IntegerType),
+      StructField("new_field_2", StringType)))
+    catalog.alterTableDataSchema("db2", "tbl1", newDataSchema)
     val newTbl1 = catalog.getTable("db2", "tbl1")
-    assert(newTbl1.schema == newSchema)
+    assert(newTbl1.dataSchema == newDataSchema)
+  }
+
+  test("alter table stats") {
+    val catalog = newBasicCatalog()
+    val oldTableStats = catalog.getTable("db2", "tbl1").stats
+    assert(oldTableStats.isEmpty)
+    val newStats = CatalogStatistics(sizeInBytes = 1)
+    catalog.alterTableStats("db2", "tbl1", Some(newStats))
+    val newTableStats = catalog.getTable("db2", "tbl1").stats
+    assert(newTableStats.get == newStats)
   }
 
   test("get table") {
@@ -437,6 +444,18 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     // if no partition is matched for the given partition spec, an empty list should be returned.
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown", "b" -> "1"))).isEmpty)
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
+  }
+
+  test("SPARK-21457: list partitions with special chars") {
+    val catalog = newBasicCatalog()
+    assert(catalog.listPartitions("db2", "tbl1").isEmpty)
+
+    val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "i+j"), storageFormat)
+    val part2 = CatalogTablePartition(Map("a" -> "1", "b" -> "i.j"), storageFormat)
+    catalog.createPartitions("db2", "tbl1", Seq(part1, part2), ignoreIfExists = false)
+
+    assert(catalog.listPartitions("db2", "tbl1", Some(part1.spec)).map(_.spec) == Seq(part1.spec))
+    assert(catalog.listPartitions("db2", "tbl1", Some(part2.spec)).map(_.spec) == Seq(part2.spec))
   }
 
   test("list partitions by filter") {
@@ -743,6 +762,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     }
   }
 
+  test("alter function") {
+    val catalog = newBasicCatalog()
+    assert(catalog.getFunction("db2", "func1").className == funcClass)
+    val myNewFunc = catalog.getFunction("db2", "func1").copy(className = newFuncClass)
+    catalog.alterFunction("db2", myNewFunc)
+    assert(catalog.getFunction("db2", "func1").className == newFuncClass)
+  }
+
   test("list functions") {
     val catalog = newBasicCatalog()
     catalog.createFunction("db2", newFunc("func2"))
@@ -907,6 +934,7 @@ abstract class CatalogTestUtils {
   lazy val partWithEmptyValue =
     CatalogTablePartition(Map("a" -> "3", "b" -> ""), storageFormat)
   lazy val funcClass = "org.apache.spark.myFunc"
+  lazy val newFuncClass = "org.apache.spark.myNewFunc"
 
   /**
    * Creates a basic catalog, with the following structure:

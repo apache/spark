@@ -22,28 +22,30 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class QueryExecutionSuite extends SharedSQLContext {
   test("toString() exception/error handling") {
-    val badRule = new SparkStrategy {
-      var mode: String = ""
-      override def apply(plan: LogicalPlan): Seq[SparkPlan] = mode.toLowerCase match {
-        case "exception" => throw new AnalysisException(mode)
-        case "error" => throw new Error(mode)
-        case _ => Nil
-      }
-    }
-    spark.experimental.extraStrategies = badRule :: Nil
+    spark.experimental.extraStrategies = Seq(
+        new SparkStrategy {
+          override def apply(plan: LogicalPlan): Seq[SparkPlan] = Nil
+        })
 
-    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation)
+    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation())
 
     // Nothing!
-    badRule.mode = ""
     assert(qe.toString.contains("OneRowRelation"))
 
     // Throw an AnalysisException - this should be captured.
-    badRule.mode = "exception"
+    spark.experimental.extraStrategies = Seq(
+      new SparkStrategy {
+        override def apply(plan: LogicalPlan): Seq[SparkPlan] =
+          throw new AnalysisException("exception")
+      })
     assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
 
     // Throw an Error - this should not be captured.
-    badRule.mode = "error"
+    spark.experimental.extraStrategies = Seq(
+      new SparkStrategy {
+        override def apply(plan: LogicalPlan): Seq[SparkPlan] =
+          throw new Error("error")
+      })
     val error = intercept[Error](qe.toString)
     assert(error.getMessage.contains("error"))
   }

@@ -25,6 +25,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
@@ -32,7 +33,7 @@ import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -41,9 +42,10 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.{FakeTask, ResultTask, TaskDescription}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.UninterruptibleThread
 
 class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar with Eventually {
 
@@ -158,6 +160,18 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     assert(failReason.isInstanceOf[FetchFailed])
   }
 
+  test("Executor's worker threads should be UninterruptibleThread") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("executor thread test")
+      .set("spark.ui.enabled", "false")
+    sc = new SparkContext(conf)
+    val executorThread = sc.parallelize(Seq(1), 1).map { _ =>
+      Thread.currentThread.getClass.getName
+    }.collect().head
+    assert(executorThread === classOf[UninterruptibleThread].getName)
+  }
+
   test("SPARK-19276: OOMs correctly handled with a FetchFailure") {
     // when there is a fatal error like an OOM, we don't do normal fetch failure handling, since it
     // may be a false positive.  And we should call the uncaught exception handler.
@@ -220,6 +234,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val mockMemoryManager = mock[MemoryManager]
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.serializer).thenReturn(serializer)
+    when(mockEnv.serializerManager).thenReturn(mock[SerializerManager])
     when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
     when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
     when(mockEnv.memoryManager).thenReturn(mockMemoryManager)

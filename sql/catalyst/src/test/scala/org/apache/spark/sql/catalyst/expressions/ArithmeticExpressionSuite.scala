@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -214,7 +215,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Pmod(left, right), convert(1))
       checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
-      checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
+      checkEvaluation(Pmod(left, Literal(convert(0))), null)  // mod by 0
     }
     checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
@@ -223,6 +224,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
+
+    // mod by 0
+    checkEvaluation(Pmod(Literal(-7), Literal(0)), null)
+    checkEvaluation(Pmod(Literal(7.2D), Literal(0D)), null)
+    checkEvaluation(Pmod(Literal(7.2F), Literal(0F)), null)
+    checkEvaluation(Pmod(Literal(2.toByte), Literal(0.toByte)), null)
+    checkEvaluation(Pmod(positiveShort, 0.toShort), null)
   }
 
   test("function least") {
@@ -326,5 +334,24 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
     }
+  }
+
+  test("SPARK-22499: Least and greatest should not generate codes beyond 64KB") {
+    val N = 3000
+    val strings = (1 to N).map(x => "s" * x)
+    val inputsExpr = strings.map(Literal.create(_, StringType))
+
+    checkEvaluation(Least(inputsExpr), "s" * 1, EmptyRow)
+    checkEvaluation(Greatest(inputsExpr), "s" * N, EmptyRow)
+  }
+
+  test("SPARK-22704: Least and greatest use less global variables") {
+    val ctx1 = new CodegenContext()
+    Least(Seq(Literal(1), Literal(1))).genCode(ctx1)
+    assert(ctx1.mutableStates.size == 1)
+
+    val ctx2 = new CodegenContext()
+    Greatest(Seq(Literal(1), Literal(1))).genCode(ctx2)
+    assert(ctx2.mutableStates.size == 1)
   }
 }

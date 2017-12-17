@@ -223,6 +223,14 @@ More details on parameters can be found in the [Python API documentation](api/py
 
 </div>
 
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+
+{% include_example classification r/ml/decisionTree.R %}
+
+</div>
+
 </div>
 
 ## Random forest classifier
@@ -706,6 +714,13 @@ More details on parameters can be found in the [Java API documentation](api/java
 More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.regression.DecisionTreeRegressor).
 
 {% include_example python/ml/decision_tree_regression_example.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+
+{% include_example regression r/ml/decisionTree.R %}
 </div>
 
 </div>

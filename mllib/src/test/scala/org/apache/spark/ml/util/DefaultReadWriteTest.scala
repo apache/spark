@@ -55,7 +55,6 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     instance.write.overwrite().save(path)
     val loader = instance.getClass.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
     val newInstance = loader.load(path)
-
     assert(newInstance.uid === instance.uid)
     if (testParams) {
       instance.params.foreach { p =>
@@ -81,20 +80,20 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
   /**
    * Default test for Estimator, Model pairs:
    *  - Explicitly set Params, and train model
-   *  - Test save/load using [[testDefaultReadWrite()]] on Estimator and Model
+   *  - Test save/load using `testDefaultReadWrite` on Estimator and Model
    *  - Check Params on Estimator and Model
    *  - Compare model data
    *
-   * This requires that [[Model]]'s [[Param]]s should be a subset of [[Estimator]]'s [[Param]]s.
+   * This requires that `Model`'s `Param`s should be a subset of `Estimator`'s `Param`s.
    *
    * @param estimator  Estimator to test
-   * @param dataset  Dataset to pass to [[Estimator.fit()]]
-   * @param testEstimatorParams  Set of [[Param]] values to set in estimator
-   * @param testModelParams Set of [[Param]] values to set in model
-   * @param checkModelData  Method which takes the original and loaded [[Model]] and compares their
-   *                        data.  This method does not need to check [[Param]] values.
-   * @tparam E  Type of [[Estimator]]
-   * @tparam M  Type of [[Model]] produced by estimator
+   * @param dataset  Dataset to pass to `Estimator.fit()`
+   * @param testEstimatorParams  Set of `Param` values to set in estimator
+   * @param testModelParams Set of `Param` values to set in model
+   * @param checkModelData  Method which takes the original and loaded `Model` and compares their
+   *                        data.  This method does not need to check `Param` values.
+   * @tparam E  Type of `Estimator`
+   * @tparam M  Type of `Model` produced by estimator
    */
   def testEstimatorAndModelReadWrite[
     E <: Estimator[M] with MLWritable, M <: Model[M] with MLWritable](

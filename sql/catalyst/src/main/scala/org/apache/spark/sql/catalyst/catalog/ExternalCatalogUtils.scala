@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
@@ -154,8 +155,20 @@ object ExternalCatalogUtils {
         })
 
       inputPartitions.filter { p =>
-        boundPredicate(p.toRow(partitionSchema, defaultTimeZoneId))
+        boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
       }
+    }
+  }
+
+  /**
+   * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
+   * partial partition spec w.r.t. PARTITION (a=1,b=2).
+   */
+  def isPartialPartitionSpec(
+      spec1: TablePartitionSpec,
+      spec2: TablePartitionSpec): Boolean = {
+    spec1.forall {
+      case (partitionColumn, value) => spec2(partitionColumn) == value
     }
   }
 }
@@ -167,8 +180,10 @@ object CatalogUtils {
    */
   def maskCredentials(options: Map[String, String]): Map[String, String] = {
     options.map {
-      case (key, _) if key.toLowerCase == "password" => (key, "###")
-      case (key, value) if key.toLowerCase == "url" && value.toLowerCase.contains("password") =>
+      case (key, _) if key.toLowerCase(Locale.ROOT) == "password" => (key, "###")
+      case (key, value)
+        if key.toLowerCase(Locale.ROOT) == "url" &&
+          value.toLowerCase(Locale.ROOT).contains("password") =>
         (key, "###")
       case o => o
     }

@@ -21,21 +21,27 @@ import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
+import org.apache.spark.sql.execution.datasources.v2.PushDownOperatorsToDataSource
 import org.apache.spark.sql.execution.python.ExtractPythonUDFFromAggregate
-import org.apache.spark.sql.internal.SQLConf
 
 class SparkOptimizer(
     catalog: SessionCatalog,
-    conf: SQLConf,
     experimentalMethods: ExperimentalMethods)
-  extends Optimizer(catalog, conf) {
+  extends Optimizer(catalog) {
 
-  override def batches: Seq[Batch] = (super.batches :+
-    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog, conf)) :+
+  override def batches: Seq[Batch] = (preOptimizationBatches ++ super.batches :+
+    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
-    Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions)) ++
+    Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
+    Batch("Push down operators to data source scan", Once, PushDownOperatorsToDataSource)) ++
     postHocOptimizationBatches :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
+
+  /**
+   * Optimization batches that are executed before the regular optimization batches (also before
+   * the finish analysis batch).
+   */
+  def preOptimizationBatches: Seq[Batch] = Nil
 
   /**
    * Optimization batches that are executed after the regular optimization batches, but before the

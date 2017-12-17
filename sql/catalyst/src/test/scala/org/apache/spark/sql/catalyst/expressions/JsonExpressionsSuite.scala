@@ -21,7 +21,8 @@ import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -38,6 +39,10 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       |"email":"amy@only_for_json_udf_test.net","owner":"amy","zip code":"94025",
       |"fb:testid":"1234"}
       |""".stripMargin
+
+  /* invalid json with leading nulls would trigger java.io.CharConversionException
+   in Jackson's JsonFactory.createParser(byte[]) due to RFC-4627 encoding detection */
+  val badJson = "\u0000\u0000\u0000A\u0001AAA"
 
   test("$.store.bicycle") {
     checkEvaluation(
@@ -224,6 +229,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
   }
 
+  test("SPARK-16548: character conversion") {
+    checkEvaluation(
+      GetJsonObject(Literal(badJson), Literal("$.a")),
+      null
+    )
+  }
+
   test("non foldable literal") {
     checkEvaluation(
       GetJsonObject(NonFoldableLiteral(json), NonFoldableLiteral("$.fb:testid")),
@@ -340,10 +352,36 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow(null, null, null, null, null))
   }
 
+  test("SPARK-16548: json_tuple - invalid json with leading nulls") {
+    checkJsonTuple(
+      JsonTuple(Literal(badJson) :: jsonTupleQuery),
+      InternalRow(null, null, null, null, null))
+  }
+
   test("json_tuple - preserve newlines") {
     checkJsonTuple(
       JsonTuple(Literal("{\"a\":\"b\nc\"}") :: Literal("a") :: Nil),
       InternalRow(UTF8String.fromString("b\nc")))
+  }
+
+  test("SPARK-21677: json_tuple throws NullPointException when column is null as string type") {
+    checkJsonTuple(
+      JsonTuple(Literal("""{"f1": 1, "f2": 2}""") ::
+        NonFoldableLiteral("f1") ::
+        NonFoldableLiteral("cast(NULL AS STRING)") ::
+        NonFoldableLiteral("f2") ::
+        Nil),
+      InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("2")))
+  }
+
+  test("SPARK-21804: json_tuple returns null values within repeated columns except the first one") {
+    checkJsonTuple(
+      JsonTuple(Literal("""{"f1": 1, "f2": 2}""") ::
+        NonFoldableLiteral("f1") ::
+        NonFoldableLiteral("cast(NULL AS STRING)") ::
+        NonFoldableLiteral("f1") ::
+        Nil),
+      InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("1")))
   }
 
   val gmtId = Option(DateTimeUtils.TimeZoneGMT.getID)
@@ -434,6 +472,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       JsonToStructs(schema, Map.empty, Literal.create(null, StringType), gmtId),
       null
     )
+  }
+
+  test("SPARK-20549: from_json bad UTF-8") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStructs(schema, Map.empty, Literal(badJson), gmtId),
+      null)
   }
 
   test("from_json with timestamp") {
@@ -565,5 +610,74 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         gmtId),
       """{"t":"2015-12-31T16:00:00"}"""
     )
+  }
+
+  test("SPARK-21513: to_json support map[string, struct] to json") {
+    val schema = MapType(StringType, StructType(StructField("a", IntegerType) :: Nil))
+    val input = Literal.create(ArrayBasedMapData(Map("test" -> InternalRow(1))), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"test":{"a":1}}"""
+    )
+  }
+
+  test("SPARK-21513: to_json support map[struct, struct] to json") {
+    val schema = MapType(StructType(StructField("a", IntegerType) :: Nil),
+      StructType(StructField("b", IntegerType) :: Nil))
+    val input = Literal.create(ArrayBasedMapData(Map(InternalRow(1) -> InternalRow(2))), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"[1]":{"b":2}}"""
+    )
+  }
+
+  test("SPARK-21513: to_json support map[string, integer] to json") {
+    val schema = MapType(StringType, IntegerType)
+    val input = Literal.create(ArrayBasedMapData(Map("a" -> 1)), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"a":1}"""
+    )
+  }
+
+  test("to_json - array with maps") {
+    val inputSchema = ArrayType(MapType(StringType, IntegerType))
+    val input = new GenericArrayData(ArrayBasedMapData(
+      Map("a" -> 1)) :: ArrayBasedMapData(Map("b" -> 2)) :: Nil)
+    val output = """[{"a":1},{"b":2}]"""
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      output)
+  }
+
+  test("to_json - array with single map") {
+    val inputSchema = ArrayType(MapType(StringType, IntegerType))
+    val input = new GenericArrayData(ArrayBasedMapData(Map("a" -> 1)) :: Nil)
+    val output = """[{"a":1}]"""
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      output)
+  }
+
+  test("to_json: verify MapType's value type instead of key type") {
+    // Keys in map are treated as strings when converting to JSON. The type doesn't matter at all.
+    val mapType1 = MapType(CalendarIntervalType, IntegerType)
+    val schema1 = StructType(StructField("a", mapType1) :: Nil)
+    val struct1 = Literal.create(null, schema1)
+    checkEvaluation(
+      StructsToJson(Map.empty, struct1, gmtId),
+      null
+    )
+
+    // The value type must be valid for converting to JSON.
+    val mapType2 = MapType(IntegerType, CalendarIntervalType)
+    val schema2 = StructType(StructField("a", mapType2) :: Nil)
+    val struct2 = Literal.create(null, schema2)
+    intercept[TreeNodeException[_]] {
+      checkEvaluation(
+        StructsToJson(Map.empty, struct2, gmtId),
+        null
+      )
+    }
   }
 }

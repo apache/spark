@@ -26,10 +26,10 @@ import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-import org.scalatest.concurrent.AsyncAssertions._
+import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog.{FileContextManager, FileManager, FileSystemManager}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -38,8 +38,8 @@ import org.apache.spark.util.UninterruptibleThread
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
   /** To avoid caching of FS objects */
-  override protected val sparkConf =
-    new SparkConf().set(s"spark.hadoop.fs.$scheme.impl.disable.cache", "true")
+  override protected def sparkConf =
+    super.sparkConf.set(s"spark.hadoop.fs.$scheme.impl.disable.cache", "true")
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
 
@@ -258,6 +258,23 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     intercept[FileAlreadyExistsException] {
       fm.rename(path2, path3)
     }
+  }
+
+  test("verifyBatchIds") {
+    import HDFSMetadataLog.verifyBatchIds
+    verifyBatchIds(Seq(1L, 2L, 3L), Some(1L), Some(3L))
+    verifyBatchIds(Seq(1L), Some(1L), Some(1L))
+    verifyBatchIds(Seq(1L, 2L, 3L), None, Some(3L))
+    verifyBatchIds(Seq(1L, 2L, 3L), Some(1L), None)
+    verifyBatchIds(Seq(1L, 2L, 3L), None, None)
+
+    intercept[IllegalStateException](verifyBatchIds(Seq(), Some(1L), None))
+    intercept[IllegalStateException](verifyBatchIds(Seq(), None, Some(1L)))
+    intercept[IllegalStateException](verifyBatchIds(Seq(), Some(1L), Some(1L)))
+    intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), Some(1L), None))
+    intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), None, Some(5L)))
+    intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), Some(1L), Some(5L)))
+    intercept[IllegalStateException](verifyBatchIds(Seq(1, 2, 4, 5), Some(1L), Some(5L)))
   }
 }
 

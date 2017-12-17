@@ -29,7 +29,7 @@ import org.apache.spark.streaming.util.{EmptyStateMap, StateMap}
 import org.apache.spark.util.Utils
 
 /**
- * Record storing the keyed-state [[MapWithStateRDD]]. Each record contains a [[StateMap]] and a
+ * Record storing the keyed-state [[MapWithStateRDD]]. Each record contains a `StateMap` and a
  * sequence of records returned by the mapping function of `mapWithState`.
  */
 private[streaming] case class MapWithStateRDDRecord[K, S, E](
@@ -111,7 +111,7 @@ private[streaming] class MapWithStateRDDPartition(
 /**
  * RDD storing the keyed states of `mapWithState` operation and corresponding mapped data.
  * Each partition of this RDD has a single record of type [[MapWithStateRDDRecord]]. This contains a
- * [[StateMap]] (containing the keyed-states) and the sequence of records returned by the mapping
+ * `StateMap` (containing the keyed-states) and the sequence of records returned by the mapping
  * function of  `mapWithState`.
  * @param prevStateRDD The previous MapWithStateRDD on whose StateMap data `this` RDD
   *                    will be created

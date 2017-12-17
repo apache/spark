@@ -24,7 +24,6 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * User-defined function.
- * Note that the user-defined functions must be deterministic.
  * @param function  The user defined scala function to run.
  *                  Note that if you use primitive parameters, you are not able to check if it is
  *                  null or not, and the UDF will return null for you if the primitive input is
@@ -35,17 +34,22 @@ import org.apache.spark.sql.types.DataType
  *                    not want to perform coercion, simply use "Nil". Note that it would've been
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
  *                    type coercion. However, that would require more refactoring of the codebase.
- * @param udfName   The user-specified name of this UDF.
+ * @param udfName  The user-specified name of this UDF.
+ * @param nullable  True if the UDF can return null value.
+ * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
+ *                          each time it is invoked with a particular input.
  */
 case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
     inputTypes: Seq[DataType] = Nil,
-    udfName: Option[String] = None)
-  extends Expression with ImplicitCastInputTypes with NonSQLExpression {
+    udfName: Option[String] = None,
+    nullable: Boolean = true,
+    udfDeterministic: Boolean = true)
+  extends Expression with ImplicitCastInputTypes with NonSQLExpression with UserDefinedExpression {
 
-  override def nullable: Boolean = true
+  override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def toString: String =
     s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"
@@ -72,11 +76,6 @@ case class ScalaUDF(
     }.foreach(println)
 
   */
-
-  // Accessors used in genCode
-  def userDefinedFunc(): AnyRef = function
-  def getChildren(): Seq[Expression] = children
-
   private[this] val f = children.size match {
     case 0 =>
       val func = function.asInstanceOf[() => Any]
@@ -977,49 +976,18 @@ case class ScalaUDF(
   }
 
   // scalastyle:on line.size.limit
-
-  // Generate codes used to convert the arguments to Scala type for user-defined functions
-  private[this] def genCodeForConverter(ctx: CodegenContext, index: Int): String = {
-    val converterClassName = classOf[Any => Any].getName
-    val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
-    val expressionClassName = classOf[Expression].getName
-    val scalaUDFClassName = classOf[ScalaUDF].getName
-
-    val converterTerm = ctx.freshName("converter")
-    val expressionIdx = ctx.references.size - 1
-    ctx.addMutableState(converterClassName, converterTerm,
-      s"this.$converterTerm = ($converterClassName)$typeConvertersClassName" +
-        s".createToScalaConverter(((${expressionClassName})((($scalaUDFClassName)" +
-          s"references[$expressionIdx]).getChildren().apply($index))).dataType());")
-    converterTerm
-  }
-
   override def doGenCode(
       ctx: CodegenContext,
       ev: ExprCode): ExprCode = {
-
-    val scalaUDF = ctx.addReferenceObj("scalaUDF", this)
     val converterClassName = classOf[Any => Any].getName
-    val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
 
-    // Generate codes used to convert the returned value of user-defined functions to Catalyst type
-    val catalystConverterTerm = ctx.freshName("catalystConverter")
-    ctx.addMutableState(converterClassName, catalystConverterTerm,
-      s"this.$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
-        s".createToCatalystConverter($scalaUDF.dataType());")
-
+    // The type converters for inputs and the result.
+    val converters: Array[Any => Any] = children.map { c =>
+      CatalystTypeConverters.createToScalaConverter(c.dataType)
+    }.toArray :+ CatalystTypeConverters.createToCatalystConverter(dataType)
+    val convertersTerm = ctx.addReferenceObj("converters", converters, s"$converterClassName[]")
+    val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
     val resultTerm = ctx.freshName("result")
-
-    // This must be called before children expressions' codegen
-    // because ctx.references is used in genCodeForConverter
-    val converterTerms = children.indices.map(genCodeForConverter(ctx, _))
-
-    // Initialize user-defined function
-    val funcClassName = s"scala.Function${children.size}"
-
-    val funcTerm = ctx.freshName("udf")
-    ctx.addMutableState(funcClassName, funcTerm,
-      s"this.$funcTerm = ($funcClassName)$scalaUDF.userDefinedFunc();")
 
     // codegen for children expressions
     val evals = children.map(_.genCode(ctx))
@@ -1028,38 +996,42 @@ case class ScalaUDF(
     // We need to get the boxedType of dataType's javaType here. Because for the dataType
     // such as IntegerType, its javaType is `int` and the returned type of user-defined
     // function is Object. Trying to convert an Object to `int` will cause casting exception.
-    val evalCode = evals.map(_.code).mkString
-    val (converters, funcArguments) = converterTerms.zipWithIndex.map { case (converter, i) =>
-      val eval = evals(i)
+    val evalCode = evals.map(_.code).mkString("\n")
+    val (funcArgs, initArgs) = evals.zipWithIndex.map { case (eval, i) =>
       val argTerm = ctx.freshName("arg")
-      val convert = s"Object $argTerm = ${eval.isNull} ? null : $converter.apply(${eval.value});"
-      (convert, argTerm)
+      val convert = s"$convertersTerm[$i].apply(${eval.value})"
+      val initArg = s"Object $argTerm = ${eval.isNull} ? null : $convert;"
+      (argTerm, initArg)
     }.unzip
 
-    val getFuncResult = s"$funcTerm.apply(${funcArguments.mkString(", ")})"
+    val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
+    val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
+    val resultConverter = s"$convertersTerm[${children.length}]"
     val callFunc =
       s"""
-         ${ctx.boxedType(dataType)} $resultTerm = null;
-         try {
-           $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($getFuncResult);
-         } catch (Exception e) {
-           throw new org.apache.spark.SparkException($scalaUDF.udfErrorMessage(), e);
-         }
-       """
+         |${ctx.boxedType(dataType)} $resultTerm = null;
+         |try {
+         |  $resultTerm = (${ctx.boxedType(dataType)})$resultConverter.apply($getFuncResult);
+         |} catch (Exception e) {
+         |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
+         |}
+       """.stripMargin
 
-    ev.copy(code = s"""
-      $evalCode
-      ${converters.mkString("\n")}
-      $callFunc
-
-      boolean ${ev.isNull} = $resultTerm == null;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = $resultTerm;
-      }""")
+    ev.copy(code =
+      s"""
+         |$evalCode
+         |${initArgs.mkString("\n")}
+         |$callFunc
+         |
+         |boolean ${ev.isNull} = $resultTerm == null;
+         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
+         |}
+       """.stripMargin)
   }
 
-  private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
+  private[this] val resultConverter = CatalystTypeConverters.createToCatalystConverter(dataType)
 
   lazy val udfErrorMessage = {
     val funcCls = function.getClass.getSimpleName
@@ -1075,6 +1047,6 @@ case class ScalaUDF(
         throw new SparkException(udfErrorMessage, e)
     }
 
-    converter(result)
+    resultConverter(result)
   }
 }

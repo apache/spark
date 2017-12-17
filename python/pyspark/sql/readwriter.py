@@ -96,14 +96,20 @@ class DataFrameReader(OptionUtils):
         By specifying the schema here, the underlying data source can skip the schema
         inference step, and thus speed up data loading.
 
-        :param schema: a :class:`pyspark.sql.types.StructType` object
+        :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
+                       (For example ``col0 INT, col1 DOUBLE``).
+
+        >>> s = spark.read.schema("col0 INT, col1 DOUBLE")
         """
         from pyspark.sql import SparkSession
-        if not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType")
         spark = SparkSession.builder.getOrCreate()
-        jschema = spark._jsparkSession.parseDataType(schema.json())
-        self._jreader = self._jreader.schema(jschema)
+        if isinstance(schema, StructType):
+            jschema = spark._jsparkSession.parseDataType(schema.json())
+            self._jreader = self._jreader.schema(jschema)
+        elif isinstance(schema, basestring):
+            self._jreader = self._jreader.schema(schema)
+        else:
+            raise TypeError("schema should be StructType or string")
         return self
 
     @since(1.5)
@@ -137,7 +143,8 @@ class DataFrameReader(OptionUtils):
 
         :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
-        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param options: all other string options
 
         >>> df = spark.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
@@ -169,19 +176,20 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             wholeFile=None):
+             multiLine=None, allowUnquotedControlChars=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
-        `JSON Lines <http://jsonlines.org/>`_(newline-delimited JSON) is supported by default.
-        For JSON (one record per file), set the `wholeFile` parameter to ``true``.
+        `JSON Lines <http://jsonlines.org/>`_ (newline-delimited JSON) is supported by default.
+        For JSON (one record per file), set the ``multiLine`` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
         :param path: string represents path to the JSON dataset, or a list of paths,
                      or RDD of Strings storing JSON objects.
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema or
+                       a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -224,8 +232,11 @@ class DataFrameReader(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
-        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
+        :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
+        :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
+                                          characters (ASCII characters with value less than 32,
+                                          including tab and line feed characters) or not.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -242,7 +253,8 @@ class DataFrameReader(OptionUtils):
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat, wholeFile=wholeFile)
+            timestampFormat=timestampFormat, multiLine=multiLine,
+            allowUnquotedControlChars=allowUnquotedControlChars)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -292,7 +304,7 @@ class DataFrameReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, paths):
+    def text(self, paths, wholetext=False):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -301,11 +313,16 @@ class DataFrameReader(OptionUtils):
         Each line in the text file is a new row in the resulting DataFrame.
 
         :param paths: string, or list of strings, for input path(s).
+        :param wholetext: if true, read each file from input path(s) as a single row.
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
+        >>> df = spark.read.text('python/test_support/sql/text-test.txt', wholetext=True)
+        >>> df.collect()
+        [Row(value=u'hello\\nthis')]
         """
+        self._set_opts(wholetext=wholetext)
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
@@ -316,15 +333,17 @@ class DataFrameReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, wholeFile=None, escapeQuoteEscaping=None):
+            columnNameOfCorruptRecord=None, multiLine=None, escapeQuoteEscaping=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
-        :param path: string, or list of strings, for input path(s).
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param path: string, or list of strings, for input path(s),
+                     or RDD of Strings storing CSV rows.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param sep: sets the single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
@@ -389,13 +408,17 @@ class DataFrameReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
-        :param wholeFile: parse records, which may span multiple lines. If None is
+        :param multiLine: parse records, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
         :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
                                     character. If None is set, it uses the default value, ``\0``.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
+        [('_c0', 'string'), ('_c1', 'string')]
+        >>> rdd = sc.textFile('python/test_support/sql/ages.csv')
+        >>> df2 = spark.read.csv(rdd)
+        >>> df2.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
         """
         self._set_opts(
@@ -406,11 +429,33 @@ class DataFrameReader(OptionUtils):
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             escapeQuoteEscaping=escapeQuoteEscaping)
         if isinstance(path, basestring):
             path = [path]
-        return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+        if type(path) == list:
+            return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+        elif isinstance(path, RDD):
+            def func(iterator):
+                for x in iterator:
+                    if not isinstance(x, basestring):
+                        x = unicode(x)
+                    if isinstance(x, unicode):
+                        x = x.encode("utf-8")
+                    yield x
+            keyed = path.mapPartitions(func)
+            keyed._bypass_serializer = True
+            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
+            # see SPARK-22112
+            # There aren't any jvm api for creating a dataframe from rdd storing csv.
+            # We can do it through creating a jvm dataset firstly and using the jvm api
+            # for creating a dataframe from dataset storing csv.
+            jdataset = self._spark._ssql_ctx.createDataset(
+                jrdd.rdd(),
+                self._spark._jvm.Encoders.STRING())
+            return self._df(self._jreader.csv(jdataset))
+        else:
+            raise TypeError("path can be only string, list or RDD")
 
     @since(1.5)
     def orc(self, path):
@@ -503,7 +548,7 @@ class DataFrameWriter(OptionUtils):
 
         * `append`: Append contents of this :class:`DataFrame` to existing data.
         * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
+        * `error` or `errorifexists`: Throw an exception if data already exists.
         * `ignore`: Silently ignore this operation if data already exists.
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -566,6 +611,63 @@ class DataFrameWriter(OptionUtils):
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
+    @since(2.3)
+    def bucketBy(self, numBuckets, col, *cols):
+        """Buckets the output by the given columns.If specified,
+        the output is laid out on the file system similar to Hive's bucketing scheme.
+
+        :param numBuckets: the number of buckets to save
+        :param col: a name of a column, or a list of names.
+        :param cols: additional names (optional). If `col` is a list it should be empty.
+
+        .. note:: Applicable for file-based data sources in combination with
+                  :py:meth:`DataFrameWriter.saveAsTable`.
+
+        >>> (df.write.format('parquet')  # doctest: +SKIP
+        ...     .bucketBy(100, 'year', 'month')
+        ...     .mode("overwrite")
+        ...     .saveAsTable('bucketed_table'))
+        """
+        if not isinstance(numBuckets, int):
+            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
+
+        if isinstance(col, (list, tuple)):
+            if cols:
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+
+            col, cols = col[0], col[1:]
+
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+            raise TypeError("all names should be `str`")
+
+        self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
+        return self
+
+    @since(2.3)
+    def sortBy(self, col, *cols):
+        """Sorts the output in each bucket by the given columns on the file system.
+
+        :param col: a name of a column, or a list of names.
+        :param cols: additional names (optional). If `col` is a list it should be empty.
+
+        >>> (df.write.format('parquet')  # doctest: +SKIP
+        ...     .bucketBy(100, 'year', 'month')
+        ...     .sortBy('day')
+        ...     .mode("overwrite")
+        ...     .saveAsTable('sorted_bucketed_table'))
+        """
+        if isinstance(col, (list, tuple)):
+            if cols:
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+
+            col, cols = col[0], col[1:]
+
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+            raise TypeError("all names should be `str`")
+
+        self._jwrite = self._jwrite.sortBy(col, _to_seq(self._spark._sc, cols))
+        return self
+
     @since(1.4)
     def save(self, path=None, format=None, mode=None, partitionBy=None, **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
@@ -581,7 +683,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param partitionBy: names of partitioning columns
         :param options: all other string options
 
@@ -619,12 +722,13 @@ class DataFrameWriter(OptionUtils):
 
         * `append`: Append contents of this :class:`DataFrame` to existing data.
         * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
+        * `error` or `errorifexists`: Throw an exception if data already exists.
         * `ignore`: Silently ignore this operation if data already exists.
 
         :param name: the table name
         :param format: the format used to save
-        :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
+        :param mode: one of `append`, `overwrite`, `error`, `errorifexists`, `ignore` \
+                     (default: error)
         :param partitionBy: names of partitioning columns
         :param options: all other string options
         """
@@ -637,7 +741,9 @@ class DataFrameWriter(OptionUtils):
 
     @since(1.4)
     def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None):
-        """Saves the content of the :class:`DataFrame` in JSON format at the specified path.
+        """Saves the content of the :class:`DataFrame` in JSON format
+        (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
+        specified path.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.
@@ -645,7 +751,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
@@ -675,7 +782,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, gzip, and lzo).
@@ -719,7 +827,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
 
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
@@ -728,8 +837,7 @@ class DataFrameWriter(OptionUtils):
                     set, it uses the default value, ``,``.
         :param quote: sets the single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
-                      value, ``"``. If you would like to turn off quotations, you need to set an
-                      empty string.
+                      value, ``"``. If an empty string is set, it uses ``u0000`` (null character).
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
         :param escapeQuotes: a flag indicating whether values containing quotes should always
@@ -785,12 +893,14 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, zlib, and lzo).
-                            This will override ``orc.compress``. If None is set, it uses the
-                            default value, ``snappy``.
+                            This will override ``orc.compress`` and
+                            ``spark.sql.orc.compression.codec``. If None is set, it uses the value
+                            specified in ``spark.sql.orc.compression.codec``.
 
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -815,7 +925,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param properties: a dictionary of JDBC database connection arguments. Normally at
                            least properties "user" and "password" with their corresponding values.
                            For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
@@ -825,7 +936,7 @@ class DataFrameWriter(OptionUtils):
         jprop = JavaClass("java.util.Properties", self._spark._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
-        self._jwrite.mode(mode).jdbc(url, table, jprop)
+        self.mode(mode)._jwrite.jdbc(url, table, jprop)
 
 
 def _test():

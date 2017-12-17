@@ -29,17 +29,17 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 
 /**
- * :: Experimental ::
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
  */
-@Experimental
 @InterfaceStability.Evolving
 class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
-    val numRowsUpdated: Long) extends Serializable {
+    val numRowsUpdated: Long,
+    val memoryUsedBytes: Long
+  ) extends Serializable {
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -47,14 +47,19 @@ class StateOperatorProgress private[sql](
   /** The pretty (i.e. indented) JSON representation of this progress. */
   def prettyJson: String = pretty(render(jsonValue))
 
+  private[sql] def copy(newNumRowsUpdated: Long): StateOperatorProgress =
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes)
+
   private[sql] def jsonValue: JValue = {
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
-    ("numRowsUpdated" -> JInt(numRowsUpdated))
+    ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
+    ("memoryUsedBytes" -> JInt(memoryUsedBytes))
   }
+
+  override def toString: String = prettyJson
 }
 
 /**
- * :: Experimental ::
  * Information about progress made in the execution of a [[StreamingQuery]] during
  * a trigger. Each event relates to processing done for a single trigger of the streaming
  * query. Events are emitted even when no new data is available to be processed.
@@ -80,7 +85,6 @@ class StateOperatorProgress private[sql](
  * @param sources detailed statistics on data being read from each of the streaming sources.
  * @since 2.1.0
  */
-@Experimental
 @InterfaceStability.Evolving
 class StreamingQueryProgress private[sql](
   val id: UUID,
@@ -127,6 +131,7 @@ class StreamingQueryProgress private[sql](
     ("runId" -> JString(runId.toString)) ~
     ("name" -> JString(name)) ~
     ("timestamp" -> JString(timestamp)) ~
+    ("batchId" -> JInt(batchId)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
     ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
     ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
@@ -139,7 +144,6 @@ class StreamingQueryProgress private[sql](
 }
 
 /**
- * :: Experimental ::
  * Information about progress made for a source in the execution of a [[StreamingQuery]]
  * during a trigger. See [[StreamingQueryProgress]] for more information.
  *
@@ -152,7 +156,6 @@ class StreamingQueryProgress private[sql](
  *                               Spark.
  * @since 2.1.0
  */
-@Experimental
 @InterfaceStability.Evolving
 class SourceProgress protected[sql](
   val description: String,
@@ -191,14 +194,12 @@ class SourceProgress protected[sql](
 }
 
 /**
- * :: Experimental ::
  * Information about progress made for a sink in the execution of a [[StreamingQuery]]
  * during a trigger. See [[StreamingQueryProgress]] for more information.
  *
  * @param description Description of the source corresponding to this status.
  * @since 2.1.0
  */
-@Experimental
 @InterfaceStability.Evolving
 class SinkProgress protected[sql](
     val description: String) extends Serializable {

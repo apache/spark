@@ -1,38 +1,39 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser}
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options, ReadSupport, ReadSupportWithSchema}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -64,6 +65,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def schema(schema: StructType): DataFrameReader = {
     this.userSpecifiedSchema = Option(schema)
+    this
+  }
+
+  /**
+   * Specifies the schema by using the input DDL-formatted string. Some data sources (e.g. JSON) can
+   * infer the input schema automatically from data. By specifying the schema here, the underlying
+   * data source can skip the schema inference step, and thus speed up data loading.
+   *
+   * @since 2.3.0
+   */
+  def schema(schemaString: String): DataFrameReader = {
+    this.userSpecifiedSchema = Option(StructType.fromDDL(schemaString))
     this
   }
 
@@ -164,18 +177,47 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
     }
 
-    sparkSession.baseRelationToDataFrame(
-      DataSource.apply(
-        sparkSession,
-        paths = paths,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap).resolveRelation())
+    val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
+    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
+      val options = new DataSourceV2Options(extraOptions.asJava)
+
+      val reader = (cls.newInstance(), userSpecifiedSchema) match {
+        case (ds: ReadSupportWithSchema, Some(schema)) =>
+          ds.createReader(schema, options)
+
+        case (ds: ReadSupport, None) =>
+          ds.createReader(options)
+
+        case (ds: ReadSupportWithSchema, None) =>
+          throw new AnalysisException(s"A schema needs to be specified when using $ds.")
+
+        case (ds: ReadSupport, Some(schema)) =>
+          val reader = ds.createReader(options)
+          if (reader.readSchema() != schema) {
+            throw new AnalysisException(s"$ds does not allow user-specified schemas.")
+          }
+          reader
+
+        case _ =>
+          throw new AnalysisException(s"$cls does not support data reading.")
+      }
+
+      Dataset.ofRows(sparkSession, DataSourceV2Relation(reader))
+    } else {
+      // Code path for data source v1.
+      sparkSession.baseRelationToDataFrame(
+        DataSource.apply(
+          sparkSession,
+          paths = paths,
+          userSpecifiedSchema = userSpecifiedSchema,
+          className = source,
+          options = extraOptions.toMap).resolveRelation())
+    }
   }
 
   /**
@@ -268,8 +310,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a JSON file (<a href="http://jsonlines.org/">JSON Lines text format or
-   * newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   * Loads a JSON file and returns the results as a `DataFrame`.
+   *
    * See the documentation on the overloaded `json()` method with varargs for more details.
    *
    * @since 1.4.0
@@ -283,7 +325,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads JSON files and returns the results as a `DataFrame`.
    *
    * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by
-   * default. For JSON (one record per file), set the `wholeFile` option to true.
+   * default. For JSON (one record per file), set the `multiLine` option to true.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -301,6 +343,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * (e.g. 00012)</li>
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
+   * <li>`allowUnquotedControlChars` (default `false`): allows JSON Strings to contain unquoted
+   * control characters (ASCII characters with value less than 32, including tab and line feed
+   * characters) or not.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.
    *   <ul>
@@ -323,7 +368,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
+   * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * </ul>
    *
@@ -395,10 +440,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
+    sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
   }
 
   /**
@@ -458,10 +500,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
+    sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)
   }
 
   /**
@@ -527,7 +566,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
-   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines.</li>
+   * <li>`multiLine` (default `false`): parse one record, which may span multiple lines.</li>
    * </ul>
    * @since 2.0.0
    */
@@ -609,7 +648,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    *
-   * Each line in the text files is a new row in the resulting DataFrame. For example:
+   * You can set the following text-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * </ul>
+   * By default, each line in the text files is a new row in the resulting DataFrame.
+   *
+   * Usage example:
    * {{{
    *   // Scala:
    *   spark.read.text("/path/to/spark/README.md")
@@ -641,7 +687,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
    *
-   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * You can set the following textFile-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * </ul>
+   * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
    *   spark.read.textFile("/path/to/spark/README.md")

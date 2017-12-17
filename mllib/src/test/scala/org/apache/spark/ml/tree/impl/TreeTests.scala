@@ -34,7 +34,7 @@ private[ml] object TreeTests extends SparkFunSuite {
    * Convert the given data to a DataFrame, and set the features and label metadata.
    * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
    *              This must be non-empty.
-   * @param categoricalFeatures  Map: categorical feature index -> number of distinct values
+   * @param categoricalFeatures  Map: categorical feature index to number of distinct values
    * @param numClasses  Number of classes label can take.  If 0, mark as continuous.
    * @return DataFrame with metadata
    */
@@ -43,8 +43,6 @@ private[ml] object TreeTests extends SparkFunSuite {
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
     val spark = SparkSession.builder()
-      .master("local[2]")
-      .appName("TreeTests")
       .sparkContext(data.sparkContext)
       .getOrCreate()
     import spark.implicits._
@@ -69,7 +67,9 @@ private[ml] object TreeTests extends SparkFunSuite {
       df("label").as("label", labelMetadata))
   }
 
-  /** Java-friendly version of [[setMetadata()]] */
+  /**
+   * Java-friendly version of `setMetadata()`
+   */
   def setMetadata(
       data: JavaRDD[LabeledPoint],
       categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],

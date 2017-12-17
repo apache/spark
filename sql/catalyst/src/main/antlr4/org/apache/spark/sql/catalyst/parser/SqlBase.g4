@@ -25,7 +25,7 @@ grammar SqlBase;
    * For char stream "2.3", "2." is not a valid decimal token, because it is followed by digit '3'.
    * For char stream "2.3_", "2.3" is not a valid decimal token, because it is followed by '_'.
    * For char stream "2.3W", "2.3" is not a valid decimal token, because it is followed by 'W'.
-   * For char stream "12.0D 34.E2+0.12 "  12.0D is a valid decimal token because it is folllowed
+   * For char stream "12.0D 34.E2+0.12 "  12.0D is a valid decimal token because it is followed
    * by a space. 34.E2 is a valid decimal token because it is followed by symbol '+'
    * which is not a digit or letter or underscore.
    */
@@ -38,10 +38,6 @@ grammar SqlBase;
       return true;
     }
   }
-}
-
-tokens {
-    DELIMITER
 }
 
 singleStatement
@@ -64,6 +60,10 @@ singleDataType
     : dataType EOF
     ;
 
+singleTableSchema
+    : colTypeList EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
@@ -77,6 +77,7 @@ statement
         (PARTITIONED BY partitionColumnNames=identifierList)?
         bucketSpec? locationSpec?
         (COMMENT comment=STRING)?
+        (TBLPROPERTIES tableProps=tablePropertyList)?
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
         (COMMENT comment=STRING)?
@@ -126,7 +127,8 @@ statement
         tableIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
     | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
-    | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
+    | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
+        qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
@@ -149,7 +151,7 @@ statement
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
-    | REFRESH .*?                                                      #refreshResource
+    | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
     | UNCACHE TABLE (IF EXISTS)? tableIdentifier                       #uncacheTable
     | CLEAR CACHE                                                      #clearCache
@@ -237,8 +239,10 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?
-    | INSERT INTO TABLE? tableIdentifier partitionSpec?
+    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?                              #insertOverwriteTable
+    | INSERT INTO TABLE? tableIdentifier partitionSpec?                                                     #insertIntoTable
+    | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                            #insertOverwriteHiveDir
+    | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=tablePropertyList)?   #insertOverwriteDir
     ;
 
 partitionSpecLocation
@@ -262,7 +266,7 @@ describeFuncName
     ;
 
 describeColName
-    : identifier ('.' (identifier | STRING))*
+    : nameParts+=identifier ('.' nameParts+=identifier)*
     ;
 
 ctes
@@ -334,7 +338,7 @@ queryOrganization
       (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
       (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
       windows?
-      (LIMIT limit=expression)?
+      (LIMIT (ALL | limit=expression))?
     ;
 
 multiInsertQueryBody
@@ -371,7 +375,7 @@ querySpecification
        (RECORDREADER recordReader=STRING)?
        fromClause?
        (WHERE where=booleanExpression)?)
-    | ((kind=SELECT hint? setQuantifier? namedExpressionSeq fromClause?
+    | ((kind=SELECT (hints+=hint)* setQuantifier? namedExpressionSeq fromClause?
        | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
        lateralView*
        (WHERE where=booleanExpression)?
@@ -381,12 +385,12 @@ querySpecification
     ;
 
 hint
-    : '/*+' hintStatement '*/'
+    : '/*+' hintStatements+=hintStatement (','? hintStatements+=hintStatement)* '*/'
     ;
 
 hintStatement
     : hintName=identifier
-    | hintName=identifier '(' parameters+=identifier (',' parameters+=identifier)* ')'
+    | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
     ;
 
 fromClause
@@ -439,12 +443,15 @@ joinCriteria
     ;
 
 sample
-    : TABLESAMPLE '('
-      ( (percentage=(INTEGER_VALUE | DECIMAL_VALUE) sampleType=PERCENTLIT)
-      | (expression sampleType=ROWS)
-      | sampleType=BYTELENGTH_LITERAL
-      | (sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE (ON (identifier | qualifiedName '(' ')'))?))
-      ')'
+    : TABLESAMPLE '(' sampleMethod? ')'
+    ;
+
+sampleMethod
+    : negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
+    | expression ROWS                                                             #sampleByRows
+    | sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE
+        (ON (identifier | qualifiedName '(' ')'))?                                #sampleByBucket
+    | bytes=expression                                                            #sampleByBytes
     ;
 
 identifierList
@@ -472,15 +479,23 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? (AS? strictIdentifier)?               #tableName
-    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?           #aliasedQuery
-    | '(' relation ')' sample? (AS? strictIdentifier)?              #aliasedRelation
-    | inlineTable                                                   #inlineTableDefault2
-    | identifier '(' (expression (',' expression)*)? ')'            #tableValuedFunction
+    : tableIdentifier sample? tableAlias      #tableName
+    | '(' queryNoWith ')' sample? tableAlias  #aliasedQuery
+    | '(' relation ')' sample? tableAlias     #aliasedRelation
+    | inlineTable                             #inlineTableDefault2
+    | functionTable                           #tableValuedFunction
     ;
 
 inlineTable
-    : VALUES expression (',' expression)*  (AS? identifier identifierList?)?
+    : VALUES expression (',' expression)* tableAlias
+    ;
+
+functionTable
+    : identifier '(' (expression (',' expression)*)? ')' tableAlias
+    ;
+
+tableAlias
+    : (AS? strictIdentifier identifierList?)?
     ;
 
 rowFormat
@@ -534,13 +549,14 @@ predicate
     | NOT? kind=IN '(' query ')'
     | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
     | IS NOT? kind=NULL
+    | IS NOT? kind=DISTINCT FROM right=valueExpression
     ;
 
 valueExpression
     : primaryExpression                                                                      #valueExpressionDefault
     | operator=(MINUS | PLUS | TILDE) valueExpression                                        #arithmeticUnary
     | left=valueExpression operator=(ASTERISK | SLASH | PERCENT | DIV) right=valueExpression #arithmeticBinary
-    | left=valueExpression operator=(PLUS | MINUS) right=valueExpression                     #arithmeticBinary
+    | left=valueExpression operator=(PLUS | MINUS | CONCAT_PIPE) right=valueExpression       #arithmeticBinary
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
     | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
@@ -548,17 +564,22 @@ valueExpression
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
-    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    : CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
+    | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
+    | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
+    | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
+    | POSITION '(' substr=valueExpression IN str=valueExpression ')'                           #position
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
-    | qualifiedName '(' (setQuantifier? namedExpression (',' namedExpression)*)? ')'
+    | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
+    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
+      FROM argument+=expression ')'                                                            #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -579,7 +600,7 @@ comparisonOperator
     ;
 
 arithmeticOperator
-    : PLUS | MINUS | ASTERISK | SLASH | PERCENT | DIV | TILDE | AMPERSAND | PIPE | HAT
+    : PLUS | MINUS | ASTERISK | SLASH | PERCENT | DIV | TILDE | AMPERSAND | PIPE | CONCAT_PIPE | HAT
     ;
 
 predicateOperator
@@ -700,7 +721,7 @@ nonReserved
     | ADD
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | LAST | FIRST | AFTER
     | MAP | ARRAY | STRUCT
-    | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
+    | LATERAL | WINDOW | REDUCE | TRANSFORM | SERDE | SERDEPROPERTIES | RECORDREADER
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
     | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | GLOBAL | TEMPORARY | OPTIONS
     | GROUPING | CUBE | ROLLUP
@@ -709,8 +730,9 @@ nonReserved
     | SET | RESET
     | VIEW | REPLACE
     | IF
+    | POSITION
     | NO | DATA
-    | START | TRANSACTION | COMMIT | ROLLBACK
+    | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE
     | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
@@ -724,7 +746,9 @@ nonReserved
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
-    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT | CURRENT_DATE | CURRENT_TIMESTAMP
+    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
+    | DIRECTORY
+    | BOTH | LEADING | TRAILING
     ;
 
 SELECT: 'SELECT';
@@ -795,6 +819,7 @@ WITH: 'WITH';
 VALUES: 'VALUES';
 CREATE: 'CREATE';
 TABLE: 'TABLE';
+DIRECTORY: 'DIRECTORY';
 VIEW: 'VIEW';
 REPLACE: 'REPLACE';
 INSERT: 'INSERT';
@@ -836,8 +861,13 @@ TRANSACTION: 'TRANSACTION';
 COMMIT: 'COMMIT';
 ROLLBACK: 'ROLLBACK';
 MACRO: 'MACRO';
+IGNORE: 'IGNORE';
+BOTH: 'BOTH';
+LEADING: 'LEADING';
+TRAILING: 'TRAILING';
 
 IF: 'IF';
+POSITION: 'POSITION';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
@@ -857,6 +887,7 @@ DIV: 'DIV';
 TILDE: '~';
 AMPERSAND: '&';
 PIPE: '|';
+CONCAT_PIPE: '||';
 HAT: '^';
 
 PERCENTLIT: 'PERCENT';
@@ -951,12 +982,10 @@ OPTION: 'OPTION';
 ANTI: 'ANTI';
 LOCAL: 'LOCAL';
 INPATH: 'INPATH';
-CURRENT_DATE: 'CURRENT_DATE';
-CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
-    | '\"' ( ~('\"'|'\\') | ('\\' .) )* '\"'
+    | '"' ( ~('"'|'\\') | ('\\' .) )* '"'
     ;
 
 BIGINT_LITERAL
@@ -969,10 +998,6 @@ SMALLINT_LITERAL
 
 TINYINT_LITERAL
     : DIGIT+ 'Y'
-    ;
-
-BYTELENGTH_LITERAL
-    : DIGIT+ ('B' | 'K' | 'M' | 'G')
     ;
 
 INTEGER_VALUE

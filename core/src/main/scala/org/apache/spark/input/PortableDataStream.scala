@@ -27,9 +27,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat, CombineFileRecordReader, CombineFileSplit}
 
-import org.apache.spark.internal.config
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.config
 
 /**
  * A general format for reading whole files in as streams, byte arrays,

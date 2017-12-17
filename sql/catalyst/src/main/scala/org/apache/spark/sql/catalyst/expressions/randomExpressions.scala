@@ -60,7 +60,7 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) uniformly distributed values in [0, 1).",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_();
        0.9629742951434543
@@ -79,7 +79,7 @@ case class Rand(child: Expression) extends RDG {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    ctx.addMutableState(className, rngTerm, "")
+    ctx.addMutableState(className, rngTerm)
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""
@@ -95,7 +95,7 @@ object Rand {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_();
        -0.3254147983080288
@@ -114,7 +114,7 @@ case class Randn(child: Expression) extends RDG {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    ctx.addMutableState(className, rngTerm, "")
+    ctx.addMutableState(className, rngTerm)
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""

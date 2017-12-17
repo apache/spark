@@ -67,8 +67,7 @@ operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",
   "==" = "equalTo", ">" = "gt", "<" = "lt", "!=" = "notEqual", "<=" = "leq", ">=" = "geq",
   # we can not override `&&` and `||`, so use `&` and `|` instead
-  "&" = "and", "|" = "or", #, "!" = "unary_$bang"
-  "^" = "pow"
+  "&" = "and", "|" = "or", "^" = "pow"
 )
 column_functions1 <- c("asc", "desc", "isNaN", "isNull", "isNotNull")
 column_functions2 <- c("like", "rlike", "getField", "getItem", "contains")
@@ -131,19 +130,20 @@ createMethods <- function() {
 
 createMethods()
 
-#' alias
-#'
-#' Set a new name for a column
-#'
-#' @param object Column to rename
-#' @param data new name to use
-#'
 #' @rdname alias
 #' @name alias
 #' @aliases alias,Column-method
 #' @family colum_func
 #' @export
-#' @note alias since 1.4.0
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(iris)
+#'
+#' head(select(
+#'   df, alias(df$Sepal_Length, "slength"), alias(df$Petal_Length, "plength")
+#' ))
+#' }
+#' @note alias(Column) since 1.4.0
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
@@ -238,14 +238,17 @@ setMethod("between", signature(x = "Column"),
 #' @param x a Column.
 #' @param dataType a character object describing the target data type.
 #'        See
+# nolint start
 #'        \href{https://spark.apache.org/docs/latest/sparkr.html#data-type-mapping-between-r-and-spark}{
 #'        Spark Data Types} for available data types.
+# nolint end
 #' @rdname cast
 #' @name cast
 #' @family colum_func
 #' @aliases cast,Column-method
 #'
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   cast(df$age, "string")
 #' }
 #' @note cast since 1.4.0
@@ -302,3 +305,55 @@ setMethod("otherwise",
             jc <- callJMethod(x@jc, "otherwise", value)
             column(jc)
           })
+
+#' \%<=>\%
+#'
+#' Equality test that is safe for null values.
+#'
+#' Can be used, unlike standard equality operator, to perform null-safe joins.
+#' Equivalent to Scala \code{Column.<=>} and \code{Column.eqNullSafe}.
+#'
+#' @param x a Column
+#' @param value a value to compare
+#' @rdname eq_null_safe
+#' @name %<=>%
+#' @aliases %<=>%,Column-method
+#' @export
+#' @examples
+#' \dontrun{
+#' df1 <- createDataFrame(data.frame(
+#'   x = c(1, NA, 3, NA), y = c(2, 6, 3, NA)
+#' ))
+#'
+#' head(select(df1, df1$x == df1$y, df1$x %<=>% df1$y))
+#'
+#' df2 <- createDataFrame(data.frame(y = c(3, NA)))
+#' count(join(df1, df2, df1$y == df2$y))
+#'
+#' count(join(df1, df2, df1$y %<=>% df2$y))
+#' }
+#' @note \%<=>\% since 2.3.0
+setMethod("%<=>%",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            value <- if (class(value) == "Column") { value@jc } else { value }
+            jc <- callJMethod(x@jc, "eqNullSafe", value)
+            column(jc)
+          })
+
+#' !
+#'
+#' Inversion of boolean expression.
+#'
+#' @rdname not
+#' @name not
+#' @aliases !,Column-method
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(data.frame(x = c(-1, 0, 1)))
+#'
+#' head(select(df, !column("x") > 0))
+#' }
+#' @note ! since 2.3.0
+setMethod("!", signature(x = "Column"), function(x) not(x))

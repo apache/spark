@@ -103,9 +103,9 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
 /**
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
- * <a href="http://www.icml2010.org/papers/387.pdf">Lin and Cohen</a>. From the abstract: PIC finds
- * a very low-dimensional embedding of a dataset using truncated power iteration on a normalized
- * pair-wise similarity matrix of the data.
+ * <a href="http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf">Lin and Cohen</a>.
+ * From the abstract: PIC finds a very low-dimensional embedding of a dataset using
+ * truncated power iteration on a normalized pair-wise similarity matrix of the data.
  *
  * @param k Number of clusters.
  * @param maxIterations Maximum number of iterations of the PIC algorithm.
@@ -259,7 +259,7 @@ object PowerIterationClustering extends Logging {
         val j = ctx.dstId
         val s = ctx.attr
         if (s < 0.0) {
-          throw new SparkException("Similarity must be nonnegative but found s($i, $j) = $s.")
+          throw new SparkException(s"Similarity must be nonnegative but found s($i, $j) = $s.")
         }
         if (s > 0.0) {
           ctx.sendToSrc(s)
@@ -283,7 +283,7 @@ object PowerIterationClustering extends Logging {
     : Graph[Double, Double] = {
     val edges = similarities.flatMap { case (i, j, s) =>
       if (s < 0.0) {
-        throw new SparkException("Similarity must be nonnegative but found s($i, $j) = $s.")
+        throw new SparkException(s"Similarity must be nonnegative but found s($i, $j) = $s.")
       }
       if (i != j) {
         Seq(Edge(i, j, s), Edge(j, i, s))

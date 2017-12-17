@@ -25,9 +25,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.FileStreamSink
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -36,19 +38,27 @@ import org.apache.spark.util.SerializableConfiguration
  * A [[FileIndex]] that generates the list of files to process by recursively listing all the
  * files present in `paths`.
  *
- * @param rootPaths the list of root table paths to scan
+ * @param rootPathsSpecified the list of root table paths to scan (some of which might be
+ *                           filtered out later)
  * @param parameters as set of options to control discovery
  * @param partitionSchema an optional partition schema that will be use to provide types for the
  *                        discovered partitions
  */
 class InMemoryFileIndex(
     sparkSession: SparkSession,
-    override val rootPaths: Seq[Path],
+    rootPathsSpecified: Seq[Path],
     parameters: Map[String, String],
     partitionSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache)
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, partitionSchema, fileStatusCache) {
+
+  // Filter out streaming metadata dirs or files such as "/.../_spark_metadata" (the metadata dir)
+  // or "/.../_spark_metadata/0" (a file in the metadata dir). `rootPathsSpecified` might contain
+  // such streaming metadata dir or files, e.g. when after globbing "basePath/*" where "basePath"
+  // is the output of a streaming query.
+  override val rootPaths =
+    rootPathsSpecified.filterNot(FileStreamSink.ancestorIsMetadataDirectory(_, hadoopConf))
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
@@ -110,6 +120,7 @@ class InMemoryFileIndex(
         case None =>
           pathsToFetch += path
       }
+      Unit // for some reasons scalac 2.12 needs this; return type doesn't matter
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
@@ -177,42 +188,56 @@ object InMemoryFileIndex extends Logging {
     // in case of large #defaultParallelism.
     val numParallelism = Math.min(paths.size, parallelPartitionDiscoveryParallelism)
 
-    val statusMap = sparkContext
-      .parallelize(serializedPaths, numParallelism)
-      .mapPartitions { pathStrings =>
-        val hadoopConf = serializableConfiguration.value
-        pathStrings.map(new Path(_)).toSeq.map { path =>
-          (path, listLeafFiles(path, hadoopConf, filter, None))
-        }.iterator
-      }.map { case (path, statuses) =>
-      val serializableStatuses = statuses.map { status =>
-        // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
-        val blockLocations = status match {
-          case f: LocatedFileStatus =>
-            f.getBlockLocations.map { loc =>
-              SerializableBlockLocation(
-                loc.getNames,
-                loc.getHosts,
-                loc.getOffset,
-                loc.getLength)
-            }
-
-          case _ =>
-            Array.empty[SerializableBlockLocation]
-        }
-
-        SerializableFileStatus(
-          status.getPath.toString,
-          status.getLen,
-          status.isDirectory,
-          status.getReplication,
-          status.getBlockSize,
-          status.getModificationTime,
-          status.getAccessTime,
-          blockLocations)
+    val previousJobDescription = sparkContext.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+    val statusMap = try {
+      val description = paths.size match {
+        case 0 =>
+          s"Listing leaf files and directories 0 paths"
+        case 1 =>
+          s"Listing leaf files and directories for 1 path:<br/>${paths(0)}"
+        case s =>
+          s"Listing leaf files and directories for $s paths:<br/>${paths(0)}, ..."
       }
-      (path.toString, serializableStatuses)
-    }.collect()
+      sparkContext.setJobDescription(description)
+      sparkContext
+        .parallelize(serializedPaths, numParallelism)
+        .mapPartitions { pathStrings =>
+          val hadoopConf = serializableConfiguration.value
+          pathStrings.map(new Path(_)).toSeq.map { path =>
+            (path, listLeafFiles(path, hadoopConf, filter, None))
+          }.iterator
+        }.map { case (path, statuses) =>
+        val serializableStatuses = statuses.map { status =>
+          // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
+          val blockLocations = status match {
+            case f: LocatedFileStatus =>
+              f.getBlockLocations.map { loc =>
+                SerializableBlockLocation(
+                  loc.getNames,
+                  loc.getHosts,
+                  loc.getOffset,
+                  loc.getLength)
+              }
+
+            case _ =>
+              Array.empty[SerializableBlockLocation]
+          }
+
+          SerializableFileStatus(
+            status.getPath.toString,
+            status.getLen,
+            status.isDirectory,
+            status.getReplication,
+            status.getBlockSize,
+            status.getModificationTime,
+            status.getAccessTime,
+            blockLocations)
+        }
+        (path.toString, serializableStatuses)
+      }.collect()
+    } finally {
+      sparkContext.setJobDescription(previousJobDescription)
+    }
 
     // turn SerializableFileStatus back to Status
     statusMap.map { case (path, serializableStatuses) =>
@@ -245,7 +270,6 @@ object InMemoryFileIndex extends Logging {
       sessionOpt: Option[SparkSession]): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
-    val name = path.getName.toLowerCase
 
     // [SPARK-17599] Prevent InMemoryFileIndex from failing if path doesn't exist
     // Note that statuses only include FileStatus for the files and dirs directly under path,

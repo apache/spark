@@ -22,16 +22,14 @@ import java.util.Date
 
 import scala.collection.mutable
 
-import com.google.common.base.Objects
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
@@ -75,7 +73,7 @@ case class CatalogStorageFormat(
     CatalogUtils.maskCredentials(properties) match {
       case props if props.isEmpty => // No-op
       case props =>
-        map.put("Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
+        map.put("Storage Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
     }
     map
   }
@@ -92,12 +90,14 @@ object CatalogStorageFormat {
  *
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
- * @param parameters some parameters for the partition, for example, stats.
+ * @param parameters some parameters for the partition
+ * @param stats optional statistics (number of rows, total size, etc.)
  */
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
     storage: CatalogStorageFormat,
-    parameters: Map[String, String] = Map.empty) {
+    parameters: Map[String, String] = Map.empty,
+    stats: Option[CatalogStatistics] = None) {
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
@@ -107,6 +107,7 @@ case class CatalogTablePartition(
     if (parameters.nonEmpty) {
       map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
     }
+    stats.foreach(s => map.put("Partition Statistics", s.simpleString))
     map
   }
 
@@ -203,6 +204,11 @@ case class BucketSpec(
  *                           sensitive schema was unable to be read from the table properties.
  *                           Used to trigger case-sensitive schema inference at query time, when
  *                           configured.
+ * @param ignoredProperties is a list of table properties that are used by the underlying table
+ *                          but ignored by Spark SQL yet.
+ * @param createVersion records the version of Spark that created this table metadata. The default
+ *                      is an empty string. We expect it will be read from the catalog or filled by
+ *                      ExternalCatalog.createTable. For temporary views, the value will be empty.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -215,13 +221,15 @@ case class CatalogTable(
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
+    createVersion: String = "",
     properties: Map[String, String] = Map.empty,
     stats: Option[CatalogStatistics] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false,
-    schemaPreservesCase: Boolean = true) {
+    schemaPreservesCase: Boolean = true,
+    ignoredProperties: Map[String, String] = Map.empty) {
 
   import CatalogTable._
 
@@ -298,9 +306,10 @@ case class CatalogTable(
 
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
-    if (owner.nonEmpty) map.put("Owner", owner)
-    map.put("Created", new Date(createTime).toString)
+    if (owner != null && owner.nonEmpty) map.put("Owner", owner)
+    map.put("Created Time", new Date(createTime).toString)
     map.put("Last Access", new Date(lastAccessTime).toString)
+    map.put("Created By", "Spark " + createVersion)
     map.put("Type", tableType.name)
     provider.foreach(map.put("Provider", _))
     bucketSpec.foreach(map ++= _.toLinkedHashMap)
@@ -313,7 +322,7 @@ case class CatalogTable(
       }
     }
 
-    if (properties.nonEmpty) map.put("Properties", tableProperties)
+    if (properties.nonEmpty) map.put("Table Properties", tableProperties)
     stats.foreach(s => map.put("Statistics", s.simpleString))
     map ++= storage.toLinkedHashMap
     if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")
@@ -358,10 +367,17 @@ case class CatalogStatistics(
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
-  def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
-    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
-    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
-      attributeStats = AttributeMap(matched))
+  def toPlanStats(planOutput: Seq[Attribute], cboEnabled: Boolean): Statistics = {
+    if (cboEnabled && rowCount.isDefined) {
+      val attrStats = AttributeMap(planOutput.flatMap(a => colStats.get(a.name).map(a -> _)))
+      // Estimate size as number of rows * row size.
+      val size = EstimationUtils.getOutputSize(planOutput, rowCount.get, attrStats)
+      Statistics(sizeInBytes = size, rowCount = rowCount, attributeStats = attrStats)
+    } else {
+      // When CBO is disabled or the table doesn't have other statistics, we apply the size-only
+      // estimation strategy and only propagate sizeInBytes in statistics.
+      Statistics(sizeInBytes = sizeInBytes)
+    }
   }
 
   /** Readable string representation for the CatalogStatistics. */
@@ -395,13 +411,29 @@ object CatalogTypes {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+
+  /**
+   * Initialize an empty spec.
+   */
+  lazy val emptyTablePartitionSpec: TablePartitionSpec = Map.empty[String, String]
 }
 
+/**
+ * A placeholder for a table relation, which will be replaced by concrete relation like
+ * `LogicalRelation` or `HiveTableRelation`, during analysis.
+ */
+case class UnresolvedCatalogRelation(tableMeta: CatalogTable) extends LeafNode {
+  assert(tableMeta.identifier.database.isDefined)
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = Nil
+}
 
 /**
- * A [[LogicalPlan]] that represents a table.
+ * A `LogicalPlan` that represents a hive table.
+ *
+ * TODO: remove this after we completely make hive as a data source.
  */
-case class CatalogRelation(
+case class HiveTableRelation(
     tableMeta: CatalogTable,
     dataCols: Seq[AttributeReference],
     partitionCols: Seq[AttributeReference]) extends LeafNode with MultiInstanceRelation {
@@ -414,28 +446,26 @@ case class CatalogRelation(
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
-  override def equals(relation: Any): Boolean = relation match {
-    case other: CatalogRelation => tableMeta == other.tableMeta && output == other.output
-    case _ => false
-  }
+  override def doCanonicalize(): HiveTableRelation = copy(
+    tableMeta = tableMeta.copy(
+      storage = CatalogStorageFormat.empty,
+      createTime = -1
+    ),
+    dataCols = dataCols.zipWithIndex.map {
+      case (attr, index) => attr.withExprId(ExprId(index))
+    },
+    partitionCols = partitionCols.zipWithIndex.map {
+      case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
+    }
+  )
 
-  override def hashCode(): Int = {
-    Objects.hashCode(tableMeta.identifier, output)
-  }
-
-  /** Only compare table identifier. */
-  override lazy val cleanArgs: Seq[Any] = Seq(tableMeta.identifier)
-
-  override def computeStats(conf: SQLConf): Statistics = {
-    // For data source tables, we will create a `LogicalRelation` and won't call this method, for
-    // hive serde tables, we will always generate a statistics.
-    // TODO: unify the table stats generation.
-    tableMeta.stats.map(_.toPlanStats(output)).getOrElse {
+  override def computeStats(): Statistics = {
+    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled)).getOrElse {
       throw new IllegalStateException("table stats must be specified.")
     }
   }
 
-  override def newInstance(): LogicalPlan = copy(
+  override def newInstance(): HiveTableRelation = copy(
     dataCols = dataCols.map(_.newInstance()),
     partitionCols = partitionCols.map(_.newInstance()))
 }

@@ -27,7 +27,9 @@ import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
+import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
+import org.codehaus.commons.compiler.CompileException
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
@@ -37,6 +39,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
@@ -75,6 +78,22 @@ case class SubExprEliminationState(isNull: String, value: String)
 case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprEliminationState])
 
 /**
+ * The main information about a new added function.
+ *
+ * @param functionName String representing the name of the function
+ * @param innerClassName Optional value which is empty if the function is added to
+ *                       the outer class, otherwise it contains the name of the
+ *                       inner class in which the function has been added.
+ * @param innerClassInstance Optional value which is empty if the function is added to
+ *                           the outer class, otherwise it contains the name of the
+ *                           instance of the inner class in the outer class.
+ */
+private[codegen] case class NewFunctionSpec(
+    functionName: String,
+    innerClassName: Option[String],
+    innerClassInstance: Option[String])
+
+/**
  * A context for codegen, tracking a list of objects that could be passed into generated Java
  * function.
  */
@@ -90,45 +109,32 @@ class CodegenContext {
    *
    * Returns the code to access it.
    *
-   * This is for minor objects not to store the object into field but refer it from the references
-   * field at the time of use because number of fields in class is limited so we should reduce it.
+   * This does not to store the object into field but refer it from the references field at the
+   * time of use because number of fields in class is limited so we should reduce it.
    */
-  def addReferenceMinorObj(obj: Any, className: String = null): String = {
+  def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
     val clsName = Option(className).getOrElse(obj.getClass.getName)
-    s"(($clsName) references[$idx])"
+    s"(($clsName) references[$idx] /* $objName */)"
   }
 
   /**
-   * Add an object to `references`, create a class member to access it.
+   * Holding the variable name of the input row of the current operator, will be used by
+   * `BoundReference` to generate code.
    *
-   * Returns the name of class member.
+   * Note that if `currentVars` is not null, `BoundReference` prefers `currentVars` over `INPUT_ROW`
+   * to generate code. If you want to make sure the generated code use `INPUT_ROW`, you need to set
+   * `currentVars` to null, or set `currentVars(i)` to null for certain columns, before calling
+   * `Expression.genCode`.
    */
-  def addReferenceObj(name: String, obj: Any, className: String = null): String = {
-    val term = freshName(name)
-    val idx = references.length
-    references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
-    addMutableState(clsName, term, s"this.$term = ($clsName) references[$idx];")
-    term
-  }
+  final var INPUT_ROW = "i"
 
   /**
    * Holding a list of generated columns as input of current operator, will be used by
    * BoundReference to generate code.
    */
   var currentVars: Seq[ExprCode] = null
-
-  /**
-   * Whether should we copy the result rows or not.
-   *
-   * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
-   * example, Join), this should be true.
-   *
-   * If an operator starts a new pipeline, this should be reset to false before calling `consume()`.
-   */
-  var copyResult: Boolean = false
 
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
@@ -148,7 +154,19 @@ class CodegenContext {
   val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
     mutable.ArrayBuffer.empty[(String, String, String)]
 
-  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
+  /**
+   * Add a mutable state as a field to the generated class. c.f. the comments above.
+   *
+   * @param javaType Java type of the field. Note that short names can be used for some types,
+   *                 e.g. InternalRow, UnsafeRow, UnsafeArrayData, etc. Other types will have to
+   *                 specify the fully-qualified Java type name. See the code in doCompile() for
+   *                 the list of default imports available.
+   *                 Also, generic type arguments are accepted but ignored.
+   * @param variableName Name of the field.
+   * @param initCode The statement(s) to put into the init() method to initialize this field.
+   *                 If left blank, the field will be default-initialized.
+   */
+  def addMutableState(javaType: String, variableName: String, initCode: String = ""): Unit = {
     mutableStates += ((javaType, variableName, initCode))
   }
 
@@ -182,7 +200,7 @@ class CodegenContext {
     val initCodes = mutableStates.distinct.map(_._3 + "\n")
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
-    splitExpressions(initCodes, "init", Nil)
+    splitExpressions(expressions = initCodes, funcName = "init", arguments = Nil)
   }
 
   /**
@@ -197,16 +215,6 @@ class CodegenContext {
 
   def initPartition(): String = {
     partitionInitializationStatements.mkString("\n")
-  }
-
-  /**
-   * Holding all the functions those will be added into generated class.
-   */
-  val addedFunctions: mutable.Map[String, String] =
-    mutable.Map.empty[String, String]
-
-  def addNewFunction(funcName: String, funcCode: String): Unit = {
-    addedFunctions += ((funcName, funcCode))
   }
 
   /**
@@ -230,8 +238,141 @@ class CodegenContext {
   // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
+  val outerClassName = "OuterClass"
+
+  /**
+   * Holds the class and instance names to be generated, where `OuterClass` is a placeholder
+   * standing for whichever class is generated as the outermost class and which will contain any
+   * inner sub-classes. All other classes and instance names in this list will represent private,
+   * inner sub-classes.
+   */
+  private val classes: mutable.ListBuffer[(String, String)] =
+    mutable.ListBuffer[(String, String)](outerClassName -> null)
+
+  // A map holding the current size in bytes of each class to be generated.
+  private val classSize: mutable.Map[String, Int] =
+    mutable.Map[String, Int](outerClassName -> 0)
+
+  // Nested maps holding function names and their code belonging to each class.
+  private val classFunctions: mutable.Map[String, mutable.Map[String, String]] =
+    mutable.Map(outerClassName -> mutable.Map.empty[String, String])
+
+  // Verbatim extra code to be added to the OuterClass.
+  private val extraClasses: mutable.ListBuffer[String] = mutable.ListBuffer[String]()
+
+  // Returns the size of the most recently added class.
+  private def currClassSize(): Int = classSize(classes.head._1)
+
+  // Returns the class name and instance name for the most recently added class.
+  private def currClass(): (String, String) = classes.head
+
+  // Adds a new class. Requires the class' name, and its instance name.
+  private def addClass(className: String, classInstance: String): Unit = {
+    classes.prepend(className -> classInstance)
+    classSize += className -> 0
+    classFunctions += className -> mutable.Map.empty[String, String]
+  }
+
+  /**
+   * Adds a function to the generated class. If the code for the `OuterClass` grows too large, the
+   * function will be inlined into a new private, inner class, and a class-qualified name for the
+   * function will be returned. Otherwise, the function will be inlined to the `OuterClass` the
+   * simple `funcName` will be returned.
+   *
+   * @param funcName the class-unqualified name of the function
+   * @param funcCode the body of the function
+   * @param inlineToOuterClass whether the given code must be inlined to the `OuterClass`. This
+   *                           can be necessary when a function is declared outside of the context
+   *                           it is eventually referenced and a returned qualified function name
+   *                           cannot otherwise be accessed.
+   * @return the name of the function, qualified by class if it will be inlined to a private,
+   *         inner class
+   */
+  def addNewFunction(
+      funcName: String,
+      funcCode: String,
+      inlineToOuterClass: Boolean = false): String = {
+    val newFunction = addNewFunctionInternal(funcName, funcCode, inlineToOuterClass)
+    newFunction match {
+      case NewFunctionSpec(functionName, None, None) => functionName
+      case NewFunctionSpec(functionName, Some(_), Some(innerClassInstance)) =>
+        innerClassInstance + "." + functionName
+    }
+  }
+
+  private[this] def addNewFunctionInternal(
+      funcName: String,
+      funcCode: String,
+      inlineToOuterClass: Boolean): NewFunctionSpec = {
+    val (className, classInstance) = if (inlineToOuterClass) {
+      outerClassName -> ""
+    } else if (currClassSize > CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD) {
+      val className = freshName("NestedClass")
+      val classInstance = freshName("nestedClassInstance")
+
+      addClass(className, classInstance)
+
+      className -> classInstance
+    } else {
+      currClass()
+    }
+
+    addNewFunctionToClass(funcName, funcCode, className)
+
+    if (className == outerClassName) {
+      NewFunctionSpec(funcName, None, None)
+    } else {
+      NewFunctionSpec(funcName, Some(className), Some(classInstance))
+    }
+  }
+
+  private[this] def addNewFunctionToClass(
+      funcName: String,
+      funcCode: String,
+      className: String) = {
+    classSize(className) += funcCode.length
+    classFunctions(className) += funcName -> funcCode
+  }
+
+  /**
+   * Declares all function code. If the added functions are too many, split them into nested
+   * sub-classes to avoid hitting Java compiler constant pool limitation.
+   */
   def declareAddedFunctions(): String = {
-    addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
+    val inlinedFunctions = classFunctions(outerClassName).values
+
+    // Nested, private sub-classes have no mutable state (though they do reference the outer class'
+    // mutable state), so we declare and initialize them inline to the OuterClass.
+    val initNestedClasses = classes.filter(_._1 != outerClassName).map {
+      case (className, classInstance) =>
+        s"private $className $classInstance = new $className();"
+    }
+
+    val declareNestedClasses = classFunctions.filterKeys(_ != outerClassName).map {
+      case (className, functions) =>
+        s"""
+           |private class $className {
+           |  ${functions.values.mkString("\n")}
+           |}
+           """.stripMargin
+    }
+
+    (inlinedFunctions ++ initNestedClasses ++ declareNestedClasses).mkString("\n")
+  }
+
+  /**
+   * Emits extra inner classes added with addExtraCode
+   */
+  def emitExtraCode(): String = {
+    extraClasses.mkString("\n")
+  }
+
+  /**
+   * Add extra source code to the outermost generated class.
+   * @param code verbatim source code of the inner class to be added.
+   */
+  def addInnerClass(code: String): Unit = {
+    extraClasses.append(code)
   }
 
   final val JAVA_BOOLEAN = "boolean"
@@ -241,9 +382,6 @@ class CodegenContext {
   final val JAVA_LONG = "long"
   final val JAVA_FLOAT = "float"
   final val JAVA_DOUBLE = "double"
-
-  /** The variable name of the input row in generated code. */
-  final var INPUT_ROW = "i"
 
   /**
    * The map from a variable name to it's next ID.
@@ -308,9 +446,11 @@ class CodegenContext {
     dataType match {
       case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
-      // The UTF8String may came from UnsafeRow, otherwise clone is cheap (re-use the bytes)
-      case StringType => s"$row.update($ordinal, $value.clone())"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
+      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
+      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
+      case StringType | _: StructType | _: ArrayType | _: MapType =>
+        s"$row.update($ordinal, $value.copy())"
       case _ => s"$row.update($ordinal, $value)"
     }
   }
@@ -354,14 +494,13 @@ class CodegenContext {
   /**
    * Returns the specialized code to set a given value in a column vector for a given `DataType`.
    */
-  def setValue(batch: String, row: String, dataType: DataType, ordinal: Int,
-      value: String): String = {
+  def setValue(vector: String, rowId: String, dataType: DataType, value: String): String = {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) =>
-        s"$batch.column($ordinal).put${primitiveTypeName(jt)}($row, $value);"
-      case t: DecimalType => s"$batch.column($ordinal).putDecimal($row, $value, ${t.precision});"
-      case t: StringType => s"$batch.column($ordinal).putByteArray($row, $value.getBytes());"
+        s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
+      case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
+      case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
@@ -372,37 +511,36 @@ class CodegenContext {
    * that could potentially be nullable.
    */
   def updateColumn(
-      batch: String,
-      row: String,
+      vector: String,
+      rowId: String,
       dataType: DataType,
-      ordinal: Int,
       ev: ExprCode,
       nullable: Boolean): String = {
     if (nullable) {
       s"""
          if (!${ev.isNull}) {
-           ${setValue(batch, row, dataType, ordinal, ev.value)}
+           ${setValue(vector, rowId, dataType, ev.value)}
          } else {
-           $batch.column($ordinal).putNull($row);
+           $vector.putNull($rowId);
          }
        """
     } else {
-      s"""${setValue(batch, row, dataType, ordinal, ev.value)};"""
+      s"""${setValue(vector, rowId, dataType, ev.value)};"""
     }
   }
 
   /**
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
-  def getValue(batch: String, row: String, dataType: DataType, ordinal: Int): String = {
+  def getValue(vector: String, rowId: String, dataType: DataType): String = {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) =>
-        s"$batch.column($ordinal).get${primitiveTypeName(jt)}($row)"
+        s"$vector.get${primitiveTypeName(jt)}($rowId)"
       case t: DecimalType =>
-        s"$batch.column($ordinal).getDecimal($row, ${t.precision}, ${t.scale})"
+        s"$vector.getDecimal($rowId, ${t.precision}, ${t.scale})"
       case StringType =>
-        s"$batch.column($ordinal).getUTF8String($row)"
+        s"$vector.getUTF8String($rowId)"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
@@ -486,6 +624,7 @@ class CodegenContext {
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
+    case NullType => "false"
     case _ =>
       throw new IllegalArgumentException(
         "cannot generate equality code for un-comparable type: " + dataType.simpleString)
@@ -553,8 +692,7 @@ class CodegenContext {
             return 0;
           }
         """
-      addNewFunction(compareFunc, funcCode)
-      s"this.$compareFunc($c1, $c2)"
+      s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case schema: StructType =>
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
@@ -570,8 +708,7 @@ class CodegenContext {
             return 0;
           }
         """
-      addNewFunction(compareFunc, funcCode)
-      s"this.$compareFunc($c1, $c2)"
+      s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
@@ -626,22 +763,49 @@ class CodegenContext {
 
   /**
    * Splits the generated code of expressions into multiple functions, because function has
-   * 64kb code size limit in JVM
+   * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
+   * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
+   * instead, because classes have a constant pool limit of 65,536 named values.
    *
-   * @param row the variable name of row that is used by expressions
+   * Note that different from `splitExpressions`, we will extract the current inputs of this
+   * context and pass them to the generated functions. The input is `INPUT_ROW` for normal codegen
+   * path, and `currentVars` for whole stage codegen path. Whole stage codegen path is not
+   * supported yet.
+   *
    * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param extraArguments the list of (type, name) of the arguments of the split function,
+   *                       except for the current inputs like `ctx.INPUT_ROW`.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
    */
-  def splitExpressions(row: String, expressions: Seq[String]): String = {
-    if (row == null || currentVars != null) {
-      // Cannot split these expressions because they are not created from a row object.
-      return expressions.mkString("\n")
+  def splitExpressionsWithCurrentInputs(
+      expressions: Seq[String],
+      funcName: String = "apply",
+      extraArguments: Seq[(String, String)] = Nil,
+      returnType: String = "void",
+      makeSplitFunction: String => String = identity,
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
+    // TODO: support whole stage codegen
+    if (INPUT_ROW == null || currentVars != null) {
+      expressions.mkString("\n")
+    } else {
+      splitExpressions(
+        expressions,
+        funcName,
+        ("InternalRow", INPUT_ROW) +: extraArguments,
+        returnType,
+        makeSplitFunction,
+        foldFunctions)
     }
-    splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
   }
 
   /**
    * Splits the generated code of expressions into multiple functions, because function has
-   * 64kb code size limit in JVM
+   * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
+   * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
+   * instead, because classes have a constant pool limit of 65,536 named values.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
@@ -657,20 +821,7 @@ class CodegenContext {
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
       foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
-    val blocks = new ArrayBuffer[String]()
-    val blockBuilder = new StringBuilder()
-    for (code <- expressions) {
-      // We can't know how many bytecode will be generated, so use the length of source code
-      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
-      // also not be too small, or it will have many function calls (for wide table), see the
-      // results in BenchmarkWideTable.
-      if (blockBuilder.length > 1024) {
-        blocks += blockBuilder.toString()
-        blockBuilder.clear()
-      }
-      blockBuilder.append(code)
-    }
-    blocks += blockBuilder.toString()
+    val blocks = buildCodeBlocks(expressions)
 
     if (blocks.length == 1) {
       // inline execution if only one block
@@ -685,11 +836,116 @@ class CodegenContext {
            |  ${makeSplitFunction(body)}
            |}
          """.stripMargin
-        addNewFunction(name, code)
-        name
+        addNewFunctionInternal(name, code, inlineToOuterClass = false)
       }
 
-      foldFunctions(functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")})"))
+      val (outerClassFunctions, innerClassFunctions) = functions.partition(_.innerClassName.isEmpty)
+
+      val argsString = arguments.map(_._2).mkString(", ")
+      val outerClassFunctionCalls = outerClassFunctions.map(f => s"${f.functionName}($argsString)")
+
+      val innerClassFunctionCalls = generateInnerClassesFunctionCalls(
+        innerClassFunctions,
+        func,
+        arguments,
+        returnType,
+        makeSplitFunction,
+        foldFunctions)
+
+      foldFunctions(outerClassFunctionCalls ++ innerClassFunctionCalls)
+    }
+  }
+
+  /**
+   * Splits the generated code of expressions into multiple sequences of String
+   * based on a threshold of length of a String
+   *
+   * @param expressions the codes to evaluate expressions.
+   */
+  private def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
+    val blocks = new ArrayBuffer[String]()
+    val blockBuilder = new StringBuilder()
+    var length = 0
+    for (code <- expressions) {
+      // We can't know how many bytecode will be generated, so use the length of source code
+      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
+      // also not be too small, or it will have many function calls (for wide table), see the
+      // results in BenchmarkWideTable.
+      if (length > 1024) {
+        blocks += blockBuilder.toString()
+        blockBuilder.clear()
+        length = 0
+      }
+      blockBuilder.append(code)
+      length += CodeFormatter.stripExtraNewLinesAndComments(code).length
+    }
+    blocks += blockBuilder.toString()
+  }
+
+  /**
+   * Here we handle all the methods which have been added to the inner classes and
+   * not to the outer class.
+   * Since they can be many, their direct invocation in the outer class adds many entries
+   * to the outer class' constant pool. This can cause the constant pool to past JVM limit.
+   * Moreover, this can cause also the outer class method where all the invocations are
+   * performed to grow beyond the 64k limit.
+   * To avoid these problems, we group them and we call only the grouping methods in the
+   * outer class.
+   *
+   * @param functions a [[Seq]] of [[NewFunctionSpec]] defined in the inner classes
+   * @param funcName the split function name base.
+   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
+   * @return an [[Iterable]] containing the methods' invocations
+   */
+  private def generateInnerClassesFunctionCalls(
+      functions: Seq[NewFunctionSpec],
+      funcName: String,
+      arguments: Seq[(String, String)],
+      returnType: String,
+      makeSplitFunction: String => String,
+      foldFunctions: Seq[String] => String): Iterable[String] = {
+    val innerClassToFunctions = mutable.LinkedHashMap.empty[(String, String), Seq[String]]
+    functions.foreach(f => {
+      val key = (f.innerClassName.get, f.innerClassInstance.get)
+      val value = f.functionName +: innerClassToFunctions.getOrElse(key, Seq.empty[String])
+      innerClassToFunctions.put(key, value)
+    })
+
+    val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
+    val argInvocationString = arguments.map(_._2).mkString(", ")
+
+    innerClassToFunctions.flatMap {
+      case ((innerClassName, innerClassInstance), innerClassFunctions) =>
+        // for performance reasons, the functions are prepended, instead of appended,
+        // thus here they are in reversed order
+        val orderedFunctions = innerClassFunctions.reverse
+        if (orderedFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
+          // Adding a new function to each inner class which contains the invocation of all the
+          // ones which have been added to that inner class. For example,
+          //   private class NestedClass {
+          //     private void apply_862(InternalRow i) { ... }
+          //     private void apply_863(InternalRow i) { ... }
+          //       ...
+          //     private void apply(InternalRow i) {
+          //       apply_862(i);
+          //       apply_863(i);
+          //       ...
+          //     }
+          //   }
+          val body = foldFunctions(orderedFunctions.map(name => s"$name($argInvocationString)"))
+          val code = s"""
+              |private $returnType $funcName($argDefinitionString) {
+              |  ${makeSplitFunction(body)}
+              |}
+            """.stripMargin
+          addNewFunctionToClass(funcName, code, innerClassName)
+          Seq(s"$innerClassInstance.$funcName($argInvocationString)")
+        } else {
+          orderedFunctions.map(f => s"$innerClassInstance.$f($argInvocationString)")
+        }
     }
   }
 
@@ -770,8 +1026,6 @@ class CodegenContext {
            |}
            """.stripMargin
 
-      addNewFunction(fnName, fn)
-
       // Add a state and a mapping of the common subexpressions that are associate with this
       // state. Adding this expression to subExprEliminationExprMap means it will call `fn`
       // when it is code generated. This decision should be a cost based one.
@@ -785,11 +1039,11 @@ class CodegenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-      addMutableState("boolean", isNull, s"$isNull = false;")
+      addMutableState(JAVA_BOOLEAN, isNull, s"$isNull = false;")
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
-      subexprFunctions += s"$fnName($INPUT_ROW);"
+      subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
     }
@@ -797,10 +1051,11 @@ class CodegenContext {
 
   /**
    * Generates code for expressions. If doSubexpressionElimination is true, subexpression
-   * elimination will be performed. Subexpression elimination assumes that the code will for each
+   * elimination will be performed. Subexpression elimination assumes that the code for each
    * expression will be combined in the `expressions` order.
    */
-  def generateExpressions(expressions: Seq[Expression],
+  def generateExpressions(
+      expressions: Seq[Expression],
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
     expressions.map(e => e.genCode(this))
@@ -896,17 +1151,39 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 }
 
 object CodeGenerator extends Logging {
+
+  // This is the value of HugeMethodLimit in the OpenJDK JVM settings
+  val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+
+  // This is the threshold over which the methods in an inner class are grouped in a single
+  // method which is going to be called by the outer class instead of the many small ones
+  val MERGE_SPLIT_METHODS_THRESHOLD = 3
+
+  // The number of named constants that can exist in the class is limited by the Constant Pool
+  // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
+  // threshold of 1000k bytes to determine when a function should be inlined to a private, inner
+  // class.
+  val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
+
   /**
    * Compile the Java source code into a Java class, using Janino.
+   *
+   * @return a pair of a generated class and the max bytecode size of generated functions.
    */
-  def compile(code: CodeAndComment): GeneratedClass = {
+  def compile(code: CodeAndComment): (GeneratedClass, Int) = try {
     cache.get(code)
+  } catch {
+    // Cache.get() may wrap the original exception. See the following URL
+    // http://google.github.io/guava/releases/14.0/api/docs/com/google/common/cache/
+    //   Cache.html#get(K,%20java.util.concurrent.Callable)
+    case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
+      throw e.getCause
   }
 
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  private[this] def doCompile(code: CodeAndComment): GeneratedClass = {
+  private[this] def doCompile(code: CodeAndComment): (GeneratedClass, Int) = {
     val evaluator = new ClassBodyEvaluator()
 
     // A special classloader used to wrap the actual parent classloader of
@@ -939,30 +1216,38 @@ object CodeGenerator extends Logging {
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    lazy val formatted = CodeFormatter.format(code)
-
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      s"\n$formatted"
+      s"\n${CodeFormatter.format(code)}"
     })
 
-    try {
+    val maxCodeSize = try {
       evaluator.cook("generated.java", code.body)
-      recordCompilationStats(evaluator)
+      updateAndGetCompilationStats(evaluator)
     } catch {
-      case e: Exception =>
-        val msg = s"failed to compile: $e\n$formatted"
+      case e: InternalCompilerException =>
+        val msg = s"failed to compile: $e"
         logError(msg, e)
-        throw new Exception(msg, e)
+        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
+        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
+        throw new InternalCompilerException(msg, e)
+      case e: CompileException =>
+        val msg = s"failed to compile: $e"
+        logError(msg, e)
+        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
+        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
+        throw new CompileException(msg, e.getLocation)
     }
-    evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
+
+    (evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
   }
 
   /**
-   * Records the generated class and method bytecode sizes by inspecting janino private fields.
+   * Returns the max bytecode size of the generated functions by inspecting janino private fields.
+   * Also, this method updates the metrics information.
    */
-  private def recordCompilationStats(evaluator: ClassBodyEvaluator): Unit = {
+  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): Int = {
     // First retrieve the generated classes.
     val classes = {
       val resultField = classOf[SimpleCompiler].getDeclaredField("result")
@@ -977,23 +1262,26 @@ object CodeGenerator extends Logging {
     val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
     val codeAttrField = codeAttr.getDeclaredField("code")
     codeAttrField.setAccessible(true)
-    classes.foreach { case (_, classBytes) =>
+    val codeSizes = classes.flatMap { case (_, classBytes) =>
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-        cf.methodInfos.asScala.foreach { method =>
-          method.getAttributes().foreach { a =>
-            if (a.getClass.getName == codeAttr.getName) {
-              CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
-                codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
-            }
+        val stats = cf.methodInfos.asScala.flatMap { method =>
+          method.getAttributes().filter(_.getClass.getName == codeAttr.getName).map { a =>
+            val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
+            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
+            byteCodeSize
           }
         }
+        Some(stats)
       } catch {
         case NonFatal(e) =>
           logWarning("Error calculating stats of compiled class.", e)
+          None
       }
-    }
+    }.flatten
+
+    codeSizes.max
   }
 
   /**
@@ -1008,8 +1296,8 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[CodeAndComment, GeneratedClass]() {
-        override def load(code: CodeAndComment): GeneratedClass = {
+      new CacheLoader[CodeAndComment, (GeneratedClass, Int)]() {
+        override def load(code: CodeAndComment): (GeneratedClass, Int) = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()

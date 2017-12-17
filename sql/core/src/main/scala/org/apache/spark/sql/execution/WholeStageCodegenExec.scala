@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{broadcast, TaskContext}
+import java.util.Locale
+
+import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -43,7 +45,7 @@ trait CodegenSupport extends SparkPlan {
     case _: SortMergeJoinExec => "smj"
     case _: RDDScanExec => "rdd"
     case _: DataSourceScanExec => "scan"
-    case _ => nodeName.toLowerCase
+    case _ => nodeName.toLowerCase(Locale.ROOT)
   }
 
   /**
@@ -68,7 +70,7 @@ trait CodegenSupport extends SparkPlan {
   /**
    * Returns all the RDDs of InternalRow which generates the input rows.
    *
-   * Note: right now we support up to two RDDs.
+   * @note Right now we support up to two RDDs
    */
   def inputRDDs(): Seq[RDD[InternalRow]]
 
@@ -106,20 +108,22 @@ trait CodegenSupport extends SparkPlan {
 
   /**
    * Consume the generated columns or row from current SparkPlan, call its parent's `doConsume()`.
+   *
+   * Note that `outputVars` and `row` can't both be null.
    */
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
     val inputVars =
-      if (row != null) {
+      if (outputVars != null) {
+        assert(outputVars.length == output.length)
+        // outputVars will be used to generate the code for UnsafeRow, so we should copy them
+        outputVars.map(_.copy())
+      } else {
+        assert(row != null, "outputVars and row cannot both be null.")
         ctx.currentVars = null
         ctx.INPUT_ROW = row
         output.zipWithIndex.map { case (attr, i) =>
           BoundReference(i, attr.dataType, attr.nullable).genCode(ctx)
         }
-      } else {
-        assert(outputVars != null)
-        assert(outputVars.length == output.length)
-        // outputVars will be used to generate the code for UnsafeRow, so we should copy them
-        outputVars.map(_.copy())
       }
 
     val rowVar = if (row != null) {
@@ -145,6 +149,11 @@ trait CodegenSupport extends SparkPlan {
       }
     }
 
+    // Set up the `currentVars` in the codegen context, as we generate the code of `inputVars`
+    // before calling `parent.doConsume`. We can't set up `INPUT_ROW`, because parent needs to
+    // generate code of `rowVar` manually.
+    ctx.currentVars = inputVars
+    ctx.INPUT_ROW = null
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
     s"""
@@ -191,41 +200,63 @@ trait CodegenSupport extends SparkPlan {
   def usedInputs: AttributeSet = references
 
   /**
-   * Generate the Java source code to process the rows from child SparkPlan.
+   * Generate the Java source code to process the rows from child SparkPlan. This should only be
+   * called from `consume`.
    *
    * This should be override by subclass to support codegen.
    *
-   * For example, Filter will generate the code like this:
+   * Note: The operator should not assume the existence of an outer processing loop,
+   *       which it can jump from with "continue;"!
    *
+   * For example, filter could generate this:
    *   # code to evaluate the predicate expression, result is isNull1 and value2
-   *   if (isNull1 || !value2) continue;
-   *   # call consume(), which will call parent.doConsume()
+   *   if (!isNull1 && value2) {
+   *     # call consume(), which will call parent.doConsume()
+   *   }
    *
    * Note: A plan can either consume the rows as UnsafeRow (row), or a list of variables (input).
+   *       When consuming as a listing of variables, the code to produce the input is already
+   *       generated and `CodegenContext.currentVars` is already set. When consuming as UnsafeRow,
+   *       implementations need to put `row.code` in the generated code and set
+   *       `CodegenContext.INPUT_ROW` manually. Some plans may need more tweaks as they have
+   *       different inputs(join build side, aggregate buffer, etc.), or other special cases.
    */
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     throw new UnsupportedOperationException
   }
 
   /**
-   * For optimization to suppress shouldStop() in a loop of WholeStageCodegen.
-   * Returning true means we need to insert shouldStop() into the loop producing rows, if any.
+   * Whether or not the result rows of this operator should be copied before putting into a buffer.
+   *
+   * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
+   * example, Join), this should be true.
+   *
+   * If an operator starts a new pipeline, this should be false.
    */
-  def isShouldStopRequired: Boolean = {
-    return shouldStopRequired && (this.parent == null || this.parent.isShouldStopRequired)
+  def needCopyResult: Boolean = {
+    if (children.isEmpty) {
+      false
+    } else if (children.length == 1) {
+      children.head.asInstanceOf[CodegenSupport].needCopyResult
+    } else {
+      throw new UnsupportedOperationException
+    }
   }
 
   /**
-   * Set to false if this plan consumes all rows produced by children but doesn't output row
-   * to buffer by calling append(), so the children don't require shouldStop()
-   * in the loop of producing rows.
+   * Whether or not the children of this operator should generate a stop check when consuming input
+   * rows. This is used to suppress shouldStop() in a loop of WholeStageCodegen.
+   *
+   * This should be false if an operator starts a new pipeline, which means it consumes all rows
+   * produced by children but doesn't output row to buffer by calling append(),  so the children
+   * don't require shouldStop() in the loop of producing rows.
    */
-  protected def shouldStopRequired: Boolean = true
+  def needStopCheck: Boolean = parent.needStopCheck
 }
 
 
 /**
- * InputAdapter is used to hide a SparkPlan from a subtree that support codegen.
+ * InputAdapter is used to hide a SparkPlan from a subtree that supports codegen.
  *
  * This is the leaf node of a tree with WholeStageCodegen that is used to generate code
  * that consumes an RDD iterator of InternalRow.
@@ -273,17 +304,31 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "")
   }
+
+  override def needCopyResult: Boolean = false
 }
 
 object WholeStageCodegenExec {
   val PIPELINE_DURATION_METRIC = "duration"
+
+  private def numOfNestedFields(dataType: DataType): Int = dataType match {
+    case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
+    case m: MapType => numOfNestedFields(m.keyType) + numOfNestedFields(m.valueType)
+    case a: ArrayType => numOfNestedFields(a.elementType)
+    case u: UserDefinedType[_] => numOfNestedFields(u.sqlType)
+    case _ => 1
+  }
+
+  def isTooManyFields(conf: SQLConf, dataType: DataType): Boolean = {
+    numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
+  }
 }
 
 /**
- * WholeStageCodegen compile a subtree of plans that support codegen together into single Java
+ * WholeStageCodegen compiles a subtree of plans that support codegen together into single Java
  * function.
  *
- * Here is the call graph of to generate Java source (plan A support codegen, but plan B does not):
+ * Here is the call graph of to generate Java source (plan A supports codegen, but plan B does not):
  *
  *   WholeStageCodegen       Plan A               FakeInput        Plan B
  * =========================================================================
@@ -302,10 +347,10 @@ object WholeStageCodegenExec {
  *                             |
  *  doConsume()  <--------  consume()
  *
- * SparkPlan A should override doProduce() and doConsume().
+ * SparkPlan A should override `doProduce()` and `doConsume()`.
  *
- * doCodeGen() will create a CodeGenContext, which will hold a list of variables for input,
- * used to generated code for BoundReference.
+ * `doCodeGen()` will create a `CodeGenContext`, which will hold a list of variables for input,
+ * used to generated code for [[BoundReference]].
  */
 case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
@@ -327,6 +372,15 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+
+    // main next function.
+    ctx.addNewFunction("processNext",
+      s"""
+        protected void processNext() throws java.io.IOException {
+          ${code.trim}
+        }
+       """, inlineToOuterClass = true)
+
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
@@ -350,11 +404,9 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
           ${ctx.initPartition()}
         }
 
-        ${ctx.declareAddedFunctions()}
+        ${ctx.emitExtraCode()}
 
-        protected void processNext() throws java.io.IOException {
-          ${code.trim}
-        }
+        ${ctx.declareAddedFunctions()}
       }
       """.trim
 
@@ -369,14 +421,29 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   override def doExecute(): RDD[InternalRow] = {
     val (ctx, cleanedSource) = doCodeGen()
     // try to compile and fallback if it failed
-    try {
+    val (_, maxCodeSize) = try {
       CodeGenerator.compile(cleanedSource)
     } catch {
-      case e: Exception if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
+      case _: Exception if !Utils.isTesting && sqlContext.conf.codegenFallback =>
         // We should already saw the error message
         logWarning(s"Whole-stage codegen disabled for this plan:\n $treeString")
         return child.execute()
     }
+
+    // Check if compiled code has a too large function
+    if (maxCodeSize > sqlContext.conf.hugeMethodLimit) {
+      logInfo(s"Found too long generated codes and JIT optimization might not work: " +
+        s"the bytecode size ($maxCodeSize) is above the limit " +
+        s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
+        s"for this plan. To avoid this, you can raise the limit " +
+        s"`${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}`:\n$treeString")
+      child match {
+        // The fallback solution of batch file source scan still uses WholeStageCodegenExec
+        case f: FileSourceScanExec if f.supportsBatch => // do nothing
+        case _ => return child.execute()
+      }
+    }
+
     val references = ctx.references.toArray
 
     val durationMs = longMetric("pipelineTime")
@@ -385,7 +452,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
     if (rdds.length == 1) {
       rdds.head.mapPartitionsWithIndex { (index, iter) =>
-        val clazz = CodeGenerator.compile(cleanedSource)
+        val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(index, Array(iter))
         new Iterator[InternalRow] {
@@ -404,7 +471,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         // a small hack to obtain the correct partition index
       }.mapPartitionsWithIndex { (index, zippedIter) =>
         val (leftIter, rightIter) = zippedIter.next()
-        val clazz = CodeGenerator.compile(cleanedSource)
+        val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(index, Array(leftIter, rightIter))
         new Iterator[InternalRow] {
@@ -428,7 +495,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val doCopy = if (ctx.copyResult) {
+    val doCopy = if (needCopyResult) {
       ".copy()"
     } else {
       ""
@@ -448,6 +515,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "*")
   }
+
+  override def needStopCheck: Boolean = true
 }
 
 
@@ -463,22 +532,14 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     case _ => true
   }
 
-  private def numOfNestedFields(dataType: DataType): Int = dataType match {
-    case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
-    case m: MapType => numOfNestedFields(m.keyType) + numOfNestedFields(m.valueType)
-    case a: ArrayType => numOfNestedFields(a.elementType)
-    case u: UserDefinedType[_] => numOfNestedFields(u.sqlType)
-    case _ => 1
-  }
-
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
       val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
       // the generated code will be huge if there are too many columns
       val hasTooManyOutputFields =
-        numOfNestedFields(plan.schema) > conf.wholeStageMaxNumFields
+        WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
       val hasTooManyInputFields =
-        plan.children.map(p => numOfNestedFields(p.schema)).exists(_ > conf.wholeStageMaxNumFields)
+        plan.children.exists(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema))
       !willFallback && !hasTooManyOutputFields && !hasTooManyInputFields
     case _ => false
   }
@@ -487,13 +548,12 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
    * Inserts an InputAdapter on top of those that do not support codegen.
    */
   private def insertInputAdapter(plan: SparkPlan): SparkPlan = plan match {
-    case j @ SortMergeJoinExec(_, _, _, _, left, right) if j.supportCodegen =>
-      // The children of SortMergeJoin should do codegen separately.
-      j.copy(left = InputAdapter(insertWholeStageCodegen(left)),
-        right = InputAdapter(insertWholeStageCodegen(right)))
     case p if !supportCodegen(p) =>
       // collapse them recursively
       InputAdapter(insertWholeStageCodegen(p))
+    case j: SortMergeJoinExec =>
+      // The children of SortMergeJoin should do codegen separately.
+      j.withNewChildren(j.children.map(child => InputAdapter(insertWholeStageCodegen(child))))
     case p =>
       p.withNewChildren(p.children.map(insertInputAdapter))
   }

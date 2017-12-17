@@ -18,14 +18,15 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.text.SimpleDateFormat
-import java.util.{Date, TimeZone, UUID}
+import java.util.{Date, UUID}
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
@@ -82,7 +83,7 @@ trait ProgressReporter extends Logging {
   private var lastNoDataProgressEventTime = Long.MinValue
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(TimeZone.getTimeZone("UTC"))
+  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
 
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
@@ -185,18 +186,10 @@ trait ProgressReporter extends Logging {
     if (lastExecution == null) return Nil
     // lastExecution could belong to one of the previous triggers if `!hasNewData`.
     // Walking the plan again should be inexpensive.
-    val stateNodes = lastExecution.executedPlan.collect {
-      case p if p.isInstanceOf[StateStoreWriter] => p
-    }
-    stateNodes.map { node =>
-      val numRowsUpdated = if (hasNewData) {
-        node.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L)
-      } else {
-        0L
-      }
-      new StateOperatorProgress(
-        numRowsTotal = node.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L),
-        numRowsUpdated = numRowsUpdated)
+    lastExecution.executedPlan.collect {
+      case p if p.isInstanceOf[StateStoreWriter] =>
+        val progress = p.asInstanceOf[StateStoreWriter].getProgress()
+        if (hasNewData) progress else progress.copy(newNumRowsUpdated = 0)
     }
   }
 
@@ -266,7 +259,7 @@ trait ProgressReporter extends Logging {
         Map(
           "max" -> stats.max,
           "min" -> stats.min,
-          "avg" -> stats.avg).mapValues(formatTimestamp)
+          "avg" -> stats.avg.toLong).mapValues(formatTimestamp)
     }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
     ExecutionStats(numInputRows, stateOperators, eventTimeStats)

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.ExistsThrowsExceptionFileSystem._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSQLContext
@@ -44,8 +45,8 @@ abstract class FileStreamSourceTest
   import testImplicits._
 
   /**
-   * A subclass [[AddData]] for adding data to files. This is meant to use the
-   * [[FileStreamSource]] actually being used in the execution.
+   * A subclass `AddData` for adding data to files. This is meant to use the
+   * `FileStreamSource` actually being used in the execution.
    */
   abstract class AddFileData extends AddData {
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {
@@ -1023,7 +1024,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         expectedCompactInterval: Int): Boolean = {
       import CompactibleFileStreamLog._
 
-      val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
+      val fileSource = getSourcesFromStreamingQuery(execution).head
       val metadataLog = fileSource invokePrivate _metadataLog()
 
       if (isCompactionBatch(batchId, expectedCompactInterval)) {
@@ -1099,13 +1100,15 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           CheckAnswer("keep1", "keep2", "keep3"),
           AssertOnQuery("check getBatch") { execution: StreamExecution =>
             val _sources = PrivateMethod[Seq[Source]]('sources)
-            val fileSource =
-              (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
+            val fileSource = getSourcesFromStreamingQuery(execution).head
 
             def verify(startId: Option[Int], endId: Int, expected: String*): Unit = {
               val start = startId.map(new FileStreamSourceOffset(_))
               val end = FileStreamSourceOffset(endId)
-              assert(fileSource.getBatch(start, end).as[String].collect().toSeq === expected)
+
+              withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+                assert(fileSource.getBatch(start, end).as[String].collect().toSeq === expected)
+              }
             }
 
             verify(startId = None, endId = 2, "keep1", "keep2", "keep3")
@@ -1314,6 +1317,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val metadataLog =
       new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
       assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
+      assert(metadataLog.add(1, Array(FileEntry(s"$scheme:///file2", 200L, 0))))
 
       val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil), Nil,
         dir.getAbsolutePath, Map.empty)

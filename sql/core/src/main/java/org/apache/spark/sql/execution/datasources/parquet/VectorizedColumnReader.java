@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.util.TimeZone;
 
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -26,10 +27,12 @@ import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
+import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
@@ -90,11 +93,20 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
+  private final OriginalType originalType;
+  // The timezone conversion to apply to int96 timestamps. Null if no conversion.
+  private final TimeZone convertTz;
+  private final static TimeZone UTC = DateTimeUtils.TimeZoneUTC();
 
-  public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader)
-      throws IOException {
+  public VectorizedColumnReader(
+      ColumnDescriptor descriptor,
+      OriginalType originalType,
+      PageReader pageReader,
+      TimeZone convertTz) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
+    this.convertTz = convertTz;
+    this.originalType = originalType;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
@@ -135,9 +147,9 @@ public class VectorizedColumnReader {
   /**
    * Reads `total` values from this columnReader into column.
    */
-  void readBatch(int total, ColumnVector column) throws IOException {
+  void readBatch(int total, WritableColumnVector column) throws IOException {
     int rowId = 0;
-    ColumnVector dictionaryIds = null;
+    WritableColumnVector dictionaryIds = null;
     if (dictionary != null) {
       // SPARK-16334: We only maintain a single dictionary per row batch, so that it can be used to
       // decode all previous dictionary encoded pages if we ever encounter a non-dictionary encoded
@@ -157,19 +169,19 @@ public class VectorizedColumnReader {
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
 
-        // Timestamp values encoded as INT64 can't be lazily decoded as we need to post process
+        // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64  &&
-               column.dataType() != DataTypes.TimestampType) ||
+              originalType != OriginalType.TIMESTAMP_MILLIS) ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.FLOAT ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.DOUBLE ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.BINARY))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
-          column.setDictionary(dictionary);
+          column.setDictionary(new ParquetDictionary(dictionary));
         } else {
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
         }
@@ -216,11 +228,18 @@ public class VectorizedColumnReader {
     }
   }
 
+  private boolean shouldConvertTimestamps() {
+    return convertTz != null && !convertTz.equals(UTC);
+  }
+
   /**
    * Reads `num` values into column, decoding the values from `dictionaryIds` and `dictionary`.
    */
-  private void decodeDictionaryIds(int rowId, int num, ColumnVector column,
-                                   ColumnVector dictionaryIds) {
+  private void decodeDictionaryIds(
+      int rowId,
+      int num,
+      WritableColumnVector column,
+      WritableColumnVector dictionaryIds) {
     switch (descriptor.getType()) {
       case INT32:
         if (column.dataType() == DataTypes.IntegerType ||
@@ -249,21 +268,21 @@ public class VectorizedColumnReader {
 
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
-            DecimalType.is64BitDecimalType(column.dataType())) {
+            DecimalType.is64BitDecimalType(column.dataType()) ||
+            originalType == OriginalType.TIMESTAMP_MICROS) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
             }
           }
-        } else if (column.dataType() == DataTypes.TimestampType) {
+        } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i,
                 DateTimeUtils.fromMillis(dictionary.decodeToLong(dictionaryIds.getDictId(i))));
             }
           }
-        }
-        else {
+        } else {
           throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
         }
         break;
@@ -285,11 +304,21 @@ public class VectorizedColumnReader {
         break;
       case INT96:
         if (column.dataType() == DataTypes.TimestampType) {
-          for (int i = rowId; i < rowId + num; ++i) {
-            // TODO: Convert dictionary of Binaries to dictionary of Longs
-            if (!column.isNullAt(i)) {
-              Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
-              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
+          if (!shouldConvertTimestamps()) {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+                column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
+              }
+            }
+          } else {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+                long rawTime = ParquetRowConverter.binaryToSQLTimestamp(v);
+                long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+                column.putLong(i, adjTime);
+              }
             }
           }
         } else {
@@ -346,13 +375,13 @@ public class VectorizedColumnReader {
    * is guaranteed that num is smaller than the number of values left in the current page.
    */
 
-  private void readBooleanBatch(int rowId, int num, ColumnVector column) throws IOException {
+  private void readBooleanBatch(int rowId, int num, WritableColumnVector column) {
     assert(column.dataType() == DataTypes.BooleanType);
     defColumn.readBooleans(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
   }
 
-  private void readIntBatch(int rowId, int num, ColumnVector column) throws IOException {
+  private void readIntBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.IntegerType || column.dataType() == DataTypes.DateType ||
@@ -370,13 +399,14 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readLongBatch(int rowId, int num, ColumnVector column) throws IOException {
+  private void readLongBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     if (column.dataType() == DataTypes.LongType ||
-        DecimalType.is64BitDecimalType(column.dataType())) {
+        DecimalType.is64BitDecimalType(column.dataType()) ||
+        originalType == OriginalType.TIMESTAMP_MICROS) {
       defColumn.readLongs(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-    } else if (column.dataType() == DataTypes.TimestampType) {
+    } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i, DateTimeUtils.fromMillis(dataColumn.readLong()));
@@ -389,7 +419,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readFloatBatch(int rowId, int num, ColumnVector column) throws IOException {
+  private void readFloatBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     // TODO: support implicit cast to double?
     if (column.dataType() == DataTypes.FloatType) {
@@ -400,7 +430,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readDoubleBatch(int rowId, int num, ColumnVector column) throws IOException {
+  private void readDoubleBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.DoubleType) {
@@ -411,20 +441,33 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readBinaryBatch(int rowId, int num, ColumnVector column) throws IOException {
+  private void readBinaryBatch(int rowId, int num, WritableColumnVector column) {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
-    if (column.isArray()) {
+    if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType) {
       defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
     } else if (column.dataType() == DataTypes.TimestampType) {
-      for (int i = 0; i < num; i++) {
-        if (defColumn.readInteger() == maxDefLevel) {
-          column.putLong(rowId + i,
-              // Read 12 bytes for INT96
-              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
-        } else {
-          column.putNull(rowId + i);
+      if (!shouldConvertTimestamps()) {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            // Read 12 bytes for INT96
+            long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
+            column.putLong(rowId + i, rawTime);
+          } else {
+            column.putNull(rowId + i);
+          }
+        }
+      } else {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            // Read 12 bytes for INT96
+            long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
+            long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+            column.putLong(rowId + i, adjTime);
+          } else {
+            column.putNull(rowId + i);
+          }
         }
       }
     } else {
@@ -432,8 +475,11 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readFixedLenByteArrayBatch(int rowId, int num,
-                                          ColumnVector column, int arrayLen) throws IOException {
+  private void readFixedLenByteArrayBatch(
+      int rowId,
+      int num,
+      WritableColumnVector column,
+      int arrayLen) {
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
@@ -468,7 +514,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readPage() throws IOException {
+  private void readPage() {
     DataPage page = pageReader.readPage();
     // TODO: Why is this a visitor?
     page.accept(new DataPage.Visitor<Void>() {

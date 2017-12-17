@@ -40,9 +40,9 @@ import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-import org.apache.spark.SparkConf
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -173,7 +173,10 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
         AdminUtils.createTopic(zkUtils, topic, partitions, 1)
         created = true
       } catch {
-        case e: kafka.common.TopicExistsException if overwrite => deleteTopic(topic)
+        // Workaround fact that TopicExistsException is in kafka.common in 0.10.0 and
+        // org.apache.kafka.common.errors in 0.10.1 (!)
+        case e: Exception if (e.getClass.getSimpleName == "TopicExistsException") && overwrite =>
+          deleteTopic(topic)
       }
     }
     // wait until metadata is propagated
@@ -292,7 +295,10 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
     props.put("delete.topic.enable", "true")
-    props.putAll(withBrokerProps.asJava)
+    props.put("offsets.topic.num.partitions", "1")
+    // Can not use properties.putAll(propsMap.asJava) in scala-2.12
+    // See https://github.com/scala/bug/issues/10418
+    withBrokerProps.foreach { case (k, v) => props.put(k, v) }
     props
   }
 
@@ -377,7 +383,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
 
         zkUtils.getLeaderForPartition(topic, partition).isDefined &&
           Request.isValidBrokerId(leaderAndInSyncReplicas.leader) &&
-          leaderAndInSyncReplicas.isr.size >= 1
+          leaderAndInSyncReplicas.isr.nonEmpty
 
       case _ =>
         false

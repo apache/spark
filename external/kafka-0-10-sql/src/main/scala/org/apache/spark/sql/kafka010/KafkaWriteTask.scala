@@ -19,8 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import org.apache.kafka.clients.producer.{KafkaProducer, _}
-import org.apache.kafka.common.serialization.ByteArraySerializer
+import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord, RecordMetadata}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
@@ -44,7 +43,7 @@ private[kafka010] class KafkaWriteTask(
    * Writes key value data out to topics.
    */
   def execute(iterator: Iterator[InternalRow]): Unit = {
-    producer = new KafkaProducer[Array[Byte], Array[Byte]](producerConfiguration)
+    producer = CachedKafkaProducer.getOrCreate(producerConfiguration)
     while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
       val projectedRow = projection(currentRow)
@@ -68,10 +67,10 @@ private[kafka010] class KafkaWriteTask(
   }
 
   def close(): Unit = {
+    checkForErrors()
     if (producer != null) {
-      checkForErrors
-      producer.close()
-      checkForErrors
+      producer.flush()
+      checkForErrors()
       producer = null
     }
   }
@@ -88,7 +87,7 @@ private[kafka010] class KafkaWriteTask(
       case t =>
         throw new IllegalStateException(s"${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
           s"attribute unsupported type $t. ${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
-          s"must be a ${StringType}")
+          "must be a StringType")
     }
     val keyExpression = inputSchema.find(_.name == KafkaWriter.KEY_ATTRIBUTE_NAME)
       .getOrElse(Literal(null, BinaryType))
@@ -100,7 +99,7 @@ private[kafka010] class KafkaWriteTask(
     }
     val valueExpression = inputSchema
       .find(_.name == KafkaWriter.VALUE_ATTRIBUTE_NAME).getOrElse(
-      throw new IllegalStateException(s"Required attribute " +
+      throw new IllegalStateException("Required attribute " +
         s"'${KafkaWriter.VALUE_ATTRIBUTE_NAME}' not found")
     )
     valueExpression.dataType match {
@@ -114,7 +113,7 @@ private[kafka010] class KafkaWriteTask(
         Cast(valueExpression, BinaryType)), inputSchema)
   }
 
-  private def checkForErrors: Unit = {
+  private def checkForErrors(): Unit = {
     if (failedWrite != null) {
       throw failedWrite
     }

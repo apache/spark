@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -32,6 +32,8 @@ case class StringLongClass(a: String, b: Long)
 case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
+
+case class PrimitiveArrayClass(arr: Array[Long])
 
 case class ArrayClass(arr: Seq[StringIntClass])
 
@@ -64,6 +66,27 @@ class EncoderResolutionSuite extends PlanTest {
       ExpressionEncoder[Long])
     val attrs = Seq('a.struct('a.string, 'b.byte), 'b.int)
     encoder.resolveAndBind(attrs).fromRow(InternalRow(InternalRow(str, 1.toByte), 2))
+  }
+
+  test("real type doesn't match encoder schema but they are compatible: primitive array") {
+    val encoder = ExpressionEncoder[PrimitiveArrayClass]
+    val attrs = Seq('arr.array(IntegerType))
+    val array = new GenericArrayData(Array(1, 2, 3))
+    encoder.resolveAndBind(attrs).fromRow(InternalRow(array))
+  }
+
+  test("the real type is not compatible with encoder schema: primitive array") {
+    val encoder = ExpressionEncoder[PrimitiveArrayClass]
+    val attrs = Seq('arr.array(StringType))
+    assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+      s"""
+         |Cannot up cast array element from string to bigint as it may truncate
+         |The type path of the target object is:
+         |- array element class: "scala.Long"
+         |- field (class: "scala.Array", name: "arr")
+         |- root class: "org.apache.spark.sql.catalyst.encoders.PrimitiveArrayClass"
+         |You can either add an explicit cast to the input data or choose a higher precision type
+       """.stripMargin.trim + " of the field in the target object")
   }
 
   test("real type doesn't match encoder schema but they are compatible: array") {

@@ -34,12 +34,12 @@ class FoldablePropagationSuite extends PlanTest {
   val testRelation = LocalRelation('a.int, 'b.int)
 
   test("Propagate from subquery") {
-    val query = OneRowRelation
+    val query = OneRowRelation()
       .select(Literal(1).as('a), Literal(2).as('b))
       .subquery('T)
       .select('a, 'b)
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = OneRowRelation
+    val correctAnswer = OneRowRelation()
       .select(Literal(1).as('a), Literal(2).as('b))
       .subquery('T)
       .select(Literal(1).as('a), Literal(2).as('b)).analyze
@@ -152,7 +152,7 @@ class FoldablePropagationSuite extends PlanTest {
     val expand = Expand(
       Seq(Seq(Literal(null), 'b), Seq('a, Literal(null))),
       Seq(a1, a2),
-      OneRowRelation.select(c1, c2))
+      OneRowRelation().select(c1, c2))
     val query = expand.where(a1.isNotNull).select(a1, a2).analyze
     val optimized = Optimize.execute(query)
     val correctExpand = expand.copy(projections = Seq(

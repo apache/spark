@@ -143,6 +143,9 @@ The master URL passed to Spark can be in one of the following formats:
 <tr><td> <code>spark://HOST:PORT</code> </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
         cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
 </td></tr>
+<tr><td> <code>spark://HOST1:PORT1,HOST2:PORT2</code> </td><td> Connect to the given <a href="spark-standalone.html#standby-masters-with-zookeeper">Spark standalone
+        cluster with standby masters with Zookeeper</a>. The list must have all the master hosts in the high availability cluster set up with Zookeeper. The port must be whichever each master is configured to use, which is 7077 by default.
+</td></tr>
 <tr><td> <code>mesos://HOST:PORT</code> </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
         The port must be whichever one your is configured to use, which is 5050 by default.
         Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
