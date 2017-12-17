@@ -997,7 +997,7 @@ private[spark] object JsonProtocol {
       StorageLevel.fromString(json.extract[String])
     case _: JObject =>
       // Generic case for compatibility with older event logs and for
-      // use-defined storage levels.
+      // user-defined storage levels.
       val useDisk = (json \ "Use Disk").extract[Boolean]
       val useMemory = (json \ "Use Memory").extract[Boolean]
       val deserialized = (json \ "Deserialized").extract[Boolean]
