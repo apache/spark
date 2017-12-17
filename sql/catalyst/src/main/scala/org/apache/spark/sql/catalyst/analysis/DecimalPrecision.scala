@@ -93,41 +93,46 @@ object DecimalPrecision extends TypeCoercionRule {
     case e: BinaryArithmetic if e.left.isInstanceOf[PromotePrecision] => e
 
     case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+      val resultScale = max(s1, s2)
+      val dt = DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
+        resultScale)
       CheckOverflow(Add(promotePrecision(e1, dt), promotePrecision(e2, dt)), dt)
 
     case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+      val resultScale = max(s1, s2)
+      val dt = DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
+        resultScale)
       CheckOverflow(Subtract(promotePrecision(e1, dt), promotePrecision(e2, dt)), dt)
 
     case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val resultType = DecimalType.bounded(p1 + p2 + 1, s1 + s2)
+      val resultType = DecimalType.adjustPrecisionScale(p1 + p2 + 1, s1 + s2)
       val widerType = widerDecimalType(p1, s1, p2, s2)
       CheckOverflow(Multiply(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
         resultType)
 
     case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
-      var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
-      val diff = (intDig + decDig) - DecimalType.MAX_SCALE
-      if (diff > 0) {
-        decDig -= diff / 2 + 1
-        intDig = DecimalType.MAX_SCALE - decDig
-      }
-      val resultType = DecimalType.bounded(intDig + decDig, decDig)
+      // From https://msdn.microsoft.com/en-us/library/ms190476.aspx
+      // Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
+      // Scale: max(6, s1 + p2 + 1)
+      val intDig = p1 - s1 + s2
+      val scale = max(DecimalType.MINIMUM_ADJUSTED_SCALE, s1 + p2 + 1)
+      val prec = intDig + scale
+      val resultType = DecimalType.adjustPrecisionScale(prec, scale)
       val widerType = widerDecimalType(p1, s1, p2, s2)
       CheckOverflow(Divide(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
         resultType)
 
     case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+      val resultType = DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2),
+        max(s1, s2))
       // resultType may have lower precision, so we cast them into wider type first.
       val widerType = widerDecimalType(p1, s1, p2, s2)
       CheckOverflow(Remainder(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
         resultType)
 
     case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+      val resultType = DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2),
+        max(s1, s2))
       // resultType may have lower precision, so we cast them into wider type first.
       val widerType = widerDecimalType(p1, s1, p2, s2)
       CheckOverflow(Pmod(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
@@ -243,17 +248,43 @@ object DecimalPrecision extends TypeCoercionRule {
     // Promote integers inside a binary expression with fixed-precision decimals to decimals,
     // and fixed-precision decimals in an expression with floats / doubles to doubles
     case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
-      (left.dataType, right.dataType) match {
-        case (t: IntegralType, DecimalType.Fixed(p, s)) =>
-          b.makeCopy(Array(Cast(left, DecimalType.forType(t)), right))
-        case (DecimalType.Fixed(p, s), t: IntegralType) =>
-          b.makeCopy(Array(left, Cast(right, DecimalType.forType(t))))
-        case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
-          b.makeCopy(Array(left, Cast(right, DoubleType)))
-        case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
-          b.makeCopy(Array(Cast(left, DoubleType), right))
-        case _ =>
-          b
-      }
+      nondecimalLiteralAndDecimal(b).lift((left, right)).getOrElse(
+        nondecimalNonliteralAndDecimal(b).applyOrElse((left.dataType, right.dataType),
+          (_: (DataType, DataType)) => b))
   }
+
+  /**
+   * Type coercion for BinaryOperator in which one side is a non-decimal literal numeric, and the
+   * other side is a decimal.
+   */
+  private def nondecimalLiteralAndDecimal(
+      b: BinaryOperator): PartialFunction[(Expression, Expression), Expression] = {
+    // Promote literal integers inside a binary expression with fixed-precision decimals to
+    // decimals. The precision and scale are the ones needed by the integer value.
+    case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType]
+      && l.dataType.isInstanceOf[IntegralType] =>
+      b.makeCopy(Array(Cast(l, DecimalType.forLiteral(l)), r))
+    case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType]
+      && r.dataType.isInstanceOf[IntegralType] =>
+      b.makeCopy(Array(l, Cast(r, DecimalType.forLiteral(r))))
+  }
+
+  /**
+   * Type coercion for BinaryOperator in which one side is a non-decimal non-literal numeric, and
+   * the other side is a decimal.
+   */
+  private def nondecimalNonliteralAndDecimal(
+      b: BinaryOperator): PartialFunction[(DataType, DataType), Expression] = {
+    // Promote integers inside a binary expression with fixed-precision decimals to decimals,
+    // and fixed-precision decimals in an expression with floats / doubles to doubles
+    case (t: IntegralType, DecimalType.Fixed(p, s)) =>
+      b.makeCopy(Array(Cast(b.left, DecimalType.forType(t)), b.right))
+    case (DecimalType.Fixed(_, _), t: IntegralType) =>
+      b.makeCopy(Array(b.left, Cast(b.right, DecimalType.forType(t))))
+    case (t, DecimalType.Fixed(_, _)) if isFloat(t) =>
+      b.makeCopy(Array(b.left, Cast(b.right, DoubleType)))
+    case (DecimalType.Fixed(_, _), t) if isFloat(t) =>
+      b.makeCopy(Array(Cast(b.left, DoubleType), b.right))
+  }
+
 }
