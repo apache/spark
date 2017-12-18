@@ -1617,7 +1617,7 @@ def to_arrow_type(dt):
     elif type(dt) == DoubleType:
         arrow_type = pa.float64()
     elif type(dt) == DecimalType:
-        arrow_type = pa.decimal(dt.precision, dt.scale)
+        arrow_type = pa.decimal128(dt.precision, dt.scale)
     elif type(dt) == StringType:
         arrow_type = pa.string()
     elif type(dt) == DateType:
