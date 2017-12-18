@@ -31,6 +31,17 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainVa
            'TrainValidationSplitModel']
 
 
+def parallelFitTasks(est, train, eva, validation, epm):
+    modelIter = est.fitMultiple(train, epm)
+
+    def singleTask():
+        index, model = modelIter.next()
+        metric = eva.evaluate(model.transform(validation, epm[index]))
+        return index, metric
+
+    return [singleTask] * len(epm)
+
+
 class ParamGridBuilder(object):
     r"""
     Builder for a param grid used in grid search-based model selection.
@@ -266,15 +277,9 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
             validation = df.filter(condition).cache()
             train = df.filter(~condition).cache()
 
-            def singleTrain(paramMap):
-                model = est.fit(train, paramMap)
-                # TODO: duplicate evaluator to take extra params from input
-                metric = eva.evaluate(model.transform(validation, paramMap))
-                return metric
-
-            currentFoldMetrics = pool.map(singleTrain, epm)
-            for j in range(numModels):
-                metrics[j] += (currentFoldMetrics[j] / nFolds)
+            tasks = parallelFitTasks(est, train, eva, validation, epm)
+            for j, metric in pool.imap_unordered(lambda f: f(), tasks):
+                metrics[j] += (metric / nFolds)
             validation.unpersist()
             train.unpersist()
 
@@ -523,13 +528,11 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         validation = df.filter(condition).cache()
         train = df.filter(~condition).cache()
 
-        def singleTrain(paramMap):
-            model = est.fit(train, paramMap)
-            metric = eva.evaluate(model.transform(validation, paramMap))
-            return metric
-
+        tasks = parallelFitTasks(est, train, eva, validation, epm)
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        metrics = pool.map(singleTrain, epm)
+        metrics = [None] * numModels
+        for j, m in pool.imap_unordered(lambda f: f(), tasks):
+            metrics[j] = m
         train.unpersist()
         validation.unpersist()
 

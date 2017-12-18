@@ -18,14 +18,32 @@
 from abc import ABCMeta, abstractmethod
 
 import copy
+import threading
 
 from pyspark import since
-from pyspark.ml.param import Params
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.functions import udf
-from pyspark.sql.types import StructField, StructType, DoubleType
+from pyspark.sql.types import StructField, StructType
 
+
+class FitMutlipleIterator(object):
+    def __init__(self, fitSingleModel, numModel):
+        self.fitSingleModel = fitSingleModel
+        self.numModel = numModel
+        self.counter = 0
+        self.lock = threading.Lock()
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        with self.lock:
+            index = self.counter
+            if index >= self.numModel:
+                raise StopIteration("No models remaining.")
+            self.counter += 1
+        return index, self.fitSingleModel(index)
 
 @inherit_doc
 class Estimator(Params):
@@ -47,6 +65,11 @@ class Estimator(Params):
         """
         raise NotImplementedError()
 
+    def fitMultiple(self, dataset, params):
+        def fitSingleModel(index):
+            return self.fit(dataset, params[index])
+        return FitMutlipleIterator(fitSingleModel, len(params))
+
     @since("1.3.0")
     def fit(self, dataset, params=None):
         """
@@ -61,7 +84,10 @@ class Estimator(Params):
         if params is None:
             params = dict()
         if isinstance(params, (list, tuple)):
-            return [self.fit(dataset, paramMap) for paramMap in params]
+            models = [None] * len(params)
+            for index, model in self.fitMultiple(dataset, params):
+                models[index] = model
+            return models
         elif isinstance(params, dict):
             if params:
                 return self.copy(params)._fit(dataset)
