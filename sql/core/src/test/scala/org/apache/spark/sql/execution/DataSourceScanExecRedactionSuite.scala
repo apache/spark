@@ -67,7 +67,6 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
       val df = spark.read.parquet(basePath)
       val replacement = "*********"
 
-
       // Respect SparkConf and replace file:/
       assert(isIncluded(df.queryExecution, replacement))
 
