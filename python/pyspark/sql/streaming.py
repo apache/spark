@@ -543,7 +543,7 @@ class DataStreamReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, multiLine=None, escapeQuoteEscaping=None):
+            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -621,9 +621,9 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param multiLine: parse one record, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
-        :param escapeQuoteEscaping: sets a single character used for escaping the escape for the
-                                    quote character. If None is set, it uses the default value,
-                                    ``\0``.
+        :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
+                                          the quote character. If None is set, it uses the default
+                                          value, ``\0``.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -640,7 +640,7 @@ class DataStreamReader(OptionUtils):
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            escapeQuoteEscaping=escapeQuoteEscaping)
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:

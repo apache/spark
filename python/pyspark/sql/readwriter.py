@@ -333,7 +333,7 @@ class DataFrameReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, multiLine=None, escapeQuoteEscaping=None):
+            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -410,9 +410,9 @@ class DataFrameReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param multiLine: parse records, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
-        :param escapeQuoteEscaping: sets a single character used for escaping the escape for the
-                                    quote character. If None is set, it uses the default value,
-                                    ``\0``.
+        :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
+                                          the quote character. If None is set, it uses the default
+                                          value, ``\0``.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -431,7 +431,7 @@ class DataFrameReader(OptionUtils):
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            escapeQuoteEscaping=escapeQuoteEscaping)
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -819,7 +819,7 @@ class DataFrameWriter(OptionUtils):
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
             timestampFormat=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            escapeQuoteEscaping=None):
+            charToEscapeQuoteEscaping=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -865,9 +865,9 @@ class DataFrameWriter(OptionUtils):
         :param ignoreTrailingWhiteSpace: a flag indicating whether or not trailing whitespaces from
                                          values being written should be skipped. If None is set, it
                                          uses the default value, ``true``.
-        :param escapeQuoteEscaping: sets a single character used for escaping the escape for the
-                                    quote character. If None is set, it uses the default value,
-                                    ``\0``.
+        :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
+                                          the quote character. If None is set, it uses the default
+                                          value, ``\0``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -877,7 +877,7 @@ class DataFrameWriter(OptionUtils):
                        dateFormat=dateFormat, timestampFormat=timestampFormat,
                        ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
                        ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
-                       escapeQuoteEscaping=escapeQuoteEscaping)
+                       charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
         self._jwrite.csv(path)
 
     @since(1.5)

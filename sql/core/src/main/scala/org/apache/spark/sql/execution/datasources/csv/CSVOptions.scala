@@ -89,7 +89,7 @@ class CSVOptions(
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
-  val escapeQuoteEscaping = getChar("escapeQuoteEscaping", '\u0000')
+  val charToEscapeQuoteEscaping = getChar("charToEscapeQuoteEscaping", '\u0000')
   val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
@@ -149,7 +149,7 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    format.setCharToEscapeQuoteEscaping(escapeQuoteEscaping)
+    format.setCharToEscapeQuoteEscaping(charToEscapeQuoteEscaping)
     format.setComment(comment)
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
@@ -167,7 +167,7 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    format.setCharToEscapeQuoteEscaping(escapeQuoteEscaping)
+    format.setCharToEscapeQuoteEscaping(charToEscapeQuoteEscaping)
     format.setComment(comment)
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)

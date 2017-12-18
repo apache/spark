@@ -522,7 +522,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `com.databricks.spark.csv`.</li>
    * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
    * an already quoted value.</li>
-   * <li>`escapeQuoteEscaping` (default `\0`): sets a single character used for escaping
+   * <li>`charToEscapeQuoteEscaping` (default `\0`): sets a single character used for escaping
    * the escape for the quote character.</li>
    * <li>`comment` (default empty string): sets a single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
