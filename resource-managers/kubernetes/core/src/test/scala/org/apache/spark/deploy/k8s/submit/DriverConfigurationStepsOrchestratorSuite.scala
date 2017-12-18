@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.Config.DRIVER_DOCKER_IMAGE
+import org.apache.spark.deploy.k8s.Config.DRIVER_CONTAINER_IMAGE
 import org.apache.spark.deploy.k8s.submit.steps._
 
 class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
@@ -32,7 +32,7 @@ class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test("Base submission steps with a main app resource.") {
     val sparkConf = new SparkConf(false)
-      .set(DRIVER_DOCKER_IMAGE, DRIVER_IMAGE)
+      .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigurationStepsOrchestrator(
       NAMESPACE,
@@ -54,7 +54,7 @@ class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test("Base submission steps without a main app resource.") {
     val sparkConf = new SparkConf(false)
-      .set(DRIVER_DOCKER_IMAGE, DRIVER_IMAGE)
+      .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
     val orchestrator = new DriverConfigurationStepsOrchestrator(
       NAMESPACE,
       APP_ID,
