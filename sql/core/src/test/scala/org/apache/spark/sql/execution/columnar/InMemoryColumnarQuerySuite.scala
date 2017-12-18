@@ -488,9 +488,9 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-22673: InMemoryRelation should utilize existing stats of the plan to be cached") {
     withSQLConf("spark.sql.cbo.enabled" -> "true") {
-      withTempDir { workDir =>
+      withTempPath { workDir =>
         withTable("table1") {
-          val workDirPath = workDir.getAbsolutePath + "/table1"
+          val workDirPath = workDir.getAbsolutePath
           val data = Seq(100, 200, 300, 400).toDF("count")
           data.write.parquet(workDirPath)
           val dfFromFile = spark.read.parquet(workDirPath).cache()
