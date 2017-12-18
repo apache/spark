@@ -505,6 +505,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       val df2 = spark.read
         .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\\")
         .option("escapeQuoteEscaping", "\\")
         .load(path.getAbsolutePath)
 
