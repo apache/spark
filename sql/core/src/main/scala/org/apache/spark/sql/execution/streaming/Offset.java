@@ -1,5 +1,12 @@
 package org.apache.spark.sql.execution.streaming;
 
+/**
+ * This is an internal, deprecated interface. New source implementations should use the
+ * org.apache.spark.sql.sources.v2.reader.Offset class, which is the one that will be supported
+ * in the long term.
+ *
+ * This class will be removed in a future release.
+ */
 public abstract class Offset {
     /**
      * A JSON-serialized representation of an Offset that is
