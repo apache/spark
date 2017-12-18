@@ -142,6 +142,10 @@ class VectorSizeHintSuite
     sizeHint.setHandleInvalid("skip")
     assert(sizeHint.transform(dataWithNull).count() === 1)
     assert(sizeHint.transform(dataWithShort).count() === 1)
+
+    sizeHint.setHandleInvalid("optimistic")
+    assert(sizeHint.transform(dataWithNull).count() === 2)
+    assert(sizeHint.transform(dataWithShort).count() === 2)
   }
 
   test("read/write") {
@@ -173,11 +177,6 @@ class VectorSizeHintStreamingSuite extends StreamTest {
       .setInputCols(Array("a", "b"))
       .setOutputCol("assembled")
     val pipeline = new Pipeline().setStages(Array(sizeHintA, sizeHintB, vectorAssembler))
-    /**
-    val output = Seq(sizeHintA, sizeHintB, vectorAssembler).foldLeft(streamingDF) {
-      case (data, transformer) => transformer.transform(data)
-    }.select("assembled")
-    */
     val output = pipeline.fit(streamingDF).transform(streamingDF).select("assembled")
 
     val expected = Vectors.dense(0, 1, 2, 3, 0, 0, 6)
