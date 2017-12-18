@@ -1145,7 +1145,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       Utils.loadExtensions(classOf[Seq[_]], wrongType, conf)
     }
   }
-  
+
   test("parseHostPort") {
     assert(Utils.parseHostPort("abc:123")          === (("abc", 123)))
     assert(Utils.parseHostPort("example.com")      === (("example.com", 0)))
