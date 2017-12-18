@@ -27,7 +27,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.scheduler.SparkListener
-import org.apache.spark.status.AppStatusPlugin
+import org.apache.spark.status.{AppStatusPlugin, ElementTrackingStore}
 import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
@@ -84,7 +84,7 @@ private[sql] class SQLAppStatusPlugin extends AppStatusPlugin {
 
   override def setupListeners(
       conf: SparkConf,
-      store: KVStore,
+      store: ElementTrackingStore,
       addListenerFn: SparkListener => Unit,
       live: Boolean): Unit = {
     // For live applications, the listener is installed in [[setupUI]]. This also avoids adding
@@ -100,7 +100,8 @@ private[sql] class SQLAppStatusPlugin extends AppStatusPlugin {
       case Some(sc) =>
         // If this is a live application, then install a listener that will enable the SQL
         // tab as soon as there's a SQL event posted to the bus.
-        val listener = new SQLAppStatusListener(sc.conf, ui.store.store, true, Some(ui))
+        val listener = new SQLAppStatusListener(sc.conf,
+          ui.store.store.asInstanceOf[ElementTrackingStore], true, Some(ui))
         sc.listenerBus.addToStatusQueue(listener)
 
       case _ =>
