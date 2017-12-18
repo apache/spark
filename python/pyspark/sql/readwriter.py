@@ -344,17 +344,17 @@ class DataFrameReader(OptionUtils):
                      or RDD of Strings storing CSV rows.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets the single character as a separator for each field and value.
+        :param sep: sets a single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
-        :param quote: sets the single character used for escaping quoted values where the
+        :param quote: sets a single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
                       value, ``"``. If you would like to turn off quotations, you need to set an
                       empty string.
-        :param escape: sets the single character used for escaping quotes inside an already
+        :param escape: sets a single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
-        :param comment: sets the single character used for skipping lines beginning with this
+        :param comment: sets a single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
@@ -410,8 +410,9 @@ class DataFrameReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param multiLine: parse records, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
-        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
-                                    character. If None is set, it uses the default value, ``\0``.
+        :param escapeQuoteEscaping: sets a single character used for escaping the escape for the
+                                    quote character. If None is set, it uses the default value,
+                                    ``\0``.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -833,12 +834,12 @@ class DataFrameWriter(OptionUtils):
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
-        :param sep: sets the single character as a separator for each field and value. If None is
+        :param sep: sets a single character as a separator for each field and value. If None is
                     set, it uses the default value, ``,``.
-        :param quote: sets the single character used for escaping quoted values where the
+        :param quote: sets a single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
                       value, ``"``. If an empty string is set, it uses ``u0000`` (null character).
-        :param escape: sets the single character used for escaping quotes inside an already
+        :param escape: sets a single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
         :param escapeQuotes: a flag indicating whether values containing quotes should always
                              be enclosed in quotes. If None is set, it uses the default value
@@ -864,8 +865,9 @@ class DataFrameWriter(OptionUtils):
         :param ignoreTrailingWhiteSpace: a flag indicating whether or not trailing whitespaces from
                                          values being written should be skipped. If None is set, it
                                          uses the default value, ``true``.
-        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
-                                    character. If None is set, it uses the default value, ``\0``.
+        :param escapeQuoteEscaping: sets a single character used for escaping the escape for the
+                                    quote character. If None is set, it uses the default value,
+                                    ``\0``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """

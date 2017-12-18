@@ -555,17 +555,17 @@ class DataStreamReader(OptionUtils):
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets the single character as a separator for each field and value.
+        :param sep: sets a single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
-        :param quote: sets the single character used for escaping quoted values where the
+        :param quote: sets a single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
                       value, ``"``. If you would like to turn off quotations, you need to set an
                       empty string.
-        :param escape: sets the single character used for escaping quotes inside an already
+        :param escape: sets a single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
-        :param comment: sets the single character used for skipping lines beginning with this
+        :param comment: sets a single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
@@ -621,8 +621,9 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param multiLine: parse one record, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
-        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
-                                    character. If None is set, it uses the default value, ``\0``.
+        :param escapeQuoteEscaping: sets a single character used for escaping the escape for the
+                                    quote character. If None is set, it uses the default value,
+                                    ``\0``.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming

@@ -496,10 +496,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       ).toDF()
 
       // escapeQuotes is true by default
-      // quote character is '\"' by default
-      // escape character is '\\' by default
       df1.coalesce(1).write
         .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\\")
         .option("escapeQuoteEscaping", "\\")
         .save(path.getAbsolutePath)
 
