@@ -127,7 +127,7 @@ case class SimpleTypedAggregateExpression(
     nullable: Boolean)
   extends DeclarativeAggregate with TypedAggregateExpression with NonSQLExpression {
 
-  override def deterministic: Boolean = true
+  override lazy val deterministic: Boolean = true
 
   override def children: Seq[Expression] = inputDeserializer.toSeq :+ bufferDeserializer
 
@@ -221,7 +221,7 @@ case class ComplexTypedAggregateExpression(
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[Any] with TypedAggregateExpression with NonSQLExpression {
 
-  override def deterministic: Boolean = true
+  override lazy val deterministic: Boolean = true
 
   override def children: Seq[Expression] = inputDeserializer.toSeq
 

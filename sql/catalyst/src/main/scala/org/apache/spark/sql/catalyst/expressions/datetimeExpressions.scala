@@ -24,7 +24,6 @@ import java.util.{Calendar, TimeZone}
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -34,6 +33,9 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * Common base class for time zone aware expressions.
  */
 trait TimeZoneAwareExpression extends Expression {
+  /** The expression is only resolved when the time zone has been set. */
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneId.isDefined
 
   /** the timezone ID to be used to evaluate value. */
   def timeZoneId: Option[String]
@@ -41,7 +43,7 @@ trait TimeZoneAwareExpression extends Expression {
   /** Returns a copy of this expression with the specified timeZoneId. */
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
-  @transient lazy val timeZone: TimeZone = TimeZone.getTimeZone(timeZoneId.get)
+  @transient lazy val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId.get)
 }
 
 /**
@@ -51,7 +53,8 @@ trait TimeZoneAwareExpression extends Expression {
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current date at the start of query evaluation.")
+  usage = "_FUNC_() - Returns the current date at the start of query evaluation.",
+  since = "1.5.0")
 case class CurrentDate(timeZoneId: Option[String] = None)
   extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
 
@@ -79,7 +82,8 @@ case class CurrentDate(timeZoneId: Option[String] = None)
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.")
+  usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.",
+  since = "1.5.0")
 case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
   override def nullable: Boolean = false
@@ -135,11 +139,12 @@ case class CurrentBatchTimestamp(
  */
 @ExpressionDescription(
   usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` after `start_date`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30', 1);
        2016-07-31
-  """)
+  """,
+  since = "1.5.0")
 case class DateAdd(startDate: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -168,11 +173,12 @@ case class DateAdd(startDate: Expression, days: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` before `start_date`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30', 1);
        2016-07-29
-  """)
+  """,
+  since = "1.5.0")
 case class DateSub(startDate: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
   override def left: Expression = startDate
@@ -197,11 +203,12 @@ case class DateSub(startDate: Expression, days: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the hour component of the string/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
        12
-  """)
+  """,
+  since = "1.5.0")
 case class Hour(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
@@ -219,7 +226,7 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getHours($c, $tz)")
   }
@@ -227,11 +234,12 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
 
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the minute component of the string/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
        58
-  """)
+  """,
+  since = "1.5.0")
 case class Minute(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
@@ -249,7 +257,7 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c, $tz)")
   }
@@ -257,11 +265,12 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
 
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the second component of the string/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
        59
-  """)
+  """,
+  since = "1.5.0")
 case class Second(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
@@ -279,7 +288,7 @@ case class Second(child: Expression, timeZoneId: Option[String] = None)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c, $tz)")
   }
@@ -287,11 +296,12 @@ case class Second(child: Expression, timeZoneId: Option[String] = None)
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of year of the date/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-04-09');
        100
-  """)
+  """,
+  since = "1.5.0")
 case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -310,11 +320,12 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30');
        2016
-  """)
+  """,
+  since = "1.5.0")
 case class Year(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -333,11 +344,12 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the quarter of the year for date, in the range 1 to 4.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31');
        3
-  """)
+  """,
+  since = "1.5.0")
 case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -356,11 +368,12 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the month component of the date/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30');
        7
-  """)
+  """,
+  since = "1.5.0")
 case class Month(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -379,11 +392,12 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of month of the date/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30');
        30
-  """)
+  """,
+  since = "1.5.0")
 case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -400,13 +414,55 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the week of the year of the given date.",
-  extended = """
+  usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (1 = Sunday, 2 = Monday, ..., 7 = Saturday).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2009-07-30');
+       5
+  """,
+  since = "2.3.0")
+// scalastyle:on line.size.limit
+case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  @transient private lazy val c = {
+    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
+  }
+
+  override protected def nullSafeEval(date: Any): Any = {
+    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    c.get(Calendar.DAY_OF_WEEK)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, time => {
+      val cal = classOf[Calendar].getName
+      val c = ctx.freshName("cal")
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      ctx.addMutableState(cal, c, s"""$c = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+      s"""
+        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
+        ${ev.value} = $c.get($cal.DAY_OF_WEEK);
+      """
+    })
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the week of the year of the given date. A week is considered to start on a Monday and week 1 is the first week with >3 days.",
+  examples = """
     Examples:
       > SELECT _FUNC_('2008-02-20');
        8
-  """)
+  """,
+  since = "1.5.0")
+// scalastyle:on line.size.limit
 case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -414,7 +470,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   override def dataType: DataType = IntegerType
 
   @transient private lazy val c = {
-    val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    val c = Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
     c.setFirstDayOfWeek(Calendar.MONDAY)
     c.setMinimalDaysInFirstWeek(4)
     c
@@ -429,9 +485,10 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
     nullSafeCodeGen(ctx, ev, time => {
       val cal = classOf[Calendar].getName
       val c = ctx.freshName("cal")
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
       ctx.addMutableState(cal, c,
         s"""
-          $c = $cal.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+          $c = $cal.getInstance($dtu.getTimeZone("UTC"));
           $c.setFirstDayOfWeek($cal.MONDAY);
           $c.setMinimalDaysInFirstWeek(4);
          """)
@@ -446,11 +503,12 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'y');
        2016
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
@@ -471,7 +529,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     defineCodeGen(ctx, ev, (timestamp, format) => {
       s"""UTF8String.fromString($dtu.newDateFormat($format.toString(), $tz)
           .format(new java.util.Date($timestamp / 1000)))"""
@@ -486,12 +544,13 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
  * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the give time.",
-  extended = """
+  usage = "_FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the given time.",
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
-  """)
+  """,
+  since = "1.6.0")
 case class ToUnixTimestamp(
     timeExp: Expression,
     format: Expression,
@@ -525,13 +584,14 @@ case class ToUnixTimestamp(
  */
 @ExpressionDescription(
   usage = "_FUNC_([expr[, pattern]]) - Returns the UNIX timestamp of current or specified time.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_();
        1476884637
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
-  """)
+  """,
+  since = "1.5.0")
 case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Option[String] = None)
   extends UnixTime {
 
@@ -631,7 +691,7 @@ abstract class UnixTime
             }""")
         }
       case StringType =>
-        val tz = ctx.addReferenceMinorObj(timeZone)
+        val tz = ctx.addReferenceObj("timeZone", timeZone)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
@@ -655,7 +715,7 @@ abstract class UnixTime
             ${ev.value} = ${eval1.value} / 1000000L;
           }""")
       case DateType =>
-        val tz = ctx.addReferenceMinorObj(timeZone)
+        val tz = ctx.addReferenceObj("timeZone", timeZone)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
         ev.copy(code = s"""
@@ -677,11 +737,12 @@ abstract class UnixTime
  */
 @ExpressionDescription(
   usage = "_FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
        1970-01-01 00:00:00
-  """)
+  """,
+  since = "1.5.0")
 case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
@@ -766,7 +827,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           }""")
       }
     } else {
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
@@ -786,11 +847,12 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
  */
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the last day of the month which the date belongs to.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-01-12');
        2009-01-31
-  """)
+  """,
+  since = "1.5.0")
 case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def child: Expression = startDate
 
@@ -820,11 +882,12 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(start_date, day_of_week) - Returns the first date which is later than `start_date` and named as indicated.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2015-01-14', 'TU');
        2015-01-20
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class NextDay(startDate: Expression, dayOfWeek: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -906,7 +969,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
       s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds, $tz)"""
@@ -915,17 +978,19 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
- * Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
- * that corresponds to the same time of day in the given timezone.
+ * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+ * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+ * '2017-07-14 03:40:00.0'.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, timezone) - Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp that corresponds to the same time of day in the given timezone.",
-  extended = """
+  usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14 03:40:00.0'.",
+  examples = """
     Examples:
       > SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul');
        2016-08-31 09:00:00
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -952,8 +1017,9 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
         val tzTerm = ctx.freshName("tz")
         val utcTerm = ctx.freshName("utc")
         val tzClass = classOf[TimeZone].getName
-        ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
-        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $tzClass.getTimeZone("UTC");""")
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $dtu.getTimeZone("$tz");""")
+        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
            |${eval.code}
@@ -999,7 +1065,7 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
       s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds, $tz)"""
@@ -1013,11 +1079,12 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(start_date, num_months) - Returns the date that is `num_months` after `start_date`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31', 1);
        2016-09-30
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class AddMonths(startDate: Expression, numMonths: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1049,11 +1116,12 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between `timestamp1` and `timestamp2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
        3.94959677
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
@@ -1075,7 +1143,7 @@ case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Optio
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceMinorObj(timeZone)
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (l, r) => {
       s"""$dtu.monthsBetween($l, $r, $tz)"""
@@ -1086,17 +1154,19 @@ case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Optio
 }
 
 /**
- * Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
- * another timestamp that corresponds to the same time of day in UTC.
+ * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time zone,
+ * and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+ * '2017-07-14 01:40:00.0'.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, timezone) - Given a timestamp, which corresponds to a certain time of day in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.",
-  extended = """
+  usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield '2017-07-14 01:40:00.0'.",
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-30 15:00:00
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1123,8 +1193,9 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
         val tzTerm = ctx.freshName("tz")
         val utcTerm = ctx.freshName("utc")
         val tzClass = classOf[TimeZone].getName
-        ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
-        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $tzClass.getTimeZone("UTC");""")
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $dtu.getTimeZone("$tz");""")
+        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
            |${eval.code}
@@ -1144,44 +1215,22 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
 }
 
 /**
- * Returns the date part of a timestamp or string.
+ * Parses a column to a date based on the given format.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Extracts the date part of the date or timestamp expression `expr`.",
-  extended = """
+  usage = """
+    _FUNC_(date_str[, fmt]) - Parses the `date_str` expression with the `fmt` expression to
+      a date. Returns null with invalid input. By default, it follows casting rules to a date if
+      the `fmt` is omitted.
+  """,
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 04:17:52');
        2009-07-30
-  """)
-case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  // Implicit casting of spark will accept string in both date and timestamp format, as
-  // well as TimestampType.
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = DateType
-
-  override def eval(input: InternalRow): Any = child.eval(input)
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, d => d)
-  }
-
-  override def prettyName: String = "to_date"
-}
-
-/**
- * Parses a column to a date based on the given format.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(date_str, fmt) - Parses the `left` expression with the `fmt` expression. Returns null with invalid input.",
-  extended = """
-    Examples:
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31
-  """)
-// scalastyle:on line.size.limit
+  """,
+  since = "1.5.0")
 case class ParseToDate(left: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
@@ -1192,13 +1241,13 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 
   def this(left: Expression) = {
     // backwards compatability
-    this(left, Option(null), ToDate(left))
+    this(left, None, Cast(left, DateType))
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def sql: String = {
     if (format.isDefined) {
-      s"$prettyName(${left.sql}, ${format.get.sql}"
+      s"$prettyName(${left.sql}, ${format.get.sql})"
     } else {
       s"$prettyName(${left.sql})"
     }
@@ -1210,24 +1259,37 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 /**
  * Parses a column to a timestamp based on the supplied format.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, fmt) - Parses the `left` expression with the `format` expression to a timestamp. Returns null with invalid input.",
-  extended = """
+  usage = """
+    _FUNC_(timestamp[, fmt]) - Parses the `timestamp` expression with the `fmt` expression to
+      a timestamp. Returns null with invalid input. By default, it follows casting rules to
+      a timestamp if the `fmt` is omitted.
+  """,
+  examples = """
     Examples:
+      > SELECT _FUNC_('2016-12-31 00:12:00');
+       2016-12-31 00:12:00
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
-       2016-12-31 00:00:00.0
-  """)
-// scalastyle:on line.size.limit
-case class ParseToTimestamp(left: Expression, format: Expression, child: Expression)
+       2016-12-31 00:00:00
+  """,
+  since = "2.2.0")
+case class ParseToTimestamp(left: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-  this(left, format, Cast(UnixTimestamp(left, format), TimestampType))
-}
+    this(left, Option(format), Cast(UnixTimestamp(left, format), TimestampType))
+  }
+
+  def this(left: Expression) = this(left, None, Cast(left, TimestampType))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"
+  override def sql: String = {
+    if (format.isDefined) {
+      s"$prettyName(${left.sql}, ${format.get.sql})"
+    } else {
+      s"$prettyName(${left.sql})"
+    }
+  }
 
   override def prettyName: String = "to_timestamp"
   override def dataType: DataType = TimestampType
@@ -1239,13 +1301,14 @@ case class ParseToTimestamp(left: Expression, format: Expression, child: Express
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-02-12', 'MM');
        2009-02-01
       > SELECT _FUNC_('2015-10-27', 'YEAR');
        2015-01-01
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class TruncDate(date: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1318,14 +1381,15 @@ case class TruncDate(date: Expression, format: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-31', '2009-07-30');
        1
 
       > SELECT _FUNC_('2009-07-30', '2009-07-31');
        -1
-  """)
+  """,
+  since = "1.5.0")
 case class DateDiff(endDate: Expression, startDate: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 

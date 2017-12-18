@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -37,7 +38,7 @@ class ComplexTypesSuite extends PlanTest{
       Batch("collapse projections", FixedPoint(10),
           CollapseProject) ::
       Batch("Constant Folding", FixedPoint(10),
-          NullPropagation(conf),
+          NullPropagation,
           ConstantFolding,
           BooleanSimplification,
           SimplifyConditionals,
@@ -162,6 +163,12 @@ class ComplexTypesSuite extends PlanTest{
         ('id + 1L) as "a4")
       .analyze
     comparePlans(Optimizer execute query, expected)
+  }
+
+  test("SPARK-22570: CreateArray should not create a lot of global variables") {
+    val ctx = new CodegenContext
+    CreateArray(Seq(Literal(1))).genCode(ctx)
+    assert(ctx.mutableStates.length == 0)
   }
 
   test("simplify map ops") {

@@ -21,12 +21,15 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * Test basic expression parsing. If a type of expression is supported it should be tested here.
+ * Test basic expression parsing.
+ * If the type of an expression is supported it should be tested here.
  *
  * Please note that some of the expressions test don't have to be sound expressions, only their
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
@@ -37,12 +40,17 @@ class ExpressionParserSuite extends PlanTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
-  def assertEqual(sqlCommand: String, e: Expression): Unit = {
-    compareExpressions(parseExpression(sqlCommand), e)
+  val defaultParser = CatalystSqlParser
+
+  def assertEqual(
+      sqlCommand: String,
+      e: Expression,
+      parser: ParserInterface = defaultParser): Unit = {
+    compareExpressions(parser.parseExpression(sqlCommand), e)
   }
 
   def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parseExpression(sqlCommand))
+    val e = intercept[ParseException](defaultParser.parseExpression(sqlCommand))
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
@@ -99,7 +107,7 @@ class ExpressionParserSuite extends PlanTest {
   test("long binary logical expressions") {
     def testVeryBinaryExpression(op: String, clazz: Class[_]): Unit = {
       val sql = (1 to 1000).map(x => s"$x == $x").mkString(op)
-      val e = parseExpression(sql)
+      val e = defaultParser.parseExpression(sql)
       assert(e.collect { case _: EqualTo => true }.size === 1000)
       assert(e.collect { case x if clazz.isInstance(x) => true }.size === 999)
     }
@@ -158,11 +166,25 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
   }
 
+  test("like expressions with ESCAPED_STRING_LITERALS = true") {
+    val conf = new SQLConf()
+    conf.setConfString(SQLConf.ESCAPED_STRING_LITERALS.key, "true")
+    val parser = new CatalystSqlParser(conf)
+    assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
+    assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
+    assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
+  }
+
   test("is null expressions") {
     assertEqual("a is null", 'a.isNull)
     assertEqual("a is not null", 'a.isNotNull)
     assertEqual("a = b is null", ('a === 'b).isNull)
     assertEqual("a = b is not null", ('a === 'b).isNotNull)
+  }
+
+  test("is distinct expressions") {
+    assertEqual("a is distinct from b", !('a <=> 'b))
+    assertEqual("a is not distinct from b", 'a <=> 'b)
   }
 
   test("binary arithmetic expressions") {
@@ -209,7 +231,7 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
     assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
     assertEqual("`select`(all a, b)", 'select.function('a, 'b))
-    assertEqual("foo(a as x, b as e)", 'foo.function('a as 'x, 'b as 'e))
+    intercept("foo(a x)", "extraneous input 'x'")
   }
 
   test("window function expressions") {
@@ -245,16 +267,17 @@ class ExpressionParserSuite extends PlanTest {
     // Range/Row
     val frameTypes = Seq(("rows", RowFrame), ("range", RangeFrame))
     val boundaries = Seq(
-      ("10 preceding", ValuePreceding(10), CurrentRow),
-      ("3 + 1 following", ValueFollowing(4), CurrentRow), // Will fail during analysis
+      ("10 preceding", -Literal(10), CurrentRow),
+      ("2147483648 preceding", -Literal(2147483648L), CurrentRow),
+      ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow),
       ("unbounded preceding", UnboundedPreceding, CurrentRow),
       ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
       ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),
       ("between unbounded preceding and unbounded following",
         UnboundedPreceding, UnboundedFollowing),
-      ("between 10 preceding and current row", ValuePreceding(10), CurrentRow),
-      ("between current row and 5 following", CurrentRow, ValueFollowing(5)),
-      ("between 10 preceding and 5 following", ValuePreceding(10), ValueFollowing(5))
+      ("between 10 preceding and current row", -Literal(10), CurrentRow),
+      ("between current row and 5 following", CurrentRow, Literal(5)),
+      ("between 10 preceding and 5 following", -Literal(10), Literal(5))
     )
     frameTypes.foreach {
       case (frameTypeSql, frameType) =>
@@ -266,13 +289,9 @@ class ExpressionParserSuite extends PlanTest {
         }
     }
 
-    // We cannot use non integer constants.
-    intercept("foo(*) over (partition by a order by b rows 10.0 preceding)",
-      "Frame bound value must be a constant integer.")
-
     // We cannot use an arbitrary expression.
     intercept("foo(*) over (partition by a order by b rows exp(b) preceding)",
-      "Frame bound value must be a constant integer.")
+      "Frame bound value must be a literal.")
   }
 
   test("row constructor") {
@@ -308,7 +327,9 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a.b", UnresolvedAttribute("a.b"))
     assertEqual("`select`.b", UnresolvedAttribute("select.b"))
     assertEqual("(a + b).b", ('a + 'b).getField("b")) // This will fail analysis.
-    assertEqual("struct(a, b).b", 'struct.function('a, 'b).getField("b"))
+    assertEqual(
+      "struct(a, b).b",
+      namedStruct(NamePlaceholder, 'a, NamePlaceholder, 'b).getField("b"))
   }
 
   test("reference") {
@@ -411,38 +432,87 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("strings") {
-    // Single Strings.
-    assertEqual("\"hello\"", "hello")
-    assertEqual("'hello'", "hello")
+    Seq(true, false).foreach { escape =>
+      val conf = new SQLConf()
+      conf.setConfString(SQLConf.ESCAPED_STRING_LITERALS.key, escape.toString)
+      val parser = new CatalystSqlParser(conf)
 
-    // Multi-Strings.
-    assertEqual("\"hello\" 'world'", "helloworld")
-    assertEqual("'hello' \" \" 'world'", "hello world")
+      // tests that have same result whatever the conf is
+      // Single Strings.
+      assertEqual("\"hello\"", "hello", parser)
+      assertEqual("'hello'", "hello", parser)
 
-    // 'LIKE' string literals. Notice that an escaped '%' is the same as an escaped '\' and a
-    // regular '%'; to get the correct result you need to add another escaped '\'.
-    // TODO figure out if we shouldn't change the ParseUtils.unescapeSQLString method?
-    assertEqual("'pattern%'", "pattern%")
-    assertEqual("'no-pattern\\%'", "no-pattern\\%")
-    assertEqual("'pattern\\\\%'", "pattern\\%")
-    assertEqual("'pattern\\\\\\%'", "pattern\\\\%")
+      // Multi-Strings.
+      assertEqual("\"hello\" 'world'", "helloworld", parser)
+      assertEqual("'hello' \" \" 'world'", "hello world", parser)
 
-    // Escaped characters.
-    // See: http://dev.mysql.com/doc/refman/5.7/en/string-literals.html
-    assertEqual("'\\0'", "\u0000") // ASCII NUL (X'00')
-    assertEqual("'\\''", "\'")     // Single quote
-    assertEqual("'\\\"'", "\"")    // Double quote
-    assertEqual("'\\b'", "\b")     // Backspace
-    assertEqual("'\\n'", "\n")     // Newline
-    assertEqual("'\\r'", "\r")     // Carriage return
-    assertEqual("'\\t'", "\t")     // Tab character
-    assertEqual("'\\Z'", "\u001A") // ASCII 26 - CTRL + Z (EOF on windows)
+      // 'LIKE' string literals. Notice that an escaped '%' is the same as an escaped '\' and a
+      // regular '%'; to get the correct result you need to add another escaped '\'.
+      // TODO figure out if we shouldn't change the ParseUtils.unescapeSQLString method?
+      assertEqual("'pattern%'", "pattern%", parser)
+      assertEqual("'no-pattern\\%'", "no-pattern\\%", parser)
 
-    // Octals
-    assertEqual("'\\110\\145\\154\\154\\157\\041'", "Hello!")
+      // tests that have different result regarding the conf
+      if (escape) {
+        // When SQLConf.ESCAPED_STRING_LITERALS is enabled, string literal parsing fallbacks to
+        // Spark 1.6 behavior.
 
-    // Unicode
-    assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'", "World :)")
+        // 'LIKE' string literals.
+        assertEqual("'pattern\\\\%'", "pattern\\\\%", parser)
+        assertEqual("'pattern\\\\\\%'", "pattern\\\\\\%", parser)
+
+        // Escaped characters.
+        // Unescape string literal "'\\0'" for ASCII NUL (X'00') doesn't work
+        // when ESCAPED_STRING_LITERALS is enabled.
+        // It is parsed literally.
+        assertEqual("'\\0'", "\\0", parser)
+
+        // Note: Single quote follows 1.6 parsing behavior when ESCAPED_STRING_LITERALS is enabled.
+        val e = intercept[ParseException](parser.parseExpression("'\''"))
+        assert(e.message.contains("extraneous input '''"))
+
+        // The unescape special characters (e.g., "\\t") for 2.0+ don't work
+        // when ESCAPED_STRING_LITERALS is enabled. They are parsed literally.
+        assertEqual("'\\\"'", "\\\"", parser)   // Double quote
+        assertEqual("'\\b'", "\\b", parser)     // Backspace
+        assertEqual("'\\n'", "\\n", parser)     // Newline
+        assertEqual("'\\r'", "\\r", parser)     // Carriage return
+        assertEqual("'\\t'", "\\t", parser)     // Tab character
+
+        // The unescape Octals for 2.0+ don't work when ESCAPED_STRING_LITERALS is enabled.
+        // They are parsed literally.
+        assertEqual("'\\110\\145\\154\\154\\157\\041'", "\\110\\145\\154\\154\\157\\041", parser)
+        // The unescape Unicode for 2.0+ doesn't work when ESCAPED_STRING_LITERALS is enabled.
+        // They are parsed literally.
+        assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'",
+          "\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029", parser)
+      } else {
+        // Default behavior
+
+        // 'LIKE' string literals.
+        assertEqual("'pattern\\\\%'", "pattern\\%", parser)
+        assertEqual("'pattern\\\\\\%'", "pattern\\\\%", parser)
+
+        // Escaped characters.
+        // See: http://dev.mysql.com/doc/refman/5.7/en/string-literals.html
+        assertEqual("'\\0'", "\u0000", parser) // ASCII NUL (X'00')
+        assertEqual("'\\''", "\'", parser)     // Single quote
+        assertEqual("'\\\"'", "\"", parser)    // Double quote
+        assertEqual("'\\b'", "\b", parser)     // Backspace
+        assertEqual("'\\n'", "\n", parser)     // Newline
+        assertEqual("'\\r'", "\r", parser)     // Carriage return
+        assertEqual("'\\t'", "\t", parser)     // Tab character
+        assertEqual("'\\Z'", "\u001A", parser) // ASCII 26 - CTRL + Z (EOF on windows)
+
+        // Octals
+        assertEqual("'\\110\\145\\154\\154\\157\\041'", "Hello!", parser)
+
+        // Unicode
+        assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'", "World :)",
+          parser)
+      }
+
+    }
   }
 
   test("intervals") {
@@ -522,11 +592,6 @@ class ExpressionParserSuite extends PlanTest {
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
   }
 
-  test("current date/timestamp braceless expressions") {
-    assertEqual("current_date", CurrentDate())
-    assertEqual("current_timestamp", CurrentTimestamp())
-  }
-
   test("SPARK-17364, fully qualified column name which starts with number") {
     assertEqual("123_", UnresolvedAttribute("123_"))
     assertEqual("1a.123_", UnresolvedAttribute("1a.123_"))
@@ -547,5 +612,12 @@ class ExpressionParserSuite extends PlanTest {
     // Function identifier contains countious backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
     assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
+  }
+
+  test("SPARK-19526 Support ignore nulls keywords for first and last") {
+    assertEqual("first(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
+    assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
+    assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 }

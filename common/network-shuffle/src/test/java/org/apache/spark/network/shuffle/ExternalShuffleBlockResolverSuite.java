@@ -65,7 +65,7 @@ public class ExternalShuffleBlockResolverSuite {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     // Unregistered executor
     try {
-      resolver.getBlockData("app0", "exec1", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec1", 1, 1, 0);
       fail("Should have failed");
     } catch (RuntimeException e) {
       assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
@@ -74,7 +74,7 @@ public class ExternalShuffleBlockResolverSuite {
     // Invalid shuffle manager
     try {
       resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
-      resolver.getBlockData("app0", "exec2", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec2", 1, 1, 0);
       fail("Should have failed");
     } catch (UnsupportedOperationException e) {
       // pass
@@ -84,7 +84,7 @@ public class ExternalShuffleBlockResolverSuite {
     resolver.registerExecutor("app0", "exec3",
       dataContext.createExecutorInfo(SORT_MANAGER));
     try {
-      resolver.getBlockData("app0", "exec3", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec3", 1, 1, 0);
       fail("Should have failed");
     } catch (Exception e) {
       // pass
@@ -98,14 +98,14 @@ public class ExternalShuffleBlockResolverSuite {
       dataContext.createExecutorInfo(SORT_MANAGER));
 
     InputStream block0Stream =
-      resolver.getBlockData("app0", "exec0", "shuffle_0_0_0").createInputStream();
+      resolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream();
     String block0 = CharStreams.toString(
         new InputStreamReader(block0Stream, StandardCharsets.UTF_8));
     block0Stream.close();
     assertEquals(sortBlock0, block0);
 
     InputStream block1Stream =
-      resolver.getBlockData("app0", "exec0", "shuffle_0_0_1").createInputStream();
+      resolver.getBlockData("app0", "exec0", 0, 0, 1).createInputStream();
     String block1 = CharStreams.toString(
         new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
     block1Stream.close();

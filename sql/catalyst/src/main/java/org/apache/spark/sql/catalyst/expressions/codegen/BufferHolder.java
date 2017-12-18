@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 
 /**
  * A helper class to manage the data buffer for an unsafe row.  The data buffer can grow and
@@ -35,6 +36,9 @@ import org.apache.spark.unsafe.Platform;
  * if the fields of row are all fixed-length, as the size of result row is also fixed.
  */
 public class BufferHolder {
+
+  private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
+
   public byte[] buffer;
   public int cursor = Platform.BYTE_ARRAY_OFFSET;
   private final UnsafeRow row;
@@ -46,7 +50,7 @@ public class BufferHolder {
 
   public BufferHolder(UnsafeRow row, int initialSize) {
     int bitsetWidthInBytes = UnsafeRow.calculateBitSetWidthInBytes(row.numFields());
-    if (row.numFields() > (Integer.MAX_VALUE - initialSize - bitsetWidthInBytes) / 8) {
+    if (row.numFields() > (ARRAY_MAX - initialSize - bitsetWidthInBytes) / 8) {
       throw new UnsupportedOperationException(
         "Cannot create BufferHolder for input UnsafeRow because there are " +
           "too many fields (number of fields: " + row.numFields() + ")");
@@ -61,15 +65,15 @@ public class BufferHolder {
    * Grows the buffer by at least neededSize and points the row to the buffer.
    */
   public void grow(int neededSize) {
-    if (neededSize > Integer.MAX_VALUE - totalSize()) {
+    if (neededSize > ARRAY_MAX - totalSize()) {
       throw new UnsupportedOperationException(
         "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
-          "exceeds size limitation " + Integer.MAX_VALUE);
+          "exceeds size limitation " + ARRAY_MAX);
     }
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
-      int newLength = length < Integer.MAX_VALUE / 2 ? length * 2 : Integer.MAX_VALUE;
+      int newLength = length < ARRAY_MAX / 2 ? length * 2 : ARRAY_MAX;
       final byte[] tmp = new byte[newLength];
       Platform.copyMemory(
         buffer,

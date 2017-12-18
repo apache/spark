@@ -18,7 +18,7 @@ rem limitations under the License.
 rem
 
 rem Figure out where the Spark framework is installed
-set SPARK_HOME=%~dp0..
+call "%~dp0find-spark-home.cmd"
 
 call "%SPARK_HOME%\bin\load-spark-env.cmd"
 
@@ -29,7 +29,7 @@ if "x%1"=="x" (
 )
 
 rem Find Spark jars.
-if exist "%SPARK_HOME%\RELEASE" (
+if exist "%SPARK_HOME%\jars" (
   set SPARK_JARS_DIR="%SPARK_HOME%\jars"
 ) else (
   set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars"
@@ -51,7 +51,7 @@ if not "x%SPARK_PREPEND_CLASSES%"=="x" (
 rem Figure out where java is.
 set RUNNER=java
 if not "x%JAVA_HOME%"=="x" (
-  set RUNNER="%JAVA_HOME%\bin\java"
+  set RUNNER=%JAVA_HOME%\bin\java
 ) else (
   where /q "%RUNNER%"
   if ERRORLEVEL 1 (

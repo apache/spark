@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.yarn.security
 
 import java.security.PrivilegedExceptionAction
-import java.util.concurrent.{Executors, TimeUnit}
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -25,6 +25,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -54,15 +55,14 @@ import org.apache.spark.util.ThreadUtils
 private[yarn] class AMCredentialRenewer(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    credentialManager: ConfigurableCredentialManager) extends Logging {
+    credentialManager: YARNHadoopDelegationTokenManager) extends Logging {
 
   private var lastCredentialsFileSuffix = 0
 
-  private val credentialRenewer =
-    Executors.newSingleThreadScheduledExecutor(
-      ThreadUtils.namedThreadFactory("Credential Refresh Thread"))
+  private val credentialRenewerThread: ScheduledExecutorService =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Refresh Thread")
 
-  private val hadoopUtil = YarnSparkHadoopUtil.get
+  private val hadoopUtil = SparkHadoopUtil.get
 
   private val credentialsFile = sparkConf.get(CREDENTIALS_FILE_PATH)
   private val daysToKeepFiles = sparkConf.get(CREDENTIALS_FILE_MAX_RETENTION)
@@ -70,7 +70,7 @@ private[yarn] class AMCredentialRenewer(
   private val freshHadoopConf =
     hadoopUtil.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
-  @volatile private var timeOfNextRenewal = sparkConf.get(CREDENTIALS_RENEWAL_TIME)
+  @volatile private var timeOfNextRenewal: Long = sparkConf.get(CREDENTIALS_RENEWAL_TIME)
 
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab
@@ -95,7 +95,7 @@ private[yarn] class AMCredentialRenewer(
         runnable.run()
       } else {
         logInfo(s"Scheduling login from keytab in $remainingTime millis.")
-        credentialRenewer.schedule(runnable, remainingTime, TimeUnit.MILLISECONDS)
+        credentialRenewerThread.schedule(runnable, remainingTime, TimeUnit.MILLISECONDS)
       }
     }
 
@@ -111,7 +111,7 @@ private[yarn] class AMCredentialRenewer(
               // Log the error and try to write new tokens back in an hour
               logWarning("Failed to write out new credentials to HDFS, will try again in an " +
                 "hour! If this happens too often tasks will fail.", e)
-              credentialRenewer.schedule(this, 1, TimeUnit.HOURS)
+              credentialRenewerThread.schedule(this, 1, TimeUnit.HOURS)
               return
           }
           scheduleRenewal(this)
@@ -174,7 +174,9 @@ private[yarn] class AMCredentialRenewer(
     keytabLoggedInUGI.doAs(new PrivilegedExceptionAction[Void] {
       // Get a copy of the credentials
       override def run(): Void = {
-        nearestNextRenewalTime = credentialManager.obtainCredentials(freshHadoopConf, tempCreds)
+        nearestNextRenewalTime = credentialManager.obtainDelegationTokens(
+          freshHadoopConf,
+          tempCreds)
         null
       }
     })
@@ -193,8 +195,9 @@ private[yarn] class AMCredentialRenewer(
     } else {
       // Next valid renewal time is about 75% of credential renewal time, and update time is
       // slightly later than valid renewal time (80% of renewal time).
-      timeOfNextRenewal = ((nearestNextRenewalTime - currTime) * 0.75 + currTime).toLong
-      ((nearestNextRenewalTime - currTime) * 0.8 + currTime).toLong
+      timeOfNextRenewal =
+        SparkHadoopUtil.getDateOfNextUpdate(nearestNextRenewalTime, 0.75)
+      SparkHadoopUtil.getDateOfNextUpdate(nearestNextRenewalTime, 0.8)
     }
 
     // Add the temp credentials back to the original ones.
@@ -230,6 +233,6 @@ private[yarn] class AMCredentialRenewer(
   }
 
   def stop(): Unit = {
-    credentialRenewer.shutdown()
+    credentialRenewerThread.shutdown()
   }
 }

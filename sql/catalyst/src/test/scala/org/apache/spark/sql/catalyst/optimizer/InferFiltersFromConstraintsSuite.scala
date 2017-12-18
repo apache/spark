@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
@@ -32,18 +32,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       Batch("InferAndPushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
         PushDownPredicate,
-        InferFiltersFromConstraints(SimpleCatalystConf(caseSensitiveAnalysis = true)),
-        CombineFilters) :: Nil
-  }
-
-  object OptimizeWithConstraintPropagationDisabled extends RuleExecutor[LogicalPlan] {
-    val batches =
-      Batch("InferAndPushDownFilters", FixedPoint(100),
-        PushPredicateThroughJoin,
-        PushDownPredicate,
-        InferFiltersFromConstraints(SimpleCatalystConf(caseSensitiveAnalysis = true,
-          constraintPropagationEnabled = false)),
-        CombineFilters) :: Nil
+        InferFiltersFromConstraints,
+        CombineFilters,
+        BooleanSimplification) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -160,9 +151,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull('b) && 'a <=> 'a && 'b <=> 'b &&'a === 'b)
+      .where(IsNotNull('a) && IsNotNull('b) &&'a === 'b)
       .select('a, 'b.as('d)).as("t")
-      .join(t2.where(IsNotNull('a) && 'a <=> 'a), Inner,
+      .join(t2.where(IsNotNull('a)), Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
@@ -173,30 +164,55 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val t1 = testRelation.subquery('t1)
     val t2 = testRelation.subquery('t2)
 
-    val originalQuery = t1.select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
+    // We should prevent `Coalese(a, b)` from recursively creating complicated constraints through
+    // the constraint inference procedure.
+    val originalQuery = t1.select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col))
+      // We hide an `Alias` inside the child's child's expressions, to cover the situation reported
+      // in [SPARK-20700].
+      .select('int_col, 'd, 'a).as("t")
       .join(t2, Inner,
         Some("t.a".attr === "t2.a".attr
           && "t.d".attr === "t2.a".attr
           && "t.int_col".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-        && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
-        && Coalesce(Seq('a, 'a)) <=> 'b && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))
-        && 'a === 'b && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === Coalesce(Seq('a, 'b))
-        && Coalesce(Seq('a, 'b)) <=> Coalesce(Seq('b, 'b)) && Coalesce(Seq('a, 'b)) === 'b
-        && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b)))
-        && 'b === Coalesce(Seq('b, 'b)) && 'b <=> Coalesce(Seq('b, 'b))
-        && Coalesce(Seq('b, 'b)) <=> Coalesce(Seq('b, 'b)) && 'b <=> 'b)
-      .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
-      .join(t2
-        .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-          && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
-          && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))), Inner,
-        Some("t.a".attr === "t2.a".attr
-          && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr
-          && Coalesce(Seq("t.d".attr, "t.d".attr)) <=> "t.int_col".attr))
+      .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))  && IsNotNull(Coalesce(Seq('b, 'a)))
+        && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b))) && IsNotNull(Coalesce(Seq('a, 'b)))
+        && 'a === 'b && 'a === Coalesce(Seq('a, 'a)) && 'a === Coalesce(Seq('a, 'b))
+        && 'a === Coalesce(Seq('b, 'a)) && 'b === Coalesce(Seq('a, 'b))
+        && 'b === Coalesce(Seq('b, 'a)) && 'b === Coalesce(Seq('b, 'b)))
+      .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col))
+      .select('int_col, 'd, 'a).as("t")
+      .join(
+        t2.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a))) &&
+          'a === Coalesce(Seq('a, 'a))),
+        Inner,
+        Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr
+          && "t.int_col".attr === "t2.a".attr))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("inner join with EqualTo expressions containing part of each other: don't generate " +
+    "constraints for recursive functions") {
+    val t1 = testRelation.subquery('t1)
+    val t2 = testRelation.subquery('t2)
+
+    // We should prevent `c = Coalese(a, b)` and `a = Coalese(b, c)` from recursively creating
+    // complicated constraints through the constraint inference procedure.
+    val originalQuery = t1
+      .select('a, 'b, 'c, Coalesce(Seq('b, 'c)).as('d), Coalesce(Seq('a, 'b)).as('e))
+      .where('a === 'd && 'c === 'e)
+      .join(t2, Inner, Some("t1.a".attr === "t2.a".attr && "t1.c".attr === "t2.c".attr))
+      .analyze
+    val correctAnswer = t1
+      .where(IsNotNull('a) && IsNotNull('c) && 'a === Coalesce(Seq('b, 'c)) &&
+        'c === Coalesce(Seq('a, 'b)))
+      .select('a, 'b, 'c, Coalesce(Seq('b, 'c)).as('d), Coalesce(Seq('a, 'b)).as('e))
+      .join(t2.where(IsNotNull('a) && IsNotNull('c)),
+        Inner,
+        Some("t1.a".attr === "t2.a".attr && "t1.c".attr === "t2.c".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
@@ -214,8 +230,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("No inferred filter when constraint propagation is disabled") {
-    val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
-    val optimized = OptimizeWithConstraintPropagationDisabled.execute(originalQuery)
-    comparePlans(optimized, originalQuery)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
   }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.broadcast
 
+import java.util.Locale
+
 import scala.util.Random
 
 import org.scalatest.Assertions
@@ -130,7 +132,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     val thrown = intercept[IllegalStateException] {
       sc.broadcast(Seq(1, 2, 3))
     }
-    assert(thrown.getMessage.toLowerCase.contains("stopped"))
+    assert(thrown.getMessage.toLowerCase(Locale.ROOT).contains("stopped"))
   }
 
   test("Forbid broadcasting RDD directly") {
@@ -222,7 +224,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
         new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
       // Wait until all salves are up
       try {
-        _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 60000)
+        TestUtils.waitUntilExecutorsUp(_sc, numSlaves, 60000)
         _sc
       } catch {
         case e: Throwable =>

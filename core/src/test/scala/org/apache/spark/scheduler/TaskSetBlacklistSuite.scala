@@ -37,7 +37,8 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
 
     // First, mark task 0 as failed on exec1.
     // task 0 should be blacklisted on exec1, and nowhere else
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec1", index = 0)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "exec1", index = 0, failureReason = "testing")
     for {
       executor <- (1 to 4).map(_.toString)
       index <- 0 until 10
@@ -49,17 +50,20 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
     // Mark task 1 failed on exec1 -- this pushes the executor into the blacklist
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec1", index = 1)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "exec1", index = 1, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
     // Mark one task as failed on exec2 -- not enough for any further blacklisting yet.
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec2", index = 0)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "exec2", index = 0, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec2"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
     // Mark another task as failed on exec2 -- now we blacklist exec2, which also leads to
     // blacklisting the entire node.
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec2", index = 1)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "exec2", index = 1, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec2"))
     assert(taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
@@ -86,8 +90,8 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
     Seq("exec1", "exec2").foreach { exec =>
       assert(
         execToFailures(exec).taskToFailureCountAndFailureTime === Map(
-          0 -> (1, 0),
-          1 -> (1, 0)
+          0 -> ((1, 0)),
+          1 -> ((1, 0))
         )
       )
     }
@@ -108,34 +112,41 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
       .set(config.MAX_FAILED_EXEC_PER_NODE_STAGE, 3)
     val taskSetBlacklist = new TaskSetBlacklist(conf, stageId = 0, new SystemClock())
     // Fail a task twice on hostA, exec:1
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "1", index = 0, failureReason = "testing")
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "1", index = 0, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTask("1", 0))
     assert(!taskSetBlacklist.isNodeBlacklistedForTask("hostA", 0))
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
     // Fail the same task once more on hostA, exec:2
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "2", index = 0)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "2", index = 0, failureReason = "testing")
     assert(taskSetBlacklist.isNodeBlacklistedForTask("hostA", 0))
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
     // Fail another task on hostA, exec:1.  Now that executor has failures on two different tasks,
     // so its blacklisted
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "1", index = 1, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
     // Fail a third task on hostA, exec:2, so that exec is blacklisted for the whole task set
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "2", index = 2)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "2", index = 2, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
     // Fail a fourth & fifth task on hostA, exec:3.  Now we've got three executors that are
     // blacklisted for the taskset, so blacklist the whole node.
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "3", index = 3)
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "3", index = 4)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "3", index = 3, failureReason = "testing")
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "3", index = 4, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("3"))
     assert(taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
   }
@@ -147,13 +158,17 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set(config.BLACKLIST_ENABLED.key, "true")
     val taskSetBlacklist = new TaskSetBlacklist(conf, stageId = 0, new SystemClock())
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
-    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "1", index = 0, failureReason = "testing")
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostA", exec = "1", index = 1, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
-    taskSetBlacklist.updateBlacklistForFailedTask("hostB", exec = "2", index = 0)
-    taskSetBlacklist.updateBlacklistForFailedTask("hostB", exec = "2", index = 1)
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostB", exec = "2", index = 0, failureReason = "testing")
+    taskSetBlacklist.updateBlacklistForFailedTask(
+      "hostB", exec = "2", index = 1, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))

@@ -41,6 +41,12 @@ if [[ $@ == *"help"* ]]; then
   exit_with_usage
 fi
 
+if [[ -z "$ASF_PASSWORD" ]]; then
+  echo 'The environment variable ASF_PASSWORD is not set. Enter the password.'
+  echo
+  stty -echo && printf "ASF password: " && read ASF_PASSWORD && printf '\n' && stty echo
+fi
+
 for env in ASF_USERNAME ASF_PASSWORD RELEASE_VERSION RELEASE_TAG NEXT_VERSION GIT_EMAIL GIT_NAME GIT_BRANCH; do
   if [ -z "${!env}" ]; then
     echo "$env must be set to run this script"
@@ -52,7 +58,7 @@ ASF_SPARK_REPO="git-wip-us.apache.org/repos/asf/spark.git"
 MVN="build/mvn --force"
 
 rm -rf spark
-git clone https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO -b $GIT_BRANCH
+git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
 cd spark
 
 git config user.name "$GIT_NAME"

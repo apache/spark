@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -87,6 +88,14 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
+        if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
+            key.startsWith("hive.")) {
+          logWarning(s"'SET $key=$value' might not work, since Spark doesn't support changing " +
+            "the Hive config dynamically. Please passing the Hive-specific config by adding the " +
+            s"prefix spark.hadoop (e.g., spark.hadoop.$key) when starting a Spark application. " +
+            "For details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
+            "dynamically-loading-spark-properties.")
+        }
         sparkSession.conf.set(key, value)
         Seq(Row(key, value))
       }

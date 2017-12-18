@@ -93,16 +93,13 @@ INDEX
 .lintr
 gen-java.*
 .*avpr
-org.apache.spark.sql.sources.DataSourceRegister
-org.apache.spark.scheduler.SparkHistoryListenerFactory
 .*parquet
 spark-deps-.*
 .*csv
 .*tsv
-org.apache.spark.scheduler.ExternalClusterManager
 .*\.sql
 .Rbuildignore
-org.apache.spark.deploy.yarn.security.ServiceCredentialProvider
+META-INF/*
 spark-warehouse
 structured-streaming/*
 kafka-source-initial-offset-version-2.1.0.bin

@@ -144,45 +144,13 @@ class PrefixSpan private (
     logInfo(s"minimum count for a frequent pattern: $minCount")
 
     // Find frequent items.
-    val freqItemAndCounts = data.flatMap { itemsets =>
-        val uniqItems = mutable.Set.empty[Item]
-        itemsets.foreach { _.foreach { item =>
-          uniqItems += item
-        }}
-        uniqItems.toIterator.map((_, 1L))
-      }.reduceByKey(_ + _)
-      .filter { case (_, count) =>
-        count >= minCount
-      }.collect()
-    val freqItems = freqItemAndCounts.sortBy(-_._2).map(_._1)
+    val freqItems = findFrequentItems(data, minCount)
     logInfo(s"number of frequent items: ${freqItems.length}")
 
     // Keep only frequent items from input sequences and convert them to internal storage.
     val itemToInt = freqItems.zipWithIndex.toMap
-    val dataInternalRepr = data.flatMap { itemsets =>
-      val allItems = mutable.ArrayBuilder.make[Int]
-      var containsFreqItems = false
-      allItems += 0
-      itemsets.foreach { itemsets =>
-        val items = mutable.ArrayBuilder.make[Int]
-        itemsets.foreach { item =>
-          if (itemToInt.contains(item)) {
-            items += itemToInt(item) + 1 // using 1-indexing in internal format
-          }
-        }
-        val result = items.result()
-        if (result.nonEmpty) {
-          containsFreqItems = true
-          allItems ++= result.sorted
-        }
-        allItems += 0
-      }
-      if (containsFreqItems) {
-        Iterator.single(allItems.result())
-      } else {
-        Iterator.empty
-      }
-    }.persist(StorageLevel.MEMORY_AND_DISK)
+    val dataInternalRepr = toDatabaseInternalRepr(data, itemToInt)
+      .persist(StorageLevel.MEMORY_AND_DISK)
 
     val results = genFreqPatterns(dataInternalRepr, minCount, maxPatternLength, maxLocalProjDBSize)
 
@@ -230,6 +198,67 @@ class PrefixSpan private (
 
 @Since("1.5.0")
 object PrefixSpan extends Logging {
+
+  /**
+   * This methods finds all frequent items in a input dataset.
+   *
+   * @param data Sequences of itemsets.
+   * @param minCount The minimal number of sequence an item should be present in to be frequent
+   *
+   * @return An array of Item containing only frequent items.
+   */
+  private[fpm] def findFrequentItems[Item: ClassTag](
+      data: RDD[Array[Array[Item]]],
+      minCount: Long): Array[Item] = {
+
+    data.flatMap { itemsets =>
+      val uniqItems = mutable.Set.empty[Item]
+      itemsets.foreach(set => uniqItems ++= set)
+      uniqItems.toIterator.map((_, 1L))
+    }.reduceByKey(_ + _).filter { case (_, count) =>
+      count >= minCount
+    }.sortBy(-_._2).map(_._1).collect()
+  }
+
+  /**
+   * This methods cleans the input dataset from un-frequent items, and translate it's item
+   * to their corresponding Int identifier.
+   *
+   * @param data Sequences of itemsets.
+   * @param itemToInt A map allowing translation of frequent Items to their Int Identifier.
+   *                  The map should only contain frequent item.
+   *
+   * @return The internal repr of the inputted dataset. With properly placed zero delimiter.
+   */
+  private[fpm] def toDatabaseInternalRepr[Item: ClassTag](
+      data: RDD[Array[Array[Item]]],
+      itemToInt: Map[Item, Int]): RDD[Array[Int]] = {
+
+    data.flatMap { itemsets =>
+      val allItems = mutable.ArrayBuilder.make[Int]
+      var containsFreqItems = false
+      allItems += 0
+      itemsets.foreach { itemsets =>
+        val items = mutable.ArrayBuilder.make[Int]
+        itemsets.foreach { item =>
+          if (itemToInt.contains(item)) {
+            items += itemToInt(item) + 1 // using 1-indexing in internal format
+          }
+        }
+        val result = items.result()
+        if (result.nonEmpty) {
+          containsFreqItems = true
+          allItems ++= result.sorted
+          allItems += 0
+        }
+      }
+      if (containsFreqItems) {
+        Iterator.single(allItems.result())
+      } else {
+        Iterator.empty
+      }
+    }
+  }
 
   /**
    * Find the complete set of frequent sequential patterns in the input sequences.

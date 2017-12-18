@@ -22,9 +22,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.mutable.ListBuffer
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -72,7 +75,14 @@ trait QueryExecutionListener {
  */
 @Experimental
 @InterfaceStability.Evolving
-class ExecutionListenerManager private[sql] () extends Logging {
+class ExecutionListenerManager private extends Logging {
+
+  private[sql] def this(conf: SparkConf) = {
+    this()
+    conf.get(QUERY_EXECUTION_LISTENERS).foreach { classNames =>
+      Utils.loadExtensions(classOf[QueryExecutionListener], classNames, conf).foreach(register)
+    }
+  }
 
   /**
    * Registers the specified [[QueryExecutionListener]].
@@ -96,6 +106,16 @@ class ExecutionListenerManager private[sql] () extends Logging {
   @DeveloperApi
   def clear(): Unit = writeLock {
     listeners.clear()
+  }
+
+  /**
+   * Get an identical copy of this listener manager.
+   */
+  @DeveloperApi
+  override def clone(): ExecutionListenerManager = writeLock {
+    val newListenerManager = new ExecutionListenerManager
+    listeners.foreach(newListenerManager.register)
+    newListenerManager
   }
 
   private[sql] def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {

@@ -29,6 +29,7 @@ import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions._
 
 class MultilayerPerceptronClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -75,9 +76,53 @@ class MultilayerPerceptronClassifierSuite
       .setSolver("l-bfgs")
     val model = trainer.fit(dataset)
     val result = model.transform(dataset)
+    MLTestingUtils.checkCopyAndUids(trainer, model)
     val predictionAndLabels = result.select("prediction", "label").collect()
     predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
       assert(p == l)
+    }
+  }
+
+  test("Predicted class probabilities: calibration on toy dataset") {
+    val layers = Array[Int](4, 5, 2)
+
+    val strongDataset = Seq(
+      (Vectors.dense(1, 2, 3, 4), 0d, Vectors.dense(1d, 0d)),
+      (Vectors.dense(4, 3, 2, 1), 1d, Vectors.dense(0d, 1d)),
+      (Vectors.dense(1, 1, 1, 1), 0d, Vectors.dense(.5, .5)),
+      (Vectors.dense(1, 1, 1, 1), 1d, Vectors.dense(.5, .5))
+    ).toDF("features", "label", "expectedProbability")
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(123L)
+      .setMaxIter(100)
+      .setSolver("l-bfgs")
+    val model = trainer.fit(strongDataset)
+    val result = model.transform(strongDataset)
+    result.select("probability", "expectedProbability").collect().foreach {
+      case Row(p: Vector, e: Vector) =>
+        assert(p ~== e absTol 1e-3)
+    }
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, MultilayerPerceptronClassificationModel](model, strongDataset)
+  }
+
+  test("test model probability") {
+    val layers = Array[Int](2, 5, 2)
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(123L)
+      .setMaxIter(100)
+      .setSolver("l-bfgs")
+    val model = trainer.fit(dataset)
+    model.setProbabilityCol("probability")
+    val result = model.transform(dataset)
+    val features2prob = udf { features: Vector => model.mlpModel.predict(features) }
+    result.select(features2prob(col("features")), col("probability")).collect().foreach {
+      case Row(p1: Vector, p2: Vector) =>
+        assert(p1 ~== p2 absTol 1e-3)
     }
   }
 

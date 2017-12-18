@@ -23,7 +23,6 @@ import java.nio.ByteBuffer
 import scala.util.Random
 
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
-import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.PutRecordRequest
@@ -34,7 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.streaming.dstream.DStream.toPairDStreamFunctions
-import org.apache.spark.streaming.kinesis.KinesisUtils
+import org.apache.spark.streaming.kinesis.KinesisInputDStream
 
 
 /**
@@ -135,8 +134,16 @@ object KinesisWordCountASL extends Logging {
 
     // Create the Kinesis DStreams
     val kinesisStreams = (0 until numStreams).map { i =>
-      KinesisUtils.createStream(ssc, appName, streamName, endpointUrl, regionName,
-        InitialPositionInStream.LATEST, kinesisCheckpointInterval, StorageLevel.MEMORY_AND_DISK_2)
+      KinesisInputDStream.builder
+        .streamingContext(ssc)
+        .streamName(streamName)
+        .endpointUrl(endpointUrl)
+        .regionName(regionName)
+        .initialPositionInStream(InitialPositionInStream.LATEST)
+        .checkpointAppName(appName)
+        .checkpointInterval(kinesisCheckpointInterval)
+        .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
+        .build()
     }
 
     // Union all the streams

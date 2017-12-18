@@ -185,6 +185,23 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
       }
     }
   }
+
+  test("SPARK-20430 Initialize Range parameters in a driver side") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      checkAnswer(sql("SELECT * FROM range(3)"), Row(0) :: Row(1) :: Row(2) :: Nil)
+    }
+  }
+
+  test("SPARK-21041 SparkSession.range()'s behavior is inconsistent with SparkContext.range()") {
+    val start = java.lang.Long.MAX_VALUE - 3
+    val end = java.lang.Long.MIN_VALUE + 2
+    Seq("false", "true").foreach { value =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value) {
+        assert(spark.range(start, end, 1).collect.length == 0)
+        assert(spark.range(start, start, 1).collect.length == 0)
+      }
+    }
+  }
 }
 
 object DataFrameRangeSuite {

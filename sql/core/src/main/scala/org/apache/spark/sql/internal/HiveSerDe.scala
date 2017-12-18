@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
 
 case class HiveSerDe(
@@ -68,7 +70,7 @@ object HiveSerDe {
    * @return HiveSerDe associated with the specified source
    */
   def sourceToSerDe(source: String): Option[HiveSerDe] = {
-    val key = source.toLowerCase match {
+    val key = source.toLowerCase(Locale.ROOT) match {
       case s if s.startsWith("org.apache.spark.sql.parquet") => "parquet"
       case s if s.startsWith("org.apache.spark.sql.orc") => "orc"
       case s if s.equals("orcfile") => "orc"

@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.net.URLClassLoader
 import java.sql.{Date, Timestamp}
 
-import scala.reflect.runtime.universe.typeOf
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow, UpCast}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
 
 case class PrimitiveData(
     intField: Int,
@@ -82,6 +79,8 @@ object GenericData {
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
+
+case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
 
 object TestingUDT {
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
@@ -314,39 +313,47 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
   }
 
-  private val dataTypeForComplexData = dataTypeFor[ComplexData]
-  private val typeOfComplexData = typeOf[ComplexData]
+  test("serialize and deserialize arbitrary map types") {
+    val mapSerializer = serializerFor[Map[Int, Int]](BoundReference(
+      0, ObjectType(classOf[Map[Int, Int]]), nullable = false))
+    assert(mapSerializer.dataType.head.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mapDeserializer = deserializerFor[Map[Int, Int]]
+    assert(mapDeserializer.dataType == ObjectType(classOf[Map[_, _]]))
 
-  Seq(
-    ("mirror", () => mirror),
-    ("dataTypeFor", () => dataTypeFor[ComplexData]),
-    ("constructorFor", () => deserializerFor[ComplexData]),
-    ("extractorsFor", {
-      val inputObject = BoundReference(0, dataTypeForComplexData, nullable = false)
-      () => serializerFor[ComplexData](inputObject)
-    }),
-    ("getConstructorParameters(cls)", () => getConstructorParameters(classOf[ComplexData])),
-    ("getConstructorParameterNames", () => getConstructorParameterNames(classOf[ComplexData])),
-    ("getClassFromType", () => getClassFromType(typeOfComplexData)),
-    ("schemaFor", () => schemaFor[ComplexData]),
-    ("localTypeOf", () => localTypeOf[ComplexData]),
-    ("getClassNameFromType", () => getClassNameFromType(typeOfComplexData)),
-    ("getParameterTypes", () => getParameterTypes(() => ())),
-    ("getConstructorParameters(tpe)", () => getClassNameFromType(typeOfComplexData))).foreach {
-      case (name, exec) =>
-        test(s"SPARK-13640: thread safety of ${name}") {
-          (0 until 100).foreach { _ =>
-            val loader = new URLClassLoader(Array.empty, Utils.getContextOrSparkClassLoader)
-            (0 until 10).par.foreach { _ =>
-              val cl = Thread.currentThread.getContextClassLoader
-              try {
-                Thread.currentThread.setContextClassLoader(loader)
-                exec()
-              } finally {
-                Thread.currentThread.setContextClassLoader(cl)
-              }
-            }
-          }
-        }
-    }
+    import scala.collection.immutable.HashMap
+    val hashMapSerializer = serializerFor[HashMap[Int, Int]](BoundReference(
+      0, ObjectType(classOf[HashMap[Int, Int]]), nullable = false))
+    assert(hashMapSerializer.dataType.head.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val hashMapDeserializer = deserializerFor[HashMap[Int, Int]]
+    assert(hashMapDeserializer.dataType == ObjectType(classOf[HashMap[_, _]]))
+
+    import scala.collection.mutable.{LinkedHashMap => LHMap}
+    val linkedHashMapSerializer = serializerFor[LHMap[Long, String]](BoundReference(
+      0, ObjectType(classOf[LHMap[Long, String]]), nullable = false))
+    assert(linkedHashMapSerializer.dataType.head.dataType ==
+      MapType(LongType, StringType, valueContainsNull = true))
+    val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]
+    assert(linkedHashMapDeserializer.dataType == ObjectType(classOf[LHMap[_, _]]))
+  }
+
+  test("SPARK-22442: Generate correct field names for special characters") {
+    val serializer = serializerFor[SpecialCharAsFieldData](BoundReference(
+      0, ObjectType(classOf[SpecialCharAsFieldData]), nullable = false))
+    val deserializer = deserializerFor[SpecialCharAsFieldData]
+    assert(serializer.dataType(0).name == "field.1")
+    assert(serializer.dataType(1).name == "field 2")
+
+    val argumentsFields = deserializer.asInstanceOf[NewInstance].arguments.flatMap { _.collect {
+      case UpCast(u: UnresolvedAttribute, _, _) => u.nameParts
+    }}
+    assert(argumentsFields(0) == Seq("field.1"))
+    assert(argumentsFields(1) == Seq("field 2"))
+  }
+
+  test("SPARK-22472: add null check for top-level primitive values") {
+    assert(deserializerFor[Int].isInstanceOf[AssertNotNull])
+    assert(!deserializerFor[String].isInstanceOf[AssertNotNull])
+  }
 }

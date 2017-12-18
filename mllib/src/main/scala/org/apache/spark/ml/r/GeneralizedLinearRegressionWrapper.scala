@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -63,6 +65,7 @@ private[r] class GeneralizedLinearRegressionWrapper private (
 private[r] object GeneralizedLinearRegressionWrapper
   extends MLReadable[GeneralizedLinearRegressionWrapper] {
 
+  // scalastyle:off
   def fit(
       formula: String,
       data: DataFrame,
@@ -73,15 +76,15 @@ private[r] object GeneralizedLinearRegressionWrapper
       weightCol: String,
       regParam: Double,
       variancePower: Double,
-      linkPower: Double): GeneralizedLinearRegressionWrapper = {
+      linkPower: Double,
+      stringIndexerOrderType: String,
+      offsetCol: String): GeneralizedLinearRegressionWrapper = {
+  // scalastyle:on
     val rFormula = new RFormula().setFormula(formula)
+      .setStringIndexerOrderType(stringIndexerOrderType)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
-    // get labels and feature names from output schema
-    val schema = rFormulaModel.transform(data).schema
-    val featureAttrs = AttributeGroup.fromStructField(schema(rFormula.getFeaturesCol))
-      .attributes.get
-    val features = featureAttrs.map(_.name.get)
+
     // assemble and fit the pipeline
     val glr = new GeneralizedLinearRegression()
       .setFamily(family)
@@ -91,12 +94,13 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
     // set variancePower and linkPower if family is tweedie; otherwise, set link function
-    if (family.toLowerCase == "tweedie") {
+    if (family.toLowerCase(Locale.ROOT) == "tweedie") {
       glr.setVariancePower(variancePower).setLinkPower(linkPower)
     } else {
       glr.setLink(link)
     }
     if (weightCol != null) glr.setWeightCol(weightCol)
+    if (offsetCol != null) glr.setOffsetCol(offsetCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, glr))
@@ -107,37 +111,16 @@ private[r] object GeneralizedLinearRegressionWrapper
     val summary = glm.summary
 
     val rFeatures: Array[String] = if (glm.getFitIntercept) {
-      Array("(Intercept)") ++ features
+      Array("(Intercept)") ++ summary.featureNames
     } else {
-      features
+      summary.featureNames
     }
 
     val rCoefficients: Array[Double] = if (summary.isNormalSolver) {
-      val rCoefficientStandardErrors = if (glm.getFitIntercept) {
-        Array(summary.coefficientStandardErrors.last) ++
-          summary.coefficientStandardErrors.dropRight(1)
-      } else {
-        summary.coefficientStandardErrors
-      }
-
-      val rTValues = if (glm.getFitIntercept) {
-        Array(summary.tValues.last) ++ summary.tValues.dropRight(1)
-      } else {
-        summary.tValues
-      }
-
-      val rPValues = if (glm.getFitIntercept) {
-        Array(summary.pValues.last) ++ summary.pValues.dropRight(1)
-      } else {
-        summary.pValues
-      }
-
-      if (glm.getFitIntercept) {
-        Array(glm.intercept) ++ glm.coefficients.toArray ++
-          rCoefficientStandardErrors ++ rTValues ++ rPValues
-      } else {
-        glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
-      }
+      summary.coefficientsWithStatistics.map(_._2) ++
+        summary.coefficientsWithStatistics.map(_._3) ++
+        summary.coefficientsWithStatistics.map(_._4) ++
+        summary.coefficientsWithStatistics.map(_._5)
     } else {
       if (glm.getFitIntercept) {
         Array(glm.intercept) ++ glm.coefficients.toArray
@@ -151,7 +134,7 @@ private[r] object GeneralizedLinearRegressionWrapper
     val rDeviance: Double = summary.deviance
     val rResidualDegreeOfFreedomNull: Long = summary.residualDegreeOfFreedomNull
     val rResidualDegreeOfFreedom: Long = summary.residualDegreeOfFreedom
-    val rAic: Double = if (family.toLowerCase == "tweedie" &&
+    val rAic: Double = if (family.toLowerCase(Locale.ROOT) == "tweedie" &&
       !Array(0.0, 1.0, 2.0).exists(x => math.abs(x - variancePower) < 1e-8)) {
       0.0
     } else {

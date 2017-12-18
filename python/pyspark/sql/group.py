@@ -16,9 +16,10 @@
 #
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
+from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -54,9 +55,10 @@ class GroupedData(object):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jgd, sql_ctx):
+    def __init__(self, jgd, df):
         self._jgd = jgd
-        self.sql_ctx = sql_ctx
+        self._df = df
+        self.sql_ctx = df.sql_ctx
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -170,7 +172,7 @@ class GroupedData(object):
     @since(1.6)
     def pivot(self, pivot_col, values=None):
         """
-        Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
+        Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
         There are two versions of pivot function: one that requires the caller to specify the list
         of distinct values to pivot on, and one that does not. The latter is more concise but less
         efficient, because Spark needs to first compute the list of distinct values internally.
@@ -192,7 +194,57 @@ class GroupedData(object):
             jgd = self._jgd.pivot(pivot_col)
         else:
             jgd = self._jgd.pivot(pivot_col, values)
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self._df)
+
+    @since(2.3)
+    def apply(self, udf):
+        """
+        Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
+        as a `DataFrame`.
+
+        The user-defined function should take a `pandas.DataFrame` and return another
+        `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
+        to the user-function and the returned `pandas.DataFrame`s are combined as a
+        :class:`DataFrame`.
+        The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
+        returnType of the pandas udf.
+
+        This function does not support partial aggregation, and requires shuffling all the data in
+        the :class:`DataFrame`.
+
+        :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ...     ("id", "v"))
+        >>> @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)
+        ... def normalize(pdf):
+        ...     v = pdf.v
+        ...     return pdf.assign(v=(v - v.mean()) / v.std())
+        >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
+        +---+-------------------+
+        | id|                  v|
+        +---+-------------------+
+        |  1|-0.7071067811865475|
+        |  1| 0.7071067811865475|
+        |  2|-0.8320502943378437|
+        |  2|-0.2773500981126146|
+        |  2| 1.1094003924504583|
+        +---+-------------------+
+
+        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
+
+        """
+        # Columns are special because hasattr always return True
+        if isinstance(udf, Column) or not hasattr(udf, 'func') \
+           or udf.evalType != PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
+                             "GROUP_MAP.")
+        df = self._df
+        udf_column = udf(*[df[col] for col in df.columns])
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.sql_ctx)
 
 
 def _test():
@@ -206,6 +258,7 @@ def _test():
         .getOrCreate()
     sc = spark.sparkContext
     globs['sc'] = sc
+    globs['spark'] = spark
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))

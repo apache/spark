@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -25,7 +26,7 @@ import org.apache.spark.sql.types.StructType
  * monotonically increasing notion of progress that can be represented as an [[Offset]]. Spark
  * will regularly query each [[Source]] to see if any more data is available.
  */
-trait Source  {
+trait Source {
 
   /** Returns the schema of the data from this source */
   def schema: StructType

@@ -272,8 +272,8 @@ class KMeans private (
       val costAccum = sc.doubleAccumulator
       val bcCenters = sc.broadcast(centers)
 
-      // Find the sum and count of points mapping to each center
-      val totalContribs = data.mapPartitions { points =>
+      // Find the new centers
+      val newCenters = data.mapPartitions { points =>
         val thisCenters = bcCenters.value
         val dims = thisCenters.head.vector.size
 
@@ -292,15 +292,16 @@ class KMeans private (
       }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
         axpy(1.0, sum2, sum1)
         (sum1, count1 + count2)
+      }.mapValues { case (sum, count) =>
+        scal(1.0 / count, sum)
+        new VectorWithNorm(sum)
       }.collectAsMap()
 
       bcCenters.destroy(blocking = false)
 
       // Update the cluster centers and costs
       converged = true
-      totalContribs.foreach { case (j, (sum, count)) =>
-        scal(1.0 / count, sum)
-        val newCenter = new VectorWithNorm(sum)
+      newCenters.foreach { case (j, newCenter) =>
         if (converged && KMeans.fastSquaredDistance(newCenter, centers(j)) > epsilon * epsilon) {
           converged = false
         }
@@ -362,7 +363,7 @@ class KMeans private (
     // to their squared distance from the centers. Note that only distances between points
     // and new centers are computed in each iteration.
     var step = 0
-    var bcNewCentersList = ArrayBuffer[Broadcast[_]]()
+    val bcNewCentersList = ArrayBuffer[Broadcast[_]]()
     while (step < initializationSteps) {
       val bcNewCenters = data.context.broadcast(newCenters)
       bcNewCentersList += bcNewCenters

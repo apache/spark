@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.kafka.clients.producer.ProducerConfig
@@ -27,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, DataType}
@@ -75,7 +77,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .save()
     }
-    assert(ex.getMessage.toLowerCase.contains(
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       "null topic present in the data"))
   }
 
@@ -92,7 +94,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         .mode(SaveMode.Ignore)
         .save()
     }
-    assert(ex.getMessage.toLowerCase.contains(
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       s"save mode ignore not allowed for kafka"))
 
     // Test bad save mode Overwrite
@@ -103,8 +105,23 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         .mode(SaveMode.Overwrite)
         .save()
     }
-    assert(ex.getMessage.toLowerCase.contains(
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       s"save mode overwrite not allowed for kafka"))
+  }
+
+  test("SPARK-20496: batch - enforce analyzed plans") {
+    val inputEvents =
+      spark.range(1, 1000)
+        .select(to_json(struct("*")) as 'value)
+
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+    // used to throw UnresolvedException
+    inputEvents.write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("topic", topic)
+      .save()
   }
 
   test("streaming - write to kafka with topic field") {
@@ -233,7 +250,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       writer.stop()
     }
     assert(ex.getMessage
-      .toLowerCase
+      .toLowerCase(Locale.ROOT)
       .contains("topic option required when no 'topic' attribute is present"))
 
     try {
@@ -248,7 +265,8 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     } finally {
       writer.stop()
     }
-    assert(ex.getMessage.toLowerCase.contains("required attribute 'value' not found"))
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
+      "required attribute 'value' not found"))
   }
 
   test("streaming - write data with valid schema but wrong types") {
@@ -270,7 +288,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     } finally {
       writer.stop()
     }
-    assert(ex.getMessage.toLowerCase.contains("topic type must be a string"))
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("topic type must be a string"))
 
     try {
       /* value field wrong type */
@@ -284,7 +302,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     } finally {
       writer.stop()
     }
-    assert(ex.getMessage.toLowerCase.contains(
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       "value attribute type must be a string or binarytype"))
 
     try {
@@ -299,7 +317,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     } finally {
       writer.stop()
     }
-    assert(ex.getMessage.toLowerCase.contains(
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       "key attribute type must be a string or binarytype"))
   }
 
@@ -318,7 +336,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     } finally {
       writer.stop()
     }
-    assert(ex.getMessage.toLowerCase.contains("job aborted"))
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("job aborted"))
   }
 
   test("streaming - exception on config serializer") {
@@ -330,7 +348,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         input.toDF(),
         withOptions = Map("kafka.key.serializer" -> "foo"))()
     }
-    assert(ex.getMessage.toLowerCase.contains(
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       "kafka option 'key.serializer' is not supported"))
 
     ex = intercept[IllegalArgumentException] {
@@ -338,7 +356,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         input.toDF(),
         withOptions = Map("kafka.value.serializer" -> "foo"))()
     }
-    assert(ex.getMessage.toLowerCase.contains(
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       "kafka option 'value.serializer' is not supported"))
   }
 

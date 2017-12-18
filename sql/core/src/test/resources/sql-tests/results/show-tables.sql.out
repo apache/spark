@@ -118,33 +118,43 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query 12 schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 12 output
-show_t3	true	CatalogTable(
-	Table: `show_t3`
-	Created: 
-	Last Access: 
-	Type: VIEW
-	Schema: [StructField(e,IntegerType,true)]
-	Storage())
+show_t3	true	Table: show_t3
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: VIEW
+Schema: root
+ |-- e: integer (nullable = true)
 
-showdb	show_t1	false	CatalogTable(
-	Table: `showdb`.`show_t1`
-	Created: 
-	Last Access: 
-	Type: MANAGED
-	Schema: [StructField(a,StringType,true), StructField(b,IntegerType,true), StructField(c,StringType,true), StructField(d,StringType,true)]
-	Provider: parquet
-	Partition Columns: [`c`, `d`]
-	Storage(Location: sql/core/spark-warehouse/showdb.db/show_t1)
-	Partition Provider: Catalog)
 
-showdb	show_t2	false	CatalogTable(
-	Table: `showdb`.`show_t2`
-	Created: 
-	Last Access: 
-	Type: MANAGED
-	Schema: [StructField(b,StringType,true), StructField(d,IntegerType,true)]
-	Provider: parquet
-	Storage(Location: sql/core/spark-warehouse/showdb.db/show_t2))
+showdb	show_t1	false	Database: showdb
+Table: show_t1
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: MANAGED
+Provider: parquet
+Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1
+Partition Provider: Catalog
+Partition Columns: [`c`, `d`]
+Schema: root
+ |-- a: string (nullable = true)
+ |-- b: integer (nullable = true)
+ |-- c: string (nullable = true)
+ |-- d: string (nullable = true)
+
+
+showdb	show_t2	false	Database: showdb
+Table: show_t2
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: MANAGED
+Provider: parquet
+Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t2
+Schema: root
+ |-- b: string (nullable = true)
+ |-- d: integer (nullable = true)
 
 
 -- !query 13
@@ -154,7 +164,7 @@ struct<>
 -- !query 13 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input '<EOF>' expecting 'LIKE'(line 1, pos 19)
+mismatched input '<EOF>' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 19)
 
 == SQL ==
 SHOW TABLE EXTENDED
@@ -166,10 +176,8 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1)
 -- !query 14 schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 14 output
-showdb	show_t1	false	CatalogPartition(
-	Partition Values: [c=Us, d=1]
-	Storage(Location: sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1)
-	Partition Parameters:{})
+showdb	show_t1	false	Partition Values: [c=Us, d=1]
+Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
 
 
 -- !query 15
@@ -179,7 +187,7 @@ struct<>
 -- !query 15 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'PARTITION' expecting 'LIKE'(line 1, pos 20)
+mismatched input 'PARTITION' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 20)
 
 == SQL ==
 SHOW TABLE EXTENDED PARTITION(c='Us', d=1)

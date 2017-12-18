@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StringType
 
 /**
  * A command for users to list the databases/schemas.
- * If a databasePattern is supplied then the databases that only matches the
+ * If a databasePattern is supplied then the databases that only match the
  * pattern would be listed.
  * The syntax of using this command in SQL is:
  * {{{

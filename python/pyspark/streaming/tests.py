@@ -55,7 +55,7 @@ from pyspark.streaming.listener import StreamingListener
 
 class PySparkStreamingTestCase(unittest.TestCase):
 
-    timeout = 10  # seconds
+    timeout = 30  # seconds
     duration = .5
 
     @classmethod
@@ -1478,7 +1478,7 @@ def search_kafka_assembly_jar():
             ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
             "You need to build Spark with "
             "'build/sbt assembly/package streaming-kafka-0-8-assembly/assembly' or "
-            "'build/mvn package' before running this test.")
+            "'build/mvn -Pkafka-0-8 package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kafka assembly JARs: %s; please "
                          "remove all but one") % (", ".join(jars)))
@@ -1495,7 +1495,7 @@ def search_flume_assembly_jar():
             ("Failed to find Spark Streaming Flume assembly jar in %s. " % flume_assembly_dir) +
             "You need to build Spark with "
             "'build/sbt assembly/assembly streaming-flume-assembly/assembly' or "
-            "'build/mvn package' before running this test.")
+            "'build/mvn -Pflume package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Flume assembly JARs: %s; please "
                         "remove all but one") % (", ".join(jars)))
@@ -1516,7 +1516,13 @@ def search_kinesis_asl_assembly_jar():
         return jars[0]
 
 
-# Must be same as the variable and condition defined in KinesisTestUtils.scala
+# Must be same as the variable and condition defined in modules.py
+flume_test_environ_var = "ENABLE_FLUME_TESTS"
+are_flume_tests_enabled = os.environ.get(flume_test_environ_var) == '1'
+# Must be same as the variable and condition defined in modules.py
+kafka_test_environ_var = "ENABLE_KAFKA_0_8_TESTS"
+are_kafka_tests_enabled = os.environ.get(kafka_test_environ_var) == '1'
+# Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
 kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 
@@ -1535,8 +1541,22 @@ if __name__ == "__main__":
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
-                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests,
                  StreamingListenerTests]
+
+    if are_flume_tests_enabled:
+        testcases.append(FlumeStreamTests)
+        testcases.append(FlumePollingStreamTests)
+    else:
+        sys.stderr.write(
+            "Skipped test_flume_stream (enable by setting environment variable %s=1"
+            % flume_test_environ_var)
+
+    if are_kafka_tests_enabled:
+        testcases.append(KafkaStreamTests)
+    else:
+        sys.stderr.write(
+            "Skipped test_kafka_stream (enable by setting environment variable %s=1"
+            % kafka_test_environ_var)
 
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)

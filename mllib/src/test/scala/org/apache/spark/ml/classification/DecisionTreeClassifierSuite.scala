@@ -249,8 +249,7 @@ class DecisionTreeClassifierSuite
     val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(newTree)
+    MLTestingUtils.checkCopyAndUids(dt, newTree)
 
     val predictions = newTree.transform(newData)
       .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)
@@ -263,6 +262,9 @@ class DecisionTreeClassifierSuite
       assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
         "probability prediction mismatch")
     }
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, DecisionTreeClassificationModel](newTree, newData)
   }
 
   test("training with 1-category categorical feature") {

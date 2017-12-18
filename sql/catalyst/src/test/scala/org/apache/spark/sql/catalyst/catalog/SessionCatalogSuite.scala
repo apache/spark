@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
@@ -43,7 +43,7 @@ class InMemorySessionCatalogSuite extends SessionCatalogSuite {
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
  */
-abstract class SessionCatalogSuite extends PlanTest {
+abstract class SessionCatalogSuite extends AnalysisTest {
   protected val utils: CatalogTestUtils
 
   protected val isHiveExternalCatalog = false
@@ -447,13 +447,25 @@ abstract class SessionCatalogSuite extends PlanTest {
     }
   }
 
+  test("alter table stats") {
+    withBasicCatalog { catalog =>
+      val tableId = TableIdentifier("tbl1", Some("db2"))
+      val oldTableStats = catalog.getTableMetadata(tableId).stats
+      assert(oldTableStats.isEmpty)
+      val newStats = CatalogStatistics(sizeInBytes = 1)
+      catalog.alterTableStats(tableId, Some(newStats))
+      val newTableStats = catalog.getTableMetadata(tableId).stats
+      assert(newTableStats.get == newStats)
+    }
+  }
+
   test("alter table add columns") {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
-      sessionCatalog.alterTableSchema(
+      sessionCatalog.alterTableDataSchema(
         TableIdentifier("t1", Some("default")),
-        StructType(oldTab.dataSchema.add("c3", IntegerType) ++ oldTab.partitionSchema))
+        StructType(oldTab.dataSchema.add("c3", IntegerType)))
 
       val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
       // construct the expected table schema
@@ -468,8 +480,8 @@ abstract class SessionCatalogSuite extends PlanTest {
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
       val e = intercept[AnalysisException] {
-        sessionCatalog.alterTableSchema(
-          TableIdentifier("t1", Some("default")), StructType(oldTab.schema.drop(1)))
+        sessionCatalog.alterTableDataSchema(
+          TableIdentifier("t1", Some("default")), StructType(oldTab.dataSchema.drop(1)))
       }.getMessage
       assert(e.contains("We don't support dropping columns yet."))
     }
@@ -497,17 +509,6 @@ abstract class SessionCatalogSuite extends PlanTest {
     }
   }
 
-  test("get option of table metadata") {
-    withBasicCatalog { catalog =>
-      assert(catalog.getTableMetadataOption(TableIdentifier("tbl1", Some("db2")))
-        == Option(catalog.externalCatalog.getTable("db2", "tbl1")))
-      assert(catalog.getTableMetadataOption(TableIdentifier("unknown_table", Some("db2"))).isEmpty)
-      intercept[NoSuchDatabaseException] {
-        catalog.getTableMetadataOption(TableIdentifier("tbl1", Some("unknown_db")))
-      }
-    }
-  }
-
   test("lookup table relation") {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
@@ -516,14 +517,14 @@ abstract class SessionCatalogSuite extends PlanTest {
       catalog.setCurrentDatabase("db2")
       // If we explicitly specify the database, we'll look up the relation in that database
       assert(catalog.lookupRelation(TableIdentifier("tbl1", Some("db2"))).children.head
-        .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
+        .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
       // Otherwise, we'll first look up a temporary table with the same name
       assert(catalog.lookupRelation(TableIdentifier("tbl1"))
         == SubqueryAlias("tbl1", tempTable1))
       // Then, if that does not exist, look up the relation in the current database
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
       assert(catalog.lookupRelation(TableIdentifier("tbl1")).children.head
-        .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
+        .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
     }
   }
 
@@ -1161,10 +1162,10 @@ abstract class SessionCatalogSuite extends PlanTest {
     withBasicCatalog { catalog =>
       val tempFunc1 = (e: Seq[Expression]) => e.head
       val tempFunc2 = (e: Seq[Expression]) => e.last
-      val info1 = new ExpressionInfo("tempFunc1", "temp1")
-      val info2 = new ExpressionInfo("tempFunc2", "temp2")
-      catalog.createTempFunction("temp1", info1, tempFunc1, ignoreIfExists = false)
-      catalog.createTempFunction("temp2", info2, tempFunc2, ignoreIfExists = false)
+      catalog.registerFunction(
+        newFunc("temp1", None), overrideIfExists = false, functionBuilder = Some(tempFunc1))
+      catalog.registerFunction(
+        newFunc("temp2", None), overrideIfExists = false, functionBuilder = Some(tempFunc2))
       val arguments = Seq(Literal(1), Literal(2), Literal(3))
       assert(catalog.lookupFunction(FunctionIdentifier("temp1"), arguments) === Literal(1))
       assert(catalog.lookupFunction(FunctionIdentifier("temp2"), arguments) === Literal(3))
@@ -1173,13 +1174,15 @@ abstract class SessionCatalogSuite extends PlanTest {
         catalog.lookupFunction(FunctionIdentifier("temp3"), arguments)
       }
       val tempFunc3 = (e: Seq[Expression]) => Literal(e.size)
-      val info3 = new ExpressionInfo("tempFunc3", "temp1")
       // Temporary function already exists
-      intercept[TempFunctionAlreadyExistsException] {
-        catalog.createTempFunction("temp1", info3, tempFunc3, ignoreIfExists = false)
-      }
+      val e = intercept[AnalysisException] {
+        catalog.registerFunction(
+          newFunc("temp1", None), overrideIfExists = false, functionBuilder = Some(tempFunc3))
+      }.getMessage
+      assert(e.contains("Function temp1 already exists"))
       // Temporary function is overridden
-      catalog.createTempFunction("temp1", info3, tempFunc3, ignoreIfExists = true)
+      catalog.registerFunction(
+        newFunc("temp1", None), overrideIfExists = true, functionBuilder = Some(tempFunc3))
       assert(
         catalog.lookupFunction(
           FunctionIdentifier("temp1"), arguments) === Literal(arguments.length))
@@ -1192,8 +1195,8 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("temp1")))
 
       val tempFunc1 = (e: Seq[Expression]) => e.head
-      val info1 = new ExpressionInfo("tempFunc1", "temp1")
-      catalog.createTempFunction("temp1", info1, tempFunc1, ignoreIfExists = false)
+      catalog.registerFunction(
+        newFunc("temp1", None), overrideIfExists = false, functionBuilder = Some(tempFunc1))
 
       // Returns true when the function is temporary
       assert(catalog.isTemporaryFunction(FunctionIdentifier("temp1")))
@@ -1206,7 +1209,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("func1")))
 
       // Returns false when the function is built-in or hive
-      assert(FunctionRegistry.builtin.functionExists("sum"))
+      assert(FunctionRegistry.builtin.functionExists(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("histogram_numeric")))
     }
@@ -1242,9 +1245,9 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("drop temp function") {
     withBasicCatalog { catalog =>
-      val info = new ExpressionInfo("tempFunc", "func1")
       val tempFunc = (e: Seq[Expression]) => e.head
-      catalog.createTempFunction("func1", info, tempFunc, ignoreIfExists = false)
+      catalog.registerFunction(
+        newFunc("func1", None), overrideIfExists = false, functionBuilder = Some(tempFunc))
       val arguments = Seq(Literal(1), Literal(2), Literal(3))
       assert(catalog.lookupFunction(FunctionIdentifier("func1"), arguments) === Literal(1))
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
@@ -1283,9 +1286,9 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("lookup temp function") {
     withBasicCatalog { catalog =>
-      val info1 = new ExpressionInfo("tempFunc1", "func1")
       val tempFunc1 = (e: Seq[Expression]) => e.head
-      catalog.createTempFunction("func1", info1, tempFunc1, ignoreIfExists = false)
+      catalog.registerFunction(
+        newFunc("func1", None), overrideIfExists = false, functionBuilder = Some(tempFunc1))
       assert(catalog.lookupFunction(
         FunctionIdentifier("func1"), Seq(Literal(1), Literal(2), Literal(3))) == Literal(1))
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
@@ -1297,14 +1300,16 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("list functions") {
     withBasicCatalog { catalog =>
-      val info1 = new ExpressionInfo("tempFunc1", "func1")
-      val info2 = new ExpressionInfo("tempFunc2", "yes_me")
+      val funcMeta1 = newFunc("func1", None)
+      val funcMeta2 = newFunc("yes_me", None)
       val tempFunc1 = (e: Seq[Expression]) => e.head
       val tempFunc2 = (e: Seq[Expression]) => e.last
       catalog.createFunction(newFunc("func2", Some("db2")), ignoreIfExists = false)
       catalog.createFunction(newFunc("not_me", Some("db2")), ignoreIfExists = false)
-      catalog.createTempFunction("func1", info1, tempFunc1, ignoreIfExists = false)
-      catalog.createTempFunction("yes_me", info2, tempFunc2, ignoreIfExists = false)
+      catalog.registerFunction(
+        funcMeta1, overrideIfExists = false, functionBuilder = Some(tempFunc1))
+      catalog.registerFunction(
+        funcMeta2, overrideIfExists = false, functionBuilder = Some(tempFunc2))
       assert(catalog.listFunctions("db1", "*").map(_._1).toSet ==
         Set(FunctionIdentifier("func1"),
           FunctionIdentifier("yes_me")))
@@ -1382,7 +1387,7 @@ abstract class SessionCatalogSuite extends PlanTest {
     import org.apache.spark.sql.catalyst.dsl.plans._
 
     Seq(true, false) foreach { caseSensitive =>
-      val conf = SimpleCatalystConf(caseSensitive)
+      val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
       val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
       try {
         val analyzer = new Analyzer(catalog, conf)

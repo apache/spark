@@ -32,6 +32,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
+    import JDBCOptions._
+
     val jdbcOptions = new JDBCOptions(parameters)
     val partitionColumn = jdbcOptions.partitionColumn
     val lowerBound = jdbcOptions.lowerBound
@@ -39,10 +41,13 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val numPartitions = jdbcOptions.numPartitions
 
     val partitionInfo = if (partitionColumn.isEmpty) {
-      assert(lowerBound.isEmpty && upperBound.isEmpty)
+      assert(lowerBound.isEmpty && upperBound.isEmpty, "When 'partitionColumn' is not specified, " +
+        s"'$JDBC_LOWER_BOUND' and '$JDBC_UPPER_BOUND' are expected to be empty")
       null
     } else {
-      assert(lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty)
+      assert(lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty,
+        s"When 'partitionColumn' is specified, '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', and " +
+          s"'$JDBC_NUM_PARTITIONS' are also required")
       JDBCPartitioningInfo(
         partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
@@ -66,7 +71,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
           case SaveMode.Overwrite =>
             if (options.isTruncate && isCascadingTruncateTable(options.url).contains(false)) {
               // In this case, we should truncate table and then load.
-              truncateTable(conn, options.table)
+              truncateTable(conn, options)
               val tableSchema = JdbcUtils.getSchemaOption(conn, options)
               saveTable(df, tableSchema, isCaseSensitive, options)
             } else {

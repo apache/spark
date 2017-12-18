@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  * `Dataset.groupByKey()`) while maintaining user-defined per-group state between invocations.
  * For a static batch Dataset, the function will be invoked once per group. For a streaming
  * Dataset, the function will be invoked for each group repeatedly in every trigger.
- * That is, in every batch of the `streaming.StreamingQuery`,
+ * That is, in every batch of the `StreamingQuery`,
  * the function will be invoked once for each group that has data in the trigger. Furthermore,
  * if timeout is set, then the function will invoked on timed out groups (more detail below).
  *
@@ -42,12 +42,23 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  *  - The key of the group.
  *  - An iterator containing all the values for this group.
  *  - A user-defined state object set by previous invocations of the given function.
+ *
  * In case of a batch Dataset, there is only one invocation and state object will be empty as
  * there is no prior state. Essentially, for batch Datasets, `[map/flatMap]GroupsWithState`
  * is equivalent to `[map/flatMap]Groups` and any updates to the state and/or timeouts have
  * no effect.
  *
- * Important points to note about the function.
+ * The major difference between `mapGroupsWithState` and `flatMapGroupsWithState` is that the
+ * former allows the function to return one and only one record, whereas the latter
+ * allows the function to return any number of records (including no records). Furthermore, the
+ * `flatMapGroupsWithState` is associated with an operation output mode, which can be either
+ * `Append` or `Update`. Semantically, this defines whether the output records of one trigger
+ * is effectively replacing the previously output records (from previous triggers) or is appending
+ * to the list of previously output records. Essentially, this defines how the Result Table (refer
+ * to the semantics in the programming guide) is updated, and allows us to reason about the
+ * semantics of later operations.
+ *
+ * Important points to note about the function (both mapGroupsWithState and flatMapGroupsWithState).
  *  - In a trigger, the function will be called only the groups present in the batch. So do not
  *    assume that the function will be called in every trigger for every group that has state.
  *  - There is no guaranteed ordering of values in the iterator in the function, neither with
@@ -194,92 +205,122 @@ trait GroupState[S] extends LogicalGroupState[S] {
   /** Get the state value as a scala Option. */
   def getOption: Option[S]
 
-  /**
-   * Update the value of the state. Note that `null` is not a valid value, and it throws
-   * IllegalArgumentException.
-   */
-  @throws[IllegalArgumentException]("when updating with null")
+  /** Update the value of the state. */
   def update(newState: S): Unit
 
-  /** Remove this state. Note that this resets any timeout configuration as well. */
+  /** Remove this state. */
   def remove(): Unit
 
   /**
    * Whether the function has been called because the key has timed out.
-   * @note This can return true only when timeouts are enabled in `[map/flatmap]GroupsWithStates`.
+   * @note This can return true only when timeouts are enabled in `[map/flatMap]GroupsWithState`.
    */
   def hasTimedOut: Boolean
+
 
   /**
    * Set the timeout duration in ms for this key.
    *
-   * @note ProcessingTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note [[GroupStateTimeout Processing time timeout]] must be enabled in
+   *       `[map/flatMap]GroupsWithState` for calling this method.
+   * @note This method has no effect when used in a batch query.
    */
   @throws[IllegalArgumentException]("if 'durationMs' is not positive")
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
   @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+    "if processing time timeout has not been enabled in [map|flatMap]GroupsWithState")
   def setTimeoutDuration(durationMs: Long): Unit
+
 
   /**
    * Set the timeout duration for this key as a string. For example, "1 hour", "2 days", etc.
    *
-   * @note ProcessingTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note [[GroupStateTimeout Processing time timeout]] must be enabled in
+   *       `[map/flatMap]GroupsWithState` for calling this method.
+   * @note This method has no effect when used in a batch query.
    */
   @throws[IllegalArgumentException]("if 'duration' is not a valid duration")
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
   @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+    "if processing time timeout has not been enabled in [map|flatMap]GroupsWithState")
   def setTimeoutDuration(duration: String): Unit
 
-  @throws[IllegalArgumentException]("if 'timestampMs' is not positive")
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
-  @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+
   /**
    * Set the timeout timestamp for this key as milliseconds in epoch time.
    * This timestamp cannot be older than the current watermark.
    *
-   * @note EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note [[GroupStateTimeout Event time timeout]] must be enabled in
+   *       `[map/flatMap]GroupsWithState` for calling this method.
+   * @note This method has no effect when used in a batch query.
    */
+  @throws[IllegalArgumentException](
+    "if 'timestampMs' is not positive or less than the current watermark in a streaming query")
+  @throws[UnsupportedOperationException](
+    "if processing time timeout has not been enabled in [map|flatMap]GroupsWithState")
   def setTimeoutTimestamp(timestampMs: Long): Unit
 
-  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
-  @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+
   /**
    * Set the timeout timestamp for this key as milliseconds in epoch time and an additional
    * duration as a string (e.g. "1 hour", "2 days", etc.).
    * The final timestamp (including the additional duration) cannot be older than the
    * current watermark.
    *
-   * @note EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note [[GroupStateTimeout Event time timeout]] must be enabled in
+   *       `[map/flatMap]GroupsWithState` for calling this method.
+   * @note This method has no side effect when used in a batch query.
    */
+  @throws[IllegalArgumentException](
+    "if 'additionalDuration' is invalid or the final timeout timestamp is less than " +
+      "the current watermark in a streaming query")
+  @throws[UnsupportedOperationException](
+    "if event time timeout has not been enabled in [map|flatMap]GroupsWithState")
   def setTimeoutTimestamp(timestampMs: Long, additionalDuration: String): Unit
 
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
-  @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+
   /**
    * Set the timeout timestamp for this key as a java.sql.Date.
    * This timestamp cannot be older than the current watermark.
    *
-   * @note EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note [[GroupStateTimeout Event time timeout]] must be enabled in
+   *       `[map/flatMap]GroupsWithState` for calling this method.
+   * @note This method has no side effect when used in a batch query.
    */
+  @throws[UnsupportedOperationException](
+    "if event time timeout has not been enabled in [map|flatMap]GroupsWithState")
   def setTimeoutTimestamp(timestamp: java.sql.Date): Unit
 
-  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
-  @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+
   /**
    * Set the timeout timestamp for this key as a java.sql.Date and an additional
    * duration as a string (e.g. "1 hour", "2 days", etc.).
    * The final timestamp (including the additional duration) cannot be older than the
    * current watermark.
    *
-   * @note EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note [[GroupStateTimeout Event time timeout]] must be enabled in
+   *      `[map/flatMap]GroupsWithState` for calling this method.
+   * @note This method has no side effect when used in a batch query.
    */
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[UnsupportedOperationException](
+    "if event time timeout has not been enabled in [map|flatMap]GroupsWithState")
   def setTimeoutTimestamp(timestamp: java.sql.Date, additionalDuration: String): Unit
+
+
+  /**
+   * Get the current event time watermark as milliseconds in epoch time.
+   *
+   * @note In a streaming query, this can be called only when watermark is set before calling
+   *       `[map/flatMap]GroupsWithState`. In a batch query, this method always returns -1.
+   */
+  @throws[UnsupportedOperationException](
+    "if watermark has not been set before in [map|flatMap]GroupsWithState")
+  def getCurrentWatermarkMs(): Long
+
+
+  /**
+   * Get the current processing time as milliseconds in epoch time.
+   * @note In a streaming query, this will return a constant value throughout the duration of a
+   *       trigger, even if the trigger is re-executed.
+   */
+  def getCurrentProcessingTimeMs(): Long
 }

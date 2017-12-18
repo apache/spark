@@ -24,6 +24,7 @@
     "localBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
     "fetchWaitTime" : [ 0.0, 0.0, 0.0, 1.0, 1.0 ],
     "remoteBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "remoteBytesReadToDisk" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "totalBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ]
   },
   "shuffleWriteMetrics" : {

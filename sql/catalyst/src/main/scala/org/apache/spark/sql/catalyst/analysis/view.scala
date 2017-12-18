@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This file defines analysis rules related to views.
@@ -47,8 +47,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * This should be only done after the batch of Resolution, because the view attributes are not
  * completely resolved during the batch of Resolution.
  */
-case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+case class AliasViewChild(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case v @ View(desc, output, child) if child.resolved && output != child.output =>
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
@@ -78,7 +78,7 @@ case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
             throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
               s"${originAttr.dataType.simpleString} to ${attr.simpleString} as it may truncate\n")
           } else {
-            Alias(Cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
+            Alias(cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
               qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
           }
         case (_, originAttr) => originAttr

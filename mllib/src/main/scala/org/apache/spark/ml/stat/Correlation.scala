@@ -27,9 +27,9 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
- * API for correlation functions in MLlib, compatible with Dataframes and Datasets.
+ * API for correlation functions in MLlib, compatible with DataFrames and Datasets.
  *
- * The functions in this package generalize the functions in [[org.apache.spark.sql.Dataset.stat]]
+ * The functions in this package generalize the functions in [[org.apache.spark.sql.Dataset#stat]]
  * to spark.ml's Vector types.
  */
 @Since("2.2.0")
@@ -38,7 +38,7 @@ object Correlation {
 
   /**
    * :: Experimental ::
-   * Compute the correlation matrix for the input RDD of Vectors using the specified method.
+   * Compute the correlation matrix for the input Dataset of Vectors using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
    * @param dataset A dataset or a dataframe
@@ -56,14 +56,14 @@ object Correlation {
    *  Here is how to access the correlation coefficient:
    *  {{{
    *    val data: Dataset[Vector] = ...
-   *    val Row(coeff: Matrix) = Statistics.corr(data, "value").head
+   *    val Row(coeff: Matrix) = Correlation.corr(data, "value").head
    *    // coeff now contains the Pearson correlation matrix.
    *  }}}
    *
    * @note For Spearman, a rank correlation, we need to create an RDD[Double] for each column
    * and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
-   * which is fairly costly. Cache the input RDD before calling corr with `method = "spearman"` to
-   * avoid recomputing the common lineage.
+   * which is fairly costly. Cache the input Dataset before calling corr with `method = "spearman"`
+   * to avoid recomputing the common lineage.
    */
   @Since("2.2.0")
   def corr(dataset: Dataset[_], column: String, method: String): DataFrame = {

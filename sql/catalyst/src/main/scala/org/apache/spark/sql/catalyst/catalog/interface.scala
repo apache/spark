@@ -20,13 +20,14 @@ package org.apache.spark.sql.catalyst.catalog
 import java.net.URI
 import java.util.Date
 
-import com.google.common.base.Objects
+import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{CatalystConf, FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.StructType
@@ -57,20 +58,25 @@ case class CatalogStorageFormat(
     properties: Map[String, String]) {
 
   override def toString: String = {
-    val serdePropsToString = CatalogUtils.maskCredentials(properties) match {
-      case props if props.isEmpty => ""
-      case props => "Properties: " + props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-    }
-    val output =
-      Seq(locationUri.map("Location: " + _).getOrElse(""),
-        inputFormat.map("InputFormat: " + _).getOrElse(""),
-        outputFormat.map("OutputFormat: " + _).getOrElse(""),
-        if (compressed) "Compressed" else "",
-        serde.map("Serde: " + _).getOrElse(""),
-        serdePropsToString)
-    output.filter(_.nonEmpty).mkString("Storage(", ", ", ")")
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("Storage(", ", ", ")")
   }
 
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    val map = new mutable.LinkedHashMap[String, String]()
+    locationUri.foreach(l => map.put("Location", l.toString))
+    serde.foreach(map.put("Serde Library", _))
+    inputFormat.foreach(map.put("InputFormat", _))
+    outputFormat.foreach(map.put("OutputFormat", _))
+    if (compressed) map.put("Compressed", "")
+    CatalogUtils.maskCredentials(properties) match {
+      case props if props.isEmpty => // No-op
+      case props =>
+        map.put("Storage Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
+    }
+    map
+  }
 }
 
 object CatalogStorageFormat {
@@ -84,22 +90,38 @@ object CatalogStorageFormat {
  *
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
- * @param parameters some parameters for the partition, for example, stats.
+ * @param parameters some parameters for the partition
+ * @param stats optional statistics (number of rows, total size, etc.)
  */
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
     storage: CatalogStorageFormat,
-    parameters: Map[String, String] = Map.empty) {
+    parameters: Map[String, String] = Map.empty,
+    stats: Option[CatalogStatistics] = None) {
+
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    val map = new mutable.LinkedHashMap[String, String]()
+    val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
+    map.put("Partition Values", s"[$specString]")
+    map ++= storage.toLinkedHashMap
+    if (parameters.nonEmpty) {
+      map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+    }
+    stats.foreach(s => map.put("Partition Statistics", s.simpleString))
+    map
+  }
 
   override def toString: String = {
-    val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
-    val output =
-      Seq(
-        s"Partition Values: [$specString]",
-        s"$storage",
-        s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("CatalogPartition(\n\t", "\n\t", ")")
+  }
 
-    output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+  /** Readable string representation for the CatalogTablePartition. */
+  def simpleString: String = {
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("", "\n", "")
   }
 
   /** Return the partition location, assuming it is specified. */
@@ -154,6 +176,14 @@ case class BucketSpec(
     }
     s"$numBuckets buckets, $bucketString$sortString"
   }
+
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    mutable.LinkedHashMap[String, String](
+      "Num Buckets" -> numBuckets.toString,
+      "Bucket Columns" -> bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]"),
+      "Sort Columns" -> sortColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
+    )
+  }
 }
 
 /**
@@ -174,6 +204,11 @@ case class BucketSpec(
  *                           sensitive schema was unable to be read from the table properties.
  *                           Used to trigger case-sensitive schema inference at query time, when
  *                           configured.
+ * @param ignoredProperties is a list of table properties that are used by the underlying table
+ *                          but ignored by Spark SQL yet.
+ * @param createVersion records the version of Spark that created this table metadata. The default
+ *                      is an empty string. We expect it will be read from the catalog or filled by
+ *                      ExternalCatalog.createTable. For temporary views, the value will be empty.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -186,13 +221,15 @@ case class CatalogTable(
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
+    createVersion: String = "",
     properties: Map[String, String] = Map.empty,
     stats: Option[CatalogStatistics] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false,
-    schemaPreservesCase: Boolean = true) {
+    schemaPreservesCase: Boolean = true,
+    ignoredProperties: Map[String, String] = Map.empty) {
 
   import CatalogTable._
 
@@ -261,40 +298,51 @@ case class CatalogTable(
       locationUri, inputFormat, outputFormat, serde, compressed, properties))
   }
 
-  override def toString: String = {
+
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    val map = new mutable.LinkedHashMap[String, String]()
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
-    val bucketStrings = bucketSpec match {
-      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
-        val bucketColumnsString = bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
-        val sortColumnsString = sortColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
-        Seq(
-          s"Num Buckets: $numBuckets",
-          if (bucketColumnNames.nonEmpty) s"Bucket Columns: $bucketColumnsString" else "",
-          if (sortColumnNames.nonEmpty) s"Sort Columns: $sortColumnsString" else ""
-        )
 
-      case _ => Nil
+    identifier.database.foreach(map.put("Database", _))
+    map.put("Table", identifier.table)
+    if (owner != null && owner.nonEmpty) map.put("Owner", owner)
+    map.put("Created Time", new Date(createTime).toString)
+    map.put("Last Access", new Date(lastAccessTime).toString)
+    map.put("Created By", "Spark " + createVersion)
+    map.put("Type", tableType.name)
+    provider.foreach(map.put("Provider", _))
+    bucketSpec.foreach(map ++= _.toLinkedHashMap)
+    comment.foreach(map.put("Comment", _))
+    if (tableType == CatalogTableType.VIEW) {
+      viewText.foreach(map.put("View Text", _))
+      viewDefaultDatabase.foreach(map.put("View Default Database", _))
+      if (viewQueryColumnNames.nonEmpty) {
+        map.put("View Query Output Columns", viewQueryColumnNames.mkString("[", ", ", "]"))
+      }
     }
 
-    val output =
-      Seq(s"Table: ${identifier.quotedString}",
-        if (owner.nonEmpty) s"Owner: $owner" else "",
-        s"Created: ${new Date(createTime).toString}",
-        s"Last Access: ${new Date(lastAccessTime).toString}",
-        s"Type: ${tableType.name}",
-        if (schema.nonEmpty) s"Schema: ${schema.mkString("[", ", ", "]")}" else "",
-        if (provider.isDefined) s"Provider: ${provider.get}" else "",
-        if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
-      ) ++ bucketStrings ++ Seq(
-        viewText.map("View: " + _).getOrElse(""),
-        comment.map("Comment: " + _).getOrElse(""),
-        if (properties.nonEmpty) s"Properties: $tableProperties" else "",
-        if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
-        s"$storage",
-        if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "")
+    if (properties.nonEmpty) map.put("Table Properties", tableProperties)
+    stats.foreach(s => map.put("Statistics", s.simpleString))
+    map ++= storage.toLinkedHashMap
+    if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")
+    if (partitionColumnNames.nonEmpty) map.put("Partition Columns", partitionColumns)
+    if (schema.nonEmpty) map.put("Schema", schema.treeString)
 
-    output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
+    map
+  }
+
+  override def toString: String = {
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("CatalogTable(\n", "\n", ")")
+  }
+
+  /** Readable string representation for the CatalogTable. */
+  def simpleString: String = {
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("", "\n", "")
   }
 }
 
@@ -319,10 +367,17 @@ case class CatalogStatistics(
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
-  def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
-    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
-    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
-      attributeStats = AttributeMap(matched))
+  def toPlanStats(planOutput: Seq[Attribute], cboEnabled: Boolean): Statistics = {
+    if (cboEnabled && rowCount.isDefined) {
+      val attrStats = AttributeMap(planOutput.flatMap(a => colStats.get(a.name).map(a -> _)))
+      // Estimate size as number of rows * row size.
+      val size = EstimationUtils.getOutputSize(planOutput, rowCount.get, attrStats)
+      Statistics(sizeInBytes = size, rowCount = rowCount, attributeStats = attrStats)
+    } else {
+      // When CBO is disabled or the table doesn't have other statistics, we apply the size-only
+      // estimation strategy and only propagate sizeInBytes in statistics.
+      Statistics(sizeInBytes = sizeInBytes)
+    }
   }
 
   /** Readable string representation for the CatalogStatistics. */
@@ -356,47 +411,61 @@ object CatalogTypes {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+
+  /**
+   * Initialize an empty spec.
+   */
+  lazy val emptyTablePartitionSpec: TablePartitionSpec = Map.empty[String, String]
 }
 
+/**
+ * A placeholder for a table relation, which will be replaced by concrete relation like
+ * `LogicalRelation` or `HiveTableRelation`, during analysis.
+ */
+case class UnresolvedCatalogRelation(tableMeta: CatalogTable) extends LeafNode {
+  assert(tableMeta.identifier.database.isDefined)
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = Nil
+}
 
 /**
- * A [[LogicalPlan]] that represents a table.
+ * A `LogicalPlan` that represents a hive table.
+ *
+ * TODO: remove this after we completely make hive as a data source.
  */
-case class CatalogRelation(
+case class HiveTableRelation(
     tableMeta: CatalogTable,
-    dataCols: Seq[Attribute],
-    partitionCols: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
+    dataCols: Seq[AttributeReference],
+    partitionCols: Seq[AttributeReference]) extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
   assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
   assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
 
   // The partition column should always appear after data columns.
-  override def output: Seq[Attribute] = dataCols ++ partitionCols
+  override def output: Seq[AttributeReference] = dataCols ++ partitionCols
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
-  override def equals(relation: Any): Boolean = relation match {
-    case other: CatalogRelation => tableMeta == other.tableMeta && output == other.output
-    case _ => false
-  }
+  override def doCanonicalize(): HiveTableRelation = copy(
+    tableMeta = tableMeta.copy(
+      storage = CatalogStorageFormat.empty,
+      createTime = -1
+    ),
+    dataCols = dataCols.zipWithIndex.map {
+      case (attr, index) => attr.withExprId(ExprId(index))
+    },
+    partitionCols = partitionCols.zipWithIndex.map {
+      case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
+    }
+  )
 
-  override def hashCode(): Int = {
-    Objects.hashCode(tableMeta.identifier, output)
-  }
-
-  /** Only compare table identifier. */
-  override lazy val cleanArgs: Seq[Any] = Seq(tableMeta.identifier)
-
-  override def computeStats(conf: CatalystConf): Statistics = {
-    // For data source tables, we will create a `LogicalRelation` and won't call this method, for
-    // hive serde tables, we will always generate a statistics.
-    // TODO: unify the table stats generation.
-    tableMeta.stats.map(_.toPlanStats(output)).getOrElse {
+  override def computeStats(): Statistics = {
+    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled)).getOrElse {
       throw new IllegalStateException("table stats must be specified.")
     }
   }
 
-  override def newInstance(): LogicalPlan = copy(
+  override def newInstance(): HiveTableRelation = copy(
     dataCols = dataCols.map(_.newInstance()),
     partitionCols = partitionCols.map(_.newInstance()))
 }

@@ -26,7 +26,6 @@ function getThreadDumpEnabled() {
 }
 
 function formatStatus(status, type) {
-    if (type !== 'display') return status;
     if (status) {
         return "Active"
     } else {
@@ -190,6 +189,10 @@ $(document).ready(function () {
             var allRDDBlocks = 0;
             var allMemoryUsed = 0;
             var allMaxMemory = 0;
+            var allOnHeapMemoryUsed = 0;
+            var allOnHeapMaxMemory = 0;
+            var allOffHeapMemoryUsed = 0;
+            var allOffHeapMaxMemory = 0;
             var allDiskUsed = 0;
             var allTotalCores = 0;
             var allMaxTasks = 0;
@@ -208,6 +211,10 @@ $(document).ready(function () {
             var activeRDDBlocks = 0;
             var activeMemoryUsed = 0;
             var activeMaxMemory = 0;
+            var activeOnHeapMemoryUsed = 0;
+            var activeOnHeapMaxMemory = 0;
+            var activeOffHeapMemoryUsed = 0;
+            var activeOffHeapMaxMemory = 0;
             var activeDiskUsed = 0;
             var activeTotalCores = 0;
             var activeMaxTasks = 0;
@@ -226,6 +233,10 @@ $(document).ready(function () {
             var deadRDDBlocks = 0;
             var deadMemoryUsed = 0;
             var deadMaxMemory = 0;
+            var deadOnHeapMemoryUsed = 0;
+            var deadOnHeapMaxMemory = 0;
+            var deadOffHeapMemoryUsed = 0;
+            var deadOffHeapMaxMemory = 0;
             var deadDiskUsed = 0;
             var deadTotalCores = 0;
             var deadMaxTasks = 0;
@@ -241,10 +252,25 @@ $(document).ready(function () {
             var deadTotalBlacklisted = 0;
 
             response.forEach(function (exec) {
+                var memoryMetrics = {
+                    usedOnHeapStorageMemory: 0,
+                    usedOffHeapStorageMemory: 0,
+                    totalOnHeapStorageMemory: 0,
+                    totalOffHeapStorageMemory: 0
+                };
+
+                exec.memoryMetrics = exec.hasOwnProperty('memoryMetrics') ? exec.memoryMetrics : memoryMetrics;
+            });
+
+            response.forEach(function (exec) {
                 allExecCnt += 1;
                 allRDDBlocks += exec.rddBlocks;
                 allMemoryUsed += exec.memoryUsed;
                 allMaxMemory += exec.maxMemory;
+                allOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                allOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                allOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                allOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                 allDiskUsed += exec.diskUsed;
                 allTotalCores += exec.totalCores;
                 allMaxTasks += exec.maxTasks;
@@ -263,6 +289,10 @@ $(document).ready(function () {
                     activeRDDBlocks += exec.rddBlocks;
                     activeMemoryUsed += exec.memoryUsed;
                     activeMaxMemory += exec.maxMemory;
+                    activeOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                    activeOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                    activeOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                    activeOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                     activeDiskUsed += exec.diskUsed;
                     activeTotalCores += exec.totalCores;
                     activeMaxTasks += exec.maxTasks;
@@ -281,6 +311,10 @@ $(document).ready(function () {
                     deadRDDBlocks += exec.rddBlocks;
                     deadMemoryUsed += exec.memoryUsed;
                     deadMaxMemory += exec.maxMemory;
+                    deadOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                    deadOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                    deadOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                    deadOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                     deadDiskUsed += exec.diskUsed;
                     deadTotalCores += exec.totalCores;
                     deadMaxTasks += exec.maxTasks;
@@ -302,6 +336,10 @@ $(document).ready(function () {
                 "allRDDBlocks": allRDDBlocks,
                 "allMemoryUsed": allMemoryUsed,
                 "allMaxMemory": allMaxMemory,
+                "allOnHeapMemoryUsed": allOnHeapMemoryUsed,
+                "allOnHeapMaxMemory": allOnHeapMaxMemory,
+                "allOffHeapMemoryUsed": allOffHeapMemoryUsed,
+                "allOffHeapMaxMemory": allOffHeapMaxMemory,
                 "allDiskUsed": allDiskUsed,
                 "allTotalCores": allTotalCores,
                 "allMaxTasks": allMaxTasks,
@@ -321,6 +359,10 @@ $(document).ready(function () {
                 "allRDDBlocks": activeRDDBlocks,
                 "allMemoryUsed": activeMemoryUsed,
                 "allMaxMemory": activeMaxMemory,
+                "allOnHeapMemoryUsed": activeOnHeapMemoryUsed,
+                "allOnHeapMaxMemory": activeOnHeapMaxMemory,
+                "allOffHeapMemoryUsed": activeOffHeapMemoryUsed,
+                "allOffHeapMaxMemory": activeOffHeapMaxMemory,
                 "allDiskUsed": activeDiskUsed,
                 "allTotalCores": activeTotalCores,
                 "allMaxTasks": activeMaxTasks,
@@ -340,6 +382,10 @@ $(document).ready(function () {
                 "allRDDBlocks": deadRDDBlocks,
                 "allMemoryUsed": deadMemoryUsed,
                 "allMaxMemory": deadMaxMemory,
+                "allOnHeapMemoryUsed": deadOnHeapMemoryUsed,
+                "allOnHeapMaxMemory": deadOnHeapMaxMemory,
+                "allOffHeapMemoryUsed": deadOffHeapMemoryUsed,
+                "allOffHeapMaxMemory": deadOffHeapMaxMemory,
                 "allDiskUsed": deadDiskUsed,
                 "allTotalCores": deadTotalCores,
                 "allMaxTasks": deadMaxTasks,
@@ -370,7 +416,6 @@ $(document).ready(function () {
                         },
                         {data: 'hostPort'},
                         {data: 'isActive', render: function (data, type, row) {
-                            if (type !== 'display') return data;
                             if (row.isBlacklisted) return "Blacklisted";
                             else return formatStatus (data, type);
                             }
@@ -378,7 +423,35 @@ $(document).ready(function () {
                         {data: 'rddBlocks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatBytes(row.memoryUsed, type) + ' / ' + formatBytes(row.maxMemory, type)) : row.memoryUsed;
+                                if (type !== 'display')
+                                    return row.memoryUsed;
+                                else
+                                    return (formatBytes(row.memoryUsed, type) + ' / ' +
+                                        formatBytes(row.maxMemory, type));
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.memoryMetrics.usedOnHeapStorageMemory;
+                                else
+                                    return (formatBytes(row.memoryMetrics.usedOnHeapStorageMemory, type) + ' / ' +
+                                        formatBytes(row.memoryMetrics.totalOnHeapStorageMemory, type));
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('on_heap_memory')
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.memoryMetrics.usedOffHeapStorageMemory;
+                                else
+                                    return (formatBytes(row.memoryMetrics.usedOffHeapStorageMemory, type) + ' / ' +
+                                        formatBytes(row.memoryMetrics.totalOffHeapStorageMemory, type));
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('off_heap_memory')
                             }
                         },
                         {data: 'diskUsed', render: formatBytes},
@@ -417,24 +490,20 @@ $(document).ready(function () {
                         {data: 'totalInputBytes', render: formatBytes},
                         {data: 'totalShuffleRead', render: formatBytes},
                         {data: 'totalShuffleWrite', render: formatBytes},
-                        {data: 'executorLogs', render: formatLogsCells},
+                        {name: 'executorLogsCol', data: 'executorLogs', render: formatLogsCells},
                         {
+                            name: 'threadDumpCol',
                             data: 'id', render: function (data, type) {
                                 return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
                             }
-                        }
-                    ],
-                    "columnDefs": [
-                        {
-                            "targets": [ 16 ],
-                            "visible": getThreadDumpEnabled()
                         }
                     ],
                     "order": [[0, "asc"]]
                 };
     
                 var dt = $(selector).DataTable(conf);
-                dt.column(15).visible(logsExist(response));
+                dt.column('executorLogsCol:name').visible(logsExist(response));
+                dt.column('threadDumpCol:name').visible(getThreadDumpEnabled());
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";
@@ -450,7 +519,35 @@ $(document).ready(function () {
                         {data: 'allRDDBlocks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatBytes(row.allMemoryUsed, type) + ' / ' + formatBytes(row.allMaxMemory, type)) : row.allMemoryUsed;
+                                if (type !== 'display')
+                                    return row.allMemoryUsed
+                                else
+                                    return (formatBytes(row.allMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.allMaxMemory, type));
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.allOnHeapMemoryUsed;
+                                else
+                                    return (formatBytes(row.allOnHeapMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.allOnHeapMaxMemory, type));
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('on_heap_memory')
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.allOffHeapMemoryUsed;
+                                else
+                                    return (formatBytes(row.allOffHeapMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.allOffHeapMaxMemory, type));
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('off_heap_memory')
                             }
                         },
                         {data: 'allDiskUsed', render: formatBytes},

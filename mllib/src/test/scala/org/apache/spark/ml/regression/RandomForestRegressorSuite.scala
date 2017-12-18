@@ -90,6 +90,8 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
 
     val model = rf.fit(df)
 
+    MLTestingUtils.checkCopyAndUids(rf, model)
+
     val importances = model.featureImportances
     val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)

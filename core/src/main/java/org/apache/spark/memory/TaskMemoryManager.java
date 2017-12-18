@@ -19,6 +19,7 @@ package org.apache.spark.memory;
 
 import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -52,8 +53,8 @@ import org.apache.spark.util.Utils;
  * retrieve the base object.
  * <p>
  * This allows us to address 8192 pages. In on-heap mode, the maximum page size is limited by the
- * maximum size of a long[] array, allowing us to address 8192 * 2^32 * 8 bytes, which is
- * approximately 35 terabytes of memory.
+ * maximum size of a long[] array, allowing us to address 8192 * (2^31 - 1) * 8 bytes, which is
+ * approximately 140 terabytes of memory.
  */
 public class TaskMemoryManager {
 
@@ -73,7 +74,8 @@ public class TaskMemoryManager {
    * Maximum supported data page size (in bytes). In principle, the maximum addressable page size is
    * (1L &lt;&lt; OFFSET_BITS) bytes, which is 2+ petabytes. However, the on-heap allocator's
    * maximum page size is limited by the maximum amount of data that can be stored in a long[]
-   * array, which is (2^32 - 1) * 8 bytes (or 16 gigabytes). Therefore, we cap this at 16 gigabytes.
+   * array, which is (2^31 - 1) * 8 bytes (or about 17 gigabytes). Therefore, we cap this at 17
+   * gigabytes.
    */
   public static final long MAXIMUM_PAGE_SIZE_BYTES = ((1L << 31) - 1) * 8L;
 
@@ -155,11 +157,8 @@ public class TaskMemoryManager {
         for (MemoryConsumer c: consumers) {
           if (c != consumer && c.getUsed() > 0 && c.getMode() == mode) {
             long key = c.getUsed();
-            List<MemoryConsumer> list = sortedConsumers.get(key);
-            if (list == null) {
-              list = new ArrayList<>(1);
-              sortedConsumers.put(key, list);
-            }
+            List<MemoryConsumer> list =
+                sortedConsumers.computeIfAbsent(key, k -> new ArrayList<>(1));
             list.add(c);
           }
         }
@@ -187,6 +186,10 @@ public class TaskMemoryManager {
                 break;
               }
             }
+          } catch (ClosedByInterruptException e) {
+            // This called by user to kill a task (e.g: speculative task).
+            logger.error("error while calling spill() on " + c, e);
+            throw new RuntimeException(e.getMessage());
           } catch (IOException e) {
             logger.error("error while calling spill() on " + c, e);
             throw new OutOfMemoryError("error while calling spill() on " + c + " : "
@@ -204,6 +207,10 @@ public class TaskMemoryManager {
               Utils.bytesToString(released), consumer);
             got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
           }
+        } catch (ClosedByInterruptException e) {
+          // This called by user to kill a task (e.g: speculative task).
+          logger.error("error while calling spill() on " + consumer, e);
+          throw new RuntimeException(e.getMessage());
         } catch (IOException e) {
           logger.error("error while calling spill() on " + consumer, e);
           throw new OutOfMemoryError("error while calling spill() on " + consumer + " : "
@@ -263,13 +270,14 @@ public class TaskMemoryManager {
    *
    * Returns `null` if there was not enough memory to allocate the page. May return a page that
    * contains fewer bytes than requested, so callers should verify the size of returned pages.
+   *
+   * @throws TooLargePageException
    */
   public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
     assert(consumer != null);
     assert(consumer.getMode() == tungstenMemoryMode);
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
-      throw new IllegalArgumentException(
-        "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
+      throw new TooLargePageException(size);
     }
 
     long acquired = acquireExecutionMemory(size, consumer);

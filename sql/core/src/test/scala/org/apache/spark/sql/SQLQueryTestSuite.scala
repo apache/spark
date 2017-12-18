@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeTableCommand}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -123,7 +124,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   private def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.exists(t => testCase.name.toLowerCase.contains(t.toLowerCase))) {
+    if (blackList.exists(t =>
+        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else {
@@ -165,8 +167,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         s"-- Number of queries: ${outputs.size}\n\n\n" +
         outputs.zipWithIndex.map{case (qr, i) => qr.toString(i)}.mkString("\n\n\n") + "\n"
       }
-      val resultFile = new File(testCase.resultFile);
-      val parent = resultFile.getParentFile();
+      val resultFile = new File(testCase.resultFile)
+      val parent = resultFile.getParentFile
       if (!parent.exists()) {
         assert(parent.mkdirs(), "Could not create directory: " + parent)
       }
@@ -214,6 +216,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // Returns true if the plan is supposed to be sorted.
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
+      case _: DescribeTableCommand | _: DescribeColumnCommand => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
@@ -221,11 +224,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     try {
       val df = session.sql(sql)
       val schema = df.schema
+      val notIncludedMsg = "[not included in comparison]"
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
       val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x")
-        .replaceAll("Location:.*/sql/core/", "Location: sql/core/")
-        .replaceAll("Created: .*", "Created: ")
-        .replaceAll("Last Access: .*", "Last Access: "))
+        .replaceAll("Location.*/sql/core/", s"Location ${notIncludedMsg}sql/core/")
+        .replaceAll("Created By.*", s"Created By $notIncludedMsg")
+        .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
+        .replaceAll("Last Access.*", s"Last Access $notIncludedMsg"))
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)

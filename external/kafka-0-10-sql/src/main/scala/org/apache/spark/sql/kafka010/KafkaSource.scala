@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
+import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -70,13 +71,13 @@ import org.apache.spark.unsafe.types.UTF8String
  * and not use wrong broker addresses.
  */
 private[kafka010] class KafkaSource(
-                                     sqlContext: SQLContext,
-                                     kafkaReader: KafkaOffsetReader,
-                                     executorKafkaParams: ju.Map[String, Object],
-                                     sourceOptions: Map[String, String],
-                                     metadataPath: String,
-                                     startingOffsets: KafkaOffsetRangeLimit,
-                                     failOnDataLoss: Boolean)
+    sqlContext: SQLContext,
+    kafkaReader: KafkaOffsetReader,
+    executorKafkaParams: ju.Map[String, Object],
+    sourceOptions: Map[String, String],
+    metadataPath: String,
+    startingOffsets: KafkaOffsetRangeLimit,
+    failOnDataLoss: Boolean)
   extends Source with Logging {
 
   private val sc = sqlContext.sparkContext
@@ -310,7 +311,7 @@ private[kafka010] class KafkaSource(
       currentPartitionOffsets = Some(untilPartitionOffsets)
     }
 
-    sqlContext.internalCreateDataFrame(rdd, schema)
+    sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
   }
 
   /** Stop this source and free any resources it has allocated. */

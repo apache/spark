@@ -54,6 +54,7 @@ public class TaskMemoryManagerSuite {
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, offset);
     Assert.assertEquals(null, manager.getPage(encodedAddress));
     Assert.assertEquals(offset, manager.getOffsetInPage(encodedAddress));
+    manager.freePage(dataPage, c);
   }
 
   @Test

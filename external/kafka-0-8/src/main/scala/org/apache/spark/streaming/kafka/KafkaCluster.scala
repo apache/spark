@@ -42,6 +42,7 @@ import org.apache.spark.annotation.DeveloperApi
  *   NOT zookeeper servers, specified in host1:port1,host2:port2 form
  */
 @DeveloperApi
+@deprecated("Update to Kafka 0.10 integration", "2.3.0")
 class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   import KafkaCluster.{Err, LeaderOffset, SimpleConsumerConfig}
 
@@ -376,6 +377,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
 }
 
 @DeveloperApi
+@deprecated("Update to Kafka 0.10 integration", "2.3.0")
 object KafkaCluster {
   type Err = ArrayBuffer[Throwable]
 

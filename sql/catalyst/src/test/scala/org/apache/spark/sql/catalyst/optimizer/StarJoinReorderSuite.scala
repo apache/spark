@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
@@ -25,19 +24,36 @@ import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
-
+import org.apache.spark.sql.internal.SQLConf._
 
 class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
 
-  override val conf = SimpleCatalystConf(
-    caseSensitiveAnalysis = true, starSchemaDetection = true)
+  var originalConfStarSchemaDetection = false
+  var originalConfCBOEnabled = true
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalConfStarSchemaDetection = conf.starSchemaDetection
+    originalConfCBOEnabled = conf.cboEnabled
+    conf.setConf(STARSCHEMA_DETECTION, true)
+    conf.setConf(CBO_ENABLED, false)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      conf.setConf(STARSCHEMA_DETECTION, originalConfStarSchemaDetection)
+      conf.setConf(CBO_ENABLED, originalConfCBOEnabled)
+    } finally {
+      super.afterAll()
+    }
+  }
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
         PushDownPredicate,
-        ReorderJoin(conf),
+        ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) :: Nil
@@ -207,7 +223,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     //  and d3_fk1 = s3_pk1
     //
     // Default join reordering: d1, f1, d2, d3, s3
-    // Star join reordering: f1, d1, d3, d2,, d3
+    // Star join reordering: f1, d1, d3, d2, s3
 
     val query =
       d1.join(f1).join(d2).join(s3).join(d3)
@@ -243,7 +259,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     //  and d3_fk1 = s3_pk1
     //
     // Default join reordering: d1, f1, d2, d3, s3
-    // Star join reordering: f1, d1, d3, d2, d3
+    // Star join reordering: f1, d1, d3, d2, s3
     val query =
       d1.join(f1).join(d2).join(s3).join(d3)
         .where((nameToAttr("f1_fk1") === nameToAttr("d1_pk1")) &&

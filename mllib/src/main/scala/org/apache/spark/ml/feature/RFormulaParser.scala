@@ -99,7 +99,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
     }).map(_.distinct)
 
     // Deduplicates feature interactions, for example, a:b is the same as b:a.
-    var seen = mutable.Set[Set[String]]()
+    val seen = mutable.Set[Set[String]]()
     validInteractions.flatMap {
       case t if seen.contains(t.toSet) =>
         None

@@ -17,39 +17,19 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable
 import scala.xml.{Node, Unparsed}
 
+import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.api.v1.StageData
 import org.apache.spark.ui.{ToolTips, UIUtils}
-import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
 /** Stage summary grouped by executors. */
-private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: StagesTab) {
-  private val listener = parent.progressListener
+private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
+
+  import ApiHelper._
 
   def toNodeSeq: Seq[Node] = {
-    listener.synchronized {
-      executorTable()
-    }
-  }
-
-  /** Special table which merges two header cells. */
-  private def executorTable[T](): Seq[Node] = {
-    val stageData = listener.stageIdToData.get((stageId, stageAttemptId))
-    var hasInput = false
-    var hasOutput = false
-    var hasShuffleWrite = false
-    var hasShuffleRead = false
-    var hasBytesSpilled = false
-    stageData.foreach { data =>
-        hasInput = data.hasInput
-        hasOutput = data.hasOutput
-        hasShuffleRead = data.hasShuffleRead
-        hasShuffleWrite = data.hasShuffleWrite
-        hasBytesSpilled = data.hasBytesSpilled
-    }
-
     <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
       <thead>
         <th id="executorid">Executor ID</th>
@@ -59,29 +39,29 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
         <th>Failed Tasks</th>
         <th>Killed Tasks</th>
         <th>Succeeded Tasks</th>
-        {if (hasInput) {
+        {if (hasInput(stage)) {
           <th>
             <span data-toggle="tooltip" title={ToolTips.INPUT}>Input Size / Records</span>
           </th>
         }}
-        {if (hasOutput) {
+        {if (hasOutput(stage)) {
           <th>
             <span data-toggle="tooltip" title={ToolTips.OUTPUT}>Output Size / Records</span>
           </th>
         }}
-        {if (hasShuffleRead) {
+        {if (hasShuffleRead(stage)) {
           <th>
             <span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>
             Shuffle Read Size / Records</span>
           </th>
         }}
-        {if (hasShuffleWrite) {
+        {if (hasShuffleWrite(stage)) {
           <th>
             <span data-toggle="tooltip" title={ToolTips.SHUFFLE_WRITE}>
             Shuffle Write Size / Records</span>
           </th>
         }}
-        {if (hasBytesSpilled) {
+        {if (hasBytesSpilled(stage)) {
           <th>Shuffle Spill (Memory)</th>
           <th>Shuffle Spill (Disk)</th>
         }}
@@ -92,7 +72,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
         </th>
       </thead>
       <tbody>
-        {createExecutorTable()}
+        {createExecutorTable(stage)}
       </tbody>
     </table>
     <script>
@@ -106,70 +86,57 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
     </script>
   }
 
-  private def createExecutorTable() : Seq[Node] = {
-    // Make an executor-id -> address map
-    val executorIdToAddress = mutable.HashMap[String, String]()
-    listener.blockManagerIds.foreach { blockManagerId =>
-      val address = blockManagerId.hostPort
-      val executorId = blockManagerId.executorId
-      executorIdToAddress.put(executorId, address)
-    }
-
-    listener.stageIdToData.get((stageId, stageAttemptId)) match {
-      case Some(stageData: StageUIData) =>
-        stageData.executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
-          <tr>
-            <td>
-              <div style="float: left">{k}</div>
-              <div style="float: right">
-              {
-                val logs = parent.executorsListener.executorToTaskSummary.get(k)
-                  .map(_.executorLogs).getOrElse(Map.empty)
-                logs.map {
-                  case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
-                }
-              }
-              </div>
-            </td>
-            <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
-            <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
-            <td>{v.failedTasks + v.succeededTasks + v.reasonToNumKilled.map(_._2).sum}</td>
-            <td>{v.failedTasks}</td>
-            <td>{v.reasonToNumKilled.map(_._2).sum}</td>
-            <td>{v.succeededTasks}</td>
-            {if (stageData.hasInput) {
-              <td sorttable_customkey={v.inputBytes.toString}>
-                {s"${Utils.bytesToString(v.inputBytes)} / ${v.inputRecords}"}
-              </td>
-            }}
-            {if (stageData.hasOutput) {
-              <td sorttable_customkey={v.outputBytes.toString}>
-                {s"${Utils.bytesToString(v.outputBytes)} / ${v.outputRecords}"}
-              </td>
-            }}
-            {if (stageData.hasShuffleRead) {
-              <td sorttable_customkey={v.shuffleRead.toString}>
-                {s"${Utils.bytesToString(v.shuffleRead)} / ${v.shuffleReadRecords}"}
-              </td>
-            }}
-            {if (stageData.hasShuffleWrite) {
-              <td sorttable_customkey={v.shuffleWrite.toString}>
-                {s"${Utils.bytesToString(v.shuffleWrite)} / ${v.shuffleWriteRecords}"}
-              </td>
-            }}
-            {if (stageData.hasBytesSpilled) {
-              <td sorttable_customkey={v.memoryBytesSpilled.toString}>
-                {Utils.bytesToString(v.memoryBytesSpilled)}
-              </td>
-              <td sorttable_customkey={v.diskBytesSpilled.toString}>
-                {Utils.bytesToString(v.diskBytesSpilled)}
-              </td>
-            }}
-            <td>{v.isBlacklisted}</td>
-          </tr>
-        }
-      case None =>
-        Seq.empty[Node]
+  private def createExecutorTable(stage: StageData) : Seq[Node] = {
+    stage.executorSummary.getOrElse(Map.empty).toSeq.sortBy(_._1).map { case (k, v) =>
+      val executor = store.asOption(store.executorSummary(k))
+      <tr>
+        <td>
+          <div style="float: left">{k}</div>
+          <div style="float: right">
+          {
+            executor.map(_.executorLogs).getOrElse(Map.empty).map {
+              case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
+            }
+          }
+          </div>
+        </td>
+        <td>{executor.map { e => e.hostPort }.getOrElse("CANNOT FIND ADDRESS")}</td>
+        <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
+        <td>{v.failedTasks + v.succeededTasks + v.killedTasks}</td>
+        <td>{v.failedTasks}</td>
+        <td>{v.killedTasks}</td>
+        <td>{v.succeededTasks}</td>
+        {if (hasInput(stage)) {
+          <td sorttable_customkey={v.inputBytes.toString}>
+            {s"${Utils.bytesToString(v.inputBytes)} / ${v.inputRecords}"}
+          </td>
+        }}
+        {if (hasOutput(stage)) {
+          <td sorttable_customkey={v.outputBytes.toString}>
+            {s"${Utils.bytesToString(v.outputBytes)} / ${v.outputRecords}"}
+          </td>
+        }}
+        {if (hasShuffleRead(stage)) {
+          <td sorttable_customkey={v.shuffleRead.toString}>
+            {s"${Utils.bytesToString(v.shuffleRead)} / ${v.shuffleReadRecords}"}
+          </td>
+        }}
+        {if (hasShuffleWrite(stage)) {
+          <td sorttable_customkey={v.shuffleWrite.toString}>
+            {s"${Utils.bytesToString(v.shuffleWrite)} / ${v.shuffleWriteRecords}"}
+          </td>
+        }}
+        {if (hasBytesSpilled(stage)) {
+          <td sorttable_customkey={v.memoryBytesSpilled.toString}>
+            {Utils.bytesToString(v.memoryBytesSpilled)}
+          </td>
+          <td sorttable_customkey={v.diskBytesSpilled.toString}>
+            {Utils.bytesToString(v.diskBytesSpilled)}
+          </td>
+        }}
+        <td>{executor.map(_.isBlacklisted).getOrElse(false)}</td>
+      </tr>
     }
   }
+
 }

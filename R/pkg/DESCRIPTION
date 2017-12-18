@@ -1,8 +1,8 @@
 Package: SparkR
 Type: Package
-Version: 2.2.0
+Version: 2.3.0
 Title: R Frontend for Apache Spark
-Description: The SparkR package provides an R Frontend for Apache Spark.
+Description: Provides an R Frontend for Apache Spark.
 Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
                     email = "shivaram@cs.berkeley.edu"),
              person("Xiangrui", "Meng", role = "aut",
@@ -35,6 +35,7 @@ Collate:
     'WindowSpec.R'
     'backend.R'
     'broadcast.R'
+    'catalog.R'
     'client.R'
     'context.R'
     'deserialize.R'
@@ -43,6 +44,7 @@ Collate:
     'jvm.R'
     'mllib_classification.R'
     'mllib_clustering.R'
+    'mllib_fpm.R'
     'mllib_recommendation.R'
     'mllib_regression.R'
     'mllib_stat.R'
