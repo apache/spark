@@ -1041,7 +1041,7 @@ object SQLConf {
       .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
         "information. When this regex matches a string part, that string part is replaced by a " +
         "dummy value. This is currently used to redact the output of SQL explain commands. " +
-        "When this conf is not set, the value from `spark.sql.redaction.string.regex` is used.")
+        "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
 
   object Deprecated {
