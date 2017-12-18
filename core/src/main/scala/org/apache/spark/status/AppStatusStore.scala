@@ -330,6 +330,10 @@ private[spark] class AppStatusStore(
     store.read(classOf[PoolData], name)
   }
 
+  def appSummary(): AppSummary = {
+    store.read(classOf[AppSummary], classOf[AppSummary].getName())
+  }
+
   def close(): Unit = {
     store.close()
   }
@@ -347,7 +351,7 @@ private[spark] object AppStatusStore {
    * @param addListenerFn Function to register a listener with a bus.
    */
   def createLiveStore(conf: SparkConf, addListenerFn: SparkListener => Unit): AppStatusStore = {
-    val store = new InMemoryStore()
+    val store = new ElementTrackingStore(new InMemoryStore(), conf)
     val listener = new AppStatusListener(store, conf, true)
     addListenerFn(listener)
     AppStatusPlugin.loadPlugins().foreach { p =>
