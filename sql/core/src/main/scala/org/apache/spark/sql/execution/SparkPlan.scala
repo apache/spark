@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.JaninoRuntimeException
+import org.codehaus.janino.InternalCompilerException
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -111,6 +111,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Concrete implementations of SparkPlan should override `doExecute`.
    */
   final def execute(): RDD[InternalRow] = executeQuery {
+    if (isCanonicalizedPlan) {
+      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+    }
     doExecute()
   }
 
@@ -121,6 +124,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Concrete implementations of SparkPlan should override `doExecuteBroadcast`.
    */
   final def executeBroadcast[T](): broadcast.Broadcast[T] = executeQuery {
+    if (isCanonicalizedPlan) {
+      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+    }
     doExecuteBroadcast()
   }
 
@@ -379,7 +385,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     try {
       GeneratePredicate.generate(expression, inputSchema)
     } catch {
-      case _ @ (_: JaninoRuntimeException | _: CompileException) if codeGenFallBack =>
+      case _ @ (_: InternalCompilerException | _: CompileException) if codeGenFallBack =>
         genInterpretedPredicate(expression, inputSchema)
     }
   }

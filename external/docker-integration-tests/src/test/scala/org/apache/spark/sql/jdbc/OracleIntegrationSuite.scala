@@ -18,11 +18,12 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
-import java.util.Properties
+import java.util.{Properties, TimeZone}
 import java.math.BigDecimal
 
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.execution.{WholeStageCodegenExec, RowDataSourceScanExec}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -52,7 +53,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "wnameless/oracle-xe-11g:14.04.4"
+    override val imageName = "wnameless/oracle-xe-11g:16.04"
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )
@@ -77,6 +78,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     conn.prepareStatement(
       "INSERT INTO ts_with_timezone VALUES " +
         "(1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO ts_with_timezone VALUES " +
+        "(2, to_timestamp_tz('1999-12-01 12:00:00 PST','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
     conn.commit()
 
     conn.prepareStatement(
@@ -104,15 +108,18 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       """.stripMargin.replaceAll("\n", " "))
 
 
-    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))").executeUpdate();
+    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))").executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate();
-    conn.commit();
+      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement("CREATE TABLE oracle_types (d BINARY_DOUBLE, f BINARY_FLOAT)").executeUpdate()
+    conn.commit()
   }
 
 
   test("SPARK-16625 : Importing Oracle numeric types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties);
+    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
     val rows = df.collect()
     assert(rows.size == 1)
     val row = rows(0)
@@ -232,6 +239,63 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(types(1).equals("class java.sql.Timestamp"))
   }
 
+  test("Column type TIMESTAMP with SESSION_LOCAL_TIMEZONE is different from default") {
+    val defaultJVMTimeZone = TimeZone.getDefault
+    // Pick the timezone different from the current default time zone of JVM
+    val sofiaTimeZone = TimeZone.getTimeZone("Europe/Sofia")
+    val shanghaiTimeZone = TimeZone.getTimeZone("Asia/Shanghai")
+    val localSessionTimeZone =
+      if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
+      val e = intercept[java.sql.SQLException] {
+        val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+        dfRead.collect()
+      }.getMessage
+      assert(e.contains("Unrecognized SQL type -101"))
+    }
+  }
+
+  /**
+   * Change the Time Zone `timeZoneId` of JVM before executing `f`, then switches back to the
+   * original after `f` returns.
+   * @param timeZoneId the ID for a TimeZone, either an abbreviation such as "PST", a full name such
+   *                   as "America/Los_Angeles", or a custom ID such as "GMT-8:00".
+   */
+  private def withTimeZone(timeZoneId: String)(f: => Unit): Unit = {
+    val originalLocale = TimeZone.getDefault
+    try {
+      // Add Locale setting
+      TimeZone.setDefault(TimeZone.getTimeZone(timeZoneId))
+      f
+    } finally {
+      TimeZone.setDefault(originalLocale)
+    }
+  }
+
+  test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
+    def checkRow(row: Row, ts: String): Unit = {
+      assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
+    }
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
+      val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+      withTimeZone("PST") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
+      }
+
+      withTimeZone("UTC") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 20:00:00"))))
+      }
+    }
+  }
+
   test("SPARK-18004: Make sure date or timestamp related predicate is pushed down correctly") {
     val props = new Properties()
     props.put("oracle.jdbc.mapDateToTimestamp", "false")
@@ -306,5 +370,33 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
     assert(values.getInt(1).equals(1))
     assert(values.getBoolean(2).equals(false))
+  }
+
+  test("SPARK-22303: handle BINARY_DOUBLE and BINARY_FLOAT as DoubleType and FloatType") {
+    val tableName = "oracle_types"
+    val schema = StructType(Seq(
+      StructField("d", DoubleType, true),
+      StructField("f", FloatType, true)))
+    val props = new Properties()
+
+    // write it back to the table (append mode)
+    val data = spark.sparkContext.parallelize(Seq(Row(1.1, 2.2f)))
+    val dfWrite = spark.createDataFrame(data, schema)
+    dfWrite.write.mode(SaveMode.Append).jdbc(jdbcUrl, tableName, props)
+
+    // read records from oracle_types
+    val dfRead = sqlContext.read.jdbc(jdbcUrl, tableName, new Properties)
+    val rows = dfRead.collect()
+    assert(rows.size == 1)
+
+    // check data types
+    val types = dfRead.schema.map(field => field.dataType)
+    assert(types(0).equals(DoubleType))
+    assert(types(1).equals(FloatType))
+
+    // check values
+    val values = rows(0)
+    assert(values.getDouble(0) === 1.1)
+    assert(values.getFloat(1) === 2.2f)
   }
 }

@@ -54,10 +54,8 @@ case class UncacheTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val tableId = tableIdent.quotedString
-    try {
+    if (!ifExists || sparkSession.catalog.tableExists(tableId)) {
       sparkSession.catalog.uncacheTable(tableId)
-    } catch {
-      case _: NoSuchTableException if ifExists => // don't throw
     }
     Seq.empty[Row]
   }
@@ -66,10 +64,13 @@ case class UncacheTableCommand(
 /**
  * Clear all cached data from the in-memory cache.
  */
-case object ClearCacheCommand extends RunnableCommand {
+case class ClearCacheCommand() extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
+
+  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
+  override def makeCopy(newArgs: Array[AnyRef]): ClearCacheCommand = ClearCacheCommand()
 }

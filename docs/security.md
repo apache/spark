@@ -186,7 +186,54 @@ configure those ports.
   </tr>
 </table>
 
+### HTTP Security Headers
+
+Apache Spark can be configured to include HTTP Headers which aids in preventing Cross 
+Site Scripting (XSS), Cross-Frame Scripting (XFS), MIME-Sniffing and also enforces HTTP 
+Strict Transport Security.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.ui.xXssProtection</code></td>
+  <td><code>1; mode=block</code></td>
+  <td>
+    Value for HTTP X-XSS-Protection response header. You can choose appropriate value 
+    from below:
+    <ul>
+      <li><code>0</code> (Disables XSS filtering)</li> 
+      <li><code>1</code> (Enables XSS filtering. If a cross-site scripting attack is detected, 
+        the browser will sanitize the page.)</li>
+      <li><code>1; mode=block</code> (Enables XSS filtering. The browser will prevent rendering 
+        of the page if an attack is detected.)</li>
+    </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.xContentTypeOptions.enabled</code></td>
+  <td><code>true</code></td>
+  <td>
+    When value is set to "true", X-Content-Type-Options HTTP response header will be set 
+    to "nosniff". Set "false" to disable.
+  </td>
+  </tr>
+<tr>
+  <td><code>spark.ui.strictTransportSecurity</code></td>
+  <td>None</td>
+  <td>
+    Value for HTTP Strict Transport Security (HSTS) Response Header. You can choose appropriate 
+    value from below and set <code>expire-time</code> accordingly, when Spark is SSL/TLS enabled.
+    <ul>
+      <li><code>max-age=&lt;expire-time&gt;</code></li>
+      <li><code>max-age=&lt;expire-time&gt;; includeSubDomains</code></li>
+      <li><code>max-age=&lt;expire-time&gt;; preload</code></li>
+    </ul>
+  </td>
+</tr>
+</table>
+    
 
 See the [configuration page](configuration.html) for more details on the security configuration
 parameters, and <a href="{{site.SPARK_GITHUB_URL}}/tree/master/core/src/main/scala/org/apache/spark/SecurityManager.scala">
 <code>org.apache.spark.SecurityManager</code></a> for implementation details about security.
+

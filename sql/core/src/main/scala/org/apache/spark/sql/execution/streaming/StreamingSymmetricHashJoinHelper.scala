@@ -24,8 +24,9 @@ import org.apache.spark.{Partition, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsRDD2}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
-import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeReference, AttributeSet, BoundReference, Cast, CheckOverflow, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Multiply, NamedExpression, PreciseTimestampConversion, PredicateHelper, Subtract, TimeAdd, TimeSub, UnaryMinus}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, AttributeReference, AttributeSet, BoundReference, Cast, CheckOverflow, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Multiply, NamedExpression, PreciseTimestampConversion, PredicateHelper, Subtract, TimeAdd, TimeSub, UnaryMinus}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
 import org.apache.spark.sql.execution.streaming.state.{StateStoreCoordinatorRef, StateStoreProvider, StateStoreProviderId}
 import org.apache.spark.sql.types._
@@ -63,6 +64,73 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     override def toString(): String = {
       s"state cleanup [ left ${left.map(_.toString).getOrElse("= null")}, " +
         s"right ${right.map(_.toString).getOrElse("= null")} ]"
+    }
+  }
+
+  /**
+   * Wrapper around various useful splits of the join condition.
+   * left AND right AND joined is equivalent to full.
+   *
+   * Note that left and right do not necessarily contain *all* conjuncts which satisfy
+   * their condition. Any conjuncts after the first nondeterministic one are treated as
+   * nondeterministic for purposes of the split.
+   *
+   * @param leftSideOnly Deterministic conjuncts which reference only the left side of the join.
+   * @param rightSideOnly Deterministic conjuncts which reference only the right side of the join.
+   * @param bothSides Conjuncts which are nondeterministic, occur after a nondeterministic conjunct,
+   *                  or reference both left and right sides of the join.
+   * @param full The full join condition.
+   */
+  case class JoinConditionSplitPredicates(
+      leftSideOnly: Option[Expression],
+      rightSideOnly: Option[Expression],
+      bothSides: Option[Expression],
+      full: Option[Expression]) {
+    override def toString(): String = {
+      s"condition = [ leftOnly = ${leftSideOnly.map(_.toString).getOrElse("null")}, " +
+        s"rightOnly = ${rightSideOnly.map(_.toString).getOrElse("null")}, " +
+        s"both = ${bothSides.map(_.toString).getOrElse("null")}, " +
+        s"full = ${full.map(_.toString).getOrElse("null")} ]"
+    }
+  }
+
+  object JoinConditionSplitPredicates extends PredicateHelper {
+    def apply(condition: Option[Expression], left: SparkPlan, right: SparkPlan):
+        JoinConditionSplitPredicates = {
+      // Split the condition into 3 parts:
+      // * Conjuncts that can be evaluated on only the left input.
+      // * Conjuncts that can be evaluated on only the right input.
+      // * Conjuncts that require both left and right input.
+      //
+      // Note that we treat nondeterministic conjuncts as though they require both left and right
+      // input. To maintain their semantics, they need to be evaluated exactly once per joined row.
+      val (leftCondition, rightCondition, joinedCondition) = {
+        if (condition.isEmpty) {
+          (None, None, None)
+        } else {
+          // Span rather than partition, because nondeterministic expressions don't commute
+          // across AND.
+          val (deterministicConjuncts, nonDeterministicConjuncts) =
+            splitConjunctivePredicates(condition.get).span(_.deterministic)
+
+          val (leftConjuncts, nonLeftConjuncts) = deterministicConjuncts.partition { cond =>
+            cond.references.subsetOf(left.outputSet)
+          }
+
+          val (rightConjuncts, nonRightConjuncts) = deterministicConjuncts.partition { cond =>
+            cond.references.subsetOf(right.outputSet)
+          }
+
+          (
+            leftConjuncts.reduceOption(And),
+            rightConjuncts.reduceOption(And),
+            (nonLeftConjuncts.intersect(nonRightConjuncts) ++ nonDeterministicConjuncts)
+              .reduceOption(And)
+          )
+        }
+      }
+
+      JoinConditionSplitPredicates(leftCondition, rightCondition, joinedCondition, condition)
     }
   }
 

@@ -31,7 +31,7 @@ package org.apache.spark.sql.catalyst.expressions
  *  - [[EqualTo]] and [[EqualNullSafe]] are reordered by `hashCode`.
  *  - Other comparisons ([[GreaterThan]], [[LessThan]]) are reversed by `hashCode`.
  */
-object Canonicalize extends {
+object Canonicalize {
   def execute(e: Expression): Expression = {
     expressionReorder(ignoreNamesTypes(e))
   }

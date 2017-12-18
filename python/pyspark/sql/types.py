@@ -35,6 +35,7 @@ from py4j.java_gateway import JavaClass
 
 from pyspark import SparkContext
 from pyspark.serializers import CloudPickleSerializer
+from pyspark.util import _exception_message
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -1619,9 +1620,162 @@ def to_arrow_type(dt):
         arrow_type = pa.decimal(dt.precision, dt.scale)
     elif type(dt) == StringType:
         arrow_type = pa.string()
+    elif type(dt) == DateType:
+        arrow_type = pa.date32()
+    elif type(dt) == TimestampType:
+        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
+        arrow_type = pa.timestamp('us', tz='UTC')
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
+
+
+def to_arrow_schema(schema):
+    """ Convert a schema from Spark to Arrow
+    """
+    import pyarrow as pa
+    fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+              for field in schema]
+    return pa.schema(fields)
+
+
+def from_arrow_type(at):
+    """ Convert pyarrow type to Spark data type.
+    """
+    # TODO: newer pyarrow has is_boolean(at) functions that would be better to check type
+    import pyarrow as pa
+    if at == pa.bool_():
+        spark_type = BooleanType()
+    elif at == pa.int8():
+        spark_type = ByteType()
+    elif at == pa.int16():
+        spark_type = ShortType()
+    elif at == pa.int32():
+        spark_type = IntegerType()
+    elif at == pa.int64():
+        spark_type = LongType()
+    elif at == pa.float32():
+        spark_type = FloatType()
+    elif at == pa.float64():
+        spark_type = DoubleType()
+    elif type(at) == pa.DecimalType:
+        spark_type = DecimalType(precision=at.precision, scale=at.scale)
+    elif at == pa.string():
+        spark_type = StringType()
+    elif at == pa.date32():
+        spark_type = DateType()
+    elif type(at) == pa.TimestampType:
+        spark_type = TimestampType()
+    else:
+        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+    return spark_type
+
+
+def from_arrow_schema(arrow_schema):
+    """ Convert schema from Arrow to Spark.
+    """
+    return StructType(
+        [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+         for field in arrow_schema])
+
+
+def _old_pandas_exception_message(e):
+    """ Create an error message for importing old Pandas.
+    """
+    msg = "note: Pandas (>=0.19.2) must be installed and available on calling Python process"
+    return "%s\n%s" % (_exception_message(e), msg)
+
+
+def _check_dataframe_localize_timestamps(pdf, timezone):
+    """
+    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
+
+    :param pdf: pandas.DataFrame
+    :param timezone: the timezone to convert. if None then use local timezone
+    :return pandas.DataFrame where any timezone aware columns have been converted to tz-naive
+    """
+    try:
+        from pandas.api.types import is_datetime64tz_dtype
+    except ImportError as e:
+        raise ImportError(_old_pandas_exception_message(e))
+    tz = timezone or 'tzlocal()'
+    for column, series in pdf.iteritems():
+        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+        if is_datetime64tz_dtype(series.dtype):
+            pdf[column] = series.dt.tz_convert(tz).dt.tz_localize(None)
+    return pdf
+
+
+def _check_series_convert_timestamps_internal(s, timezone):
+    """
+    Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
+    Spark internal storage
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
+    """
+    try:
+        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+    except ImportError as e:
+        raise ImportError(_old_pandas_exception_message(e))
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64_dtype(s.dtype):
+        tz = timezone or 'tzlocal()'
+        return s.dt.tz_localize(tz).dt.tz_convert('UTC')
+    elif is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert('UTC')
+    else:
+        return s
+
+
+def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param from_timezone: the timezone to convert from. if None then use local timezone
+    :param to_timezone: the timezone to convert to. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    try:
+        import pandas as pd
+        from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
+    except ImportError as e:
+        raise ImportError(_old_pandas_exception_message(e))
+    from_tz = from_timezone or 'tzlocal()'
+    to_tz = to_timezone or 'tzlocal()'
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert(to_tz).dt.tz_localize(None)
+    elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
+        # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
+        return s.apply(lambda ts: ts.tz_localize(from_tz).tz_convert(to_tz).tz_localize(None)
+                       if ts is not pd.NaT else pd.NaT)
+    else:
+        return s
+
+
+def _check_series_convert_timestamps_local_tz(s, timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert to. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    return _check_series_convert_timestamps_localize(s, None, timezone)
+
+
+def _check_series_convert_timestamps_tz_local(s, timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert from. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    return _check_series_convert_timestamps_localize(s, timezone, None)
 
 
 def _test():

@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
-import org.apache.arrow.vector.util.DecimalUtility
+import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
@@ -29,8 +29,8 @@ import org.apache.spark.sql.types._
 
 object ArrowWriter {
 
-  def create(schema: StructType): ArrowWriter = {
-    val arrowSchema = ArrowUtils.toArrowSchema(schema)
+  def create(schema: StructType, timeZoneId: String): ArrowWriter = {
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
     create(root)
   }
@@ -55,6 +55,8 @@ object ArrowWriter {
       case (DoubleType, vector: NullableFloat8Vector) => new DoubleWriter(vector)
       case (StringType, vector: NullableVarCharVector) => new StringWriter(vector)
       case (BinaryType, vector: NullableVarBinaryVector) => new BinaryWriter(vector)
+      case (DateType, vector: NullableDateDayVector) => new DateWriter(vector)
+      case (TimestampType, vector: NullableTimeStampMicroTZVector) => new TimestampWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
@@ -69,9 +71,7 @@ object ArrowWriter {
   }
 }
 
-class ArrowWriter(
-    val root: VectorSchemaRoot,
-    fields: Array[ArrowFieldWriter]) {
+class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
 
   def schema: StructType = StructType(fields.map { f =>
     StructField(f.name, f.dataType, f.nullable)
@@ -252,6 +252,33 @@ private[arrow] class BinaryWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val bytes = input.getBinary(ordinal)
     valueMutator.setSafe(count, bytes, 0, bytes.length)
+  }
+}
+
+private[arrow] class DateWriter(val valueVector: NullableDateDayVector) extends ArrowFieldWriter {
+
+  override def valueMutator: NullableDateDayVector#Mutator = valueVector.getMutator()
+
+  override def setNull(): Unit = {
+    valueMutator.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueMutator.setSafe(count, input.getInt(ordinal))
+  }
+}
+
+private[arrow] class TimestampWriter(
+    val valueVector: NullableTimeStampMicroTZVector) extends ArrowFieldWriter {
+
+  override def valueMutator: NullableTimeStampMicroTZVector#Mutator = valueVector.getMutator()
+
+  override def setNull(): Unit = {
+    valueMutator.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueMutator.setSafe(count, input.getLong(ordinal))
   }
 }
 

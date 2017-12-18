@@ -76,6 +76,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
+      ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
@@ -137,11 +138,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) ::
-    Batch("OptimizeCodegen", Once,
-      OptimizeCodegen) ::
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
-      CollapseProject) :: Nil
+      ColumnPruning,
+      CollapseProject,
+      RemoveRedundantProject) :: Nil
   }
 
   /**
@@ -331,12 +332,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // pushdown Limit.
     case LocalLimit(exp, Union(children)) =>
       LocalLimit(exp, Union(children.map(maybePushLocalLimit(exp, _))))
-    // Add extra limits below OUTER JOIN. For LEFT OUTER and FULL OUTER JOIN we push limits to the
-    // left and right sides, respectively. For FULL OUTER JOIN, we can only push limits to one side
-    // because we need to ensure that rows from the limited side still have an opportunity to match
-    // against all candidates from the non-limited side. We also need to ensure that this limit
-    // pushdown rule will not eventually introduce limits on both sides if it is applied multiple
-    // times. Therefore:
+    // Add extra limits below OUTER JOIN. For LEFT OUTER and RIGHT OUTER JOIN we push limits to
+    // the left and right sides, respectively. It's not safe to push limits below FULL OUTER
+    // JOIN in the general case without a more invasive rewrite.
+    // We also need to ensure that this limit pushdown rule will not eventually introduce limits
+    // on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
     //   - If neither side is limited, limit the side that is estimated to be bigger.
@@ -344,19 +344,6 @@ object LimitPushDown extends Rule[LogicalPlan] {
       val newJoin = joinType match {
         case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
         case LeftOuter => join.copy(left = maybePushLocalLimit(exp, left))
-        case FullOuter =>
-          (left.maxRows, right.maxRows) match {
-            case (None, None) =>
-              if (left.stats.sizeInBytes >= right.stats.sizeInBytes) {
-                join.copy(left = maybePushLocalLimit(exp, left))
-              } else {
-                join.copy(right = maybePushLocalLimit(exp, right))
-              }
-            case (Some(_), Some(_)) => join
-            case (Some(_), None) => join.copy(left = maybePushLocalLimit(exp, left))
-            case (None, Some(_)) => join.copy(right = maybePushLocalLimit(exp, right))
-
-          }
         case _ => join
       }
       LocalLimit(exp, newJoin)
@@ -707,7 +694,9 @@ object CombineUnions extends Rule[LogicalPlan] {
  */
 object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Filter(fc, nf @ Filter(nc, grandChild)) =>
+    // The query execution/optimization does not guarantee the expressions are evaluated in order.
+    // We only can combine them if and only if both are deterministic.
+    case Filter(fc, nf @ Filter(nc, grandChild)) if fc.deterministic && nc.deterministic =>
       (ExpressionSet(splitConjunctivePredicates(fc)) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>

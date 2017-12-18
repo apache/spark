@@ -217,8 +217,13 @@ object Client {
       println("Use ./bin/spark-submit with \"--master spark://host:port\"")
     }
     // scalastyle:on println
+    new ClientApp().start(args, new SparkConf())
+  }
+}
 
-    val conf = new SparkConf()
+private[spark] class ClientApp extends SparkApplication {
+
+  override def start(args: Array[String], conf: SparkConf): Unit = {
     val driverArgs = new ClientArguments(args)
 
     if (!conf.contains("spark.rpc.askTimeout")) {
@@ -235,4 +240,5 @@ object Client {
 
     rpcEnv.awaitTermination()
   }
+
 }

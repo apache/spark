@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.arrow
 import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.types.FloatingPointPrecision
+import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
 import org.apache.spark.sql.types._
@@ -31,7 +31,8 @@ object ArrowUtils {
 
   // todo: support more types.
 
-  def toArrowType(dt: DataType): ArrowType = dt match {
+  /** Maps data type from Spark to Arrow. NOTE: timeZoneId required for TimestampTypes */
+  def toArrowType(dt: DataType, timeZoneId: String): ArrowType = dt match {
     case BooleanType => ArrowType.Bool.INSTANCE
     case ByteType => new ArrowType.Int(8, true)
     case ShortType => new ArrowType.Int(8 * 2, true)
@@ -42,6 +43,13 @@ object ArrowUtils {
     case StringType => ArrowType.Utf8.INSTANCE
     case BinaryType => ArrowType.Binary.INSTANCE
     case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
+    case DateType => new ArrowType.Date(DateUnit.DAY)
+    case TimestampType =>
+      if (timeZoneId == null) {
+        throw new UnsupportedOperationException("TimestampType must supply timeZoneId parameter")
+      } else {
+        new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
+      }
     case _ => throw new UnsupportedOperationException(s"Unsupported data type: ${dt.simpleString}")
   }
 
@@ -58,22 +66,27 @@ object ArrowUtils {
     case ArrowType.Utf8.INSTANCE => StringType
     case ArrowType.Binary.INSTANCE => BinaryType
     case d: ArrowType.Decimal => DecimalType(d.getPrecision, d.getScale)
+    case date: ArrowType.Date if date.getUnit == DateUnit.DAY => DateType
+    case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
     case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dt")
   }
 
-  def toArrowField(name: String, dt: DataType, nullable: Boolean): Field = {
+  /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */
+  def toArrowField(
+      name: String, dt: DataType, nullable: Boolean, timeZoneId: String): Field = {
     dt match {
       case ArrayType(elementType, containsNull) =>
         val fieldType = new FieldType(nullable, ArrowType.List.INSTANCE, null)
-        new Field(name, fieldType, Seq(toArrowField("element", elementType, containsNull)).asJava)
+        new Field(name, fieldType,
+          Seq(toArrowField("element", elementType, containsNull, timeZoneId)).asJava)
       case StructType(fields) =>
         val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
         new Field(name, fieldType,
           fields.map { field =>
-            toArrowField(field.name, field.dataType, field.nullable)
+            toArrowField(field.name, field.dataType, field.nullable, timeZoneId)
           }.toSeq.asJava)
       case dataType =>
-        val fieldType = new FieldType(nullable, toArrowType(dataType), null)
+        val fieldType = new FieldType(nullable, toArrowType(dataType, timeZoneId), null)
         new Field(name, fieldType, Seq.empty[Field].asJava)
     }
   }
@@ -94,9 +107,10 @@ object ArrowUtils {
     }
   }
 
-  def toArrowSchema(schema: StructType): Schema = {
+  /** Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType */
+  def toArrowSchema(schema: StructType, timeZoneId: String): Schema = {
     new Schema(schema.map { field =>
-      toArrowField(field.name, field.dataType, field.nullable)
+      toArrowField(field.name, field.dataType, field.nullable, timeZoneId)
     }.asJava)
   }
 

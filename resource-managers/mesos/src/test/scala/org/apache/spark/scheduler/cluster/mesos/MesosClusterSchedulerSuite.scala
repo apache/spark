@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import org.apache.mesos.Protos.{Environment, Secret, TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Value.{Scalar, Type}
 import org.apache.mesos.SchedulerDriver
-import org.apache.mesos.protobuf.ByteString
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
 import org.scalatest.mockito.MockitoSugar
@@ -32,6 +31,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.config
 
 class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 
@@ -254,6 +254,53 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
+  test("accept/decline offers with driver constraints") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+    val s2Attributes = List(Utils.createTextAttribute("c1", "a"))
+    val s3Attributes = List(
+      Utils.createTextAttribute("c1", "a"),
+      Utils.createTextAttribute("c2", "b"))
+    val offers = List(
+      Utils.createOffer("o1", "s1", mem, cpu, None, 0),
+      Utils.createOffer("o2", "s2", mem, cpu, None, 0, s2Attributes),
+      Utils.createOffer("o3", "s3", mem, cpu, None, 0, s3Attributes))
+
+    def submitDriver(driverConstraints: String): Unit = {
+      val response = scheduler.submitDriver(
+        new MesosDriverDescription("d1", "jar", mem, cpu, true,
+          command,
+          Map("spark.mesos.executor.home" -> "test",
+            "spark.app.name" -> "test",
+            config.DRIVER_CONSTRAINTS.key -> driverConstraints),
+          "s1",
+          new Date()))
+      assert(response.success)
+    }
+
+    submitDriver("c1:x")
+    scheduler.resourceOffers(driver, offers.asJava)
+    offers.foreach(o => Utils.verifyTaskNotLaunched(driver, o.getId.getValue))
+
+    submitDriver("c1:y;c2:z")
+    scheduler.resourceOffers(driver, offers.asJava)
+    offers.foreach(o => Utils.verifyTaskNotLaunched(driver, o.getId.getValue))
+
+    submitDriver("")
+    scheduler.resourceOffers(driver, offers.asJava)
+    Utils.verifyTaskLaunched(driver, "o1")
+
+    submitDriver("c1:a")
+    scheduler.resourceOffers(driver, offers.asJava)
+    Utils.verifyTaskLaunched(driver, "o2")
+
+    submitDriver("c1:a;c2:b")
+    scheduler.resourceOffers(driver, offers.asJava)
+    Utils.verifyTaskLaunched(driver, "o3")
+  }
+
   test("supports spark.mesos.driver.labels") {
     setScheduler()
 
@@ -341,132 +388,33 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
   }
 
   test("Creates an env-based reference secrets.") {
-    setScheduler()
-
-    val mem = 1000
-    val cpu = 1
-    val secretName = "/path/to/secret,/anothersecret"
-    val envKey = "SECRET_ENV_KEY,PASSWORD"
-    val driverDesc = new MesosDriverDescription(
-      "d1",
-      "jar",
-      mem,
-      cpu,
-      true,
-      command,
-      Map("spark.mesos.executor.home" -> "test",
-        "spark.app.name" -> "test",
-        "spark.mesos.driver.secret.names" -> secretName,
-        "spark.mesos.driver.secret.envkeys" -> envKey),
-      "s1",
-      new Date())
-    val response = scheduler.submitDriver(driverDesc)
-    assert(response.success)
-    val offer = Utils.createOffer("o1", "s1", mem, cpu)
-    scheduler.resourceOffers(driver, Collections.singletonList(offer))
-    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
-    assert(launchedTasks.head
-      .getCommand
-      .getEnvironment
-      .getVariablesCount == 3)  // SPARK_SUBMIT_OPS and the secret
-    val variableOne = launchedTasks.head.getCommand.getEnvironment
-      .getVariablesList.asScala.filter(_.getName == "SECRET_ENV_KEY").head
-    assert(variableOne.getSecret.isInitialized)
-    assert(variableOne.getSecret.getType == Secret.Type.REFERENCE)
-    assert(variableOne.getSecret.getReference.getName == "/path/to/secret")
-    assert(variableOne.getType == Environment.Variable.Type.SECRET)
-    val variableTwo = launchedTasks.head.getCommand.getEnvironment
-      .getVariablesList.asScala.filter(_.getName == "PASSWORD").head
-    assert(variableTwo.getSecret.isInitialized)
-    assert(variableTwo.getSecret.getType == Secret.Type.REFERENCE)
-    assert(variableTwo.getSecret.getReference.getName == "/anothersecret")
-    assert(variableTwo.getType == Environment.Variable.Type.SECRET)
+    val launchedTasks = launchDriverTask(
+      Utils.configEnvBasedRefSecrets(config.driverSecretConfig))
+    Utils.verifyEnvBasedRefSecrets(launchedTasks)
   }
 
   test("Creates an env-based value secrets.") {
-    setScheduler()
-    val mem = 1000
-    val cpu = 1
-    val secretValues = "user,password"
-    val envKeys = "USER,PASSWORD"
-    val driverDesc = new MesosDriverDescription(
-      "d1",
-      "jar",
-      mem,
-      cpu,
-      true,
-      command,
-      Map("spark.mesos.executor.home" -> "test",
-        "spark.app.name" -> "test",
-        "spark.mesos.driver.secret.values" -> secretValues,
-        "spark.mesos.driver.secret.envkeys" -> envKeys),
-      "s1",
-      new Date())
-    val response = scheduler.submitDriver(driverDesc)
-    assert(response.success)
-    val offer = Utils.createOffer("o1", "s1", mem, cpu)
-    scheduler.resourceOffers(driver, Collections.singletonList(offer))
-    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
-    assert(launchedTasks.head
-      .getCommand
-      .getEnvironment
-      .getVariablesCount == 3)  // SPARK_SUBMIT_OPS and the secret
-    val variableOne = launchedTasks.head.getCommand.getEnvironment
-      .getVariablesList.asScala.filter(_.getName == "USER").head
-    assert(variableOne.getSecret.isInitialized)
-    assert(variableOne.getSecret.getType == Secret.Type.VALUE)
-    assert(variableOne.getSecret.getValue.getData == ByteString.copyFrom("user".getBytes))
-    assert(variableOne.getType == Environment.Variable.Type.SECRET)
-    val variableTwo = launchedTasks.head.getCommand.getEnvironment
-      .getVariablesList.asScala.filter(_.getName == "PASSWORD").head
-    assert(variableTwo.getSecret.isInitialized)
-    assert(variableTwo.getSecret.getType == Secret.Type.VALUE)
-    assert(variableTwo.getSecret.getValue.getData == ByteString.copyFrom("password".getBytes))
-    assert(variableTwo.getType == Environment.Variable.Type.SECRET)
+    val launchedTasks = launchDriverTask(
+      Utils.configEnvBasedValueSecrets(config.driverSecretConfig))
+    Utils.verifyEnvBasedValueSecrets(launchedTasks)
   }
 
   test("Creates file-based reference secrets.") {
-    setScheduler()
-    val mem = 1000
-    val cpu = 1
-    val secretName = "/path/to/secret,/anothersecret"
-    val secretPath = "/topsecret,/mypassword"
-    val driverDesc = new MesosDriverDescription(
-      "d1",
-      "jar",
-      mem,
-      cpu,
-      true,
-      command,
-      Map("spark.mesos.executor.home" -> "test",
-        "spark.app.name" -> "test",
-        "spark.mesos.driver.secret.names" -> secretName,
-        "spark.mesos.driver.secret.filenames" -> secretPath),
-      "s1",
-      new Date())
-    val response = scheduler.submitDriver(driverDesc)
-    assert(response.success)
-    val offer = Utils.createOffer("o1", "s1", mem, cpu)
-    scheduler.resourceOffers(driver, Collections.singletonList(offer))
-    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
-    val volumes = launchedTasks.head.getContainer.getVolumesList
-    assert(volumes.size() == 2)
-    val secretVolOne = volumes.get(0)
-    assert(secretVolOne.getContainerPath == "/topsecret")
-    assert(secretVolOne.getSource.getSecret.getType == Secret.Type.REFERENCE)
-    assert(secretVolOne.getSource.getSecret.getReference.getName == "/path/to/secret")
-    val secretVolTwo = volumes.get(1)
-    assert(secretVolTwo.getContainerPath == "/mypassword")
-    assert(secretVolTwo.getSource.getSecret.getType == Secret.Type.REFERENCE)
-    assert(secretVolTwo.getSource.getSecret.getReference.getName == "/anothersecret")
+    val launchedTasks = launchDriverTask(
+      Utils.configFileBasedRefSecrets(config.driverSecretConfig))
+    Utils.verifyFileBasedRefSecrets(launchedTasks)
   }
 
   test("Creates a file-based value secrets.") {
+    val launchedTasks = launchDriverTask(
+      Utils.configFileBasedValueSecrets(config.driverSecretConfig))
+    Utils.verifyFileBasedValueSecrets(launchedTasks)
+  }
+
+  private def launchDriverTask(addlSparkConfVars: Map[String, String]): List[TaskInfo] = {
     setScheduler()
     val mem = 1000
     val cpu = 1
-    val secretValues = "user,password"
-    val secretPath = "/whoami,/mypassword"
     val driverDesc = new MesosDriverDescription(
       "d1",
       "jar",
@@ -475,27 +423,14 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       true,
       command,
       Map("spark.mesos.executor.home" -> "test",
-        "spark.app.name" -> "test",
-        "spark.mesos.driver.secret.values" -> secretValues,
-        "spark.mesos.driver.secret.filenames" -> secretPath),
+        "spark.app.name" -> "test") ++
+        addlSparkConfVars,
       "s1",
       new Date())
     val response = scheduler.submitDriver(driverDesc)
     assert(response.success)
     val offer = Utils.createOffer("o1", "s1", mem, cpu)
     scheduler.resourceOffers(driver, Collections.singletonList(offer))
-    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
-    val volumes = launchedTasks.head.getContainer.getVolumesList
-    assert(volumes.size() == 2)
-    val secretVolOne = volumes.get(0)
-    assert(secretVolOne.getContainerPath == "/whoami")
-    assert(secretVolOne.getSource.getSecret.getType == Secret.Type.VALUE)
-    assert(secretVolOne.getSource.getSecret.getValue.getData ==
-      ByteString.copyFrom("user".getBytes))
-    val secretVolTwo = volumes.get(1)
-    assert(secretVolTwo.getContainerPath == "/mypassword")
-    assert(secretVolTwo.getSource.getSecret.getType == Secret.Type.VALUE)
-    assert(secretVolTwo.getSource.getSecret.getValue.getData ==
-      ByteString.copyFrom("password".getBytes))
+    Utils.verifyTaskLaunched(driver, "o1")
   }
 }

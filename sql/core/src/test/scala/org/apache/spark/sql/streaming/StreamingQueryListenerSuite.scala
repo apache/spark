@@ -25,14 +25,15 @@ import scala.language.reflectiveCalls
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
-import org.scalatest.concurrent.AsyncAssertions.Waiter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.concurrent.Waiters.Waiter
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{Encoder, SparkSession}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.util.JsonProtocol

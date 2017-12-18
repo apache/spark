@@ -208,4 +208,15 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     unsafeProj.apply(InternalRow(InternalRow(UTF8String.fromString("b"))))
     assert(row.getStruct(0, 1).getString(0).toString == "a")
   }
+
+  test("SPARK-22699: GenerateSafeProjection should not use global variables for struct") {
+    val safeProj = GenerateSafeProjection.generate(
+      Seq(BoundReference(0, new StructType().add("i", IntegerType), true)))
+    val globalVariables = safeProj.getClass.getDeclaredFields
+    // We need always 3 variables:
+    // - one is a reference to this
+    // - one is the references object
+    // - one is the mutableRow
+    assert(globalVariables.length == 3)
+  }
 }

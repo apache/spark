@@ -17,38 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-/**
- * An offset is a monotonically increasing metric used to track progress in the computation of a
- * stream. Since offsets are retrieved from a [[Source]] by a single thread, we know the global
- * ordering of two [[Offset]] instances.  We do assume that if two offsets are `equal` then no
- * new data has arrived.
- */
-abstract class Offset {
+import org.apache.spark.sql.sources.v2.reader.Offset
 
-  /**
-   * Equality based on JSON string representation. We leverage the
-   * JSON representation for normalization between the Offset's
-   * in memory and on disk representations.
-   */
-  override def equals(obj: Any): Boolean = obj match {
-    case o: Offset => this.json == o.json
-    case _ => false
-  }
-
-  override def hashCode(): Int = this.json.hashCode
-
-  override def toString(): String = this.json.toString
-
-  /**
-   * A JSON-serialized representation of an Offset that is
-   * used for saving offsets to the offset log.
-   * Note: We assume that equivalent/equal offsets serialize to
-   * identical JSON strings.
-   *
-   * @return JSON string encoding
-   */
-  def json: String
-}
 
 /**
  * Used when loading a JSON serialized offset from external storage.
@@ -58,3 +28,5 @@ abstract class Offset {
  * that accepts a [[SerializedOffset]] for doing the conversion.
  */
 case class SerializedOffset(override val json: String) extends Offset
+
+

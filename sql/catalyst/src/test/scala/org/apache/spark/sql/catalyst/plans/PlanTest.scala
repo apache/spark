@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.scalatest.Suite
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
@@ -29,7 +31,13 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Provides helper methods for comparing plans.
  */
-trait PlanTest extends SparkFunSuite with PredicateHelper {
+trait PlanTest extends SparkFunSuite with PlanTestBase
+
+/**
+ * Provides helper methods for comparing plans, but without the overhead of
+ * mandating a FunSuite.
+ */
+trait PlanTestBase extends PredicateHelper { self: Suite =>
 
   // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
   protected def conf = SQLConf.get

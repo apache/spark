@@ -371,7 +371,7 @@ class LocalLDAModel private[spark] (
   /**
    * Get a method usable as a UDF for `topicDistributions()`
    */
-  private[spark] def getTopicDistributionMethod(sc: SparkContext): Vector => Vector = {
+  private[spark] def getTopicDistributionMethod: Vector => Vector = {
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     val docConcentrationBrz = this.docConcentration.asBreeze
     val gammaShape = this.gammaShape

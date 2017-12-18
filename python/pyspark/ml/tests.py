@@ -44,6 +44,7 @@ import array as pyarray
 import numpy as np
 from numpy import abs, all, arange, array, array_equal, inf, ones, tile, zeros
 import inspect
+import py4j
 
 from pyspark import keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer, UnaryTransformer
@@ -54,6 +55,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
     MulticlassClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
+from pyspark.ml.image import ImageSchema
 from pyspark.ml.linalg import DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT, \
     SparseMatrix, SparseVector, Vector, VectorUDT, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
@@ -66,11 +68,11 @@ from pyspark.ml.tuning import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
-from pyspark.sql import DataFrame, Row, SparkSession
+from pyspark.sql import DataFrame, Row, SparkSession, HiveContext
 from pyspark.sql.functions import rand
 from pyspark.sql.types import DoubleType, IntegerType
 from pyspark.storagelevel import *
-from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
+from pyspark.tests import QuietTest, ReusedPySparkTestCase as PySparkTestCase
 
 ser = PickleSerializer()
 
@@ -836,6 +838,27 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
+    def test_parallel_evaluation(self):
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 6]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        # test save/load of CrossValidator
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        cv.setParallelism(1)
+        cvSerialModel = cv.fit(dataset)
+        cv.setParallelism(2)
+        cvParallelModel = cv.fit(dataset)
+        self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
+
     def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
@@ -985,6 +1008,24 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+
+    def test_parallel_evaluation(self):
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 6]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        tvs.setParallelism(1)
+        tvsSerialModel = tvs.fit(dataset)
+        tvs.setParallelism(2)
+        tvsParallelModel = tvs.fit(dataset)
+        self.assertEqual(tvsSerialModel.validationMetrics, tvsParallelModel.validationMetrics)
 
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.
@@ -1777,6 +1818,74 @@ class FPGrowthTests(SparkSessionTestCase):
 
     def tearDown(self):
         del self.data
+
+
+class ImageReaderTest(SparkSessionTestCase):
+
+    def test_read_images(self):
+        data_path = 'data/mllib/images/kittens'
+        df = ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
+        self.assertEqual(df.count(), 4)
+        first_row = df.take(1)[0][0]
+        array = ImageSchema.toNDArray(first_row)
+        self.assertEqual(len(array), first_row[1])
+        self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
+        self.assertEqual(df.schema, ImageSchema.imageSchema)
+        expected = {'CV_8UC3': 16, 'Undefined': -1, 'CV_8U': 0, 'CV_8UC1': 0, 'CV_8UC4': 24}
+        self.assertEqual(ImageSchema.ocvTypes, expected)
+        expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
+        self.assertEqual(ImageSchema.imageFields, expected)
+        self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                TypeError,
+                "image argument should be pyspark.sql.types.Row; however",
+                lambda: ImageSchema.toNDArray("a"))
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                ValueError,
+                "image argument should have attributes specified in",
+                lambda: ImageSchema.toNDArray(Row(a=1)))
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                TypeError,
+                "array argument should be numpy.ndarray; however, it got",
+                lambda: ImageSchema.toImage("a"))
+
+
+class ImageReaderTest2(PySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super(ImageReaderTest2, cls).setUpClass()
+        # Note that here we enable Hive's support.
+        cls.spark = None
+        try:
+            cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        except py4j.protocol.Py4JError:
+            cls.tearDownClass()
+            raise unittest.SkipTest("Hive is not available")
+        except TypeError:
+            cls.tearDownClass()
+            raise unittest.SkipTest("Hive is not available")
+        cls.spark = HiveContext._createForTesting(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        super(ImageReaderTest2, cls).tearDownClass()
+        if cls.spark is not None:
+            cls.spark.sparkSession.stop()
+            cls.spark = None
+
+    def test_read_images_multiple_times(self):
+        # This test case is to check if `ImageSchema.readImages` tries to
+        # initiate Hive client multiple times. See SPARK-22651.
+        data_path = 'data/mllib/images/kittens'
+        ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
+        ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
 
 
 class ALSTest(SparkSessionTestCase):

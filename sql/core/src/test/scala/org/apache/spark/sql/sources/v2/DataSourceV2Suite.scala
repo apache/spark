@@ -21,6 +21,7 @@ import java.util.{ArrayList, List => JList}
 
 import test.org.apache.spark.sql.sources.v2._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
@@ -80,6 +81,74 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("simple writable data source") {
+    // TODO: java implementation.
+    Seq(classOf[SimpleWritableDataSource]).foreach { cls =>
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+
+        spark.range(10).select('id, -'id).write.format(cls.getName)
+          .option("path", path).save()
+        checkAnswer(
+          spark.read.format(cls.getName).option("path", path).load(),
+          spark.range(10).select('id, -'id))
+
+        // test with different save modes
+        spark.range(10).select('id, -'id).write.format(cls.getName)
+          .option("path", path).mode("append").save()
+        checkAnswer(
+          spark.read.format(cls.getName).option("path", path).load(),
+          spark.range(10).union(spark.range(10)).select('id, -'id))
+
+        spark.range(5).select('id, -'id).write.format(cls.getName)
+          .option("path", path).mode("overwrite").save()
+        checkAnswer(
+          spark.read.format(cls.getName).option("path", path).load(),
+          spark.range(5).select('id, -'id))
+
+        spark.range(5).select('id, -'id).write.format(cls.getName)
+          .option("path", path).mode("ignore").save()
+        checkAnswer(
+          spark.read.format(cls.getName).option("path", path).load(),
+          spark.range(5).select('id, -'id))
+
+        val e = intercept[Exception] {
+          spark.range(5).select('id, -'id).write.format(cls.getName)
+            .option("path", path).mode("error").save()
+        }
+        assert(e.getMessage.contains("data already exists"))
+
+        // test transaction
+        val failingUdf = org.apache.spark.sql.functions.udf {
+          var count = 0
+          (id: Long) => {
+            if (count > 5) {
+              throw new RuntimeException("testing error")
+            }
+            count += 1
+            id
+          }
+        }
+        // this input data will fail to read middle way.
+        val input = spark.range(10).select(failingUdf('id).as('i)).select('i, -'i)
+        val e2 = intercept[SparkException] {
+          input.write.format(cls.getName).option("path", path).mode("overwrite").save()
+        }
+        assert(e2.getMessage.contains("Writing job aborted"))
+        // make sure we don't have partial data.
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+
+        // test internal row writer
+        spark.range(5).select('id, -'id).write.format(cls.getName)
+          .option("path", path).option("internal", "true").mode("overwrite").save()
+        checkAnswer(
+          spark.read.format(cls.getName).option("path", path).load(),
+          spark.range(5).select('id, -'id))
+      }
+    }
+  }
 }
 
 class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
@@ -98,7 +167,7 @@ class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
 class SimpleReadTask(start: Int, end: Int) extends ReadTask[Row] with DataReader[Row] {
   private var current = start - 1
 
-  override def createReader(): DataReader[Row] = new SimpleReadTask(start, end)
+  override def createDataReader(): DataReader[Row] = new SimpleReadTask(start, end)
 
   override def next(): Boolean = {
     current += 1
@@ -164,7 +233,9 @@ class AdvancedReadTask(start: Int, end: Int, requiredSchema: StructType)
 
   private var current = start - 1
 
-  override def createReader(): DataReader[Row] = new AdvancedReadTask(start, end, requiredSchema)
+  override def createDataReader(): DataReader[Row] = {
+    new AdvancedReadTask(start, end, requiredSchema)
+  }
 
   override def close(): Unit = {}
 
@@ -204,7 +275,7 @@ class UnsafeRowReadTask(start: Int, end: Int)
 
   private var current = start - 1
 
-  override def createReader(): DataReader[UnsafeRow] = new UnsafeRowReadTask(start, end)
+  override def createDataReader(): DataReader[UnsafeRow] = new UnsafeRowReadTask(start, end)
 
   override def next(): Boolean = {
     current += 1

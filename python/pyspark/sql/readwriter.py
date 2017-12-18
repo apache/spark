@@ -304,7 +304,7 @@ class DataFrameReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, paths):
+    def text(self, paths, wholetext=False):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -313,11 +313,16 @@ class DataFrameReader(OptionUtils):
         Each line in the text file is a new row in the resulting DataFrame.
 
         :param paths: string, or list of strings, for input path(s).
+        :param wholetext: if true, read each file from input path(s) as a single row.
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
+        >>> df = spark.read.text('python/test_support/sql/text-test.txt', wholetext=True)
+        >>> df.collect()
+        [Row(value=u'hello\\nthis')]
         """
+        self._set_opts(wholetext=wholetext)
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
@@ -540,7 +545,7 @@ class DataFrameWriter(OptionUtils):
 
         * `append`: Append contents of this :class:`DataFrame` to existing data.
         * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
+        * `error` or `errorifexists`: Throw an exception if data already exists.
         * `ignore`: Silently ignore this operation if data already exists.
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -675,7 +680,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param partitionBy: names of partitioning columns
         :param options: all other string options
 
@@ -713,12 +719,13 @@ class DataFrameWriter(OptionUtils):
 
         * `append`: Append contents of this :class:`DataFrame` to existing data.
         * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
+        * `error` or `errorifexists`: Throw an exception if data already exists.
         * `ignore`: Silently ignore this operation if data already exists.
 
         :param name: the table name
         :param format: the format used to save
-        :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
+        :param mode: one of `append`, `overwrite`, `error`, `errorifexists`, `ignore` \
+                     (default: error)
         :param partitionBy: names of partitioning columns
         :param options: all other string options
         """
@@ -741,7 +748,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
@@ -771,7 +779,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, gzip, and lzo).
@@ -814,7 +823,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
 
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
@@ -823,8 +833,7 @@ class DataFrameWriter(OptionUtils):
                     set, it uses the default value, ``,``.
         :param quote: sets the single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
-                      value, ``"``. If you would like to turn off quotations, you need to set an
-                      empty string.
+                      value, ``"``. If an empty string is set, it uses ``u0000`` (null character).
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
         :param escapeQuotes: a flag indicating whether values containing quotes should always
@@ -874,7 +883,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, zlib, and lzo).
@@ -905,7 +915,8 @@ class DataFrameWriter(OptionUtils):
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
         :param properties: a dictionary of JDBC database connection arguments. Normally at
                            least properties "user" and "password" with their corresponding values.
                            For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
@@ -915,7 +926,7 @@ class DataFrameWriter(OptionUtils):
         jprop = JavaClass("java.util.Properties", self._spark._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
-        self._jwrite.mode(mode).jdbc(url, table, jprop)
+        self.mode(mode)._jwrite.jdbc(url, table, jprop)
 
 
 def _test():
