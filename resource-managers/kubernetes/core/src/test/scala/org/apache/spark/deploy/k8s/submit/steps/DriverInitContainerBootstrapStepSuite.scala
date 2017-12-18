@@ -42,8 +42,8 @@ class DriverInitContainerBootstrapStepSuite extends SparkFunSuite {
       driverSparkConf = new SparkConf(false),
       otherKubernetesResources = Seq.empty[HasMetadata])
     val initContainerSteps = Seq(
-      FirstTestInitContainerConfigurationStep$,
-      SecondTestInitContainerConfigurationStep$)
+      FirstTestInitContainerConfigurationStep,
+      SecondTestInitContainerConfigurationStep)
     val bootstrapStep = new DriverInitContainerBootstrapStep(
       initContainerSteps,
       CONFIG_MAP_NAME,
@@ -52,17 +52,17 @@ class DriverInitContainerBootstrapStepSuite extends SparkFunSuite {
     val preparedDriverSpec = bootstrapStep.configureDriver(baseDriverSpec)
 
     assert(preparedDriverSpec.driverPod.getMetadata.getLabels.asScala ===
-      FirstTestInitContainerConfigurationStep$.additionalLabels)
+      FirstTestInitContainerConfigurationStep.additionalLabels)
     val additionalDriverEnv = preparedDriverSpec.driverContainer.getEnv.asScala
     assert(additionalDriverEnv.size === 1)
     assert(additionalDriverEnv.head.getName ===
-      FirstTestInitContainerConfigurationStep$.additionalMainContainerEnvKey)
+      FirstTestInitContainerConfigurationStep.additionalMainContainerEnvKey)
     assert(additionalDriverEnv.head.getValue ===
-      FirstTestInitContainerConfigurationStep$.additionalMainContainerEnvValue)
+      FirstTestInitContainerConfigurationStep.additionalMainContainerEnvValue)
 
     assert(preparedDriverSpec.otherKubernetesResources.size === 2)
     assert(preparedDriverSpec.otherKubernetesResources.contains(
-      FirstTestInitContainerConfigurationStep$.additionalKubernetesResource))
+      FirstTestInitContainerConfigurationStep.additionalKubernetesResource))
     assert(preparedDriverSpec.otherKubernetesResources.exists {
       case configMap: ConfigMap =>
         val hasMatchingName = configMap.getMetadata.getName == CONFIG_MAP_NAME
@@ -75,8 +75,8 @@ class DriverInitContainerBootstrapStepSuite extends SparkFunSuite {
         }
         val initContainerPropertiesMap = Maps.fromProperties(initContainerProperties).asScala
         val expectedInitContainerProperties = Map(
-          SecondTestInitContainerConfigurationStep$.additionalInitContainerPropertyKey ->
-            SecondTestInitContainerConfigurationStep$.additionalInitContainerPropertyValue)
+          SecondTestInitContainerConfigurationStep.additionalInitContainerPropertyKey ->
+            SecondTestInitContainerConfigurationStep.additionalInitContainerPropertyValue)
         val hasMatchingProperties = initContainerPropertiesMap == expectedInitContainerProperties
         hasMatchingName && hasCorrectNumberOfEntries && hasMatchingProperties
       case _ => false
@@ -87,20 +87,20 @@ class DriverInitContainerBootstrapStepSuite extends SparkFunSuite {
     val initContainerEnv = initContainers.get(0).getEnv.asScala
     assert(initContainerEnv.size === 1)
     assert(initContainerEnv.head.getName ===
-      SecondTestInitContainerConfigurationStep$.additionalInitContainerEnvKey)
+      SecondTestInitContainerConfigurationStep.additionalInitContainerEnvKey)
     assert(initContainerEnv.head.getValue ===
-      SecondTestInitContainerConfigurationStep$.additionalInitContainerEnvValue)
+      SecondTestInitContainerConfigurationStep.additionalInitContainerEnvValue)
 
     val expectedSparkConf = Map(
       INIT_CONTAINER_CONFIG_MAP_NAME.key -> CONFIG_MAP_NAME,
       INIT_CONTAINER_CONFIG_MAP_KEY_CONF.key -> CONFIG_MAP_KEY,
-      SecondTestInitContainerConfigurationStep$.additionalDriverSparkConfKey ->
-        SecondTestInitContainerConfigurationStep$.additionalDriverSparkConfValue)
+      SecondTestInitContainerConfigurationStep.additionalDriverSparkConfKey ->
+        SecondTestInitContainerConfigurationStep.additionalDriverSparkConfValue)
     assert(preparedDriverSpec.driverSparkConf.getAll.toMap === expectedSparkConf)
   }
 }
 
-private object FirstTestInitContainerConfigurationStep$ extends InitContainerConfigurationStep {
+private object FirstTestInitContainerConfigurationStep extends InitContainerConfigurationStep {
 
   val additionalLabels = Map("additionalLabelkey" -> "additionalLabelValue")
   val additionalMainContainerEnvKey = "TEST_ENV_MAIN_KEY"
@@ -132,7 +132,7 @@ private object FirstTestInitContainerConfigurationStep$ extends InitContainerCon
   }
 }
 
-private object SecondTestInitContainerConfigurationStep$ extends InitContainerConfigurationStep {
+private object SecondTestInitContainerConfigurationStep extends InitContainerConfigurationStep {
   val additionalInitContainerEnvKey = "TEST_ENV_INIT_KEY"
   val additionalInitContainerEnvValue = "TEST_ENV_INIT_VALUE"
   val additionalInitContainerPropertyKey = "spark.initcontainer.testkey"

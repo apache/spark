@@ -33,8 +33,8 @@ private[spark] object SparkConfPropertiesParser {
     val sparkConf = new SparkConf(true)
 
     if (!propertiesFile.isFile) {
-      throw new IllegalArgumentException(s"Server properties file given at" +
-        s" ${propertiesFile.getAbsoluteFile} does not exist or is not a file.")
+      throw new IllegalArgumentException("Server properties file given at " +
+        s"${propertiesFile.getAbsoluteFile} does not exist or is not a file.")
     }
 
     val properties = new Properties
