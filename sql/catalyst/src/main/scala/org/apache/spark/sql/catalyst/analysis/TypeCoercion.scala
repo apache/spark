@@ -99,6 +99,17 @@ object TypeCoercion {
     case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
       Some(TimestampType)
 
+    case (t1 @ ArrayType(pointType1, nullable1), t2 @ ArrayType(pointType2, nullable2))
+        if t1.sameType(t2) =>
+      val dataType = findTightestCommonType(pointType1, pointType2).get
+      Some(ArrayType(dataType, nullable1 || nullable2))
+
+    case (t1 @ MapType(keyType1, valueType1, nullable1),
+        t2 @ MapType(keyType2, valueType2, nullable2)) if t1.sameType(t2) =>
+      val keyType = findTightestCommonType(keyType1, keyType2).get
+      val valueType = findTightestCommonType(valueType1, valueType2).get
+      Some(MapType(keyType, valueType, nullable1 || nullable2))
+
     case (t1 @ StructType(fields1), t2 @ StructType(fields2)) if t1.sameType(t2) =>
       Some(StructType(fields1.zip(fields2).map { case (f1, f2) =>
         // Since `t1.sameType(t2)` is true, two StructTypes have the same DataType
@@ -158,11 +169,6 @@ object TypeCoercion {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
       .orElse(stringPromotion(t1, t2))
-      .orElse((t1, t2) match {
-        case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
-          findWiderTypeForTwo(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
-        case _ => None
-      })
   }
 
   private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
@@ -182,12 +188,6 @@ object TypeCoercion {
       t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
-      .orElse((t1, t2) match {
-        case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
-          findWiderTypeWithoutStringPromotionForTwo(et1, et2)
-            .map(ArrayType(_, containsNull1 || containsNull2))
-        case _ => None
-      })
   }
 
   def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {

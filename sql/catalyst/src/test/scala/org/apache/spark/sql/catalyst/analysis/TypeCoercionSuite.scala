@@ -390,6 +390,25 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
 
     widenTest(
+      ArrayType(StringType, containsNull=true),
+      ArrayType(StringType, containsNull=false),
+      Some(ArrayType(StringType, containsNull=true)))
+    widenTest(
+      MapType(StringType, StringType, valueContainsNull=true),
+      MapType(StringType, StringType, valueContainsNull=false),
+      Some(MapType(StringType, StringType, valueContainsNull=true)))
+
+    widenTest(
+      StructType(StructField("a", ArrayType(StringType, containsNull=true)) :: Nil),
+      StructType(StructField("a", ArrayType(StringType, containsNull=false)) :: Nil),
+      Some(StructType(StructField("a", ArrayType(StringType, containsNull=true)) :: Nil)))
+    widenTest(
+      StructType(StructField("a", MapType(StringType, StringType, valueContainsNull=true)) :: Nil),
+      StructType(StructField("a", MapType(StringType, StringType, valueContainsNull=false)) :: Nil),
+      Some(StructType(
+        StructField("a", MapType(StringType, StringType, valueContainsNull=true)) :: Nil)))
+
+    widenTest(
       StructType(Seq(StructField("a", IntegerType))),
       StructType(Seq(StructField("b", IntegerType))),
       None)
