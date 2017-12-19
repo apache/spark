@@ -4370,22 +4370,22 @@ class GroupbyAggTests(ReusedSQLTestCase):
             return np.average(v, weights=w)
 
         result1 = df.groupby('id').agg(mean_udf(df.v, lit(1.0))).sort('id').toPandas()
-        expected1 = df.groupby('id').agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
+        expected1 = df.groupby('id').agg(mean(df.v).alias('mean_udf(v, 1.0)')).sort('id').toPandas()
         self.assertPandasEqual(expected1, result1)
 
         result2 = df.groupby((col('id') + 1).alias('id')).agg(mean_udf(df.v, lit(1.0)))\
             .sort('id').toPandas()
-        expected2 = df.groupby((col('id') + 1).alias('id')).agg(mean(df.v).alias('mean_udf'))\
-            .sort('id').toPandas()
+        expected2 = df.groupby((col('id') + 1).alias('id'))\
+            .agg(mean(df.v).alias('mean_udf(v, 1.0)')).sort('id').toPandas()
         self.assertPandasEqual(expected2, result2)
 
         result3 = df.groupby('id').agg(mean_udf(df.v, df.w)).sort('id').toPandas()
-        expected3 = df.groupby('id').agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
+        expected3 = df.groupby('id').agg(mean(df.v).alias('mean_udf(v, w)')).sort('id').toPandas()
         self.assertPandasEqual(expected3, result3)
 
         result4 = df.groupby((col('id') + 1).alias('id')).agg(mean_udf(df.v, df.w))\
             .sort('id').toPandas()
-        expected4 = df.groupby((col('id') + 1).alias('id')).agg(mean(df.v).alias('mean_udf'))\
+        expected4 = df.groupby((col('id') + 1).alias('id')).agg(mean(df.v).alias('mean_udf(v, w)'))\
             .sort('id').toPandas()
         self.assertPandasEqual(expected4, result4)
 
@@ -4439,21 +4439,79 @@ class GroupbyAggTests(ReusedSQLTestCase):
         def weighted_mean_udf(v, w):
             return np.average(v, weights=w)
 
-        result1 = df.groupBy('id') \
-            .agg(mean_udf(df.v),
-                 sum_udf(df.v),
-                 weighted_mean_udf(df.v, df.w)) \
-            .sort('id') \
-            .toPandas()
+        result1 = (df.groupBy('id')
+                   .agg(mean_udf(df.v),
+                        sum_udf(df.v),
+                        weighted_mean_udf(df.v, df.w))
+                   .sort('id')
+                   .toPandas())
 
-        expected1 = df.groupBy('id') \
-            .agg(mean(df.v).alias('mean_udf'),
-                 sum(df.v).alias('sum_udf'),
-                 mean(df.v).alias('weighted_mean_udf')) \
-            .sort('id') \
-            .toPandas()
+        expected1 = (df.groupBy('id')
+                     .agg(mean(df.v).alias('mean_udf(v)'),
+                          sum(df.v).alias('sum_udf(v)'),
+                          mean(df.v).alias('weighted_mean_udf(v, w)'))
+                     .sort('id')
+                     .toPandas())
 
         self.assertPandasEqual(expected1, result1)
+
+    def test_complex_expressions(self):
+        from pyspark.sql.functions import col, mean, udf, pandas_udf, PandasUDFType
+
+        df = self.data
+
+        @udf('double')
+        def plus_one(v):
+            return v + 1
+
+        @pandas_udf('double', PandasUDFType.GROUP_AGG)
+        def mean_udf(v):
+            return v.mean()
+
+        result1 = (df.withColumn('v1', plus_one(df.v))
+                   .withColumn('v2', df.v + 2)
+                   .groupby('id')
+                   .agg(mean_udf(col('v')),
+                        mean_udf(col('v1')),
+                        mean_udf(col('v2')))
+                   .sort('id')
+                   .toPandas())
+
+        expected1 = (df.withColumn('v1', df.v + 1)
+                     .withColumn('v2', df.v + 2)
+                     .groupby('id')
+                     .agg(mean(col('v')).alias('mean_udf(v)'),
+                          mean(col('v1')).alias('mean_udf(v1)'),
+                          mean(col('v2')).alias('mean_udf(v2)'))
+                     .sort('id')
+                     .toPandas())
+
+        result2 = (df.groupby('id')
+                   .agg(mean_udf(col('v')),
+                        mean_udf(plus_one(df.v)).alias('mean_udf(v1)'),
+                        mean_udf(df.v + 2).alias('mean_udf(v2)'))
+                   .sort('id')
+                   .toPandas())
+
+        expected2 = expected1
+
+        result3 = (df.groupby('id')
+                   .agg(mean_udf(df.v).alias('v'))
+                   .groupby('id')
+                   .agg(mean_udf(col('v')).alias('mean_v'))
+                   .sort('id')
+                   .toPandas())
+
+        expected3 = (df.groupby('id')
+                     .agg(mean(df.v).alias('v'))
+                     .groupby('id')
+                     .agg(mean(col('v')).alias('mean_v'))
+                     .sort('id')
+                     .toPandas())
+
+        self.assertPandasEqual(expected1, result1)
+        self.assertPandasEqual(expected2, result2)
+        self.assertPandasEqual(expected3, result3)
 
 
 if __name__ == "__main__":

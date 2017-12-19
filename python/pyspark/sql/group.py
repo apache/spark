@@ -65,7 +65,14 @@ class GroupedData(object):
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
-        The available aggregate functions are `avg`, `max`, `min`, `sum`, `count`.
+        The available aggregate functions can be:
+
+        1. built-in aggregation functions, such as `avg`, `max`, `min`, `sum`, `count`
+
+        2. group aggregate pandas UDFs
+           .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
+                 a full shuffle is required.
+           .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         If ``exprs`` is a single :class:`dict` mapping from string to string, then the key
         is the column to perform aggregation on, and the value is the aggregate function.
@@ -82,6 +89,13 @@ class GroupedData(object):
         >>> from pyspark.sql import functions as F
         >>> sorted(gdf.agg(F.min(df.age)).collect())
         [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> @pandas_udf('double', PandasUDFType.GROUP_AGG)
+        ... def min_udf(v):
+        ...     return v.min()
+        >>> sorted(gdf.agg(min_udf(df.age))).collect())
+        [Row(name=u'Alice', min_udf(age)=2), Row(name=u'Bob', min_udf(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):

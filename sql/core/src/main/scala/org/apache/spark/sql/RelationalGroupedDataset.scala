@@ -85,8 +85,6 @@ class RelationalGroupedDataset protected[sql](
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
-    case udf: PythonUDF =>
-      UnresolvedAlias(udf, Some(_ => udf.name))
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
