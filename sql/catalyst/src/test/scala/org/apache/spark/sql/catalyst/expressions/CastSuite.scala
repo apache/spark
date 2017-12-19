@@ -851,6 +851,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ctx = new CodegenContext
     cast("1", IntegerType).genCode(ctx)
     cast("2", LongType).genCode(ctx)
-    assert(ctx.mutableStates.length == 0)
+    assert(ctx.inlinedMutableStates.length == 0)
   }
 }
