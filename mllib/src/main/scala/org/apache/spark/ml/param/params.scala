@@ -31,6 +31,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.linalg.{JsonMatrixConverter, JsonVectorConverter, Matrix, Vector}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 
 /**
@@ -248,6 +249,29 @@ object ParamValidators {
   /** Check that the array length is greater than lowerBound. */
   def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
     value.length > lowerBound
+  }
+
+  /**
+   * Checks that either inputCols and outputCols are set or inputCol and outputCol are set. If
+   * this is not true, an `IllegalArgumentException` is raised.
+   * @param model
+   */
+  def assertColOrCols(model: Params): Unit = {
+    model match {
+      case m: HasInputCols with HasInputCol if m.isSet(m.inputCols) && m.isSet(m.inputCol) =>
+        raiseIncompatibleParamsException("inputCols", "inputCol")
+      case m: HasOutputCols with HasInputCol if m.isSet(m.outputCols) && m.isSet(m.inputCol) =>
+        raiseIncompatibleParamsException("outputCols", "inputCol")
+      case m: HasInputCols with HasOutputCol if m.isSet(m.inputCols) && m.isSet(m.outputCol) =>
+        raiseIncompatibleParamsException("inputCols", "outputCol")
+      case m: HasOutputCols with HasOutputCol if m.isSet(m.outputCols) && m.isSet(m.outputCol) =>
+        raiseIncompatibleParamsException("outputCols", "outputCol")
+      case _ =>
+    }
+  }
+
+  def raiseIncompatibleParamsException(paramName1: String, paramName2: String): Unit = {
+    throw new IllegalArgumentException(s"Both `$paramName1` and `$paramName2` are set.")
   }
 }
 
@@ -833,14 +857,6 @@ trait Params extends Identifiable with Serializable {
       }
     }
     to
-  }
-
-  protected def raiseIncompatibleParamsException(paramName1: String, paramName2: String): Unit = {
-    throw new IllegalArgumentException(
-      s"""
-         |Both `$paramName1` and `$paramName2` are set, `${this.getClass.getName}` only supports
-         |setting either `$paramName1` or `$paramName2`.
-          """.stripMargin)
   }
 }
 

@@ -140,13 +140,12 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * by `inputCol`. An exception will be thrown if both are set.
    */
   private[feature] def isBucketizeMultipleColumns(): Boolean = {
-    inputColsSanityCheck()
-    outputColsSanityCheck()
+    ParamValidators.assertColOrCols(this)
     if (isSet(inputCol) && isSet(splitsArray)) {
-      raiseIncompatibleParamsException("inputCol", "splitsArray")
+      ParamValidators.raiseIncompatibleParamsException("inputCol", "splitsArray")
     }
     if (isSet(inputCols) && isSet(splits)) {
-      raiseIncompatibleParamsException("inputCols", "splits")
+      ParamValidators.raiseIncompatibleParamsException("inputCols", "splits")
     }
     isSet(inputCols)
   }

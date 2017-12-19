@@ -236,16 +236,6 @@ trait HasInputCols extends Params {
 
   /** @group getParam */
   final def getInputCols: Array[String] = $(inputCols)
-
-  final def inputColsSanityCheck(): Unit = {
-    this match {
-      case model: HasInputCol if isSet(inputCols) && isSet(model.inputCol) =>
-        raiseIncompatibleParamsException("inputCols", "inputCol")
-      case model: HasOutputCol if isSet(inputCols) && isSet(model.outputCol) =>
-        raiseIncompatibleParamsException("inputCols", "outputCol")
-      case _ =>
-    }
-  }
 }
 
 /**
@@ -282,16 +272,6 @@ trait HasOutputCols extends Params {
 
   /** @group getParam */
   final def getOutputCols: Array[String] = $(outputCols)
-
-  final def outputColsSanityCheck(): Unit = {
-    this match {
-      case model: HasInputCol if isSet(outputCols) && isSet(model.inputCol) =>
-        raiseIncompatibleParamsException("outputCols", "inputCol")
-      case model: HasOutputCol if isSet(outputCols) && isSet(model.outputCol) =>
-        raiseIncompatibleParamsException("outputCols", "outputCol")
-      case _ =>
-    }
-  }
 }
 
 /**
