@@ -146,34 +146,20 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
-      // Fit models in a Future for training in parallel
-      val modelFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
-        Future[Model[_]] {
-          val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
-
+      val foldMetrics = new Array[Double](epm.length)
+      est.fit(trainingDataset, epm, true, executionContext,
+        (model: Model[_], paramMapIndex: Int) => {
+          val paramMap = epm(paramMapIndex)
           if (collectSubModelsParam) {
-            subModels.get(splitIndex)(paramIndex) = model
+            subModels.get(splitIndex)(paramMapIndex) = model
           }
-          model
-        } (executionContext)
-      }
-
-      // Unpersist training data only when all models have trained
-      Future.sequence[Model[_], Iterable](modelFutures)(implicitly, executionContext)
-        .onComplete { _ => trainingDataset.unpersist() } (executionContext)
-
-      // Evaluate models in a Future that will calulate a metric and allow model to be cleaned up
-      val foldMetricFutures = modelFutures.zip(epm).map { case (modelFuture, paramMap) =>
-        modelFuture.map { model =>
           // TODO: duplicate evaluator to take extra params from input
           val metric = eval.evaluate(model.transform(validationDataset, paramMap))
           logDebug(s"Got metric $metric for model trained with $paramMap.")
-          metric
-        } (executionContext)
-      }
+          foldMetrics(paramMapIndex) = metric
+        }
+      )
 
-      // Wait for metrics to be calculated before unpersisting validation dataset
-      val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
       validationDataset.unpersist()
       foldMetrics
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
