@@ -21,17 +21,17 @@ import io.fabric8.kubernetes.api.model.{Container, HasMetadata, Pod}
 /**
  * Represents a specification of the init-container for the driver pod.
  *
- * @param initContainerProperties properties that should be set on the init-container
+ * @param properties properties that should be set on the init-container
  * @param driverSparkConf Spark configuration properties that will be carried back to the driver
  * @param initContainer the init-container object
  * @param driverContainer the driver container object
  * @param driverPod the driver pod object
- * @param initContainerDependentResources resources the init-container depends on to work
+ * @param dependentResources resources the init-container depends on to work
  */
 private[spark] case class InitContainerSpec(
-    initContainerProperties: Map[String, String],
+    properties: Map[String, String],
     driverSparkConf: Map[String, String],
     initContainer: Container,
     driverContainer: Container,
     driverPod: Pod,
-    initContainerDependentResources: Seq[HasMetadata])
+    dependentResources: Seq[HasMetadata])

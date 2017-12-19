@@ -25,10 +25,10 @@ private[spark] class BaseInitContainerConfigurationStep(
     sparkFiles: Seq[String],
     jarsDownloadPath: String,
     filesDownloadPath: String,
-    initContainerBootstrap: InitContainerBootstrap)
+    bootstrap: InitContainerBootstrap)
   extends InitContainerConfigurationStep {
 
-  override def configureInitContainer(initContainerSpec: InitContainerSpec): InitContainerSpec = {
+  override def configureInitContainer(spec: InitContainerSpec): InitContainerSpec = {
     val remoteJarsToDownload = KubernetesFileUtils.getOnlyRemoteFiles(sparkJars)
     val remoteFilesToDownload = KubernetesFileUtils.getOnlyRemoteFiles(sparkFiles)
     val remoteJarsConf = if (remoteJarsToDownload.nonEmpty) {
@@ -47,17 +47,16 @@ private[spark] class BaseInitContainerConfigurationStep(
       FILES_DOWNLOAD_LOCATION.key -> filesDownloadPath) ++
       remoteJarsConf ++
       remoteFilesConf
-    val bootstrappedPodAndInitContainer =
-      initContainerBootstrap.bootstrapInitContainer(
-        PodWithDetachedInitContainer(
-          initContainerSpec.driverPod,
-          initContainerSpec.initContainer,
-          initContainerSpec.driverContainer))
+    val bootstrapped = bootstrap.bootstrapInitContainer(
+      PodWithDetachedInitContainer(
+        spec.driverPod,
+        spec.initContainer,
+        spec.driverContainer))
 
-    initContainerSpec.copy(
-      initContainer = bootstrappedPodAndInitContainer.initContainer,
-      driverContainer = bootstrappedPodAndInitContainer.mainContainer,
-      driverPod = bootstrappedPodAndInitContainer.pod,
-      initContainerProperties = baseInitContainerConfig)
+    spec.copy(
+      initContainer = bootstrapped.initContainer,
+      driverContainer = bootstrapped.mainContainer,
+      driverPod = bootstrapped.pod,
+      properties = baseInitContainerConfig)
   }
 }

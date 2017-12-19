@@ -127,7 +127,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
   private def validateStepTypes(
       orchestrator: DriverConfigOrchestrator,
       types: Class[_ <: DriverConfigurationStep]*): Unit = {
-    val steps = orchestrator.getAllConfigurationSteps()
+    val steps = orchestrator.getAllConfigurationSteps
     assert(steps.size === types.size)
     assert(steps.map(_.getClass) === types)
   }

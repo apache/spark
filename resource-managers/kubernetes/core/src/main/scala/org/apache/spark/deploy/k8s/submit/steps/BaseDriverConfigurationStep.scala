@@ -32,39 +32,36 @@ import org.apache.spark.internal.config.{DRIVER_CLASS_PATH, DRIVER_MEMORY, DRIVE
  */
 private[spark] class BaseDriverConfigurationStep(
     kubernetesAppId: String,
-    kubernetesResourceNamePrefix: String,
+    resourceNamePrefix: String,
     driverLabels: Map[String, String],
     imagePullPolicy: String,
     appName: String,
     mainClass: String,
     appArgs: Array[String],
-    submissionSparkConf: SparkConf) extends DriverConfigurationStep {
+    sparkConf: SparkConf) extends DriverConfigurationStep {
 
-  private val kubernetesDriverPodName = submissionSparkConf.get(KUBERNETES_DRIVER_POD_NAME)
-    .getOrElse(s"$kubernetesResourceNamePrefix-driver")
+  private val driverPodName = sparkConf
+    .get(KUBERNETES_DRIVER_POD_NAME)
+    .getOrElse(s"$resourceNamePrefix-driver")
 
-  private val driverExtraClasspath = submissionSparkConf.get(
-    DRIVER_CLASS_PATH)
+  private val driverExtraClasspath = sparkConf.get(DRIVER_CLASS_PATH)
 
-  private val driverContainerImage = submissionSparkConf
+  private val driverContainerImage = sparkConf
     .get(DRIVER_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
   // CPU settings
-  private val driverCpuCores = submissionSparkConf.getOption("spark.driver.cores").getOrElse("1")
-  private val driverLimitCores = submissionSparkConf.get(KUBERNETES_DRIVER_LIMIT_CORES)
+  private val driverCpuCores = sparkConf.getOption("spark.driver.cores").getOrElse("1")
+  private val driverLimitCores = sparkConf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
   // Memory settings
-  private val driverMemoryMiB = submissionSparkConf.get(
-    DRIVER_MEMORY)
-  private val driverMemoryString = submissionSparkConf.get(
-    DRIVER_MEMORY.key,
-    DRIVER_MEMORY.defaultValueString)
-  private val memoryOverheadMiB = submissionSparkConf
+  private val driverMemoryMiB = sparkConf.get(DRIVER_MEMORY)
+  private val driverMemoryString = sparkConf.get(
+    DRIVER_MEMORY.key, DRIVER_MEMORY.defaultValueString)
+  private val memoryOverheadMiB = sparkConf
     .get(DRIVER_MEMORY_OVERHEAD)
-    .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt,
-      MEMORY_OVERHEAD_MIN_MIB))
-  private val driverContainerMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
+    .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt, MEMORY_OVERHEAD_MIN_MIB))
+  private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     val driverExtraClasspathEnv = driverExtraClasspath.map { classPath =>
@@ -74,15 +71,13 @@ private[spark] class BaseDriverConfigurationStep(
         .build()
     }
 
-    val driverCustomAnnotations = ConfigurationUtils
-      .parsePrefixedKeyValuePairs(
-        submissionSparkConf,
-        KUBERNETES_DRIVER_ANNOTATION_PREFIX)
+    val driverCustomAnnotations = ConfigurationUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_DRIVER_ANNOTATION_PREFIX)
     require(!driverCustomAnnotations.contains(SPARK_APP_NAME_ANNOTATION),
       s"Annotation with key $SPARK_APP_NAME_ANNOTATION is not allowed as it is reserved for" +
         " Spark bookkeeping operations.")
 
-    val driverCustomEnvs = submissionSparkConf.getAllWithPrefix(KUBERNETES_DRIVER_ENV_KEY).toSeq
+    val driverCustomEnvs = sparkConf.getAllWithPrefix(KUBERNETES_DRIVER_ENV_KEY).toSeq
       .map { env =>
         new EnvVarBuilder()
           .withName(env._1)
@@ -90,10 +85,10 @@ private[spark] class BaseDriverConfigurationStep(
           .build()
       }
 
-    val allDriverAnnotations = driverCustomAnnotations ++ Map(SPARK_APP_NAME_ANNOTATION -> appName)
+    val driverAnnotations = driverCustomAnnotations ++ Map(SPARK_APP_NAME_ANNOTATION -> appName)
 
     val nodeSelector = ConfigurationUtils.parsePrefixedKeyValuePairs(
-      submissionSparkConf, KUBERNETES_NODE_SELECTOR_PREFIX)
+      sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX)
 
     val driverCpuQuantity = new QuantityBuilder(false)
       .withAmount(driverCpuCores)
@@ -102,7 +97,7 @@ private[spark] class BaseDriverConfigurationStep(
       .withAmount(s"${driverMemoryMiB}Mi")
       .build()
     val driverMemoryLimitQuantity = new QuantityBuilder(false)
-      .withAmount(s"${driverContainerMemoryWithOverheadMiB}Mi")
+      .withAmount(s"${driverMemoryWithOverheadMiB}Mi")
       .build()
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
@@ -142,9 +137,9 @@ private[spark] class BaseDriverConfigurationStep(
 
     val baseDriverPod = new PodBuilder(driverSpec.driverPod)
       .editOrNewMetadata()
-        .withName(kubernetesDriverPodName)
+        .withName(driverPodName)
         .addToLabels(driverLabels.asJava)
-        .addToAnnotations(allDriverAnnotations.asJava)
+        .addToAnnotations(driverAnnotations.asJava)
       .endMetadata()
       .withNewSpec()
         .withRestartPolicy("Never")
@@ -153,9 +148,9 @@ private[spark] class BaseDriverConfigurationStep(
       .build()
 
     val resolvedSparkConf = driverSpec.driverSparkConf.clone()
-      .setIfMissing(KUBERNETES_DRIVER_POD_NAME, kubernetesDriverPodName)
+      .setIfMissing(KUBERNETES_DRIVER_POD_NAME, driverPodName)
       .set("spark.app.id", kubernetesAppId)
-      .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, kubernetesResourceNamePrefix)
+      .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, resourceNamePrefix)
 
     driverSpec.copy(
       driverPod = baseDriverPod,

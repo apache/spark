@@ -21,5 +21,5 @@ package org.apache.spark.deploy.k8s.submit.steps.initcontainer
  */
 private[spark] trait InitContainerConfigurationStep {
 
-  def configureInitContainer(initContainerSpec: InitContainerSpec): InitContainerSpec
+  def configureInitContainer(spec: InitContainerSpec): InitContainerSpec
 }

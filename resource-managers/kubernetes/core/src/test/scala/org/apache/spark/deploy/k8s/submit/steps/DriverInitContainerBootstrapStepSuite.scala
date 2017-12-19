@@ -127,7 +127,7 @@ private object FirstTestInitContainerConfigurationStep extends InitContainerConf
     initContainerSpec.copy(
       driverPod = driverPod,
       driverContainer = mainContainer,
-      initContainerDependentResources = initContainerSpec.initContainerDependentResources ++
+      dependentResources = initContainerSpec.dependentResources ++
         Seq(additionalKubernetesResource))
   }
 }
@@ -147,13 +147,13 @@ private object SecondTestInitContainerConfigurationStep extends InitContainerCon
       .withValue(additionalInitContainerEnvValue)
       .endEnv()
       .build()
-    val initContainerProperties = initContainerSpec.initContainerProperties ++
+    val initContainerProperties = initContainerSpec.properties ++
       Map(additionalInitContainerPropertyKey -> additionalInitContainerPropertyValue)
     val driverSparkConf = initContainerSpec.driverSparkConf ++
       Map(additionalDriverSparkConfKey -> additionalDriverSparkConfValue)
     initContainerSpec.copy(
       initContainer = initContainer,
-      initContainerProperties = initContainerProperties,
+      properties = initContainerProperties,
       driverSparkConf = driverSparkConf)
   }
 }

@@ -32,25 +32,23 @@ private[spark] trait InitContainerBootstrap {
   /**
    * Bootstraps an init-container that downloads dependencies to be used by a main container.
    */
-  def bootstrapInitContainer(
-      originalPodWithInitContainer: PodWithDetachedInitContainer)
-  : PodWithDetachedInitContainer
+  def bootstrapInitContainer(original: PodWithDetachedInitContainer): PodWithDetachedInitContainer
 }
 
 private[spark] class InitContainerBootstrapImpl(
     initContainerImage: String,
-    dockerImagePullPolicy: String,
+    imagePullPolicy: String,
     jarsDownloadPath: String,
     filesDownloadPath: String,
     downloadTimeoutMinutes: Long,
-    initContainerConfigMapName: String,
-    initContainerConfigMapKey: String,
+    configMapName: String,
+    configMapKey: String,
     sparkRole: String,
     sparkConf: SparkConf)
   extends InitContainerBootstrap {
 
   override def bootstrapInitContainer(
-      podWithDetachedInitContainer: PodWithDetachedInitContainer): PodWithDetachedInitContainer = {
+      original: PodWithDetachedInitContainer): PodWithDetachedInitContainer = {
     val sharedVolumeMounts = Seq[VolumeMount](
       new VolumeMountBuilder()
         .withName(INIT_CONTAINER_DOWNLOAD_JARS_VOLUME_NAME)
@@ -61,25 +59,23 @@ private[spark] class InitContainerBootstrapImpl(
         .withMountPath(filesDownloadPath)
         .build())
 
-    val initContainerCustomEnvVarKeyPrefix = sparkRole match {
+    val customEnvVarKeyPrefix = sparkRole match {
       case SPARK_POD_DRIVER_ROLE => KUBERNETES_DRIVER_ENV_KEY
       case SPARK_POD_EXECUTOR_ROLE => "spark.executorEnv."
       case _ => throw new SparkException(s"$sparkRole is not a valid Spark pod role")
     }
-    val initContainerCustomEnvVars = sparkConf.getAllWithPrefix(initContainerCustomEnvVarKeyPrefix)
-      .toSeq
-      .map { env =>
-        new EnvVarBuilder()
-          .withName(env._1)
-          .withValue(env._2)
-          .build()
-      }
+    val customEnvVars = sparkConf.getAllWithPrefix(customEnvVarKeyPrefix).toSeq.map { env =>
+      new EnvVarBuilder()
+        .withName(env._1)
+        .withValue(env._2)
+        .build()
+    }
 
-    val initContainer = new ContainerBuilder(podWithDetachedInitContainer.initContainer)
+    val initContainer = new ContainerBuilder(original.initContainer)
       .withName("spark-init")
       .withImage(initContainerImage)
-      .withImagePullPolicy(dockerImagePullPolicy)
-      .addAllToEnv(initContainerCustomEnvVars.asJava)
+      .withImagePullPolicy(imagePullPolicy)
+      .addAllToEnv(customEnvVars.asJava)
       .addNewVolumeMount()
         .withName(INIT_CONTAINER_PROPERTIES_FILE_VOLUME)
         .withMountPath(INIT_CONTAINER_PROPERTIES_FILE_DIR)
@@ -88,14 +84,14 @@ private[spark] class InitContainerBootstrapImpl(
       .addToArgs(INIT_CONTAINER_PROPERTIES_FILE_PATH)
       .build()
 
-    val podWithBasicVolumes = new PodBuilder(podWithDetachedInitContainer.pod)
+    val podWithBasicVolumes = new PodBuilder(original.pod)
       .editSpec()
       .addNewVolume()
         .withName(INIT_CONTAINER_PROPERTIES_FILE_VOLUME)
         .withNewConfigMap()
-          .withName(initContainerConfigMapName)
+          .withName(configMapName)
           .addNewItem()
-            .withKey(initContainerConfigMapKey)
+            .withKey(configMapKey)
             .withPath(INIT_CONTAINER_PROPERTIES_FILE_NAME)
             .endItem()
           .endConfigMap()
@@ -111,8 +107,8 @@ private[spark] class InitContainerBootstrapImpl(
       .endSpec()
       .build()
 
-    val mainContainerWithMountedFiles = new ContainerBuilder(
-      podWithDetachedInitContainer.mainContainer)
+    val mainContainer = new ContainerBuilder(
+      original.mainContainer)
         .addToVolumeMounts(sharedVolumeMounts: _*)
         .addNewEnv()
           .withName(ENV_MOUNTED_FILES_DIR)
@@ -123,6 +119,6 @@ private[spark] class InitContainerBootstrapImpl(
     PodWithDetachedInitContainer(
       podWithBasicVolumes,
       initContainer,
-      mainContainerWithMountedFiles)
+      mainContainer)
   }
 }

@@ -89,7 +89,7 @@ class BaseInitContainerConfigurationStepSuite extends SparkFunSuite with BeforeA
       new Pod,
       Seq.empty[HasMetadata])
     val returnContainerSpec = baseInitStep.configureInitContainer(initContainerSpec)
-    assert(expectedDriverSparkConf === returnContainerSpec.initContainerProperties)
+    assert(expectedDriverSparkConf === returnContainerSpec.properties)
     assert(returnContainerSpec.initContainer.getName == INIT_CONTAINER_NAME)
     assert(returnContainerSpec.driverContainer.getName == DRIVER_CONTAINER_NAME)
     assert(returnContainerSpec.driverPod.getMetadata.getLabels.asScala === POD_LABEL)

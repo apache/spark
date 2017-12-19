@@ -80,22 +80,22 @@ private[spark] object ClientArguments {
  * spark.kubernetes.submission.waitAppCompletion is true.
  *
  * @param submissionSteps steps that collectively configure the driver
- * @param submissionSparkConf the submission client Spark configuration
+ * @param sparkConf the submission client Spark configuration
  * @param kubernetesClient the client to talk to the Kubernetes API server
  * @param waitForAppCompletion a flag indicating whether the client should wait for the application
  *                             to complete
  * @param appName the application name
- * @param loggingPodStatusWatcher a watcher that monitors and logs the application status
+ * @param watcher a watcher that monitors and logs the application status
  */
 private[spark] class Client(
     submissionSteps: Seq[DriverConfigurationStep],
-    submissionSparkConf: SparkConf,
+    sparkConf: SparkConf,
     kubernetesClient: KubernetesClient,
     waitForAppCompletion: Boolean,
     appName: String,
-    loggingPodStatusWatcher: LoggingPodStatusWatcher) extends Logging {
+    watcher: LoggingPodStatusWatcher) extends Logging {
 
-  private val driverJavaOptions = submissionSparkConf.get(
+  private val driverJavaOptions = sparkConf.get(
     org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS)
 
    /**
@@ -104,7 +104,7 @@ private[spark] class Client(
     * will be used to build the Driver Container, Driver Pod, and Kubernetes Resources
     */
   def run(): Unit = {
-    var currentDriverSpec = KubernetesDriverSpec.initialSpec(submissionSparkConf)
+    var currentDriverSpec = KubernetesDriverSpec.initialSpec(sparkConf)
     // submissionSteps contain steps necessary to take, to resolve varying
     // client arguments that are passed in, created by orchestrator
     for (nextStep <- submissionSteps) {
@@ -141,7 +141,7 @@ private[spark] class Client(
       kubernetesClient
         .pods()
         .withName(resolvedDriverPod.getMetadata.getName)
-        .watch(loggingPodStatusWatcher)) { _ =>
+        .watch(watcher)) { _ =>
       val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
       try {
         if (currentDriverSpec.otherKubernetesResources.nonEmpty) {
@@ -157,7 +157,7 @@ private[spark] class Client(
 
       if (waitForAppCompletion) {
         logInfo(s"Waiting for application $appName to finish...")
-        loggingPodStatusWatcher.awaitCompletion()
+        watcher.awaitCompletion()
         logInfo(s"Application $appName finished.")
       } else {
         logInfo(s"Deployed Spark application $appName into Kubernetes.")
@@ -207,10 +207,9 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val master = sparkConf.get("spark.master").substring("k8s://".length)
     val loggingInterval = if (waitForAppCompletion) Some(sparkConf.get(REPORT_INTERVAL)) else None
 
-    val loggingPodStatusWatcher = new LoggingPodStatusWatcherImpl(
-      kubernetesAppId, loggingInterval)
+    val watcher = new LoggingPodStatusWatcherImpl(kubernetesAppId, loggingInterval)
 
-    val configurationStepsOrchestrator = new DriverConfigOrchestrator(
+    val orchestrator = new DriverConfigOrchestrator(
       namespace,
       kubernetesAppId,
       launchTime,
@@ -228,12 +227,12 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       None,
       None)) { kubernetesClient =>
         val client = new Client(
-          configurationStepsOrchestrator.getAllConfigurationSteps(),
+          orchestrator.getAllConfigurationSteps,
           sparkConf,
           kubernetesClient,
           waitForAppCompletion,
           appName,
-          loggingPodStatusWatcher)
+          watcher)
         client.run()
     }
   }

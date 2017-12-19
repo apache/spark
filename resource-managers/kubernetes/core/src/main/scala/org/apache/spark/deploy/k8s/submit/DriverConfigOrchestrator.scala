@@ -41,7 +41,7 @@ private[spark] class DriverConfigOrchestrator(
     appName: String,
     mainClass: String,
     appArgs: Array[String],
-    submissionSparkConf: SparkConf) {
+    sparkConf: SparkConf) {
 
   // The resource name prefix is derived from the Spark application name, making it easy to connect
   // the names of the Kubernetes resources from e.g. kubectl or the Kubernetes dashboard to the
@@ -51,14 +51,14 @@ private[spark] class DriverConfigOrchestrator(
     s"$appName-$uuid".toLowerCase.replaceAll("\\.", "-")
   }
 
-  private val imagePullPolicy = submissionSparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
+  private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
   private val initContainerConfigMapName = s"$kubernetesResourceNamePrefix-init-config"
-  private val jarsDownloadPath = submissionSparkConf.get(JARS_DOWNLOAD_LOCATION)
-  private val filesDownloadPath = submissionSparkConf.get(FILES_DOWNLOAD_LOCATION)
+  private val jarsDownloadPath = sparkConf.get(JARS_DOWNLOAD_LOCATION)
+  private val filesDownloadPath = sparkConf.get(FILES_DOWNLOAD_LOCATION)
 
-  def getAllConfigurationSteps(): Seq[DriverConfigurationStep] = {
+  def getAllConfigurationSteps: Seq[DriverConfigurationStep] = {
     val driverCustomLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
-      submissionSparkConf,
+      sparkConf,
       KUBERNETES_DRIVER_LABEL_PREFIX)
     require(!driverCustomLabels.contains(SPARK_APP_ID_LABEL), "Label with key " +
       s"$SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping " +
@@ -67,8 +67,8 @@ private[spark] class DriverConfigOrchestrator(
       s"$SPARK_ROLE_LABEL is not allowed as it is reserved for Spark bookkeeping " +
       "operations.")
 
-    val driverSecretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
-      submissionSparkConf,
+    val secretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
+      sparkConf,
       KUBERNETES_DRIVER_SECRETS_PREFIX)
 
     val allDriverLabels = driverCustomLabels ++ Map(
@@ -83,16 +83,16 @@ private[spark] class DriverConfigOrchestrator(
       appName,
       mainClass,
       appArgs,
-      submissionSparkConf)
+      sparkConf)
 
     val driverAddressStep = new DriverServiceBootstrapStep(
       kubernetesResourceNamePrefix,
       allDriverLabels,
-      submissionSparkConf,
+      sparkConf,
       new SystemClock)
 
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsStep(
-      submissionSparkConf, kubernetesResourceNamePrefix)
+      sparkConf, kubernetesResourceNamePrefix)
 
     val additionalMainAppJar = if (mainAppResource.nonEmpty) {
        val mayBeResource = mainAppResource.get match {
@@ -105,11 +105,11 @@ private[spark] class DriverConfigOrchestrator(
       None
     }
 
-    val sparkJars = submissionSparkConf.getOption("spark.jars")
+    val sparkJars = sparkConf.getOption("spark.jars")
       .map(_.split(","))
       .getOrElse(Array.empty[String]) ++
       additionalMainAppJar.toSeq
-    val sparkFiles = submissionSparkConf.getOption("spark.files")
+    val sparkFiles = sparkConf.getOption("spark.files")
       .map(_.split(","))
       .getOrElse(Array.empty[String])
 
@@ -136,9 +136,9 @@ private[spark] class DriverConfigOrchestrator(
           allDriverLabels,
           initContainerConfigMapName,
           INIT_CONTAINER_PROPERTIES_FILE_NAME,
-          submissionSparkConf)
+          sparkConf)
         val bootstrapStep = new DriverInitContainerBootstrapStep(
-          orchestrator.getAllConfigurationSteps(),
+          orchestrator.getAllConfigurationSteps,
           initContainerConfigMapName,
           INIT_CONTAINER_PROPERTIES_FILE_NAME)
 
@@ -147,8 +147,8 @@ private[spark] class DriverConfigOrchestrator(
         None
       }
 
-    val mayBeMountSecretsStep = if (driverSecretNamesToMountPaths.nonEmpty) {
-      val mountSecretsBootstrap = new MountSecretsBootstrapImpl(driverSecretNamesToMountPaths)
+    val mayBeMountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
+      val mountSecretsBootstrap = new MountSecretsBootstrapImpl(secretNamesToMountPaths)
       Some(new DriverMountSecretsStep(mountSecretsBootstrap))
     } else {
       None

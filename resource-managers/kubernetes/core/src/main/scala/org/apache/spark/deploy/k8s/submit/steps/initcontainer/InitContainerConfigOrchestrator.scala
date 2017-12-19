@@ -27,57 +27,57 @@ import org.apache.spark.deploy.k8s.Constants._
  */
 private[spark] class InitContainerConfigOrchestrator(
     namespace: String,
-    kubernetesResourceNamePrefix: String,
+    resourceNamePrefix: String,
     sparkJars: Seq[String],
     sparkFiles: Seq[String],
     jarsDownloadPath: String,
     filesDownloadPath: String,
-    dockerImagePullPolicy: String,
+    imagePullPolicy: String,
     driverLabels: Map[String, String],
-    initContainerConfigMapName: String,
-    initContainerConfigMapKey: String,
-    submissionSparkConf: SparkConf) {
+    configMapName: String,
+    configMapKey: String,
+    sparkConf: SparkConf) {
 
-  private val initContainerImage = submissionSparkConf
+  private val initContainerImage = sparkConf
     .get(INIT_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException(
       "Must specify the init-container image when there are remote dependencies"))
-  private val downloadTimeoutMinutes = submissionSparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT)
+  private val downloadTimeoutMinutes = sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT)
 
-  def getAllConfigurationSteps(): Seq[InitContainerConfigurationStep] = {
+  def getAllConfigurationSteps: Seq[InitContainerConfigurationStep] = {
     val initContainerBootstrap = new InitContainerBootstrapImpl(
       initContainerImage,
-      dockerImagePullPolicy,
+      imagePullPolicy,
       jarsDownloadPath,
       filesDownloadPath,
       downloadTimeoutMinutes,
-      initContainerConfigMapName,
-      initContainerConfigMapKey,
+      configMapName,
+      configMapKey,
       SPARK_POD_DRIVER_ROLE,
-      submissionSparkConf)
-    val baseInitContainerStep = new BaseInitContainerConfigurationStep(
+      sparkConf)
+    val baseStep = new BaseInitContainerConfigurationStep(
       sparkJars,
       sparkFiles,
       jarsDownloadPath,
       filesDownloadPath,
       initContainerBootstrap)
 
-    val driverSecretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
-      submissionSparkConf,
+    val secretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
+      sparkConf,
       KUBERNETES_DRIVER_SECRETS_PREFIX)
     // Mount user-specified driver secrets also into the driver's init-container. The
     // init-container may need credentials in the secrets to be able to download remote
     // dependencies. The driver's main container and its init-container share the secrets
     // because the init-container is sort of an implementation details and this sharing
     // avoids introducing a dedicated configuration property just for the init-container.
-    val maybeMountSecretsStep = if (driverSecretNamesToMountPaths.nonEmpty) {
-      val mountSecretsBootstrap = new MountSecretsBootstrapImpl(driverSecretNamesToMountPaths)
+    val maybeMountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
+      val mountSecretsBootstrap = new MountSecretsBootstrapImpl(secretNamesToMountPaths)
       Some(new InitContainerMountSecretsStep(mountSecretsBootstrap))
     } else {
       None
     }
 
-    Seq(baseInitContainerStep) ++
+    Seq(baseStep) ++
       maybeMountSecretsStep.toSeq
   }
 }

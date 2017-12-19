@@ -66,8 +66,8 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
       INIT_CONTAINER_CONFIG_MAP_KEY,
       sparkConf)
     val initSteps : Seq[InitContainerConfigurationStep] =
-      orchestrator.getAllConfigurationSteps()
-    assert(initSteps.length == 1)
+      orchestrator.getAllConfigurationSteps
+    assert(initSteps.lengthCompare(1) == 0)
     assert(initSteps.head.isInstanceOf[BaseInitContainerConfigurationStep])
   }
 
@@ -90,7 +90,7 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
       INIT_CONTAINER_CONFIG_MAP_KEY,
       sparkConf)
     val initSteps : Seq[InitContainerConfigurationStep] =
-      orchestrator.getAllConfigurationSteps()
+      orchestrator.getAllConfigurationSteps
     assert(initSteps.length === 2)
     assert(initSteps.head.isInstanceOf[BaseInitContainerConfigurationStep])
     assert(initSteps(1).isInstanceOf[InitContainerMountSecretsStep])
