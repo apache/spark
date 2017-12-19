@@ -4346,6 +4346,7 @@ class GroupbyApplyTests(ReusedSQLTestCase):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
                 df.groupby('id').apply(f).collect()
 
+
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class GroupbyAggTests(ReusedSQLTestCase):
 
@@ -4372,16 +4373,20 @@ class GroupbyAggTests(ReusedSQLTestCase):
         expected1 = df.groupby('id').agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
         self.assertPandasEqual(expected1, result1)
 
-        result2 = df.groupby((col('id') + 1).alias('id')).agg(mean_udf(df.v, lit(1.0))).sort('id').toPandas()
-        expected2 = df.groupby((col('id') + 1).alias('id')).agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
+        result2 = df.groupby((col('id') + 1).alias('id')).agg(mean_udf(df.v, lit(1.0)))\
+            .sort('id').toPandas()
+        expected2 = df.groupby((col('id') + 1).alias('id')).agg(mean(df.v).alias('mean_udf'))\
+            .sort('id').toPandas()
         self.assertPandasEqual(expected2, result2)
 
         result3 = df.groupby('id').agg(mean_udf(df.v, df.w)).sort('id').toPandas()
         expected3 = df.groupby('id').agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
         self.assertPandasEqual(expected3, result3)
 
-        result4 = df.groupby((col('id') + 1).alias('id')).agg(mean_udf(df.v, df.w)).sort('id').toPandas()
-        expected4 = df.groupby((col('id') + 1).alias('id')).agg(mean(df.v).alias('mean_udf')).sort('id').toPandas()
+        result4 = df.groupby((col('id') + 1).alias('id')).agg(mean_udf(df.v, df.w))\
+            .sort('id').toPandas()
+        expected4 = df.groupby((col('id') + 1).alias('id')).agg(mean(df.v).alias('mean_udf'))\
+            .sort('id').toPandas()
         self.assertPandasEqual(expected4, result4)
 
     def test_array(self):
@@ -4435,15 +4440,15 @@ class GroupbyAggTests(ReusedSQLTestCase):
             return np.average(v, weights=w)
 
         result1 = df.groupBy('id') \
-            .agg(mean_udf(df.v), \
-                 sum_udf(df.v), \
+            .agg(mean_udf(df.v),
+                 sum_udf(df.v),
                  weighted_mean_udf(df.v, df.w)) \
             .sort('id') \
             .toPandas()
 
         expected1 = df.groupBy('id') \
-            .agg(mean(df.v).alias('mean_udf'), \
-                 sum(df.v).alias('sum_udf'), \
+            .agg(mean(df.v).alias('mean_udf'),
+                 sum(df.v).alias('sum_udf'),
                  mean(df.v).alias('weighted_mean_udf')) \
             .sort('id') \
             .toPandas()
