@@ -27,14 +27,15 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
-import org.apache.spark.status.LiveEntity
+import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
 import org.apache.spark.status.config._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.kvstore.KVStore
 
 private[sql] class SQLAppStatusListener(
     conf: SparkConf,
-    kvstore: KVStore,
+    kvstore: ElementTrackingStore,
     live: Boolean,
     ui: Option[SparkUI] = None)
   extends SparkListener with Logging {
@@ -50,6 +51,23 @@ private[sql] class SQLAppStatusListener(
   private val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
 
   private var uiInitialized = false
+
+  kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get(UI_RETAINED_EXECUTIONS)) { count =>
+    cleanupExecutions(count)
+  }
+
+  kvstore.onFlush {
+    if (!live) {
+      val now = System.nanoTime()
+      liveExecutions.values.asScala.foreach { exec =>
+        // This saves the partial aggregated metrics to the store; this works currently because
+        // when the SHS sees an updated event log, all old data for the application is thrown
+        // away.
+        exec.metricsValues = aggregateMetrics(exec)
+        exec.write(kvstore, now)
+      }
+    }
+  }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
     val executionIdString = event.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -315,6 +333,17 @@ private[sql] class SQLAppStatusListener(
     liveExecutions.values().asScala.exists { exec =>
       exec.stages.contains(stageId)
     }
+  }
+
+  private def cleanupExecutions(count: Long): Unit = {
+    val countToDelete = count - conf.get(UI_RETAINED_EXECUTIONS)
+    if (countToDelete <= 0) {
+      return
+    }
+
+    val toDelete = KVUtils.viewToSeq(kvstore.view(classOf[SQLExecutionUIData]),
+        countToDelete.toInt) { e => e.completionTime.isDefined }
+    toDelete.foreach { e => kvstore.delete(e.getClass(), e.executionId) }
   }
 
 }

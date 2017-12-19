@@ -1379,7 +1379,7 @@ class SQLConf extends Serializable with Logging {
     Option(settings.get(key)).
       orElse {
         // Try to use the default value
-        Option(sqlConfEntries.get(key)).map(_.defaultValueString)
+        Option(sqlConfEntries.get(key)).map { e => e.stringConverter(e.readFrom(reader)) }
       }.
       getOrElse(throw new NoSuchElementException(key))
   }
@@ -1417,14 +1417,21 @@ class SQLConf extends Serializable with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    if (defaultValue != null && defaultValue != "<undefined>") {
+    if (defaultValue != null && defaultValue != ConfigEntry.UNDEFINED) {
       val entry = sqlConfEntries.get(key)
       if (entry != null) {
         // Only verify configs in the SQLConf object
         entry.valueConverter(defaultValue)
       }
     }
-    Option(settings.get(key)).getOrElse(defaultValue)
+    Option(settings.get(key)).getOrElse {
+      // If the key is not set, need to check whether the config entry is registered and is
+      // a fallback conf, so that we can check its parent.
+      sqlConfEntries.get(key) match {
+        case e: FallbackConfigEntry[_] => getConfString(e.fallback.key, defaultValue)
+        case _ => defaultValue
+      }
+    }
   }
 
   /**
@@ -1440,7 +1447,8 @@ class SQLConf extends Serializable with Logging {
    */
   def getAllDefinedConfs: Seq[(String, String, String)] = sqlConfEntries.synchronized {
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
-      (entry.key, getConfString(entry.key, entry.defaultValueString), entry.doc)
+      val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
+      (entry.key, displayValue, entry.doc)
     }.toSeq
   }
 
