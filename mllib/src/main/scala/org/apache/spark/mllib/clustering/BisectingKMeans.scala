@@ -213,7 +213,7 @@ class BisectingKMeans private (
       level += 1
     }
     if (preIndices != null) preIndices.unpersist(blocking = false)
-    if(indices != null) indices.unpersist(blocking = false)
+    if (indices != null) indices.unpersist(blocking = false)
     norms.unpersist(blocking = false)
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters)
