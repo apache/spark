@@ -34,9 +34,9 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 /**
  * `Bucketizer` maps a column of continuous features to a column of feature buckets. Since 2.3.0,
  * `Bucketizer` can map multiple columns at once by setting the `inputCols` parameter. Note that
- * when both the `inputCol` and `inputCols` parameters are set, a log warning will be printed and
- * only `inputCol` will take effect, while `inputCols` will be ignored. The `splits` parameter is
- * only used for single column usage, and `splitsArray` is for multiple columns.
+ * when both the `inputCol` and `inputCols` parameters are set, an Exception will be thrown. The
+ * `splits` parameter is only used for single column usage, and `splitsArray` is for multiple
+ * columns.
  */
 @Since("1.4.0")
 final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
@@ -140,15 +140,15 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * by `inputCol`. A warning will be printed if both are set.
    */
   private[feature] def isBucketizeMultipleColumns(): Boolean = {
-    if (isSet(inputCols) && isSet(inputCol) || isSet(inputCols) && isSet(outputCol) ||
-      isSet(inputCol) && isSet(outputCols)) {
-      throw new IllegalArgumentException("Both `inputCol` and `inputCols` are set, `Bucketizer` " +
-        "only supports setting either `inputCol` or `inputCols`.")
-    } else if (isSet(inputCols)) {
-      true
-    } else {
-      false
+    inputColsSanityCheck()
+    outputColsSanityCheck()
+    if (isSet(inputCol) && isSet(splitsArray)) {
+      raiseIncompatibleParamsException("inputCol", "splitsArray")
     }
+    if (isSet(inputCols) && isSet(splits)) {
+      raiseIncompatibleParamsException("inputCols", "splits")
+    }
+    isSet(inputCols)
   }
 
   @Since("2.0.0")

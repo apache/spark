@@ -834,6 +834,14 @@ trait Params extends Identifiable with Serializable {
     }
     to
   }
+
+  final def raiseIncompatibleParamsException(paramName1: String, paramName2: String): Unit = {
+    throw new IllegalArgumentException(
+      s"""
+         |Both `$paramName1` and `$paramName2` are set, `${this.getClass.getName}` only supports
+         |setting either `$paramName1` or `$paramName2`.
+          """.stripMargin)
+  }
 }
 
 /**
