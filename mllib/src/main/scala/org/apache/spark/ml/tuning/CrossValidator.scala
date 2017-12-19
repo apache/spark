@@ -147,15 +147,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
-      val completeFitCount = new AtomicInteger(0)
       // Fit models in a Future for training in parallel
       val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
         Future[Double] {
           val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
-          if (completeFitCount.incrementAndGet() == epm.length) {
-            trainingDataset.unpersist()
-          }
-
           if (collectSubModelsParam) {
             subModels.get(splitIndex)(paramIndex) = model
           }
@@ -168,6 +163,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
       // Wait for metrics to be calculated before unpersisting validation dataset
       val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+      trainingDataset.unpersist()
       validationDataset.unpersist()
       foldMetrics
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
