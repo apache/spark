@@ -121,19 +121,6 @@ SELECT cast(1 as string) / cast(1 as boolean) FROM t;
 SELECT cast(1 as string) / cast('2017-12-11 09:30:00.0' as timestamp) FROM t;
 SELECT cast(1 as string) / cast('2017-12-11 09:30:00' as date) FROM t;
 
-SELECT cast(1 as string) / cast(1 as tinyint) FROM t;
-SELECT cast(1 as string) / cast(1 as smallint) FROM t;
-SELECT cast(1 as string) / cast(1 as int) FROM t;
-SELECT cast(1 as string) / cast(1 as bigint) FROM t;
-SELECT cast(1 as string) / cast(1 as float) FROM t;
-SELECT cast(1 as string) / cast(1 as double) FROM t;
-SELECT cast(1 as string) / cast(1 as decimal(10, 0)) FROM t;
-SELECT cast(1 as string) / cast(1 as string) FROM t;
-SELECT cast(1 as string) / cast('1' as binary) FROM t;
-SELECT cast(1 as string) / cast(1 as boolean) FROM t;
-SELECT cast(1 as string) / cast('2017-12-11 09:30:00.0' as timestamp) FROM t;
-SELECT cast(1 as string) / cast('2017-12-11 09:30:00' as date) FROM t;
-
 SELECT cast('1' as binary) / cast(1 as tinyint) FROM t;
 SELECT cast('1' as binary) / cast(1 as smallint) FROM t;
 SELECT cast('1' as binary) / cast(1 as int) FROM t;
