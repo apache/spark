@@ -423,11 +423,10 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
 
     Seq(invalid1, invalid2, invalid3).foreach { bucketizer =>
-      // When both inputCol and inputCols are set, we throw Exception.
-      val e = intercept[IllegalArgumentException] {
+      // When both inputCol/outputCol and inputCols/outputCols are set, we throw Exception.
+      intercept[IllegalArgumentException] {
         bucketizer.transform(df)
       }
-      assert(e.getMessage.contains("Both `inputCol` and `inputCols` are set"))
     }
   }
 }
