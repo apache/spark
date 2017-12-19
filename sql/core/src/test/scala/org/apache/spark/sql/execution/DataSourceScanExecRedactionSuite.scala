@@ -80,12 +80,6 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
         assert(!isIncluded(df.queryExecution, "FileScan"))
         assert(isIncluded(df.queryExecution, "file:/"))
       }
-
-      // Respect SparkConf and replace file:/
-      assert(isIncluded(df.queryExecution, replacement))
-
-      assert(isIncluded(df.queryExecution, "FileScan"))
-      assert(!isIncluded(df.queryExecution, "file:/"))
     }
   }
 

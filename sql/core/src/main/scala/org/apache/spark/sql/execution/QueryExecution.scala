@@ -234,7 +234,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   /**
    * Redact the sensitive information in the given string.
    */
-  private def withRedaction(message: => String): String = {
+  private def withRedaction(message: String): String = {
     Utils.redact(sparkSession.sessionState.conf.stringRedationPattern, message)
   }
 
