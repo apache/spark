@@ -318,16 +318,14 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val ser = new KryoSerializer(conf).newInstance()
 
-    def check(v: VectorWithNorm): Unit = {
+    val vec1 = new VectorWithNorm(Vectors.dense(Array(1.0, 2.0)))
+    val vec2 = new VectorWithNorm(Vectors.sparse(10, Array(5, 8), Array(1.0, 2.0)))
+
+    Seq(vec1, vec2).foreach { v =>
       val v2 = ser.deserialize[VectorWithNorm](ser.serialize(v))
       assert(v2.norm === v.norm)
       assert(v2.vector === v.vector)
     }
-
-    val vec1 = new VectorWithNorm(Vectors.dense(Array(1.0, 2.0)))
-    val vec2 = new VectorWithNorm(Vectors.sparse(10, Array(5, 8), Array(1.0, 2.0)))
-    check(vec1)
-    check(vec2)
   }
 }
 

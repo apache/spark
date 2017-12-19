@@ -23,20 +23,19 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.serializer.KryoSerializer
 
-class LabeledPointSuite extends SparkFunSuite{
+class LabeledPointSuite extends SparkFunSuite {
   test("Kryo class register") {
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrationRequired", "true")
 
     val ser = new KryoSerializer(conf).newInstance()
 
-    def check[T: ClassTag](t: T) {
-      assert(ser.deserialize[T](ser.serialize(t)) === t)
-    }
-
     val labeled1 = LabeledPoint(1.0, Vectors.dense(Array(1.0, 2.0)))
     val labeled2 = LabeledPoint(1.0, Vectors.sparse(10, Array(5, 7), Array(1.0, 2.0)))
-    check(labeled1)
-    check(labeled2)
+
+    Seq(labeled1, labeled2).foreach { l =>
+      val l2 = ser.deserialize[LabeledPoint](ser.serialize(l))
+      assert(l === l2)
+    }
   }
 }

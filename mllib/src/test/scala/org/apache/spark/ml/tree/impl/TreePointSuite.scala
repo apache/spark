@@ -20,20 +20,16 @@ package org.apache.spark.ml.tree.impl
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.KryoSerializer
 
-class TreePointSuite extends SparkFunSuite{
+class TreePointSuite extends SparkFunSuite {
   test("Kryo class register") {
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrationRequired", "true")
 
     val ser = new KryoSerializer(conf).newInstance()
 
-    def check(p: TreePoint): Unit = {
-      val p2 = ser.deserialize[TreePoint](ser.serialize(p))
-      assert(p2.label === p.label)
-      assert(p2.binnedFeatures === p.binnedFeatures)
-    }
-
     val point = new TreePoint(1.0, Array(1, 2, 3))
-    check(point)
+    val point2 = ser.deserialize[TreePoint](ser.serialize(point))
+    assert(point.label === point2.label)
+    assert(point.binnedFeatures === point2.binnedFeatures)
   }
 }
