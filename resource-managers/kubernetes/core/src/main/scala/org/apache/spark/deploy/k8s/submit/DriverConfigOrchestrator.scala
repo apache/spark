@@ -21,7 +21,7 @@ import java.util.UUID
 import com.google.common.primitives.Longs
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, MountSecretsBootstrapImpl}
+import org.apache.spark.deploy.k8s.{ConfigurationUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.steps._
@@ -148,8 +148,7 @@ private[spark] class DriverConfigOrchestrator(
       }
 
     val mayBeMountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
-      val mountSecretsBootstrap = new MountSecretsBootstrapImpl(secretNamesToMountPaths)
-      Some(new DriverMountSecretsStep(mountSecretsBootstrap))
+      Some(new DriverMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
     } else {
       None
     }

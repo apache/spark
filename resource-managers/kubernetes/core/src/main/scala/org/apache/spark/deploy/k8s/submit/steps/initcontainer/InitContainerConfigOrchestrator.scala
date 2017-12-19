@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.submit.steps.initcontainer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerBootstrapImpl, MountSecretsBootstrapImpl}
+import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerBootstrap, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
@@ -45,7 +45,7 @@ private[spark] class InitContainerConfigOrchestrator(
   private val downloadTimeoutMinutes = sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT)
 
   def getAllConfigurationSteps: Seq[InitContainerConfigurationStep] = {
-    val initContainerBootstrap = new InitContainerBootstrapImpl(
+    val initContainerBootstrap = new InitContainerBootstrap(
       initContainerImage,
       imagePullPolicy,
       jarsDownloadPath,
@@ -71,8 +71,7 @@ private[spark] class InitContainerConfigOrchestrator(
     // because the init-container is sort of an implementation details and this sharing
     // avoids introducing a dedicated configuration property just for the init-container.
     val maybeMountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
-      val mountSecretsBootstrap = new MountSecretsBootstrapImpl(secretNamesToMountPaths)
-      Some(new InitContainerMountSecretsStep(mountSecretsBootstrap))
+      Some(new InitContainerMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
     } else {
       None
     }

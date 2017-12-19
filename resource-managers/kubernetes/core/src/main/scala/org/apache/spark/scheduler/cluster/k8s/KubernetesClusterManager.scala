@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerBootstrapImpl, MountSecretsBootstrapImpl, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerBootstrap, MountSecretsBootstrap, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -69,7 +69,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         .get(INIT_CONTAINER_IMAGE)
         .getOrElse(throw new SparkException(
           "Must specify the init-container image when there are remote dependencies"))
-      new InitContainerBootstrapImpl(
+      new InitContainerBootstrap(
         initContainerImage,
         sparkConf.get(CONTAINER_IMAGE_PULL_POLICY),
         sparkConf.get(JARS_DOWNLOAD_LOCATION),
@@ -84,7 +84,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val executorSecretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
     val mayBeMountSecretBootstrap = if (executorSecretNamesToMountPaths.nonEmpty) {
-      Some(new MountSecretsBootstrapImpl(executorSecretNamesToMountPaths))
+      Some(new MountSecretsBootstrap(executorSecretNamesToMountPaths))
     } else {
       None
     }
@@ -95,7 +95,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     // avoids introducing a dedicated configuration property just for the init-container.
     val mayBeInitContainerMountSecretsBootstrap = if (maybeInitContainerBootstrap.nonEmpty &&
       executorSecretNamesToMountPaths.nonEmpty) {
-      Some(new MountSecretsBootstrapImpl(executorSecretNamesToMountPaths))
+      Some(new MountSecretsBootstrap(executorSecretNamesToMountPaths))
     } else {
       None
     }
@@ -108,7 +108,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
 
-    val executorPodFactory = new ExecutorPodFactoryImpl(
+    val executorPodFactory = new ExecutorPodFactory(
       sparkConf,
       mayBeMountSecretBootstrap,
       maybeInitContainerBootstrap,

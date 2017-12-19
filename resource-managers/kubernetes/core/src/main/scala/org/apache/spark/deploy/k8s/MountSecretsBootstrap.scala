@@ -21,7 +21,7 @@ import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBui
 /**
  * Bootstraps a driver or executor container or an init-container with needed secrets mounted.
  */
-private[spark] trait MountSecretsBootstrap {
+private[spark] class MountSecretsBootstrap(secretNamesToMountPaths: Map[String, String]) {
 
   /**
    * Mounts Kubernetes secrets as secret volumes into the given container in the given pod.
@@ -30,13 +30,7 @@ private[spark] trait MountSecretsBootstrap {
    * @param container the container into which the secret volumes are being mounted.
    * @return the updated pod and container with the secrets mounted.
    */
-  def mountSecrets(pod: Pod, container: Container): (Pod, Container)
-}
-
-private[spark] class MountSecretsBootstrapImpl(
-    secretNamesToMountPaths: Map[String, String]) extends MountSecretsBootstrap {
-
-  override def mountSecrets(pod: Pod, container: Container): (Pod, Container) = {
+  def mountSecrets(pod: Pod, container: Container): (Pod, Container) = {
     var podBuilder = new PodBuilder(pod)
     secretNamesToMountPaths.keys.foreach { name =>
       podBuilder = podBuilder

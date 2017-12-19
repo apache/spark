@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.submit.steps.initcontainer
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.deploy.k8s.MountSecretsBootstrapImpl
+import org.apache.spark.deploy.k8s.MountSecretsBootstrap
 import org.apache.spark.deploy.k8s.submit.SecretVolumeUtils
 
 class InitContainerMountSecretsStepSuite extends SparkFunSuite {
@@ -40,7 +40,7 @@ class InitContainerMountSecretsStepSuite extends SparkFunSuite {
       SECRET_FOO -> SECRET_MOUNT_PATH,
       SECRET_BAR -> SECRET_MOUNT_PATH)
 
-    val mountSecretsBootstrap = new MountSecretsBootstrapImpl(secretNamesToMountPaths)
+    val mountSecretsBootstrap = new MountSecretsBootstrap(secretNamesToMountPaths)
     val initContainerMountSecretsStep = new InitContainerMountSecretsStep(mountSecretsBootstrap)
     val configuredInitContainerSpec = initContainerMountSecretsStep.configureInitContainer(
       baseInitContainerSpec)

@@ -25,7 +25,7 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{InitContainerBootstrap, MountSecretsBootstrapImpl, PodWithDetachedInitContainer}
+import org.apache.spark.deploy.k8s.{InitContainerBootstrap, MountSecretsBootstrap, PodWithDetachedInitContainer}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
@@ -58,7 +58,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
   }
 
   test("basic executor pod has reasonable defaults") {
-    val factory = new ExecutorPodFactoryImpl(baseConf, None, None, None)
+    val factory = new ExecutorPodFactory(baseConf, None, None, None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -89,7 +89,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX,
       "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple")
 
-    val factory = new ExecutorPodFactoryImpl(conf, None, None, None)
+    val factory = new ExecutorPodFactory(conf, None, None, None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -101,7 +101,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     conf.set(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
     conf.set(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH, "bar=baz")
 
-    val factory = new ExecutorPodFactoryImpl(conf, None, None, None)
+    val factory = new ExecutorPodFactory(conf, None, None, None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)]("qux" -> "quux"), driverPod, Map[String, Int]())
 
@@ -115,8 +115,8 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
   test("executor secrets get mounted") {
     val conf = baseConf.clone()
 
-    val secretsBootstrap = new MountSecretsBootstrapImpl(Map("secret1" -> "/var/secret1"))
-    val factory = new ExecutorPodFactoryImpl(
+    val secretsBootstrap = new MountSecretsBootstrap(Map("secret1" -> "/var/secret1"))
+    val factory = new ExecutorPodFactory(
       conf,
       Some(secretsBootstrap),
       None,
@@ -144,7 +144,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     when(initContainerBootstrap.bootstrapInitContainer(
       any(classOf[PodWithDetachedInitContainer]))).thenAnswer(AdditionalAnswers.returnsFirstArg())
 
-    val factory = new ExecutorPodFactoryImpl(
+    val factory = new ExecutorPodFactory(
       conf,
       None,
       Some(initContainerBootstrap),
@@ -161,9 +161,9 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     val initContainerBootstrap = mock(classOf[InitContainerBootstrap])
     when(initContainerBootstrap.bootstrapInitContainer(
       any(classOf[PodWithDetachedInitContainer]))).thenAnswer(AdditionalAnswers.returnsFirstArg())
-    val secretsBootstrap = new MountSecretsBootstrapImpl(Map("secret1" -> "/var/secret1"))
+    val secretsBootstrap = new MountSecretsBootstrap(Map("secret1" -> "/var/secret1"))
 
-    val factory = new ExecutorPodFactoryImpl(
+    val factory = new ExecutorPodFactory(
       conf,
       None,
       Some(initContainerBootstrap),

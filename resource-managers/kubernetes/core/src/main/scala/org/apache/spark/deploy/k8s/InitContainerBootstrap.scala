@@ -28,14 +28,7 @@ import org.apache.spark.deploy.k8s.Constants._
  * This is separated out from the init-container steps API because this component can be reused to
  * set up the init-container for executors as well.
  */
-private[spark] trait InitContainerBootstrap {
-  /**
-   * Bootstraps an init-container that downloads dependencies to be used by a main container.
-   */
-  def bootstrapInitContainer(original: PodWithDetachedInitContainer): PodWithDetachedInitContainer
-}
-
-private[spark] class InitContainerBootstrapImpl(
+private[spark] class InitContainerBootstrap(
     initContainerImage: String,
     imagePullPolicy: String,
     jarsDownloadPath: String,
@@ -44,10 +37,12 @@ private[spark] class InitContainerBootstrapImpl(
     configMapName: String,
     configMapKey: String,
     sparkRole: String,
-    sparkConf: SparkConf)
-  extends InitContainerBootstrap {
+    sparkConf: SparkConf) {
 
-  override def bootstrapInitContainer(
+  /**
+   * Bootstraps an init-container that downloads dependencies to be used by a main container.
+   */
+  def bootstrapInitContainer(
       original: PodWithDetachedInitContainer): PodWithDetachedInitContainer = {
     val sharedVolumeMounts = Seq[VolumeMount](
       new VolumeMountBuilder()

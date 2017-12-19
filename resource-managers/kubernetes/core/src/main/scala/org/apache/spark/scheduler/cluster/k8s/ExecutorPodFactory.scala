@@ -31,26 +31,11 @@ import org.apache.spark.util.Utils
 /**
  * A factory class for configuring and creating executor pods.
  */
-private[spark] trait ExecutorPodFactory {
-
-  /**
-   * Configure and construct an executor pod with the given parameters.
-   */
-  def createExecutorPod(
-      executorId: String,
-      applicationId: String,
-      driverUrl: String,
-      executorEnvs: Seq[(String, String)],
-      driverPod: Pod,
-      nodeToLocalTaskCount: Map[String, Int]): Pod
-}
-
-private[spark] class ExecutorPodFactoryImpl(
+private[spark] class ExecutorPodFactory(
     sparkConf: SparkConf,
     mountSecretsBootstrap: Option[MountSecretsBootstrap],
     initContainerBootstrap: Option[InitContainerBootstrap],
-    initContainerMountSecretsBootstrap: Option[MountSecretsBootstrap])
-  extends ExecutorPodFactory {
+    initContainerMountSecretsBootstrap: Option[MountSecretsBootstrap]) {
 
   private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
@@ -99,7 +84,10 @@ private[spark] class ExecutorPodFactoryImpl(
   private val executorCores = sparkConf.getDouble("spark.executor.cores", 1)
   private val executorLimitCores = sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
-  override def createExecutorPod(
+  /**
+   * Configure and construct an executor pod with the given parameters.
+   */
+  def createExecutorPod(
       executorId: String,
       applicationId: String,
       driverUrl: String,
