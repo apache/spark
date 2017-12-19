@@ -20,6 +20,10 @@ import org.apache.spark.deploy.k8s.{InitContainerBootstrap, PodWithDetachedInitC
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.submit.KubernetesFileUtils
 
+/**
+ * Performs basic configuration for the driver init-container with most of the work delegated to
+ * the given InitContainerBootstrap.
+ */
 private[spark] class BaseInitContainerConfigurationStep(
     sparkJars: Seq[String],
     sparkFiles: Seq[String],
@@ -47,6 +51,7 @@ private[spark] class BaseInitContainerConfigurationStep(
       FILES_DOWNLOAD_LOCATION.key -> filesDownloadPath) ++
       remoteJarsConf ++
       remoteFilesConf
+
     val bootstrapped = bootstrap.bootstrapInitContainer(
       PodWithDetachedInitContainer(
         spec.driverPod,

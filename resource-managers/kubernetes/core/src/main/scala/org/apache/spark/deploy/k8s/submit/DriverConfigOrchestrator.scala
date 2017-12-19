@@ -34,7 +34,9 @@ import org.apache.spark.util.Utils
  * Figures out and returns the complete ordered list of needed DriverConfigurationSteps to
  * configure the Spark driver pod. The returned steps will be applied one by one in the given
  * order to produce a final KubernetesDriverSpec that is used in KubernetesClientApplication
- * to construct and create the driver pod.
+ * to construct and create the driver pod. It uses the InitContainerConfigOrchestrator to
+ * configure the driver init-container if one is needed, i.e., when there are remote dependencies
+ * to localize.
  */
 private[spark] class DriverConfigOrchestrator(
     kubernetesAppId: String,

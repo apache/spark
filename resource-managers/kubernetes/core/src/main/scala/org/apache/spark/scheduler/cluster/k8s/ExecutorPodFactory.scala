@@ -29,7 +29,18 @@ import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTI
 import org.apache.spark.util.Utils
 
 /**
- * A factory class for configuring and creating executor pods.
+ * A factory class for bootstrapping and creating executor pods with the given bootstrapping
+ * components.
+ *
+ * @param sparkConf Spark configuration
+ * @param mountSecretsBootstrap an optional component for mounting user-specified secrets onto
+ *                              user-specified paths into the executor container
+ * @param initContainerBootstrap an optional component for bootstrapping the executor init-container
+ *                               if one is needed, i.e., when there are remote dependencies to
+ *                               localize
+ * @param initContainerMountSecretsBootstrap an optional component for mounting user-specified
+ *                                           secrets onto user-specified paths into the executor
+ *                                           init-container
  */
 private[spark] class ExecutorPodFactory(
     sparkConf: SparkConf,

@@ -28,7 +28,7 @@ import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 import org.apache.spark.internal.config.{DRIVER_CLASS_PATH, DRIVER_MEMORY, DRIVER_MEMORY_OVERHEAD}
 
 /**
- * Represents the initial setup required for the driver.
+ * Performs basic configuration for the driver pod.
  */
 private[spark] class BaseDriverConfigurationStep(
     kubernetesAppId: String,

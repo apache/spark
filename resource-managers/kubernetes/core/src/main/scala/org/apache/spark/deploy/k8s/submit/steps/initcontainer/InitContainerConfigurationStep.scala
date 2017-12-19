@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.submit.steps.initcontainer
 
 /**
- * Represents a step in configuring the init-container for the driver and executors.
+ * Represents a step in configuring the driver init-container.
  */
 private[spark] trait InitContainerConfigurationStep {
 

@@ -25,8 +25,9 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
 /**
- * This is separated out from the init-container steps API because this component can be reused to
- * set up the init-container for executors as well.
+ * Bootstraps an init-container for downloading remote dependencies. This is separated out from
+ * the init-container steps API because this component can be used to bootstrap init-containers
+ * for both the driver and executors.
  */
 private[spark] class InitContainerBootstrap(
     initContainerImage: String,

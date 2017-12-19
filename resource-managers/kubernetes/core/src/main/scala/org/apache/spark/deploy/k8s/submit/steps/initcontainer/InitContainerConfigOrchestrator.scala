@@ -23,9 +23,10 @@ import org.apache.spark.deploy.k8s.Constants._
 
 /**
  * Figures out and returns the complete ordered list of InitContainerConfigurationSteps required to
- * configure an init-container. The returned steps will be applied in the given order to produce a
- * final InitContainerSpec that is used to construct an init-container. This is only used when an
- * init-container is needed, i.e., when there are remote application dependencies to localize.
+ * configure the driver init-container. The returned steps will be applied in the given order to
+ * produce a final InitContainerSpec that is used to construct the driver init-container in
+ * DriverInitContainerBootstrapStep. This class is only used when an init-container is needed, i.e.,
+ * when there are remote application dependencies to localize.
  */
 private[spark] class InitContainerConfigOrchestrator(
     sparkJars: Seq[String],

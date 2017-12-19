@@ -26,8 +26,10 @@ import org.apache.spark.deploy.k8s.submit.{InitContainerUtil, KubernetesDriverSp
 import org.apache.spark.deploy.k8s.submit.steps.initcontainer.{InitContainerConfigurationStep, InitContainerSpec}
 
 /**
- * Configures the init-container that bootstraps dependencies into the driver pod, including
- * building a ConfigMap that will be mounted into the init-container. The ConfigMap carries
+ * Configures the driver init-container that localizes remote dependencies into the driver pod.
+ * It applies the given InitContainerConfigurationSteps in the given order to produce a final
+ * InitContainerSpec that is then used to configure the driver pod with the init-container attached.
+ * It also builds a ConfigMap that will be mounted into the init-container. The ConfigMap carries
  * configuration properties for the init-container.
  */
 private[spark] class DriverInitContainerBootstrapStep(
