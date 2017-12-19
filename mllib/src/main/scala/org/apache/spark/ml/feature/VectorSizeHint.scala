@@ -70,7 +70,7 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   /**
    * Param for how to handle invalid entries. Invalid vectors include nulls and vectors with the
    * wrong size. The options are `skip` (filter out rows with invalid vectors), `error` (throw an
-   * error) and `optimistic` (do not check the vector size, and keep all row\). `error` by default.
+   * error) and `optimistic` (do not check the vector size, and keep all rows). `error` by default.
    *
    * Note: Users should take care when setting this param to `optimistic`. The use of the
    * `optimistic` option will prevent the transformer from validating the sizes of vectors in
