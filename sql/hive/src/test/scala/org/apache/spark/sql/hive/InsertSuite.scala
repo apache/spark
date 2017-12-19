@@ -27,7 +27,6 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -793,11 +792,11 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   private def writeDataToTable(
-      rootDir: File,
-      tableName: String,
-      isPartitioned: Boolean,
-      format: String,
-      compressionCodec: Option[String]) {
+    rootDir: File,
+    tableName: String,
+    isPartitioned: Boolean,
+    format: String,
+    compressionCodec: Option[String]) {
     val tblProperties = compressionCodec match {
       case Some(prop) => s"TBLPROPERTIES('${getHiveCompressPropName(format)}'='$prop')"
       case _ => ""
@@ -822,9 +821,9 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   private def checkCompressionCodecForTable(
-      format: String,
-      isPartitioned: Boolean,
-      compressionCodec: Option[String])(assertion: String => Unit): Unit = {
+    format: String,
+    isPartitioned: Boolean,
+    compressionCodec: Option[String])(assertion: String => Unit): Unit = {
     val tableName = s"tbl_$format${isPartitioned}"
     withTempDir { tmpDir =>
       withTable(tableName) {
@@ -837,12 +836,12 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   private def checkTableCompressionCodecForCodecs(
-      format: String,
-      isPartitioned: Boolean,
-      convertMetastore: Boolean,
-      compressionCodecs: List[String],
-      tableCompressionCodecs: List[String]) (
-      assertion: (Option[String], String, String) => Unit): Unit = {
+    format: String,
+    isPartitioned: Boolean,
+    convertMetastore: Boolean,
+    compressionCodecs: List[String],
+    tableCompressionCodecs: List[String])
+    (assertion: (Option[String], String, String) => Unit): Unit = {
     withSQLConf(getConvertMetastoreConfName(format) -> convertMetastore.toString) {
       tableCompressionCodecs.foreach { tableCompression =>
         compressionCodecs.foreach { sessionCompressionCodec =>

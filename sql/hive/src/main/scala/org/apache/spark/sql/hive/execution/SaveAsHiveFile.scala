@@ -68,29 +68,11 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         .get("mapreduce.output.fileoutputformat.compress.type"))
     }
 
-    fileSinkConf.tableInfo.getOutputFileFormatClassName match {
-      case formatName if formatName.toLowerCase.endsWith("parquetoutputformat") =>
-        val compressionConf = "parquet.compression"
-        val compressionCodec = getCompressionByPriority(
-          fileSinkConf,
-          compressionConf,
-          default = sparkSession.sessionState.conf.parquetCompressionCodec) match {
-          case "NONE" => "UNCOMPRESSED"
-          case _@x => x
-        }
-        hadoopConf.set(compressionConf, compressionCodec)
-      case formatName if formatName.endsWith("OrcOutputFormat") =>
-        val compressionConf = "orc.compress"
-        val compressionCodec = getCompressionByPriority(
-          fileSinkConf,
-          compressionConf,
-          default = sparkSession.sessionState.conf.orcCompressionCodec) match {
-          case "UNCOMPRESSED" => "NONE"
-          case _@x => x
-        }
-        hadoopConf.set(compressionConf, compressionCodec)
-      case _ =>
-    }
+    // Set compression by priority
+    HiveOptions.getHiveWriteCompression(fileSinkConf.getTableInfo, sparkSession.sessionState.conf)
+      .foreach{ case (compression, codec) =>
+        hadoopConf.set(compression, codec)
+      }
 
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
@@ -108,19 +90,6 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       bucketSpec = None,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = Map.empty)
-  }
-
-  // Because compression configurations can come in a variety of ways,
-  // we choose the compression configuration in this order:
-  // For parquet: `compression` > `parquet.compression` > `spark.sql.parquet.compression.codec`
-  // For orc: `compression` > `orc.compress` > `spark.sql.orc.compression.codec`
-  private def getCompressionByPriority(fileSinkConf: FileSinkDesc,
-    compressionConf: String, default: String): String = {
-    // The variable `default` was set to spark sql conf.
-    val props = fileSinkConf.tableInfo.getProperties
-    val priorities = List("compression", compressionConf)
-    priorities.find(props.getProperty(_, null) != null)
-      .map(props.getProperty).getOrElse(default).toUpperCase(Locale.ROOT)
   }
 
   protected def getExternalTmpPath(
