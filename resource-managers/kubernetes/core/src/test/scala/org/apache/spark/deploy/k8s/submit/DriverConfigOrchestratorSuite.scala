@@ -22,7 +22,6 @@ import org.apache.spark.deploy.k8s.submit.steps._
 
 class DriverConfigOrchestratorSuite extends SparkFunSuite {
 
-  private val NAMESPACE = "default"
   private val DRIVER_IMAGE = "driver-image"
   private val IC_IMAGE = "init-container-image"
   private val APP_ID = "spark-app-id"
@@ -39,7 +38,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigOrchestrator(
-      NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
       Some(mainAppResource),
@@ -60,7 +58,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
     val sparkConf = new SparkConf(false)
       .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
     val orchestrator = new DriverConfigOrchestrator(
-      NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
       Option.empty,
@@ -83,7 +80,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       .set("spark.jars", "hdfs://localhost:9000/var/apps/jars/jar1.jar")
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigOrchestrator(
-      NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
       Some(mainAppResource),
@@ -107,7 +103,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       .set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$SECRET_BAR", SECRET_MOUNT_PATH)
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigOrchestrator(
-      NAMESPACE,
       APP_ID,
       LAUNCH_TIME,
       Some(mainAppResource),

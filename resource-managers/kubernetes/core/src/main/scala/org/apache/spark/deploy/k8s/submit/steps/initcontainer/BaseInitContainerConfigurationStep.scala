@@ -57,6 +57,6 @@ private[spark] class BaseInitContainerConfigurationStep(
       initContainer = bootstrapped.initContainer,
       driverContainer = bootstrapped.mainContainer,
       driverPod = bootstrapped.pod,
-      properties = baseInitContainerConfig)
+      properties = spec.properties ++ baseInitContainerConfig)
   }
 }

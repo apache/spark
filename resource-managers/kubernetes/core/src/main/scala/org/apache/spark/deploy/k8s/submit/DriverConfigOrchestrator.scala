@@ -31,10 +31,12 @@ import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
 
 /**
- * Constructs the complete list of driver configuration steps to run to deploy the Spark driver.
+ * Figures out and returns the complete ordered list of needed DriverConfigurationSteps to
+ * configure the Spark driver pod. The returned steps will be applied one by one in the given
+ * order to produce a final KubernetesDriverSpec that is used in KubernetesClientApplication
+ * to construct and create the driver pod.
  */
 private[spark] class DriverConfigOrchestrator(
-    namespace: String,
     kubernetesAppId: String,
     launchTime: Long,
     mainAppResource: Option[MainAppResource],
@@ -85,7 +87,7 @@ private[spark] class DriverConfigOrchestrator(
       appArgs,
       sparkConf)
 
-    val driverAddressStep = new DriverServiceBootstrapStep(
+    val serviceBootstrapStep = new DriverServiceBootstrapStep(
       kubernetesResourceNamePrefix,
       allDriverLabels,
       sparkConf,
@@ -126,14 +128,11 @@ private[spark] class DriverConfigOrchestrator(
     val mayBeInitContainerBootstrapStep =
       if (areAnyFilesNonContainerLocal(sparkJars ++ sparkFiles)) {
         val orchestrator = new InitContainerConfigOrchestrator(
-          namespace,
-          kubernetesResourceNamePrefix,
           sparkJars,
           sparkFiles,
           jarsDownloadPath,
           filesDownloadPath,
           imagePullPolicy,
-          allDriverLabels,
           initContainerConfigMapName,
           INIT_CONTAINER_PROPERTIES_FILE_NAME,
           sparkConf)
@@ -155,7 +154,7 @@ private[spark] class DriverConfigOrchestrator(
 
     Seq(
       initialSubmissionStep,
-      driverAddressStep,
+      serviceBootstrapStep,
       kubernetesCredentialsStep) ++
       maybeDependencyResolutionStep.toSeq ++
       mayBeInitContainerBootstrapStep.toSeq ++

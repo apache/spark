@@ -22,9 +22,7 @@ import org.apache.spark.deploy.k8s.Constants._
 
 class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
 
-  private val NAMESPACE = "namespace"
   private val DOCKER_IMAGE = "init-container"
-  private val APP_RESOURCE_PREFIX = "spark-prefix"
   private val SPARK_JARS = Seq(
     "hdfs://localhost:9000/app/jars/jar1.jar", "file:///app/jars/jar2.jar")
   private val SPARK_FILES = Seq(
@@ -32,16 +30,8 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
   private val JARS_DOWNLOAD_PATH = "/var/data/jars"
   private val FILES_DOWNLOAD_PATH = "/var/data/files"
   private val DOCKER_IMAGE_PULL_POLICY: String = "IfNotPresent"
-  private val APP_ID = "spark-id"
   private val CUSTOM_LABEL_KEY = "customLabel"
   private val CUSTOM_LABEL_VALUE = "customLabelValue"
-  private val DEPRECATED_CUSTOM_LABEL_KEY = "deprecatedCustomLabel"
-  private val DEPRECATED_CUSTOM_LABEL_VALUE = "deprecatedCustomLabelValue"
-  private val DRIVER_LABELS = Map(
-    CUSTOM_LABEL_KEY -> CUSTOM_LABEL_VALUE,
-    DEPRECATED_CUSTOM_LABEL_KEY -> DEPRECATED_CUSTOM_LABEL_VALUE,
-    SPARK_APP_ID_LABEL -> APP_ID,
-    SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
   private val INIT_CONTAINER_CONFIG_MAP_NAME = "spark-init-config-map"
   private val INIT_CONTAINER_CONFIG_MAP_KEY = "spark-init-config-map-key"
   private val SECRET_FOO = "foo"
@@ -54,14 +44,11 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
       .set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$CUSTOM_LABEL_KEY", CUSTOM_LABEL_VALUE)
 
     val orchestrator = new InitContainerConfigOrchestrator(
-      NAMESPACE,
-      APP_RESOURCE_PREFIX,
       SPARK_JARS.take(1),
       SPARK_FILES,
       JARS_DOWNLOAD_PATH,
       FILES_DOWNLOAD_PATH,
       DOCKER_IMAGE_PULL_POLICY,
-      DRIVER_LABELS,
       INIT_CONTAINER_CONFIG_MAP_NAME,
       INIT_CONTAINER_CONFIG_MAP_KEY,
       sparkConf)
@@ -78,14 +65,11 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
       .set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$SECRET_BAR", SECRET_MOUNT_PATH)
 
     val orchestrator = new InitContainerConfigOrchestrator(
-      NAMESPACE,
-      APP_RESOURCE_PREFIX,
       SPARK_JARS.take(1),
       SPARK_FILES,
       JARS_DOWNLOAD_PATH,
       FILES_DOWNLOAD_PATH,
       DOCKER_IMAGE_PULL_POLICY,
-      DRIVER_LABELS,
       INIT_CONTAINER_CONFIG_MAP_NAME,
       INIT_CONTAINER_CONFIG_MAP_KEY,
       sparkConf)

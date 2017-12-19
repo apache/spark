@@ -33,7 +33,6 @@ private[spark] class InitContainerBootstrap(
     imagePullPolicy: String,
     jarsDownloadPath: String,
     filesDownloadPath: String,
-    downloadTimeoutMinutes: Long,
     configMapName: String,
     configMapKey: String,
     sparkRole: String,

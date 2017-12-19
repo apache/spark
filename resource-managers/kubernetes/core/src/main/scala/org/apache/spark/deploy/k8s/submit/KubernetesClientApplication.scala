@@ -210,7 +210,6 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val watcher = new LoggingPodStatusWatcherImpl(kubernetesAppId, loggingInterval)
 
     val orchestrator = new DriverConfigOrchestrator(
-      namespace,
       kubernetesAppId,
       launchTime,
       clientArguments.mainAppResource,

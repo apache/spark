@@ -22,18 +22,17 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
 /**
- * Returns the complete ordered list of steps required to configure the init-container. This is
- * only used when there are remote application dependencies to localize.
+ * Figures out and returns the complete ordered list of InitContainerConfigurationSteps required to
+ * configure an init-container. The returned steps will be applied in the given order to produce a
+ * final InitContainerSpec that is used to construct an init-container. This is only used when an
+ * init-container is needed, i.e., when there are remote application dependencies to localize.
  */
 private[spark] class InitContainerConfigOrchestrator(
-    namespace: String,
-    resourceNamePrefix: String,
     sparkJars: Seq[String],
     sparkFiles: Seq[String],
     jarsDownloadPath: String,
     filesDownloadPath: String,
     imagePullPolicy: String,
-    driverLabels: Map[String, String],
     configMapName: String,
     configMapKey: String,
     sparkConf: SparkConf) {
@@ -42,7 +41,6 @@ private[spark] class InitContainerConfigOrchestrator(
     .get(INIT_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException(
       "Must specify the init-container image when there are remote dependencies"))
-  private val downloadTimeoutMinutes = sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT)
 
   def getAllConfigurationSteps: Seq[InitContainerConfigurationStep] = {
     val initContainerBootstrap = new InitContainerBootstrap(
@@ -50,7 +48,6 @@ private[spark] class InitContainerConfigOrchestrator(
       imagePullPolicy,
       jarsDownloadPath,
       filesDownloadPath,
-      downloadTimeoutMinutes,
       configMapName,
       configMapKey,
       SPARK_POD_DRIVER_ROLE,

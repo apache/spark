@@ -38,8 +38,6 @@ class BaseInitContainerConfigurationStepSuite extends SparkFunSuite with BeforeA
     "hdfs://localhost:9000/app/files/file1.txt", "file:///app/files/file2.txt")
   private val JARS_DOWNLOAD_PATH = "/var/data/jars"
   private val FILES_DOWNLOAD_PATH = "/var/data/files"
-  private val CONFIG_MAP_NAME = "config-map"
-  private val CONFIG_MAP_KEY = "config-map-key"
   private val POD_LABEL = Map("bootstrap" -> "true")
   private val INIT_CONTAINER_NAME = "init-container"
   private val DRIVER_CONTAINER_NAME = "driver-container"
