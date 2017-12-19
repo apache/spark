@@ -320,7 +320,12 @@ class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable)
 class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
                  HasHandleInvalid, JavaMLReadable, JavaMLWritable):
     """
-    Maps a column of continuous features to a column of feature buckets.
+    Maps a column of continuous features to a column of feature buckets. Since 2.3.0,
+    :py:class:`Bucketizer` can map multiple columns at once by setting the :py:attr:`inputCols`
+    parameter. Note that when both the :py:attr:`inputCol` and :py:attr:`inputCols` parameters
+    are set, a log warning will be printed and only :py:attr:`inputCol` will take effect, while
+    :py:attr:`inputCols` will be ignored. The :py:attr:`splits` parameter is only used for single
+    column usage, and :py:attr:`splitsArray` is for multiple columns.
 
     >>> values = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, float("nan")),
     ...     (float("nan"), 1.0), (float("nan"), 0.0)]
