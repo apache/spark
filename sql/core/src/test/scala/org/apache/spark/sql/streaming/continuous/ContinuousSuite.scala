@@ -115,7 +115,9 @@ class ContinuousSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 20, 2): _*))
+      Execute(waitForRateSourceTriggers(_, 4)),
+      IncrementEpoch(),
+      CheckAnswer(scala.Range(0, 40, 2): _*))
   }
 
   test("flatMap") {
@@ -132,7 +134,9 @@ class ContinuousSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 10).flatMap(n => Seq(0, n, n * 2)): _*))
+      Execute(waitForRateSourceTriggers(_, 4)),
+      IncrementEpoch(),
+      CheckAnswer(scala.Range(0, 20).flatMap(n => Seq(0, n, n * 2)): _*))
   }
 
   test("filter") {
@@ -149,7 +153,9 @@ class ContinuousSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(6, 10): _*))
+      Execute(waitForRateSourceTriggers(_, 4)),
+      IncrementEpoch(),
+      CheckAnswer(scala.Range(6, 20): _*))
   }
 
   test("deduplicate") {
