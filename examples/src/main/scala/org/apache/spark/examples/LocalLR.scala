@@ -48,7 +48,7 @@ object LocalLR {
 
   def showWarning() {
     System.err.println(
-      """WARN: This is a naive implementation of Logistic Regression and is given as an example!
+      s"""WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use org.apache.spark.ml.classification.LogisticRegression
         |for more conventional use.
       """.stripMargin)
@@ -61,10 +61,10 @@ object LocalLR {
     val data = generateData
     // Initialize w to a random value
     val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
-    println("Initial w: " + w)
+    println(s"Initial w: ${w}")
 
     for (i <- 1 to ITERATIONS) {
-      println("On iteration " + i)
+      println(s"On iteration ${i}")
       val gradient = DenseVector.zeros[Double](D)
       for (p <- data) {
         val scale = (1 / (1 + math.exp(-p.y * (w.dot(p.x)))) - 1) * p.y
@@ -73,7 +73,7 @@ object LocalLR {
       w -= gradient
     }
 
-    println("Final w: " + w)
+    println(s"Final w: ${w}")
   }
 }
 // scalastyle:on println

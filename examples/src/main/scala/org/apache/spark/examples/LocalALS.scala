@@ -95,7 +95,7 @@ object LocalALS {
 
   def showWarning() {
     System.err.println(
-      """WARN: This is a naive implementation of ALS and is given as an example!
+      s"""WARN: This is a naive implementation of ALS and is given as an example!
         |Please use org.apache.spark.ml.recommendation.ALS
         |for more conventional use.
       """.stripMargin)
@@ -110,7 +110,7 @@ object LocalALS {
         F = f.toInt
         ITERATIONS = iters.toInt
       case _ =>
-        System.err.println("Usage: LocalALS <M> <U> <F> <iters>")
+        System.err.println(s"Usage: LocalALS <M> <U> <F> <iters>")
         System.exit(1)
     }
 
@@ -129,8 +129,7 @@ object LocalALS {
       println(s"Iteration $iter:")
       ms = (0 until M).map(i => updateMovie(i, ms(i), us, R)).toArray
       us = (0 until U).map(j => updateUser(j, us(j), ms, R)).toArray
-      println("RMSE = " + rmse(R, ms, us))
-      println()
+      println(s"RMSE = ${rmse(R, ms, us)}")
     }
   }
 

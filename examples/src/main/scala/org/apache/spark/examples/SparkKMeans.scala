@@ -51,7 +51,7 @@ object SparkKMeans {
 
   def showWarning() {
     System.err.println(
-      """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
+      s"""WARN: This is a naive implementation of KMeans Clustering and is given as an example!
         |Please use org.apache.spark.ml.clustering.KMeans
         |for more conventional use.
       """.stripMargin)
@@ -60,7 +60,7 @@ object SparkKMeans {
   def main(args: Array[String]) {
 
     if (args.length < 3) {
-      System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>")
+      System.err.println(s"Usage: SparkKMeans <file> <k> <convergeDist>")
       System.exit(1)
     }
 
@@ -95,10 +95,10 @@ object SparkKMeans {
       for (newP <- newPoints) {
         kPoints(newP._1) = newP._2
       }
-      println("Finished iteration (delta = " + tempDist + ")")
+      println(s"Finished iteration (delta = ${tempDist})")
     }
 
-    println("Final centers:")
+    println(s"Final centers:")
     kPoints.foreach(println)
     spark.stop()
   }

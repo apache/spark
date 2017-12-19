@@ -41,7 +41,7 @@ object SparkPageRank {
 
   def showWarning() {
     System.err.println(
-      """WARN: This is a naive implementation of PageRank and is given as an example!
+      s"""WARN: This is a naive implementation of PageRank and is given as an example!
         |Please use the PageRank implementation found in org.apache.spark.graphx.lib.PageRank
         |for more conventional use.
       """.stripMargin)
@@ -49,7 +49,7 @@ object SparkPageRank {
 
   def main(args: Array[String]) {
     if (args.length < 1) {
-      System.err.println("Usage: SparkPageRank <file> <iter>")
+      System.err.println(s"Usage: SparkPageRank <file> <iter>")
       System.exit(1)
     }
 
@@ -77,7 +77,7 @@ object SparkPageRank {
     }
 
     val output = ranks.collect()
-    output.foreach(tup => println(tup._1 + " has rank: " + tup._2 + "."))
+    output.foreach(tup => println(s"${tup._1} has rank:  ${tup._2} ."))
 
     spark.stop()
   }
