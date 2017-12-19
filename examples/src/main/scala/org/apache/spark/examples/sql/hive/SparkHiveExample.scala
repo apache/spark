@@ -103,6 +103,7 @@ object SparkHiveExample {
     // ...
     // $example off:spark_hive$
 
+    // $example on:spark_hive$
     // to save DataFrame to Hive Managed table as Parquet format
 
     /*
@@ -157,6 +158,8 @@ object SparkHiveExample {
     // if data is huge and make sense to do partitioning.
     hiveTableDF.coalesce(10).write.mode(SaveMode.Overwrite)
       .partitionBy("key").parquet(hiveExternalTableLocation)
+    // $example off:spark_hive$
+    
     spark.stop()
   }
 }
