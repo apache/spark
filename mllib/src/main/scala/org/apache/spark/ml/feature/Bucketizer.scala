@@ -137,7 +137,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   /**
    * Determines whether this `Bucketizer` is going to map multiple columns. If and only if
    * `inputCols` is set, it will map multiple columns. Otherwise, it just maps a column specified
-   * by `inputCol`. A warning will be printed if both are set.
+   * by `inputCol`. An exception will be thrown if both are set.
    */
   private[feature] def isBucketizeMultipleColumns(): Boolean = {
     inputColsSanityCheck()
