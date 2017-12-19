@@ -133,8 +133,10 @@ class StorageLevel private(
   override def hashCode(): Int = toInt * 41 + replication
 
   /** Name of the storage level if it is predefined or `None` otherwise. */
-  def name: Option[String] = StorageLevel.PREDEFINED
-    .collectFirst { case (storageLevel, name) if storageLevel == this => name }
+  def name: Option[String] = {
+    StorageLevel.PREDEFINED
+      .collectFirst { case (storageLevel, name) if storageLevel == this => name }
+  }
 
   def description: String = {
     var result = ""
@@ -186,12 +188,13 @@ object StorageLevel {
    * Return the StorageLevel object with the specified name.
    */
   @DeveloperApi
-  def fromString(s: String): StorageLevel =
+  def fromString(s: String): StorageLevel = {
     PREDEFINED.collectFirst {
       case (storageLevel, name) if name == s => storageLevel
     }.getOrElse {
       throw new IllegalArgumentException(s"Invalid StorageLevel: $s")
     }
+  }
 
   /**
    * :: DeveloperApi ::
