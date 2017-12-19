@@ -34,9 +34,9 @@ case class PythonUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  override def toString: String = s"$name(${children.mkString(", ")})"
-
   lazy val resultAttribute: Attribute = AttributeReference(name, dataType)()
+
+  override def toString: String = s"$name(${children.mkString(", ")})"
 
   override def nullable: Boolean = true
 }

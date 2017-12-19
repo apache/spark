@@ -49,8 +49,8 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
   }
 
   private def isPandasGroupAggUdf(expr: Expression): Boolean = expr match {
-      case _ @ PythonUDF(_, _, _, _, PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF ) => true
-      case Alias(expr, _) => isPandasGroupAggUdf(expr)
+      case PythonUDF(_, _, _, _, PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF) => true
+      case Alias(child, _) => isPandasGroupAggUdf(child)
       case _ => false
   }
 
@@ -67,27 +67,26 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
     if (hasPandasGroupAggUdf(agg)) {
       Aggregate(agg.groupingExpressions, agg.aggregateExpressions, agg.child)
     } else {
-
-    agg.aggregateExpressions.foreach { expr =>
-      if (hasPythonUdfOverAggregate(expr, agg)) {
-        // Python UDF can only be evaluated after aggregate
-        val newE = expr transformDown {
-          case e: Expression if belongAggregate(e, agg) =>
-            val alias = e match {
-              case a: NamedExpression => a
-              case o => Alias(e, "agg")()
-            }
-            aggExpr += alias
-            alias.toAttribute
+      agg.aggregateExpressions.foreach { expr =>
+        if (hasPythonUdfOverAggregate(expr, agg)) {
+          // Python UDF can only be evaluated after aggregate
+          val newE = expr transformDown {
+            case e: Expression if belongAggregate(e, agg) =>
+              val alias = e match {
+                case a: NamedExpression => a
+                case o => Alias(e, "agg")()
+              }
+              aggExpr += alias
+              alias.toAttribute
+          }
+          projList += newE.asInstanceOf[NamedExpression]
+        } else {
+          aggExpr += expr
+          projList += expr.toAttribute
         }
-        projList += newE.asInstanceOf[NamedExpression]
-      } else {
-        aggExpr += expr
-        projList += expr.toAttribute
       }
-    }
-    // There is no Python UDF over aggregate expression
-    Project(projList, agg.copy(aggregateExpressions = aggExpr))
+      // There is no Python UDF over aggregate expression
+      Project(projList, agg.copy(aggregateExpressions = aggExpr))
     }
   }
 
@@ -129,7 +128,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    // FlatMapGroupsInPandas can be evaluated directly in python worker
+    // AggregateInPandasExec and FlatMapGroupsInPandas can be evaluated directly in python worker
     // Therefore we don't need to extract the UDFs
     case plan: AggregateInPandasExec => plan
     case plan: FlatMapGroupsInPandasExec => plan

@@ -133,7 +133,7 @@ case class AggregateInPandasExec(
       val joined = new JoinedRow
       val resultProj = UnsafeProjection.create(output, output)
 
-      columnarBatchIter.map(_.rowIterator.next()).map{ outputRow =>
+      columnarBatchIter.map(_.rowIterator.next()).map { outputRow =>
         val leftRow = queue.remove()
         val joinedRow = joined(leftRow, outputRow)
         resultProj(joinedRow)
