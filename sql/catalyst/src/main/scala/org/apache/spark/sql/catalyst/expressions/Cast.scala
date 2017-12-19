@@ -19,10 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 
+import scala.collection.mutable.WrappedArray
+
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -206,6 +210,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
+    case ar: ArrayType =>
+      buildCast[ArrayData](_, a => {
+        val arrayData = CatalystTypeConverters.convertToScala(a, ar).asInstanceOf[WrappedArray[_]]
+        UTF8String.fromString(arrayData.mkString("[", ", ", "]"))
+      })
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -543,7 +552,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
+    val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx, eval)
     ev.copy(code = eval.code +
       castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
@@ -555,11 +564,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def nullSafeCastFunction(
       from: DataType,
       to: DataType,
-      ctx: CodegenContext): CastFunction = to match {
+      ctx: CodegenContext,
+      ev: ExprCode): CastFunction = to match {
 
     case _ if from == NullType => (c, evPrim, evNull) => s"$evNull = true;"
     case _ if to == from => (c, evPrim, evNull) => s"$evPrim = $c;"
-    case StringType => castToStringCode(from, ctx)
+    case StringType => castToStringCode(from, ctx, ev)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
@@ -574,9 +584,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DoubleType => castToDoubleCode(from)
 
     case array: ArrayType =>
-      castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
-    case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
-    case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
+      castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx, ev)
+    case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx, ev)
+    case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx, ev)
     case udt: UserDefinedType[_]
       if udt.userClass == from.asInstanceOf[UserDefinedType[_]].userClass =>
       (c, evPrim, evNull) => s"$evPrim = $c;"
@@ -597,7 +607,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     """
   }
 
-  private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
+  private[this] def castToStringCode(from: DataType, ctx: CodegenContext, ev: ExprCode)
+    : CastFunction = {
     from match {
       case BinaryType =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromBytes($c);"
@@ -608,6 +619,26 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         val tz = ctx.addReferenceObj("timeZone", timeZone)
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
+      case ar: ArrayType =>
+        // Generate code to recursively convert a catalyst array type `ArrayData` into
+        // a Scala array type by using an array encoder.
+        val staticInvoke = RowEncoder.deserializerFor(child, ar).asInstanceOf[StaticInvoke]
+        val arVal = ctx.freshName("arVal")
+        val arNull = ctx.freshName("arNull")
+        val inputExprCode = ExprCode(
+          code =
+            s"""${ctx.javaType(ar)} $arVal = ${ev.value}
+               |boolean $arNull = ${ev.isNull}
+             """.stripMargin,
+          isNull = arNull,
+          value = arVal
+        )
+        val expr = staticInvoke.doGenCode(ctx, inputExprCode)
+        ev.code = expr.code
+        ev.isNull = expr.isNull
+        ev.value = expr.value
+        (c, evPrim, evNull) =>
+          s"""$evPrim = UTF8String.fromString($c.mkString("[", ", ", "]"));"""
       case _ =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -945,8 +976,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def castArrayCode(
-      fromType: DataType, toType: DataType, ctx: CodegenContext): CastFunction = {
-    val elementCast = nullSafeCastFunction(fromType, toType, ctx)
+      fromType: DataType, toType: DataType, ctx: CodegenContext, ev: ExprCode): CastFunction = {
+    val elementCast = nullSafeCastFunction(fromType, toType, ctx, ev)
     val arrayClass = classOf[GenericArrayData].getName
     val fromElementNull = ctx.freshName("feNull")
     val fromElementPrim = ctx.freshName("fePrim")
@@ -980,9 +1011,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       """
   }
 
-  private[this] def castMapCode(from: MapType, to: MapType, ctx: CodegenContext): CastFunction = {
-    val keysCast = castArrayCode(from.keyType, to.keyType, ctx)
-    val valuesCast = castArrayCode(from.valueType, to.valueType, ctx)
+  private[this] def castMapCode(from: MapType, to: MapType, ctx: CodegenContext, ev: ExprCode)
+    : CastFunction = {
+    val keysCast = castArrayCode(from.keyType, to.keyType, ctx, ev)
+    val valuesCast = castArrayCode(from.valueType, to.valueType, ctx, ev)
 
     val mapClass = classOf[ArrayBasedMapData].getName
 
@@ -1008,10 +1040,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def castStructCode(
-      from: StructType, to: StructType, ctx: CodegenContext): CastFunction = {
+      from: StructType, to: StructType, ctx: CodegenContext, ev: ExprCode): CastFunction = {
 
     val fieldsCasts = from.fields.zip(to.fields).map {
-      case (fromField, toField) => nullSafeCastFunction(fromField.dataType, toField.dataType, ctx)
+      case (fromField, toField) =>
+        nullSafeCastFunction(fromField.dataType, toField.dataType, ctx, ev)
     }
     val rowClass = classOf[GenericInternalRow].getName
     val tmpResult = ctx.freshName("tmpResult")

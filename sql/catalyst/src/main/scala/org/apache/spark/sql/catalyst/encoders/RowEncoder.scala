@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -250,7 +250,8 @@ object RowEncoder {
     deserializerFor(input, input.dataType)
   }
 
-  private def deserializerFor(input: Expression, dataType: DataType): Expression = dataType match {
+  private[catalyst] def deserializerFor(input: Expression, dataType: DataType)
+    : Expression = dataType match {
     case dt if ScalaReflection.isNativeType(dt) => input
 
     case p: PythonUserDefinedType => deserializerFor(input, p.sqlType)

@@ -853,4 +853,15 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     cast("2", LongType).genCode(ctx)
     assert(ctx.inlinedMutableStates.length == 0)
   }
+
+  test("SPARK-22825 Cast array to string") {
+    val ret1 = cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType)
+    checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
+    val ret2 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
+    checkEvaluation(ret2, "[WrappedArray(1, 2, 3), WrappedArray(4, 5)]")
+    val ret3 = cast(Literal.create(Array(Map(1 -> "a"), Map(2 -> "b", 3 -> "c"))), StringType)
+    checkEvaluation(ret3, "[Map(1 -> a), Map(2 -> b, 3 -> c)]")
+    val ret4 = cast(Literal.create(Array((1, 3.0, "a"), (3, 1.0, "b"))), StringType)
+    checkEvaluation(ret4, "[[1,3.0,a], [3,1.0,b]]")
+  }
 }

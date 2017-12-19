@@ -2775,4 +2775,42 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-22825 Cast array to string") {
+    // Check non-codegen path
+    val df1 = sql("SELECT CAST(ARRAY(1, 2, 3, 4) AS STRING)")
+    checkAnswer(df1, Row("[1, 2, 3, 4]"))
+    val df2 = sql("SELECT CAST(ARRAY(ARRAY(1, 2), ARRAY(3, 4, 5), ARRAY(6, 7)) AS STRING)")
+    checkAnswer(df2, Row("[WrappedArray(1, 2), WrappedArray(3, 4, 5), WrappedArray(6, 7)]"))
+    val df3 = sql("SELECT CAST(ARRAY(MAP(1, 'a', 2, 'b'), MAP(3, 'c')) AS STRING)")
+    checkAnswer(df3, Row("[Map(1 -> a, 2 -> b), Map(3 -> c)]"))
+    val df4 = sql("SELECT CAST(ARRAY(STRUCT(1, 0.3, 'a'), STRUCT(2, 0.5, 'b')) AS STRING)")
+    checkAnswer(df4, Row("[[1,0.3,a], [2,0.5,b]]"))
+
+    // Check codegen path
+    withTable("t") {
+      Seq(Seq(0, 1, 2, 3, 4)).toDF("a").write.saveAsTable("t")
+      val df = sql("SELECT CAST(a AS STRING) FROM t")
+      checkAnswer(df, Row("[0, 1, 2, 3, 4]"))
+    }
+
+    withTable("t") {
+      Seq(Seq(Seq(1, 2), Seq(3), Seq(4, 5, 6))).toDF("a").write.saveAsTable("t")
+      val df = sql("SELECT CAST(a AS STRING) FROM t")
+      checkAnswer(df, Row("[WrappedArray(1, 2), WrappedArray(3), WrappedArray(4, 5, 6)]"))
+    }
+
+    withTable("t") {
+      Seq(Seq(Map(1 -> "a", 2 -> "b"), Map(3 -> "c"), Map(4 -> "d", 5 -> "e"))).toDF("a")
+        .write.saveAsTable("t")
+      val df = sql("SELECT CAST(a AS STRING) FROM t")
+      checkAnswer(df, Row("[Map(1 -> a, 2 -> b), Map(3 -> c), Map(4 -> d, 5 -> e)]"))
+    }
+
+    withTable("t") {
+      Seq(Seq((1, "a"), (2, "b")), Seq((3, "c"))).toDF("a").write.saveAsTable("t")
+      val df = sql("SELECT CAST(a AS STRING) FROM t")
+      checkAnswer(df, Row("[[1,a], [2,b]]") :: Row("[[3,c]]") :: Nil)
+    }
+  }
 }
