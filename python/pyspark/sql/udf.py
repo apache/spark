@@ -33,6 +33,10 @@ def _wrap_function(sc, func, returnType):
 
 
 def _create_udf(f, returnType, evalType):
+    from pyspark.sql.types import _require_minimum_pyarrow_version
+
+    _require_minimum_pyarrow_version()
+
     if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
         import inspect
         argspec = inspect.getargspec(f)
