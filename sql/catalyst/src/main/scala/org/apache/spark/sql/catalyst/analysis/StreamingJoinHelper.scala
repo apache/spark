@@ -20,10 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, AttributeSet, Cast, CheckOverflow, Expression}
-import org.apache.spark.sql.catalyst.expressions.{ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual}
-import org.apache.spark.sql.catalyst.expressions.{Literal, Multiply, PreciseTimestampConversion, PredicateHelper}
-import org.apache.spark.sql.catalyst.expressions.{PromotePrecision, Subtract, TimeAdd, TimeSub, UnaryMinus}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
