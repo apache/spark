@@ -134,19 +134,18 @@ case class BroadcastHashJoinExec(
     // create a name for HashedRelation
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
-    val relationTerm = ctx.freshName("relation")
     val clsName = broadcastRelation.value.getClass.getName
 
     // At the end of the task, we update the avg hash probe.
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
-    val addTaskListener = genTaskListener(avgHashProbe, relationTerm)
 
-    ctx.addMutableState(clsName, relationTerm,
-      s"""
-         | $relationTerm = (($clsName) $broadcast.value()).asReadOnlyCopy();
-         | incPeakExecutionMemory($relationTerm.estimatedSize());
-         | $addTaskListener
-       """.stripMargin)
+    // inline mutable state since not many join operations in a task
+    val relationTerm = ctx.addMutableState(clsName, "relation",
+      v => s"""
+         | $v = (($clsName) $broadcast.value()).asReadOnlyCopy();
+         | incPeakExecutionMemory($v.estimatedSize());
+         | ${genTaskListener(avgHashProbe, v)}
+       """.stripMargin, forceInline = true)
     (broadcastRelation, relationTerm)
   }
 

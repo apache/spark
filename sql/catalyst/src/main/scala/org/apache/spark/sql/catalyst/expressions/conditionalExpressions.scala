@@ -190,8 +190,7 @@ case class CaseWhen(
     // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
     // We won't go on anymore on the computation.
     val resultState = ctx.freshName("caseWhenResultState")
-    val tmpResult = ctx.freshName("caseWhenTmpResult")
-    ctx.addMutableState(ctx.javaType(dataType), tmpResult)
+    val tmpResult = ctx.addMutableState(ctx.javaType(dataType), "caseWhenTmpResult")
 
     // these blocks are meant to be inside a
     // do {
