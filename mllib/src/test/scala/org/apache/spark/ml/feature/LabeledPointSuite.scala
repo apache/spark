@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.serializer.KryoSerializer
