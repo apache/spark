@@ -1387,13 +1387,14 @@ trait TruncTime extends BinaryExpression with ImplicitCastInputTypes {
     _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
     `fmt` should be one of ["YEAR", "YYYY", "YY", "MON", "MONTH", "MM"]
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-02-12', 'MM');
        2009-02-01
       > SELECT _FUNC_('2015-10-27', 'YEAR');
        2015-01-01
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class TruncDate(date: Expression, format: Expression)
   extends TruncTime {
@@ -1427,7 +1428,7 @@ case class TruncDate(date: Expression, format: Expression)
     _FUNC_(fmt, date) - Returns timestamp `ts` truncated to the unit specified by the format model `fmt`.
     `fmt` should be one of ["YEAR", "YYYY", "YY", "MON", "MONTH", "MM", "DAY", "DD", "HOUR", "MINUTE", "SECOND", "WEEK", "QUARTER"]
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2015-03-05T09:32:05.359', 'YEAR');
        2015-01-01T00:00:00
@@ -1437,7 +1438,8 @@ case class TruncDate(date: Expression, format: Expression)
        2015-03-05T00:00:00
       > SELECT _FUNC_('2015-03-05T09:32:05.359', 'HOUR');
        2015-03-05T09:00:00
-  """)
+  """,
+  since = "2.3.0")
 // scalastyle:on line.size.limit
 case class TruncTimestamp(
     format: Expression,
