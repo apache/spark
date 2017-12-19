@@ -55,7 +55,9 @@ class ContinuousDataSourceRDD(
 
     val runId = context.getLocalProperty(ContinuousExecution.RUN_ID_KEY)
 
-    // (null, null) is an allowed input to the queue, representing an epoch boundary.
+    // This queue contains two types of messages:
+    // * (null, null) representing an epoch boundary.
+    // * (row, off) containing a data row and its corresponding PartitionOffset.
     val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](dataQueueSize)
 
     val epochPollFailed = new AtomicBoolean(false)
@@ -64,6 +66,9 @@ class ContinuousDataSourceRDD(
     val epochPollRunnable = new EpochPollRunnable(queue, context, epochPollFailed)
     epochPollExecutor.scheduleWithFixedDelay(
       epochPollRunnable, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
+
+    // Important sequencing - we must get start offset before the data reader thread begins
+    val startOffset = ContinuousDataSourceRDD.getBaseReader(reader).getOffset
 
     val dataReaderFailed = new AtomicBoolean(false)
     val dataReaderThread = new DataReaderThread(reader, queue, context, dataReaderFailed)
@@ -79,8 +84,7 @@ class ContinuousDataSourceRDD(
     val epochEndpoint = EpochCoordinatorRef.get(runId, SparkEnv.get)
     new Iterator[UnsafeRow] {
       private var currentRow: UnsafeRow = _
-      private var currentOffset: PartitionOffset =
-        ContinuousDataSourceRDD.getBaseReader(reader).getOffset
+      private var currentOffset: PartitionOffset = startOffset
       private var currentEpoch =
         context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 

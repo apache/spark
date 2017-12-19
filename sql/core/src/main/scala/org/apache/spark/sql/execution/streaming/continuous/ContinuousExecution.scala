@@ -119,6 +119,11 @@ class ContinuousExecution(
         }
         committedOffsets = nextOffsets.toStreamProgress(sources)
 
+        // Forcibly align commit and offset logs by slicing off any spurious offset logs from
+        // a previous run. We can't allow commits to an epoch that a previous run reached but
+        // this run has not.
+        offsetLog.purgeAfter(latestEpochId)
+
         currentBatchId = latestEpochId + 1
         logDebug(s"Resuming at epoch $currentBatchId with committed offsets $committedOffsets")
         nextOffsets

@@ -316,14 +316,14 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       AwaitEpoch(50),
       Execute { query =>
         // Because we have automatic advancement, we can't reliably check where precisely the last
-        // commit happened. And we don't have exactly once processing, meaning values may be
+        // commit happened. And we don't have exactly once prøocessing, meaning values may be
         // duplicated. So we just check all values below the highest are present, and as a
         // sanity check that we got at least up to the 50th trigger.
         val data = query.sink.asInstanceOf[MemorySinkV2].allData
-        val vals = data.map(_.getLong(0)).toSet
-        assert(scala.Range(0, 25000).forall { i =>
-          vals.contains(i)
-        })
+        val vals = data.map(_.getLong(0)).sorted
+        scala.Range(0, 25000).foreach { i =>
+          assert(vals.contains(i), s"$i was missing from result data")
+        }
       })
   }
 }
