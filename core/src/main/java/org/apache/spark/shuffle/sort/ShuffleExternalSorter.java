@@ -338,11 +338,11 @@ final class ShuffleExternalSorter extends MemoryConsumer {
         // The pointer array is too big to fix in a single page, spill.
         spill();
         return;
-      } catch (OutOfMemoryError e) {
+      } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
         if (!inMemSorter.hasSpaceForAnotherRecord()) {
           logger.error("Unable to grow the pointer array");
-          throw new SparkOutOfMemoryError(e);
+          throw e;
         }
         return;
       }
