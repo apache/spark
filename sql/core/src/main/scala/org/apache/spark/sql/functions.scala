@@ -2801,9 +2801,9 @@ object functions {
    * Returns timestamp truncated to the unit specified by the format.
    *
    * @param format: 'year', 'yyyy', 'yy' for truncate by year,
-   *               'month', 'mon', 'mm' for truncate by month,
-   *               'day', 'dd' for truncate by day,
-   *               Other options are: second, minute, hour, week, month, quarter
+   *                'month', 'mon', 'mm' for truncate by month,
+   *                'day', 'dd' for truncate by day,
+   *                Other options are: 'second', 'minute', 'hour', 'week', 'month', 'quarter'
    *
    * @group datetime_funcs
    * @since 2.3.0

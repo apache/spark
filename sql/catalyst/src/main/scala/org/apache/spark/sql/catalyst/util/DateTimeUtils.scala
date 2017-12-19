@@ -955,15 +955,15 @@ object DateTimeUtils {
   }
 
   // Visible for testing.
-  val TRUNC_TO_YEAR = 1
-  val TRUNC_TO_MONTH = 2
-  val TRUNC_TO_DAY = 3
-  val TRUNC_TO_HOUR = 4
-  val TRUNC_TO_MINUTE = 5
-  val TRUNC_TO_SECOND = 6
-  val TRUNC_TO_WEEK = 7
-  val TRUNC_TO_QUARTER = 8
-  val TRUNC_INVALID = -1
+  private[sql] val TRUNC_TO_YEAR = 1
+  private[sql] val TRUNC_TO_MONTH = 2
+  private[sql] val TRUNC_TO_QUARTER = 3
+  private[sql] val TRUNC_TO_WEEK = 4
+  private[sql] val TRUNC_TO_DAY = 5
+  private[sql] val TRUNC_TO_HOUR = 6
+  private[sql] val TRUNC_TO_MINUTE = 7
+  private[sql] val TRUNC_TO_SECOND = 8
+  private[sql] val TRUNC_INVALID = -1
 
   /**
    * Returns the trunc date from original date and trunc level.
@@ -984,8 +984,8 @@ object DateTimeUtils {
    * Returns the trunc date time from original date time and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 1 and 8
    */
-  def truncTimestamp(d: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
-    var millis = d / MICROS_PER_MILLIS
+  def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
+    var millis = t / MICROS_PER_MILLIS
     val truncated = level match {
       case TRUNC_TO_YEAR =>
         val dDays = millisToDays(millis, timeZone)

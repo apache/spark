@@ -1295,8 +1295,8 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   override def dataType: DataType = TimestampType
 }
 
-trait TruncTime extends BinaryExpression with ImplicitCastInputTypes {
-  val time: Expression
+trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
+  val instant: Expression
   val format: Expression
   override def nullable: Boolean = true
 
@@ -1304,34 +1304,31 @@ trait TruncTime extends BinaryExpression with ImplicitCastInputTypes {
     DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
 
   /**
-   *
-   * @param input
+   * @param input internalRow (time)
    * @param maxLevel Maximum level that can be used for truncation (e.g MONTH for Date input)
-   * @param truncFunc
-   * @tparam T
-   * @return
+   * @param truncFunc function: (time, level) => time
    */
-  protected def evalHelper[T](input: InternalRow, maxLevel: Int)(
-    truncFunc: (Any, Int) => T): Any = {
+  protected def evalHelper(input: InternalRow, maxLevel: Int)(
+    truncFunc: (Any, Int) => Any): Any = {
     val level = if (format.foldable) {
       truncLevel
     } else {
       DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
     }
     if (level == DateTimeUtils.TRUNC_INVALID || level > maxLevel) {
-      // unknown format
+      // unknown format or too large level
       null
     } else {
-      val d = time.eval(input)
-      if (d == null) {
+      val t = instant.eval(input)
+      if (t == null) {
         null
       } else {
-        truncFunc(d, level)
+        truncFunc(t, level)
       }
     }
   }
 
-  protected def codeGenHelper[T](
+  protected def codeGenHelper(
       ctx: CodegenContext,
       ev: ExprCode,
       maxLevel: Int,
@@ -1346,11 +1343,11 @@ trait TruncTime extends BinaryExpression with ImplicitCastInputTypes {
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
-        val d = time.genCode(ctx)
-        val truncFuncStr = truncFunc(d.value, truncLevel.toString)
+        val t = instant.genCode(ctx)
+        val truncFuncStr = truncFunc(t.value, truncLevel.toString)
         ev.copy(code = s"""
-          ${d.code}
-          boolean ${ev.isNull} = ${d.isNull};
+          ${t.code}
+          boolean ${ev.isNull} = ${t.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $dtu.$truncFuncStr;
@@ -1385,7 +1382,7 @@ trait TruncTime extends BinaryExpression with ImplicitCastInputTypes {
 @ExpressionDescription(
   usage = """
     _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
-    `fmt` should be one of ["YEAR", "YYYY", "YY", "MON", "MONTH", "MM"]
+    `fmt` should be one of ["year", "yyyy", "yy", "mon", "month", "mm"]
   """,
   examples = """
     Examples:
@@ -1397,14 +1394,14 @@ trait TruncTime extends BinaryExpression with ImplicitCastInputTypes {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class TruncDate(date: Expression, format: Expression)
-  extends TruncTime {
+  extends TruncInstant {
   override def left: Expression = date
   override def right: Expression = format
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
   override def dataType: DataType = DateType
   override def prettyName: String = "trunc"
-  override val time = date
+  override val instant = date
 
   override def eval(input: InternalRow): Any = {
     evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_MONTH) { (d: Any, level: Int) =>
@@ -1425,7 +1422,7 @@ case class TruncDate(date: Expression, format: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(fmt, date) - Returns timestamp `ts` truncated to the unit specified by the format model `fmt`.
+    _FUNC_(fmt, ts) - Returns timestamp `ts` truncated to the unit specified by the format model `fmt`.
     `fmt` should be one of ["YEAR", "YYYY", "YY", "MON", "MONTH", "MM", "DAY", "DD", "HOUR", "MINUTE", "SECOND", "WEEK", "QUARTER"]
   """,
   examples = """
@@ -1445,28 +1442,28 @@ case class TruncTimestamp(
     format: Expression,
     timestamp: Expression,
     timeZoneId: Option[String] = None)
-  extends TruncTime with TimeZoneAwareExpression {
+  extends TruncInstant with TimeZoneAwareExpression {
   override def left: Expression = format
   override def right: Expression = timestamp
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, TimestampType)
   override def dataType: TimestampType = TimestampType
   override def prettyName: String = "date_trunc"
-  override val time = timestamp
+  override val instant = timestamp
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
   def this(format: Expression, timestamp: Expression) = this(format, timestamp, None)
 
   override def eval(input: InternalRow): Any = {
-    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_QUARTER) { (d: Any, level: Int) =>
-      DateTimeUtils.truncTimestamp(d.asInstanceOf[Long], level, timeZone)
+    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_SECOND) { (t: Any, level: Int) =>
+      DateTimeUtils.truncTimestamp(t.asInstanceOf[Long], level, timeZone)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tz = ctx.addReferenceObj("timeZone", timeZone)
-    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_QUARTER, true) {
+    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_SECOND, true) {
       (date: String, fmt: String) =>
         s"truncTimestamp($date, $fmt, $tz);"
     }
