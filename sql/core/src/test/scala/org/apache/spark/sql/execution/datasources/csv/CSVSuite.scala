@@ -484,6 +484,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("save csv with quote escaping, using charToEscapeQuoteEscaping option") {
     withTempPath { path =>
+
       // original text
       val df1 = Seq(
         """You are "beautiful"""",
