@@ -137,16 +137,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   /**
    * Determines whether this `Bucketizer` is going to map multiple columns. If and only if
    * `inputCols` is set, it will map multiple columns. Otherwise, it just maps a column specified
-   * by `inputCol`. An exception will be thrown if both are set.
+   * by `inputCol`.
    */
   private[feature] def isBucketizeMultipleColumns(): Boolean = {
-    ParamValidators.assertColOrCols(this)
-    if (isSet(inputCol) && isSet(splitsArray)) {
-      ParamValidators.raiseIncompatibleParamsException("inputCol", "splitsArray")
-    }
-    if (isSet(inputCols) && isSet(splits)) {
-      ParamValidators.raiseIncompatibleParamsException("inputCols", "splits")
-    }
     isSet(inputCols)
   }
 
@@ -200,6 +193,13 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
+    ParamValidators.assertColOrCols(this)
+    if (isSet(inputCol) && isSet(splitsArray)) {
+      ParamValidators.raiseIncompatibleParamsException("inputCol", "splitsArray")
+    }
+    if (isSet(inputCols) && isSet(splits)) {
+      ParamValidators.raiseIncompatibleParamsException("inputCols", "splits")
+    }
     if (isBucketizeMultipleColumns()) {
       var transformedSchema = schema
       $(inputCols).zip($(outputCols)).zipWithIndex.map { case ((inputCol, outputCol), idx) =>

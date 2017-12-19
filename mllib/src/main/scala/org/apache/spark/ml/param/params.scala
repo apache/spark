@@ -256,7 +256,7 @@ object ParamValidators {
    * this is not true, an `IllegalArgumentException` is raised.
    * @param model
    */
-  def assertColOrCols(model: Params): Unit = {
+  private[spark] def assertColOrCols(model: Params): Unit = {
     model match {
       case m: HasInputCols with HasInputCol if m.isSet(m.inputCols) && m.isSet(m.inputCol) =>
         raiseIncompatibleParamsException("inputCols", "inputCol")
@@ -270,8 +270,10 @@ object ParamValidators {
     }
   }
 
-  def raiseIncompatibleParamsException(paramName1: String, paramName2: String): Unit = {
-    throw new IllegalArgumentException(s"Both `$paramName1` and `$paramName2` are set.")
+  private[spark] def raiseIncompatibleParamsException(
+      paramName1: String,
+      paramName2: String): Unit = {
+    throw new IllegalArgumentException(s"`$paramName1` and `$paramName2` cannot be both set.")
   }
 }
 
