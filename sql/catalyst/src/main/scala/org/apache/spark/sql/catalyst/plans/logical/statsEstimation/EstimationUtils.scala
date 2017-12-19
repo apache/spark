@@ -236,28 +236,8 @@ object EstimationUtils {
         // Only collect overlapped ranges.
         if (left.lo <= right.hi && left.hi >= right.lo) {
           // Collect overlapped ranges.
-          val range = if (left.lo == left.hi) {
-            // Case1: the left bin has only one value
-            OverlappedRange(
-              lo = left.lo,
-              hi = left.lo,
-              leftNdv = 1,
-              rightNdv = 1,
-              leftNumRows = leftHeight,
-              rightNumRows = rightHeight / right.ndv
-            )
-          } else if (right.lo == right.hi) {
-            // Case2: the right bin has only one value
-            OverlappedRange(
-              lo = right.lo,
-              hi = right.lo,
-              leftNdv = 1,
-              rightNdv = 1,
-              leftNumRows = leftHeight / left.ndv,
-              rightNumRows = rightHeight
-            )
-          } else if (right.lo >= left.lo && right.hi >= left.hi) {
-            // Case3: the left bin is "smaller" than the right bin
+          val range = if (right.lo >= left.lo && right.hi >= left.hi) {
+            // Case1: the left bin is "smaller" than the right bin
             //      left.lo            right.lo     left.hi          right.hi
             // --------+------------------+------------+----------------+------->
             if (left.hi == right.lo) {
@@ -283,7 +263,7 @@ object EstimationUtils {
               )
             }
           } else if (right.lo <= left.lo && right.hi <= left.hi) {
-            // Case4: the left bin is "larger" than the right bin
+            // Case2: the left bin is "larger" than the right bin
             //      right.lo           left.lo      right.hi         left.hi
             // --------+------------------+------------+----------------+------->
             if (right.hi == left.lo) {
@@ -309,7 +289,7 @@ object EstimationUtils {
               )
             }
           } else if (right.lo >= left.lo && right.hi <= left.hi) {
-            // Case5: the left bin contains the right bin
+            // Case3: the left bin contains the right bin
             //      left.lo            right.lo     right.hi         left.hi
             // --------+------------------+------------+----------------+------->
             val leftRatio = (right.hi - right.lo) / (left.hi - left.lo)
@@ -323,7 +303,7 @@ object EstimationUtils {
             )
           } else {
             assert(right.lo <= left.lo && right.hi >= left.hi)
-            // Case6: the right bin contains the left bin
+            // Case4: the right bin contains the left bin
             //      right.lo           left.lo      left.hi          right.hi
             // --------+------------------+------------+----------------+------->
             val rightRatio = (left.hi - left.lo) / (right.hi - right.lo)
@@ -346,6 +326,11 @@ object EstimationUtils {
   /**
    * Given an original bin and a value range [lowerBound, upperBound], returns the trimmed part
    * of the bin in that range and its number of rows.
+   * @param bin the input histogram bin.
+   * @param height the number of rows of the given histogram bin inside an equi-height histogram.
+   * @param lowerBound lower bound of the given range.
+   * @param upperBound upper bound of the given range.
+   * @return trimmed part of the given bin and its number of rows.
    */
   def trimBin(bin: HistogramBin, height: Double, lowerBound: Double, upperBound: Double)
   : (HistogramBin, Double) = {
@@ -364,14 +349,15 @@ object EstimationUtils {
     } else {
       //    lowerBound            bin.lo        bin.hi     upperBound
       // --------+------------------+------------+-------------+------->
+      assert(bin.lo >= lowerBound && bin.hi <= upperBound)
       (bin.lo, bin.hi)
     }
 
-    if (bin.hi == bin.lo) {
-      (bin, height)
-    } else if (hi == lo) {
+    if (hi == lo) {
+      // Note that bin.hi == bin.lo also falls into this branch.
       (HistogramBin(lo, hi, 1), height / bin.ndv)
     } else {
+      assert(bin.hi != bin.lo)
       val ratio = (hi - lo) / (bin.hi - bin.lo)
       (HistogramBin(lo, hi, math.ceil(bin.ndv * ratio).toLong), height * ratio)
     }

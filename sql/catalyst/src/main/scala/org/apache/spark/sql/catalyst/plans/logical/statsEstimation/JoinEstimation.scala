@@ -193,7 +193,7 @@ case class JoinEstimation(join: Join) extends Logging {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
         val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
           case (Some(l: Histogram), Some(r: Histogram)) =>
-            computeByEquiHeightHistogram(leftKey, rightKey, l, r, newMin, newMax)
+            computeByHistogram(leftKey, rightKey, l, r, newMin, newMax)
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
         }
@@ -237,7 +237,7 @@ case class JoinEstimation(join: Join) extends Logging {
   }
 
   /** Compute join cardinality using equi-height histograms. */
-  private def computeByEquiHeightHistogram(
+  private def computeByHistogram(
       leftKey: AttributeReference,
       rightKey: AttributeReference,
       leftHistogram: Histogram,

@@ -136,24 +136,22 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
 
     val expectedRanges = Seq(
       // histogram1.bins(0) overlaps t0
-      OverlappedRange(10, 30, 10, 40*1/2, 300, 80*1/2),
+      OverlappedRange(10, 30, 10, 40 * 1 / 2, 300, 80 * 1 / 2),
       // histogram1.bins(1) overlaps t0
-      OverlappedRange(30, 50, 30*2/3, 40*1/2, 300*2/3, 80*1/2),
+      OverlappedRange(30, 50, 30 * 2 / 3, 40 * 1 / 2, 300 * 2 / 3, 80 * 1 / 2),
       // histogram1.bins(1) overlaps t1
-      OverlappedRange(50, 60, 30*1/3, 8, 300*1/3, 20)
+      OverlappedRange(50, 60, 30 * 1 / 3, 8, 300 * 1 / 3, 20)
     )
     assert(expectedRanges.equals(
-      getOverlappedRanges(histogram1, histogram2, lowerBound = 10D, upperBound = 60D)))
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 10, upperBound = 60)))
 
     estimateByHistogram(
       leftHistogram = histogram1,
       rightHistogram = histogram2,
-      expectedMin = 10D,
-      expectedMax = 60D,
-      // 10 + 20 + 8
-      expectedNdv = 38L,
-      // 300*40/20 + 200*40/20 + 100*20/10
-      expectedRows = 1200L)
+      expectedMin = 10,
+      expectedMax = 60,
+      expectedNdv = 10 + 20 + 8,
+      expectedRows = 300 * 40 / 20 + 200 * 40 / 20 + 100 * 20 / 10)
   }
 
   test("equi-height histograms: a bin has only one value after trimming") {
@@ -169,24 +167,22 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
 
     val expectedRanges = Seq(
       // histogram1.bins(0) overlaps t0
-      OverlappedRange(50, 50, 1, 1, 300/10, 2),
+      OverlappedRange(50, 50, 1, 1, 300 / 10, 2),
       // histogram1.bins(0) overlaps t1
-      OverlappedRange(50, 60, 10, 20*10/25, 300, 50*10/25),
+      OverlappedRange(50, 60, 10, 20 * 10 / 25, 300, 50 * 10 / 25),
       // histogram1.bins(1) overlaps t1
-      OverlappedRange(60, 75, 3, 20*15/25, 300, 50*15/25)
+      OverlappedRange(60, 75, 3, 20 * 15 / 25, 300, 50 * 15 / 25)
     )
     assert(expectedRanges.equals(
-      getOverlappedRanges(histogram1, histogram2, lowerBound = 50D, upperBound = 75D)))
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 50, upperBound = 75)))
 
     estimateByHistogram(
       leftHistogram = histogram1,
       rightHistogram = histogram2,
-      expectedMin = 50D,
-      expectedMax = 75D,
-      // 1 + 8 + 3
-      expectedNdv = 12L,
-      // 30*2/1 + 300*20/10 + 300*30/12
-      expectedRows = 1410L)
+      expectedMin = 50,
+      expectedMax = 75,
+      expectedNdv = 1 + 8 + 3,
+      expectedRows = 30 * 2 / 1 + 300 * 20 / 10 + 300 * 30 / 12)
   }
 
   test("equi-height histograms: skew distribution (some bins have only one value)") {
@@ -203,23 +199,21 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     assert(t1 ==HistogramBin(lo = 50, hi = 60, ndv = 8) && h1 == 20)
 
     val expectedRanges = Seq(
-      OverlappedRange(30, 30, 1, 1, 300, 40/20),
-      OverlappedRange(30, 30, 1, 1, 300, 40/20),
-      OverlappedRange(30, 50, 30*2/3, 20, 300*2/3, 40),
-      OverlappedRange(50, 60, 30*1/3, 8, 300*1/3, 20)
+      OverlappedRange(30, 30, 1, 1, 300, 40 / 20),
+      OverlappedRange(30, 30, 1, 1, 300, 40 / 20),
+      OverlappedRange(30, 50, 30 * 2 / 3, 20, 300 * 2 / 3, 40),
+      OverlappedRange(50, 60, 30 * 1 / 3, 8, 300 * 1 / 3, 20)
     )
     assert(expectedRanges.equals(
-      getOverlappedRanges(histogram1, histogram2, lowerBound = 30D, upperBound = 60D)))
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 30, upperBound = 60)))
 
     estimateByHistogram(
       leftHistogram = histogram1,
       rightHistogram = histogram2,
-      expectedMin = 30D,
-      expectedMax = 60D,
-      // 1 + 20 + 8
-      expectedNdv = 29L,
-      // 300*2/1 + 300*2/1 + 200*40/20 + 100*20/10
-      expectedRows = 1800L)
+      expectedMin = 30,
+      expectedMax = 60,
+      expectedNdv = 1 + 20 + 8,
+      expectedRows = 300 * 2 / 1 + 300 * 2 / 1 + 200 * 40 / 20 + 100 * 20 / 10)
   }
 
   test("equi-height histograms: skew distribution (histograms have different skewed values") {
@@ -234,22 +228,20 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     assert(t1 == HistogramBin(lo = 30, hi = 50, ndv = 20) && h1 == 40)
 
     val expectedRanges = Seq(
-      OverlappedRange(30, 30, 1, 1, 300, 40/20),
+      OverlappedRange(30, 30, 1, 1, 300, 40 / 20),
       OverlappedRange(30, 50, 20, 20, 200, 40),
-      OverlappedRange(50, 50, 1, 1, 200/20, 100)
+      OverlappedRange(50, 50, 1, 1, 200 / 20, 100)
     )
     assert(expectedRanges.equals(
-      getOverlappedRanges(histogram1, histogram2, lowerBound = 30D, upperBound = 50D)))
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 30, upperBound = 50)))
 
     estimateByHistogram(
       leftHistogram = histogram1,
       rightHistogram = histogram2,
-      expectedMin = 30D,
-      expectedMax = 50D,
-      // 1 + 20
-      expectedNdv = 21L,
-      // 300*2/1 + 200*40/20 + 10*100/1
-      expectedRows = 2000L)
+      expectedMin = 30,
+      expectedMax = 50,
+      expectedNdv = 1 + 20,
+      expectedRows = 300 * 2 / 1 + 200 * 40 / 20 + 10 * 100 / 1)
   }
 
   test("equi-height histograms: skew distribution (both histograms have the same skewed value") {
@@ -270,17 +262,16 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       OverlappedRange(30, 30, 1, 1, 10, 150)
     )
     assert(expectedRanges.equals(
-      getOverlappedRanges(histogram1, histogram2, lowerBound = 30D, upperBound = 30D)))
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 30, upperBound = 30)))
 
     estimateByHistogram(
       leftHistogram = histogram1,
       rightHistogram = histogram2,
-      expectedMin = 30D,
-      expectedMax = 30D,
+      expectedMin = 30,
+      expectedMax = 30,
       // only one value: 30
-      expectedNdv = 1L,
-      // 300*5/1 + 300*150/1 + 10*5/1 + 10*150/1
-      expectedRows = 48050L)
+      expectedNdv = 1,
+      expectedRows = 300 * 5 / 1 + 300 * 150 / 1 + 10 * 5 / 1 + 10 * 150 / 1)
   }
 
   test("cross join") {
