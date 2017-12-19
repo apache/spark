@@ -35,7 +35,6 @@ import org.apache.spark.util.kvstore.KVStore
  */
 class SQLAppStatusStore(
     store: KVStore,
-    // Only exposed for tests.
     val listener: Option[SQLAppStatusListener] = None) {
 
   def executionsList(): Seq[SQLExecutionUIData] = {

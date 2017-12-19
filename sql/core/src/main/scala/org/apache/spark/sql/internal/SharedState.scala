@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 
@@ -87,7 +88,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */
   val statusStore: SQLAppStatusStore = {
-    val kvStore = sparkContext.statusStore.store
+    val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
     val listener = new SQLAppStatusListener(sparkContext.conf, kvStore, live = true)
     sparkContext.listenerBus.addToStatusQueue(listener)
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))

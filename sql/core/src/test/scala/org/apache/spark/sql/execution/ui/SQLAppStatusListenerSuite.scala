@@ -36,7 +36,8 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.status.config.LIVE_ENTITY_UPDATE_PERIOD
+import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.status.config._
 import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
 import org.apache.spark.util.kvstore.InMemoryStore
 
@@ -44,7 +45,9 @@ import org.apache.spark.util.kvstore.InMemoryStore
 class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTestUtils {
   import testImplicits._
 
-  override protected def sparkConf = super.sparkConf.set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
+  override protected def sparkConf = {
+    super.sparkConf.set(LIVE_ENTITY_UPDATE_PERIOD, 0L).set(ASYNC_TRACKING_ENABLED, false)
+  }
 
   private def createTestDataFrame: DataFrame = {
     Seq(
@@ -121,8 +124,9 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
   }
 
   private def createStatusStore(): SQLAppStatusStore = {
-    val store = new InMemoryStore
-    val listener = new SQLAppStatusListener(sparkContext.conf, store, live = true)
+    val conf = sparkContext.conf
+    val store = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, store, live = true)
     new SQLAppStatusStore(store, Some(listener))
   }
 
@@ -380,45 +384,46 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
   }
 
   test("SPARK-11126: no memory leak when running non SQL jobs") {
-    val statusStore = createStatusStore()
-    val listener = statusStore.listener.get
-    // No need to remove the listener as the SparkContext is dedicated to this test suite.
-    sparkContext.addSparkListener(listener)
+    val listener = spark.sharedState.statusStore.listener.get
+    // At the beginning of this test case, there should be no live data in the listener.
+    assert(listener.noLiveData())
     spark.sparkContext.parallelize(1 to 10).foreach(i => ())
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     // Listener should ignore the non-SQL stages, as the stage data are only removed when SQL
     // execution ends, which will not be triggered for non-SQL jobs.
-    assert(listener.stageMetrics.isEmpty)
+    assert(listener.noLiveData())
   }
 
   test("driver side SQL metrics") {
-    val statusStore = createStatusStore()
-    val listener = statusStore.listener.get
-    // No need to remove the listener as the SparkContext is dedicated to this test suite.
-    sparkContext.addSparkListener(listener)
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
     val expectedAccumValue = 12345
     val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue)
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
       override lazy val executedPlan = physicalPlan
     }
+
     SQLExecution.withNewExecutionId(spark, dummyQueryExecution) {
       physicalPlan.execute().collect()
     }
 
-    // Wait until execution finished
-    var finished = false
-    while (!finished) {
+    // Wait until the new execution is started and being tracked.
+    while (statusStore.executionsCount() < oldCount) {
       Thread.sleep(100)
-      val executionData = statusStore.executionsList().headOption
-      finished = executionData.isDefined && executionData.get.jobs.values
-        .forall(_ == JobExecutionStatus.SUCCEEDED)
+    }
+
+    // Wait for listener to finish computing the metrics for the execution.
+    while (statusStore.executionsList().last.metricValues == null) {
+      Thread.sleep(100)
     }
 
     val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
     val expectedValue = SQLMetrics.stringValue(driverMetric.metricType, Seq(expectedAccumValue))
+
     assert(metrics.contains(driverMetric.id))
     assert(metrics(driverMetric.id) === expectedValue)
   }
@@ -490,15 +495,15 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExe
 
 class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
 
-  // TODO: this feature is not yet available in SQLAppStatusStore.
-  ignore("no memory leak") {
-    quietly {
-      val conf = new SparkConf()
-        .setMaster("local")
-        .setAppName("test")
-        .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
-        .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
-      withSpark(new SparkContext(conf)) { sc =>
+  test("no memory leak") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+      .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
+      .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
+      .set(ASYNC_TRACKING_ENABLED, false)
+    withSpark(new SparkContext(conf)) { sc =>
+      quietly {
         val spark = new SparkSession(sc)
         import spark.implicits._
         // Run 100 successful executions and 100 failed executions.
@@ -517,11 +522,9 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
         }
         sc.listenerBus.waitUntilEmpty(10000)
         val statusStore = spark.sharedState.statusStore
-        assert(statusStore.executionsCount() == 200)
+        assert(statusStore.executionsCount() <= 50)
         // No live data should be left behind after all executions end.
-        val listener = statusStore.listener.get
-        assert(listener.liveExecutions.isEmpty)
-        assert(listener.stageMetrics.isEmpty)
+        assert(statusStore.listener.get.noLiveData())
       }
     }
   }

@@ -22,24 +22,10 @@ import com.fasterxml.jackson.databind.`type`.TypeFactory
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.fasterxml.jackson.databind.util.Converter
 
-import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.SparkPlanInfo
-import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.kvstore.KVStore
-
-class SQLHistoryUIPlugin extends SparkHistoryUIPlugin {
-
-  override def createListeners(conf: SparkConf, store: KVStore): Seq[SparkListener] = {
-    Seq(new SQLAppStatusListener(conf, store, live = false))
-  }
-
-  override def setupUI(ui: SparkUI): Unit = {
-    val kvStore = ui.store.store
-    new SQLTab(new SQLAppStatusStore(kvStore), ui)
-  }
-}
+import org.apache.spark.sql.execution.metric._
 
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(

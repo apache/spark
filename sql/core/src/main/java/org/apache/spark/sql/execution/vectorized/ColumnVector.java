@@ -54,12 +54,6 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract int numNulls();
 
   /**
-   * Returns true if any of the nulls indicator are set for this column. This can be used
-   * as an optimization to prevent setting nulls.
-   */
-  public abstract boolean anyNullsSet();
-
-  /**
    * Returns whether the value at rowId is NULL.
    */
   public abstract boolean isNullAt(int rowId);

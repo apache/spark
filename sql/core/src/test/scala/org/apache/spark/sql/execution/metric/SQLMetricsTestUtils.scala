@@ -34,7 +34,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   import testImplicits._
 
   protected def currentExecutionIds(): Set[Long] = {
-    spark.sharedState.statusStore.executionsList.map(_.executionId).toSet
+    statusStore.executionsList.map(_.executionId).toSet
   }
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore

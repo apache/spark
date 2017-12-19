@@ -22,7 +22,6 @@ import java.util.{List => JList}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Distribution
@@ -33,7 +32,7 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
  */
 private[spark] class AppStatusStore(
     val store: KVStore,
-    listener: Option[AppStatusListener] = None) {
+    val listener: Option[AppStatusListener] = None) {
 
   def applicationInfo(): v1.ApplicationInfo = {
     store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
@@ -329,6 +328,10 @@ private[spark] class AppStatusStore(
     store.read(classOf[PoolData], name)
   }
 
+  def appSummary(): AppSummary = {
+    store.read(classOf[AppSummary], classOf[AppSummary].getName())
+  }
+
   def close(): Unit = {
     store.close()
   }
@@ -336,7 +339,18 @@ private[spark] class AppStatusStore(
 }
 
 private[spark] object AppStatusStore {
+
   val CURRENT_VERSION = 1L
+
+  /**
+   * Create an in-memory store for a live application.
+   */
+  def createLiveStore(conf: SparkConf): AppStatusStore = {
+    val store = new ElementTrackingStore(new InMemoryStore(), conf)
+    val listener = new AppStatusListener(store, conf, true)
+    new AppStatusStore(store, listener = Some(listener))
+  }
+
 }
 
 /**

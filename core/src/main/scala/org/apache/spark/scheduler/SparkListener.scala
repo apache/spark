@@ -30,7 +30,6 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.kvstore.KVStore
 
 @DeveloperApi
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
@@ -167,24 +166,6 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
  */
 @DeveloperApi
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
-
-/**
- * An interface for creating history listeners(to replay event logs) defined in other modules like
- * SQL, and setup the UI of the plugin to rebuild the history UI.
- */
-private[spark] trait SparkHistoryUIPlugin {
-
-  /**
-   * Creates listeners to replay the event logs.
-   */
-  def createListeners(conf: SparkConf, store: KVStore): Seq[SparkListener]
-
-  /**
-   * Sets up UI of this plugin to rebuild the history UI.
-   */
-  def setupUI(ui: SparkUI): Unit
-}
-
 
 /**
  * Interface for listening to events from the Spark scheduler. Most applications should probably

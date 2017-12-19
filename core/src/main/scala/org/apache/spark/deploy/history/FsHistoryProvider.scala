@@ -304,6 +304,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val (kvstore, needReplay) = uiStorePath match {
       case Some(path) =>
         try {
+          // The store path is not guaranteed to exist - maybe it hasn't been created, or was
+          // invalidated because changes to the event log were detected. Need to replay in that
+          // case.
           val _replay = !path.isDirectory()
           (createDiskStore(path, conf), _replay)
         } catch {
@@ -319,27 +322,25 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val plugins = ServiceLoader.load(
-      classOf[SparkHistoryUIPlugin], Utils.getContextOrSparkClassLoader).asScala
-
+      classOf[AppHistoryServerPlugin], Utils.getContextOrSparkClassLoader).asScala
+    val trackingStore = new ElementTrackingStore(kvstore, conf)
     if (needReplay) {
       val replayBus = new ReplayListenerBus()
-      val listener = new AppStatusListener(kvstore, conf, false,
+      val listener = new AppStatusListener(trackingStore, conf, false,
         lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
       replayBus.addListener(listener)
       for {
         plugin <- plugins
-        listener <- plugin.createListeners(conf, kvstore)
+        listener <- plugin.createListeners(conf, trackingStore)
       } replayBus.addListener(listener)
       try {
         val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
         replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
-        listener.flush()
+        trackingStore.close(false)
       } catch {
         case e: Exception =>
-          try {
-            kvstore.close()
-          } catch {
-            case _e: Exception => logInfo("Error closing store.", _e)
+          Utils.tryLogNonFatalError {
+            trackingStore.close()
           }
           uiStorePath.foreach(Utils.deleteRecursively)
           if (e.isInstanceOf[FileNotFoundException]) {

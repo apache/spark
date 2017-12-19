@@ -27,9 +27,8 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.status.{AppStatusListener, AppStatusStore}
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui.jobs.{StagePage, StagesTab}
-import org.apache.spark.util.kvstore.InMemoryStore
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -54,9 +53,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
    * This also runs a dummy stage to populate the page with useful content.
    */
   private def renderStagePage(conf: SparkConf): Seq[Node] = {
-    val kvStore = new InMemoryStore
-    val listener = new AppStatusListener(kvStore, conf, true)
-    val statusStore = new AppStatusStore(kvStore, listener = Some(listener))
+    val statusStore = AppStatusStore.createLiveStore(conf)
+    val listener = statusStore.listener.get
 
     try {
       val tab = mock(classOf[StagesTab], RETURNS_SMART_NULLS)
