@@ -95,22 +95,22 @@ object DFSReadWriteTest {
   def main(args: Array[String]): Unit = {
     parseArgs(args)
 
-    println(s"Performing local word count")
+    println("Performing local word count")
     val fileContents = readFile(localFilePath.toString())
     val localWordCount = runLocalWordCount(fileContents)
 
-    println(s"Creating SparkSession")
+    println("Creating SparkSession")
     val spark = SparkSession
       .builder
       .appName("DFS Read Write Test")
       .getOrCreate()
 
-    println(s"Writing local file to DFS")
+    println("Writing local file to DFS")
     val dfsFilename = s"${dfsDirPath}/dfs_read_write_test"
     val fileRDD = spark.sparkContext.parallelize(fileContents)
     fileRDD.saveAsTextFile(dfsFilename)
 
-    println(s"Reading file from DFS and running Word Count")
+    println("Reading file from DFS and running Word Count")
     val readFileRDD = spark.sparkContext.textFile(dfsFilename)
 
     val dfsWordCount = readFileRDD
@@ -125,11 +125,11 @@ object DFSReadWriteTest {
     spark.stop()
 
     if (localWordCount == dfsWordCount) {
-      println(s"Success! Local Word Count ($localWordCount) 
-                and DFS Word Count ($dfsWordCount) agree.")
+      println(s"Success! Local Word Count $localWordCount and " +
+        s"DFS Word Count $dfsWordCount agree.")
     } else {
-      println(s"Failure! Local Word Count ($localWordCount) 
-                and DFS Word Count ($dfsWordCount) disagree.")
+      println(s"Failure! Local Word Count $localWordCount " +
+        s"and DFS Word Count $dfsWordCount disagree.")
     }
 
   }

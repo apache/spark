@@ -110,7 +110,7 @@ object LocalALS {
         F = f.toInt
         ITERATIONS = iters.toInt
       case _ =>
-        System.err.println(s"Usage: LocalALS <M> <U> <F> <iters>")
+        System.err.println("Usage: LocalALS <M> <U> <F> <iters>")
         System.exit(1)
     }
 

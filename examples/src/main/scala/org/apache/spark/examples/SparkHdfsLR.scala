@@ -60,7 +60,7 @@ object SparkHdfsLR {
   def main(args: Array[String]) {
 
     if (args.length < 2) {
-      System.err.println(s"Usage: SparkHdfsLR <file> <iters>")
+      System.err.println("Usage: SparkHdfsLR <file> <iters>")
       System.exit(1)
     }
 
@@ -79,17 +79,17 @@ object SparkHdfsLR {
 
     // Initialize w to a random value
     val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
-    println(s"Initial w: ${w}")
+    println(s"Initial w: $w")
 
     for (i <- 1 to ITERATIONS) {
-      println(s"On iteration ${i}")
+      println(s"On iteration $i")
       val gradient = points.map { p =>
         p.x * (1 / (1 + exp(-p.y * (w.dot(p.x)))) - 1) * p.y
       }.reduce(_ + _)
       w -= gradient
     }
 
-    println(s"Final w: ${w}")
+    println(s"Final w: $w")
     spark.stop()
   }
 }

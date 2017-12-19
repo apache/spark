@@ -60,7 +60,7 @@ object SparkKMeans {
   def main(args: Array[String]) {
 
     if (args.length < 3) {
-      System.err.println(s"Usage: SparkKMeans <file> <k> <convergeDist>")
+      System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>")
       System.exit(1)
     }
 
@@ -95,10 +95,10 @@ object SparkKMeans {
       for (newP <- newPoints) {
         kPoints(newP._1) = newP._2
       }
-      println(s"Finished iteration (delta = ${tempDist})")
+      println(s"Finished iteration (delta = $tempDist)")
     }
 
-    println(s"Final centers:")
+    println("Final centers:")
     kPoints.foreach(println)
     spark.stop()
   }

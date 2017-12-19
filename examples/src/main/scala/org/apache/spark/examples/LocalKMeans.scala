@@ -88,7 +88,7 @@ object LocalKMeans {
       kPoints.put(i, iter.next())
     }
 
-    println(s"Initial centers: ${kPoints}")
+    println(s"Initial centers: $kPoints")
 
     while(tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
@@ -114,7 +114,7 @@ object LocalKMeans {
       }
     }
 
-    println(s"Final centers: ${kPoints}")
+    println(s"Final centers: $kPoints")
   }
 }
 // scalastyle:on println

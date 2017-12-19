@@ -51,7 +51,7 @@ object Analytics extends Logging {
     val optionsList = args.drop(2).map { arg =>
       arg.dropWhile(_ == '-').split('=') match {
         case Array(opt, v) => (opt -> v)
-        case _ => throw new IllegalArgumentException(s"Invalid argument: ${arg}")
+        case _ => throw new IllegalArgumentException(s"Invalid argument: $arg")
       }
     }
     val options = mutable.Map(optionsList: _*)
@@ -77,14 +77,14 @@ object Analytics extends Logging {
         val numIterOpt = options.remove("numIter").map(_.toInt)
 
         options.foreach {
-          case (opt, _) => throw new IllegalArgumentException(s"Invalid option: ${opt}")
+          case (opt, _) => throw new IllegalArgumentException(s"Invalid option: $opt")
         }
 
         println("======================================")
         println("|             PageRank               |")
         println("======================================")
 
-        val sc = new SparkContext(conf.setAppName(s"PageRank(${fname})"))
+        val sc = new SparkContext(conf.setAppName(s"PageRank($fname)"))
 
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
           numEdgePartitions = numEPart,
@@ -103,7 +103,7 @@ object Analytics extends Logging {
         println(s"GRAPHX: Total rank: ${pr.map(_._2).reduce(_ + _)}")
 
         if (!outFname.isEmpty) {
-          logWarning(s"Saving pageranks of pages to ${outFname}")
+          logWarning(s"Saving pageranks of pages to $outFname")
           pr.map { case (id, r) => id + "\t" + r }.saveAsTextFile(outFname)
         }
 
@@ -111,14 +111,14 @@ object Analytics extends Logging {
 
       case "cc" =>
         options.foreach {
-          case (opt, _) => throw new IllegalArgumentException(s"Invalid option: ${opt}")
+          case (opt, _) => throw new IllegalArgumentException(s"Invalid option: $opt")
         }
 
         println("======================================")
         println("|      Connected Components          |")
         println("======================================")
 
-        val sc = new SparkContext(conf.setAppName(s"ConnectedComponents(${fname})"))
+        val sc = new SparkContext(conf.setAppName(s"ConnectedComponents($fname)"))
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
           numEdgePartitions = numEPart,
           edgeStorageLevel = edgeStorageLevel,
@@ -131,14 +131,14 @@ object Analytics extends Logging {
 
       case "triangles" =>
         options.foreach {
-          case (opt, _) => throw new IllegalArgumentException(s"Invalid option: ${opt}")
+          case (opt, _) => throw new IllegalArgumentException(s"Invalid option: $opt")
         }
 
         println("======================================")
         println("|      Triangle Count                |")
         println("======================================")
 
-        val sc = new SparkContext(conf.setAppName(s"TriangleCount(${fname})"))
+        val sc = new SparkContext(conf.setAppName(s"TriangleCount($fname)"))
         val graph = GraphLoader.edgeListFile(sc, fname,
           canonicalOrientation = true,
           numEdgePartitions = numEPart,

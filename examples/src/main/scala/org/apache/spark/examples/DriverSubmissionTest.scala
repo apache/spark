@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 object DriverSubmissionTest {
   def main(args: Array[String]) {
     if (args.length < 1) {
-      println(s"Usage: DriverSubmissionTest <seconds-to-sleep>")
+      println("Usage: DriverSubmissionTest <seconds-to-sleep>")
       System.exit(0)
     }
     val numSecondsToSleep = args(0).toInt
@@ -37,10 +37,10 @@ object DriverSubmissionTest {
     val env = System.getenv()
     val properties = Utils.getSystemProperties
 
-    println(s"Environment variables containing SPARK_TEST:")
+    println("Environment variables containing SPARK_TEST:")
     env.asScala.filter { case (k, _) => k.contains("SPARK_TEST")}.foreach(println)
 
-    println(s"System properties containing spark.test:")
+    println("System properties containing spark.test:")
     properties.filter { case (k, _) => k.toString.contains("spark.test") }.foreach(println)
 
     for (i <- 1 until numSecondsToSleep) {
