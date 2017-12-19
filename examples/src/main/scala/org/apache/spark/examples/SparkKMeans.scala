@@ -51,7 +51,7 @@ object SparkKMeans {
 
   def showWarning() {
     System.err.println(
-      s"""WARN: This is a naive implementation of KMeans Clustering and is given as an example!
+      """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
         |Please use org.apache.spark.ml.clustering.KMeans
         |for more conventional use.
       """.stripMargin)

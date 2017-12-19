@@ -95,7 +95,7 @@ object LocalALS {
 
   def showWarning() {
     System.err.println(
-      s"""WARN: This is a naive implementation of ALS and is given as an example!
+      """WARN: This is a naive implementation of ALS and is given as an example!
         |Please use org.apache.spark.ml.recommendation.ALS
         |for more conventional use.
       """.stripMargin)

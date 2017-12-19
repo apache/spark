@@ -53,7 +53,7 @@ object SparkLR {
 
   def showWarning() {
     System.err.println(
-      s"""WARN: This is a naive implementation of Logistic Regression and is given as an example!
+      """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use org.apache.spark.ml.classification.LogisticRegression
         |for more conventional use.
       """.stripMargin)
