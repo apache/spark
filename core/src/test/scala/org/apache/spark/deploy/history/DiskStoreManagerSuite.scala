@@ -19,8 +19,10 @@ package org.apache.spark.deploy.history
 
 import java.io.File
 
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.Matchers.{any, anyBoolean, anyLong, eq => meq}
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -34,54 +36,64 @@ class DiskStoreManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val MAX_USAGE = 3L
 
-  private val clock = new ManualClock()
   private var testDir: File = _
   private var store: KVStore = _
-  private var manager: DiskStoreManager = _
 
   before {
-    if (testDir != null) {
-      Utils.deleteRecursively(testDir)
-    }
     testDir = Utils.createTempDir()
     store = KVUtils.open(new File(testDir, "listing"), "test")
-
-    val conf = new SparkConf()
-      .set(MAX_LOCAL_DISK_USAGE, MAX_USAGE)
-      .set(EVENT_TO_STORE_SIZE_RATIO, 1.0D)
-    manager = spy(new DiskStoreManager(conf, testDir, store, clock))
-    doReturn(0L).when(manager).sizeOf(any(classOf[File]))
   }
 
   after {
     store.close()
+    if (testDir != null) {
+      Utils.deleteRecursively(testDir)
+    }
+  }
+
+  private def mockManager(): DiskStoreManager = {
+    val conf = new SparkConf().set(MAX_LOCAL_DISK_USAGE, MAX_USAGE)
+    val manager = spy(new DiskStoreManager(conf, testDir, store, new ManualClock()))
+    doReturn(0L).when(manager).sizeOf(any(classOf[File]))
+    doAnswer(new Answer[Long] {
+      def answer(invocation: InvocationOnMock): Long = {
+        invocation.getArguments()(0).asInstanceOf[Long]
+      }
+    }).when(manager).approximateSize(anyLong(), anyBoolean())
+    manager
+  }
+
+  private def hasFreeSpace(manager: DiskStoreManager, size: Long): Boolean = {
+    size <= manager.free()
   }
 
   test("leasing space") {
+    val manager = mockManager()
+
     // Lease all available space.
     val lease1 = manager.lease(1)
     val lease2 = manager.lease(1)
     val lease3 = manager.lease(1)
-    assert(!manager.hasFreeSpace(1))
+    assert(!hasFreeSpace(manager, 1))
 
     // Revert one lease, get another one.
     lease1.rollback()
-    assert(manager.hasFreeSpace(1))
+    assert(hasFreeSpace(manager, 1))
     assert(!lease1.path.exists())
 
     val lease4 = manager.lease(1)
-    assert(!manager.hasFreeSpace(1))
+    assert(!hasFreeSpace(manager, 1))
 
     // Committing 2 should bring the "used" space up to 4, so there shouldn't be space left yet.
     doReturn(2L).when(manager).sizeOf(meq(lease2.path))
     val dst2 = lease2.commit("app2", None)
-    assert(!manager.hasFreeSpace(1))
+    assert(!hasFreeSpace(manager, 1))
 
     // Rollback 3 and 4, now there should be 1 left.
     lease3.rollback()
     lease4.rollback()
-    assert(manager.hasFreeSpace(1))
-    assert(!manager.hasFreeSpace(2))
+    assert(hasFreeSpace(manager, 1))
+    assert(!hasFreeSpace(manager, 2))
 
     // Release app 2 to make it available for eviction.
     doReturn(2L).when(manager).sizeOf(meq(dst2))
@@ -93,19 +105,21 @@ class DiskStoreManagerSuite extends SparkFunSuite with BeforeAndAfter {
     lease5.commit("app2", None)
     assert(dst2.exists())
     assert(!lease5.path.exists())
-    assert(!manager.hasFreeSpace(1))
+    assert(!hasFreeSpace(manager, 1))
     manager.release("app2", None)
 
     // Try a big lease that should cause the committed app to be evicted.
     val lease6 = manager.lease(6)
     assert(!dst2.exists())
-    assert(!manager.hasFreeSpace(1))
+    assert(!hasFreeSpace(manager, 1))
   }
 
   test("tracking active stores") {
+    val manager = mockManager()
+
     // Lease and commit space for app 1, making it active.
     val lease1 = manager.lease(2)
-    assert(!manager.hasFreeSpace(2))
+    assert(!hasFreeSpace(manager, 2))
     doReturn(2L).when(manager).sizeOf(lease1.path)
     assert(manager.openStore("app1", None).isEmpty)
     val dst1 = lease1.commit("app1", None)
@@ -126,13 +140,22 @@ class DiskStoreManagerSuite extends SparkFunSuite with BeforeAndAfter {
     // deleted.
     doReturn(3L).when(manager).sizeOf(dst1)
     manager.release("app1", None)
-    assert(!manager.hasFreeSpace(1))
+    assert(!hasFreeSpace(manager, 1))
 
     val lease3 = manager.lease(1)
     assert(!dst1.exists())
     lease3.rollback()
 
     assert(manager.openStore("app1", None).isEmpty)
+  }
+
+  test("approximate size heuristic") {
+    val conf = new SparkConf().set(MAX_LOCAL_DISK_USAGE, 1024L)
+    val manager = new DiskStoreManager(conf, testDir, store, new ManualClock())
+
+    assert(manager.approximateSize(50L, false) < 50L)
+    assert(manager.approximateSize(50L, true) > 50L)
+    assert(manager.approximateSize(1024L, false) <= 1024L / 10)
   }
 
 }

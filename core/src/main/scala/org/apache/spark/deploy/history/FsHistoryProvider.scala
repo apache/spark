@@ -24,6 +24,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.util.Try
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -39,6 +40,7 @@ import org.fusesource.leveldbjni.internal.NativeDB
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
@@ -765,7 +767,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
     val status = fs.getFileStatus(new Path(logDir, attempt.logPath))
-    val lease = sm.lease(status.getLen())
+    val isCompressed = EventLoggingListener.codecName(status.getPath()).flatMap { name =>
+      Try(CompressionCodec.getShortName(name)).toOption
+    }.isDefined
+    val lease = sm.lease(status.getLen(), isCompressed)
     val newStorePath = try {
       val store = KVUtils.open(lease.path, metadata)
       try {

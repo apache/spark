@@ -64,7 +64,6 @@ private class DiskStoreManager(
     throw new IllegalArgumentException(s"Failed to create temp directory ($tmpStoreDir).")
   }
 
-  private val eventLogSizeRatio = conf.get(EVENT_TO_STORE_SIZE_RATIO)
   private val maxUsage = conf.get(MAX_LOCAL_DISK_USAGE)
   private val currentUsage = new AtomicLong(0L)
   private val active = new HashMap[(String, Option[String]), Long]()
@@ -99,8 +98,8 @@ private class DiskStoreManager(
    * While the lease is active, the data is written to a temporary location, so `openStore()`
    * will still return `None` for the application.
    */
-  def lease(eventLogSize: Long): Lease = {
-    val needed = approximateSize(eventLogSize)
+  def lease(eventLogSize: Long, isCompressed: Boolean = false): Lease = {
+    val needed = approximateSize(eventLogSize, isCompressed)
     makeRoom(needed)
 
     val perms = PosixFilePermissions.fromString("rwx------")
@@ -109,15 +108,6 @@ private class DiskStoreManager(
 
     updateUsage(needed)
     new Lease(tmp, needed)
-  }
-
-  /**
-   * Returns whether there's enough free space to create a store for an application event log.
-   * This uses an approximation of what's the expected size of an application store given the
-   * size of the event log, since there's no way to really know that relationship up front.
-   */
-  def hasFreeSpace(eventLogSize: Long): Boolean = {
-    approximateSize(eventLogSize) <= free()
   }
 
   /**
@@ -170,14 +160,26 @@ private class DiskStoreManager(
 
   /**
    * A non-scientific approximation of how large an app state store will be given the size of the
-   * event log. By default it's 30% of the event log size.
+   * event log.
    */
-  private def approximateSize(eventLogSize: Long): Long = {
-    math.ceil(eventLogSizeRatio * eventLogSize).toLong
+  def approximateSize(eventLogSize: Long, isCompressed: Boolean): Long = {
+    val expectedSize = if (isCompressed) {
+      // For compressed logs, assume that compression reduces the log size a lot, and the disk
+      // store will actually grow compared to the log size.
+      eventLogSize * 2
+    } else {
+      // For non-compressed logs, assume the disk store will end up at approximately 50% of the
+      // size of the logs. This is loosely based on empirical evidence.
+      eventLogSize / 2
+    }
+
+    // Cap the value at 10% of the max size; this assumes that element cleanup will put a cap on
+    // how large the disk store can get, which may not always be the case.
+    math.min(expectedSize, maxUsage / 10)
   }
 
   /** Current free space. Considers space currently leased out too. */
-  private def free(): Long = {
+  def free(): Long = {
     math.max(maxUsage - currentUsage.get(), 0L)
   }
 
@@ -222,12 +224,13 @@ private class DiskStoreManager(
     listing.write(info)
   }
 
-  private def updateUsage(delta: Long): Unit = {
+  private def updateUsage(delta: Long): Long = {
     val updated = currentUsage.addAndGet(delta)
     if (updated < 0) {
       throw new IllegalStateException(
         s"Disk usage tracker went negative (now = $updated, delta = $delta)")
     }
+    updated
   }
 
   /** Visible for testing. Return the size of a directory. */
@@ -258,7 +261,15 @@ private class DiskStoreManager(
       val newSize = sizeOf(path)
       makeRoom(newSize)
       path.renameTo(dst)
-      updateUsage(newSize)
+
+      val currentUsage = updateUsage(newSize)
+      if (currentUsage > maxUsage) {
+        val current = Utils.bytesToString(currentUsage)
+        val max = Utils.bytesToString(maxUsage)
+        logWarning(s"Commit of application $appId / $attemptId causes maximum disk usage to be " +
+          s"exceeded ($current > $max)")
+      }
+
       updateAccessTime(appId, attemptId)
 
       active.synchronized {

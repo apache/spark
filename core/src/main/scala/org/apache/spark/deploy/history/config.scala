@@ -44,8 +44,4 @@ private[spark] object config {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10g")
 
-  val EVENT_TO_STORE_SIZE_RATIO = ConfigBuilder("spark.history.store.eventLogSizeRatio")
-    .doubleConf
-    .createWithDefault(0.3D)
-
 }
