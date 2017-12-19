@@ -28,6 +28,10 @@ from pyspark.sql.types import StructField, StructType
 
 
 class FitMutlipleIterator(object):
+    """
+    Used by default implementation of Estimator.fitMultiple to produce models in a thread safe
+    iterator.
+    """
     def __init__(self, fitSingleModel, numModel):
         self.fitSingleModel = fitSingleModel
         self.numModel = numModel
@@ -37,13 +41,18 @@ class FitMutlipleIterator(object):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         with self.lock:
             index = self.counter
             if index >= self.numModel:
                 raise StopIteration("No models remaining.")
             self.counter += 1
         return index, self.fitSingleModel(index)
+
+    def next(self):
+        """For python2 compatibility."""
+        return self.__next__()
+
 
 @inherit_doc
 class Estimator(Params):
@@ -66,6 +75,15 @@ class Estimator(Params):
         raise NotImplementedError()
 
     def fitMultiple(self, dataset, params):
+        """
+        Fits a model to the input dataset for each param map in params.
+
+        :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`.
+        :param params: A list/tuple of param maps.
+        :return: A thread safe iterable which contains one model for each param map. Each
+        call to `next(modelIterator)` will return `(index, model)` where model was fit using
+        `params[index]`. Params maps may be fit in an order different than their order in params.
+        """
         def fitSingleModel(index):
             return self.fit(dataset, params[index])
         return FitMutlipleIterator(fitSingleModel, len(params))

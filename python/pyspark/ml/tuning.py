@@ -35,7 +35,7 @@ def parallelFitTasks(est, train, eva, validation, epm):
     modelIter = est.fitMultiple(train, epm)
 
     def singleTask():
-        index, model = modelIter.next()
+        index, model = next(modelIter)
         metric = eva.evaluate(model.transform(validation, epm[index]))
         return index, metric
 
@@ -531,8 +531,8 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         tasks = parallelFitTasks(est, train, eva, validation, epm)
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
         metrics = [None] * numModels
-        for j, m in pool.imap_unordered(lambda f: f(), tasks):
-            metrics[j] = m
+        for j, metric in pool.imap_unordered(lambda f: f(), tasks):
+            metrics[j] = metric
         train.unpersist()
         validation.unpersist()
 

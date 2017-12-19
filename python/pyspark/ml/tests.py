@@ -2359,6 +2359,21 @@ class UnaryTransformerTests(SparkSessionTestCase):
             self.assertEqual(res.input + shiftVal, res.output)
 
 
+class TestFit(unittest.TestCase):
+
+    def testDefaultFitMultiple(self):
+        N = 4
+        data = MockDataset()
+        estimator = MockEstimator()
+        params = [{estimator.fake: i} for i in range(N)]
+        modelIter = estimator.fitMultiple(data, params)
+        indexList = []
+        for index, model in modelIter:
+            self.assertEqual(model.getFake(), index)
+            indexList.append(index)
+        self.assertEqual(sorted(indexList), list(range(N)))
+
+
 if __name__ == "__main__":
     from pyspark.ml.tests import *
     if xmlrunner:
