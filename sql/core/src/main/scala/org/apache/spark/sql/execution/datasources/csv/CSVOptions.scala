@@ -149,7 +149,9 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    format.setCharToEscapeQuoteEscaping(charToEscapeQuoteEscaping)
+    if (charToEscapeQuoteEscaping != '\u0000') {
+      format.setCharToEscapeQuoteEscaping(charToEscapeQuoteEscaping)
+    }
     format.setComment(comment)
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
@@ -167,7 +169,9 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    format.setCharToEscapeQuoteEscaping(charToEscapeQuoteEscaping)
+    if (charToEscapeQuoteEscaping != '\u0000') {
+      format.setCharToEscapeQuoteEscaping(charToEscapeQuoteEscaping)
+    }
     format.setComment(comment)
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
