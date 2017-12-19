@@ -17,10 +17,10 @@
 
 package org.apache.spark.memory;
 
+import java.io.IOException;
+
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-
-import java.io.IOException;
 
 /**
  * A memory consumer of {@link TaskMemoryManager} that supports spilling.
