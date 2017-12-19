@@ -208,10 +208,12 @@ class CodegenContext {
    *                 this field. The argument is the name of the mutable state variable.
    *                 If left blank, the field will be default-initialized.
    * @param forceInline whether the declaration and initialization code may be inlined rather than
-   *                    compacted. Please set `true` into forceInline, if you want to access the
-   *                    status fast (e.g. frequently accessed) or if you want to use the original
-   *                    variable name
-   * @param useFreshName If this is false and forceInline is true, the name is not changed
+   *                    compacted. Please set `true` into forceInline for one of the followings:
+   *                    1. use the original name of the status
+   *                    2. expect to non-frequently generate the status
+   *                       (e.g. not much sort operators in one stage)
+   * @param useFreshName If this is false and the mutable state ends up inlining in the outer
+   *                     class, the name is not changed
    * @return the name of the mutable state variable, which is the original name or fresh name if
    *         the variable is inlined to the outer class, or an array access if the variable is to
    *         be stored in an array of variables of the same type.
@@ -221,7 +223,6 @@ class CodegenContext {
    *         2. its type is primitive type and the total number of the inlined mutable variables
    *            is less than `CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD`
    *         3. its type is multi-dimensional array
-   *         A primitive type variable will be inlined into outer class when the total number of
    *         When a variable is compacted into an array, the max size of the array for compaction
    *         is given by `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
    */

@@ -605,12 +605,15 @@ case class HashAggregateExec(
     }
 
     // Create a name for the iterator from the regular hash map.
-    val iterTerm = ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, "mapIter")
+    // inline mutable state since not many aggregation operations in a task
+    val iterTerm = ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName,
+      "mapIter", forceInline = true)
     // create hashMap
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
     hashMapTerm = ctx.addMutableState(hashMapClassName, "hashMap",
       v => s"$v = $thisPlan.createHashMap();")
-    sorterTerm = ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, "sorter")
+    sorterTerm = ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, "sorter",
+      forceInline = true)
 
     val doAgg = ctx.freshName("doAggregateWithKeys")
     val peakMemory = metricTerm(ctx, "peakMemory")

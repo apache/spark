@@ -283,6 +283,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
 
   override def doProduce(ctx: CodegenContext): String = {
     // Right now, InputAdapter is only used when there is one input RDD.
+    // inline mutable state since an inputAdaptor in a task
     val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
       forceInline = true)
     val row = ctx.freshName("row")

@@ -118,6 +118,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
+        // inline mutable state since not many Like operations in a task
         val pattern = ctx.addMutableState(patternClass, "patternLike",
           v => s"""$v = ${patternClass}.compile("$regexStr");""", forceInline = true)
 
@@ -193,6 +194,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
+        // inline mutable state since not many RLike operations in a task
         val pattern = ctx.addMutableState(patternClass, "patternRLike",
           v => s"""$v = ${patternClass}.compile("$regexStr");""", forceInline = true)
 

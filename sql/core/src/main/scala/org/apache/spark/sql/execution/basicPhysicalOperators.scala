@@ -284,6 +284,7 @@ case class SampleExec(
       val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
       val initSampler = ctx.freshName("initSampler")
 
+      // inline mutable state since not many Sample operations in a task
       val sampler = ctx.addMutableState(s"$samplerClass<UnsafeRow>", "sampleReplace",
         v => {
           val initSamplerFuncName = ctx.addNewFunction(initSampler,
@@ -317,7 +318,7 @@ case class SampleExec(
         v => s"""
           | $v = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
           | $v.setSeed(${seed}L + partitionIndex);
-         """.stripMargin.trim, forceInline = true)
+         """.stripMargin.trim)
 
       s"""
          | if ($sampler.sample() != 0) {
@@ -370,6 +371,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val ev = ExprCode("", "false", value)
     val BigInt = classOf[java.math.BigInteger].getName
 
+    // inline mutable state since not many Range operations in a task
     val taskContext = ctx.addMutableState("TaskContext", "taskContext",
       v => s"$v = TaskContext.get();", forceInline = true)
     val inputMetrics = ctx.addMutableState("InputMetrics", "inputMetrics",
@@ -434,10 +436,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
         |   }
         | }
        """.stripMargin)
-
-    // Right now, Range is only used when there is one upstream.
-    val input = ctx.addMutableState("scala.collection.Iterator", "input",
-      v => s"$v = inputs[0];", forceInline = true)
 
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
