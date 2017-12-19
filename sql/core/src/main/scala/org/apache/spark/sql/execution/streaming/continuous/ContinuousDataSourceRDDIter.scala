@@ -58,8 +58,26 @@ class ContinuousDataSourceRDD(
     // (null, null) is an allowed input to the queue, representing an epoch boundary.
     val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](dataQueueSize)
 
+    val epochPollFailed = new AtomicBoolean(false)
+    val epochPollExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      s"epoch-poll--${runId}--${context.partitionId()}")
+    val epochPollRunnable = new EpochPollRunnable(queue, context, epochPollFailed)
+    epochPollExecutor.scheduleWithFixedDelay(
+      epochPollRunnable, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
+
+    val dataReaderFailed = new AtomicBoolean(false)
+    val dataReaderThread = new DataReaderThread(reader, queue, context, dataReaderFailed)
+    dataReaderThread.setDaemon(true)
+    dataReaderThread.start()
+
+    context.addTaskCompletionListener(_ => {
+      reader.close()
+      dataReaderThread.interrupt()
+      epochPollExecutor.shutdown()
+    })
+
     val epochEndpoint = EpochCoordinatorRef.get(runId, SparkEnv.get)
-    val itr = new Iterator[UnsafeRow] {
+    new Iterator[UnsafeRow] {
       private var currentRow: UnsafeRow = _
       private var currentOffset: PartitionOffset =
         ContinuousDataSourceRDD.getBaseReader(reader).getOffset
@@ -67,6 +85,13 @@ class ContinuousDataSourceRDD(
         context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
       override def hasNext(): Boolean = {
+        if (dataReaderFailed.get()) {
+          throw new SparkException("data read failed", dataReaderThread.failureReason)
+        }
+        if (epochPollFailed.get()) {
+          throw new SparkException("epoch poll failed", epochPollRunnable.failureReason)
+        }
+
         queue.take() match {
           // epoch boundary marker
           case (null, null) =>
@@ -90,25 +115,6 @@ class ContinuousDataSourceRDD(
         r
       }
     }
-
-    val epochPollExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
-      s"epoch-poll--${runId}--${context.partitionId()}")
-    epochPollExecutor.scheduleWithFixedDelay(
-      new EpochPollRunnable(queue, context),
-      0,
-      epochPollIntervalMs,
-      TimeUnit.MILLISECONDS)
-
-    val dataReaderThread = new DataReaderThread(reader, queue, context)
-    dataReaderThread.setDaemon(true)
-    dataReaderThread.start()
-
-    context.addTaskCompletionListener(_ => {
-      reader.close()
-      dataReaderThread.interrupt()
-      epochPollExecutor.shutdown()
-    })
-    itr
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
@@ -120,26 +126,39 @@ case class EpochPackedPartitionOffset(epoch: Long) extends PartitionOffset
 
 class EpochPollRunnable(
     queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
-    context: TaskContext)
+    context: TaskContext,
+    failedFlag: AtomicBoolean)
   extends Thread with Logging {
+  private[continuous] var failureReason: Throwable = _
+
   private val epochEndpoint = EpochCoordinatorRef.get(
     context.getLocalProperty(ContinuousExecution.RUN_ID_KEY), SparkEnv.get)
   private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
   override def run(): Unit = {
-    val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch())
-    for (i <- currentEpoch to newEpoch - 1) {
-      queue.put((null, null))
-      logDebug(s"Sent marker to start epoch ${i + 1}")
+    try {
+      val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch())
+      for (i <- currentEpoch to newEpoch - 1) {
+        queue.put((null, null))
+        logDebug(s"Sent marker to start epoch ${i + 1}")
+      }
+      currentEpoch = newEpoch
+    } catch {
+      case t: Throwable =>
+        failedFlag.set(true)
+        failureReason = t
+        throw t
     }
-    currentEpoch = newEpoch
   }
 }
 
 class DataReaderThread(
     reader: DataReader[UnsafeRow],
     queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
-    context: TaskContext) extends Thread {
+    context: TaskContext,
+    failedFlag: AtomicBoolean) extends Thread {
+  private[continuous] var failureReason: Throwable = _
+
   override def run(): Unit = {
     val baseReader = ContinuousDataSourceRDD.getBaseReader(reader)
     try {
@@ -160,6 +179,11 @@ class DataReaderThread(
       case _: InterruptedException if context.isInterrupted() =>
         // Continuous shutdown always involves an interrupt; shut down quietly.
         return
+
+      case t: Throwable =>
+        failedFlag.set(true)
+        failureReason = t
+        throw t
     }
   }
 }
