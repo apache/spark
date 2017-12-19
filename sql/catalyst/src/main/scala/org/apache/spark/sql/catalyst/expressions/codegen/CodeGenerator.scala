@@ -930,6 +930,18 @@ class CodegenContext {
       // inline execution if only one block
       blocks.head
     } else {
+      if (Utils.isTesting) {
+        // Passing global variables to the split method is dangerous, as any mutating to it is
+        // ignored and may lead to unexpected behavior.
+        // We don't need to check `arrayCompactedMutableStates` here, as it results to array access
+        // code and will raise compile error if we use it in parameter list.
+        val mutableStateNames = inlinedMutableStates.map(_._2).toSet
+        arguments.foreach { case (_, name) =>
+          assert(!mutableStateNames.contains(name),
+            s"split function argument $name cannot be a global variable.")
+        }
+      }
+
       val func = freshName(funcName)
       val argString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
