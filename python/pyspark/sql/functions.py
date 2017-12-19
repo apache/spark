@@ -1111,6 +1111,24 @@ def trunc(date, format):
     return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
 
 
+@since(2.3)
+def date_trunc(format, timestamp):
+    """
+    Returns timestamp truncated to the unit specified by the format.
+
+    :param format: 'year', 'YYYY', 'yy', 'month', 'mon', 'mm',
+        'DAY', 'DD', 'HOUR', 'MINUTE', 'SECOND', 'WEEK', 'QUARTER'
+
+    >>> df = spark.createDataFrame([('1997-02-28',)], ['d'])
+    >>> df.select(date_trunc('year', df.d).alias('year')).collect()
+    [Row(year=datetime.datetime(1997, 1, 1, 0, 0))]
+    >>> df.select(date_trunc('mon', df.d).alias('month')).collect()
+    [Row(month=datetime.datetime(1997, 2, 1, 0, 0))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.date_trunc(format, _to_java_column(timestamp)))
+
+
 @since(1.5)
 def next_day(date, dayOfWeek):
     """

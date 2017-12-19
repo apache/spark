@@ -1295,83 +1295,178 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   override def dataType: DataType = TimestampType
 }
 
-/**
- * Returns date truncated to the unit specified by the format.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('2009-02-12', 'MM');
-       2009-02-01
-      > SELECT _FUNC_('2015-10-27', 'YEAR');
-       2015-01-01
-  """,
-  since = "1.5.0")
-// scalastyle:on line.size.limit
-case class TruncDate(date: Expression, format: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-  override def left: Expression = date
-  override def right: Expression = format
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
-  override def dataType: DataType = DateType
+trait TruncTime extends BinaryExpression with ImplicitCastInputTypes {
+  val time: Expression
+  val format: Expression
   override def nullable: Boolean = true
-  override def prettyName: String = "trunc"
 
   private lazy val truncLevel: Int =
     DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
 
-  override def eval(input: InternalRow): Any = {
+  /**
+   *
+   * @param input
+   * @param maxLevel Maximum level that can be used for truncation (e.g MONTH for Date input)
+   * @param truncFunc
+   * @tparam T
+   * @return
+   */
+  protected def evalHelper[T](input: InternalRow, maxLevel: Int)(
+    truncFunc: (Any, Int) => T): Any = {
     val level = if (format.foldable) {
       truncLevel
     } else {
       DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
     }
-    if (level == -1) {
+    if (level == DateTimeUtils.TRUNC_INVALID || level > maxLevel) {
       // unknown format
       null
     } else {
-      val d = date.eval(input)
+      val d = time.eval(input)
       if (d == null) {
         null
       } else {
-        DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
+        truncFunc(d, level)
       }
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  protected def codeGenHelper[T](
+      ctx: CodegenContext,
+      ev: ExprCode,
+      maxLevel: Int,
+      orderReversed: Boolean = false)(
+      truncFunc: (String, String) => String)
+    : ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
     if (format.foldable) {
-      if (truncLevel == -1) {
+      if (truncLevel == DateTimeUtils.TRUNC_INVALID || truncLevel > maxLevel) {
         ev.copy(code = s"""
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
-        val d = date.genCode(ctx)
+        val d = time.genCode(ctx)
+        val truncFuncStr = truncFunc(d.value, truncLevel.toString)
         ev.copy(code = s"""
           ${d.code}
           boolean ${ev.isNull} = ${d.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.truncDate(${d.value}, $truncLevel);
+            ${ev.value} = $dtu.$truncFuncStr;
           }""")
       }
     } else {
-      nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
+      nullSafeCodeGen(ctx, ev, (left, right) => {
         val form = ctx.freshName("form")
+        val (dateVal, fmt) = if (orderReversed) {
+          (right, left)
+        } else {
+          (left, right)
+        }
+        val truncFuncStr = truncFunc(dateVal, form)
         s"""
           int $form = $dtu.parseTruncLevel($fmt);
-          if ($form == -1) {
+          if ($form == -1 || $form > $maxLevel) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = $dtu.truncDate($dateVal, $form);
+            ${ev.value} = $dtu.$truncFuncStr
           }
         """
       })
+    }
+  }
+}
+
+/**
+ * Returns date truncated to the unit specified by the format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
+    `fmt` should be one of ["YEAR", "YYYY", "YY", "MON", "MONTH", "MM"]
+  """,
+  extended = """
+    Examples:
+      > SELECT _FUNC_('2009-02-12', 'MM');
+       2009-02-01
+      > SELECT _FUNC_('2015-10-27', 'YEAR');
+       2015-01-01
+  """)
+// scalastyle:on line.size.limit
+case class TruncDate(date: Expression, format: Expression)
+  extends TruncTime {
+  override def left: Expression = date
+  override def right: Expression = format
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
+  override def dataType: DataType = DateType
+  override def prettyName: String = "trunc"
+  override val time = date
+
+  override def eval(input: InternalRow): Any = {
+    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_MONTH) { (d: Any, level: Int) =>
+      DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_MONTH) { (date: String, fmt: String) =>
+      s"truncDate($date, $fmt);"
+    }
+  }
+}
+
+/**
+ * Returns timestamp truncated to the unit specified by the format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(fmt, date) - Returns timestamp `ts` truncated to the unit specified by the format model `fmt`.
+    `fmt` should be one of ["YEAR", "YYYY", "YY", "MON", "MONTH", "MM", "DAY", "DD", "HOUR", "MINUTE", "SECOND", "WEEK", "QUARTER"]
+  """,
+  extended = """
+    Examples:
+      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'YEAR');
+       2015-01-01T00:00:00
+      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'MM');
+       2015-03-01T00:00:00
+      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'DD');
+       2015-03-05T00:00:00
+      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'HOUR');
+       2015-03-05T09:00:00
+  """)
+// scalastyle:on line.size.limit
+case class TruncTimestamp(
+    format: Expression,
+    timestamp: Expression,
+    timeZoneId: Option[String] = None)
+  extends TruncTime with TimeZoneAwareExpression {
+  override def left: Expression = format
+  override def right: Expression = timestamp
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, TimestampType)
+  override def dataType: TimestampType = TimestampType
+  override def prettyName: String = "date_trunc"
+  override val time = timestamp
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  def this(format: Expression, timestamp: Expression) = this(format, timestamp, None)
+
+  override def eval(input: InternalRow): Any = {
+    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_QUARTER) { (d: Any, level: Int) =>
+      DateTimeUtils.truncTimestamp(d.asInstanceOf[Long], level, timeZone)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_QUARTER, true) {
+      (date: String, fmt: String) =>
+        s"truncTimestamp($date, $fmt, $tz);"
     }
   }
 }
