@@ -264,7 +264,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     val badStageAttemptId = getContentAndCode("applications/local-1422981780767/stages/1/1")
     badStageAttemptId._1 should be (HttpServletResponse.SC_NOT_FOUND)
-    badStageAttemptId._3 should be (Some("unknown attempt 1 for stage 1."))
+    badStageAttemptId._3 should be (Some("unknown attempt for stage 1.  Found attempts: [0]"))
 
     val badStageId2 = getContentAndCode("applications/local-1422981780767/stages/flimflam")
     badStageId2._1 should be (HttpServletResponse.SC_NOT_FOUND)

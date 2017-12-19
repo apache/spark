@@ -34,7 +34,7 @@ private[spark] class BaseDriverConfigurationStep(
     kubernetesAppId: String,
     kubernetesResourceNamePrefix: String,
     driverLabels: Map[String, String],
-    dockerImagePullPolicy: String,
+    imagePullPolicy: String,
     appName: String,
     mainClass: String,
     appArgs: Array[String],
@@ -46,9 +46,9 @@ private[spark] class BaseDriverConfigurationStep(
   private val driverExtraClasspath = submissionSparkConf.get(
     DRIVER_CLASS_PATH)
 
-  private val driverDockerImage = submissionSparkConf
-    .get(DRIVER_DOCKER_IMAGE)
-    .getOrElse(throw new SparkException("Must specify the driver Docker image"))
+  private val driverContainerImage = submissionSparkConf
+    .get(DRIVER_CONTAINER_IMAGE)
+    .getOrElse(throw new SparkException("Must specify the driver container image"))
 
   // CPU settings
   private val driverCpuCores = submissionSparkConf.getOption("spark.driver.cores").getOrElse("1")
@@ -110,8 +110,8 @@ private[spark] class BaseDriverConfigurationStep(
 
     val driverContainer = new ContainerBuilder(driverSpec.driverContainer)
       .withName(DRIVER_CONTAINER_NAME)
-      .withImage(driverDockerImage)
-      .withImagePullPolicy(dockerImagePullPolicy)
+      .withImage(driverContainerImage)
+      .withImagePullPolicy(imagePullPolicy)
       .addAllToEnv(driverCustomEnvs.asJava)
       .addToEnv(driverExtraClasspathEnv.toSeq: _*)
       .addNewEnv()

@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.status.config._
 import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
 import org.apache.spark.util.kvstore.InMemoryStore
@@ -43,7 +44,9 @@ import org.apache.spark.util.kvstore.InMemoryStore
 class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTestUtils {
   import testImplicits._
 
-  override protected def sparkConf = super.sparkConf.set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
+  override protected def sparkConf = {
+    super.sparkConf.set(LIVE_ENTITY_UPDATE_PERIOD, 0L).set(ASYNC_TRACKING_ENABLED, false)
+  }
 
   private def createTestDataFrame: DataFrame = {
     Seq(
@@ -107,10 +110,12 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
   private def sqlStoreTest(name: String)
       (fn: (SQLAppStatusStore, SparkListenerBus) => Unit): Unit = {
     test(name) {
-      val store = new InMemoryStore()
+      val conf = sparkConf
+      val store = new ElementTrackingStore(new InMemoryStore(), conf)
       val bus = new ReplayListenerBus()
-      val listener = new SQLAppStatusListener(sparkConf, store, true)
+      val listener = new SQLAppStatusListener(conf, store, true)
       bus.addListener(listener)
+      store.close(false)
       val sqlStore = new SQLAppStatusStore(store, Some(listener))
       fn(sqlStore, bus)
     }
@@ -491,15 +496,15 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExe
 
 class SQLListenerMemoryLeakSuite extends SparkFunSuite {
 
-  // TODO: this feature is not yet available in SQLAppStatusStore.
-  ignore("no memory leak") {
-    quietly {
-      val conf = new SparkConf()
-        .setMaster("local")
-        .setAppName("test")
-        .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
-        .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
-      withSpark(new SparkContext(conf)) { sc =>
+  test("no memory leak") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+      .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
+      .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
+      .set(ASYNC_TRACKING_ENABLED, false)
+    withSpark(new SparkContext(conf)) { sc =>
+      quietly {
         val spark = new SparkSession(sc)
         import spark.implicits._
         // Run 100 successful executions and 100 failed executions.
