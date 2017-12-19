@@ -84,9 +84,9 @@ case class AggregateInPandasExec(
 
     val argOffsets = inputs.map { input =>
       input.map { e =>
-          allInputs += e
-          dataTypes += e.dataType
-          allInputs.length - 1 - groupingExpressions.length
+        allInputs += e
+        dataTypes += e.dataType
+        allInputs.length - 1 - groupingExpressions.length
       }.toArray
     }.toArray
 

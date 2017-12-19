@@ -2250,7 +2250,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        +---+-----------+
 
        .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
-                 a full shuffle is required.
+           a full shuffle is required.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.agg`
 

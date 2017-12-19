@@ -70,8 +70,10 @@ class GroupedData(object):
         1. built-in aggregation functions, such as `avg`, `max`, `min`, `sum`, `count`
 
         2. group aggregate pandas UDFs
+
            .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
-                 a full shuffle is required.
+               a full shuffle is required.
+
            .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         If ``exprs`` is a single :class:`dict` mapping from string to string, then the key
