@@ -80,10 +80,13 @@ object TypeCoercion {
    * with primitive types, because in that case the precision and scale of the result depends on
    * the operation. Those rules are implemented in [[DecimalPrecision]].
    */
-  val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
-    case (t1, t2) if t1 == t2 => Some(t1)
-    case (NullType, t1) => Some(t1)
-    case (t1, NullType) => Some(t1)
+  def findTightestCommonType(
+      t1: DataType,
+      t2: DataType,
+      withStringPromotion: Boolean = true): Option[DataType] = (t1, t2) match {
+    case (_, _) if t1 == t2 => Some(t1)
+    case (_, NullType) => Some(t1)
+    case (NullType, _) => Some(t2)
 
     case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
       Some(t2)
@@ -99,16 +102,32 @@ object TypeCoercion {
     case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
       Some(TimestampType)
 
-    case (t1 @ ArrayType(pointType1, nullable1), t2 @ ArrayType(pointType2, nullable2))
-        if t1.sameType(t2) =>
-      val dataType = findTightestCommonType(pointType1, pointType2).get
-      Some(ArrayType(dataType, nullable1 || nullable2))
+    case (ArrayType(pointType1, nullable1), ArrayType(pointType2, nullable2)) =>
+      val dataType = if (withStringPromotion) {
+        findWiderTypeForTwo(pointType1, pointType2)
+      } else {
+        findWiderTypeWithoutStringPromotionForTwo(pointType1, pointType2)
+      }
 
-    case (t1 @ MapType(keyType1, valueType1, nullable1),
-        t2 @ MapType(keyType2, valueType2, nullable2)) if t1.sameType(t2) =>
-      val keyType = findTightestCommonType(keyType1, keyType2).get
-      val valueType = findTightestCommonType(valueType1, valueType2).get
-      Some(MapType(keyType, valueType, nullable1 || nullable2))
+      dataType.map(ArrayType(_, nullable1 || nullable2))
+
+    case (MapType(keyType1, valueType1, nullable1), MapType(keyType2, valueType2, nullable2)) =>
+      val keyType = if (withStringPromotion) {
+        findWiderTypeForTwo(keyType1, keyType2)
+      } else {
+        findWiderTypeWithoutStringPromotionForTwo(keyType1, keyType2)
+      }
+      val valueType = if (withStringPromotion) {
+        findWiderTypeForTwo(valueType1, valueType2)
+      } else {
+        findWiderTypeWithoutStringPromotionForTwo(valueType1, valueType2)
+      }
+
+      if (keyType.nonEmpty && valueType.nonEmpty) {
+        Some(MapType(keyType.get, valueType.get, nullable1 || nullable2))
+      } else {
+        None
+      }
 
     case (t1 @ StructType(fields1), t2 @ StructType(fields2)) if t1.sameType(t2) =>
       Some(StructType(fields1.zip(fields2).map { case (f1, f2) =>
@@ -186,7 +205,7 @@ object TypeCoercion {
   private[analysis] def findWiderTypeWithoutStringPromotionForTwo(
       t1: DataType,
       t2: DataType): Option[DataType] = {
-    findTightestCommonType(t1, t2)
+    findTightestCommonType(t1, t2, withStringPromotion = false)
       .orElse(findWiderTypeForDecimal(t1, t2))
   }
 

@@ -144,6 +144,22 @@ class TypeCoercionSuite extends AnalysisTest {
     }
   }
 
+  private def checkTightestCommonType(
+      t1: DataType,
+      t2: DataType,
+      expected: Option[DataType],
+      isSymmetric: Boolean = true): Unit = {
+    var found = TypeCoercion.findTightestCommonType(t1, t2)
+    assert(found == expected,
+      s"Expected $expected as wider common type for $t1 and $t2, found $found")
+    // Test both directions to make sure the widening is symmetric.
+    if (isSymmetric) {
+      found = TypeCoercion.findTightestCommonType(t2, t1)
+      assert(found == expected,
+        s"Expected $expected as wider common type for $t2 and $t1, found $found")
+    }
+  }
+
   test("implicit type cast - ByteType") {
     val checkedType = ByteType
     checkTypeCasting(checkedType, castableTypes = numericTypes ++ Seq(StringType))
@@ -328,7 +344,7 @@ class TypeCoercionSuite extends AnalysisTest {
 
   test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, expected: Option[DataType]): Unit =
-      checkWidenType(TypeCoercion.findTightestCommonType, t1, t2, expected)
+      checkTightestCommonType(t1, t2, expected)
 
     // Null
     widenTest(NullType, NullType, Some(NullType))
@@ -393,6 +409,8 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(StringType, containsNull=true),
       ArrayType(StringType, containsNull=false),
       Some(ArrayType(StringType, containsNull=true)))
+    widenTest(ArrayType(IntegerType), ArrayType(LongType), Some(ArrayType(LongType)))
+    widenTest(ArrayType(FloatType), ArrayType(DoubleType), Some(ArrayType(DoubleType)))
     widenTest(
       MapType(StringType, StringType, valueContainsNull=true),
       MapType(StringType, StringType, valueContainsNull=false),
@@ -441,8 +459,7 @@ class TypeCoercionSuite extends AnalysisTest {
         None)
     }
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkWidenType(
-        TypeCoercion.findTightestCommonType,
+      checkTightestCommonType(
         StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType))),
         StructType(Seq(StructField("A", IntegerType), StructField("b", IntegerType))),
         Some(StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType)))),
@@ -494,6 +511,10 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTestWithoutStringPromotion(StringType, TimestampType, None)
     widenTestWithoutStringPromotion(ArrayType(LongType), ArrayType(StringType), None)
     widenTestWithoutStringPromotion(ArrayType(StringType), ArrayType(TimestampType), None)
+    widenTestWithoutStringPromotion(
+      StructType(StructField("a", ArrayType(LongType)) :: Nil),
+      StructType(StructField("a", ArrayType(StringType)) :: Nil),
+      None)
 
     // String promotion
     widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
