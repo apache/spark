@@ -158,8 +158,8 @@ class EpochPollRunnable(
       currentEpoch = newEpoch
     } catch {
       case t: Throwable =>
-        failedFlag.set(true)
         failureReason = t
+        failedFlag.set(true)
         throw t
     }
   }
@@ -194,8 +194,8 @@ class DataReaderThread(
         return
 
       case t: Throwable =>
-        failedFlag.set(true)
         failureReason = t
+        failedFlag.set(true)
         throw t
     }
   }
