@@ -80,7 +80,7 @@ object SparkALS {
 
   def showWarning() {
     System.err.println(
-      s"""WARN: This is a naive implementation of ALS and is given as an example!
+      """WARN: This is a naive implementation of ALS and is given as an example!
         |Please use org.apache.spark.ml.recommendation.ALS
         |for more conventional use.
       """.stripMargin)
@@ -100,7 +100,7 @@ object SparkALS {
         ITERATIONS = iters.getOrElse("5").toInt
         slices = slices_.getOrElse("2").toInt
       case _ =>
-        System.err.println(s"Usage: SparkALS [M] [U] [F] [iters] [partitions]")
+        System.err.println("Usage: SparkALS [M] [U] [F] [iters] [partitions]")
         System.exit(1)
     }
 
