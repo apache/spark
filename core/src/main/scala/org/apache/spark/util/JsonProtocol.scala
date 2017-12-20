@@ -444,7 +444,7 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> rddInfo.diskSize)
   }
 
-  def storageLevelToJson(storageLevel: StorageLevel): JValue =
+  def storageLevelToJson(storageLevel: StorageLevel): JValue = {
     storageLevel.name match {
       case Some(name) => name
       case None =>
@@ -453,6 +453,7 @@ private[spark] object JsonProtocol {
         ("Deserialized" -> storageLevel.deserialized) ~
         ("Replication" -> storageLevel.replication)
     }
+  }
 
   def blockStatusToJson(blockStatus: BlockStatus): JValue = {
     val storageLevel = storageLevelToJson(blockStatus.storageLevel)
