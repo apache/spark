@@ -127,7 +127,7 @@ trait MLWriterFormat {
    * Function write the provided pipeline stage out.
    */
   def write(path: String, session: SparkSession, optionMap: mutable.Map[String, String],
-    stage: PipelineStage)
+    stage: PipelineStage): Unit
 }
 
 /**
@@ -239,7 +239,7 @@ class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
       val writer = writerCls.newInstance().asInstanceOf[MLWriterFormat]
       writer.write(path, sparkSession, optionMap, stage)
     } else {
-      throw new SparkException("ML source $source is not a valid MLWriterFormat")
+      throw new SparkException(s"ML source $source is not a valid MLWriterFormat")
     }
   }
 

@@ -711,7 +711,7 @@ class LinearRegressionModel private[ml] (
   }
 
   /**
-   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
+   * Returns a [[org.apache.spark.ml.util.GeneralMLWriter]] instance for this ML instance.
    *
    * For [[LinearRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
@@ -729,7 +729,7 @@ private class InternalLinearRegressionModelWriter()
   override def shortName(): String =
     "internal+org.apache.spark.ml.regression.LinearRegressionModel"
 
-  private case class Data(intercept: Double, coefficients: Vector)
+  private case class Data(intercept: Double, coefficients: Vector, scale: Double)
 
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
@@ -738,7 +738,6 @@ private class InternalLinearRegressionModelWriter()
     // Save metadata and Params
     DefaultParamsWriter.saveMetadata(instance, path, sc)
     // Save model data: intercept, coefficients, scale
-    private case class Data(intercept: Double, coefficients: Vector, scale: Double)
     val data = Data(instance.intercept, instance.coefficients, instance.scale)
     val dataPath = new Path(path, "data").toString
     sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)

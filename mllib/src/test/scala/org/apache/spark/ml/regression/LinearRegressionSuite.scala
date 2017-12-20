@@ -18,19 +18,28 @@
 package org.apache.spark.ml.regression
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.Random
 
 import org.dmg.pmml.{OpType, PMML, RegressionModel => PMMLRegressionModel}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.PipelineStage
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils, PMMLReadWriteTest}
+import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+
+class DummyLinearRegressionWriter extends MLWriterFormat {
+  override def write(path: String, sparkSession: SparkSession,
+    optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
+    throw new Exception(s"Dummy writer doesn't write")
+  }
+}
 
 class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTest {
 
@@ -1074,8 +1083,20 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
     intercept[SparkException] {
       model.write.format("com.holdenkarau.boop").save("boop")
     }
-    intercept[SparkException] {
-      model.write.format("org.apache.spark.SparkContext").save("boop2")
+    withClue("ML source org.apache.spark.SparkContext is not a valid MLWriterFormat") {
+      intercept[SparkException] {
+        model.write.format("org.apache.spark.SparkContext").save("boop2")
+      }
+    }
+  }
+
+  test("dummy export format is called") {
+    val lr = new LinearRegression()
+    val model = lr.fit(datasetWithWeight)
+    withClue("Dummy writer doesn't write") {
+      intercept[Exception] {
+        model.write.format("org.apache.spark.ml.regression.DummyLinearRegressionWriter").save("")
+      }
     }
   }
 
