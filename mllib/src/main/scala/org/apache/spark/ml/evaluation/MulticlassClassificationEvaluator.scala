@@ -21,8 +21,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
-import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
@@ -71,15 +70,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    val schema = dataset.schema
-    SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
-    SchemaUtils.checkNumericType(schema, $(labelCol))
-
-    val predictionAndLabels =
-      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType)).rdd.map {
-        case Row(prediction: Double, label: Double) => (prediction, label)
-      }
-    val metrics = new MulticlassMetrics(predictionAndLabels)
+    val metrics = getMetrics(dataset)
     val metric = $(metricName) match {
       case "f1" => metrics.weightedFMeasure
       case "weightedPrecision" => metrics.weightedPrecision
@@ -87,6 +78,18 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       case "accuracy" => metrics.accuracy
     }
     metric
+  }
+
+  @Since("2.3.0")
+  def getMetrics(dataset: Dataset[_]): MultiClassClassificationMetrics = {
+    val schema = dataset.schema
+    SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(labelCol))
+
+    val predictionAndLabels =
+      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType))
+    val metrics = new MultiClassClassificationMetrics(predictionAndLabels)
+    metrics
   }
 
   @Since("1.5.0")

@@ -75,4 +75,15 @@ class BinaryClassificationEvaluatorSuite
     val evaluator = new BinaryClassificationEvaluator().setRawPredictionCol("prediction")
     MLTestingUtils.checkNumericTypes(evaluator, spark)
   }
+
+  test("getMetrics should return same result as evaluate") {
+    val vectorDF = Seq(
+      (Vectors.dense(12, 2.5), 0d),
+      (Vectors.dense(1, 3), 1d),
+      (Vectors.dense(10, 2), 0d)
+    ).toDF("rawPrediction", "label")
+    val evaluator = new BinaryClassificationEvaluator().setMetricName("areaUnderPR")
+    val metrics = evaluator.getMetrics(vectorDF)
+    assert(metrics.areaUnderPR == evaluator.evaluate(vectorDF))
+  }
 }

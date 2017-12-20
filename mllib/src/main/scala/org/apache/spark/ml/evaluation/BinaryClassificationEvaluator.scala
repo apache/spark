@@ -22,8 +22,7 @@ import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
@@ -72,23 +71,30 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
+    val metrics = getMetrics(dataset)
+    val metric = $(metricName) match {
+      case "areaUnderROC" => metrics.areaUnderROC
+      case "areaUnderPR" => metrics.areaUnderPR
+    }
+    metrics.unpersist()
+    metric
+  }
+
+  /**
+   * Get a BinaryClassificationMetrics from the dataset, which contains metrics like "areaUnderROC"
+   * and "areaUnderPR"
+   */
+  @Since("2.3.0")
+  def getMetrics(dataset: Dataset[_]): BinaryClassificationMetrics = {
     val schema = dataset.schema
     SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
     SchemaUtils.checkNumericType(schema, $(labelCol))
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
     val scoreAndLabels =
-      dataset.select(col($(rawPredictionCol)), col($(labelCol)).cast(DoubleType)).rdd.map {
-        case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
-        case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
-      }
+      dataset.select(col($(rawPredictionCol)), col($(labelCol)).cast(DoubleType))
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    val metric = $(metricName) match {
-      case "areaUnderROC" => metrics.areaUnderROC()
-      case "areaUnderPR" => metrics.areaUnderPR()
-    }
-    metrics.unpersist()
-    metric
+    metrics
   }
 
   @Since("1.5.0")

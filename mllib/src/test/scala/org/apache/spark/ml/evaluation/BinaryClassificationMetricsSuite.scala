@@ -18,38 +18,25 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class MulticlassClassificationEvaluatorSuite
+class BinaryClassificationMetricsSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
-  import testImplicits._
 
-  test("params") {
-    ParamsSuite.checkParams(new MulticlassClassificationEvaluator)
+  test("BinaryClassificationMetrics get same result as MLlib") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val scoreAndLabels = sc.parallelize(
+      Seq((0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)), 2)
+    val mllibMetrics = new org.apache.spark.mllib.evaluation.BinaryClassificationMetrics(
+      scoreAndLabels)
+
+    val df = scoreAndLabels.toDF("rawPrediction", "label")
+    val metrics = new BinaryClassificationMetrics(df)
+    assert(metrics.areaUnderPR == mllibMetrics.areaUnderPR())
+    assert(metrics.areaUnderROC == mllibMetrics.areaUnderROC())
   }
 
-  test("read/write") {
-    val evaluator = new MulticlassClassificationEvaluator()
-      .setPredictionCol("myPrediction")
-      .setLabelCol("myLabel")
-      .setMetricName("accuracy")
-    testDefaultReadWrite(evaluator)
-  }
-
-  test("should support all NumericType labels and not support other types") {
-    MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, spark)
-  }
-
-  test("getMetrics should return a MultiClassClassificationMetrics") {
-    val df = Seq(
-      (1d, 0d),
-      (0d, 1d),
-      (2d, 2d)
-    ).toDF("prediction", "label")
-    val evaluator = new MulticlassClassificationEvaluator().setMetricName("accuracy")
-    val metrics = evaluator.getMetrics(df)
-    assert(metrics.accuracy == evaluator.evaluate(df))
-  }
 }

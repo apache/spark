@@ -89,4 +89,15 @@ class RegressionEvaluatorSuite
   test("should support all NumericType labels and not support other types") {
     MLTestingUtils.checkNumericTypes(new RegressionEvaluator, spark)
   }
+
+  test("getMetrics should return same result as evaluate") {
+    val df = Seq(
+      (1d, 0d),
+      (0d, 1d),
+      (2d, 2d)
+    ).toDF("prediction", "label")
+    val evaluator = new RegressionEvaluator().setMetricName("r2")
+    val metrics = evaluator.getMetrics(df)
+    assert(metrics.r2 == evaluator.evaluate(df))
+  }
 }

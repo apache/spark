@@ -21,8 +21,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
-import org.apache.spark.mllib.evaluation.RegressionMetrics
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, FloatType}
 
@@ -73,15 +72,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    val schema = dataset.schema
-    SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
-    SchemaUtils.checkNumericType(schema, $(labelCol))
-
-    val predictionAndLabels = dataset
-      .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
-      .rdd
-      .map { case Row(prediction: Double, label: Double) => (prediction, label) }
-    val metrics = new RegressionMetrics(predictionAndLabels)
+    val metrics = getMetrics(dataset)
     val metric = $(metricName) match {
       case "rmse" => metrics.rootMeanSquaredError
       case "mse" => metrics.meanSquaredError
@@ -89,6 +80,18 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       case "mae" => metrics.meanAbsoluteError
     }
     metric
+  }
+
+  @Since("2.3.0")
+  def getMetrics(dataset: Dataset[_]): RegressionMetrics = {
+    val schema = dataset.schema
+    SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
+    SchemaUtils.checkNumericType(schema, $(labelCol))
+
+    val predictionAndLabels = dataset
+      .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
+    val metrics = new RegressionMetrics(predictionAndLabels)
+    metrics
   }
 
   @Since("1.4.0")
