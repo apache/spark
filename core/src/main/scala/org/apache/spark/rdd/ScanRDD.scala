@@ -53,7 +53,7 @@ class ScanRDD[T: ClassTag, U: ClassTag](prev: RDD[T],
   }
 
   override def compute(splitIn: Partition, context: TaskContext): Iterator[(T, U)] = {
-    val split = splitIn.asInstanceOf[ScanRDDPartition]
+    val split = splitIn.asInstanceOf[ScanRDDPartition[U]]
     var cum = split.start
     val parentIter = firstParent[T].iterator(split.prev, context)
     parentIter.map { t =>
@@ -67,6 +67,6 @@ class ScanRDD[T: ClassTag, U: ClassTag](prev: RDD[T],
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    firstParent[T].preferredLocations(split.asInstanceOf[ScanRDDPartition].prev)
+    firstParent[T].preferredLocations(split.asInstanceOf[ScanRDDPartition[U]].prev)
   }
 }

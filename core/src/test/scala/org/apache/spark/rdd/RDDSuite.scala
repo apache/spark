@@ -859,15 +859,15 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     val n = 10
     val data = sc.parallelize(1 to n, 3)
 
-    val cumsum = data.scan(0)(_ + _, _ + _)
-    var cum1 = 0
+    val cumsum = data.scan(0.0)(_ + _, _ + _)
+    var cum1 = 0.0
     cumsum.collect().foreach { case (x, cum) =>
       cum1 += x
       assert(cum1 === cum)
     }
 
-    val cumprod = data.scan(1)(_ * _, _ * _)
-    var cum2 = 1
+    val cumprod = data.scan(1L)(_ * _, _ * _)
+    var cum2 = 1L
     cumprod.collect().foreach { case (x, cum) =>
       cum2 *= x
       assert(cum1 === cum)
