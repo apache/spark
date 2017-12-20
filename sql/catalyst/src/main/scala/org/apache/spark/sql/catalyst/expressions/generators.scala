@@ -199,8 +199,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Rows - we write these into an array.
-    val rowData = ctx.addMutableState("InternalRow[]", "rows",
-      v => s"$v = new InternalRow[$numRows];")
+    val rowData = ctx.freshName("rowsStack")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
     val code = ctx.splitExpressionsWithCurrentInputs(Seq.tabulate(numRows) { row =>
@@ -214,14 +213,11 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
     // Create the collection.
     val wrapperClass = classOf[mutable.WrappedArray[_]].getName
-    val wrappedArray = ctx.addMutableState(
-      s"$wrapperClass<InternalRow>",
-      "stackWrappedArray",
-      v => s"$v = $wrapperClass$$.MODULE$$.make($rowData);")
     ev.copy(code =
       s"""
+         |InternalRow[] $rowData = new InternalRow[$numRows];
          |$code
-         |$wrapperClass<InternalRow> ${ev.value} = $wrappedArray;
+         |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
        """.stripMargin, isNull = "false")
   }
 }
