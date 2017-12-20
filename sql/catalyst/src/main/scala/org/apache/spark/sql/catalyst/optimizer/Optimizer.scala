@@ -128,7 +128,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
-      OptimizeSubqueries) ::
+      OptimizeSubqueries,
+      RewritePredicateSubquery,
+      CollapseProject) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
@@ -152,7 +154,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
     Batch("RewriteSubquery", Once,
-      RewritePredicateSubquery,
       ColumnPruning,
       CollapseProject,
       RemoveRedundantProject)
