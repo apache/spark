@@ -602,23 +602,37 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    ctx.addMutableState("boolean", ev.isNull, "")
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
-    def updateEval(eval: ExprCode): String = {
+    val tmpIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "leastTmpIsNull")
+    val evals = evalChildren.map(eval =>
       s"""
-        ${eval.code}
-        if (!${eval.isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, ev.value, eval.value)})) {
-          ${ev.isNull} = false;
-          ${ev.value} = ${eval.value};
-        }
-      """
-    }
-    val codes = ctx.splitExpressions(ctx.INPUT_ROW, evalChildren.map(updateEval))
-    ev.copy(code = s"""
-      ${ev.isNull} = true;
-      ${ev.value} = ${ctx.defaultValue(dataType)};
-      $codes""")
+         |${eval.code}
+         |if (!${eval.isNull} && ($tmpIsNull ||
+         |  ${ctx.genGreater(dataType, ev.value, eval.value)})) {
+         |  $tmpIsNull = false;
+         |  ${ev.value} = ${eval.value};
+         |}
+      """.stripMargin
+    )
+
+    val resultType = ctx.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "least",
+      extraArguments = Seq(resultType -> ev.value),
+      returnType = resultType,
+      makeSplitFunction = body =>
+        s"""
+          |$body
+          |return ${ev.value};
+        """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
+    ev.copy(code =
+      s"""
+         |$tmpIsNull = true;
+         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$codes
+         |final boolean ${ev.isNull} = $tmpIsNull;
+      """.stripMargin)
   }
 }
 
@@ -668,22 +682,36 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    ctx.addMutableState("boolean", ev.isNull, "")
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
-    def updateEval(eval: ExprCode): String = {
+    val tmpIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "greatestTmpIsNull")
+    val evals = evalChildren.map(eval =>
       s"""
-        ${eval.code}
-        if (!${eval.isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, eval.value, ev.value)})) {
-          ${ev.isNull} = false;
-          ${ev.value} = ${eval.value};
-        }
-      """
-    }
-    val codes = ctx.splitExpressions(ctx.INPUT_ROW, evalChildren.map(updateEval))
-    ev.copy(code = s"""
-      ${ev.isNull} = true;
-      ${ev.value} = ${ctx.defaultValue(dataType)};
-      $codes""")
+         |${eval.code}
+         |if (!${eval.isNull} && ($tmpIsNull ||
+         |  ${ctx.genGreater(dataType, eval.value, ev.value)})) {
+         |  $tmpIsNull = false;
+         |  ${ev.value} = ${eval.value};
+         |}
+      """.stripMargin
+    )
+
+    val resultType = ctx.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "greatest",
+      extraArguments = Seq(resultType -> ev.value),
+      returnType = resultType,
+      makeSplitFunction = body =>
+        s"""
+           |$body
+           |return ${ev.value};
+        """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
+    ev.copy(code =
+      s"""
+         |$tmpIsNull = true;
+         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$codes
+         |final boolean ${ev.isNull} = $tmpIsNull;
+      """.stripMargin)
   }
 }

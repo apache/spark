@@ -25,7 +25,7 @@ import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.execution.SortExec
+import org.apache.spark.sql.execution.{BinaryExecNode, SortExec}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -856,5 +856,30 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
 
     joinQueries.foreach(assertJoinOrdering)
+  }
+
+  test("SPARK-22445 Respect stream-side child's needCopyResult in BroadcastHashJoin") {
+    val df1 = Seq((2, 3), (2, 5), (2, 2), (3, 8), (2, 1)).toDF("k", "v1")
+    val df2 = Seq((2, 8), (3, 7), (3, 4), (1, 2)).toDF("k", "v2")
+    val df3 = Seq((1, 1), (3, 2), (4, 3), (5, 1)).toDF("k", "v3")
+
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.JOIN_REORDER_ENABLED.key -> "false") {
+      val df = df1.join(df2, "k").join(functions.broadcast(df3), "k")
+      val plan = df.queryExecution.sparkPlan
+
+      // Check if `needCopyResult` in `BroadcastHashJoin` is correct when smj->bhj
+      val joins = new collection.mutable.ArrayBuffer[BinaryExecNode]()
+      plan.foreachUp {
+        case j: BroadcastHashJoinExec => joins += j
+        case j: SortMergeJoinExec => joins += j
+        case _ =>
+      }
+      assert(joins.size == 2)
+      assert(joins(0).isInstanceOf[SortMergeJoinExec])
+      assert(joins(1).isInstanceOf[BroadcastHashJoinExec])
+      checkAnswer(df, Row(3, 8, 7, 2) :: Row(3, 8, 4, 2) :: Nil)
+    }
   }
 }

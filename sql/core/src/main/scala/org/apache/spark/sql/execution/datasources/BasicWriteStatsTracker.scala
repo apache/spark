@@ -22,7 +22,7 @@ import java.io.FileNotFoundException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
@@ -44,7 +44,6 @@ case class BasicWriteTaskStats(
 
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
- * @param hadoopConf
  */
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   extends WriteTaskStatsTracker with Logging {
@@ -106,6 +105,13 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
 
   override def getFinalStats(): WriteTaskStats = {
     statCurrentFile()
+
+    // Reports bytesWritten and recordsWritten to the Spark output metrics.
+    Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
+      outputMetrics.setBytesWritten(numBytes)
+      outputMetrics.setRecordsWritten(numRows)
+    }
+
     if (submittedFiles != numFiles) {
       logInfo(s"Expected $submittedFiles files, but only saw $numFiles. " +
         "This could be due to the output format not writing empty files, " +

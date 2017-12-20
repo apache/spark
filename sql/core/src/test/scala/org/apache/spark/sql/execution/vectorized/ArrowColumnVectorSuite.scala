@@ -42,7 +42,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === BooleanType)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
@@ -71,7 +70,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === ByteType)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
@@ -100,7 +98,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === ShortType)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
@@ -129,7 +126,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === IntegerType)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
@@ -158,7 +154,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === LongType)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
@@ -187,7 +182,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === FloatType)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
@@ -216,7 +210,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === DoubleType)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
@@ -246,7 +239,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === StringType)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
@@ -274,7 +266,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === BinaryType)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
@@ -319,7 +310,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === ArrayType(IntegerType))
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     val array0 = columnVector.getArray(0)
@@ -383,7 +373,6 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
 
     val columnVector = new ArrowColumnVector(vector)
     assert(columnVector.dataType === schema)
-    assert(columnVector.anyNullsSet)
     assert(columnVector.numNulls === 1)
 
     val row0 = columnVector.getStruct(0, 2)

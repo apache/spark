@@ -39,7 +39,6 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     val completedStages = allStages.filter(_.status == StageStatus.COMPLETE)
     val failedStages = allStages.filter(_.status == StageStatus.FAILED).reverse
 
-    val numCompletedStages = completedStages.size
     val numFailedStages = failedStages.size
     val subPath = "stages"
 
@@ -69,10 +68,11 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     val shouldShowCompletedStages = completedStages.nonEmpty
     val shouldShowFailedStages = failedStages.nonEmpty
 
-    val completedStageNumStr = if (numCompletedStages == completedStages.size) {
-      s"$numCompletedStages"
+    val appSummary = parent.store.appSummary()
+    val completedStageNumStr = if (appSummary.numCompletedStages == completedStages.size) {
+      s"${appSummary.numCompletedStages}"
     } else {
-      s"$numCompletedStages, only showing ${completedStages.size}"
+      s"${appSummary.numCompletedStages}, only showing ${completedStages.size}"
     }
 
     val summary: NodeSeq =
