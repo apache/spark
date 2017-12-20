@@ -1280,6 +1280,34 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Zips this RDD with its cumulative "sum". The ordering is first based on the partition index
+   * and then the ordering of items within each partition. So the first item in the first
+   * partition gets "zero value", and the last item in the last partition receives the cumulative
+   * "sum" of the whole RDD.
+   *
+   * This is similar to Scala's scan but it ignore the first value equaling to "zero value"
+   * and can compute cumulative value in another type, U.
+   * This method needs to trigger a spark job when this RDD contains more than one partitions.
+   *
+   * @note Some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * elements in a partition. The cumulative "sum" assigned to each element is therefore not
+   * guaranteed, and may even change if the RDD is reevaluated. If a fixed ordering is required
+   * to guarantee the same value assignments, you should sort the RDD with sortByKey() or save
+   * it to a file.
+   *
+   * @param zeroValue the initial value for the accumulated result of each partition for the
+   *                  `seqOp` operator, and also the initial value for the combine results from
+   *                  different partitions for the `combOp` operator - this will typically be the
+   *                  neutral element (e.g. `Nil` for list concatenation or `0` for summation)
+   * @param seqOp an operator used to accumulate results within a partition
+   * @param combOp an associative operator used to combine results from different partitions
+   */
+  def scan[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U,
+                                      combOp: (U, U) => U): RDD[(T, U)] = withScope {
+    new ScanRDD(this, zeroValue, seqOp, combOp)
+  }
+
+  /**
    * Zips this RDD with its element indices. The ordering is first based on the partition index
    * and then the ordering of items within each partition. So the first item in the first
    * partition gets index 0, and the last item in the last partition receives the largest index.
