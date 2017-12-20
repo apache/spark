@@ -267,21 +267,28 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.driver.docker.image</code></td>
+  <td><code>spark.kubernetes.driver.container.image</code></td>
   <td><code>(none)</code></td>
   <td>
-    Docker image to use for the driver. Specify this using the standard
-    <a href="https://docs.docker.com/engine/reference/commandline/tag/">Docker tag</a> format.
+    Container image to use for the driver.
+    This is usually of the form `example.com/repo/spark-driver:v1.0.0`.
     This configuration is required and must be provided by the user.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.docker.image</code></td>
+  <td><code>spark.kubernetes.executor.container.image</code></td>
   <td><code>(none)</code></td>
   <td>
-    Docker image to use for the executors. Specify this using the standard
-    <a href="https://docs.docker.com/engine/reference/commandline/tag/">Docker tag</a> format.
+    Container image to use for the executors.
+    This is usually of the form `example.com/repo/spark-executor:v1.0.0`.
     This configuration is required and must be provided by the user.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.container.image.pullPolicy</code></td>
+  <td><code>IfNotPresent</code></td>
+  <td>
+    Container image pull policy used when pulling images within Kubernetes.
   </td>
 </tr>
 <tr>
@@ -335,6 +342,15 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.authenticate.submission.oauthTokenFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the OAuth token file containing the token to use when authenticating against the Kubernetes API server when starting the driver.
+    This file must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not
+    provide a scheme).
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.authenticate.driver.caCertFile</code></td>
   <td>(none)</td>
   <td>
@@ -372,6 +388,53 @@ specific to Spark on Kubernetes.
     the token to use for the authentication. This token value is uploaded to the driver pod. If this is specified, it is
     highly recommended to set up TLS for the driver submission server, as this value is sensitive information that would
     be passed to the driver pod in plaintext otherwise.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.oauthTokenFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the OAuth token file containing the token to use when authenticating against the Kubernetes API server from the driver pod when
+    requesting executors. Note that unlike the other authentication options, this file must contain the exact string value of
+    the token to use for the authentication. This token value is uploaded to the driver pod. If this is specified, it is
+    highly recommended to set up TLS for the driver submission server, as this value is sensitive information that would
+    be passed to the driver pod in plaintext otherwise.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.mounted.caCertFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the CA cert file for connecting to the Kubernetes API server over TLS from the driver pod when requesting
+    executors. This path must be accessible from the driver pod.
+    Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.mounted.clientKeyFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the client key file for authenticating against the Kubernetes API server from the driver pod when requesting
+    executors. This path must be accessible from the driver pod.
+    Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.mounted.clientCertFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the client cert file for authenticating against the Kubernetes API server from the driver pod when
+    requesting executors. This path must be accessible from the driver pod.
+    Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.mounted.oauthTokenFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the file containing the OAuth token to use when authenticating against the Kubernetes API server from the driver pod when
+    requesting executors. This path must be accessible from the driver pod.
+    Note that unlike the other authentication options, this file must contain the exact string value of the token to use for the authentication.
   </td>
 </tr>
 <tr>
@@ -428,6 +491,23 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.podNamePrefix</code></td>
+  <td>(none)</td>
+  <td>
+    Prefix for naming the executor pods.
+    If not set, the executor pod name is set to driver pod name suffixed by an integer.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.lostCheck.maxAttempts</code></td>
+  <td>10</td>
+  <td>
+    Number of times that the driver will try to ascertain the loss reason for a specific executor.
+    The loss reason is used to ascertain whether the executor failure is due to a framework or an application error
+    which in turn decides whether the executor is removed and replaced, or placed into a failed state for debugging.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.submission.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>
@@ -443,24 +523,17 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.docker.image.pullPolicy</code></td>
-  <td><code>IfNotPresent</code></td>
-  <td>
-    Docker image pull policy used when pulling Docker images with Kubernetes.
-  </td>
-</tr>
-<tr>
    <td><code>spark.kubernetes.driver.limit.cores</code></td>
    <td>(none)</td>
    <td>
-     Specify the hard cpu limit for the driver pod
+     Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the driver pod.
    </td>
  </tr>
  <tr>
    <td><code>spark.kubernetes.executor.limit.cores</code></td>
    <td>(none)</td>
    <td>
-     Specify the hard cpu limit for a single executor pod
+     Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for each executor pod launched for the Spark Application.
    </td>
  </tr>
  <tr>
@@ -481,22 +554,20 @@ specific to Spark on Kubernetes.
      the Driver process. The user can specify multiple of these to set multiple environment variables.
    </td>
  </tr>
- <tr>
-   <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
-   <td>(none)</td>
-   <td>
-     Mounts the [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/)
-     named <code>SecretName</code> onto the path specified by the value
-     in the driver Pod. The user can specify multiple instances of this for multiple secrets.
-   </td>
- </tr>
- <tr>
-   <td><code>spark.kubernetes.executor.secrets.[SecretName]</code></td>
-   <td>(none)</td>
-   <td>
-     Mounts the [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/)
-     named <code>SecretName</code> onto the path specified by the value
-     in the executor Pods. The user can specify multiple instances of this for multiple secrets.
-   </td>
- </tr>
+  <tr>
+    <td><code>spark.kubernetes.mountDependencies.jarsDownloadDir</code></td>
+    <td>/var/spark-data/spark-jars</td>
+    <td>
+      Location to download jars to in the driver and executors.
+      This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
+    </td>
+  </tr>
+   <tr>
+     <td><code>spark.kubernetes.mountDependencies.filesDownloadDir</code></td>
+     <td>/var/spark-data/spark-files</td>
+     <td>
+       Location to download jars to in the driver and executors.
+       This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
+     </td>
+   </tr>
 </table>
