@@ -47,7 +47,7 @@ To install Apache Mesos from source, follow these steps:
 
 1. Download a Mesos release from a
    [mirror](http://www.apache.org/dyn/closer.lua/mesos/{{site.MESOS_VERSION}}/)
-2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
+2. Follow the Mesos [Getting Started](http://mesos.apache.org/getting-started) page for compiling and
    installing Mesos
 
 **Note:** If you want to run Mesos without installing it into the default paths on your system
@@ -159,7 +159,7 @@ By setting the Mesos proxy config property (requires mesos version >= 1.4), `--c
 If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
 
 The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
-For more information about these configurations please refer to the configurations [doc](configurations.html#deploy).
+For more information about these configurations please refer to the configurations [doc](configuration.html#deploy).
 
 You can also specify any additional jars required by the `MesosClusterDispatcher` in the classpath by setting the environment variable SPARK_DAEMON_CLASSPATH in spark-env.
 
@@ -263,7 +263,10 @@ resource offers will be accepted.
 conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
 {% endhighlight %}
 
-For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will
+be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+
+To constrain where driver tasks are run, use `spark.mesos.driver.constraints`
 
 # Mesos Docker Support
 
@@ -447,7 +450,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.constraints</code></td>
   <td>(none)</td>
   <td>
-    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos Attributes & Resources</a> for more information on attributes.
+    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. This setting
+    applies only to executors. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos
+    Attributes & Resources</a> for more information on attributes.
     <ul>
       <li>Scalar constraints are matched with "less than equal" semantics i.e. value in the constraint must be less than or equal to the value in the resource offer.</li>
       <li>Range constraints are matched with "contains" semantics i.e. value in the constraint must be within the resource offer's value.</li>
@@ -455,6 +460,14 @@ See the [configuration page](configuration.html) for information on Spark config
       <li>Text constraints are matched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
       <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
     </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.constraints</code></td>
+  <td>(none)</td>
+  <td>
+    Same as <code>spark.mesos.constraints</code> except applied to drivers when launched through the dispatcher. By default,
+    all offers with sufficient resources will be accepted.
   </td>
 </tr>
 <tr>

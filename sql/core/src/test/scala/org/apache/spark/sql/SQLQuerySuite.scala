@@ -25,10 +25,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1665,7 +1666,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
     }
-    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+    assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
@@ -2759,31 +2760,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-22573 Shouldn't inferFilters if it contains SubqueryExpression") {
-    withTempView("lineitem", "orders", "customer") {
-      Seq((1, 1.0)).toDF("L_ORDERKEY", "L_QUANTITY").createTempView("lineitem")
-      Seq((1, 1, 12.3, "s1")).toDF("O_ORDERKEY", "O_CUSTKEY", "O_TOTALPRICE", "O_ORDERDATE").
-        createTempView("orders")
-      Seq((1, "n1")).toDF("C_CUSTKEY", "C_NAME").createTempView("customer")
+  // Only New OrcFileFormat supports this
+  Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
+      "parquet").foreach { format =>
+    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        val emptyDf = Seq((true, 1, "str")).toDF.limit(0)
+        emptyDf.write.format(format).save(path)
 
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-        val executedPlan = spark.sql(
-          """
-            |SELECT C_NAME, C_CUSTKEY, O_ORDERKEY, O_ORDERDATE, O_TOTALPRICE,
-            |SUM(L_QUANTITY) AS SUM_QUANTITY
-            |FROM CUSTOMER, ORDERS, LINEITEM
-            |WHERE O_ORDERKEY IN (SELECT L_ORDERKEY
-            |		FROM LINEITEM
-            |		GROUP BY L_ORDERKEY
-            |		HAVING SUM(L_QUANTITY) > 300)
-            |	AND C_CUSTKEY = O_CUSTKEY
-            |	AND O_ORDERKEY = L_ORDERKEY
-            |GROUP BY C_NAME, C_CUSTKEY, O_ORDERKEY, O_ORDERDATE, O_TOTALPRICE
-            |ORDER BY O_TOTALPRICE DESC, O_ORDERDATE
-          """.stripMargin).queryExecution.executedPlan
-        val isSubqueryExists = executedPlan.treeString
-          .contains("SortMergeJoin [_1#223], [L_ORDERKEY#226#278], LeftSemi")
-        assert(!isSubqueryExists)
+        val df = spark.read.format(format).load(path)
+        assert(df.schema.sameType(emptyDf.schema))
+        checkAnswer(df, emptyDf)
       }
     }
   }

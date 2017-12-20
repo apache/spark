@@ -468,4 +468,40 @@ trait HasAggregationDepth extends Params {
   /** @group expertGetParam */
   final def getAggregationDepth: Int = $(aggregationDepth)
 }
+
+/**
+ * Trait for shared param collectSubModels (default: false). This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasCollectSubModels extends Params {
+
+  /**
+   * Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
+   * @group expertParam
+   */
+  final val collectSubModels: BooleanParam = new BooleanParam(this, "collectSubModels", "whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver")
+
+  setDefault(collectSubModels, false)
+
+  /** @group expertGetParam */
+  final def getCollectSubModels: Boolean = $(collectSubModels)
+}
+
+/**
+ * Trait for shared param loss. This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasLoss extends Params {
+
+  /**
+   * Param for the loss function to be optimized.
+   * @group param
+   */
+  val loss: Param[String] = new Param[String](this, "loss", "the loss function to be optimized")
+
+  /** @group getParam */
+  final def getLoss: String = $(loss)
+}
 // scalastyle:on

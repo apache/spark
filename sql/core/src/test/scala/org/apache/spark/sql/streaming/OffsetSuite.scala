@@ -18,7 +18,8 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.{LongOffset, SerializedOffset}
+import org.apache.spark.sql.sources.v2.reader.Offset
 
 trait OffsetSuite extends SparkFunSuite {
   /** Creates test to check all the comparisons of offsets given a `one` that is less than `two`. */

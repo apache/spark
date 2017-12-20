@@ -18,6 +18,7 @@
 package org.apache.spark.status
 
 import java.util.Date
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.HashMap
 
@@ -28,6 +29,7 @@ import org.apache.spark.status.api.v1
 import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.AccumulatorContext
+import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.kvstore.KVStore
 
 /**
@@ -37,10 +39,12 @@ import org.apache.spark.util.kvstore.KVStore
  */
 private[spark] abstract class LiveEntity {
 
-  var lastWriteTime = 0L
+  var lastWriteTime = -1L
 
-  def write(store: KVStore, now: Long): Unit = {
-    store.write(doUpdate())
+  def write(store: ElementTrackingStore, now: Long, checkTriggers: Boolean = false): Unit = {
+    // Always check triggers on the first write, since adding an element to the store may
+    // cause the maximum count for the element type to be exceeded.
+    store.write(doUpdate(), checkTriggers || lastWriteTime == -1L)
     lastWriteTime = now
   }
 
@@ -63,6 +67,12 @@ private class LiveJob(
   var activeTasks = 0
   var completedTasks = 0
   var failedTasks = 0
+
+  // Holds both the stage ID and the task index, packed into a single long value.
+  val completedIndices = new OpenHashSet[Long]()
+
+  var killedTasks = 0
+  var killedSummary: Map[String, Int] = Map()
 
   var skippedTasks = 0
   var skippedStages = Set[Int]()
@@ -89,19 +99,23 @@ private class LiveJob(
       completedTasks,
       skippedTasks,
       failedTasks,
+      killedTasks,
+      completedIndices.size,
       activeStages,
       completedStages.size,
       skippedStages.size,
-      failedStages)
+      failedStages,
+      killedSummary)
     new JobDataWrapper(info, skippedStages)
   }
 
 }
 
 private class LiveTask(
-    info: TaskInfo,
+    var info: TaskInfo,
     stageId: Int,
-    stageAttemptId: Int) extends LiveEntity {
+    stageAttemptId: Int,
+    lastUpdateTime: Option[Long]) extends LiveEntity {
 
   import LiveEntityHelpers._
 
@@ -126,6 +140,7 @@ private class LiveTask(
         metrics.resultSerializationTime,
         metrics.memoryBytesSpilled,
         metrics.diskBytesSpilled,
+        metrics.peakExecutionMemory,
         new v1.InputMetrics(
           metrics.inputMetrics.bytesRead,
           metrics.inputMetrics.recordsRead),
@@ -186,6 +201,7 @@ private class LiveTask(
       0L, 0L, 0L,
       metrics.memoryBytesSpilled - old.memoryBytesSpilled,
       metrics.diskBytesSpilled - old.diskBytesSpilled,
+      0L,
       inputDelta,
       outputDelta,
       shuffleReadDelta,
@@ -193,12 +209,19 @@ private class LiveTask(
   }
 
   override protected def doUpdate(): Any = {
+    val duration = if (info.finished) {
+      info.duration
+    } else {
+      info.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis()))
+    }
+
     val task = new v1.TaskData(
       info.taskId,
       info.index,
       info.attemptNumber,
       new Date(info.launchTime),
-      if (info.finished) Some(info.duration) else None,
+      if (info.gettingResult) Some(new Date(info.gettingResultTime)) else None,
+      Some(duration),
       info.executorId,
       info.host,
       info.status,
@@ -340,10 +363,15 @@ private class LiveExecutorStageSummary(
       taskTime,
       failedTasks,
       succeededTasks,
+      killedTasks,
       metrics.inputBytes,
+      metrics.inputRecords,
       metrics.outputBytes,
+      metrics.outputRecords,
       metrics.shuffleReadBytes,
+      metrics.shuffleReadRecords,
       metrics.shuffleWriteBytes,
+      metrics.shuffleWriteRecords,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
@@ -361,11 +389,16 @@ private class LiveStage extends LiveEntity {
   var info: StageInfo = null
   var status = v1.StageStatus.PENDING
 
+  var description: Option[String] = None
   var schedulingPool: String = SparkUI.DEFAULT_POOL_NAME
 
   var activeTasks = 0
   var completedTasks = 0
   var failedTasks = 0
+  val completedIndices = new OpenHashSet[Int]()
+
+  var killedTasks = 0
+  var killedSummary: Map[String, Int] = Map()
 
   var firstLaunchTime = Long.MaxValue
 
@@ -373,26 +406,34 @@ private class LiveStage extends LiveEntity {
 
   val executorSummaries = new HashMap[String, LiveExecutorStageSummary]()
 
+  // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
+  @volatile var cleaning = false
+  var savedTasks = new AtomicInteger(0)
+
   def executorSummary(executorId: String): LiveExecutorStageSummary = {
     executorSummaries.getOrElseUpdate(executorId,
       new LiveExecutorStageSummary(info.stageId, info.attemptId, executorId))
   }
 
-  override protected def doUpdate(): Any = {
-    val update = new v1.StageData(
+  def toApi(): v1.StageData = {
+    new v1.StageData(
       status,
       info.stageId,
       info.attemptId,
 
+      info.numTasks,
       activeTasks,
       completedTasks,
       failedTasks,
+      killedTasks,
+      completedIndices.size,
 
       metrics.executorRunTime,
       metrics.executorCpuTime,
       info.submissionTime.map(new Date(_)),
       if (firstLaunchTime < Long.MaxValue) Some(new Date(firstLaunchTime)) else None,
       info.completionTime.map(new Date(_)),
+      info.failureReason,
 
       metrics.inputBytes,
       metrics.inputRecords,
@@ -406,14 +447,19 @@ private class LiveStage extends LiveEntity {
       metrics.diskBytesSpilled,
 
       info.name,
+      description,
       info.details,
       schedulingPool,
 
+      info.rddInfos.map(_.id),
       newAccumulatorInfos(info.accumulables.values),
       None,
-      None)
+      None,
+      killedSummary)
+  }
 
-    new StageDataWrapper(update, jobIds)
+  override protected def doUpdate(): Any = {
+    new StageDataWrapper(toApi(), jobIds)
   }
 
 }
@@ -531,6 +577,16 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
       Some(partitionSeq))
 
     new RDDStorageInfoWrapper(rdd)
+  }
+
+}
+
+private class SchedulerPool(name: String) extends LiveEntity {
+
+  var stageIds = Set[Int]()
+
+  override protected def doUpdate(): Any = {
+    new PoolData(name, stageIds)
   }
 
 }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.TimeZone;
 
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -78,6 +79,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private boolean[] missingColumns;
 
   /**
+   * The timezone that timestamp INT96 values should be converted to. Null if no conversion. Here to workaround
+   * incompatibilities between different engines when writing timestamp values.
+   */
+  private TimeZone convertTz = null;
+
+  /**
    * columnBatch object that is used for batch decoding. This is created on first use and triggers
    * batched decoding. It is not valid to interleave calls to the batched interface with the row
    * by row RecordReader APIs.
@@ -101,9 +108,18 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private boolean returnColumnarBatch;
 
   /**
-   * The default config on whether columnarBatch should be offheap.
+   * The memory mode of the columnarBatch
    */
-  private static final MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
+  private final MemoryMode MEMORY_MODE;
+
+  public VectorizedParquetRecordReader(TimeZone convertTz, boolean useOffHeap) {
+    this.convertTz = convertTz;
+    MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
+  }
+
+  public VectorizedParquetRecordReader(boolean useOffHeap) {
+    this(null, useOffHeap);
+  }
 
   /**
    * Implementation of RecordReader API.
@@ -204,11 +220,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   public void initBatch() {
-    initBatch(DEFAULT_MEMORY_MODE, null, null);
+    initBatch(MEMORY_MODE, null, null);
   }
 
   public void initBatch(StructType partitionColumns, InternalRow partitionValues) {
-    initBatch(DEFAULT_MEMORY_MODE, partitionColumns, partitionValues);
+    initBatch(MEMORY_MODE, partitionColumns, partitionValues);
   }
 
   /**
@@ -287,8 +303,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     columnReaders = new VectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
-      columnReaders[i] = new VectorizedColumnReader(
-        columns.get(i), types.get(i).getOriginalType(), pages.getPageReader(columns.get(i)));
+      columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
+        pages.getPageReader(columns.get(i)), convertTz);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

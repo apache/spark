@@ -483,18 +483,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("commented lines in CSV data") {
-    val results = spark.read
-      .format("csv")
-      .options(Map("comment" -> "~", "header" -> "false"))
-      .load(testFile(commentsFile))
-      .collect()
+    Seq("false", "true").foreach { multiLine =>
 
-    val expected =
-      Seq(Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
-        Seq("6", "7", "8", "9", "0", "2015-08-21 16:58:01"),
-        Seq("1", "2", "3", "4", "5", "2015-08-23 18:00:42"))
+      val results = spark.read
+        .format("csv")
+        .options(Map("comment" -> "~", "header" -> "false", "multiLine" -> multiLine))
+        .load(testFile(commentsFile))
+        .collect()
 
-    assert(results.toSeq.map(_.toSeq) === expected)
+      val expected =
+        Seq(Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
+          Seq("6", "7", "8", "9", "0", "2015-08-21 16:58:01"),
+          Seq("1", "2", "3", "4", "5", "2015-08-23 18:00:42"))
+
+      assert(results.toSeq.map(_.toSeq) === expected)
+    }
   }
 
   test("inferring schema with commented lines in CSV data") {
