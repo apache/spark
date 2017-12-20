@@ -574,8 +574,9 @@ object TypeCoercion {
   case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformExpressionsUp {
-      case c @ Concat(children, _)
-          if conf.concatBinaryModeEnabled &&
+      case c @ Concat(children, isBinaryMode)
+          if !conf.concatBinaryAsString &&
+            !isBinaryMode &&
             c.childrenResolved &&
             children.nonEmpty &&
             children.forall(_.dataType == BinaryType) =>
