@@ -587,20 +587,24 @@ case class HashAggregateExec(
           fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
         ctx.addInnerClass(generatedMap)
 
+        // inline mutable state since not many aggregation operations in a task
         fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, "vectorizedHastHashMap",
-          v => s"$v = new $fastHashMapClassName();")
-        ctx.addMutableState(s"java.util.Iterator<InternalRow>", "vectorizedFastHashMapIter")
+          v => s"$v = new $fastHashMapClassName();", forceInline = true)
+        ctx.addMutableState(s"java.util.Iterator<InternalRow>", "vectorizedFastHashMapIter",
+          forceInline = true)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
           fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
         ctx.addInnerClass(generatedMap)
 
+        // inline mutable state since not many aggregation operations in a task
         fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, "fastHashMap",
           v => s"$v = new $fastHashMapClassName(" +
-            s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());")
+            s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());",
+          forceInline = true)
         ctx.addMutableState(
           "org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>",
-          "fastHashMapIter")
+          "fastHashMapIter", forceInline = true)
       }
     }
 
@@ -611,7 +615,7 @@ case class HashAggregateExec(
     // create hashMap
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
     hashMapTerm = ctx.addMutableState(hashMapClassName, "hashMap",
-      v => s"$v = $thisPlan.createHashMap();")
+      v => s"$v = $thisPlan.createHashMap();", forceInline = true)
     sorterTerm = ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, "sorter",
       forceInline = true)
 
