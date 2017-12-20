@@ -635,23 +635,26 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
 
 /**
  * Combine nested [[Concat]] expressions.
+ *
+ * If `spark.sql.expression.concat.binaryMode.enabled` is true and all inputs are binary,
+ * the type coercion rule `ConcatCoercion` sets true at `isBinaryMode`s in all the nested concat
+ * expressions. So, this optimizer rule just passes a given concat `isBinaryMode`
+ * into a combined concat.
  */
 object CombineConcats extends Rule[LogicalPlan] {
 
   private def flattenConcats(concat: Concat): Concat = {
     val stack = Stack[Expression](concat)
     val flattened = ArrayBuffer.empty[Expression]
-    var isBinaryMode = concat.isBinaryMode
     while (stack.nonEmpty) {
       stack.pop() match {
-        case Concat(children, binary) =>
-          isBinaryMode &= binary
+        case Concat(children, _) =>
           stack.pushAll(children.reverse)
         case child =>
           flattened += child
       }
     }
-    Concat(flattened, isBinaryMode)
+    Concat(flattened, concat.isBinaryMode)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {

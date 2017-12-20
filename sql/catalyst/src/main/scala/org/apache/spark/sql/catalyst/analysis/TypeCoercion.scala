@@ -52,7 +52,8 @@ object TypeCoercion {
       PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
-      new FunctionArgumentConversion(conf) ::
+      FunctionArgumentConversion ::
+      ConcatCoercion(conf) ::
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
@@ -480,9 +481,9 @@ object TypeCoercion {
   /**
    * This ensure that the types for various functions are as expected.
    */
-  class FunctionArgumentConversion(conf: SQLConf) extends TypeCoercionRule {
+  object FunctionArgumentConversion extends TypeCoercionRule {
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -565,9 +566,14 @@ object TypeCoercion {
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
     }
-    // This group needs to be transformed in a post order
-    .transformExpressionsUp {
-      // When all inputs in [[Concat]] are binary, coerces an output type to binary
+  }
+
+  /**
+   * When all inputs in [[Concat]] are binary, coerces an output type to binary
+   */
+  case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformExpressionsUp {
       case c @ Concat(children, _)
           if conf.concatBinaryModeEnabled &&
             c.childrenResolved &&

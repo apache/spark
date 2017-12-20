@@ -54,7 +54,12 @@ case class Concat(children: Seq[Expression], isBinaryMode: Boolean = false)
   def this(children: Seq[Expression]) = this(children, false)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(children.size)(if (isBinaryMode) BinaryType else StringType)
+    if (isBinaryMode) {
+      Seq.fill(children.size)(BinaryType)
+    } else {
+      Seq.fill(children.size)(StringType)
+    }
+
   override def dataType: DataType = if (isBinaryMode) BinaryType else StringType
 
   override def nullable: Boolean = children.exists(_.nullable)
@@ -101,6 +106,8 @@ case class Concat(children: Seq[Expression], isBinaryMode: Boolean = false)
   }
 
   override def toString: String = s"concat(${children.mkString(", ")})"
+
+  override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
 }
 
 

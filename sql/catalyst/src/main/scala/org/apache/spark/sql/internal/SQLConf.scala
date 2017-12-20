@@ -1043,7 +1043,7 @@ object SQLConf {
         "dummy value. This is currently used to redact the output of SQL explain commands. " +
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
-  
+
   val CONCAT_BINARY_MODE_ENABLED = buildConf("spark.sql.expression.concat.binaryMode.enabled")
     .doc("When this option is set to true and all inputs are binary, `functions.concat` returns " +
       "an output as binary. Otherwise, it returns as string. ")
