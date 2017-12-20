@@ -85,16 +85,15 @@ class ContinuousDataSourceRDD(
     new Iterator[UnsafeRow] {
       private val POLL_TIMEOUT_MS = 1000
 
-      private var currentRow: UnsafeRow = _
+      private var currentEntry: (UnsafeRow, PartitionOffset) = _
       private var currentOffset: PartitionOffset = startOffset
       private var currentEpoch =
         context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
       override def hasNext(): Boolean = {
-        var entry: (UnsafeRow, PartitionOffset) = null
-        while (entry == null) {
+        while (currentEntry == null) {
           if (context.isInterrupted() || context.isCompleted()) {
-            entry = (null, null)
+            currentEntry = (null, null)
           }
           if (dataReaderFailed.get()) {
             throw new SparkException("data read failed", dataReaderThread.failureReason)
@@ -102,10 +101,10 @@ class ContinuousDataSourceRDD(
           if (epochPollFailed.get()) {
             throw new SparkException("epoch poll failed", epochPollRunnable.failureReason)
           }
-          entry = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+          currentEntry = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         }
 
-        entry match {
+        currentEntry match {
           // epoch boundary marker
           case (null, null) =>
             epochEndpoint.send(ReportPartitionOffset(
@@ -113,18 +112,19 @@ class ContinuousDataSourceRDD(
               currentEpoch,
               currentOffset))
             currentEpoch += 1
+            currentEntry = null
             false
           // real row
-          case (row, offset) =>
-            currentRow = row
+          case (_, offset) =>
             currentOffset = offset
             true
         }
       }
 
       override def next(): UnsafeRow = {
-        val r = currentRow
-        currentRow = null
+        if (currentEntry == null) throw new NoSuchElementException("No current row was set")
+        val r = currentEntry._1
+        currentEntry = null
         r
       }
     }
@@ -150,7 +150,7 @@ class EpochPollRunnable(
 
   override def run(): Unit = {
     try {
-      val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch())
+      val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch)
       for (i <- currentEpoch to newEpoch - 1) {
         queue.put((null, null))
         logDebug(s"Sent marker to start epoch ${i + 1}")

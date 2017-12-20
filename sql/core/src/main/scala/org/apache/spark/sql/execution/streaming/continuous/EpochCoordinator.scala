@@ -175,12 +175,12 @@ private[continuous] class EpochCoordinator(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case GetCurrentEpoch() =>
+    case GetCurrentEpoch =>
       val result = currentDriverEpoch
       logDebug(s"Epoch $result")
       context.reply(result)
 
-    case IncrementAndGetEpoch() =>
+    case IncrementAndGetEpoch =>
       currentDriverEpoch += 1
       context.reply(currentDriverEpoch)
 

@@ -236,7 +236,7 @@ class ContinuousExecution(
               }
               false
             } else if (isActive) {
-              currentBatchId = epochEndpoint.askSync[Long](IncrementAndGetEpoch())
+              currentBatchId = epochEndpoint.askSync[Long](IncrementAndGetEpoch)
               logInfo(s"New epoch $currentBatchId is starting.")
               true
             } else {
