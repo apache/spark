@@ -83,20 +83,29 @@ class ContinuousDataSourceRDD(
 
     val epochEndpoint = EpochCoordinatorRef.get(runId, SparkEnv.get)
     new Iterator[UnsafeRow] {
+      private val POLL_TIMEOUT_MS = 1000
+
       private var currentRow: UnsafeRow = _
       private var currentOffset: PartitionOffset = startOffset
       private var currentEpoch =
         context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
       override def hasNext(): Boolean = {
-        if (dataReaderFailed.get()) {
-          throw new SparkException("data read failed", dataReaderThread.failureReason)
-        }
-        if (epochPollFailed.get()) {
-          throw new SparkException("epoch poll failed", epochPollRunnable.failureReason)
+        var entry: (UnsafeRow, PartitionOffset) = null
+        while (entry == null) {
+          if (context.isInterrupted() || context.isCompleted()) {
+            entry = (null, null)
+          }
+          if (dataReaderFailed.get()) {
+            throw new SparkException("data read failed", dataReaderThread.failureReason)
+          }
+          if (epochPollFailed.get()) {
+            throw new SparkException("epoch poll failed", epochPollRunnable.failureReason)
+          }
+          entry = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         }
 
-        queue.take() match {
+        entry match {
           // epoch boundary marker
           case (null, null) =>
             epochEndpoint.send(ReportPartitionOffset(

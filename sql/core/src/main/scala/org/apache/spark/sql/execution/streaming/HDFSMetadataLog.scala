@@ -274,7 +274,6 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       .map(f => pathToBatchId(f.getPath))
 
     for (batchId <- batchIds if batchId > thresholdBatchId) {
-      print(s"AAAAA purging\n")
       val path = batchIdToPath(batchId)
       fileManager.delete(path)
       logTrace(s"Removed metadata log file: $path")
