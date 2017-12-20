@@ -487,7 +487,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
       val cal = classOf[Calendar].getName
       val c = "calWeekOfYear"
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      ctx.addMutableState(cal, c, v =>
+      ctx.addImmutableStateIfNotExists(cal, c, v =>
         s"""
            |$v = $cal.getInstance($dtu.getTimeZone("UTC"));
            |$v.setFirstDayOfWeek($cal.MONDAY);
@@ -1197,7 +1197,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
           v => s"""$v = $dtu.getTimeZone("$tz");""")
         val utcTerm = "tzUTC"
-        ctx.addMutableState(tzClass, utcTerm,
+        ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
           v => s"""$v = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
