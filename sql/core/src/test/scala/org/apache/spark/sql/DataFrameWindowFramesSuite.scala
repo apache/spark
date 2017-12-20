@@ -140,6 +140,43 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
   }
 
+  test("range between should accept at most one ORDER BY expression when unbounded") {
+    val df = Seq((1, 1)).toDF("key", "value")
+    val window = Window.orderBy($"key", $"value")
+
+    checkAnswer(
+      df.select(
+        $"key",
+        min("key").over(
+          window.rangeBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
+      Seq(Row(1, 1))
+    )
+
+    val e = intercept[AnalysisException](
+      df.select(
+        min("key").over(window.rangeBetween(-1, 1))))
+    assert(e.message.contains("A range window frame with value boundaries cannot be used in a " +
+      "window specification with multiple order by expressions"))
+  }
+
+  test("range between should accept numeric values only when bounded") {
+    val df = Seq("non_numeric").toDF("value")
+    val window = Window.orderBy($"value")
+
+    checkAnswer(
+      df.select(
+        $"value",
+        min("value").over(
+          window.rangeBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
+      Row("non_numeric", "non_numeric") :: Nil)
+
+    val e = intercept[AnalysisException](
+      df.select(
+        min("value").over(window.rangeBetween(-1, 1))))
+    assert(e.message.contains("The data type of the lower bound 'StringType " +
+      "does not match the expected data type"))
+  }
+
   test("range between should accept int/long values as boundary") {
     val df = Seq((1L, "1"), (1L, "1"), (2147483650L, "1"), (3L, "2"), (2L, "1"), (2147483650L, "2"))
       .toDF("key", "value")
@@ -263,7 +300,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
           .as("avg_key2")),
       Row(3, 3.0d, 4.0d) :: Row(5, 4.0d, 5.0d) :: Row(2, 2.0d, 17.0d / 4.0d) ::
         Row(4, 11.0d / 3.0d, 5.0d) :: Row(5, 17.0d / 4.0d, 11.0d / 2.0d) ::
-        Row(6, 17.0d / 4.0d, 6.0d) ::Nil)
+        Row(6, 17.0d / 4.0d, 6.0d) :: Nil)
   }
 
   // This is here to illustrate the fact that reverse order also reverses offsets.
