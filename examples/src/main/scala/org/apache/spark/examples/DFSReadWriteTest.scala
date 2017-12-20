@@ -106,7 +106,7 @@ object DFSReadWriteTest {
       .getOrCreate()
 
     println("Writing local file to DFS")
-    val dfsFilename = s"${dfsDirPath}/dfs_read_write_test"
+    val dfsFilename = s"$dfsDirPath/dfs_read_write_test"
     val fileRDD = spark.sparkContext.parallelize(fileContents)
     fileRDD.saveAsTextFile(dfsFilename)
 
