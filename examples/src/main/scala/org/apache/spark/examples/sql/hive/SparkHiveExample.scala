@@ -101,12 +101,9 @@ object SparkHiveExample {
     // |  4| val_4|  4| val_4|
     // |  5| val_5|  5| val_5|
     // ...
-    // $example off:spark_hive$
-
-    // $example on:spark_hive$
-    // to save DataFrame to Hive Managed table as Parquet format
 
     /*
+     * Save DataFrame to Hive Managed table as Parquet format
      * 1. Create Hive Database / Schema with location at HDFS if you want to mentioned explicitly else default
      * warehouse location will be used to store Hive table Data.
      * Ex: CREATE DATABASE IF NOT EXISTS database_name LOCATION hdfs_path;
@@ -118,8 +115,8 @@ object SparkHiveExample {
     val hiveTableDF = sql("SELECT * FROM records").toDF()
     hiveTableDF.write.mode(SaveMode.Overwrite).saveAsTable("database_name.records")
 
-    // to save DataFrame to Hive External table as compatible parquet format.
     /*
+     * Save DataFrame to Hive External table as compatible parquet format.
      * 1. Create Hive External table with storage format as parquet.
      * Ex: CREATE EXTERNAL TABLE records(key int, value string) STORED AS PARQUET;
      * Since we are not explicitly providing hive database location, it automatically takes default warehouse location
