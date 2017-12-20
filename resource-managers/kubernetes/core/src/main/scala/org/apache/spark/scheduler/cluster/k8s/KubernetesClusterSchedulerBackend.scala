@@ -86,7 +86,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
-  private val podAllocationInterval = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
+  private val podAllocationInterval = conf.getTimeAsMs(KUBERNETES_ALLOCATION_BATCH_DELAY.key)
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
 
@@ -217,7 +217,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         .watch(new ExecutorPodsWatcher()))
 
     allocatorExecutor.scheduleWithFixedDelay(
-      allocatorRunnable, 0L, podAllocationInterval.toLong, TimeUnit.MILLISECONDS)
+      allocatorRunnable, 0L, podAllocationInterval, TimeUnit.MILLISECONDS)
 
     if (!Utils.isDynamicAllocationEnabled(conf)) {
       doRequestTotalExecutors(initialExecutors)
