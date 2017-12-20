@@ -81,7 +81,7 @@ class ContinuousExecution(
       try {
         runContinuous(sparkSessionForStream)
       } catch {
-        case _: Throwable if state.get().equals(RECONFIGURING) =>
+        case _: InterruptedException if state.get().equals(RECONFIGURING) =>
           // swallow exception and run again
           state.set(ACTIVE)
       }
