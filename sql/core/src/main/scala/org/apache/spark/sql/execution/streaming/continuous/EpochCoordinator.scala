@@ -36,7 +36,7 @@ private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
 /**
  * Atomically increment the current epoch and get the new value.
  */
-private[sql] case class IncrementAndGetEpoch() extends EpochCoordinatorMessage
+private[sql] case object IncrementAndGetEpoch extends EpochCoordinatorMessage
 
 // Init messages
 /**
@@ -50,7 +50,7 @@ case class SetWriterPartitions(numPartitions: Int) extends EpochCoordinatorMessa
 /**
  * Get the current epoch.
  */
-private[sql] case class GetCurrentEpoch() extends EpochCoordinatorMessage
+private[sql] case object GetCurrentEpoch extends EpochCoordinatorMessage
 /**
  * Commit a partition at the specified epoch with the given message.
  */
