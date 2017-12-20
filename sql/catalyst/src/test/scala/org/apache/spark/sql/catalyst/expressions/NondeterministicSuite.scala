@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 
 class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("MonotonicallyIncreasingID") {
@@ -31,20 +30,5 @@ class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("InputFileName") {
     checkEvaluation(InputFileName(), "")
-  }
-
-  test("SPARK-22750: SparkPartitionID should reuse the mutable state") {
-    val ctx = new CodegenContext
-    SparkPartitionID().genCode(ctx)
-    SparkPartitionID().genCode(ctx)
-    assert(ctx.inlinedMutableStates.length == 1)
-  }
-
-  test("SPARK-22750: MonotonicallyIncreasingID should reuse the mutable state") {
-    val ctx = new CodegenContext
-    MonotonicallyIncreasingID().genCode(ctx)
-    MonotonicallyIncreasingID().genCode(ctx)
-    // one mutable state for each counter and one for the shared partition mask
-    assert(ctx.inlinedMutableStates.length == 3)
   }
 }
