@@ -62,6 +62,9 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
 
   private val queues = new CopyOnWriteArrayList[AsyncEventQueue]()
 
+  // Visible for testing.
+  private[scheduler] var queuedEvents = new mutable.ListBuffer[SparkListenerEvent]()
+
   /** Add a listener to queue shared by all non-internal listeners. */
   def addToSharedQueue(listener: SparkListenerInterface): Unit = {
     addToQueue(listener, SHARED_QUEUE)
@@ -124,13 +127,19 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   }
 
   /** Post an event to all queues. */
-  def post(event: SparkListenerEvent): Unit = {
-    if (!stopped.get()) {
-      metrics.numEventsPosted.inc()
+  def post(event: SparkListenerEvent): Unit = synchronized {
+    if (stopped.get()) {
+      return
+    }
+
+    metrics.numEventsPosted.inc()
+    if (started.get()) {
       val it = queues.iterator()
       while (it.hasNext()) {
         it.next().post(event)
       }
+    } else {
+      queuedEvents += event
     }
   }
 
@@ -149,7 +158,11 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     }
 
     this.sparkContext = sc
-    queues.asScala.foreach(_.start(sc))
+    queues.asScala.foreach { q =>
+      q.start(sc)
+      queuedEvents.foreach(q.post)
+    }
+    queuedEvents = null
     metricsSystem.registerSource(metrics)
   }
 
