@@ -251,7 +251,7 @@ case class SpecifiedWindowFrame(
       TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
       TypeCheckFailure(
-        s"The data type of the $location bound '${e.dataType} does not match " +
+        s"The data type of the $location bound '${e.dataType}' does not match " +
           s"the expected data type '${frameType.inputType.simpleString}'.")
     case _ => TypeCheckSuccess
   }
