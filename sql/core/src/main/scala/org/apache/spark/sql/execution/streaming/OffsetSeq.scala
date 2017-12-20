@@ -23,7 +23,6 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.internal.SQLConf.{SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS}
-import org.apache.spark.sql.sources.v2.reader.Offset
 
 /**
  * An ordered collection of offsets, used to track the progress of processing data from one or more

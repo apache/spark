@@ -27,7 +27,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
-import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.types.StructType
 
 /**
