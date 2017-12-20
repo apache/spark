@@ -187,7 +187,7 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, Java
     @since("2.3.0")
     def scale(self):
         """
-        The value by which \|y - X'w\| is scaled down when loss is "huber".
+        The value by which \|y - X'w\| is scaled down when loss is "huber", otherwise 1.0.
         """
         return self._call_java("scale")
 
