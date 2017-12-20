@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
-import org.apache.spark.io.CompressionCodec
+import org.apache.spark.io.{CompressionCodec, NioBufferedFileInputStream}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.storage._
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
@@ -202,7 +202,11 @@ private[spark] class SerializerManager(
       blockId: BlockId,
       inputStream: InputStream)
       (classTag: ClassTag[T]): Iterator[T] = {
-    val stream = new BufferedInputStream(inputStream)
+    val stream = inputStream match {
+      case input: BufferedInputStream | NioBufferedFileInputStream => input
+      case others => new BufferedInputStream(others)
+    }
+
     val autoPick = !blockId.isInstanceOf[StreamBlockId]
     getSerializer(classTag, autoPick)
       .newInstance()
