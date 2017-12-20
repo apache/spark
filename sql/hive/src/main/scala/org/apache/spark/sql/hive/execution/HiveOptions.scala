@@ -20,9 +20,11 @@ package org.apache.spark.sql.hive.execution
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.orc.OrcOptions
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
@@ -110,7 +112,7 @@ object HiveOptions {
     "mapkeyDelim" -> "mapkey.delim",
     "lineDelim" -> "line.delim").map { case (k, v) => k.toLowerCase(Locale.ROOT) -> v }
 
-  def getHiveWriteCompression(tableInfo: TableDesc, sqlConf: SQLConf): Option[(String, String)]= {
+  def getHiveWriteCompression(tableInfo: TableDesc, sqlConf: SQLConf): Option[(String, String)] = {
     tableInfo.getOutputFileFormatClassName.toLowerCase match {
       case formatName if formatName.endsWith("parquetoutputformat") =>
         val compressionCodec = new ParquetOptions(tableInfo.getProperties.asScala.toMap,
