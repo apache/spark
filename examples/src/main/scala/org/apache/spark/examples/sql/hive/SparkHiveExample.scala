@@ -144,7 +144,8 @@ object SparkHiveExample {
     If Data volume is very huge, then every partitions would have many small-small files which may harm
     downstream query performance due to File I/O, Bandwidth I/O, Network I/O, Disk I/O.
     To improve performance you can create single parquet file under each partition directory using 'repartition'
-    on partitioned key for Hive table.
+    on partitioned key for Hive table. When you add partition to table, there will be change in table DDL.
+    Ex: CREATE TABLE records(value string) PARTITIONED BY(key int) STORED AS PARQUET;
      */
     hiveTableDF.repartition($"key").write.mode(SaveMode.Overwrite)
       .partitionBy("key").parquet(hiveExternalTableLocation)
