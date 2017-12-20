@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerBootstrap, MountSecretsBootstrap, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{InitContainerBootstrap, KubernetesUtils, MountSecretsBootstrap, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -45,15 +45,15 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
     val sparkConf = sc.getConf
-    val maybeInitContainerConfigMap = sparkConf.get(INIT_CONTAINER_CONFIG_MAP_NAME)
-    val maybeInitContainerConfigMapKey = sparkConf.get(INIT_CONTAINER_CONFIG_MAP_KEY_CONF)
+    val initContainerConfigMap = sparkConf.get(INIT_CONTAINER_CONFIG_MAP_NAME)
+    val initContainerConfigMapKey = sparkConf.get(INIT_CONTAINER_CONFIG_MAP_KEY_CONF)
 
-    if (maybeInitContainerConfigMap.isEmpty) {
+    if (initContainerConfigMap.isEmpty) {
       logWarning("The executor's init-container config map was not specified. Executors will " +
         "therefore not attempt to fetch remote or submitted dependencies.")
     }
 
-    if (maybeInitContainerConfigMapKey.isEmpty) {
+    if (initContainerConfigMapKey.isEmpty) {
       logWarning("The executor's init-container config map key was not specified. Executors will " +
         "therefore not attempt to fetch remote or submitted dependencies.")
     }
@@ -61,9 +61,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     // Only set up the bootstrap if they've provided both the config map key and the config map
     // name. The config map might not be provided if init-containers aren't being used to
     // bootstrap dependencies.
-    val maybeInitContainerBootstrap = for {
-      configMap <- maybeInitContainerConfigMap
-      configMapKey <- maybeInitContainerConfigMapKey
+    val initContainerBootstrap = for {
+      configMap <- initContainerConfigMap
+      configMapKey <- initContainerConfigMapKey
     } yield {
       val initContainerImage = sparkConf
         .get(INIT_CONTAINER_IMAGE)
@@ -80,9 +80,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         sparkConf)
     }
 
-    val executorSecretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
+    val executorSecretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
-    val mayBeMountSecretBootstrap = if (executorSecretNamesToMountPaths.nonEmpty) {
+    val mountSecretBootstrap = if (executorSecretNamesToMountPaths.nonEmpty) {
       Some(new MountSecretsBootstrap(executorSecretNamesToMountPaths))
     } else {
       None
@@ -92,7 +92,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     // dependencies. The executor's main container and its init-container share the secrets
     // because the init-container is sort of an implementation details and this sharing
     // avoids introducing a dedicated configuration property just for the init-container.
-    val mayBeInitContainerMountSecretsBootstrap = if (maybeInitContainerBootstrap.nonEmpty &&
+    val initContainerMountSecretsBootstrap = if (initContainerBootstrap.nonEmpty &&
       executorSecretNamesToMountPaths.nonEmpty) {
       Some(new MountSecretsBootstrap(executorSecretNamesToMountPaths))
     } else {
@@ -109,9 +109,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     val executorPodFactory = new ExecutorPodFactory(
       sparkConf,
-      mayBeMountSecretBootstrap,
-      maybeInitContainerBootstrap,
-      mayBeInitContainerMountSecretsBootstrap)
+      mountSecretBootstrap,
+      initContainerBootstrap,
+      initContainerMountSecretsBootstrap)
 
     val allocatorExecutor = ThreadUtils
       .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")

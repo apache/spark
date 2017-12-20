@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.submit.steps.initcontainer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerBootstrap, MountSecretsBootstrap}
+import org.apache.spark.deploy.k8s.{InitContainerBootstrap, KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
@@ -53,14 +53,14 @@ private[spark] class InitContainerConfigOrchestrator(
       configMapKey,
       SPARK_POD_DRIVER_ROLE,
       sparkConf)
-    val baseStep = new BaseInitContainerConfigurationStep(
+    val baseStep = new BasicInitContainerConfigurationStep(
       sparkJars,
       sparkFiles,
       jarsDownloadPath,
       filesDownloadPath,
       initContainerBootstrap)
 
-    val secretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
+    val secretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_DRIVER_SECRETS_PREFIX)
     // Mount user-specified driver secrets also into the driver's init-container. The
@@ -68,13 +68,12 @@ private[spark] class InitContainerConfigOrchestrator(
     // dependencies. The driver's main container and its init-container share the secrets
     // because the init-container is sort of an implementation details and this sharing
     // avoids introducing a dedicated configuration property just for the init-container.
-    val maybeMountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
-      Some(new InitContainerMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
+    val mountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
+      Seq(new InitContainerMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
     } else {
-      None
+      Nil
     }
 
-    Seq(baseStep) ++
-      maybeMountSecretsStep.toSeq
+    Seq(baseStep) ++ mountSecretsStep
   }
 }

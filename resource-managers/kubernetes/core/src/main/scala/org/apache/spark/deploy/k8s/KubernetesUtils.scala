@@ -14,13 +14,49 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit
+package org.apache.spark.deploy.k8s
 
 import java.io.File
 
+import io.fabric8.kubernetes.api.model.{Container, Pod, PodBuilder}
+
+import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
-private[spark] object KubernetesFileUtils {
+private[spark] object KubernetesUtils {
+
+  /**
+   * Extract and parse Spark configuration properties with a given name prefix and
+   * return the result as a Map. Keys must not have more than one value.
+   *
+   * @param sparkConf Spark configuration
+   * @param prefix the given property name prefix
+   * @return a Map storing the configuration property keys and values
+   */
+  def parsePrefixedKeyValuePairs(
+      sparkConf: SparkConf,
+      prefix: String): Map[String, String] = {
+    sparkConf.getAllWithPrefix(prefix).toMap
+  }
+
+  def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {
+    opt1.foreach { _ => require(opt2.isEmpty, errMessage) }
+  }
+
+  /**
+   * Append the given init-container to a pod's list of init-containers..
+   *
+   * @param originalPodSpec original specification of the pod
+   * @param initContainer the init-container to add to the pod
+   * @return the pod with the init-container added to the list of InitContainers
+   */
+  def appendInitContainer(originalPodSpec: Pod, initContainer: Container): Pod = {
+    new PodBuilder(originalPodSpec)
+      .editOrNewSpec()
+        .addToInitContainers(initContainer)
+        .endSpec()
+      .build()
+  }
 
   /**
    * For the given collection of file URIs, resolves them as follows:

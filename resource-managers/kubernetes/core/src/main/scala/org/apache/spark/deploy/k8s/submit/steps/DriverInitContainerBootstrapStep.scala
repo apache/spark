@@ -22,7 +22,8 @@ import java.util.Properties
 import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, HasMetadata}
 
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.submit.{InitContainerUtil, KubernetesDriverSpec}
+import org.apache.spark.deploy.k8s.KubernetesUtils
+import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 import org.apache.spark.deploy.k8s.submit.steps.initcontainer.{InitContainerConfigurationStep, InitContainerSpec}
 
 /**
@@ -59,7 +60,7 @@ private[spark] class DriverInitContainerBootstrapStep(
       .set(INIT_CONTAINER_CONFIG_MAP_NAME, configMapName)
       .set(INIT_CONTAINER_CONFIG_MAP_KEY_CONF, configMapKey)
       .setAll(initContainerSpec.driverSparkConf)
-    val resolvedDriverPod = InitContainerUtil.appendInitContainer(
+    val resolvedDriverPod = KubernetesUtils.appendInitContainer(
       initContainerSpec.driverPod, initContainerSpec.initContainer)
 
     driverSpec.copy(

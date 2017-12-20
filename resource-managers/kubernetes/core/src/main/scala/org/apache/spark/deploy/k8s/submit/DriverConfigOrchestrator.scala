@@ -21,7 +21,7 @@ import java.util.UUID
 import com.google.common.primitives.Longs
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, MountSecretsBootstrap}
+import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.steps._
@@ -61,7 +61,7 @@ private[spark] class DriverConfigOrchestrator(
   private val filesDownloadPath = sparkConf.get(FILES_DOWNLOAD_LOCATION)
 
   def getAllConfigurationSteps: Seq[DriverConfigurationStep] = {
-    val driverCustomLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
+    val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_DRIVER_LABEL_PREFIX)
     require(!driverCustomLabels.contains(SPARK_APP_ID_LABEL), "Label with key " +
@@ -71,7 +71,7 @@ private[spark] class DriverConfigOrchestrator(
       s"$SPARK_ROLE_LABEL is not allowed as it is reserved for Spark bookkeeping " +
       "operations.")
 
-    val secretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
+    val secretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_DRIVER_SECRETS_PREFIX)
 
@@ -79,7 +79,7 @@ private[spark] class DriverConfigOrchestrator(
       SPARK_APP_ID_LABEL -> kubernetesAppId,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
 
-    val initialSubmissionStep = new BaseDriverConfigurationStep(
+    val initialSubmissionStep = new BasicDriverConfigurationStep(
       kubernetesAppId,
       kubernetesResourceNamePrefix,
       allDriverLabels,
@@ -117,50 +117,49 @@ private[spark] class DriverConfigOrchestrator(
       .map(_.split(","))
       .getOrElse(Array.empty[String])
 
-    val maybeDependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
-      Some(new DependencyResolutionStep(
+    val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
+      Seq(new DependencyResolutionStep(
         sparkJars,
         sparkFiles,
         jarsDownloadPath,
         filesDownloadPath))
     } else {
-      None
+      Nil
     }
 
-    val mayBeInitContainerBootstrapStep =
-      if (areAnyFilesNonContainerLocal(sparkJars ++ sparkFiles)) {
-        val orchestrator = new InitContainerConfigOrchestrator(
-          sparkJars,
-          sparkFiles,
-          jarsDownloadPath,
-          filesDownloadPath,
-          imagePullPolicy,
-          initContainerConfigMapName,
-          INIT_CONTAINER_PROPERTIES_FILE_NAME,
-          sparkConf)
-        val bootstrapStep = new DriverInitContainerBootstrapStep(
-          orchestrator.getAllConfigurationSteps,
-          initContainerConfigMapName,
-          INIT_CONTAINER_PROPERTIES_FILE_NAME)
+    val initContainerBootstrapStep = if (areAnyFilesNonContainerLocal(sparkJars ++ sparkFiles)) {
+      val orchestrator = new InitContainerConfigOrchestrator(
+        sparkJars,
+        sparkFiles,
+        jarsDownloadPath,
+        filesDownloadPath,
+        imagePullPolicy,
+        initContainerConfigMapName,
+        INIT_CONTAINER_PROPERTIES_FILE_NAME,
+        sparkConf)
+      val bootstrapStep = new DriverInitContainerBootstrapStep(
+        orchestrator.getAllConfigurationSteps,
+        initContainerConfigMapName,
+        INIT_CONTAINER_PROPERTIES_FILE_NAME)
 
-        Some(bootstrapStep)
-      } else {
-        None
-      }
-
-    val mayBeMountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
-      Some(new DriverMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
+      Seq(bootstrapStep)
     } else {
-      None
+      Nil
+    }
+
+    val mountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
+      Seq(new DriverMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
+    } else {
+      Nil
     }
 
     Seq(
       initialSubmissionStep,
       serviceBootstrapStep,
       kubernetesCredentialsStep) ++
-      maybeDependencyResolutionStep.toSeq ++
-      mayBeInitContainerBootstrapStep.toSeq ++
-      mayBeMountSecretsStep.toSeq
+      dependencyResolutionStep ++
+      initContainerBootstrapStep ++
+      mountSecretsStep
   }
 
   private def areAnyFilesNonContainerLocal(files: Seq[String]): Boolean = {

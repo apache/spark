@@ -21,7 +21,8 @@ import java.io.File
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.{KubernetesDriverSpec, KubernetesFileUtils}
+import org.apache.spark.deploy.k8s.KubernetesUtils
+import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 
 /**
  * Step that configures the classpath, spark.jars, and spark.files for the driver given that the
@@ -34,8 +35,8 @@ private[spark] class DependencyResolutionStep(
     filesDownloadPath: String) extends DriverConfigurationStep {
 
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
-    val resolvedSparkJars = KubernetesFileUtils.resolveFileUris(sparkJars, jarsDownloadPath)
-    val resolvedSparkFiles = KubernetesFileUtils.resolveFileUris(
+    val resolvedSparkJars = KubernetesUtils.resolveFileUris(sparkJars, jarsDownloadPath)
+    val resolvedSparkFiles = KubernetesUtils.resolveFileUris(
       sparkFiles, filesDownloadPath)
 
     val sparkConf = driverSpec.driverSparkConf.clone()
@@ -46,7 +47,7 @@ private[spark] class DependencyResolutionStep(
       sparkConf.set("spark.files", resolvedSparkFiles.mkString(","))
     }
 
-    val resolvedClasspath = KubernetesFileUtils.resolveFilePaths(sparkJars, jarsDownloadPath)
+    val resolvedClasspath = KubernetesUtils.resolveFilePaths(sparkJars, jarsDownloadPath)
     val resolvedDriverContainer = if (resolvedClasspath.nonEmpty) {
       new ContainerBuilder(driverSpec.driverContainer)
         .addNewEnv()

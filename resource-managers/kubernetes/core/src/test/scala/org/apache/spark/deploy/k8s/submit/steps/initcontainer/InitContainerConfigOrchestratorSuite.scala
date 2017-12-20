@@ -55,7 +55,7 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
     val initSteps : Seq[InitContainerConfigurationStep] =
       orchestrator.getAllConfigurationSteps
     assert(initSteps.lengthCompare(1) == 0)
-    assert(initSteps.head.isInstanceOf[BaseInitContainerConfigurationStep])
+    assert(initSteps.head.isInstanceOf[BasicInitContainerConfigurationStep])
   }
 
   test("including step to mount user-specified secrets") {
@@ -76,7 +76,7 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
     val initSteps : Seq[InitContainerConfigurationStep] =
       orchestrator.getAllConfigurationSteps
     assert(initSteps.length === 2)
-    assert(initSteps.head.isInstanceOf[BaseInitContainerConfigurationStep])
+    assert(initSteps.head.isInstanceOf[BasicInitContainerConfigurationStep])
     assert(initSteps(1).isInstanceOf[InitContainerMountSecretsStep])
   }
 }

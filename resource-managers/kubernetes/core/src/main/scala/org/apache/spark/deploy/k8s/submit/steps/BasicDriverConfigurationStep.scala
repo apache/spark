@@ -22,15 +22,15 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarS
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 import org.apache.spark.internal.config.{DRIVER_CLASS_PATH, DRIVER_MEMORY, DRIVER_MEMORY_OVERHEAD}
 
 /**
  * Performs basic configuration for the driver pod.
  */
-private[spark] class BaseDriverConfigurationStep(
+private[spark] class BasicDriverConfigurationStep(
     kubernetesAppId: String,
     resourceNamePrefix: String,
     driverLabels: Map[String, String],
@@ -71,7 +71,7 @@ private[spark] class BaseDriverConfigurationStep(
         .build()
     }
 
-    val driverCustomAnnotations = ConfigurationUtils.parsePrefixedKeyValuePairs(
+    val driverCustomAnnotations = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_ANNOTATION_PREFIX)
     require(!driverCustomAnnotations.contains(SPARK_APP_NAME_ANNOTATION),
       s"Annotation with key $SPARK_APP_NAME_ANNOTATION is not allowed as it is reserved for" +
@@ -87,7 +87,7 @@ private[spark] class BaseDriverConfigurationStep(
 
     val driverAnnotations = driverCustomAnnotations ++ Map(SPARK_APP_NAME_ANNOTATION -> appName)
 
-    val nodeSelector = ConfigurationUtils.parsePrefixedKeyValuePairs(
+    val nodeSelector = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX)
 
     val driverCpuQuantity = new QuantityBuilder(false)

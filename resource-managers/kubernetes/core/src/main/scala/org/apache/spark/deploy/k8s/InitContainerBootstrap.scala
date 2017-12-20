@@ -59,11 +59,12 @@ private[spark] class InitContainerBootstrap(
       case SPARK_POD_EXECUTOR_ROLE => "spark.executorEnv."
       case _ => throw new SparkException(s"$sparkRole is not a valid Spark pod role")
     }
-    val customEnvVars = sparkConf.getAllWithPrefix(customEnvVarKeyPrefix).toSeq.map { env =>
-      new EnvVarBuilder()
-        .withName(env._1)
-        .withValue(env._2)
-        .build()
+    val customEnvVars = sparkConf.getAllWithPrefix(customEnvVarKeyPrefix).toSeq.map {
+      case (key, value) =>
+        new EnvVarBuilder()
+          .withName(key)
+          .withValue(value)
+          .build()
     }
 
     val initContainer = new ContainerBuilder(original.initContainer)
@@ -102,14 +103,13 @@ private[spark] class InitContainerBootstrap(
       .endSpec()
       .build()
 
-    val mainContainer = new ContainerBuilder(
-      original.mainContainer)
-        .addToVolumeMounts(sharedVolumeMounts: _*)
-        .addNewEnv()
-          .withName(ENV_MOUNTED_FILES_DIR)
-          .withValue(filesDownloadPath)
-          .endEnv()
-        .build()
+    val mainContainer = new ContainerBuilder(original.mainContainer)
+      .addToVolumeMounts(sharedVolumeMounts: _*)
+      .addNewEnv()
+        .withName(ENV_MOUNTED_FILES_DIR)
+        .withValue(filesDownloadPath)
+        .endEnv()
+      .build()
 
     PodWithDetachedInitContainer(
       podWithBasicVolumes,

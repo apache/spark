@@ -39,8 +39,9 @@ private[spark] class SparkPodInitContainer(
     sparkConf: SparkConf,
     fileFetcher: FileFetcher) extends Logging {
 
+  private val maxThreadPoolSize = sparkConf.get(INIT_CONTAINER_MAX_THREAD_POOL_SIZE)
   private implicit val downloadExecutor = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("download-executor"))
+    ThreadUtils.newDaemonCachedThreadPool("download-executor", maxThreadPoolSize))
 
   private val jarsDownloadDir = new File(
     sparkConf.get(JARS_DOWNLOAD_LOCATION))
@@ -75,12 +76,13 @@ private[spark] class SparkPodInitContainer(
       filesCommaSeparated: Option[String],
       downloadDir: File,
       errMessageOnDestinationNotADirectory: String): Unit = {
-    if (filesCommaSeparated.isDefined) {
+    filesCommaSeparated.foreach { files =>
       require(downloadDir.isDirectory, errMessageOnDestinationNotADirectory)
-    }
-    filesCommaSeparated.map(_.split(",")).toSeq.flatten.foreach { file =>
-      Future[Unit] {
-        fileFetcher.fetchFile(file, downloadDir)
+      Utils.stringToSeq(files).foreach { file =>
+        Future[Unit] {
+          fileFetcher.fetchFile(file, downloadDir)
+        }
+
       }
     }
   }
@@ -104,10 +106,9 @@ object SparkPodInitContainer extends Logging {
 
   def main(args: Array[String]): Unit = {
     logInfo("Starting init-container to download Spark application dependencies.")
-    val sparkConf = if (args.nonEmpty) {
-      SparkConfPropertiesParser.getSparkConfFromPropertiesFile(new File(args(0)))
-    } else {
-      new SparkConf(true)
+    val sparkConf = new SparkConf(true)
+    if (args.nonEmpty) {
+      Utils.loadDefaultSparkProperties(sparkConf, args(0))
     }
 
     val securityManager = new SparkSecurityManager(sparkConf)

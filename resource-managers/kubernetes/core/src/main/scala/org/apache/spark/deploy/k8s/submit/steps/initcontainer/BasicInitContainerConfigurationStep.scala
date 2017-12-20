@@ -18,13 +18,13 @@ package org.apache.spark.deploy.k8s.submit.steps.initcontainer
 
 import org.apache.spark.deploy.k8s.{InitContainerBootstrap, PodWithDetachedInitContainer}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.submit.KubernetesFileUtils
+import org.apache.spark.deploy.k8s.KubernetesUtils
 
 /**
  * Performs basic configuration for the driver init-container with most of the work delegated to
  * the given InitContainerBootstrap.
  */
-private[spark] class BaseInitContainerConfigurationStep(
+private[spark] class BasicInitContainerConfigurationStep(
     sparkJars: Seq[String],
     sparkFiles: Seq[String],
     jarsDownloadPath: String,
@@ -33,8 +33,8 @@ private[spark] class BaseInitContainerConfigurationStep(
   extends InitContainerConfigurationStep {
 
   override def configureInitContainer(spec: InitContainerSpec): InitContainerSpec = {
-    val remoteJarsToDownload = KubernetesFileUtils.getOnlyRemoteFiles(sparkJars)
-    val remoteFilesToDownload = KubernetesFileUtils.getOnlyRemoteFiles(sparkFiles)
+    val remoteJarsToDownload = KubernetesUtils.getOnlyRemoteFiles(sparkJars)
+    val remoteFilesToDownload = KubernetesUtils.getOnlyRemoteFiles(sparkFiles)
     val remoteJarsConf = if (remoteJarsToDownload.nonEmpty) {
       Map(INIT_CONTAINER_REMOTE_JARS.key -> remoteJarsToDownload.mkString(","))
     } else {

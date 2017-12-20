@@ -30,7 +30,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.{InitContainerBootstrap, PodWithDetachedInitContainer}
 import org.apache.spark.deploy.k8s.Config._
 
-class BaseInitContainerConfigurationStepSuite extends SparkFunSuite with BeforeAndAfter {
+class BasicInitContainerConfigurationStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val SPARK_JARS = Seq(
     "hdfs://localhost:9000/app/jars/jar1.jar", "file:///app/jars/jar2.jar")
@@ -68,7 +68,7 @@ class BaseInitContainerConfigurationStepSuite extends SparkFunSuite with BeforeA
   }
 
   test("Test of additionalDriverSparkConf with mix of remote files and jars") {
-    val baseInitStep = new BaseInitContainerConfigurationStep(
+    val baseInitStep = new BasicInitContainerConfigurationStep(
       SPARK_JARS,
       SPARK_FILES,
       JARS_DOWNLOAD_PATH,

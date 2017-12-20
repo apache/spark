@@ -21,10 +21,9 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerBootstrap, MountSecretsBootstrap, PodWithDetachedInitContainer}
+import org.apache.spark.deploy.k8s.{InitContainerBootstrap, KubernetesUtils, MountSecretsBootstrap, PodWithDetachedInitContainer}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.InitContainerUtil
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
 import org.apache.spark.util.Utils
 
@@ -50,7 +49,7 @@ private[spark] class ExecutorPodFactory(
 
   private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
-  private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
+  private val executorLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
     sparkConf,
     KUBERNETES_EXECUTOR_LABEL_PREFIX)
   require(
@@ -65,11 +64,11 @@ private[spark] class ExecutorPodFactory(
     s"Custom executor labels cannot contain $SPARK_ROLE_LABEL as it is reserved for Spark.")
 
   private val executorAnnotations =
-    ConfigurationUtils.parsePrefixedKeyValuePairs(
+    KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
   private val nodeSelector =
-    ConfigurationUtils.parsePrefixedKeyValuePairs(
+    KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_NODE_SELECTOR_PREFIX)
 
@@ -231,7 +230,7 @@ private[spark] class ExecutorPodFactory(
             bootstrap.mountSecrets(podWithInitContainer.pod, podWithInitContainer.initContainer)
           }.getOrElse((podWithInitContainer.pod, podWithInitContainer.initContainer))
 
-        val bootstrappedPod = InitContainerUtil.appendInitContainer(
+        val bootstrappedPod = KubernetesUtils.appendInitContainer(
           pod, mayBeSecretsMountedInitContainer)
 
         (bootstrappedPod, podWithInitContainer.mainContainer)

@@ -159,6 +159,13 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MINUTES)
       .createWithDefault(5)
 
+  val INIT_CONTAINER_MAX_THREAD_POOL_SIZE =
+    ConfigBuilder("spark.kubernetes.initContainer.maxThreadPoolSize")
+      .doc("Maximum size of the thread pool in the init-container for downloading remote " +
+        "dependencies.")
+      .intConf
+      .createWithDefault(5)
+
   val INIT_CONTAINER_REMOTE_JARS =
     ConfigBuilder("spark.kubernetes.initContainer.remoteJars")
       .doc("Comma-separated list of jar URIs to download in the init-container. This is " +
