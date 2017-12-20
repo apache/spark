@@ -169,7 +169,10 @@ class DataReaderThread(
     reader: DataReader[UnsafeRow],
     queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
     context: TaskContext,
-    failedFlag: AtomicBoolean) extends Thread {
+    failedFlag: AtomicBoolean)
+  extends Thread(
+    s"continuous-reader--${context.partitionId()}--" +
+    s"${context.getLocalProperty(ContinuousExecution.RUN_ID_KEY)}") {
   private[continuous] var failureReason: Throwable = _
 
   override def run(): Unit = {
