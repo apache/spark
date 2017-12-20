@@ -102,10 +102,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_ALLOCATION_BATCH_DELAY =
     ConfigBuilder("spark.kubernetes.allocation.batch.delay")
-      .doc("Number of seconds to wait between each round of executor allocation.")
-      .longConf
-      .checkValue(value => value > 0, "Allocation batch delay should be a positive integer")
-      .createWithDefault(1)
+      .doc("Time to wait between each round of executor allocation.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
+      .createWithDefaultString("1s")
 
   val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
     ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")

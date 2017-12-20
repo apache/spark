@@ -217,7 +217,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         .watch(new ExecutorPodsWatcher()))
 
     allocatorExecutor.scheduleWithFixedDelay(
-      allocatorRunnable, 0L, podAllocationInterval, TimeUnit.SECONDS)
+      allocatorRunnable, 0L, podAllocationInterval.toLong, TimeUnit.MILLISECONDS)
 
     if (!Utils.isDynamicAllocationEnabled(conf)) {
       doRequestTotalExecutors(initialExecutors)
