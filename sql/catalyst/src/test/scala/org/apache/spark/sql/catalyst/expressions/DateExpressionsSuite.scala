@@ -528,7 +528,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
 
-  test("function trunc") {
+  test("TruncDate") {
     def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
       checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
         expected)
@@ -544,9 +544,80 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       testTrunc(date, fmt, Date.valueOf("2015-07-01"))
     }
     testTrunc(date, "DD", null)
+    testTrunc(date, "SECOND", null)
+    testTrunc(date, "HOUR", null)
     testTrunc(date, null, null)
     testTrunc(null, "MON", null)
     testTrunc(null, null, null)
+  }
+
+  test("TruncTimestamp") {
+    def testTrunc(input: Timestamp, fmt: String, expected: Timestamp): Unit = {
+      checkEvaluation(
+        TruncTimestamp(Literal.create(fmt, StringType), Literal.create(input, TimestampType)),
+        expected)
+      checkEvaluation(
+        TruncTimestamp(
+          NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
+        expected)
+    }
+
+    withDefaultTimeZone(TimeZoneGMT) {
+      val inputDate = Timestamp.valueOf("2015-07-22 05:30:06")
+
+      Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-01-01 00:00:00"))
+      }
+
+      Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-01 00:00:00"))
+      }
+
+      Seq("DAY", "day", "DD", "dd").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 00:00:00"))
+      }
+
+      Seq("HOUR", "hour").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 05:00:00"))
+      }
+
+      Seq("MINUTE", "minute").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 05:30:00"))
+      }
+
+      Seq("SECOND", "second").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 05:30:06"))
+      }
+
+      Seq("WEEK", "week").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-20 00:00:00"))
+      }
+
+      Seq("QUARTER", "quarter").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-01 00:00:00"))
+      }
+
+      testTrunc(inputDate, "INVALID", null)
+      testTrunc(inputDate, null, null)
+      testTrunc(null, "MON", null)
+      testTrunc(null, null, null)
+    }
   }
 
   test("from_unixtime") {
@@ -753,20 +824,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(gmtId.get, StringType)).genCode(ctx)
     // we should have one mutable state for UTC timezone and one mutable state for each expression
     // holding the other specific timezone
-    assert(ctx.mutableStates.length == 3)
+    assert(ctx.inlinedMutableStates.length == 3)
   }
 
   test("SPARK-22750: we should reuse the same calendar for every DayOfWeek") {
     val ctx = new CodegenContext
     DayOfWeek(Literal(d)).genCode(ctx)
     DayOfWeek(Cast(Literal(ts), DateType, gmtId)).genCode(ctx)
-    assert(ctx.mutableStates.length == 1)
+    assert(ctx.inlinedMutableStates.length == 1)
   }
 
   test("SPARK-22750: we should reuse the same calendar for every WeekOfYear") {
     val ctx = new CodegenContext
     WeekOfYear(Literal(d)).genCode(ctx)
     WeekOfYear(Cast(Literal(ts), DateType, gmtId)).genCode(ctx)
-    assert(ctx.mutableStates.length == 1)
+    assert(ctx.inlinedMutableStates.length == 1)
   }
 }

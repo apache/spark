@@ -219,4 +219,31 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     // - one is the mutableRow
     assert(globalVariables.length == 3)
   }
+
+  test("SPARK-18016: generated projections on wider table requiring state compaction") {
+    val N = 6000
+    val wideRow1 = new GenericInternalRow(new Array[Any](N))
+    val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))
+    val wideRow2 = new GenericInternalRow(
+      Array.tabulate[Any](N)(i => UTF8String.fromString(i.toString)))
+    val schema2 = StructType((1 to N).map(i => StructField("", StringType)))
+    val joined = new JoinedRow(wideRow1, wideRow2)
+    val joinedSchema = StructType(schema1 ++ schema2)
+    val nested = new JoinedRow(InternalRow(joined, joined), joined)
+    val nestedSchema = StructType(
+      Seq(StructField("", joinedSchema), StructField("", joinedSchema)) ++ joinedSchema)
+
+    val safeProj = FromUnsafeProjection(nestedSchema)
+    val result = safeProj(nested)
+
+    // test generated MutableProjection
+    val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
+      BoundReference(i, f.dataType, true)
+    }
+    val mutableProj = GenerateMutableProjection.generate(exprs)
+    val row1 = mutableProj(result)
+    assert(result === row1)
+    val row2 = mutableProj(result)
+    assert(result === row2)
+  }
 }

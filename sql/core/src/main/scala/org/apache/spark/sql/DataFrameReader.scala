@@ -646,7 +646,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    *
-   * Each line in the text files is a new row in the resulting DataFrame. For example:
+   * You can set the following text-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * </ul>
+   * By default, each line in the text files is a new row in the resulting DataFrame.
+   *
+   * Usage example:
    * {{{
    *   // Scala:
    *   spark.read.text("/path/to/spark/README.md")
@@ -678,7 +685,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
    *
-   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * You can set the following textFile-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * </ul>
+   * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
    *   spark.read.textFile("/path/to/spark/README.md")

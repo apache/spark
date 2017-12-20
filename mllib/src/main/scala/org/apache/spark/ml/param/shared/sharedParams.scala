@@ -487,4 +487,21 @@ trait HasCollectSubModels extends Params {
   /** @group expertGetParam */
   final def getCollectSubModels: Boolean = $(collectSubModels)
 }
+
+/**
+ * Trait for shared param loss. This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasLoss extends Params {
+
+  /**
+   * Param for the loss function to be optimized.
+   * @group param
+   */
+  val loss: Param[String] = new Param[String](this, "loss", "the loss function to be optimized")
+
+  /** @group getParam */
+  final def getLoss: String = $(loss)
+}
 // scalastyle:on

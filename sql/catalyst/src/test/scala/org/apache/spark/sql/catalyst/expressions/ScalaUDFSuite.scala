@@ -51,7 +51,6 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22695: ScalaUDF should not use global variables") {
     val ctx = new CodegenContext
     ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil).genCode(ctx)
-    // ScalaUDF can be very verbose and trigger reduceCodeSize
-    assert(ctx.mutableStates.forall(_._2.startsWith("globalIsNull")))
+    assert(ctx.inlinedMutableStates.isEmpty)
   }
 }

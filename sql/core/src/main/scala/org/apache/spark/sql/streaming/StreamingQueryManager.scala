@@ -237,7 +237,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           "is not supported in streaming DataFrames/Datasets and will be disabled.")
     }
 
-    new StreamingQueryWrapper(new StreamExecution(
+    new StreamingQueryWrapper(new MicroBatchExecution(
       sparkSession,
       userSpecifiedName.orNull,
       checkpointLocation,

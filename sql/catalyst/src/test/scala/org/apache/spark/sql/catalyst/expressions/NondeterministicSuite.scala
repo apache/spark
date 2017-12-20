@@ -37,7 +37,7 @@ class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ctx = new CodegenContext
     SparkPartitionID().genCode(ctx)
     SparkPartitionID().genCode(ctx)
-    assert(ctx.mutableStates.length == 1)
+    assert(ctx.inlinedMutableStates.length == 1)
   }
 
   test("SPARK-22750: MonotonicallyIncreasingID should reuse the mutable state") {
@@ -45,6 +45,6 @@ class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
     MonotonicallyIncreasingID().genCode(ctx)
     MonotonicallyIncreasingID().genCode(ctx)
     // one mutable state for each counter and one for the shared partition mask
-    assert(ctx.mutableStates.length == 3)
+    assert(ctx.inlinedMutableStates.length == 3)
   }
 }

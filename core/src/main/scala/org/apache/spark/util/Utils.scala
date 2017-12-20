@@ -2651,14 +2651,28 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
+   * its value is replaced with a dummy text.
+   */
+  def redact(regex: Option[Regex], kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    regex match {
+      case None => kvs
+      case Some(r) => redact(r, kvs)
+    }
+  }
+
+  /**
    * Redact the sensitive information in the given string.
    */
-  def redact(conf: SparkConf, text: String): String = {
-    if (text == null || text.isEmpty || conf == null || !conf.contains(STRING_REDACTION_PATTERN)) {
-      text
-    } else {
-      val regex = conf.get(STRING_REDACTION_PATTERN).get
-      regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+  def redact(regex: Option[Regex], text: String): String = {
+    regex match {
+      case None => text
+      case Some(r) =>
+        if (text == null || text.isEmpty) {
+          text
+        } else {
+          r.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+        }
     }
   }
 
@@ -2757,7 +2771,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Check the validity of the given Kubernetes master URL and return the resolved URL. Prefix
-   * "k8s:" is appended to the resolved URL as the prefix is used by KubernetesClusterManager
+   * "k8s://" is appended to the resolved URL as the prefix is used by KubernetesClusterManager
    * in canCreate to determine if the KubernetesClusterManager should be used.
    */
   def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
@@ -2770,7 +2784,7 @@ private[spark] object Utils extends Logging {
       val resolvedURL = s"https://$masterWithoutK8sPrefix"
       logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
         s"URL is $resolvedURL.")
-      return s"k8s:$resolvedURL"
+      return s"k8s://$resolvedURL"
     }
 
     val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
@@ -2789,7 +2803,7 @@ private[spark] object Utils extends Logging {
         throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
     }
 
-    return s"k8s:$resolvedURL"
+    s"k8s://$resolvedURL"
   }
 }
 

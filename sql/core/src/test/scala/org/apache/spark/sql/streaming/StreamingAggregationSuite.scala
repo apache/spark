@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
@@ -299,7 +300,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
-        q.batchCommitLog.purge(3)
+        q.commitLog.purge(3)
         // advance by a minute i.e., 90 seconds total
         clock.advance(60 * 1000L)
         true
@@ -351,7 +352,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
-        q.batchCommitLog.purge(3)
+        q.commitLog.purge(3)
         // advance by 60 days i.e., 90 days total
         clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
         true

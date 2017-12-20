@@ -385,21 +385,44 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ctx = new CodegenContext
     val schema = new StructType().add("a", IntegerType).add("b", StringType)
     CreateExternalRow(Seq(Literal(1), Literal("x")), schema).genCode(ctx)
-    assert(ctx.mutableStates.isEmpty)
+    assert(ctx.inlinedMutableStates.isEmpty)
   }
 
   test("SPARK-22696: InitializeJavaBean should not use global variables") {
     val ctx = new CodegenContext
     InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
       Map("add" -> Literal(1))).genCode(ctx)
-    assert(ctx.mutableStates.isEmpty)
+    assert(ctx.inlinedMutableStates.isEmpty)
   }
 
   test("SPARK-22716: addReferenceObj should not add mutable states") {
     val ctx = new CodegenContext
     val foo = new Object()
     ctx.addReferenceObj("foo", foo)
-    assert(ctx.mutableStates.isEmpty)
+    assert(ctx.inlinedMutableStates.isEmpty)
+  }
+
+  test("SPARK-18016: define mutable states by using an array") {
+    val ctx1 = new CodegenContext
+    for (i <- 1 to CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10) {
+      ctx1.addMutableState(ctx1.JAVA_INT, "i", v => s"$v = $i;")
+    }
+    assert(ctx1.inlinedMutableStates.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
+    // When the number of primitive type mutable states is over the threshold, others are
+    // allocated into an array
+    assert(ctx1.arrayCompactedMutableStates.get(ctx1.JAVA_INT).get.arrayNames.size == 1)
+    assert(ctx1.mutableStateInitCode.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10)
+
+    val ctx2 = new CodegenContext
+    for (i <- 1 to CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10) {
+      ctx2.addMutableState("InternalRow[]", "r", v => s"$v = new InternalRow[$i];")
+    }
+    // When the number of non-primitive type mutable states is over the threshold, others are
+    // allocated into a new array
+    assert(ctx2.inlinedMutableStates.isEmpty)
+    assert(ctx2.arrayCompactedMutableStates.get("InternalRow[]").get.arrayNames.size == 2)
+    assert(ctx2.arrayCompactedMutableStates("InternalRow[]").getCurrentIndex == 10)
+    assert(ctx2.mutableStateInitCode.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
   }
 
   test("SPARK-22750: addImmutableStateIfNotExists") {
@@ -411,6 +434,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     ctx.addImmutableStateIfNotExists("String", mutableState2)
     ctx.addImmutableStateIfNotExists("int", mutableState1)
     ctx.addImmutableStateIfNotExists("String", mutableState2)
-    assert(ctx.mutableStates.length == 2)
+    assert(ctx.inlinedMutableStates.length == 2)
   }
 }

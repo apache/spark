@@ -368,7 +368,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
       kryo = true)
     DecodeUsingSerializer[java.lang.Integer](
       enc, classTag[java.lang.Integer], kryo = true).genCode(ctx)
-    assert(ctx.mutableStates.length == 1)
+    assert(ctx.inlinedMutableStates.length == 1)
 
     val ctx2 = new CodegenContext
     val enc2 = EncodeUsingSerializer(
@@ -376,7 +376,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
       kryo = false)
     DecodeUsingSerializer[java.lang.Integer](
       enc2, classTag[java.lang.Integer], kryo = false).genCode(ctx2)
-    assert(ctx2.mutableStates.length == 1)
+    assert(ctx2.inlinedMutableStates.length == 1)
 
     val ctx3 = new CodegenContext
     val enc3 = EncodeUsingSerializer(
@@ -386,6 +386,6 @@ class ScalaReflectionSuite extends SparkFunSuite {
       enc3, classTag[java.lang.Integer], kryo = true).genCode(ctx3)
     // here we should have 2 because one is using javaSerializer, while the other is using
     // kryoSerializer
-    assert(ctx3.mutableStates.length == 2)
+    assert(ctx3.inlinedMutableStates.length == 2)
   }
 }
