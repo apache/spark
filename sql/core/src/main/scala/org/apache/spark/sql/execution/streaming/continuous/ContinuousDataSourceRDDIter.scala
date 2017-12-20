@@ -190,13 +190,13 @@ class DataReaderThread(
       }
     } catch {
       case _: InterruptedException if context.isInterrupted() =>
-        // Continuous shutdown always involves an interrupt; shut down quietly.
-        return
+        // Continuous shutdown always involves an interrupt; do nothing and shut down quietly.
 
       case t: Throwable =>
         failureReason = t
         failedFlag.set(true)
-        throw t
+        // Don't rethrow the exception in this thread. It's not needed, and the default Spark
+        // exception handler will kill the executor.
     }
   }
 }
