@@ -62,7 +62,7 @@ Example usage is:
     ./sbin/build-push-docker-images.sh -r <repo> -t my-tag build
     ./sbin/build-push-docker-images.sh -r <repo> -t my-tag push
 
-Docker files are under the `dockerfiles/` and can be customized further before
+Docker files are under the `kubernetes/dockerfiles/` directory and can be customized further before
 building using the supplied script, or manually.
 
 ## Cluster Mode
