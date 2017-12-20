@@ -18,7 +18,6 @@
 package org.apache.spark.ml.tuning
 
 import java.util.{List => JList, Locale}
-import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
