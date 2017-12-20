@@ -19,11 +19,11 @@
 # This script builds and pushes docker images when run from a release of Spark
 # with Kubernetes support.
 
-declare -A path=( [spark-driver]=dockerfiles/driver/Dockerfile \
-                  [spark-executor]=dockerfiles/executor/Dockerfile )
+declare -A path=( [spark-driver]=kubernetes/dockerfiles/driver/Dockerfile \
+                  [spark-executor]=kubernetes/dockerfiles/executor/Dockerfile )
 
 function build {
-  docker build -t spark-base -f dockerfiles/spark-base/Dockerfile .
+  docker build -t spark-base -f kubernetes/dockerfiles/spark-base/Dockerfile .
   for image in "${!path[@]}"; do
     docker build -t ${REPO}/$image:${TAG} -f ${path[$image]} .
   done
@@ -37,6 +37,7 @@ function push {
 }
 
 function usage {
+  echo "This script must be run from a runnable distribution of Apache Spark."
   echo "Usage: ./sbin/build-push-docker-images.sh -r <repo> -t <tag> build"
   echo "       ./sbin/build-push-docker-images.sh -r <repo> -t <tag> push"
   echo "for example: ./sbin/build-push-docker-images.sh -r docker.io/myrepo -t v2.3.0 push"
