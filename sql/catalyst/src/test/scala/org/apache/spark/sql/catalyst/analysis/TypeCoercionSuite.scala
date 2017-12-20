@@ -488,12 +488,21 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(ArrayType(IntegerType), containsNull = false),
       ArrayType(ArrayType(LongType), containsNull = false),
       Some(ArrayType(ArrayType(LongType), containsNull = false)))
+    widenTestWithStringPromotion(
+      StructType(StructField("a", ArrayType(LongType)) :: Nil),
+      StructType(StructField("a", ArrayType(StringType)) :: Nil),
+      Some(StructType(StructField("a", ArrayType(StringType)) :: Nil)))
+
 
     // Without string promotion
     widenTestWithoutStringPromotion(IntegerType, StringType, None)
     widenTestWithoutStringPromotion(StringType, TimestampType, None)
     widenTestWithoutStringPromotion(ArrayType(LongType), ArrayType(StringType), None)
     widenTestWithoutStringPromotion(ArrayType(StringType), ArrayType(TimestampType), None)
+    widenTestWithoutStringPromotion(
+      StructType(StructField("a", ArrayType(LongType)) :: Nil),
+      StructType(StructField("a", ArrayType(StringType)) :: Nil),
+      None)
 
     // String promotion
     widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))

@@ -160,6 +160,50 @@ object TypeCoercion {
   }
 
   /**
+   * Case 2 type widening over complex types. `widerTypeFunc` is a function that finds the wider
+   * type over point types, and additionally specifies whether types should be promoted to
+   * StringType or not.
+   */
+  private def findWiderTypeForTwoComplex(
+      t1: DataType,
+      t2: DataType,
+      widerTypeFunc: (DataType, DataType) => Option[DataType]): Option[DataType] = {
+    (t1, t2) match {
+      case (ArrayType(pointType1, nullable1), ArrayType(pointType2, nullable2)) =>
+        val dataType = widerTypeFunc.apply(pointType1, pointType2)
+
+        dataType.map(ArrayType(_, nullable1 || nullable2))
+
+      case (MapType(keyType1, valueType1, nullable1), MapType(keyType2, valueType2, nullable2)) =>
+        val keyType = widerTypeFunc.apply(keyType1, keyType2)
+        val valueType = widerTypeFunc.apply(valueType1, valueType2)
+
+        if (keyType.nonEmpty && valueType.nonEmpty) {
+          Some(MapType(keyType.get, valueType.get, nullable1 || nullable2))
+        } else {
+          None
+        }
+
+      case (StructType(fields1), StructType(fields2)) =>
+        val fieldTypes = fields1.zip(fields2).map { case (f1, f2) =>
+          widerTypeFunc(f1.dataType, f2.dataType)
+        }
+
+        if (fieldTypes.forall(_.nonEmpty)) {
+          val structFields = fields1.zip(fields2).zip(fieldTypes).map { case ((f1, f2), t) =>
+              StructField(f1.name, t.get, nullable = f1.nullable || f2.nullable)
+          }
+
+          Some(StructType(structFields))
+        } else {
+          None
+        }
+
+      case _ => None
+    }
+  }
+
+  /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
    * i.e. the main difference with [[findTightestCommonType]] is that here we allow some
@@ -169,6 +213,8 @@ object TypeCoercion {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
       .orElse(stringPromotion(t1, t2))
+      .orElse(findWiderTypeForTwoComplex(t1, t2, findWiderTypeForTwo))
+
   }
 
   private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
@@ -188,6 +234,7 @@ object TypeCoercion {
       t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
+      .orElse(findWiderTypeForTwoComplex(t1, t2, findWiderTypeWithoutStringPromotionForTwo))
   }
 
   def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
