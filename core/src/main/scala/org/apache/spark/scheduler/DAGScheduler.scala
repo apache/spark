@@ -1187,9 +1187,17 @@ class DAGScheduler(
     // only updated in certain cases.
     event.reason match {
       case Success =>
-        stage match {
-          case rs: ResultStage if rs.activeJob.isEmpty =>
-            // Ignore update if task's job has finished.
+        task match {
+          case rt: ResultTask[_, _] =>
+            val resultStage = stage.asInstanceOf[ResultStage]
+            resultStage.activeJob match {
+              case Some(job) =>
+                // Only update the accumulator once for each result task.
+                if (!job.finished(rt.outputId)) {
+                  updateAccumulators(event)
+                }
+              case None => // Ignore update if task's job has finished.
+            }
           case _ =>
             updateAccumulators(event)
         }

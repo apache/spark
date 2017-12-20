@@ -224,7 +224,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
         new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
       // Wait until all salves are up
       try {
-        _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 60000)
+        TestUtils.waitUntilExecutorsUp(_sc, numSlaves, 60000)
         _sc
       } catch {
         case e: Throwable =>

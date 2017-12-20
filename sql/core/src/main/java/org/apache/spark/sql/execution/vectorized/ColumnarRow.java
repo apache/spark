@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.math.BigDecimal;
-
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.util.MapData;
@@ -30,37 +28,32 @@ import org.apache.spark.unsafe.types.UTF8String;
  * to be reused, callers should copy the data out if it needs to be stored.
  */
 public final class ColumnarRow extends InternalRow {
-  protected int rowId;
-  private final ColumnVector[] columns;
-  private final WritableColumnVector[] writableColumns;
+  // The data for this row. E.g. the value of 3rd int field is `data.getChildColumn(3).getInt(rowId)`.
+  private final ColumnVector data;
+  private final int rowId;
+  private final int numFields;
 
-  // Ctor used if this is a struct.
-  ColumnarRow(ColumnVector[] columns) {
-    this.columns = columns;
-    this.writableColumns = new WritableColumnVector[this.columns.length];
-    for (int i = 0; i < this.columns.length; i++) {
-      if (this.columns[i] instanceof WritableColumnVector) {
-        this.writableColumns[i] = (WritableColumnVector) this.columns[i];
-      }
-    }
+  ColumnarRow(ColumnVector data, int rowId) {
+    assert (data.dataType() instanceof StructType);
+    this.data = data;
+    this.rowId = rowId;
+    this.numFields = ((StructType) data.dataType()).size();
   }
 
-  public ColumnVector[] columns() { return columns; }
-
   @Override
-  public int numFields() { return columns.length; }
+  public int numFields() { return numFields; }
 
   /**
    * Revisit this. This is expensive. This is currently only used in test paths.
    */
   @Override
   public InternalRow copy() {
-    GenericInternalRow row = new GenericInternalRow(columns.length);
+    GenericInternalRow row = new GenericInternalRow(numFields);
     for (int i = 0; i < numFields(); i++) {
       if (isNullAt(i)) {
         row.setNullAt(i);
       } else {
-        DataType dt = columns[i].dataType();
+        DataType dt = data.getChildColumn(i).dataType();
         if (dt instanceof BooleanType) {
           row.setBoolean(i, getBoolean(i));
         } else if (dt instanceof ByteType) {
@@ -100,65 +93,65 @@ public final class ColumnarRow extends InternalRow {
   }
 
   @Override
-  public boolean isNullAt(int ordinal) { return columns[ordinal].isNullAt(rowId); }
+  public boolean isNullAt(int ordinal) { return data.getChildColumn(ordinal).isNullAt(rowId); }
 
   @Override
-  public boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
+  public boolean getBoolean(int ordinal) { return data.getChildColumn(ordinal).getBoolean(rowId); }
 
   @Override
-  public byte getByte(int ordinal) { return columns[ordinal].getByte(rowId); }
+  public byte getByte(int ordinal) { return data.getChildColumn(ordinal).getByte(rowId); }
 
   @Override
-  public short getShort(int ordinal) { return columns[ordinal].getShort(rowId); }
+  public short getShort(int ordinal) { return data.getChildColumn(ordinal).getShort(rowId); }
 
   @Override
-  public int getInt(int ordinal) { return columns[ordinal].getInt(rowId); }
+  public int getInt(int ordinal) { return data.getChildColumn(ordinal).getInt(rowId); }
 
   @Override
-  public long getLong(int ordinal) { return columns[ordinal].getLong(rowId); }
+  public long getLong(int ordinal) { return data.getChildColumn(ordinal).getLong(rowId); }
 
   @Override
-  public float getFloat(int ordinal) { return columns[ordinal].getFloat(rowId); }
+  public float getFloat(int ordinal) { return data.getChildColumn(ordinal).getFloat(rowId); }
 
   @Override
-  public double getDouble(int ordinal) { return columns[ordinal].getDouble(rowId); }
+  public double getDouble(int ordinal) { return data.getChildColumn(ordinal).getDouble(rowId); }
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getDecimal(rowId, precision, scale);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getDecimal(rowId, precision, scale);
   }
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getUTF8String(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getUTF8String(rowId);
   }
 
   @Override
   public byte[] getBinary(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getBinary(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getBinary(rowId);
   }
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
-    final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    final int months = data.getChildColumn(ordinal).getChildColumn(0).getInt(rowId);
+    final long microseconds = data.getChildColumn(ordinal).getChildColumn(1).getLong(rowId);
     return new CalendarInterval(months, microseconds);
   }
 
   @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getStruct(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getStruct(rowId);
   }
 
   @Override
   public ColumnarArray getArray(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getArray(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getArray(rowId);
   }
 
   @Override
@@ -205,97 +198,8 @@ public final class ColumnarRow extends InternalRow {
   }
 
   @Override
-  public void update(int ordinal, Object value) {
-    if (value == null) {
-      setNullAt(ordinal);
-    } else {
-      DataType dt = columns[ordinal].dataType();
-      if (dt instanceof BooleanType) {
-        setBoolean(ordinal, (boolean) value);
-      } else if (dt instanceof IntegerType) {
-        setInt(ordinal, (int) value);
-      } else if (dt instanceof ShortType) {
-        setShort(ordinal, (short) value);
-      } else if (dt instanceof LongType) {
-        setLong(ordinal, (long) value);
-      } else if (dt instanceof FloatType) {
-        setFloat(ordinal, (float) value);
-      } else if (dt instanceof DoubleType) {
-        setDouble(ordinal, (double) value);
-      } else if (dt instanceof DecimalType) {
-        DecimalType t = (DecimalType) dt;
-        setDecimal(ordinal, Decimal.apply((BigDecimal) value, t.precision(), t.scale()),
-                t.precision());
-      } else {
-        throw new UnsupportedOperationException("Datatype not supported " + dt);
-      }
-    }
-  }
+  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
 
   @Override
-  public void setNullAt(int ordinal) {
-    getWritableColumn(ordinal).putNull(rowId);
-  }
-
-  @Override
-  public void setBoolean(int ordinal, boolean value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putBoolean(rowId, value);
-  }
-
-  @Override
-  public void setByte(int ordinal, byte value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putByte(rowId, value);
-  }
-
-  @Override
-  public void setShort(int ordinal, short value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putShort(rowId, value);
-  }
-
-  @Override
-  public void setInt(int ordinal, int value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putInt(rowId, value);
-  }
-
-  @Override
-  public void setLong(int ordinal, long value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putLong(rowId, value);
-  }
-
-  @Override
-  public void setFloat(int ordinal, float value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putFloat(rowId, value);
-  }
-
-  @Override
-  public void setDouble(int ordinal, double value) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putDouble(rowId, value);
-  }
-
-  @Override
-  public void setDecimal(int ordinal, Decimal value, int precision) {
-    WritableColumnVector column = getWritableColumn(ordinal);
-    column.putNotNull(rowId);
-    column.putDecimal(rowId, value, precision);
-  }
-
-  private WritableColumnVector getWritableColumn(int ordinal) {
-    WritableColumnVector column = writableColumns[ordinal];
-    assert (!column.isConstant);
-    return column;
-  }
+  public void setNullAt(int ordinal) { throw new UnsupportedOperationException(); }
 }

@@ -158,10 +158,30 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.memoryOverhead</code></td>
+  <td>driverMemory * 0.10, with minimum of 384 </td>
+  <td>
+    The amount of off-heap memory (in megabytes) to be allocated per driver in cluster mode. This is
+    memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
+    This tends to grow with the container size (typically 6-10%). This option is currently supported
+    on YARN and Kubernetes.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
     Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.memoryOverhead</code></td>
+  <td>executorMemory * 0.10, with minimum of 384 </td>
+  <td>
+    The amount of off-heap memory (in megabytes) to be allocated per executor. This is memory that
+    accounts for things like VM overheads, interned strings, other native overheads, etc. This tends
+    to grow with the executor size (typically 6-10%). This option is currently supported on YARN and
+    Kubernetes.
   </td>
 </tr>
 <tr>
@@ -1132,6 +1152,46 @@ Apart from these, the following properties are also available, and may be useful
     to get the replication level of the block to the initial number.
   </td>
 </tr>
+<tr>
+  <td><code>spark.cleaner.periodicGC.interval</code></td>
+  <td>30min</td>
+  <td>
+    Controls how often to trigger a garbage collection.<br><br>
+    This context cleaner triggers cleanups only when weak references are garbage collected.
+    In long-running applications with large driver JVMs, where there is little memory pressure
+    on the driver, this may happen very occasionally or not at all. Not cleaning at all may
+    lead to executors running out of disk space after a while.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking</code></td>
+  <td>true</td>
+  <td>
+    Enables or disables context cleaning.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking.blocking</code></td>
+  <td>true</td>
+  <td>
+    Controls whether the cleaning thread should block on cleanup tasks (other than shuffle, which is controlled by
+    <code>spark.cleaner.referenceTracking.blocking.shuffle</code> Spark property).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking.blocking.shuffle</code></td>
+  <td>false</td>
+  <td>
+    Controls whether the cleaning thread should block on shuffle cleanup tasks.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking.cleanCheckpoints</code></td>
+  <td>false</td>
+  <td>
+    Controls whether to clean checkpoint files if the reference is out of scope.
+  </td>
+</tr>
 </table>
 
 ### Execution Behavior
@@ -1438,10 +1498,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
-  <td>0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
+  <td>0.8 for KUBERNETES mode; 0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode, CPU cores in standalone mode and Mesos coarsed-grained
+    (resources are executors in yarn mode and Kubernetes mode, CPU cores in standalone mode and Mesos coarsed-grained
      mode ['spark.cores.max' value is total expected resources for Mesos coarse-grained mode] )
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
