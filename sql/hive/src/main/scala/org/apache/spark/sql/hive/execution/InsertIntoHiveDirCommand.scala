@@ -27,10 +27,12 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive.client.HiveClientImpl
 
 /**
@@ -54,9 +56,13 @@ case class InsertIntoHiveDirCommand(
     isLocal: Boolean,
     storage: CatalogStorageFormat,
     query: LogicalPlan,
-    overwrite: Boolean) extends SaveAsHiveFile {
+    overwrite: Boolean,
+    allColumns: Seq[Attribute]) extends SaveAsHiveFile {
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def children: Seq[LogicalPlan] = query :: Nil
+
+  override def run(sparkSession: SparkSession, physicalChildren: Seq[SparkPlan]): Seq[Row] = {
+    assert(physicalChildren.length == 1)
     assert(storage.locationUri.nonEmpty)
 
     val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
@@ -98,10 +104,11 @@ case class InsertIntoHiveDirCommand(
     try {
       saveAsHiveFile(
         sparkSession = sparkSession,
-        queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
+        plan = physicalChildren.head,
         hadoopConf = hadoopConf,
         fileSinkConf = fileSinkConf,
-        outputLocation = tmpPath.toString)
+        outputLocation = tmpPath.toString,
+        allColumns = allColumns)
 
       val fs = writeToPath.getFileSystem(hadoopConf)
       if (overwrite && fs.exists(writeToPath)) {
