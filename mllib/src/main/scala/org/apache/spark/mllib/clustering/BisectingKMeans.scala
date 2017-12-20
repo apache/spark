@@ -197,7 +197,9 @@ class BisectingKMeans private (
           newClusters = summarize(d, newAssignments)
           newClusterCenters = newClusters.mapValues(_.center).map(identity)
         }
-        if (preIndices != null) preIndices.unpersist(blocking = false)
+        if (preIndices != null) {
+          preIndices.unpersist(false)
+        }
         preIndices = indices
         indices = updateAssignments(assignments, divisibleIndices, newClusterCenters).keys
           .persist(StorageLevel.MEMORY_AND_DISK)
@@ -212,9 +214,13 @@ class BisectingKMeans private (
       }
       level += 1
     }
-    if (preIndices != null) preIndices.unpersist(blocking = false)
-    if (indices != null) indices.unpersist(blocking = false)
-    norms.unpersist(blocking = false)
+    if (preIndices != null) {
+      preIndices.unpersist(false)
+    }
+    if (indices != null) {
+      indices.unpersist(false)
+    }
+    norms.unpersist(false)
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters)
     new BisectingKMeansModel(root)
