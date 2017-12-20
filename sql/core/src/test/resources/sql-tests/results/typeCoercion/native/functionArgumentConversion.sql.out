@@ -75,12 +75,12 @@ struct<array(CAST(CAST(1 AS TINYINT) AS STRING), CAST(CAST(1 AS STRING) AS STRIN
 
 
 -- !query 9
-SELECT array(cast(1 as tinyint), cast('1' as binary)) FROM t
+SELECT size(array(cast(1 as tinyint), cast('1' as binary))) FROM t
 -- !query 9 schema
 struct<>
 -- !query 9 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST(1 AS TINYINT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [tinyint, binary]; line 1 pos 7
+cannot resolve 'array(CAST(1 AS TINYINT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [tinyint, binary]; line 1 pos 12
 
 
 -- !query 10
@@ -175,12 +175,12 @@ struct<array(CAST(CAST(1 AS SMALLINT) AS STRING), CAST(CAST(1 AS STRING) AS STRI
 
 
 -- !query 21
-SELECT array(cast(1 as smallint), cast('1' as binary)) FROM t
+SELECT size(array(cast(1 as smallint), cast('1' as binary))) FROM t
 -- !query 21 schema
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST(1 AS SMALLINT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [smallint, binary]; line 1 pos 7
+cannot resolve 'array(CAST(1 AS SMALLINT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [smallint, binary]; line 1 pos 12
 
 
 -- !query 22
@@ -275,12 +275,12 @@ struct<array(CAST(CAST(1 AS INT) AS STRING), CAST(CAST(1 AS STRING) AS STRING)):
 
 
 -- !query 33
-SELECT array(cast(1 as int), cast('1' as binary)) FROM t
+SELECT size(array(cast(1 as int), cast('1' as binary))) FROM t
 -- !query 33 schema
 struct<>
 -- !query 33 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST(1 AS INT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [int, binary]; line 1 pos 7
+cannot resolve 'array(CAST(1 AS INT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [int, binary]; line 1 pos 12
 
 
 -- !query 34
@@ -375,12 +375,12 @@ struct<array(CAST(CAST(1 AS BIGINT) AS STRING), CAST(CAST(1 AS STRING) AS STRING
 
 
 -- !query 45
-SELECT array(cast(1 as bigint), cast('1' as binary)) FROM t
+SELECT size(array(cast(1 as bigint), cast('1' as binary))) FROM t
 -- !query 45 schema
 struct<>
 -- !query 45 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST(1 AS BIGINT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [bigint, binary]; line 1 pos 7
+cannot resolve 'array(CAST(1 AS BIGINT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [bigint, binary]; line 1 pos 12
 
 
 -- !query 46
@@ -475,12 +475,12 @@ struct<array(CAST(CAST(1 AS FLOAT) AS STRING), CAST(CAST(1 AS STRING) AS STRING)
 
 
 -- !query 57
-SELECT array(cast(1 as float), cast('1' as binary)) FROM t
+SELECT size(array(cast(1 as float), cast('1' as binary))) FROM t
 -- !query 57 schema
 struct<>
 -- !query 57 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST(1 AS FLOAT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [float, binary]; line 1 pos 7
+cannot resolve 'array(CAST(1 AS FLOAT), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [float, binary]; line 1 pos 12
 
 
 -- !query 58
@@ -575,12 +575,12 @@ struct<array(CAST(CAST(1 AS DOUBLE) AS STRING), CAST(CAST(1 AS STRING) AS STRING
 
 
 -- !query 69
-SELECT array(cast(1 as double), cast('1' as binary)) FROM t
+SELECT size(array(cast(1 as double), cast('1' as binary))) FROM t
 -- !query 69 schema
 struct<>
 -- !query 69 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST(1 AS DOUBLE), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [double, binary]; line 1 pos 7
+cannot resolve 'array(CAST(1 AS DOUBLE), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [double, binary]; line 1 pos 12
 
 
 -- !query 70
@@ -675,12 +675,12 @@ struct<array(CAST(CAST(1 AS DECIMAL(10,0)) AS STRING), CAST(CAST(1 AS STRING) AS
 
 
 -- !query 81
-SELECT array(cast(1 as decimal(10, 0)), cast('1' as binary)) FROM t
+SELECT size(array(cast(1 as decimal(10, 0)), cast('1' as binary))) FROM t
 -- !query 81 schema
 struct<>
 -- !query 81 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST(1 AS DECIMAL(10,0)), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [decimal(10,0), binary]; line 1 pos 7
+cannot resolve 'array(CAST(1 AS DECIMAL(10,0)), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [decimal(10,0), binary]; line 1 pos 12
 
 
 -- !query 82
@@ -775,12 +775,12 @@ struct<array(CAST(1 AS STRING), CAST(1 AS STRING)):array<string>>
 
 
 -- !query 93
-SELECT array(cast(1 as string), cast('1' as binary)) FROM t
+SELECT size(array(cast(1 as string), cast('1' as binary))) FROM t
 -- !query 93 schema
 struct<>
 -- !query 93 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST(1 AS STRING), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [string, binary]; line 1 pos 7
+cannot resolve 'array(CAST(1 AS STRING), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [string, binary]; line 1 pos 12
 
 
 -- !query 94
@@ -809,110 +809,110 @@ struct<array(CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(2017-12-11 09:30:00 AS
 
 
 -- !query 97
-SELECT array(cast('1' as binary), cast(1 as tinyint)) FROM t
+SELECT size(array(cast('1' as binary), cast(1 as tinyint))) FROM t
 -- !query 97 schema
 struct<>
 -- !query 97 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS TINYINT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, tinyint]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS TINYINT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, tinyint]; line 1 pos 12
 
 
 -- !query 98
-SELECT array(cast('1' as binary), cast(1 as smallint)) FROM t
+SELECT size(array(cast('1' as binary), cast(1 as smallint))) FROM t
 -- !query 98 schema
 struct<>
 -- !query 98 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS SMALLINT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, smallint]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS SMALLINT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, smallint]; line 1 pos 12
 
 
 -- !query 99
-SELECT array(cast('1' as binary), cast(1 as int)) FROM t
+SELECT size(array(cast('1' as binary), cast(1 as int))) FROM t
 -- !query 99 schema
 struct<>
 -- !query 99 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS INT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, int]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS INT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, int]; line 1 pos 12
 
 
 -- !query 100
-SELECT array(cast('1' as binary), cast(1 as bigint)) FROM t
+SELECT size(array(cast('1' as binary), cast(1 as bigint))) FROM t
 -- !query 100 schema
 struct<>
 -- !query 100 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS BIGINT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, bigint]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS BIGINT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, bigint]; line 1 pos 12
 
 
 -- !query 101
-SELECT array(cast('1' as binary), cast(1 as float)) FROM t
+SELECT size(array(cast('1' as binary), cast(1 as float))) FROM t
 -- !query 101 schema
 struct<>
 -- !query 101 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS FLOAT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, float]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS FLOAT))' due to data type mismatch: input to function array should all be the same type, but it's [binary, float]; line 1 pos 12
 
 
 -- !query 102
-SELECT array(cast('1' as binary), cast(1 as double)) FROM t
+SELECT size(array(cast('1' as binary), cast(1 as double))) FROM t
 -- !query 102 schema
 struct<>
 -- !query 102 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS DOUBLE))' due to data type mismatch: input to function array should all be the same type, but it's [binary, double]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS DOUBLE))' due to data type mismatch: input to function array should all be the same type, but it's [binary, double]; line 1 pos 12
 
 
 -- !query 103
-SELECT array(cast('1' as binary), cast(1 as decimal(10, 0))) FROM t
+SELECT size(array(cast('1' as binary), cast(1 as decimal(10, 0)))) FROM t
 -- !query 103 schema
 struct<>
 -- !query 103 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS DECIMAL(10,0)))' due to data type mismatch: input to function array should all be the same type, but it's [binary, decimal(10,0)]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS DECIMAL(10,0)))' due to data type mismatch: input to function array should all be the same type, but it's [binary, decimal(10,0)]; line 1 pos 12
 
 
 -- !query 104
-SELECT array(cast('1' as binary), cast(1 as string)) FROM t
+SELECT size(array(cast('1' as binary), cast(1 as string))) FROM t
 -- !query 104 schema
 struct<>
 -- !query 104 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS STRING))' due to data type mismatch: input to function array should all be the same type, but it's [binary, string]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS STRING))' due to data type mismatch: input to function array should all be the same type, but it's [binary, string]; line 1 pos 12
 
 
 -- !query 105
-SELECT array(cast('1' as binary), cast('1' as binary)) FROM t
+SELECT size(array(cast('1' as binary), cast('1' as binary))) FROM t
 -- !query 105 schema
-struct<array(CAST(1 AS BINARY), CAST(1 AS BINARY)):array<binary>>
+struct<size(array(CAST(1 AS BINARY), CAST(1 AS BINARY))):int>
 -- !query 105 output
-[[B@d43b792,[B@141388e5]
+2
 
 
 -- !query 106
-SELECT array(cast('1' as binary), cast(1 as boolean)) FROM t
+SELECT size(array(cast('1' as binary), cast(1 as boolean))) FROM t
 -- !query 106 schema
 struct<>
 -- !query 106 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS BOOLEAN))' due to data type mismatch: input to function array should all be the same type, but it's [binary, boolean]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST(1 AS BOOLEAN))' due to data type mismatch: input to function array should all be the same type, but it's [binary, boolean]; line 1 pos 12
 
 
 -- !query 107
-SELECT array(cast('1' as binary), cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
+SELECT size(array(cast('1' as binary), cast('2017-12-11 09:30:00.0' as timestamp))) FROM t
 -- !query 107 schema
 struct<>
 -- !query 107 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: input to function array should all be the same type, but it's [binary, timestamp]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: input to function array should all be the same type, but it's [binary, timestamp]; line 1 pos 12
 
 
 -- !query 108
-SELECT array(cast('1' as binary), cast('2017-12-11 09:30:00' as date)) FROM t
+SELECT size(array(cast('1' as binary), cast('2017-12-11 09:30:00' as date))) FROM t
 -- !query 108 schema
 struct<>
 -- !query 108 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('1' AS BINARY), CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: input to function array should all be the same type, but it's [binary, date]; line 1 pos 7
+cannot resolve 'array(CAST('1' AS BINARY), CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: input to function array should all be the same type, but it's [binary, date]; line 1 pos 12
 
 
 -- !query 109
@@ -988,12 +988,12 @@ cannot resolve 'array(CAST(1 AS BOOLEAN), CAST(1 AS STRING))' due to data type m
 
 
 -- !query 117
-SELECT array(cast(1 as boolean), cast('1' as binary)) FROM t
+SELECT size(array(cast(1 as boolean), cast('1' as binary))) FROM t
 -- !query 117 schema
 struct<>
 -- !query 117 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST(1 AS BOOLEAN), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [boolean, binary]; line 1 pos 7
+cannot resolve 'array(CAST(1 AS BOOLEAN), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [boolean, binary]; line 1 pos 12
 
 
 -- !query 118
@@ -1094,12 +1094,12 @@ struct<array(CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) AS STRING), CAST(CAST
 
 
 -- !query 129
-SELECT array(cast('2017-12-11 09:30:00.0' as timestamp), cast('1' as binary)) FROM t
+SELECT size(array(cast('2017-12-11 09:30:00.0' as timestamp), cast('1' as binary))) FROM t
 -- !query 129 schema
 struct<>
 -- !query 129 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [timestamp, binary]; line 1 pos 7
+cannot resolve 'array(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [timestamp, binary]; line 1 pos 12
 
 
 -- !query 130
@@ -1199,12 +1199,12 @@ struct<array(CAST(CAST(2017-12-11 09:30:00 AS DATE) AS STRING), CAST(CAST(1 AS S
 
 
 -- !query 141
-SELECT array(cast('2017-12-11 09:30:00' as date), cast('1' as binary)) FROM t
+SELECT size(array(cast('2017-12-11 09:30:00' as date), cast('1' as binary))) FROM t
 -- !query 141 schema
 struct<>
 -- !query 141 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [date, binary]; line 1 pos 7
+cannot resolve 'array(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS BINARY))' due to data type mismatch: input to function array should all be the same type, but it's [date, binary]; line 1 pos 12
 
 
 -- !query 142
@@ -1297,11 +1297,11 @@ struct<map(CAST(1 AS TINYINT), CAST(1 AS STRING)):map<tinyint,string>>
 
 
 -- !query 153
-SELECT map(cast(1 as tinyint), cast('1' as binary)) FROM t
+SELECT size(map(cast(1 as tinyint), cast('1' as binary))) FROM t
 -- !query 153 schema
-struct<map(CAST(1 AS TINYINT), CAST(1 AS BINARY)):map<tinyint,binary>>
+struct<size(map(CAST(1 AS TINYINT), CAST(1 AS BINARY))):int>
 -- !query 153 output
-{1:[B@2d197a9f}
+1
 
 
 -- !query 154
@@ -1393,11 +1393,11 @@ struct<map(CAST(1 AS SMALLINT), CAST(1 AS STRING)):map<smallint,string>>
 
 
 -- !query 165
-SELECT map(cast(1 as smallint), cast('1' as binary)) FROM t
+SELECT size(map(cast(1 as smallint), cast('1' as binary))) FROM t
 -- !query 165 schema
-struct<map(CAST(1 AS SMALLINT), CAST(1 AS BINARY)):map<smallint,binary>>
+struct<size(map(CAST(1 AS SMALLINT), CAST(1 AS BINARY))):int>
 -- !query 165 output
-{1:[B@2e42da42}
+1
 
 
 -- !query 166
@@ -1489,11 +1489,11 @@ struct<map(CAST(1 AS INT), CAST(1 AS STRING)):map<int,string>>
 
 
 -- !query 177
-SELECT map(cast(1 as int), cast('1' as binary)) FROM t
+SELECT size(map(cast(1 as int), cast('1' as binary))) FROM t
 -- !query 177 schema
-struct<map(CAST(1 AS INT), CAST(1 AS BINARY)):map<int,binary>>
+struct<size(map(CAST(1 AS INT), CAST(1 AS BINARY))):int>
 -- !query 177 output
-{1:[B@29c4b0eb}
+1
 
 
 -- !query 178
@@ -1585,11 +1585,11 @@ struct<map(CAST(1 AS BIGINT), CAST(1 AS STRING)):map<bigint,string>>
 
 
 -- !query 189
-SELECT map(cast(1 as bigint), cast('1' as binary)) FROM t
+SELECT size(map(cast(1 as bigint), cast('1' as binary))) FROM t
 -- !query 189 schema
-struct<map(CAST(1 AS BIGINT), CAST(1 AS BINARY)):map<bigint,binary>>
+struct<size(map(CAST(1 AS BIGINT), CAST(1 AS BINARY))):int>
 -- !query 189 output
-{1:[B@77a3cfae}
+1
 
 
 -- !query 190
@@ -1681,11 +1681,11 @@ struct<map(CAST(1 AS FLOAT), CAST(1 AS STRING)):map<float,string>>
 
 
 -- !query 201
-SELECT map(cast(1 as float), cast('1' as binary)) FROM t
+SELECT size(map(cast(1 as float), cast('1' as binary))) FROM t
 -- !query 201 schema
-struct<map(CAST(1 AS FLOAT), CAST(1 AS BINARY)):map<float,binary>>
+struct<size(map(CAST(1 AS FLOAT), CAST(1 AS BINARY))):int>
 -- !query 201 output
-{1.0:[B@70353cf8}
+1
 
 
 -- !query 202
@@ -1777,11 +1777,11 @@ struct<map(CAST(1 AS DOUBLE), CAST(1 AS STRING)):map<double,string>>
 
 
 -- !query 213
-SELECT map(cast(1 as double), cast('1' as binary)) FROM t
+SELECT size(map(cast(1 as double), cast('1' as binary))) FROM t
 -- !query 213 schema
-struct<map(CAST(1 AS DOUBLE), CAST(1 AS BINARY)):map<double,binary>>
+struct<size(map(CAST(1 AS DOUBLE), CAST(1 AS BINARY))):int>
 -- !query 213 output
-{1.0:[B@47c391c4}
+1
 
 
 -- !query 214
@@ -1873,11 +1873,11 @@ struct<map(CAST(1 AS DECIMAL(10,0)), CAST(1 AS STRING)):map<decimal(10,0),string
 
 
 -- !query 225
-SELECT map(cast(1 as decimal(10, 0)), cast('1' as binary)) FROM t
+SELECT size(map(cast(1 as decimal(10, 0)), cast('1' as binary))) FROM t
 -- !query 225 schema
-struct<map(CAST(1 AS DECIMAL(10,0)), CAST(1 AS BINARY)):map<decimal(10,0),binary>>
+struct<size(map(CAST(1 AS DECIMAL(10,0)), CAST(1 AS BINARY))):int>
 -- !query 225 output
-{1:[B@20bf2928}
+1
 
 
 -- !query 226
@@ -1969,11 +1969,11 @@ struct<map(CAST(1 AS STRING), CAST(1 AS STRING)):map<string,string>>
 
 
 -- !query 237
-SELECT map(cast(1 as string), cast('1' as binary)) FROM t
+SELECT size(map(cast(1 as string), cast('1' as binary))) FROM t
 -- !query 237 schema
-struct<map(CAST(1 AS STRING), CAST(1 AS BINARY)):map<string,binary>>
+struct<size(map(CAST(1 AS STRING), CAST(1 AS BINARY))):int>
 -- !query 237 output
-{"1":[B@51eb383e}
+1
 
 
 -- !query 238
@@ -2001,99 +2001,99 @@ struct<map(CAST(1 AS STRING), CAST(2017-12-11 09:30:00 AS DATE)):map<string,date
 
 
 -- !query 241
-SELECT map(cast('1' as binary), cast(1 as tinyint)) FROM t
+SELECT size(map(cast('1' as binary), cast(1 as tinyint))) FROM t
 -- !query 241 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS TINYINT)):map<binary,tinyint>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS TINYINT))):int>
 -- !query 241 output
-{[B@21a97a70:1}
+1
 
 
 -- !query 242
-SELECT map(cast('1' as binary), cast(1 as smallint)) FROM t
+SELECT size(map(cast('1' as binary), cast(1 as smallint))) FROM t
 -- !query 242 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS SMALLINT)):map<binary,smallint>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS SMALLINT))):int>
 -- !query 242 output
-{[B@56f140bd:1}
+1
 
 
 -- !query 243
-SELECT map(cast('1' as binary), cast(1 as int)) FROM t
+SELECT size(map(cast('1' as binary), cast(1 as int))) FROM t
 -- !query 243 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS INT)):map<binary,int>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS INT))):int>
 -- !query 243 output
-{[B@3f66734d:1}
+1
 
 
 -- !query 244
-SELECT map(cast('1' as binary), cast(1 as bigint)) FROM t
+SELECT size(map(cast('1' as binary), cast(1 as bigint))) FROM t
 -- !query 244 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS BIGINT)):map<binary,bigint>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS BIGINT))):int>
 -- !query 244 output
-{[B@21077650:1}
+1
 
 
 -- !query 245
-SELECT map(cast('1' as binary), cast(1 as float)) FROM t
+SELECT size(map(cast('1' as binary), cast(1 as float))) FROM t
 -- !query 245 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS FLOAT)):map<binary,float>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS FLOAT))):int>
 -- !query 245 output
-{[B@5ad51f6:1.0}
+1
 
 
 -- !query 246
-SELECT map(cast('1' as binary), cast(1 as double)) FROM t
+SELECT size(map(cast('1' as binary), cast(1 as double))) FROM t
 -- !query 246 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS DOUBLE)):map<binary,double>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS DOUBLE))):int>
 -- !query 246 output
-{[B@1bba2c36:1.0}
+1
 
 
 -- !query 247
-SELECT map(cast('1' as binary), cast(1 as decimal(10, 0))) FROM t
+SELECT size(map(cast('1' as binary), cast(1 as decimal(10, 0)))) FROM t
 -- !query 247 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS DECIMAL(10,0))):map<binary,decimal(10,0)>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS DECIMAL(10,0)))):int>
 -- !query 247 output
-{[B@11e99e17:1}
+1
 
 
 -- !query 248
-SELECT map(cast('1' as binary), cast(1 as string)) FROM t
+SELECT size(map(cast('1' as binary), cast(1 as string))) FROM t
 -- !query 248 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS STRING)):map<binary,string>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS STRING))):int>
 -- !query 248 output
-{[B@dc82ecd:"1"}
+1
 
 
 -- !query 249
-SELECT map(cast('1' as binary), cast('1' as binary)) FROM t
+SELECT size(map(cast('1' as binary), cast('1' as binary))) FROM t
 -- !query 249 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS BINARY)):map<binary,binary>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS BINARY))):int>
 -- !query 249 output
-{[B@567a6c1b:[B@3853921f}
+1
 
 
 -- !query 250
-SELECT map(cast('1' as binary), cast(1 as boolean)) FROM t
+SELECT size(map(cast('1' as binary), cast(1 as boolean))) FROM t
 -- !query 250 schema
-struct<map(CAST(1 AS BINARY), CAST(1 AS BOOLEAN)):map<binary,boolean>>
+struct<size(map(CAST(1 AS BINARY), CAST(1 AS BOOLEAN))):int>
 -- !query 250 output
-{[B@162395d7:true}
+1
 
 
 -- !query 251
-SELECT map(cast('1' as binary), cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
+SELECT size(map(cast('1' as binary), cast('2017-12-11 09:30:00.0' as timestamp))) FROM t
 -- !query 251 schema
-struct<map(CAST(1 AS BINARY), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)):map<binary,timestamp>>
+struct<size(map(CAST(1 AS BINARY), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))):int>
 -- !query 251 output
-{[B@414d08e9:2017-12-11 09:30:00.0}
+1
 
 
 -- !query 252
-SELECT map(cast('1' as binary), cast('2017-12-11 09:30:00' as date)) FROM t
+SELECT size(map(cast('1' as binary), cast('2017-12-11 09:30:00' as date))) FROM t
 -- !query 252 schema
-struct<map(CAST(1 AS BINARY), CAST(2017-12-11 09:30:00 AS DATE)):map<binary,date>>
+struct<size(map(CAST(1 AS BINARY), CAST(2017-12-11 09:30:00 AS DATE))):int>
 -- !query 252 output
-{[B@53083c0b:2017-12-11}
+1
 
 
 -- !query 253
@@ -2161,11 +2161,11 @@ struct<map(CAST(1 AS BOOLEAN), CAST(1 AS STRING)):map<boolean,string>>
 
 
 -- !query 261
-SELECT map(cast(1 as boolean), cast('1' as binary)) FROM t
+SELECT size(map(cast(1 as boolean), cast('1' as binary))) FROM t
 -- !query 261 schema
-struct<map(CAST(1 AS BOOLEAN), CAST(1 AS BINARY)):map<boolean,binary>>
+struct<size(map(CAST(1 AS BOOLEAN), CAST(1 AS BINARY))):int>
 -- !query 261 output
-{true:[B@3631ae9e}
+1
 
 
 -- !query 262
@@ -2257,11 +2257,11 @@ struct<map(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS STRING)):map<time
 
 
 -- !query 273
-SELECT map(cast('2017-12-11 09:30:00.0' as timestamp), cast('1' as binary)) FROM t
+SELECT size(map(cast('2017-12-11 09:30:00.0' as timestamp), cast('1' as binary))) FROM t
 -- !query 273 schema
-struct<map(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS BINARY)):map<timestamp,binary>>
+struct<size(map(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS BINARY))):int>
 -- !query 273 output
-{2017-12-11 09:30:00.0:[B@24a0f930}
+1
 
 
 -- !query 274
@@ -2353,11 +2353,11 @@ struct<map(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS STRING)):map<date,string
 
 
 -- !query 285
-SELECT map(cast('2017-12-11 09:30:00' as date), cast('1' as binary)) FROM t
+SELECT size(map(cast('2017-12-11 09:30:00' as date), cast('1' as binary))) FROM t
 -- !query 285 schema
-struct<map(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS BINARY)):map<date,binary>>
+struct<size(map(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS BINARY))):int>
 -- !query 285 output
-{2017-12-11:[B@821e08}
+1
 
 
 -- !query 286
