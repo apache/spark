@@ -59,8 +59,6 @@ case class InsertIntoHiveDirCommand(
     overwrite: Boolean,
     allColumns: Seq[Attribute]) extends SaveAsHiveFile {
 
-  override def children: Seq[LogicalPlan] = query :: Nil
-
   override def run(sparkSession: SparkSession, physicalChildren: Seq[SparkPlan]): Seq[Row] = {
     assert(physicalChildren.length == 1)
     assert(storage.locationUri.nonEmpty)

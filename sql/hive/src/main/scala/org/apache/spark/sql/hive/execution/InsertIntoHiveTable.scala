@@ -71,8 +71,6 @@ case class InsertIntoHiveTable(
     ifPartitionNotExists: Boolean,
     allColumns: Seq[Attribute]) extends SaveAsHiveFile {
 
-  override def children: Seq[LogicalPlan] = query :: Nil
-
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the

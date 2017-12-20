@@ -58,8 +58,6 @@ case class InsertIntoHadoopFsRelationCommand(
   extends DataWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
-  override def children: Seq[LogicalPlan] = query :: Nil
-
   override def run(sparkSession: SparkSession, physicalChildren: Seq[SparkPlan]): Seq[Row] = {
     assert(physicalChildren.length == 1)
 

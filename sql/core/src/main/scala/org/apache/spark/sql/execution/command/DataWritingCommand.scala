@@ -21,9 +21,11 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisBarrier, Command, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
+import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -31,6 +33,18 @@ import org.apache.spark.util.SerializableConfiguration
  * A special `RunnableCommand` which writes data out and updates metrics.
  */
 trait DataWritingCommand extends Command {
+  /**
+   * The input query plan that produces the data to be written.
+   * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns
+   *            to [[FileFormatWriter]].
+   */
+  def query: LogicalPlan
+
+  override def children: Seq[LogicalPlan] = query :: Nil
+
+  // Output columns of the analyzed input query plan
+  def allColumns: Seq[Attribute]
+
   lazy val metrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
     Map(
@@ -46,7 +60,5 @@ trait DataWritingCommand extends Command {
     new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
   }
 
-  def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
-    throw new NotImplementedError
-  }
+  def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row]
 }
