@@ -148,6 +148,15 @@ public class SessionManager extends CompositeService {
     }
   }
 
+  private void initSessionTimeoutCheckerConfig() {
+    checkInterval = HiveConf.getTimeVar(
+        hiveConf, ConfVars.HIVE_SERVER2_SESSION_CHECK_INTERVAL, TimeUnit.MILLISECONDS);
+    sessionTimeout = HiveConf.getTimeVar(
+        hiveConf, ConfVars.HIVE_SERVER2_IDLE_SESSION_TIMEOUT, TimeUnit.MILLISECONDS);
+    checkOperation = HiveConf.getBoolVar(hiveConf,
+        ConfVars.HIVE_SERVER2_IDLE_SESSION_CHECK_OPERATION);
+  }
+
   private void startTimeoutChecker() {
     final long interval = Math.max(checkInterval, 3000L);  // minimum 3 seconds
     Runnable timeoutChecker = new Runnable() {
