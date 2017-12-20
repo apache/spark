@@ -168,7 +168,7 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast(1 as string) DESC RANGE BETWE
 struct<>
 -- !query 20 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'RANGE BETWEEN CURRENT ROW AND CAST(1 AS STRING) FOLLOWING' due to data type mismatch: The data type of the upper bound 'StringType does not match the expected data type 'org.apache.spark.sql.types.TypeCollection@7ff36201'.; line 1 pos 21
+cannot resolve 'RANGE BETWEEN CURRENT ROW AND CAST(1 AS STRING) FOLLOWING' due to data type mismatch: The data type of the upper bound 'StringType does not match the expected data type '(numeric or calendarinterval)'.; line 1 pos 21
 
 
 -- !query 21
@@ -186,7 +186,7 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast(1 as boolean) DESC RANGE BETW
 struct<>
 -- !query 22 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'RANGE BETWEEN CURRENT ROW AND CAST(1 AS BOOLEAN) FOLLOWING' due to data type mismatch: The data type of the upper bound 'BooleanType does not match the expected data type 'org.apache.spark.sql.types.TypeCollection@7ff36201'.; line 1 pos 21
+cannot resolve 'RANGE BETWEEN CURRENT ROW AND CAST(1 AS BOOLEAN) FOLLOWING' due to data type mismatch: The data type of the upper bound 'BooleanType does not match the expected data type '(numeric or calendarinterval)'.; line 1 pos 21
 
 
 -- !query 23

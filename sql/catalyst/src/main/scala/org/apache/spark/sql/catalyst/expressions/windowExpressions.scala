@@ -252,7 +252,7 @@ case class SpecifiedWindowFrame(
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
       TypeCheckFailure(
         s"The data type of the $location bound '${e.dataType} does not match " +
-          s"the expected data type '${frameType.inputType}'.")
+          s"the expected data type '${frameType.inputType.simpleString}'.")
     case _ => TypeCheckSuccess
   }
 
