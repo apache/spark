@@ -122,11 +122,8 @@ class ArrowPythonRunner(
       private var vectors: Array[ColumnVector] = _
 
       context.addTaskCompletionListener { _ =>
-        // todo: we need something like `reader.end()`, which release all the resources, but leave
-        // the input stream open. `reader.close()` will close the socket and we can't reuse worker.
-        // So here we simply not close the reader, which is problematic.
-        if (root != null) {
-          root.close()
+        if (reader != null) {
+          reader.close(false)
         }
         allocator.close()
       }
@@ -145,7 +142,7 @@ class ArrowPythonRunner(
               batch.setNumRows(root.getRowCount)
               batch
             } else {
-              root.close()
+              reader.close(false)
               allocator.close()
               // Reach end of stream. Call `read()` again to read control data.
               read()
