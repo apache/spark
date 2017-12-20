@@ -33,7 +33,7 @@ def _wrap_function(sc, func, returnType):
 
 
 def _create_udf(f, returnType, evalType):
-    from pyspark.sql.types import _require_minimum_pyarrow_version
+    from pyspark.sql.utils import _require_minimum_pyarrow_version
 
     _require_minimum_pyarrow_version()
 

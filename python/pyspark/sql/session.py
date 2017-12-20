@@ -494,7 +494,8 @@ class SparkSession(object):
         """
         from pyspark.serializers import ArrowSerializer, _create_batch
         from pyspark.sql.types import from_arrow_schema, to_arrow_type, \
-            _old_pandas_exception_message, _require_minimum_pyarrow_version, TimestampType
+            _old_pandas_exception_message, TimestampType
+        from pyspark.sql.utils import _require_minimum_pyarrow_version
         try:
             from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
         except ImportError as e:

@@ -1678,15 +1678,6 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
-def _require_minimum_pyarrow_version():
-    """ Raise ImportError if minimum version of pyarrow is not installed
-    """
-    from distutils.version import LooseVersion
-    import pyarrow
-    if pyarrow.__version__ < LooseVersion('0.8.0'):
-        raise ImportError("pyarrow >= 0.8.0 must be installed on calling Python process")
-
-
 def _old_pandas_exception_message(e):
     """ Create an error message for importing old Pandas.
     """

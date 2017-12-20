@@ -1891,8 +1891,8 @@ class DataFrame(object):
 
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
-                from pyspark.sql.types import _check_dataframe_localize_timestamps, \
-                    _require_minimum_pyarrow_version
+                from pyspark.sql.types import _check_dataframe_localize_timestamps
+                from pyspark.sql.utils import _require_minimum_pyarrow_version
                 import pyarrow
                 _require_minimum_pyarrow_version()
                 tables = self._collectAsArrow()
