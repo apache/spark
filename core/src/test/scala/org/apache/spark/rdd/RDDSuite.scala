@@ -870,7 +870,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     var cum2 = 1L
     cumprod.collect().foreach { case (x, cum) =>
       cum2 *= x
-      assert(cum1 === cum)
+      assert(cum2 === cum)
     }
   }
 
