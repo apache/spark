@@ -214,11 +214,15 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
     // Create the collection.
     val wrapperClass = classOf[mutable.WrappedArray[_]].getName
-    ctx.addMutableState(
+    val wrappedArray = ctx.addMutableState(
       s"$wrapperClass<InternalRow>",
-      ev.value,
-      v => s"$v = $wrapperClass$$.MODULE$$.make($rowData);", useFreshName = false)
-    ev.copy(code = code, isNull = "false")
+      "stackWrappedArray",
+      v => s"$v = $wrapperClass$$.MODULE$$.make($rowData);")
+    ev.copy(code =
+      s"""
+         |$code
+         |$wrapperClass<InternalRow> ${ev.value} = $wrappedArray;
+       """.stripMargin, isNull = "false")
   }
 }
 
