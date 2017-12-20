@@ -500,7 +500,7 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.lostCheck.maxAttempts</code></td>
-  <td>10</td>
+  <td><code>10</code></td>
   <td>
     Number of times that the driver will try to ascertain the loss reason for a specific executor.
     The loss reason is used to ascertain whether the executor failure is due to a framework or an application error
@@ -556,7 +556,7 @@ specific to Spark on Kubernetes.
  </tr>
   <tr>
     <td><code>spark.kubernetes.mountDependencies.jarsDownloadDir</code></td>
-    <td>/var/spark-data/spark-jars</td>
+    <td><code>/var/spark-data/spark-jars</code></td>
     <td>
       Location to download jars to in the driver and executors.
       This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
@@ -564,7 +564,7 @@ specific to Spark on Kubernetes.
   </tr>
    <tr>
      <td><code>spark.kubernetes.mountDependencies.filesDownloadDir</code></td>
-     <td>/var/spark-data/spark-files</td>
+     <td><code>/var/spark-data/spark-files</code></td>
      <td>
        Location to download jars to in the driver and executors.
        This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
