@@ -24,9 +24,11 @@ import java.nio.channels.FileChannel.MapMode
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ListBuffer
+
 import com.google.common.io.Closeables
 import io.netty.channel.{DefaultFileRegion, FileRegion}
 import io.netty.util.AbstractReferenceCounted
+
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.NioBufferedFileInputStream
