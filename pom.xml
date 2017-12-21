@@ -137,7 +137,7 @@
     <okio.version>1.13.0</okio.version>
     <retrofit.version>2.3.0</retrofit.version>
     <bouncycastle.version>1.54</bouncycastle.version>
-    <jetty.version>9.4.7.v20170914</jetty.version>
+    <jetty.version>9.4.8.v20171121</jetty.version>
     <orc.version>1.4.1</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <javaxservlet.version>3.1.0</javaxservlet.version>
