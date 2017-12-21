@@ -88,6 +88,10 @@ being contacted at `api_server_url`. If no HTTP protocol is specified in the URL
 setting the master to `k8s://example.com:443` is equivalent to setting it to `k8s://https://example.com:443`, but to
 connect without TLS on a different port, the master would be set to `k8s://http://example.com:8080`.
 
+In Kubernetes mode, the Spark application name that is specified by `spark.app.name` or the `--name` argument to
+`spark-submit` is used by default to name the Kubernetes resources created like drivers and executors. So, application names
+must consist of lower case alphanumeric characters, `-`, and `.`  and must start and end with an alphanumeric character.
+
 If you have a Kubernetes cluster setup, one way to discover the apiserver URL is by executing `kubectl cluster-info`.
 
 ```bash
@@ -300,9 +304,10 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.delay</code></td>
-  <td><code>1</code></td>
+  <td><code>1s</code></td>
   <td>
-    Number of seconds to wait between each round of executor pod allocation.
+    Time to wait between each round of executor pod allocation. Specifying values less than 1 second may lead to
+    excessive CPU usage on the spark driver.
   </td>
 </tr>
 <tr>
