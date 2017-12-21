@@ -19,14 +19,18 @@ package org.apache.spark.launcher;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 class InProcessAppHandle extends AbstractAppHandle {
 
+  private static final String THREAD_NAME_FMT = "spark-app-%d: '%s'";
   private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
-  private static final ThreadFactory THREAD_FACTORY = new NamedThreadFactory("spark-app-%d");
+  private static final AtomicLong THREAD_IDS = new AtomicLong();
+
+  // Avoid really long thread names.
+  private static final int MAX_APP_NAME_LEN = 16;
 
   private Thread app;
 
@@ -47,9 +51,14 @@ class InProcessAppHandle extends AbstractAppHandle {
     setState(State.KILLED);
   }
 
-  synchronized void start(Method main, String[] args) {
+  synchronized void start(String appName, Method main, String[] args) {
     CommandBuilderUtils.checkState(app == null, "Handle already started.");
-    app = THREAD_FACTORY.newThread(() -> {
+
+    if (appName.length() > MAX_APP_NAME_LEN) {
+      appName = "..." + appName.substring(appName.length() - MAX_APP_NAME_LEN);
+    }
+
+    app = new Thread(() -> {
       try {
         main.invoke(null, (Object) args);
       } catch (Throwable t) {
@@ -59,15 +68,15 @@ class InProcessAppHandle extends AbstractAppHandle {
 
       synchronized (InProcessAppHandle.this) {
         if (!isDisposed()) {
-          State currState = getState();
           disconnect();
-
-          if (!currState.isFinal()) {
+          if (!getState().isFinal()) {
             setState(State.LOST, true);
           }
         }
       }
     });
+
+    app.setName(String.format(THREAD_NAME_FMT, THREAD_IDS.incrementAndGet(), appName));
     app.start();
   }
 

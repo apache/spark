@@ -70,7 +70,9 @@ public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
     List<String> sparkArgs = builder.buildSparkSubmitArgs();
     String[] argv = sparkArgs.toArray(new String[sparkArgs.size()]);
 
-    handle.start(main, argv);
+    String appName = CommandBuilderUtils.firstNonEmpty(builder.appName, builder.mainClass,
+      "<unknown>");
+    handle.start(appName, main, argv);
     return handle;
   }
 

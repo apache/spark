@@ -94,7 +94,6 @@ class ChildProcAppHandle extends AbstractAppHandle {
         return;
       }
 
-      State currState = getState();
       disconnect();
 
       int ec;
@@ -105,6 +104,7 @@ class ChildProcAppHandle extends AbstractAppHandle {
         ec = 1;
       }
 
+      State currState = getState();
       State newState = null;
       if (ec != 0) {
         // Override state with failure if the current state is not final, or is success.

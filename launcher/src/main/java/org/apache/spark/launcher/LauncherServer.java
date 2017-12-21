@@ -107,7 +107,7 @@ class LauncherServer implements Closeable {
 
   private final AtomicLong refCount;
   private final AtomicLong threadIds;
-  private final ConcurrentMap<String, AbstractAppHandle> pending;
+  private final ConcurrentMap<String, AbstractAppHandle> secretToPendingApps;
   private final List<ServerConnection> clients;
   private final ServerSocket server;
   private final Thread serverThread;
@@ -127,7 +127,7 @@ class LauncherServer implements Closeable {
       this.clients = new ArrayList<>();
       this.threadIds = new AtomicLong();
       this.factory = new NamedThreadFactory(THREAD_NAME_FMT);
-      this.pending = new ConcurrentHashMap<>();
+      this.secretToPendingApps = new ConcurrentHashMap<>();
       this.timeoutTimer = new Timer("LauncherServer-TimeoutTimer", true);
       this.server = server;
       this.running = true;
@@ -149,7 +149,7 @@ class LauncherServer implements Closeable {
    */
   synchronized String registerHandle(AbstractAppHandle handle) {
     String secret = createSecret();
-    pending.put(secret, handle);
+    secretToPendingApps.put(secret, handle);
     return secret;
   }
 
@@ -210,9 +210,10 @@ class LauncherServer implements Closeable {
    * the server.
    */
   void unregister(AbstractAppHandle handle) {
-    for (Map.Entry<String, AbstractAppHandle> e : pending.entrySet()) {
+    for (Map.Entry<String, AbstractAppHandle> e : secretToPendingApps.entrySet()) {
       if (e.getValue().equals(handle)) {
-        pending.remove(e.getKey());
+        String secret = e.getKey();
+        secretToPendingApps.remove(secret);
         break;
       }
     }
@@ -278,7 +279,7 @@ class LauncherServer implements Closeable {
       }
 
       String secretStr = sb.toString();
-      if (!pending.containsKey(secretStr)) {
+      if (!secretToPendingApps.containsKey(secretStr)) {
         return secretStr;
       }
     }
@@ -301,7 +302,7 @@ class LauncherServer implements Closeable {
           timeout.cancel();
           timeout = null;
           Hello hello = (Hello) msg;
-          AbstractAppHandle handle = pending.remove(hello.secret);
+          AbstractAppHandle handle = secretToPendingApps.remove(hello.secret);
           if (handle != null) {
             handle.setConnection(this);
             handle.setState(SparkAppHandle.State.CONNECTED);
