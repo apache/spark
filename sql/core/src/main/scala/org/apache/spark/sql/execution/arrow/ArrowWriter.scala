@@ -81,7 +81,7 @@ class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
 
   def write(row: InternalRow): Unit = {
     var i = 0
-    while (i < fields.size) {
+    while (i < fields.length) {
       fields(i).write(row, i)
       i += 1
     }
