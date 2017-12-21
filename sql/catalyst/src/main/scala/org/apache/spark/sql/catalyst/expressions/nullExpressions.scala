@@ -322,7 +322,7 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val value = if ("true" == s"${eval.isNull}" || "false" == s"${eval.isNull}") {
+    val value = if (eval.isNull.isInstanceOf[LiteralValue]) {
       LiteralValue(eval.isNull)
     } else {
       VariableValue(eval.isNull)
@@ -353,9 +353,9 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val value = if ("true" == s"${eval.isNull}") {
+    val value = if (eval.isNull == LiteralValue("true")) {
       LiteralValue("false")
-    } else if ("false" == s"${eval.isNull}") {
+    } else if (eval.isNull == LiteralValue("false")) {
       LiteralValue("true")
     } else {
       StatementValue(s"(!(${eval.isNull}))")
