@@ -102,10 +102,13 @@ object SparkHiveExample {
     // |  5| val_5|  5| val_5|
     // ...
 
+    // Create Hive managed table with parquet
+    sql("CREATE TABLE records(key int, value string) STORED AS PARQUET")
     // Save DataFrame to Hive Managed table as Parquet format
     val hiveTableDF = sql("SELECT * FROM records")
     hiveTableDF.write.mode(SaveMode.Overwrite).saveAsTable("database_name.records")
-
+    // Create External Hive table with parquet
+    sql("CREATE EXTERNAL TABLE records(key int, value string) STORED AS PARQUET;")
     // to make Hive parquet format compatible with spark parquet format
     spark.sqlContext.setConf("spark.sql.parquet.writeLegacyFormat", "true")
 
