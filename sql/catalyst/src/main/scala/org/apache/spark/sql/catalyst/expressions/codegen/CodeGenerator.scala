@@ -943,11 +943,13 @@ class CodegenContext {
       // inline execution if only one block
       blocks.head
     } else {
-      // Passing global variables to the split method is dangerous, as any mutating to it is
-      // ignored and may lead to unexpected behavior.
-      arguments.foreach { case (_, name) =>
-        assert(!mutableStateNames.contains(name),
-          s"[BUG] split function argument $name cannot be a global variable.")
+      if (Utils.isTesting) {
+        // Passing global variables to the split method is dangerous, as any mutating to it is
+        // ignored and may lead to unexpected behavior.
+        arguments.foreach { case (_, name) =>
+          assert(!mutableStateNames.contains(name),
+            s"split function argument $name cannot be a global variable.")
+        }
       }
 
       val func = freshName(funcName)
