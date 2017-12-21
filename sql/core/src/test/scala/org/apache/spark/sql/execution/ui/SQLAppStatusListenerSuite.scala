@@ -383,6 +383,49 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     assertJobs(statusStore.execution(executionId), failed = Seq(0))
   }
 
+  test("handle one execution with multiple jobs") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 0
+    val df = createTestDataFrame
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+
+    var stageId = 0
+    def twoStageJob(jobId: Int): Unit = {
+      val stages = Seq(stageId, stageId + 1).map { id => createStageInfo(id, 0)}
+      stageId += 2
+      listener.onJobStart(SparkListenerJobStart(
+        jobId = jobId,
+        time = System.currentTimeMillis(),
+        stageInfos = stages,
+        createProperties(executionId)))
+      stages.foreach { s =>
+        listener.onStageSubmitted(SparkListenerStageSubmitted(s))
+        listener.onStageCompleted(SparkListenerStageCompleted(s))
+      }
+      listener.onJobEnd(SparkListenerJobEnd(
+        jobId = jobId,
+        time = System.currentTimeMillis(),
+        JobSucceeded
+      ))
+    }
+    // submit two jobs with the same executionId
+    twoStageJob(0)
+    twoStageJob(1)
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
+
+    assertJobs(statusStore.execution(0), completed = 0 to 1)
+    assert(statusStore.execution(0).get.stages === (0 to 3).toSet)
+  }
+
   test("SPARK-11126: no memory leak when running non SQL jobs") {
     val listener = spark.sharedState.statusStore.listener.get
     // At the beginning of this test case, there should be no live data in the listener.
