@@ -278,12 +278,14 @@ class ContinuousExecution(
       // there's nothing meaningful to add to the offset log.
     }
     val globalOffset = reader.mergeOffsets(partitionOffsets.toArray)
-    synchronized {
-      if (queryExecutionThread.isAlive) {
-        offsetLog.add(epoch, OffsetSeq.fill(globalOffset))
-      } else {
-        return
-      }
+    val oldOffset = synchronized {
+      offsetLog.add(epoch, OffsetSeq.fill(globalOffset))
+      offsetLog.get(epoch - 1)
+    }
+
+    // If offset hasn't changed since last epoch, there's been no new data.
+    if (oldOffset.contains(OffsetSeq.fill(globalOffset))) {
+      noNewData = true
     }
   }
 

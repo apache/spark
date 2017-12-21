@@ -38,6 +38,7 @@ import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
@@ -105,7 +106,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
      * the active query, and then return the source object the data was added, as well as the
      * offset of added data.
      */
-    def addData(query: Option[StreamExecution]): (Source, Offset)
+    def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset)
   }
 
   /** A trait that can be extended when testing a source. */
@@ -403,12 +404,19 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     def fetchStreamAnswer(currentStream: StreamExecution, lastOnly: Boolean) = {
       verify(currentStream != null, "stream not running")
       // Get the map of source index to the current source objects
-      val indexToSource = currentStream
-        .logicalPlan
-        .collect { case StreamingExecutionRelation(s, _) => s }
-        .zipWithIndex
-        .map(_.swap)
-        .toMap
+      val indexToSource: Map[Int, BaseStreamingSource] =
+        currentStream
+          .logicalPlan
+          .collect { case StreamingExecutionRelation(s, _) => s }
+          .zipWithIndex
+          .map(_.swap)
+          .toMap ++
+        currentStream.lastExecution
+          .logical
+          .collect { case DataSourceV2Relation(_, r: BaseStreamingSource) => r }
+          .zipWithIndex
+          .map(_.swap)
+          .toMap
 
       // Block until all data added has been processed for all the source
       awaiting.foreach { case (sourceIndex, offset) =>
@@ -599,7 +607,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
               def findSourceIndex(plan: LogicalPlan): Option[Int] = {
                 plan
-                  .collect { case StreamingExecutionRelation(s, _) => s }
+                  .collect {
+                    case StreamingExecutionRelation(s, _) => s
+                    case DataSourceV2Relation(_, r) => r
+                  }
                   .zipWithIndex
                   .find(_._1 == source)
                   .map(_._2)
@@ -612,6 +623,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                   findSourceIndex(query.logicalPlan)
                 }.orElse {
                   findSourceIndex(stream.logicalPlan)
+                }.orElse {
+                  queryToUse.flatMap { q =>
+                    findSourceIndex(q.lastExecution.logical)
+                  }
                 }.getOrElse {
                   throw new IllegalArgumentException(
                     "Could find index of the source to which data was added")

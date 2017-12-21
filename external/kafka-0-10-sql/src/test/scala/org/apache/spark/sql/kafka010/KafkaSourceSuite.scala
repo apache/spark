@@ -34,11 +34,14 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.ForeachWriter
+import org.apache.spark.sql.{ForeachWriter, Row}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
+import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryWriter
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
-import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
+import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 import org.apache.spark.util.Utils
@@ -82,7 +85,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
       message: String = "",
       topicAction: (String, Option[Int]) => Unit = (_, _) => {}) extends AddData {
 
-    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+    override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
       if (query.get.isActive) {
         // Make sure no Spark job is running when deleting a topic
         query.get.processAllAvailable()
@@ -104,8 +107,9 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
         "Cannot add data when there is no query for finding the active kafka source")
 
       val sources = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source, _) if source.isInstanceOf[KafkaSource] =>
-          source.asInstanceOf[KafkaSource]
+        case StreamingExecutionRelation(source: KafkaSource, _) => source
+      } ++ query.get.lastExecution.logical.collect {
+        case DataSourceV2Relation(_, reader: ContinuousKafkaReader) => reader
       }
       if (sources.isEmpty) {
         throw new Exception(
@@ -137,14 +141,15 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
     override def toString: String =
       s"AddKafkaData(topics = $topics, data = $data, message = $message)"
   }
+
+  private val topicId = new AtomicInteger(0)
+  protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 }
 
 
 class KafkaSourceSuite extends KafkaSourceTest {
 
   import testImplicits._
-
-  private val topicId = new AtomicInteger(0)
 
   testWithUninterruptibleThread(
     "deserialization of initial offset with Spark 2.1.0") {
@@ -457,28 +462,48 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
-  test("starting offset is latest by default") {
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 5)
-    testUtils.sendMessages(topic, Array("0"))
-    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+  test("continuous with reconfigure") {
+    val topicPrefix = newTopic()
+    testUtils.createTopic(s"$topicPrefix-1", partitions = 3)
+    testUtils.sendMessages(s"$topicPrefix-1", Array("0"))
+    require(testUtils.getLatestOffsets(Set(s"$topicPrefix-1")).size === 3)
 
     val reader = spark
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("subscribe", topic)
+      .option("subscribe", s"$topicPrefix-1")
+      .option("kafka.metadata.max.age.ms", "100")
 
     val kafka = reader.load()
       .selectExpr("CAST(value AS STRING)")
       .as[String]
     val mapped = kafka.map(_.toInt)
+    val query = mapped.writeStream
+      .format("memory")
+      .queryName("memory")
+      .trigger(Trigger.Continuous(1000))
+      .start()
+      .asInstanceOf[ContinuousExecution]
+    query.awaitInitialization(streamingTimeout.toMillis)
 
-    testStream(mapped)(
-      makeSureGetOffsetCalled,
-      AddKafkaData(Set(topic), 1, 2, 3),
-      CheckAnswer(1, 2, 3)  // should not have 0
-    )
+    Thread.sleep(1000)
+
+    testUtils.addPartitions(s"$topicPrefix-1", 5)
+
+    require(testUtils.getLatestOffsets(Set(s"$topicPrefix-1")).size === 5)
+
+    print(testUtils.sendMessages(s"$topicPrefix-1", Seq(1, 2, 3).map{ _.toString }.toArray))
+    Thread.sleep(5500)
+
+    val sink = query.lastExecution.executedPlan.find(_.isInstanceOf[WriteToDataSourceV2Exec]).get
+      .asInstanceOf[WriteToDataSourceV2Exec].writer.asInstanceOf[ContinuousMemoryWriter]
+      .sink
+    try {
+      assert(sink.allData.sortBy(_.getInt(0)) == Seq(1, 2, 3).sorted.map(Row(_)))
+    } finally {
+      query.stop()
+    }
   }
 
   test("bad source options") {
@@ -628,8 +653,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
       assert(offset === answer)
     }
   }
-
-  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
   private def assignString(topic: String, partitions: Iterable[Int]): String = {
     JsonUtils.partitions(partitions.map(p => new TopicPartition(topic, p)))
