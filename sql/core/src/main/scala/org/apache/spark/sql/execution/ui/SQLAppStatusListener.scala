@@ -31,7 +31,6 @@ import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
 import org.apache.spark.status.config._
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.kvstore.KVStore
 
 private[sql] class SQLAppStatusListener(
     conf: SparkConf,
@@ -88,7 +87,7 @@ private[sql] class SQLAppStatusListener(
     }
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
-    exec.stages = event.stageIds.toSet
+    exec.stages ++= event.stageIds.toSet
     update(exec)
   }
 

@@ -361,6 +361,46 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
     assertJobs(store.execution(0), failed = Seq(0))
   }
 
+  sqlStoreTest("handle one execution with multiple jobs") { (store, bus) =>
+    val executionId = 0
+    val df = createTestDataFrame
+    bus.postToAll(SparkListenerSQLExecutionStart(
+      executionId,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+
+    var stageId = 0
+    def twoStageJob(jobId: Int): Unit = {
+      val stages = Seq(stageId, stageId + 1).map { id => createStageInfo(id, 0)}
+      stageId += 2
+      bus.postToAll(SparkListenerJobStart(
+        jobId = jobId,
+        time = System.currentTimeMillis(),
+        stageInfos = stages,
+        createProperties(executionId)))
+      stages.foreach { s =>
+        bus.postToAll(SparkListenerStageSubmitted(s))
+        bus.postToAll(SparkListenerStageCompleted(s))
+      }
+      bus.postToAll(SparkListenerJobEnd(
+        jobId = jobId,
+        time = System.currentTimeMillis(),
+        JobSucceeded
+      ))
+    }
+    // submit two jobs with the same executionId
+    twoStageJob(0)
+    twoStageJob(1)
+    bus.postToAll(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
+
+    assertJobs(store.execution(0), completed = 0 to 1)
+    assert(store.execution(0).get.stages === (0 to 3).toSet)
+  }
+
   test("SPARK-11126: no memory leak when running non SQL jobs") {
     val previousStageNumber = statusStore.executionsList().size
     spark.sparkContext.parallelize(1 to 10).foreach(i => ())
