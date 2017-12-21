@@ -108,7 +108,8 @@ object SparkHiveExample {
     val hiveTableDF = sql("SELECT * FROM records")
     hiveTableDF.write.mode(SaveMode.Overwrite).saveAsTable("database_name.records")
     // Create External Hive table with parquet
-    sql("CREATE EXTERNAL TABLE records(key int, value string) STORED AS PARQUET;")
+    sql("CREATE EXTERNAL TABLE records(key int, value string) " +
+      "STORED AS PARQUET LOCATION '/user/hive/warehouse/'")
     // to make Hive parquet format compatible with spark parquet format
     spark.sqlContext.setConf("spark.sql.parquet.writeLegacyFormat", "true")
 
