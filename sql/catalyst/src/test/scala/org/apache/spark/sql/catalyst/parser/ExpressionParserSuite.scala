@@ -246,13 +246,23 @@ class ExpressionParserSuite extends PlanTest {
     // Basic window testing.
     assertEqual("foo(*) over w1", UnresolvedWindowExpression(func, WindowSpecReference("w1")))
     assertEqual("foo(*) over ()", windowed())
+    assertEqual("foo(*) over (partition by a)", windowed(Seq('a)))
     assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b)))
+    assertEqual("foo(*) over (distribute by a)", windowed(Seq('a)))
     assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b)))
+    assertEqual("foo(*) over (cluster by a)", windowed(Seq('a)))
     assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc )))
-    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc )))
+    assertEqual("foo(*) over (order by a)", windowed(Seq.empty, Seq('a.asc)))
+    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
+    assertEqual("foo(*) over (sort by a)", windowed(Seq.empty, Seq('a.asc)))
+    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
     assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
     assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('c.asc)))
+    assertEqual("foo(*) over (order by a asc nulls last)",
+      windowed(Seq.empty, Seq('a.asc_nullsLast)))
+    assertEqual("foo(*) over (order by a desc nulls first)",
+      windowed(Seq.empty, Seq('a.desc_nullsFirst)))
+
 
     // Test use of expressions in window functions.
     assertEqual(
@@ -263,6 +273,14 @@ class ExpressionParserSuite extends PlanTest {
       "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
       WindowExpression('sum.function('product + 1),
         WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+    assertEqual(
+      "sum(product + 1) over (order by a + b)",
+      WindowExpression('sum.function('product + 1),
+        WindowSpecDefinition(Seq.empty, Seq(('a + 'b).asc), UnspecifiedFrame)))
+    assertEqual(
+      "sum(product + 1) over (order by a + b desc)",
+      WindowExpression('sum.function('product + 1),
+        WindowSpecDefinition(Seq.empty, Seq(('a + 'b).desc), UnspecifiedFrame)))
 
     // Range/Row
     val frameTypes = Seq(("rows", RowFrame), ("range", RangeFrame))
