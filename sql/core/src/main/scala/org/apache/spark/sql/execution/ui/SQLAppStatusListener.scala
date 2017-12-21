@@ -87,7 +87,7 @@ class SQLAppStatusListener(
     }
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
-    exec.stages = event.stageIds.toSet
+    exec.stages ++= event.stageIds.toSet
     update(exec)
   }
 
