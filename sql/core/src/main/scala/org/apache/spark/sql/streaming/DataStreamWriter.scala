@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.sources.{MemoryPlanV2, MemorySinkV2}
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,

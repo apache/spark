@@ -316,7 +316,7 @@ class MicroBatchExecution(
           val prevBatchOff = offsetLog.get(currentBatchId - 1)
           if (prevBatchOff.isDefined) {
             prevBatchOff.get.toStreamProgress(sources).foreach {
-              case (src, off) => src.commit(off)
+              case (src: Source, off) => src.commit(off)
             }
           } else {
             throw new IllegalStateException(s"batch $currentBatchId doesn't exist")

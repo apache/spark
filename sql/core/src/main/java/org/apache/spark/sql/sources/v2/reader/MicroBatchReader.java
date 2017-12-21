@@ -61,4 +61,10 @@ public interface MicroBatchReader extends DataSourceV2Reader, BaseStreamingSourc
      * @throws IllegalArgumentException if the JSON does not encode a valid offset for this reader
      */
     Offset deserializeOffset(String json);
+
+    /**
+     * Informs the source that Spark has completed processing all data for offsets less than or
+     * equal to `end` and will only request offsets greater than `end` in the future.
+     */
+    void commit(Offset end);
 }
