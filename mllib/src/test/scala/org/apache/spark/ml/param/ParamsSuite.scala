@@ -24,7 +24,7 @@ import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util.MyParams
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.Dataset
 
 class ParamsSuite extends SparkFunSuite {
 
@@ -441,24 +441,20 @@ object ParamsSuite extends SparkFunSuite {
    * `HasInputCol` and both `HasOutputCols` and `HasOutputCol`.
    *
    * @param paramsClass The Class to be checked
-   * @param spark A `SparkSession` instance to use
+   * @param dataset A `Dataset` to use in the tests
    */
-  def checkMultiColumnParams(paramsClass: Class[_ <: Params], spark: SparkSession): Unit = {
-    import spark.implicits._
-    // create fake input Dataset
-    val feature1 = Array(-1.0, 0.0, 1.0)
-    val feature2 = Array(1.0, 0.0, -1.0)
-    val df = feature1.zip(feature2).toSeq.toDF("feature1", "feature2")
+  def testMultiColumnParams(paramsClass: Class[_ <: Params], dataset: Dataset[_]): Unit = {
+    val cols = dataset.columns
 
     if (paramsClass.isAssignableFrom(classOf[HasInputCols])
         && paramsClass.isAssignableFrom(classOf[HasInputCol])) {
       val model = paramsClass.newInstance()
-      model.set(model.asInstanceOf[HasInputCols].inputCols, Array("feature1", "feature2"))
-      model.set(model.asInstanceOf[HasInputCol].inputCol, "features1")
+      model.set(model.asInstanceOf[HasInputCols].inputCols, cols)
+      model.set(model.asInstanceOf[HasInputCol].inputCol, cols(0))
       val e = intercept[IllegalArgumentException] {
         model match {
-          case t: Transformer => t.transform(df)
-          case e: Estimator[_] => e.fit(df)
+          case t: Transformer => t.transform(dataset)
+          case e: Estimator[_] => e.fit(dataset)
         }
       }
       assert(e.getMessage.contains("cannot be both set"))
@@ -467,12 +463,12 @@ object ParamsSuite extends SparkFunSuite {
     if (paramsClass.isAssignableFrom(classOf[HasOutputCols])
       && paramsClass.isAssignableFrom(classOf[HasOutputCol])) {
       val model = paramsClass.newInstance()
-      model.set(model.asInstanceOf[HasOutputCols].outputCols, Array("result1", "result2"))
-      model.set(model.asInstanceOf[HasOutputCol].outputCol, "result1")
+      model.set(model.asInstanceOf[HasOutputCols].outputCols, cols)
+      model.set(model.asInstanceOf[HasOutputCol].outputCol, cols(0))
       val e = intercept[IllegalArgumentException] {
         model match {
-          case t: Transformer => t.transform(df)
-          case e: Estimator[_] => e.fit(df)
+          case t: Transformer => t.transform(dataset)
+          case e: Estimator[_] => e.fit(dataset)
         }
       }
       assert(e.getMessage.contains("cannot be both set"))

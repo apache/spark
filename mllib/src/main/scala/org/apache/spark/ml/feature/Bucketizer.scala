@@ -193,7 +193,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    ParamValidators.assertColOrCols(this)
+    ParamValidators.checkMultiColumnParams(this)
     if (isSet(inputCol) && isSet(splitsArray)) {
       ParamValidators.raiseIncompatibleParamsException("inputCol", "splitsArray")
     }

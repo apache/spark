@@ -256,7 +256,7 @@ object ParamValidators {
    * this is not true, an `IllegalArgumentException` is raised.
    * @param model
    */
-  private[spark] def assertColOrCols(model: Params): Unit = {
+  private[spark] def checkMultiColumnParams(model: Params): Unit = {
     model match {
       case m: HasInputCols with HasInputCol if m.isSet(m.inputCols) && m.isSet(m.inputCol) =>
         raiseIncompatibleParamsException("inputCols", "inputCol")
