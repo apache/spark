@@ -476,7 +476,7 @@ case class DataSource(
       mode = mode,
       catalogTable = catalogTable,
       fileIndex = fileIndex,
-      allColumns = data.output)
+      outputColumns = data.output)
   }
 
   /**

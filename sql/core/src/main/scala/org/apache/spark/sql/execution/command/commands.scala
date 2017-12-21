@@ -88,11 +88,11 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 }
 
 /**
- * A physical operator that executes the run method of a `RunnableCommand` and
+ * A physical operator that executes the run method of a `DataWritingCommand` and
  * saves the result to prevent multiple executions.
  *
- * @param cmd the `RunnableCommand` this operator will run.
- * @param children the children physical plans ran by the `RunnableCommand`.
+ * @param cmd the `DataWritingCommand` this operator will run.
+ * @param children the children physical plans ran by the `DataWritingCommand`.
  */
 case class DataWritingCommandExec(cmd: DataWritingCommand, children: Seq[SparkPlan])
   extends SparkPlan {

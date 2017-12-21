@@ -69,7 +69,7 @@ case class InsertIntoHiveTable(
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
-    allColumns: Seq[Attribute]) extends SaveAsHiveFile {
+    outputColumns: Seq[Attribute]) extends SaveAsHiveFile {
 
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
@@ -201,7 +201,7 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,
-      allColumns = allColumns,
+      allColumns = outputColumns,
       partitionAttributes = partitionAttributes)
 
     if (partition.nonEmpty) {

@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * A special `RunnableCommand` which writes data out and updates metrics.
+ * A special `Command` which writes data out and updates metrics.
  */
 trait DataWritingCommand extends Command {
   /**
@@ -43,7 +43,7 @@ trait DataWritingCommand extends Command {
   override def children: Seq[LogicalPlan] = query :: Nil
 
   // Output columns of the analyzed input query plan
-  def allColumns: Seq[Attribute]
+  def outputColumns: Seq[Attribute]
 
   lazy val metrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
