@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.arrow.vector.NullableIntVector
+import org.apache.arrow.vector.IntVector
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
@@ -1137,22 +1137,20 @@ class ColumnarBatchSuite extends SparkFunSuite {
   test("create columnar batch from Arrow column vectors") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("int", 0, Long.MaxValue)
     val vector1 = ArrowUtils.toArrowField("int1", IntegerType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableIntVector]
+      .createVector(allocator).asInstanceOf[IntVector]
     vector1.allocateNew()
-    val mutator1 = vector1.getMutator()
     val vector2 = ArrowUtils.toArrowField("int2", IntegerType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableIntVector]
+      .createVector(allocator).asInstanceOf[IntVector]
     vector2.allocateNew()
-    val mutator2 = vector2.getMutator()
 
     (0 until 10).foreach { i =>
-      mutator1.setSafe(i, i)
-      mutator2.setSafe(i + 1, i)
+      vector1.setSafe(i, i)
+      vector2.setSafe(i + 1, i)
     }
-    mutator1.setNull(10)
-    mutator1.setValueCount(11)
-    mutator2.setNull(0)
-    mutator2.setValueCount(11)
+    vector1.setNull(10)
+    vector1.setValueCount(11)
+    vector2.setNull(0)
+    vector2.setValueCount(11)
 
     val columnVectors = Seq(new ArrowColumnVector(vector1), new ArrowColumnVector(vector2))
 

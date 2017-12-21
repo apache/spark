@@ -632,6 +632,29 @@ class HasParallelism(Params):
         return self.getOrDefault(self.parallelism)
 
 
+class HasLoss(Params):
+    """
+    Mixin for param loss: the loss function to be optimized.
+    """
+
+    loss = Param(Params._dummy(), "loss", "the loss function to be optimized.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasLoss, self).__init__()
+
+    def setLoss(self, value):
+        """
+        Sets the value of :py:attr:`loss`.
+        """
+        return self._set(loss=value)
+
+    def getLoss(self):
+        """
+        Gets the value of loss or its default value.
+        """
+        return self.getOrDefault(self.loss)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.

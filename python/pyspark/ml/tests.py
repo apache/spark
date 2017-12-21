@@ -1726,6 +1726,27 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         self.assertTrue(np.isclose(model.intercept, -1.561613, atol=1E-4))
 
 
+class LinearRegressionTest(SparkSessionTestCase):
+
+    def test_linear_regression_with_huber_loss(self):
+
+        data_path = "data/mllib/sample_linear_regression_data.txt"
+        df = self.spark.read.format("libsvm").load(data_path)
+
+        lir = LinearRegression(loss="huber", epsilon=2.0)
+        model = lir.fit(df)
+
+        expectedCoefficients = [0.136, 0.7648, -0.7761, 2.4236, 0.537,
+                                1.2612, -0.333, -0.5694, -0.6311, 0.6053]
+        expectedIntercept = 0.1607
+        expectedScale = 9.758
+
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), expectedCoefficients, atol=1E-3))
+        self.assertTrue(np.isclose(model.intercept, expectedIntercept, atol=1E-3))
+        self.assertTrue(np.isclose(model.scale, expectedScale, atol=1E-3))
+
+
 class LogisticRegressionTest(SparkSessionTestCase):
 
     def test_binomial_logistic_regression_with_bound(self):

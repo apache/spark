@@ -128,7 +128,7 @@ class CodegenContext {
    * `currentVars` to null, or set `currentVars(i)` to null for certain columns, before calling
    * `Expression.genCode`.
    */
-  final var INPUT_ROW = "i"
+  var INPUT_ROW = "i"
 
   /**
    * Holding a list of generated columns as input of current operator, will be used by
@@ -146,21 +146,29 @@ class CodegenContext {
    * as a member variable
    *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
+   *
+   * Exposed for tests only.
    */
-  val inlinedMutableStates: mutable.ArrayBuffer[(String, String)] =
+  private[catalyst] val inlinedMutableStates: mutable.ArrayBuffer[(String, String)] =
     mutable.ArrayBuffer.empty[(String, String)]
 
   /**
    * The mapping between mutable state types and corrseponding compacted arrays.
    * The keys are java type string. The values are [[MutableStateArrays]] which encapsulates
    * the compacted arrays for the mutable states with the same java type.
+   *
+   * Exposed for tests only.
    */
-  val arrayCompactedMutableStates: mutable.Map[String, MutableStateArrays] =
+  private[catalyst] val arrayCompactedMutableStates: mutable.Map[String, MutableStateArrays] =
     mutable.Map.empty[String, MutableStateArrays]
 
   // An array holds the code that will initialize each state
-  val mutableStateInitCode: mutable.ArrayBuffer[String] =
+  // Exposed for tests only.
+  private[catalyst] val mutableStateInitCode: mutable.ArrayBuffer[String] =
     mutable.ArrayBuffer.empty[String]
+
+  // Tracks the names of all the mutable states.
+  private val mutableStateNames: mutable.HashSet[String] = mutable.HashSet.empty
 
   /**
    * This class holds a set of names of mutableStateArrays that is used for compacting mutable
@@ -172,7 +180,11 @@ class CodegenContext {
 
     private[this] var currentIndex = 0
 
-    private def createNewArray() = arrayNames.append(freshName("mutableStateArray"))
+    private def createNewArray() = {
+      val newArrayName = freshName("mutableStateArray")
+      mutableStateNames += newArrayName
+      arrayNames.append(newArrayName)
+    }
 
     def getCurrentIndex: Int = currentIndex
 
@@ -241,6 +253,7 @@ class CodegenContext {
       val initCode = initFunc(varName)
       inlinedMutableStates += ((javaType, varName))
       mutableStateInitCode += initCode
+      mutableStateNames += varName
       varName
     } else {
       val arrays = arrayCompactedMutableStates.getOrElseUpdate(javaType, new MutableStateArrays)
@@ -930,6 +943,15 @@ class CodegenContext {
       // inline execution if only one block
       blocks.head
     } else {
+      if (Utils.isTesting) {
+        // Passing global variables to the split method is dangerous, as any mutating to it is
+        // ignored and may lead to unexpected behavior.
+        arguments.foreach { case (_, name) =>
+          assert(!mutableStateNames.contains(name),
+            s"split function argument $name cannot be a global variable.")
+        }
+      }
+
       val func = freshName(funcName)
       val argString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>

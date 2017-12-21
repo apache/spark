@@ -24,7 +24,6 @@ import java.nio.charset.StandardCharsets._
 import scala.io.{Source => IOSource}
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.sources.v2.reader.Offset
 
 /**
  * This class is used to log offsets to persistent files in HDFS.

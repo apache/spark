@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
-import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
