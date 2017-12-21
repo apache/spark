@@ -252,6 +252,48 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     operator.withNewChildren(children)
   }
 
+  private def reorder(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      expectedOrderOfKeys: Seq[Expression],
+      currentOrderOfKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    val leftKeysBuffer = ArrayBuffer[Expression]()
+    val rightKeysBuffer = ArrayBuffer[Expression]()
+
+    expectedOrderOfKeys.foreach(expression => {
+      val index = currentOrderOfKeys.indexWhere(e => e.semanticEquals(expression))
+      leftKeysBuffer.append(leftKeys(index))
+      rightKeysBuffer.append(rightKeys(index))
+    })
+    (leftKeysBuffer, rightKeysBuffer)
+  }
+
+  private def reorderJoinKeys(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      leftPartitioning: Partitioning,
+      rightPartitioning: Partitioning): (Seq[Expression], Seq[Expression]) = {
+    if (leftKeys.forall(_.deterministic) && rightKeys.forall(_.deterministic)) {
+      leftPartitioning match {
+        case HashPartitioning(leftExpressions, _)
+          if leftExpressions.length == leftKeys.length &&
+            leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x))) =>
+          reorder(leftKeys, rightKeys, leftExpressions, leftKeys)
+
+        case _ => rightPartitioning match {
+          case HashPartitioning(rightExpressions, _)
+            if rightExpressions.length == rightKeys.length &&
+              rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x))) =>
+            reorder(leftKeys, rightKeys, rightExpressions, rightKeys)
+
+          case _ => (leftKeys, rightKeys)
+        }
+      }
+    } else {
+      (leftKeys, rightKeys)
+    }
+  }
+
   /**
    * When the physical operators are created for JOIN, the ordering of join keys is based on order
    * in which the join keys appear in the user query. That might not match with the output
@@ -259,47 +301,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
    * introduced). This rule will change the ordering of the join keys to match with the
    * partitioning of the join nodes' children.
    */
-  def reorderJoinPredicates(plan: SparkPlan): SparkPlan = {
-    def reorderJoinKeys(
-        leftKeys: Seq[Expression],
-        rightKeys: Seq[Expression],
-        leftPartitioning: Partitioning,
-        rightPartitioning: Partitioning): (Seq[Expression], Seq[Expression]) = {
-
-      def reorder(expectedOrderOfKeys: Seq[Expression],
-                  currentOrderOfKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
-        val leftKeysBuffer = ArrayBuffer[Expression]()
-        val rightKeysBuffer = ArrayBuffer[Expression]()
-
-        expectedOrderOfKeys.foreach(expression => {
-          val index = currentOrderOfKeys.indexWhere(e => e.semanticEquals(expression))
-          leftKeysBuffer.append(leftKeys(index))
-          rightKeysBuffer.append(rightKeys(index))
-        })
-        (leftKeysBuffer, rightKeysBuffer)
-      }
-
-      if (leftKeys.forall(_.deterministic) && rightKeys.forall(_.deterministic)) {
-        leftPartitioning match {
-          case HashPartitioning(leftExpressions, _)
-            if leftExpressions.length == leftKeys.length &&
-              leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x))) =>
-            reorder(leftExpressions, leftKeys)
-
-          case _ => rightPartitioning match {
-            case HashPartitioning(rightExpressions, _)
-              if rightExpressions.length == rightKeys.length &&
-                rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x))) =>
-              reorder(rightExpressions, rightKeys)
-
-            case _ => (leftKeys, rightKeys)
-          }
-        }
-      } else {
-        (leftKeys, rightKeys)
-      }
-    }
-
+  private def reorderJoinPredicates(plan: SparkPlan): SparkPlan = {
     plan.transformUp {
       case BroadcastHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left,
         right) =>
