@@ -82,8 +82,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         'v,
         lead("v", 1).over(Window.orderBy($"k1".desc, $"k2")),
         lead("v", 1).over(Window.orderBy($"k1", $"k2".desc)),
-        lead("v", 1).over(Window.orderBy($"k1".desc, $"k2"))),
-      Row(1, 2, 3, 2) :: Row(2, null, 1, null) :: Row(3, 1, 4, 1) :: Row(4, 3, null, 3) :: Nil)
+        lead("v", 1).over(Window.orderBy($"k1".desc, $"k2".desc))),
+      Row(1, 2, 3, null) :: Row(2, null, 1, 1) :: Row(3, 1, 4, 4) :: Row(4, 3, null, 2) :: Nil)
   }
 
   test("Null values sorted to first by asc, last by desc ordering by default") {

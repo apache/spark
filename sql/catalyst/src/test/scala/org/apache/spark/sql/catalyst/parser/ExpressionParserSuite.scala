@@ -256,7 +256,9 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
     assertEqual("foo(*) over (sort by a)", windowed(Seq.empty, Seq('a.asc)))
     assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
+    assertEqual("foo(*) over (partition by a order by c)", windowed(Seq('a), Seq('c.asc)))
     assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
+    assertEqual("foo(*) over (distribute by a sort by c)", windowed(Seq('a), Seq('c.asc)))
     assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('c.asc)))
     assertEqual("foo(*) over (order by a asc nulls last)",
       windowed(Seq.empty, Seq('a.asc_nullsLast)))
