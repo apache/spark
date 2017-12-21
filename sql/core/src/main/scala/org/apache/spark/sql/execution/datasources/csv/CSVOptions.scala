@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
+import java.time.format.{DateTimeFormatter, ResolverStyle}
 import java.util.{Locale, TimeZone}
 
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
@@ -141,6 +142,16 @@ class CSVOptions(
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
+
+  def dateFormatter: DateTimeFormatter = {
+    DateTimeFormatter.ofPattern(dateFormat.getPattern)
+      .withLocale(Locale.US).withZone(timeZone.toZoneId).withResolverStyle(ResolverStyle.SMART)
+  }
+
+  def timestampFormatter: DateTimeFormatter = {
+    DateTimeFormatter.ofPattern(timestampFormat.getPattern)
+      .withLocale(Locale.US).withZone(timeZone.toZoneId).withResolverStyle(ResolverStyle.SMART)
+  }
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()

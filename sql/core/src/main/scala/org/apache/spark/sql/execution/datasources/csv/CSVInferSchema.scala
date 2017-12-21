@@ -92,7 +92,8 @@ private[csv] object CSVInferSchema {
         case DoubleType => tryParseDouble(field, options)
         case DateType => tryParseDate(field, options)
         case TimestampType =>
-          findTightestCommonType(typeSoFar, tryParseTimestamp(field, options)).getOrElse(StringType)
+          findTightestCommonType(typeSoFar, tryParseTimestamp(field, options)).getOrElse(
+            tryParseBoolean(field, options))
         case BooleanType => tryParseBoolean(field, options)
         case StringType => StringType
         case other: DataType =>
@@ -149,7 +150,7 @@ private[csv] object CSVInferSchema {
 
   private def tryParseDate(field: String, options: CSVOptions): DataType = {
     // This case infers a custom `dateFormat` is set.
-    if ((allCatch opt options.dateFormat.parse(field)).isDefined) {
+    if ((allCatch opt options.dateFormatter.parse(field)).isDefined) {
       DateType
     } else {
       tryParseTimestamp(field, options)
@@ -158,7 +159,7 @@ private[csv] object CSVInferSchema {
 
   private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
     // This case infers a custom `timestampFormat` is set.
-    if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
+    if ((allCatch opt options.timestampFormatter.parse(field)).isDefined) {
       TimestampType
     } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
       // We keep this for backwards compatibility.
