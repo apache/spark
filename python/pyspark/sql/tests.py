@@ -3339,10 +3339,11 @@ class ArrowTests(ReusedSQLTestCase):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
     def test_createDataFrame_does_not_modify_input(self):
+        import pandas as pd
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
         # Use a nanosecond value to make sure it is not truncated
-        pdf.ix[0, '7_timestamp_t'] = 1
+        pdf.ix[0, '7_timestamp_t'] = pd.Timestamp(1)
         # Integers with nulls will get NaNs filled with 0 and will be casted
         pdf.ix[1, '2_int_t'] = None
         pdf_copy = pdf.copy(deep=True)

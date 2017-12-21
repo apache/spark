@@ -2150,7 +2150,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        ... def add_one(x):
        ...     return x + 1
        ...
-       >>> df = spark.createDataFrame([(1, "John", 21)], ("id", "name", "age"))  # doctest: +SKIP
+       >>> df = spark.createDataFrame([(1, "John Doe", 21)],
+       ...                            ("id", "name", "age"))  # doctest: +SKIP
        >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")) \\
        ...     .show()  # doctest: +SKIP
        +----------+--------------+------------+
