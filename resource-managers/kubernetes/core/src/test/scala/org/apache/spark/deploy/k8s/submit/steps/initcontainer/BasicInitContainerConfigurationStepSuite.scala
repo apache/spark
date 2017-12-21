@@ -67,7 +67,7 @@ class BasicInitContainerConfigurationStepSuite extends SparkFunSuite with Before
         )}})
   }
 
-  test("Test of additionalDriverSparkConf with mix of remote files and jars") {
+  test("additionalDriverSparkConf with mix of remote files and jars") {
     val baseInitStep = new BasicInitContainerConfigurationStep(
       SPARK_JARS,
       SPARK_FILES,
@@ -88,8 +88,8 @@ class BasicInitContainerConfigurationStepSuite extends SparkFunSuite with Before
       Seq.empty[HasMetadata])
     val returnContainerSpec = baseInitStep.configureInitContainer(initContainerSpec)
     assert(expectedDriverSparkConf === returnContainerSpec.properties)
-    assert(returnContainerSpec.initContainer.getName == INIT_CONTAINER_NAME)
-    assert(returnContainerSpec.driverContainer.getName == DRIVER_CONTAINER_NAME)
+    assert(returnContainerSpec.initContainer.getName === INIT_CONTAINER_NAME)
+    assert(returnContainerSpec.driverContainer.getName === DRIVER_CONTAINER_NAME)
     assert(returnContainerSpec.driverPod.getMetadata.getLabels.asScala === POD_LABEL)
   }
 }

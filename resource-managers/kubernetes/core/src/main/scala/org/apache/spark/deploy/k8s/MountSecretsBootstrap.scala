@@ -45,13 +45,12 @@ private[spark] class MountSecretsBootstrap(secretNamesToMountPaths: Map[String, 
     }
 
     var containerBuilder = new ContainerBuilder(container)
-    secretNamesToMountPaths.foreach {
-      case (name, path) =>
-        containerBuilder = containerBuilder
-          .addNewVolumeMount()
-            .withName(secretVolumeName(name))
-            .withMountPath(path)
-            .endVolumeMount()
+    secretNamesToMountPaths.foreach { case (name, path) =>
+      containerBuilder = containerBuilder
+        .addNewVolumeMount()
+          .withName(secretVolumeName(name))
+          .withMountPath(path)
+          .endVolumeMount()
     }
 
     (podBuilder.build(), containerBuilder.build())

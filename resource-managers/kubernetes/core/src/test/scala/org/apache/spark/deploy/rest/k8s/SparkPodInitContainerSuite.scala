@@ -29,10 +29,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.util.Utils
 
-class SparkPodInitContainerSuite
-  extends SparkFunSuite with BeforeAndAfter {
-
-  import SparkPodInitContainerSuite.createTempFile
+class SparkPodInitContainerSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val DOWNLOAD_JARS_SECRET_LOCATION = createTempFile("txt")
   private val DOWNLOAD_FILES_SECRET_LOCATION = createTempFile("txt")
@@ -79,10 +76,8 @@ class SparkPodInitContainerSuite
       .set(JARS_DOWNLOAD_LOCATION, downloadJarsDir.getAbsolutePath)
       .set(FILES_DOWNLOAD_LOCATION, downloadFilesDir.getAbsolutePath)
   }
-}
 
-private object SparkPodInitContainerSuite {
-  def createTempFile(extension: String): String = {
+  private def createTempFile(extension: String): String = {
     val dir = Utils.createTempDir()
     val file = new File(dir, s"${UUID.randomUUID().toString}.$extension")
     Files.write(UUID.randomUUID().toString, file, Charsets.UTF_8)

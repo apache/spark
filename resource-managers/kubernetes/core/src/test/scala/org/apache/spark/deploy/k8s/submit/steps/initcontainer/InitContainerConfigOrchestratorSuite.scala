@@ -38,7 +38,7 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
   private val SECRET_BAR = "bar"
   private val SECRET_MOUNT_PATH = "/etc/secrets/init-container"
 
-  test ("including basic configuration step") {
+  test("including basic configuration step") {
     val sparkConf = new SparkConf(true)
       .set(INIT_CONTAINER_IMAGE, DOCKER_IMAGE)
       .set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$CUSTOM_LABEL_KEY", CUSTOM_LABEL_VALUE)
@@ -52,8 +52,7 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
       INIT_CONTAINER_CONFIG_MAP_NAME,
       INIT_CONTAINER_CONFIG_MAP_KEY,
       sparkConf)
-    val initSteps : Seq[InitContainerConfigurationStep] =
-      orchestrator.getAllConfigurationSteps
+    val initSteps = orchestrator.getAllConfigurationSteps
     assert(initSteps.lengthCompare(1) == 0)
     assert(initSteps.head.isInstanceOf[BasicInitContainerConfigurationStep])
   }
@@ -73,8 +72,7 @@ class InitContainerConfigOrchestratorSuite extends SparkFunSuite {
       INIT_CONTAINER_CONFIG_MAP_NAME,
       INIT_CONTAINER_CONFIG_MAP_KEY,
       sparkConf)
-    val initSteps : Seq[InitContainerConfigurationStep] =
-      orchestrator.getAllConfigurationSteps
+    val initSteps = orchestrator.getAllConfigurationSteps
     assert(initSteps.length === 2)
     assert(initSteps.head.isInstanceOf[BasicInitContainerConfigurationStep])
     assert(initSteps(1).isInstanceOf[InitContainerMountSecretsStep])

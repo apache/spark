@@ -26,7 +26,7 @@ class DriverMountSecretsStepSuite extends SparkFunSuite {
   private val SECRET_BAR = "bar"
   private val SECRET_MOUNT_PATH = "/etc/secrets/driver"
 
-  test("Mounts all given secrets") {
+  test("mounts all given secrets") {
     val baseDriverSpec = KubernetesDriverSpec.initialSpec(new SparkConf(false))
     val secretNamesToMountPaths = Map(
       SECRET_FOO -> SECRET_MOUNT_PATH,
@@ -38,10 +38,12 @@ class DriverMountSecretsStepSuite extends SparkFunSuite {
     val driverPodWithSecretsMounted = configuredDriverSpec.driverPod
     val driverContainerWithSecretsMounted = configuredDriverSpec.driverContainer
 
-    Seq(s"$SECRET_FOO-volume", s"$SECRET_BAR-volume").foreach(volumeName =>
-      assert(SecretVolumeUtils.podHasVolume(driverPodWithSecretsMounted, volumeName)))
-    Seq(s"$SECRET_FOO-volume", s"$SECRET_BAR-volume").foreach(volumeName =>
+    Seq(s"$SECRET_FOO-volume", s"$SECRET_BAR-volume").foreach { volumeName =>
+      assert(SecretVolumeUtils.podHasVolume(driverPodWithSecretsMounted, volumeName))
+    }
+    Seq(s"$SECRET_FOO-volume", s"$SECRET_BAR-volume").foreach { volumeName =>
       assert(SecretVolumeUtils.containerHasVolume(
-        driverContainerWithSecretsMounted, volumeName, SECRET_MOUNT_PATH)))
+        driverContainerWithSecretsMounted, volumeName, SECRET_MOUNT_PATH))
+    }
   }
 }

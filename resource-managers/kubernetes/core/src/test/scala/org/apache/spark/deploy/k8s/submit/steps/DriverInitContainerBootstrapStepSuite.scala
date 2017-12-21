@@ -79,6 +79,7 @@ class DriverInitContainerBootstrapStepSuite extends SparkFunSuite {
             SecondTestInitContainerConfigurationStep.additionalInitContainerPropertyValue)
         val hasMatchingProperties = initContainerPropertiesMap == expectedInitContainerProperties
         hasMatchingName && hasCorrectNumberOfEntries && hasMatchingProperties
+
       case _ => false
     })
 

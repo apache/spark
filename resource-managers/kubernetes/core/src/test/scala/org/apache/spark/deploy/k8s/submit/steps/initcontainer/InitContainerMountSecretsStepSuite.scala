@@ -28,7 +28,7 @@ class InitContainerMountSecretsStepSuite extends SparkFunSuite {
   private val SECRET_BAR = "bar"
   private val SECRET_MOUNT_PATH = "/etc/secrets/init-container"
 
-  test("Mounts all given secrets") {
+  test("mounts all given secrets") {
     val baseInitContainerSpec = InitContainerSpec(
       Map.empty,
       Map.empty,

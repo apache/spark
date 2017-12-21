@@ -44,7 +44,7 @@ private[spark] object KubernetesUtils {
   }
 
   /**
-   * Append the given init-container to a pod's list of init-containers..
+   * Append the given init-container to a pod's list of init-containers.
    *
    * @param originalPodSpec original specification of the pod
    * @param initContainer the init-container to add to the pod

@@ -43,10 +43,8 @@ private[spark] class SparkPodInitContainer(
   private implicit val downloadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("download-executor", maxThreadPoolSize))
 
-  private val jarsDownloadDir = new File(
-    sparkConf.get(JARS_DOWNLOAD_LOCATION))
-  private val filesDownloadDir = new File(
-    sparkConf.get(FILES_DOWNLOAD_LOCATION))
+  private val jarsDownloadDir = new File(sparkConf.get(JARS_DOWNLOAD_LOCATION))
+  private val filesDownloadDir = new File(sparkConf.get(FILES_DOWNLOAD_LOCATION))
 
   private val remoteJars = sparkConf.get(INIT_CONTAINER_REMOTE_JARS)
   private val remoteFiles = sparkConf.get(INIT_CONTAINER_REMOTE_FILES)
@@ -82,7 +80,6 @@ private[spark] class SparkPodInitContainer(
         Future[Unit] {
           fileFetcher.fetchFile(file, downloadDir)
         }
-
       }
     }
   }
