@@ -148,7 +148,7 @@ abstract class StreamExecution(
    * Pretty identified string of printing in logs. Format is
    * If name is set "queryName [id = xyz, runId = abc]" else "[id = xyz, runId = abc]"
    */
-  private val prettyIdString =
+  protected val prettyIdString =
     Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
 
   /**

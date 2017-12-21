@@ -92,13 +92,13 @@ class ContinuousSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 10): _*),
+      CheckAnswerRowsContains(scala.Range(0, 10).map(Row(_))),
       StopStream,
       StartStream(longContinuousTrigger),
       AwaitEpoch(2),
       Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 20): _*),
+      CheckAnswerRowsContains(scala.Range(0, 20).map(Row(_))),
       StopStream)
   }
 
@@ -118,7 +118,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       IncrementEpoch(),
       Execute(waitForRateSourceTriggers(_, 4)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 40, 2): _*))
+      CheckAnswerRowsContains(scala.Range(0, 40, 2).map(Row(_))))
   }
 
   test("flatMap") {
@@ -137,7 +137,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       IncrementEpoch(),
       Execute(waitForRateSourceTriggers(_, 4)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 20).flatMap(n => Seq(0, n, n * 2)): _*))
+      CheckAnswerRowsContains(scala.Range(0, 20).flatMap(n => Seq(0, n, n * 2)).map(Row(_))))
   }
 
   test("filter") {
@@ -156,7 +156,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       IncrementEpoch(),
       Execute(waitForRateSourceTriggers(_, 4)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(6, 20): _*))
+      CheckAnswerRowsContains(scala.Range(6, 20).map(Row(_))))
   }
 
   test("deduplicate") {
@@ -205,7 +205,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 10): _*),
+      CheckAnswerRowsContains(scala.Range(0, 10).map(Row(_))),
       StopStream,
       StartStream(longContinuousTrigger),
       StopStream,
@@ -215,7 +215,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       AwaitEpoch(2),
       Execute(waitForRateSourceTriggers(_, 2)),
       IncrementEpoch(),
-      CheckAnswer(scala.Range(0, 20): _*),
+      CheckAnswerRowsContains(scala.Range(0, 20).map(Row(_))),
       StopStream)
   }
 
@@ -238,7 +238,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
     query.stop()
 
     val results = spark.read.table("noharness").collect()
-    assert(results.toSet == Set(0, 1, 2, 3).map(Row(_)))
+    assert(Set(0, 1, 2, 3).map(Row(_)).subsetOf(results.toSet))
   }
 }
 
@@ -280,17 +280,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 201)),
       IncrementEpoch(),
-      Execute { query =>
-        // Because we have automatic advancement, we can't reliably guarantee another trigger won't
-        // commit more than the 100K rows we expect before we can check. So we simply ensure that:
-        //  * the highest value committed was at least 100000 - 1
-        //  * all values below the highest are present
-        val data = query.sink.asInstanceOf[MemorySinkV2].allData
-        val vals = data.map(_.getLong(0)).toSet
-        assert(scala.Range(0, 25000).forall { i =>
-          vals.contains(i)
-        })
-      })
+      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
   }
 
   test("restarts") {
@@ -321,16 +311,6 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       StopStream,
       StartStream(Trigger.Continuous(2012)),
       AwaitEpoch(50),
-      Execute { query =>
-        // Because we have automatic advancement, we can't reliably check where precisely the last
-        // commit happened. And we don't have exactly once prøocessing, meaning values may be
-        // duplicated. So we just check all values below the highest are present, and as a
-        // sanity check that we got at least up to the 50th trigger.
-        val data = query.sink.asInstanceOf[MemorySinkV2].allData
-        val vals = data.map(_.getLong(0)).sorted
-        scala.Range(0, 25000).foreach { i =>
-          assert(vals.contains(i), s"$i was missing from result data")
-        }
-      })
+      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
   }
 }

@@ -171,6 +171,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
 
+  case class CheckAnswerRowsContains(expectedAnswer: Seq[Row], lastOnly: Boolean = false)
+    extends StreamAction with StreamMustBeRunning {
+    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
+    private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
+  }
+
   case class CheckAnswerRowsByFunc(checkFunction: Row => Unit, lastOnly: Boolean)
       extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"$operatorName: ${checkFunction.toString()}"
@@ -624,6 +630,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
             val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
             QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
+              error => failTest(error)
+            }
+
+          case CheckAnswerRowsContains(expectedAnswer, lastOnly) =>
+            val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+            QueryTest.includesRows(expectedAnswer, sparkAnswer).foreach {
               error => failTest(error)
             }
 

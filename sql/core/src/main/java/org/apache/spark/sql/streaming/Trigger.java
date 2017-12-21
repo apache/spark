@@ -19,10 +19,10 @@ package org.apache.spark.sql.streaming;
 
 import java.util.concurrent.TimeUnit;
 
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger;
 import scala.concurrent.duration.Duration;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 
 /**

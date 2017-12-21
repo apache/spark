@@ -77,13 +77,13 @@ private[sql] object EpochCoordinatorRef extends Logging {
   def create(
       writer: ContinuousWriter,
       reader: ContinuousReader,
+      query: ContinuousExecution,
       startEpoch: Long,
-      queryId: String,
-      runId: String,
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
-    val coordinator = new EpochCoordinator(writer, reader, startEpoch, queryId, session, env.rpcEnv)
-    val ref = env.rpcEnv.setupEndpoint(endpointName(runId), coordinator)
+    val coordinator = new EpochCoordinator(
+      writer, reader, query, startEpoch, query.id.toString(), session, env.rpcEnv)
+    val ref = env.rpcEnv.setupEndpoint(endpointName(query.runId.toString()), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
   }
@@ -109,6 +109,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
 private[continuous] class EpochCoordinator(
     writer: ContinuousWriter,
     reader: ContinuousReader,
+    query: ContinuousExecution,
     startEpoch: Long,
     queryId: String,
     session: SparkSession,

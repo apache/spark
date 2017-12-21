@@ -58,7 +58,6 @@ class ContinuousExecution(
     assert(queryExecutionThread eq Thread.currentThread,
       "logicalPlan must be initialized in StreamExecutionThread " +
         s"but the current thread was ${Thread.currentThread}")
-    var nextSourceId = 0L
     val toExecutionRelationMap = MutableMap[StreamingRelationV2, ContinuousExecutionRelation]()
     analyzedPlan.transform {
       case r @ StreamingRelationV2(
@@ -218,8 +217,7 @@ class ContinuousExecution(
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint =
       EpochCoordinatorRef.create(
-        writer.get(), reader, currentBatchId,
-        id.toString, runId.toString, sparkSession, SparkEnv.get)
+        writer.get(), reader, this, currentBatchId, sparkSession, SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {
@@ -227,8 +225,8 @@ class ContinuousExecution(
             startTrigger()
 
             if (reader.needsReconfiguration()) {
-              stopSources()
               state.set(RECONFIGURING)
+              stopSources()
               if (queryExecutionThread.isAlive) {
                 sparkSession.sparkContext.cancelJobGroup(runId.toString)
                 queryExecutionThread.interrupt()
@@ -249,7 +247,7 @@ class ContinuousExecution(
             return
         }
       }
-    })
+    }, s"epoch update thread for $prettyIdString")
 
     try {
       epochUpdateThread.setDaemon(true)
@@ -280,7 +278,11 @@ class ContinuousExecution(
     }
     val globalOffset = reader.mergeOffsets(partitionOffsets.toArray)
     synchronized {
-      offsetLog.add(epoch, OffsetSeq.fill(globalOffset))
+      if (queryExecutionThread.isAlive) {
+        offsetLog.add(epoch, OffsetSeq.fill(globalOffset))
+      } else {
+        return
+      }
     }
   }
 
@@ -292,9 +294,13 @@ class ContinuousExecution(
     assert(continuousSources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
     synchronized {
-      commitLog.add(epoch)
-      val offset = offsetLog.get(epoch).get.offsets(0).get
-      committedOffsets ++= Seq(continuousSources(0) -> offset)
+      if (queryExecutionThread.isAlive) {
+        commitLog.add(epoch)
+        val offset = offsetLog.get(epoch).get.offsets(0).get
+        committedOffsets ++= Seq(continuousSources(0) -> offset)
+      } else {
+        return
+      }
     }
 
     if (minLogEntriesToMaintain < currentBatchId) {
