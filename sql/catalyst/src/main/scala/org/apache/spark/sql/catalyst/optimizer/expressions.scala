@@ -614,7 +614,6 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 object RemoveDispensableExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case UnaryPositive(child) => child
-    case PromotePrecision(child) => child
   }
 }
 

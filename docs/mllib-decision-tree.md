@@ -91,7 +91,7 @@ For a categorical feature with `$M$` possible values (categories), one could com
 `$2^{M-1}-1$` split candidates. For binary (0/1) classification and regression,
 we can reduce the number of split candidates to `$M-1$` by ordering the
 categorical feature values by the average label. (See Section 9.2.4 in
-[Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
+[Elements of Statistical Machine Learning](https://web.stanford.edu/~hastie/ElemStatLearn/) for
 details.) For example, for a binary classification problem with one categorical feature with three
 categories A, B and C whose corresponding proportions of label 1 are 0.2, 0.6 and 0.4, the categorical
 features are ordered as A, C, B. The two split candidates are A \| C, B

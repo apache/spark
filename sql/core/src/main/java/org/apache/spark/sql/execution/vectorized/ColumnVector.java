@@ -22,24 +22,22 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * This class represents a column of values and provides the main APIs to access the data
- * values. It supports all the types and contains get APIs as well as their batched versions.
- * The batched versions are preferable whenever possible.
+ * This class represents in-memory values of a column and provides the main APIs to access the data.
+ * It supports all the types and contains get APIs as well as their batched versions. The batched
+ * versions are considered to be faster and preferable whenever possible.
  *
  * To handle nested schemas, ColumnVector has two types: Arrays and Structs. In both cases these
- * columns have child columns. All of the data is stored in the child columns and the parent column
- * contains nullability, and in the case of Arrays, the lengths and offsets into the child column.
- * Lengths and offsets are encoded identically to INTs.
+ * columns have child columns. All of the data are stored in the child columns and the parent column
+ * only contains nullability. In the case of Arrays, the lengths and offsets are saved in the child
+ * column and are encoded identically to INTs.
+ *
  * Maps are just a special case of a two field struct.
  *
  * Most of the APIs take the rowId as a parameter. This is the batch local 0-based row id for values
- * in the current RowBatch.
- *
- * A ColumnVector should be considered immutable once originally created.
- *
- * ColumnVectors are intended to be reused.
+ * in the current batch.
  */
 public abstract class ColumnVector implements AutoCloseable {
+
   /**
    * Returns the data type of this column.
    */
@@ -47,7 +45,6 @@ public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * Cleans up memory for this column. The column is not usable after this.
-   * TODO: this should probably have ref-counted semantics.
    */
   public abstract void close();
 
@@ -55,12 +52,6 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the number of nulls in this column.
    */
   public abstract int numNulls();
-
-  /**
-   * Returns true if any of the nulls indicator are set for this column. This can be used
-   * as an optimization to prevent setting nulls.
-   */
-  public abstract boolean anyNullsSet();
 
   /**
    * Returns whether the value at rowId is NULL.
@@ -108,13 +99,6 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract int[] getInts(int rowId, int count);
 
   /**
-   * Returns the dictionary Id for rowId.
-   * This should only be called when the ColumnVector is dictionaryIds.
-   * We have this separate method for dictionaryIds as per SPARK-16928.
-   */
-  public abstract int getDictId(int rowId);
-
-  /**
    * Returns the value for rowId.
    */
   public abstract long getLong(int rowId);
@@ -145,39 +129,39 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract double[] getDoubles(int rowId, int count);
 
   /**
-   * Returns the length of the array at rowid.
+   * Returns the length of the array for rowId.
    */
   public abstract int getArrayLength(int rowId);
 
   /**
-   * Returns the offset of the array at rowid.
+   * Returns the offset of the array for rowId.
    */
   public abstract int getArrayOffset(int rowId);
 
   /**
-   * Returns a utility object to get structs.
+   * Returns the struct for rowId.
    */
   public final ColumnarRow getStruct(int rowId) {
     return new ColumnarRow(this, rowId);
   }
 
   /**
-   * Returns a utility object to get structs.
-   * provided to keep API compatibility with InternalRow for code generation
+   * A special version of {@link #getStruct(int)}, which is only used as an adapter for Spark
+   * codegen framework, the second parameter is totally ignored.
    */
   public final ColumnarRow getStruct(int rowId, int size) {
     return getStruct(rowId);
   }
 
   /**
-   * Returns the array at rowid.
+   * Returns the array for rowId.
    */
   public final ColumnarArray getArray(int rowId) {
     return new ColumnarArray(arrayData(), getArrayOffset(rowId), getArrayLength(rowId));
   }
 
   /**
-   * Returns the value for rowId.
+   * Returns the map for rowId.
    */
   public MapData getMap(int ordinal) {
     throw new UnsupportedOperationException();
@@ -213,30 +197,6 @@ public abstract class ColumnVector implements AutoCloseable {
    * Data type for this column.
    */
   protected DataType type;
-
-  /**
-   * The Dictionary for this column.
-   *
-   * If it's not null, will be used to decode the value in getXXX().
-   */
-  protected Dictionary dictionary;
-
-  /**
-   * Reusable column for ids of dictionary.
-   */
-  protected ColumnVector dictionaryIds;
-
-  /**
-   * Returns true if this column has a dictionary.
-   */
-  public boolean hasDictionary() { return this.dictionary != null; }
-
-  /**
-   * Returns the underlying integer column for ids of dictionary.
-   */
-  public ColumnVector getDictionaryIds() {
-    return dictionaryIds;
-  }
 
   /**
    * Sets up the common state and also handles creating the child columns if this is a nested

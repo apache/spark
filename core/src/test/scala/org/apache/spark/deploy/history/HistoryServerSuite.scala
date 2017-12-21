@@ -264,7 +264,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     val badStageAttemptId = getContentAndCode("applications/local-1422981780767/stages/1/1")
     badStageAttemptId._1 should be (HttpServletResponse.SC_NOT_FOUND)
-    badStageAttemptId._3 should be (Some("unknown attempt 1 for stage 1."))
+    badStageAttemptId._3 should be (Some("unknown attempt for stage 1.  Found attempts: [0]"))
 
     val badStageId2 = getContentAndCode("applications/local-1422981780767/stages/flimflam")
     badStageId2._1 should be (HttpServletResponse.SC_NOT_FOUND)
@@ -345,7 +345,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         .map(_.get)
         .filter(_.startsWith(url)).toList
 
-      // there are atleast some URL links that were generated via javascript,
+      // there are at least some URL links that were generated via javascript,
       // and they all contain the spark.ui.proxyBase (uiRoot)
       links.length should be > 4
       all(links) should startWith(url + uiRoot)

@@ -65,10 +65,8 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val countTerm = ctx.freshName("count")
-    val partitionMaskTerm = ctx.freshName("partitionMask")
-    ctx.addMutableState(ctx.JAVA_LONG, countTerm)
-    ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm)
+    val countTerm = ctx.addMutableState(ctx.JAVA_LONG, "count")
+    val partitionMaskTerm = ctx.addMutableState(ctx.JAVA_LONG, "partitionMask")
     ctx.addPartitionInitializationStatement(s"$countTerm = 0L;")
     ctx.addPartitionInitializationStatement(s"$partitionMaskTerm = ((long) partitionIndex) << 33;")
 

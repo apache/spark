@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
+import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
@@ -1035,6 +1036,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SQL_STRING_REDACTION_PATTERN =
+    ConfigBuilder("spark.sql.redaction.string.regex")
+      .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
+        "information. When this regex matches a string part, that string part is replaced by a " +
+        "dummy value. This is currently used to redact the output of SQL explain commands. " +
+        "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
+      .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1172,6 +1181,8 @@ class SQLConf extends Serializable with Logging {
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+
+  def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -1379,7 +1390,7 @@ class SQLConf extends Serializable with Logging {
     Option(settings.get(key)).
       orElse {
         // Try to use the default value
-        Option(sqlConfEntries.get(key)).map(_.defaultValueString)
+        Option(sqlConfEntries.get(key)).map { e => e.stringConverter(e.readFrom(reader)) }
       }.
       getOrElse(throw new NoSuchElementException(key))
   }
@@ -1417,14 +1428,21 @@ class SQLConf extends Serializable with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    if (defaultValue != null && defaultValue != "<undefined>") {
+    if (defaultValue != null && defaultValue != ConfigEntry.UNDEFINED) {
       val entry = sqlConfEntries.get(key)
       if (entry != null) {
         // Only verify configs in the SQLConf object
         entry.valueConverter(defaultValue)
       }
     }
-    Option(settings.get(key)).getOrElse(defaultValue)
+    Option(settings.get(key)).getOrElse {
+      // If the key is not set, need to check whether the config entry is registered and is
+      // a fallback conf, so that we can check its parent.
+      sqlConfEntries.get(key) match {
+        case e: FallbackConfigEntry[_] => getConfString(e.fallback.key, defaultValue)
+        case _ => defaultValue
+      }
+    }
   }
 
   /**
@@ -1440,7 +1458,8 @@ class SQLConf extends Serializable with Logging {
    */
   def getAllDefinedConfs: Seq[(String, String, String)] = sqlConfEntries.synchronized {
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
-      (entry.key, getConfString(entry.key, entry.defaultValueString), entry.doc)
+      val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
+      (entry.key, displayValue, entry.doc)
     }.toSeq
   }
 

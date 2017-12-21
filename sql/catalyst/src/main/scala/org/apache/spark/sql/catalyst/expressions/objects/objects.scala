@@ -62,15 +62,13 @@ trait InvokeLike extends Expression with NonSQLExpression {
   def prepareArguments(ctx: CodegenContext): (String, String, String) = {
 
     val resultIsNull = if (needNullCheck) {
-      val resultIsNull = ctx.freshName("resultIsNull")
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, resultIsNull)
+      val resultIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "resultIsNull")
       resultIsNull
     } else {
       "false"
     }
     val argValues = arguments.map { e =>
-      val argValue = ctx.freshName("argValue")
-      ctx.addMutableState(ctx.javaType(e.dataType), argValue)
+      val argValue = ctx.addMutableState(ctx.javaType(e.dataType), "argValue")
       argValue
     }
 
@@ -548,7 +546,7 @@ case class MapObjects private(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = ctx.javaType(loopVarDataType)
-    ctx.addMutableState(elementJavaType, loopValue)
+    ctx.addMutableState(elementJavaType, loopValue, forceInline = true, useFreshName = false)
     val genInputData = inputData.genCode(ctx)
     val genFunction = lambdaFunction.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -644,7 +642,7 @@ case class MapObjects private(
     }
 
     val loopNullCheck = if (loopIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, loopIsNull)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, loopIsNull, forceInline = true, useFreshName = false)
       inputDataType match {
         case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
         case _ => s"$loopIsNull = $loopValue == null;"
@@ -808,10 +806,11 @@ case class CatalystToExternalMap private(
 
     val mapType = inputDataType(inputData.dataType).asInstanceOf[MapType]
     val keyElementJavaType = ctx.javaType(mapType.keyType)
-    ctx.addMutableState(keyElementJavaType, keyLoopValue)
+    ctx.addMutableState(keyElementJavaType, keyLoopValue, forceInline = true, useFreshName = false)
     val genKeyFunction = keyLambdaFunction.genCode(ctx)
     val valueElementJavaType = ctx.javaType(mapType.valueType)
-    ctx.addMutableState(valueElementJavaType, valueLoopValue)
+    ctx.addMutableState(valueElementJavaType, valueLoopValue, forceInline = true,
+      useFreshName = false)
     val genValueFunction = valueLambdaFunction.genCode(ctx)
     val genInputData = inputData.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -844,7 +843,8 @@ case class CatalystToExternalMap private(
     val genValueFunctionValue = genFunctionValue(valueLambdaFunction, genValueFunction)
 
     val valueLoopNullCheck = if (valueLoopIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueLoopIsNull)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueLoopIsNull, forceInline = true,
+        useFreshName = false)
       s"$valueLoopIsNull = $valueArray.isNullAt($loopIndex);"
     } else {
       ""
@@ -994,8 +994,8 @@ case class ExternalMapToCatalyst private(
 
     val keyElementJavaType = ctx.javaType(keyType)
     val valueElementJavaType = ctx.javaType(valueType)
-    ctx.addMutableState(keyElementJavaType, key)
-    ctx.addMutableState(valueElementJavaType, value)
+    ctx.addMutableState(keyElementJavaType, key, forceInline = true, useFreshName = false)
+    ctx.addMutableState(valueElementJavaType, value, forceInline = true, useFreshName = false)
 
     val (defineEntries, defineKeyValue) = child.dataType match {
       case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
@@ -1031,14 +1031,14 @@ case class ExternalMapToCatalyst private(
     }
 
     val keyNullCheck = if (keyIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, keyIsNull)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, keyIsNull, forceInline = true, useFreshName = false)
       s"$keyIsNull = $key == null;"
     } else {
       ""
     }
 
     val valueNullCheck = if (valueIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueIsNull)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueIsNull, forceInline = true, useFreshName = false)
       s"$valueIsNull = $value == null;"
     } else {
       ""
@@ -1123,7 +1123,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
       expressions = childrenCodes,
       funcName = "createExternalRow",
       extraArguments = "Object[]" -> values :: Nil)
-    val schemaField = ctx.addReferenceMinorObj(schema)
+    val schemaField = ctx.addReferenceObj("schema", schema)
 
     val code =
       s"""
@@ -1148,7 +1148,6 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
-    val serializer = ctx.freshName("serializer")
     val (serializerClass, serializerInstanceClass) = {
       if (kryo) {
         (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
@@ -1159,14 +1158,14 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializerInit = s"""
-      if ($env == null) {
-        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-       } else {
-         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-       }
-     """
-    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
+    val serializer = ctx.addMutableState(serializerInstanceClass, "serializerForEncode", v =>
+      s"""
+         |if ($env == null) {
+         |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+         |} else {
+         |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+         |}
+       """.stripMargin)
 
     // Code to serialize.
     val input = child.genCode(ctx)
@@ -1194,7 +1193,6 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
-    val serializer = ctx.freshName("serializer")
     val (serializerClass, serializerInstanceClass) = {
       if (kryo) {
         (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
@@ -1205,14 +1203,14 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializerInit = s"""
-      if ($env == null) {
-        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-       } else {
-         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-       }
-     """
-    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
+    val serializer = ctx.addMutableState(serializerInstanceClass, "serializerForDecode", v =>
+      s"""
+         |if ($env == null) {
+         |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+         |} else {
+         |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+         |}
+       """.stripMargin)
 
     // Code to deserialize.
     val input = child.genCode(ctx)
@@ -1310,7 +1308,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
 
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the value is null.
-    val errMsgField = ctx.addReferenceMinorObj(errMsg)
+    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
 
     val code = s"""
       ${childGen.code}
@@ -1347,7 +1345,7 @@ case class GetExternalRowField(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the field is null.
-    val errMsgField = ctx.addReferenceMinorObj(errMsg)
+    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val row = child.genCode(ctx)
     val code = s"""
       ${row.code}
@@ -1387,7 +1385,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the type doesn't match.
-    val errMsgField = ctx.addReferenceMinorObj(errMsg)
+    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
 

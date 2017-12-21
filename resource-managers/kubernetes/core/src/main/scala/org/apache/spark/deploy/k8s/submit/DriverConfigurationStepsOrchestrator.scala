@@ -49,7 +49,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     s"$appName-$uuid".toLowerCase.replaceAll("\\.", "-")
   }
 
-  private val dockerImagePullPolicy = submissionSparkConf.get(DOCKER_IMAGE_PULL_POLICY)
+  private val imagePullPolicy = submissionSparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
   private val jarsDownloadPath = submissionSparkConf.get(JARS_DOWNLOAD_LOCATION)
   private val filesDownloadPath = submissionSparkConf.get(FILES_DOWNLOAD_LOCATION)
 
@@ -72,7 +72,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
       kubernetesAppId,
       kubernetesResourceNamePrefix,
       allDriverLabels,
-      dockerImagePullPolicy,
+      imagePullPolicy,
       appName,
       mainClass,
       appArgs,

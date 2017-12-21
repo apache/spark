@@ -112,6 +112,9 @@ private[spark] class TaskDataWrapper(
     Array(stageId: JInteger, stageAttemptId: JInteger, info.launchTime.getTime(): JLong)
   }
 
+  @JsonIgnore @KVIndex("active")
+  def active: Boolean = info.duration.isEmpty
+
 }
 
 private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
@@ -187,3 +190,16 @@ private[spark] class RDDOperationGraphWrapper(
 private[spark] class PoolData(
     @KVIndexParam val name: String,
     val stageIds: Set[Int])
+
+/**
+ * A class with information about an app, to be used by the UI. There's only one instance of
+ * this summary per application, so its ID in the store is the class name.
+ */
+private[spark] class AppSummary(
+    val numCompletedJobs: Int,
+    val numCompletedStages: Int) {
+
+  @KVIndex
+  def id: String = classOf[AppSummary].getName()
+
+}

@@ -47,7 +47,62 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
   def batches: Seq[Batch] = {
-    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
+    val operatorOptimizationRuleSet =
+      Seq(
+        // Operator push down
+        PushProjectionThroughUnion,
+        ReorderJoin,
+        EliminateOuterJoin,
+        PushPredicateThroughJoin,
+        PushDownPredicate,
+        LimitPushDown,
+        ColumnPruning,
+        InferFiltersFromConstraints,
+        // Operator combine
+        CollapseRepartition,
+        CollapseProject,
+        CollapseWindow,
+        CombineFilters,
+        CombineLimits,
+        CombineUnions,
+        // Constant folding and strength reduction
+        NullPropagation,
+        ConstantPropagation,
+        FoldablePropagation,
+        OptimizeIn,
+        ConstantFolding,
+        ReorderAssociativeOperator,
+        LikeSimplification,
+        BooleanSimplification,
+        SimplifyConditionals,
+        RemoveDispensableExpressions,
+        SimplifyBinaryComparison,
+        PruneFilters,
+        EliminateSorts,
+        SimplifyCasts,
+        SimplifyCaseConversionExpressions,
+        RewriteCorrelatedScalarSubquery,
+        EliminateSerialization,
+        RemoveRedundantAliases,
+        RemoveRedundantProject,
+        SimplifyCreateStructOps,
+        SimplifyCreateArrayOps,
+        SimplifyCreateMapOps,
+        CombineConcats) ++
+        extendedOperatorOptimizationRules
+
+    val operatorOptimizationBatch: Seq[Batch] = {
+      val rulesWithoutInferFiltersFromConstraints =
+        operatorOptimizationRuleSet.filterNot(_ == InferFiltersFromConstraints)
+      Batch("Operator Optimization before Inferring Filters", fixedPoint,
+        rulesWithoutInferFiltersFromConstraints: _*) ::
+      Batch("Infer Filters", Once,
+        InferFiltersFromConstraints) ::
+      Batch("Operator Optimization after Inferring Filters", fixedPoint,
+        rulesWithoutInferFiltersFromConstraints: _*) :: Nil
+    }
+
+    (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
     // However, because we also use the analyzer to canonicalized queries (for view definition),
@@ -81,69 +136,26 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
-      RemoveRepetitionFromGroupExpressions) ::
-    Batch("Operator Optimizations", fixedPoint, Seq(
-      // Operator push down
-      PushProjectionThroughUnion,
-      ReorderJoin,
-      EliminateOuterJoin,
-      EliminateCrossJoin,
-      InferFiltersFromConstraints,
-      BooleanSimplification,
-      PushPredicateThroughJoin,
-      PushDownPredicate,
-      LimitPushDown,
-      ColumnPruning,
-      // Operator combine
-      CollapseRepartition,
-      CollapseProject,
-      CollapseWindow,
-      CombineFilters,
-      CombineLimits,
-      CombineUnions,
-      // Constant folding and strength reduction
-      NullPropagation,
-      ConstantPropagation,
-      FoldablePropagation,
-      OptimizeIn,
-      ConstantFolding,
-      ReorderAssociativeOperator,
-      LikeSimplification,
-      BooleanSimplification,
-      SimplifyConditionals,
-      RemoveDispensableExpressions,
-      SimplifyBinaryComparison,
-      PruneFilters,
-      EliminateSorts,
-      SimplifyCasts,
-      SimplifyCaseConversionExpressions,
-      RewriteCorrelatedScalarSubquery,
-      EliminateSerialization,
-      RemoveRedundantAliases,
-      RemoveRedundantProject,
-      SimplifyCreateStructOps,
-      SimplifyCreateArrayOps,
-      SimplifyCreateMapOps,
-      CombineConcats) ++
-      extendedOperatorOptimizationRules: _*) ::
+      RemoveRepetitionFromGroupExpressions) :: Nil ++
+    operatorOptimizationBatch) :+
     Batch("Join Reorder", Once,
-      CostBasedJoinReorder) ::
+      CostBasedJoinReorder) :+
     Batch("Decimal Optimizations", fixedPoint,
-      DecimalAggregates) ::
+      DecimalAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
-      CombineTypedFilters) ::
+      CombineTypedFilters) :+
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
-      PropagateEmptyRelation) ::
+      PropagateEmptyRelation) :+
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) ::
+      CheckCartesianProducts) :+
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       ColumnPruning,
       CollapseProject,
-      RemoveRedundantProject) :: Nil
+      RemoveRedundantProject)
   }
 
   /**
@@ -695,7 +707,9 @@ object CombineUnions extends Rule[LogicalPlan] {
  */
 object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Filter(fc, nf @ Filter(nc, grandChild)) =>
+    // The query execution/optimization does not guarantee the expressions are evaluated in order.
+    // We only can combine them if and only if both are deterministic.
+    case Filter(fc, nf @ Filter(nc, grandChild)) if fc.deterministic && nc.deterministic =>
       (ExpressionSet(splitConjunctivePredicates(fc)) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
