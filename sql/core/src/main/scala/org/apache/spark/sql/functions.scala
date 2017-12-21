@@ -2602,6 +2602,13 @@ object functions {
   def month(e: Column): Column = withExpr { Month(e.expr) }
 
   /**
+   * Extracts the day of the week as an integer from a given date/timestamp/string.
+   * @group datetime_funcs
+   * @since 2.3.0
+   */
+  def dayofweek(e: Column): Column = withExpr { DayOfWeek(e.expr) }
+
+  /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
@@ -2788,6 +2795,21 @@ object functions {
    */
   def trunc(date: Column, format: String): Column = withExpr {
     TruncDate(date.expr, Literal(format))
+  }
+
+  /**
+   * Returns timestamp truncated to the unit specified by the format.
+   *
+   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
+   *                'month', 'mon', 'mm' for truncate by month,
+   *                'day', 'dd' for truncate by day,
+   *                Other options are: 'second', 'minute', 'hour', 'week', 'month', 'quarter'
+   *
+   * @group datetime_funcs
+   * @since 2.3.0
+   */
+  def date_trunc(format: String, timestamp: Column): Column = withExpr {
+    TruncTimestamp(Literal(format), timestamp.expr)
   }
 
   /**

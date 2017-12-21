@@ -94,19 +94,15 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("combine redundant deterministic filters") {
+  test("do not combine non-deterministic filters even if they are identical") {
     val originalQuery =
       testRelation
         .where(Rand(0) > 0.1 && 'a === 1)
-        .where(Rand(0) > 0.1 && 'a === 1)
+        .where(Rand(0) > 0.1 && 'a === 1).analyze
 
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      testRelation
-        .where(Rand(0) > 0.1 && 'a === 1 && Rand(0) > 0.1)
-        .analyze
+    val optimized = Optimize.execute(originalQuery)
 
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery)
   }
 
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {

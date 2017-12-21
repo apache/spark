@@ -305,6 +305,10 @@ class FileStreamSinkSuite extends StreamTest {
     testFormat(Some("parquet"))
   }
 
+  test("orc") {
+    testFormat(Some("orc"))
+  }
+
   test("text") {
     testFormat(Some("text"))
   }

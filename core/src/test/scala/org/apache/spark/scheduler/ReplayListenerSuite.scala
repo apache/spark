@@ -128,6 +128,35 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     }
   }
 
+  test("Replay incompatible event log") {
+    val logFilePath = Utils.getFilePath(testDir, "incompatible.txt")
+    val fstream = fileSystem.create(logFilePath)
+    val writer = new PrintWriter(fstream)
+    val applicationStart = SparkListenerApplicationStart("Incompatible App", None,
+      125L, "UserUsingIncompatibleVersion", None)
+    val applicationEnd = SparkListenerApplicationEnd(1000L)
+    // scalastyle:off println
+    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
+    writer.println("""{"Event":"UnrecognizedEventOnlyForTest","Timestamp":1477593059313}""")
+    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+    // scalastyle:on println
+    writer.close()
+
+    val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
+    val logData = fileSystem.open(logFilePath)
+    val eventMonster = new EventMonster(conf)
+    try {
+      val replayer = new ReplayListenerBus()
+      replayer.addListener(eventMonster)
+      replayer.replay(logData, logFilePath.toString)
+    } finally {
+      logData.close()
+    }
+    assert(eventMonster.loggedEvents.size === 2)
+    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJson(applicationStart))
+    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJson(applicationEnd))
+  }
+
   // This assumes the correctness of EventLoggingListener
   test("End-to-end replay") {
     testApplicationReplay()

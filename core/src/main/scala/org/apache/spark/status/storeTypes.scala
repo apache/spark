@@ -17,16 +17,32 @@
 
 package org.apache.spark.status
 
+import java.lang.{Integer => JInteger, Long => JLong}
+
 import com.fasterxml.jackson.annotation.JsonIgnore
 
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
+import org.apache.spark.ui.scope._
 import org.apache.spark.util.kvstore.KVIndex
+
+private[spark] case class AppStatusStoreMetadata(version: Long)
 
 private[spark] class ApplicationInfoWrapper(val info: ApplicationInfo) {
 
   @JsonIgnore @KVIndex
   def id: String = info.id
+
+}
+
+private[spark] class ApplicationEnvironmentInfoWrapper(val info: ApplicationEnvironmentInfo) {
+
+  /**
+   * There's always a single ApplicationEnvironmentInfo object per application, so this
+   * ID doesn't need to be dynamic. But the KVStore API requires an ID.
+   */
+  @JsonIgnore @KVIndex
+  def id: String = classOf[ApplicationEnvironmentInfoWrapper].getName()
 
 }
 
@@ -64,12 +80,40 @@ private[spark] class StageDataWrapper(
   @JsonIgnore @KVIndex
   def id: Array[Int] = Array(info.stageId, info.attemptId)
 
+  @JsonIgnore @KVIndex("stageId")
+  def stageId: Int = info.stageId
+
 }
 
-private[spark] class TaskDataWrapper(val info: TaskData) {
+/**
+ * The task information is always indexed with the stage ID, since that is how the UI and API
+ * consume it. That means every indexed value has the stage ID and attempt ID included, aside
+ * from the actual data being indexed.
+ */
+private[spark] class TaskDataWrapper(
+    val info: TaskData,
+    val stageId: Int,
+    val stageAttemptId: Int) {
 
   @JsonIgnore @KVIndex
   def id: Long = info.taskId
+
+  @JsonIgnore @KVIndex("stage")
+  def stage: Array[Int] = Array(stageId, stageAttemptId)
+
+  @JsonIgnore @KVIndex("runtime")
+  def runtime: Array[AnyRef] = {
+    val _runtime = info.taskMetrics.map(_.executorRunTime).getOrElse(-1L)
+    Array(stageId: JInteger, stageAttemptId: JInteger, _runtime: JLong)
+  }
+
+  @JsonIgnore @KVIndex("startTime")
+  def startTime: Array[AnyRef] = {
+    Array(stageId: JInteger, stageAttemptId: JInteger, info.launchTime.getTime(): JLong)
+  }
+
+  @JsonIgnore @KVIndex("active")
+  def active: Boolean = info.duration.isEmpty
 
 }
 
@@ -94,5 +138,68 @@ private[spark] class ExecutorStageSummaryWrapper(
 
   @JsonIgnore @KVIndex("stage")
   private[this] val stage: Array[Int] = Array(stageId, stageAttemptId)
+
+}
+
+private[spark] class StreamBlockData(
+  val name: String,
+  val executorId: String,
+  val hostPort: String,
+  val storageLevel: String,
+  val useMemory: Boolean,
+  val useDisk: Boolean,
+  val deserialized: Boolean,
+  val memSize: Long,
+  val diskSize: Long) {
+
+  @JsonIgnore @KVIndex
+  def key: Array[String] = Array(name, executorId)
+
+}
+
+private[spark] class RDDOperationClusterWrapper(
+    val id: String,
+    val name: String,
+    val childNodes: Seq[RDDOperationNode],
+    val childClusters: Seq[RDDOperationClusterWrapper]) {
+
+  def toRDDOperationCluster(): RDDOperationCluster = {
+    val cluster = new RDDOperationCluster(id, name)
+    childNodes.foreach(cluster.attachChildNode)
+    childClusters.foreach { child =>
+      cluster.attachChildCluster(child.toRDDOperationCluster())
+    }
+    cluster
+  }
+
+}
+
+private[spark] class RDDOperationGraphWrapper(
+    @KVIndexParam val stageId: Int,
+    val edges: Seq[RDDOperationEdge],
+    val outgoingEdges: Seq[RDDOperationEdge],
+    val incomingEdges: Seq[RDDOperationEdge],
+    val rootCluster: RDDOperationClusterWrapper) {
+
+  def toRDDOperationGraph(): RDDOperationGraph = {
+    new RDDOperationGraph(edges, outgoingEdges, incomingEdges, rootCluster.toRDDOperationCluster())
+  }
+
+}
+
+private[spark] class PoolData(
+    @KVIndexParam val name: String,
+    val stageIds: Set[Int])
+
+/**
+ * A class with information about an app, to be used by the UI. There's only one instance of
+ * this summary per application, so its ID in the store is the class name.
+ */
+private[spark] class AppSummary(
+    val numCompletedJobs: Int,
+    val numCompletedStages: Int) {
+
+  @KVIndex
+  def id: String = classOf[AppSummary].getName()
 
 }

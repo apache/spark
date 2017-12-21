@@ -72,25 +72,53 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val first = children(0)
-    val rest = children.drop(1)
-    val firstEval = first.genCode(ctx)
-    ev.copy(code = s"""
-      ${firstEval.code}
-      boolean ${ev.isNull} = ${firstEval.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};""" +
-      rest.map { e =>
+    val tmpIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "coalesceTmpIsNull")
+
+    // all the evals are meant to be in a do { ... } while (false); loop
+    val evals = children.map { e =>
       val eval = e.genCode(ctx)
       s"""
-        if (${ev.isNull}) {
-          ${eval.code}
-          if (!${eval.isNull}) {
-            ${ev.isNull} = false;
-            ${ev.value} = ${eval.value};
-          }
-        }
-      """
-    }.mkString("\n"))
+         |${eval.code}
+         |if (!${eval.isNull}) {
+         |  $tmpIsNull = false;
+         |  ${ev.value} = ${eval.value};
+         |  continue;
+         |}
+       """.stripMargin
+    }
+
+    val resultType = ctx.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "coalesce",
+      returnType = resultType,
+      makeSplitFunction = func =>
+        s"""
+           |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
+           |do {
+           |  $func
+           |} while (false);
+           |return ${ev.value};
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |${ev.value} = $funcCall;
+           |if (!$tmpIsNull) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
+
+
+    ev.copy(code =
+      s"""
+         |$tmpIsNull = true;
+         |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
+         |do {
+         |  $codes
+         |} while (false);
+         |final boolean ${ev.isNull} = $tmpIsNull;
+       """.stripMargin)
   }
 }
 
@@ -357,32 +385,63 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val nonnull = ctx.freshName("nonnull")
-    val code = children.map { e =>
+    // all evals are meant to be inside a do { ... } while (false); loop
+    val evals = children.map { e =>
       val eval = e.genCode(ctx)
       e.dataType match {
         case DoubleType | FloatType =>
           s"""
-            if ($nonnull < $n) {
-              ${eval.code}
-              if (!${eval.isNull} && !Double.isNaN(${eval.value})) {
-                $nonnull += 1;
-              }
-            }
-          """
+             |if ($nonnull < $n) {
+             |  ${eval.code}
+             |  if (!${eval.isNull} && !Double.isNaN(${eval.value})) {
+             |    $nonnull += 1;
+             |  }
+             |} else {
+             |  continue;
+             |}
+           """.stripMargin
         case _ =>
           s"""
-            if ($nonnull < $n) {
-              ${eval.code}
-              if (!${eval.isNull}) {
-                $nonnull += 1;
-              }
-            }
-          """
+             |if ($nonnull < $n) {
+             |  ${eval.code}
+             |  if (!${eval.isNull}) {
+             |    $nonnull += 1;
+             |  }
+             |} else {
+             |  continue;
+             |}
+           """.stripMargin
       }
-    }.mkString("\n")
-    ev.copy(code = s"""
-      int $nonnull = 0;
-      $code
-      boolean ${ev.value} = $nonnull >= $n;""", isNull = "false")
+    }
+
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "atLeastNNonNulls",
+      extraArguments = (ctx.JAVA_INT, nonnull) :: Nil,
+      returnType = ctx.JAVA_INT,
+      makeSplitFunction = body =>
+        s"""
+           |do {
+           |  $body
+           |} while (false);
+           |return $nonnull;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$nonnull = $funcCall;
+           |if ($nonnull >= $n) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
+
+    ev.copy(code =
+      s"""
+         |${ctx.JAVA_INT} $nonnull = 0;
+         |do {
+         |  $codes
+         |} while (false);
+         |${ctx.JAVA_BOOLEAN} ${ev.value} = $nonnull >= $n;
+       """.stripMargin, isNull = "false")
   }
 }

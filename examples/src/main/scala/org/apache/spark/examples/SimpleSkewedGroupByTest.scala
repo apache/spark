@@ -59,7 +59,7 @@ object SimpleSkewedGroupByTest {
     // Enforce that everything has been calculated and in cache
     pairs1.count
 
-    println("RESULT: " + pairs1.groupByKey(numReducers).count)
+    println(s"RESULT: ${pairs1.groupByKey(numReducers).count}")
     // Print how many keys each reducer got (for debugging)
     // println("RESULT: " + pairs1.groupByKey(numReducers)
     //                           .map{case (k,v) => (k, v.size)}

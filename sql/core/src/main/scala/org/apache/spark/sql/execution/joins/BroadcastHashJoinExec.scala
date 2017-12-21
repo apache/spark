@@ -76,6 +76,23 @@ case class BroadcastHashJoinExec(
     streamedPlan.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
+  private def multipleOutputForOneInput: Boolean = joinType match {
+    case _: InnerLike | LeftOuter | RightOuter =>
+      // For inner and outer joins, one row from the streamed side may produce multiple result rows,
+      // if the build side has duplicated keys. Note that here we wait for the broadcast to be
+      // finished, which is a no-op because it's already finished when we wait it in `doProduce`.
+      !buildPlan.executeBroadcast[HashedRelation]().value.keyIsUnique
+
+    // Other joins types(semi, anti, existence) can at most produce one result row for one input
+    // row from the streamed side.
+    case _ => false
+  }
+
+  // If the streaming side needs to copy result, this join plan needs to copy too. Otherwise,
+  // this join plan only needs to copy result if it may output multiple rows for one input.
+  override def needCopyResult: Boolean =
+    streamedPlan.asInstanceOf[CodegenSupport].needCopyResult || multipleOutputForOneInput
+
   override def doProduce(ctx: CodegenContext): String = {
     streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
@@ -117,19 +134,18 @@ case class BroadcastHashJoinExec(
     // create a name for HashedRelation
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
-    val relationTerm = ctx.freshName("relation")
     val clsName = broadcastRelation.value.getClass.getName
 
     // At the end of the task, we update the avg hash probe.
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
-    val addTaskListener = genTaskListener(avgHashProbe, relationTerm)
 
-    ctx.addMutableState(clsName, relationTerm,
-      s"""
-         | $relationTerm = (($clsName) $broadcast.value()).asReadOnlyCopy();
-         | incPeakExecutionMemory($relationTerm.estimatedSize());
-         | $addTaskListener
-       """.stripMargin)
+    // inline mutable state since not many join operations in a task
+    val relationTerm = ctx.addMutableState(clsName, "relation",
+      v => s"""
+         | $v = (($clsName) $broadcast.value()).asReadOnlyCopy();
+         | incPeakExecutionMemory($v.estimatedSize());
+         | ${genTaskListener(avgHashProbe, v)}
+       """.stripMargin, forceInline = true)
     (broadcastRelation, relationTerm)
   }
 
@@ -237,7 +253,6 @@ case class BroadcastHashJoinExec(
        """.stripMargin
 
     } else {
-      ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       s"""
@@ -310,7 +325,6 @@ case class BroadcastHashJoinExec(
        """.stripMargin
 
     } else {
-      ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")

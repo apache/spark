@@ -77,9 +77,8 @@ case class Rand(child: Expression) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    ctx.addMutableState(className, rngTerm, "")
+    val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""
@@ -112,9 +111,8 @@ case class Randn(child: Expression) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    ctx.addMutableState(className, rngTerm, "")
+    val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""

@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -1155,67 +1156,82 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   Seq(true, false).foreach { eager =>
-    def testCheckpointing(testName: String)(f: => Unit): Unit = {
-      test(s"Dataset.checkpoint() - $testName (eager = $eager)") {
-        withTempDir { dir =>
-          val originalCheckpointDir = spark.sparkContext.checkpointDir
+    Seq(true, false).foreach { reliable =>
+      def testCheckpointing(testName: String)(f: => Unit): Unit = {
+        test(s"Dataset.checkpoint() - $testName (eager = $eager, reliable = $reliable)") {
+          if (reliable) {
+            withTempDir { dir =>
+              val originalCheckpointDir = spark.sparkContext.checkpointDir
 
-          try {
-            spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
+              try {
+                spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
+                f
+              } finally {
+                // Since the original checkpointDir can be None, we need
+                // to set the variable directly.
+                spark.sparkContext.checkpointDir = originalCheckpointDir
+              }
+            }
+          } else {
+            // Local checkpoints dont require checkpoint_dir
             f
-          } finally {
-            // Since the original checkpointDir can be None, we need
-            // to set the variable directly.
-            spark.sparkContext.checkpointDir = originalCheckpointDir
           }
         }
       }
-    }
 
-    testCheckpointing("basic") {
-      val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
-      val cp = ds.checkpoint(eager)
+      testCheckpointing("basic") {
+        val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
+        val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
 
-      val logicalRDD = cp.logicalPlan match {
-        case plan: LogicalRDD => plan
-        case _ =>
-          val treeString = cp.logicalPlan.treeString(verbose = true)
-          fail(s"Expecting a LogicalRDD, but got\n$treeString")
+        val logicalRDD = cp.logicalPlan match {
+          case plan: LogicalRDD => plan
+          case _ =>
+            val treeString = cp.logicalPlan.treeString(verbose = true)
+            fail(s"Expecting a LogicalRDD, but got\n$treeString")
+        }
+
+        val dsPhysicalPlan = ds.queryExecution.executedPlan
+        val cpPhysicalPlan = cp.queryExecution.executedPlan
+
+        assertResult(dsPhysicalPlan.outputPartitioning) {
+          logicalRDD.outputPartitioning
+        }
+        assertResult(dsPhysicalPlan.outputOrdering) {
+          logicalRDD.outputOrdering
+        }
+
+        assertResult(dsPhysicalPlan.outputPartitioning) {
+          cpPhysicalPlan.outputPartitioning
+        }
+        assertResult(dsPhysicalPlan.outputOrdering) {
+          cpPhysicalPlan.outputOrdering
+        }
+
+        // For a lazy checkpoint() call, the first check also materializes the checkpoint.
+        checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
+
+        // Reads back from checkpointed data and check again.
+        checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
       }
 
-      val dsPhysicalPlan = ds.queryExecution.executedPlan
-      val cpPhysicalPlan = cp.queryExecution.executedPlan
+      testCheckpointing("should preserve partitioning information") {
+        val ds = spark.range(10).repartition('id % 2)
+        val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
 
-      assertResult(dsPhysicalPlan.outputPartitioning) { logicalRDD.outputPartitioning }
-      assertResult(dsPhysicalPlan.outputOrdering) { logicalRDD.outputOrdering }
+        val agg = cp.groupBy('id % 2).agg(count('id))
 
-      assertResult(dsPhysicalPlan.outputPartitioning) { cpPhysicalPlan.outputPartitioning }
-      assertResult(dsPhysicalPlan.outputOrdering) { cpPhysicalPlan.outputOrdering }
+        agg.queryExecution.executedPlan.collectFirst {
+          case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
+          case BroadcastExchangeExec(_, _: RDDScanExec) =>
+        }.foreach { _ =>
+          fail(
+            "No Exchange should be inserted above RDDScanExec since the checkpointed Dataset " +
+              "preserves partitioning information:\n\n" + agg.queryExecution
+          )
+        }
 
-      // For a lazy checkpoint() call, the first check also materializes the checkpoint.
-      checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
-
-      // Reads back from checkpointed data and check again.
-      checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
-    }
-
-    testCheckpointing("should preserve partitioning information") {
-      val ds = spark.range(10).repartition('id % 2)
-      val cp = ds.checkpoint(eager)
-
-      val agg = cp.groupBy('id % 2).agg(count('id))
-
-      agg.queryExecution.executedPlan.collectFirst {
-        case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
-        case BroadcastExchangeExec(_, _: RDDScanExec) =>
-      }.foreach { _ =>
-        fail(
-          "No Exchange should be inserted above RDDScanExec since the checkpointed Dataset " +
-            "preserves partitioning information:\n\n" + agg.queryExecution
-        )
+        checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
       }
-
-      checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
     }
   }
 
@@ -1273,8 +1289,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(spark.range(1).map { x => scala.math.BigDecimal(1, 18) }.head ==
       scala.math.BigDecimal(1, 18))
 
-    assert(spark.range(1).map { x => new java.sql.Date(2016, 12, 12) }.head ==
-      new java.sql.Date(2016, 12, 12))
+    assert(spark.range(1).map { x => java.sql.Date.valueOf("2016-12-12") }.head ==
+      java.sql.Date.valueOf("2016-12-12"))
 
     assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
       new java.sql.Timestamp(100000))
@@ -1398,6 +1414,33 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val actual = kvDataset.toString
     assert(expected === actual)
   }
+
+  test("SPARK-22442: Generate correct field names for special characters") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val data = """{"field.1": 1, "field 2": 2}"""
+      Seq(data).toDF().repartition(1).write.text(path)
+      val ds = spark.read.json(path).as[SpecialCharClass]
+      checkDataset(ds, SpecialCharClass("1", "2"))
+    }
+  }
+
+  test("SPARK-22472: add null check for top-level primitive values") {
+    // If the primitive values are from Option, we need to do runtime null check.
+    val ds = Seq(Some(1), None).toDS().as[Int]
+    intercept[NullPointerException](ds.collect())
+    val e = intercept[SparkException](ds.map(_ * 2).collect())
+    assert(e.getCause.isInstanceOf[NullPointerException])
+
+    withTempPath { path =>
+      Seq(new Integer(1), null).toDF("i").write.parquet(path.getCanonicalPath)
+      // If the primitive values are from files, we need to do runtime null check.
+      val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
+      intercept[NullPointerException](ds.collect())
+      val e = intercept[SparkException](ds.map(_ * 2).collect())
+      assert(e.getCause.isInstanceOf[NullPointerException])
+    }
+  }
 }
 
 case class SingleData(id: Int)
@@ -1487,3 +1530,5 @@ case class CircularReferenceClassB(cls: CircularReferenceClassA)
 case class CircularReferenceClassC(ar: Array[CircularReferenceClassC])
 case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
+
+case class SpecialCharClass(`field.1`: String, `field 2`: String)

@@ -39,8 +39,10 @@ import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
+import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
+import org.apache.spark.status.config._
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
@@ -104,7 +106,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .set("spark.ui.enabled", "true")
       .set("spark.ui.port", "0")
       .set("spark.ui.killEnabled", killEnabled.toString)
-      .set("spark.memory.offHeap.size", "64m")
+      .set(MEMORY_OFFHEAP_SIZE.key, "64m")
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
@@ -530,8 +532,9 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .setAppName("test")
       .set("spark.ui.enabled", "true")
       .set("spark.ui.port", "0")
-      .set("spark.ui.retainedStages", "3")
-      .set("spark.ui.retainedJobs", "2")
+      .set(MAX_RETAINED_STAGES, 3)
+      .set(MAX_RETAINED_JOBS, 2)
+      .set(ASYNC_TRACKING_ENABLED, false)
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
 
@@ -670,34 +673,36 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity).map(identity).groupBy(identity)
       rdd.count()
 
-      val stage0 = Source.fromURL(sc.ui.get.webUrl +
-        "/stages/stage/?id=0&attempt=0&expandDagViz=true").mkString
-      assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
-        "label=&quot;Stage 0&quot;;\n    subgraph "))
-      assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
-        "0 [label=&quot;ParallelCollectionRDD [0]"))
-      assert(stage0.contains("{\n      label=&quot;map&quot;;\n      " +
-        "1 [label=&quot;MapPartitionsRDD [1]"))
-      assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-        "2 [label=&quot;MapPartitionsRDD [2]"))
+      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+        val stage0 = Source.fromURL(sc.ui.get.webUrl +
+          "/stages/stage/?id=0&attempt=0&expandDagViz=true").mkString
+        assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
+          "label=&quot;Stage 0&quot;;\n    subgraph "))
+        assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
+          "0 [label=&quot;ParallelCollectionRDD [0]"))
+        assert(stage0.contains("{\n      label=&quot;map&quot;;\n      " +
+          "1 [label=&quot;MapPartitionsRDD [1]"))
+        assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+          "2 [label=&quot;MapPartitionsRDD [2]"))
 
-      val stage1 = Source.fromURL(sc.ui.get.webUrl +
-        "/stages/stage/?id=1&attempt=0&expandDagViz=true").mkString
-      assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
-        "label=&quot;Stage 1&quot;;\n    subgraph "))
-      assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-        "3 [label=&quot;ShuffledRDD [3]"))
-      assert(stage1.contains("{\n      label=&quot;map&quot;;\n      " +
-        "4 [label=&quot;MapPartitionsRDD [4]"))
-      assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-        "5 [label=&quot;MapPartitionsRDD [5]"))
+        val stage1 = Source.fromURL(sc.ui.get.webUrl +
+          "/stages/stage/?id=1&attempt=0&expandDagViz=true").mkString
+        assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
+          "label=&quot;Stage 1&quot;;\n    subgraph "))
+        assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+          "3 [label=&quot;ShuffledRDD [3]"))
+        assert(stage1.contains("{\n      label=&quot;map&quot;;\n      " +
+          "4 [label=&quot;MapPartitionsRDD [4]"))
+        assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+          "5 [label=&quot;MapPartitionsRDD [5]"))
 
-      val stage2 = Source.fromURL(sc.ui.get.webUrl +
-        "/stages/stage/?id=2&attempt=0&expandDagViz=true").mkString
-      assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
-        "label=&quot;Stage 2&quot;;\n    subgraph "))
-      assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-        "6 [label=&quot;ShuffledRDD [6]"))
+        val stage2 = Source.fromURL(sc.ui.get.webUrl +
+          "/stages/stage/?id=2&attempt=0&expandDagViz=true").mkString
+        assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
+          "label=&quot;Stage 2&quot;;\n    subgraph "))
+        assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+          "6 [label=&quot;ShuffledRDD [6]"))
+      }
     }
   }
 

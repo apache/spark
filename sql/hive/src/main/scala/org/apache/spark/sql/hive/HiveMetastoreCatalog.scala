@@ -164,13 +164,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             }
           }
 
-          val (dataSchema, updatedTable) =
-            inferIfNeeded(relation, options, fileFormat, Option(fileIndex))
+          val updatedTable = inferIfNeeded(relation, options, fileFormat, Option(fileIndex))
 
           val fsRelation = HadoopFsRelation(
             location = fileIndex,
             partitionSchema = partitionSchema,
-            dataSchema = dataSchema,
+            dataSchema = updatedTable.dataSchema,
             bucketSpec = None,
             fileFormat = fileFormat,
             options = options)(sparkSession = sparkSession)
@@ -191,13 +190,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           fileFormatClass,
           None)
         val logicalRelation = cached.getOrElse {
-          val (dataSchema, updatedTable) = inferIfNeeded(relation, options, fileFormat)
+          val updatedTable = inferIfNeeded(relation, options, fileFormat)
           val created =
             LogicalRelation(
               DataSource(
                 sparkSession = sparkSession,
                 paths = rootPath.toString :: Nil,
-                userSpecifiedSchema = Option(dataSchema),
+                userSpecifiedSchema = Option(updatedTable.dataSchema),
                 bucketSpec = None,
                 options = options,
                 className = fileType).resolveRelation(),
@@ -224,7 +223,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       relation: HiveTableRelation,
       options: Map[String, String],
       fileFormat: FileFormat,
-      fileIndexOpt: Option[FileIndex] = None): (StructType, CatalogTable) = {
+      fileIndexOpt: Option[FileIndex] = None): CatalogTable = {
     val inferenceMode = sparkSession.sessionState.conf.caseSensitiveInferenceMode
     val shouldInfer = (inferenceMode != NEVER_INFER) && !relation.tableMeta.schemaPreservesCase
     val tableName = relation.tableMeta.identifier.unquotedString
@@ -241,28 +240,28 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           sparkSession,
           options,
           fileIndex.listFiles(Nil, Nil).flatMap(_.files))
-        .map(mergeWithMetastoreSchema(relation.tableMeta.schema, _))
+        .map(mergeWithMetastoreSchema(relation.tableMeta.dataSchema, _))
 
       inferredSchema match {
-        case Some(schema) =>
+        case Some(dataSchema) =>
           if (inferenceMode == INFER_AND_SAVE) {
-            updateCatalogSchema(relation.tableMeta.identifier, schema)
+            updateDataSchema(relation.tableMeta.identifier, dataSchema)
           }
-          (schema, relation.tableMeta.copy(schema = schema))
+          val newSchema = StructType(dataSchema ++ relation.tableMeta.partitionSchema)
+          relation.tableMeta.copy(schema = newSchema)
         case None =>
           logWarning(s"Unable to infer schema for table $tableName from file format " +
             s"$fileFormat (inference mode: $inferenceMode). Using metastore schema.")
-          (relation.tableMeta.schema, relation.tableMeta)
+          relation.tableMeta
       }
     } else {
-      (relation.tableMeta.schema, relation.tableMeta)
+      relation.tableMeta
     }
   }
 
-  private def updateCatalogSchema(identifier: TableIdentifier, schema: StructType): Unit = try {
-    val db = identifier.database.get
+  private def updateDataSchema(identifier: TableIdentifier, newDataSchema: StructType): Unit = try {
     logInfo(s"Saving case-sensitive schema for table ${identifier.unquotedString}")
-    sparkSession.sharedState.externalCatalog.alterTableSchema(db, identifier.table, schema)
+    sparkSession.sessionState.catalog.alterTableDataSchema(identifier, newDataSchema)
   } catch {
     case NonFatal(ex) =>
       logWarning(s"Unable to save case-sensitive schema for table ${identifier.unquotedString}", ex)

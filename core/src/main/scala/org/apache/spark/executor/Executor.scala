@@ -35,7 +35,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task, TaskDescription}
 import org.apache.spark.shuffle.FetchFailedException
@@ -406,12 +406,53 @@ private[spark] class Executor(
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
         task.metrics.setResultSerializationTime(afterSerialization - beforeSerialization)
 
+        // Expose task metrics using the Dropwizard metrics system.
+        // Update task metrics counters
+        executorSource.METRIC_CPU_TIME.inc(task.metrics.executorCpuTime)
+        executorSource.METRIC_RUN_TIME.inc(task.metrics.executorRunTime)
+        executorSource.METRIC_JVM_GC_TIME.inc(task.metrics.jvmGCTime)
+        executorSource.METRIC_DESERIALIZE_TIME.inc(task.metrics.executorDeserializeTime)
+        executorSource.METRIC_DESERIALIZE_CPU_TIME.inc(task.metrics.executorDeserializeCpuTime)
+        executorSource.METRIC_RESULT_SERIALIZE_TIME.inc(task.metrics.resultSerializationTime)
+        executorSource.METRIC_SHUFFLE_FETCH_WAIT_TIME
+          .inc(task.metrics.shuffleReadMetrics.fetchWaitTime)
+        executorSource.METRIC_SHUFFLE_WRITE_TIME.inc(task.metrics.shuffleWriteMetrics.writeTime)
+        executorSource.METRIC_SHUFFLE_TOTAL_BYTES_READ
+          .inc(task.metrics.shuffleReadMetrics.totalBytesRead)
+        executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ
+          .inc(task.metrics.shuffleReadMetrics.remoteBytesRead)
+        executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ_TO_DISK
+          .inc(task.metrics.shuffleReadMetrics.remoteBytesReadToDisk)
+        executorSource.METRIC_SHUFFLE_LOCAL_BYTES_READ
+          .inc(task.metrics.shuffleReadMetrics.localBytesRead)
+        executorSource.METRIC_SHUFFLE_RECORDS_READ
+          .inc(task.metrics.shuffleReadMetrics.recordsRead)
+        executorSource.METRIC_SHUFFLE_REMOTE_BLOCKS_FETCHED
+          .inc(task.metrics.shuffleReadMetrics.remoteBlocksFetched)
+        executorSource.METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED
+          .inc(task.metrics.shuffleReadMetrics.localBlocksFetched)
+        executorSource.METRIC_SHUFFLE_BYTES_WRITTEN
+          .inc(task.metrics.shuffleWriteMetrics.bytesWritten)
+        executorSource.METRIC_SHUFFLE_RECORDS_WRITTEN
+          .inc(task.metrics.shuffleWriteMetrics.recordsWritten)
+        executorSource.METRIC_INPUT_BYTES_READ
+          .inc(task.metrics.inputMetrics.bytesRead)
+        executorSource.METRIC_INPUT_RECORDS_READ
+          .inc(task.metrics.inputMetrics.recordsRead)
+        executorSource.METRIC_OUTPUT_BYTES_WRITTEN
+          .inc(task.metrics.outputMetrics.bytesWritten)
+        executorSource.METRIC_OUTPUT_RECORDS_WRITTEN
+          .inc(task.metrics.inputMetrics.recordsRead)
+        executorSource.METRIC_RESULT_SIZE.inc(task.metrics.resultSize)
+        executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
+        executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
+
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
         // TODO: do not serialize value twice
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)
-        val resultSize = serializedDirectResult.limit
+        val resultSize = serializedDirectResult.limit()
 
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
@@ -512,10 +553,9 @@ private[spark] class Executor(
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
-          if (Utils.isFatalError(t)) {
+          if (!t.isInstanceOf[SparkOutOfMemoryError] && Utils.isFatalError(t)) {
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
-
       } finally {
         runningTasks.remove(taskId)
       }

@@ -1,11 +1,9 @@
 // need to make changes to uptake sbt 1.0 support in "com.eed3si9n" % "sbt-assembly" % "1.14.5"
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.11.2")
 
-// sbt 1.0.0 support: https://github.com/typesafehub/sbteclipse/issues/343
-addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "5.1.0")
+addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "5.2.3")
 
-// sbt 1.0.0 support: https://github.com/jrudolph/sbt-dependency-graph/issues/134
-addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.8.2")
+addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.9.0")
 
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
@@ -20,8 +18,7 @@ addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.3")
 // need to make changes to uptake sbt 1.0 support in "com.cavorite" % "sbt-avro-1-7" % "1.1.2"
 addSbtPlugin("com.cavorite" % "sbt-avro" % "0.3.2")
 
-// sbt 1.0.0 support: https://github.com/spray/sbt-revolver/issues/62
-addSbtPlugin("io.spray" % "sbt-revolver" % "0.8.0")
+addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 
 libraryDependencies += "org.ow2.asm"  % "asm" % "5.1"
 

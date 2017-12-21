@@ -48,7 +48,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceV2Writer, query: SparkPlan)
   override protected def doExecute(): RDD[InternalRow] = {
     val writeTask = writer match {
       case w: SupportsWriteInternalRow => w.createInternalRowWriterFactory()
-      case _ => new RowToInternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
+      case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
     }
 
     val rdd = query.execute()
@@ -93,7 +93,7 @@ object DataWritingSparkTask extends Logging {
       writeTask: DataWriterFactory[InternalRow],
       context: TaskContext,
       iter: Iterator[InternalRow]): WriterCommitMessage = {
-    val dataWriter = writeTask.createWriter(context.partitionId(), context.attemptNumber())
+    val dataWriter = writeTask.createDataWriter(context.partitionId(), context.attemptNumber())
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
@@ -111,18 +111,18 @@ object DataWritingSparkTask extends Logging {
   }
 }
 
-class RowToInternalRowDataWriterFactory(
+class InternalRowDataWriterFactory(
     rowWriterFactory: DataWriterFactory[Row],
     schema: StructType) extends DataWriterFactory[InternalRow] {
 
-  override def createWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
-    new RowToInternalRowDataWriter(
-      rowWriterFactory.createWriter(partitionId, attemptNumber),
+  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
+    new InternalRowDataWriter(
+      rowWriterFactory.createDataWriter(partitionId, attemptNumber),
       RowEncoder.apply(schema).resolveAndBind())
   }
 }
 
-class RowToInternalRowDataWriter(rowWriter: DataWriter[Row], encoder: ExpressionEncoder[Row])
+class InternalRowDataWriter(rowWriter: DataWriter[Row], encoder: ExpressionEncoder[Row])
   extends DataWriter[InternalRow] {
 
   override def write(record: InternalRow): Unit = rowWriter.write(encoder.fromRow(record))
