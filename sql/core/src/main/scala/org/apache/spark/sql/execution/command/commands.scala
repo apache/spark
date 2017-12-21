@@ -106,7 +106,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
     rows.map(converter(_).asInstanceOf[InternalRow])
   }
 
-  override def children: Seq[QueryPlan[_]] = cmd :: Nil
+  override def children: Seq[SparkPlan] = child :: Nil
 
   override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 
