@@ -110,3 +110,12 @@ def toJArray(gateway, jtype, arr):
     for i in range(0, len(arr)):
         jarr[i] = arr[i]
     return jarr
+
+
+def _require_minimum_pyarrow_version():
+    """ Raise ImportError if minimum version of pyarrow is not installed
+    """
+    from distutils.version import LooseVersion
+    import pyarrow
+    if LooseVersion(pyarrow.__version__) < LooseVersion('0.8.0'):
+        raise ImportError("pyarrow >= 0.8.0 must be installed on calling Python process")
