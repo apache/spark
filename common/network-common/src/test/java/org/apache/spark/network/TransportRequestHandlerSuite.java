@@ -17,6 +17,7 @@
 
 package org.apache.spark.network;
 
+import java.io.InvalidClassException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,6 +28,8 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.*;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -98,6 +101,41 @@ public class TransportRequestHandlerSuite {
     requestHandler.handle(request3);
     verify(channel, times(1)).close();
     assert responseAndPromisePairs.size() == 3;
+  }
+
+  @Test
+  public void handleOneWayMessageWithWrongSerialVersionUID() throws Exception {
+    RpcHandler rpcHandler = new NoOpRpcHandler();
+    Channel channel = mock(Channel.class);
+    List<Pair<Object, ExtendedChannelPromise>> responseAndPromisePairs =
+      new ArrayList<>();
+
+    when(channel.writeAndFlush(any()))
+      .thenAnswer(invocationOnMock -> {
+        Object response = invocationOnMock.getArguments()[0];
+        ExtendedChannelPromise channelFuture = new ExtendedChannelPromise(channel);
+        responseAndPromisePairs.add(ImmutablePair.of(response, channelFuture));
+        return channelFuture;
+      });
+
+    TransportClient reverseClient = mock(TransportClient.class);
+    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, reverseClient,
+      rpcHandler, 2L);
+
+    // req.body().nioByteBuffer() is the method that throws the InvalidClassException
+    // with wrong svUID, so let's mock it
+    ManagedBuffer body = mock(ManagedBuffer.class);
+    when(body.nioByteBuffer()).thenThrow(new InvalidClassException("test - wrong version"));
+    RequestMessage msg = new OneWayMessage(body);
+
+    requestHandler.handle(msg);
+
+    assertEquals(responseAndPromisePairs.size(), 1);
+    assertTrue(responseAndPromisePairs.get(0).getLeft() instanceof RpcFailure);
+    assertEquals(((RpcFailure) responseAndPromisePairs.get(0).getLeft()).requestId,
+      RpcFailure.EMPTY_REQUEST_ID);
+
+    responseAndPromisePairs.get(0).getRight().finish(true);
   }
 
   private class ExtendedChannelPromise extends DefaultChannelPromise {

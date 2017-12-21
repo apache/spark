@@ -22,9 +22,10 @@ import io.netty.buffer.ByteBuf;
 
 /** Response to {@link RpcRequest} for a failed RPC. */
 public final class RpcFailure extends AbstractMessage implements ResponseMessage {
+  public static final long EMPTY_REQUEST_ID = Long.MIN_VALUE;
+
   public final long requestId;
   public final String errorString;
-  public static final long EMPTY_REQUEST_ID = Long.MIN_VALUE;
 
   public RpcFailure(long requestId, String errorString) {
     this.requestId = requestId;
