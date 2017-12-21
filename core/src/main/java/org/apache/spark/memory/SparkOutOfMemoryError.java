@@ -14,16 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.memory;
 
-package org.apache.spark.sql.execution.streaming
+import org.apache.spark.annotation.Private;
 
-import org.json4s.DefaultFormats
-import org.json4s.jackson.Serialization
+/**
+ * This exception is thrown when a task can not acquire memory from the Memory manager.
+ * Instead of throwing {@link OutOfMemoryError}, which kills the executor,
+ * we should use throw this exception, which just kills the current task.
+ */
+@Private
+public final class SparkOutOfMemoryError extends OutOfMemoryError {
 
-import org.apache.spark.sql.sources.v2
+    public SparkOutOfMemoryError(String s) {
+        super(s);
+    }
 
-case class RateStreamOffset(partitionToValueAndRunTimeMs: Map[Int, (Long, Long)])
-  extends v2.reader.Offset {
-  implicit val defaultFormats: DefaultFormats = DefaultFormats
-  override val json = Serialization.write(partitionToValueAndRunTimeMs)
+    public SparkOutOfMemoryError(OutOfMemoryError e) {
+        super(e.getMessage());
+    }
 }

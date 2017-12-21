@@ -329,10 +329,6 @@ private[spark] class AppStatusListener(
       .toSeq
     stage.jobIds = stage.jobs.map(_.jobId).toSet
 
-    stage.schedulingPool = Option(event.properties).flatMap { p =>
-      Option(p.getProperty("spark.scheduler.pool"))
-    }.getOrElse(SparkUI.DEFAULT_POOL_NAME)
-
     stage.description = Option(event.properties).flatMap { p =>
       Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
     }

@@ -18,31 +18,12 @@
 package org.apache.spark.sql.execution.streaming
 
 /**
- * A simple offset for sources that produce a single linear stream of data.
+ * Used when loading a JSON serialized offset from external storage.
+ * We are currently not responsible for converting JSON serialized
+ * data into an internal (i.e., object) representation. Sources should
+ * define a factory method in their source Offset companion objects
+ * that accepts a [[SerializedOffset]] for doing the conversion.
  */
-case class LongOffset(offset: Long) extends Offset {
+case class SerializedOffset(override val json: String) extends Offset
 
-  override val json = offset.toString
 
-  def +(increment: Long): LongOffset = new LongOffset(offset + increment)
-  def -(decrement: Long): LongOffset = new LongOffset(offset - decrement)
-}
-
-object LongOffset {
-
-  /**
-   * LongOffset factory from serialized offset.
-   * @return new LongOffset
-   */
-  def apply(offset: SerializedOffset) : LongOffset = new LongOffset(offset.json.toLong)
-
-  /**
-   * Convert generic Offset to LongOffset if possible.
-   * @return converted LongOffset
-   */
-  def convert(offset: Offset): Option[LongOffset] = offset match {
-    case lo: LongOffset => Some(lo)
-    case so: SerializedOffset => Some(LongOffset(so))
-    case _ => None
-  }
-}
