@@ -280,13 +280,13 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     val javaType = ctx.javaType(dataType)
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
-      ev.isNull = "true"
+      ev.isNull = LiteralValue("true")
       ev.copy(s"final $javaType ${ev.value} = ${ctx.defaultValue(dataType)};")
     } else {
-      ev.isNull = "false"
+      ev.isNull = LiteralValue("false")
       dataType match {
         case BooleanType | IntegerType | DateType =>
-          ev.copy(code = "", value = value.toString)
+          ev.copy(code = "", value = LiteralValue(value.toString))
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
@@ -294,7 +294,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
             val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
             ev.copy(code = code)
           } else {
-            ev.copy(code = "", value = s"${value}f")
+            ev.copy(code = "", value = LiteralValue(s"${value}f"))
           }
         case DoubleType =>
           val v = value.asInstanceOf[Double]
@@ -303,15 +303,15 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
             val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
             ev.copy(code = code)
           } else {
-            ev.copy(code = "", value = s"${value}D")
+            ev.copy(code = "", value = LiteralValue(s"${value}D"))
           }
         case ByteType | ShortType =>
-          ev.copy(code = "", value = s"($javaType)$value")
+          ev.copy(code = "", value = LiteralValue(s"($javaType)$value"))
         case TimestampType | LongType =>
-          ev.copy(code = "", value = s"${value}L")
+          ev.copy(code = "", value = LiteralValue(s"${value}L"))
         case _ =>
-          ev.copy(code = "", value = ctx.addReferenceObj("literal", value,
-            ctx.javaType(dataType)))
+          ev.copy(code = "", value = GlobalValue(ctx.addReferenceObj("literal", value,
+            ctx.javaType(dataType))))
       }
     }
   }

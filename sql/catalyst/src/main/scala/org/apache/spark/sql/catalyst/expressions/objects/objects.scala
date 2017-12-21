@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
@@ -59,13 +59,13 @@ trait InvokeLike extends Expression with NonSQLExpression {
    * @param ctx a [[CodegenContext]]
    * @return (code to prepare arguments, argument string, result of argument null check)
    */
-  def prepareArguments(ctx: CodegenContext): (String, String, String) = {
+  def prepareArguments(ctx: CodegenContext): (String, String, ExprValue) = {
 
     val resultIsNull = if (needNullCheck) {
       val resultIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "resultIsNull")
-      resultIsNull
+      GlobalValue(resultIsNull)
     } else {
-      "false"
+      LiteralValue("false")
     }
     val argValues = arguments.map { e =>
       val argValue = ctx.addMutableState(ctx.javaType(e.dataType), "argValue")
@@ -146,7 +146,7 @@ case class StaticInvoke(
     val prepareIsNull = if (nullable) {
       s"boolean ${ev.isNull} = $resultIsNull;"
     } else {
-      ev.isNull = "false"
+      ev.isNull = LiteralValue("false")
       ""
     }
 
@@ -427,7 +427,7 @@ case class WrapOption(child: Expression, optType: DataType)
         ${inputObject.isNull} ?
         scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
     """
-    ev.copy(code = code, isNull = "false")
+    ev.copy(code = code, isNull = LiteralValue("false"))
   }
 }
 
@@ -443,7 +443,8 @@ case class LambdaVariable(
   with Unevaluable with NonSQLExpression {
 
   override def genCode(ctx: CodegenContext): ExprCode = {
-    ExprCode(code = "", value = value, isNull = if (nullable) isNull else "false")
+    ExprCode(code = "", value = VariableValue(value),
+      isNull = if (nullable) VariableValue(isNull) else LiteralValue("false"))
   }
 }
 
@@ -634,7 +635,7 @@ case class MapObjects private(
     // Make a copy of the data if it's unsafe-backed
     def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
       s"$value instanceof ${clazz.getSimpleName}? ${value}.copy() : $value"
-    val genFunctionValue = lambdaFunction.dataType match {
+    val genFunctionValue: String = lambdaFunction.dataType match {
       case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
       case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
       case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
@@ -1131,7 +1132,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
          |$childrenCode
          |final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
        """.stripMargin
-    ev.copy(code = code, isNull = "false")
+    ev.copy(code = code, isNull = LiteralValue("false"))
   }
 }
 
@@ -1317,7 +1318,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
         throw new NullPointerException($errMsgField);
       }
      """
-    ev.copy(code = code, isNull = "false", value = childGen.value)
+    ev.copy(code = code, isNull = LiteralValue("false"), value = childGen.value)
   }
 }
 
@@ -1360,7 +1361,7 @@ case class GetExternalRowField(
 
       final Object ${ev.value} = ${row.value}.get($index);
      """
-    ev.copy(code = code, isNull = "false")
+    ev.copy(code = code, isNull = LiteralValue("false"))
   }
 }
 

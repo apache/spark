@@ -22,7 +22,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
@@ -191,7 +191,7 @@ case class BroadcastHashJoinExec(
           |  $value = ${ev.value};
           |}
          """.stripMargin
-        ExprCode(code, isNull, value)
+        ExprCode(code, VariableValue(isNull), VariableValue(value))
       }
     }
   }
@@ -486,7 +486,7 @@ case class BroadcastHashJoinExec(
       s"$existsVar = true;"
     }
 
-    val resultVar = input ++ Seq(ExprCode("", "false", existsVar))
+    val resultVar = input ++ Seq(ExprCode("", LiteralValue("false"), VariableValue(existsVar)))
     if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side

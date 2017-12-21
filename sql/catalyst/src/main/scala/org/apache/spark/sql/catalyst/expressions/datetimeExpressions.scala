@@ -24,7 +24,7 @@ import java.util.{Calendar, TimeZone}
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -673,7 +673,7 @@ abstract class UnixTime
       case StringType if right.foldable =>
         val df = classOf[DateFormat].getName
         if (formatter == null) {
-          ExprCode("", "true", ctx.defaultValue(dataType))
+          ExprCode("", LiteralValue("true"), LiteralValue(ctx.defaultValue(dataType)))
         } else {
           val formatterName = ctx.addReferenceObj("formatter", formatter, df)
           val eval1 = left.genCode(ctx)
@@ -808,7 +808,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     val df = classOf[DateFormat].getName
     if (format.foldable) {
       if (formatter == null) {
-        ExprCode("", "true", "(UTF8String) null")
+        ExprCode("", LiteralValue("true"), LiteralValue("(UTF8String) null"))
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)

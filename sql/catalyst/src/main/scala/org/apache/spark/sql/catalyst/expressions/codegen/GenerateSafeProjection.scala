@@ -53,7 +53,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val rowClass = classOf[GenericInternalRow].getName
 
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
-      val converter = convertToSafe(ctx, ctx.getValue(tmpInput, dt, i.toString), dt)
+      val converter = convertToSafe(ctx, StatementValue(ctx.getValue(tmpInput, dt, i.toString)), dt)
       s"""
         if (!$tmpInput.isNullAt($i)) {
           ${converter.code}
@@ -74,7 +74,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
          |final InternalRow $output = new $rowClass($values);
        """.stripMargin
 
-    ExprCode(code, "false", output)
+    ExprCode(code, LiteralValue("false"), VariableValue(output))
   }
 
   private def createCodeForArray(
@@ -90,7 +90,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val arrayClass = classOf[GenericArrayData].getName
 
     val elementConverter = convertToSafe(
-      ctx, ctx.getValue(tmpInput, elementType, index), elementType)
+      ctx, StatementValue(ctx.getValue(tmpInput, elementType, index)), elementType)
     val code = s"""
       final ArrayData $tmpInput = $input;
       final int $numElements = $tmpInput.numElements();
@@ -104,7 +104,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final ArrayData $output = new $arrayClass($values);
     """
 
-    ExprCode(code, "false", output)
+    ExprCode(code, LiteralValue("false"), VariableValue(output))
   }
 
   private def createCodeForMap(
@@ -125,19 +125,19 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final MapData $output = new $mapClass(${keyConverter.value}, ${valueConverter.value});
     """
 
-    ExprCode(code, "false", output)
+    ExprCode(code, LiteralValue("false"), VariableValue(output))
   }
 
   @tailrec
   private def convertToSafe(
       ctx: CodegenContext,
-      input: String,
+      input: ExprValue,
       dataType: DataType): ExprCode = dataType match {
     case s: StructType => createCodeForStruct(ctx, input, s)
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
     case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
-    case _ => ExprCode("", "false", input)
+    case _ => ExprCode("", LiteralValue("false"), input)
   }
 
   protected def create(expressions: Seq[Expression]): Projection = {

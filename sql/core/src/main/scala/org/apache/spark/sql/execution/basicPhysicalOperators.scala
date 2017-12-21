@@ -24,7 +24,7 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
@@ -192,7 +192,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // generate better code (remove dead branches).
     val resultVars = input.zipWithIndex.map { case (ev, i) =>
       if (notNullAttributes.contains(child.output(i).exprId)) {
-        ev.isNull = "false"
+        ev.isNull = LiteralValue("false")
       }
       ev
     }
@@ -368,7 +368,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val number = ctx.addMutableState(ctx.JAVA_LONG, "number")
 
     val value = ctx.freshName("value")
-    val ev = ExprCode("", "false", value)
+    val ev = ExprCode("", LiteralValue("false"), VariableValue(value))
     val BigInt = classOf[java.math.BigInteger].getName
 
     // inline mutable state since not many Range operations in a task

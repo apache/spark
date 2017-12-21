@@ -64,8 +64,8 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
       GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
     ev.copy(
       code = preprocess + assigns + postprocess,
-      value = arrayData,
-      isNull = "false")
+      value = VariableValue(arrayData),
+      isNull = LiteralValue("false"))
   }
 
   override def prettyName: String = "array"
@@ -378,7 +378,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
          |$valuesCode
          |final InternalRow ${ev.value} = new $rowClass($values);
          |$values = null;
-       """.stripMargin, isNull = "false")
+       """.stripMargin, isNull = LiteralValue("false"))
   }
 
   override def prettyName: String = "named_struct"
@@ -394,7 +394,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
 case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateNamedStructLike {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ExprCode(code = eval.code, isNull = "false", value = eval.value)
+    ExprCode(code = eval.code, isNull = LiteralValue("false"), value = eval.value)
   }
 
   override def prettyName: String = "named_struct_unsafe"

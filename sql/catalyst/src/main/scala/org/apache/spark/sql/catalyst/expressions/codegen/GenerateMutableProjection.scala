@@ -59,7 +59,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
     val exprVals = ctx.generateExpressions(validExpr, useSubexprElimination)
 
     // 4-tuples: (code for projection, isNull variable name, value variable name, column index)
-    val projectionCodes: Seq[(String, String, String, Int)] = exprVals.zip(index).map {
+    val projectionCodes: Seq[(String, ExprValue, String, Int)] = exprVals.zip(index).map {
       case (ev, i) =>
         val e = expressions(i)
         val value = ctx.addMutableState(ctx.javaType(e.dataType), "value")
@@ -69,7 +69,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
               |${ev.code}
               |$isNull = ${ev.isNull};
               |$value = ${ev.value};
-            """.stripMargin, isNull, value, i)
+            """.stripMargin, GlobalValue(isNull), value, i)
         } else {
           (s"""
               |${ev.code}
@@ -83,7 +83,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
 
     val updates = validExpr.zip(projectionCodes).map {
       case (e, (_, isNull, value, i)) =>
-        val ev = ExprCode("", isNull, value)
+        val ev = ExprCode("", isNull, GlobalValue(value))
         ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
     }
 

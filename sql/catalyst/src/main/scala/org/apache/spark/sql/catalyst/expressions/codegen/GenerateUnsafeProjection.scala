@@ -52,7 +52,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
     val fieldEvals = fieldTypes.zipWithIndex.map { case (dt, i) =>
-      ExprCode("", s"$tmpInput.isNullAt($i)", ctx.getValue(tmpInput, dt, i.toString))
+      ExprCode("", StatementValue(s"$tmpInput.isNullAt($i)"),
+        StatementValue(ctx.getValue(tmpInput, dt, i.toString)))
     }
 
     s"""
@@ -347,7 +348,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         $writeExpressions
         $updateRowSize
       """
-    ExprCode(code, "false", result)
+    ExprCode(code, LiteralValue("false"), GlobalValue(result))
   }
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =

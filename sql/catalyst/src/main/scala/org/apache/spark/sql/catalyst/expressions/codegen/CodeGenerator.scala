@@ -23,7 +23,7 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
+import scala.language.{existentials, implicitConversions}
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -56,7 +56,36 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
  */
-case class ExprCode(var code: String, var isNull: String, var value: String)
+case class ExprCode(var code: String, var isNull: ExprValue, var value: ExprValue)
+
+
+// An abstraction that represents the evaluation result of [[ExprCode]].
+abstract class ExprValue
+
+object ExprValue {
+  implicit def exprValueToString(exprValue: ExprValue): String = exprValue.toString
+}
+
+// A literal evaluation of [[ExprCode]].
+case class LiteralValue(val value: String) extends ExprValue {
+  override def toString: String = value
+}
+
+// A variable evaluation of [[ExprCode]].
+case class VariableValue(val variableName: String) extends ExprValue {
+  override def toString: String = variableName
+}
+
+// A statement evaluation of [[ExprCode]].
+case class StatementValue(val statement: String) extends ExprValue {
+  override def toString: String = statement
+}
+
+// A global variable evaluation of [[ExprCode]].
+case class GlobalValue(val value: String) extends ExprValue {
+  override def toString: String = value
+}
+
 
 /**
  * State used for subexpression elimination.
@@ -66,7 +95,7 @@ case class ExprCode(var code: String, var isNull: String, var value: String)
  * @param value A term for a value of a common sub-expression. Not valid if `isNull`
  *              is set to `true`.
  */
-case class SubExprEliminationState(isNull: String, value: String)
+case class SubExprEliminationState(isNull: ExprValue, value: ExprValue)
 
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
@@ -264,7 +293,7 @@ class CodegenContext {
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
       case _ => s"$value = $initCode;"
     }
-    ExprCode(code, "false", value)
+    ExprCode(code, LiteralValue("false"), GlobalValue(value))
   }
 
   def declareMutableStates(): String = {
@@ -1144,7 +1173,7 @@ class CodegenContext {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
+      val state = SubExprEliminationState(GlobalValue(isNull), GlobalValue(value))
       e.foreach(subExprEliminationExprs.put(_, state))
     }
   }

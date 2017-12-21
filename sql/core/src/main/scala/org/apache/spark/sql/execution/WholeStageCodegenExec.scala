@@ -127,7 +127,7 @@ trait CodegenSupport extends SparkPlan {
       }
 
     val rowVar = if (row != null) {
-      ExprCode("", "false", row)
+      ExprCode("", LiteralValue("false"), VariableValue(row))
     } else {
       if (outputVars.nonEmpty) {
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
@@ -142,10 +142,10 @@ trait CodegenSupport extends SparkPlan {
           |$evaluateInputs
           |${ev.code.trim}
          """.stripMargin.trim
-        ExprCode(code, "false", ev.value)
+        ExprCode(code, LiteralValue("false"), ev.value)
       } else {
         // There is no columns
-        ExprCode("", "false", "unsafeRow")
+        ExprCode("", LiteralValue("false"), VariableValue("unsafeRow"))
       }
     }
 
