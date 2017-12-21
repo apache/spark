@@ -32,6 +32,209 @@ import org.apache.spark.unsafe.types.CalendarInterval
 class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  test("Window partitionBy cardinality, no order by") {
+    val df = Seq(("a", 1), ("a", 2), ("b", 4), ("b", 4)).toDF("key", "value")
+
+    checkAnswer(
+      df.select(
+        sum("value").over(),
+        sum("value").over(Window.partitionBy("key")),
+        sum("value").over(Window.partitionBy("key", "value")),
+        sum("value").over(Window.partitionBy("value", "key"))),
+      Row(11, 3, 1, 1) :: Row(11, 3, 2, 2) :: Row(11, 8, 8, 8) :: Row(11, 8, 8, 8) :: Nil)
+  }
+
+  test("Null value in partition key") {
+    val df = Seq(("a", 1), ("a", 2), (null, 4), (null, 8)).toDF("key", "value")
+
+    checkAnswer(
+      df.select(
+        'value,
+        sum("value").over(Window.partitionBy("key"))),
+      Row(1, 3) :: Row(2, 3) :: Row(4, 12) :: Row(8, 12) :: Nil)
+  }
+
+  test("Same partitionBy multiple times") {
+    val df = Seq(("a", 1), ("a", 2), ("b", 4), ("b", 8)).toDF("key", "value")
+
+    checkAnswer(
+      df.select(
+        sum("value").over(Window.partitionBy("key", "key"))),
+      Row(3) :: Row(3) :: Row(12) :: Row(12) :: Nil)
+  }
+
+  test("Multiple orderBy clauses") {
+    val df = Seq(("a", "x", 1), ("a", "y", 2), ("b", "y", 3), ("b", "x", 4)).toDF("k1", "k2", "v")
+
+    checkAnswer(
+      df.select(
+        'v,
+        lead("v", 1).over(Window.orderBy("k1", "k2")),
+        lead("v", 1).over(Window.orderBy("k2", "k1"))),
+      Row(1, 2, 4) :: Row(4, 3, 2) :: Row(2, 4, 3) :: Row(3, null, null) :: Nil)
+  }
+
+  test("Multiple orderBy clauses with desc") {
+    val df = Seq(("a", "x", 1), ("a", "y", 2), ("b", "y", 3), ("b", "x", 4)).toDF("k1", "k2", "v")
+
+    checkAnswer(
+      df.select(
+        'v,
+        lead("v", 1).over(Window.orderBy($"k1".desc, $"k2")),
+        lead("v", 1).over(Window.orderBy($"k1", $"k2".desc)),
+        lead("v", 1).over(Window.orderBy($"k1".desc, $"k2"))),
+      Row(1, 2, 3, 2) :: Row(2, null, 1, null) :: Row(3, 1, 4, 1) :: Row(4, 3, null, 3) :: Nil)
+  }
+
+  test("Null values sorted to first by asc, last by desc ordering by default") {
+    val df = Seq((null, 1), ("a", 2), ("b", 3)).toDF("key", "value")
+
+    checkAnswer(
+      df.select(
+        'value,
+        lead("value", 1).over(Window.orderBy($"key")),
+        lead("value", 1).over(Window.orderBy($"key".desc))),
+      Row(1, 2, null) :: Row(2, 3, 1) :: Row(3, null, 2) :: Nil)
+  }
+
+  test("Ordering of null values can be explicitly controlled") {
+    val df = Seq((null, 1), ("a", 2), ("b", 3)).toDF("key", "value")
+
+    checkAnswer(
+      df.select(
+        'value,
+        lead("value", 1).over(Window.orderBy($"key".asc_nulls_first)),
+        lead("value", 1).over(Window.orderBy($"key".asc_nulls_last)),
+        lead("value", 1).over(Window.orderBy($"key".desc_nulls_first)),
+        lead("value", 1).over(Window.orderBy($"key".desc_nulls_last))),
+      Row(1, 2, null, 3, null) :: Row(2, 3, 3, null, 1) :: Row(3, null, 1, 2, 2) :: Nil)
+  }
+
+
+  test("Order by without frame defaults to range between unbounded_preceding - current_row") {
+    val df = Seq(8, 2, 2, 1).toDF("value")
+
+    checkAnswer(
+      df.select(
+        'value,
+        sum("value").over(Window.orderBy('value))),
+      Row(1, 1) :: Row(2, 5) :: Row(2, 5) :: Row(8, 13) :: Nil)
+  }
+
+  test("Without order and frame default is row btw unbounded_preceding - unbounded_following") {
+    val df = Seq(8, 4, 2, 1).toDF("value")
+
+    checkAnswer(
+      df.select(
+        'value,
+        sum("value").over()),
+      Row(1, 15) :: Row(2, 15) :: Row(4, 15) :: Row(8, 15) :: Nil)
+  }
+
+  test("Partitioning and ordering don't fail on empty dataframe") {
+    val emptyDf = Seq(("k", 1)).toDF("key", "value").limit(0)
+
+    checkAnswer(
+      emptyDf.select(
+        sum("value").over(Window.partitionBy('key)),
+        sum("value").over(Window.orderBy('value))),
+      Nil)
+  }
+
+  test("orderBy with expression using a column") {
+    val df = Seq("a", "abc", "ab", "abcd").toDF("v")
+
+    checkAnswer(
+      df.select(
+        'v,
+        rank.over(
+          Window.orderBy(length($"v")))),
+      Row("a", 1) :: Row("ab", 2) :: Row("abc", 3) :: Row("abcd", 4) :: Nil)
+  }
+
+  test("orderBy with expression using multiple columns") {
+    val df = Seq((2, 5), (1, 2), (4, 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        'a,
+        sum("a").over(
+          Window.orderBy($"a" + $"b")),
+        sum("a").over(
+          Window.orderBy(($"a" + $"b").desc))),
+      Row(1, 1, 7) :: Row(2, 7, 2) :: Row(4, 5, 6) :: Nil)
+  }
+
+  test("partitionBy with expression using multiple columns") {
+    val df = Seq((2, 2), (1, 3), (4, 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        'a,
+        sum("a").over(
+          Window.partitionBy($"a" + $"b"))),
+      Row(1, 3) :: Row(2, 3) :: Row(4, 4) :: Nil)
+  }
+
+  test("ranking, analytic and aggregate functions in the same window") {
+    val df = Seq((1, 4), (1, 2), (2, 8), (2, 16)).toDF("a", "b")
+    val w = Window.partitionBy("a").orderBy("b")
+
+    checkAnswer(
+      df.select(
+        'b,
+        first("b").over(w),
+        lag("b", 1).over(w),
+        sum("b").over(w)),
+      Row(2, 2, null, 2) :: Row(4, 2, 2, 6) :: Row(8, 8, null, 8) :: Row(16, 8, 8, 24) :: Nil)
+  }
+
+  test("partitionBy can use a window function") {
+    val df = Seq(("a", 2), ("b", 1), ("c", 4), ("d", 8)).toDF("k", "v")
+
+    checkAnswer(
+      df.select(
+        'k,
+        sum("v").over(Window.partitionBy(rank.over(Window.orderBy("v")) mod 2))),
+      Row("a", 10) :: Row("b", 5) :: Row("c", 5) :: Row("d", 10) :: Nil)
+  }
+
+  test("orderBy can use a window function") {
+    val df = Seq(2, 1, 4, 3).toDF("v")
+
+    checkAnswer(
+      df.select(
+        'v,
+        rank.over(Window.orderBy(rank.over(Window.orderBy("v")).desc))),
+      Row(1, 4) :: Row(2, 3) :: Row(3, 2) :: Row(4, 1) :: Nil)
+  }
+
+  // it can be enabled when SPARK-16418 is resolved
+  ignore("window functions in filter") {
+    val df = Seq(("a", 1), ("a", 2), ("b", 4), ("b", 8)).toDF("k", "v")
+    checkAnswer(
+      df.select('v).where('v > avg('v).over(Window.partitionBy('k))),
+      Row(2) :: Row(8) :: Nil)
+  }
+
+  test("partitionBy referring to a non-existent column causes failure") {
+    val df = Seq(1).toDF("value")
+
+    val e = intercept[AnalysisException](
+      df.select(
+        avg("value").over(Window.partitionBy($"key"))))
+    assert(e.message.contains("cannot resolve '`key`' given input columns: [value]"))
+  }
+
+  test("orderBy referring to a non-existent column causes failure") {
+    val df = Seq(1).toDF("value")
+
+    val e = intercept[AnalysisException](
+      df.select(
+        avg("value").over(Window.orderBy($"key"))))
+    assert(e.message.contains("cannot resolve '`key`' given input columns: [value]"))
+  }
+
   test("reuse window partitionBy") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     val w = Window.partitionBy("key").orderBy("value")
