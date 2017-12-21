@@ -203,7 +203,8 @@ private[spark] class SerializerManager(
       inputStream: InputStream)
       (classTag: ClassTag[T]): Iterator[T] = {
     val stream = inputStream match {
-      case input: BufferedInputStream | NioBufferedFileInputStream => input
+      case bufferedInput: BufferedInputStream => bufferedInput
+      case nioBufferedInput: NioBufferedFileInputStream => nioBufferedInput
       case others => new BufferedInputStream(others)
     }
 
