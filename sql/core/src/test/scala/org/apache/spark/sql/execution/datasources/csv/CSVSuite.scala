@@ -1248,4 +1248,49 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
     )
   }
+
+  test("SPARK-17916: An empty string should not be coerced to null when nullValue is passed.") {
+    val sparkSession = spark
+
+    val elems = Seq(("bar"), (""), (null: String))
+
+    // Checks for new behavior where an empty string is not coerced to null.
+    withTempDir { dir =>
+      val outDir = new File(dir, "out").getCanonicalPath
+      val nullValue = "\\N"
+
+      import sparkSession.implicits._
+      val dsIn = spark.createDataset(elems)
+      dsIn.write
+        .option("nullValue", nullValue)
+        .csv(outDir)
+      val dsOut = spark.read
+        .option("nullValue", nullValue)
+        .schema(dsIn.schema)
+        .csv(outDir)
+        .as[(String)]
+      val computed = dsOut.collect.toSeq
+      val expected = Seq(("bar"), (null: String))
+
+      assert(computed.size === 2)
+      assert(computed.sameElements(expected))
+    }
+    // Keeps the old behavior for when nullValue is not passed.
+    withTempDir { dir =>
+      val outDir = new File(dir, "out").getCanonicalPath
+
+      import sparkSession.implicits._
+      val dsIn = spark.createDataset(elems)
+      dsIn.write.csv(outDir)
+      val dsOut = spark.read
+        .schema(dsIn.schema)
+        .csv(outDir)
+        .as[(String)]
+      val computed = dsOut.collect.toSeq
+      val expected = Seq(("bar"))
+
+      assert(computed.size === 1)
+      assert(computed.sameElements(expected))
+    }
+  }
 }
