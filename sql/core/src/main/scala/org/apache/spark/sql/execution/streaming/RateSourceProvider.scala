@@ -236,6 +236,21 @@ class RateStreamSource(
     s"rampUpTimeSeconds=$rampUpTimeSeconds, numPartitions=$numPartitions]"
 }
 
+/**
+ * This is a temporary register as we build out v2 migration. Microbatch read support should
+ * be implemented in the same register as v1.
+ */
+class RateSourceProviderV2 extends DataSourceV2 with MicroBatchReadSupport with DataSourceRegister {
+  override def createMicroBatchReader(
+      schema: Optional[StructType],
+      checkpointLocation: String,
+      options: DataSourceV2Options): MicroBatchReader = {
+    new RateStreamV2Reader(options)
+  }
+
+  override def shortName(): String = "ratev2"
+}
+
 object RateStreamSource {
 
   /** Calculate the end value we will emit at the time `seconds`. */

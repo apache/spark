@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util.Optional
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
@@ -28,8 +29,50 @@ import org.apache.spark.sql.execution.streaming.sources.{RateStreamBatchTask, Ra
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
 import org.apache.spark.sql.sources.v2.streaming.ContinuousReadSupport
 import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.util.ManualClock
 
 class RateSourceV2Suite extends StreamTest {
+  import testImplicits._
+
+  case class AdvanceRateManualClock(seconds: Long) extends AddData {
+    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      assert(query.nonEmpty)
+      val rateSource = query.get.logicalPlan.collect {
+        case StreamingExecutionRelation(source, _) if source.isInstanceOf[RateStreamSource] =>
+          source.asInstanceOf[RateStreamSource]
+      }.head
+      rateSource.clock.asInstanceOf[ManualClock].advance(TimeUnit.SECONDS.toMillis(seconds))
+      (rateSource, rateSource.getOffset.get)
+    }
+  }
+  
+  test("microbatch in registry") {
+    DataSource.lookupDataSource("ratev2", spark.sqlContext.conf).newInstance() match {
+      case ds: MicroBatchReadSupport =>
+        val reader = ds.createMicroBatchReader(Optional.empty(), "", DataSourceV2Options.empty())
+        assert(reader.isInstanceOf[RateStreamV2Reader])
+      case _ =>
+        throw new IllegalStateException("Could not find v2 read support for rate")
+    }
+  }
+
+  test("basic microbatch execution") {
+    val input = spark.readStream
+      .format("rateV2")
+      .option("rowsPerSecond", "10")
+      .option("useManualClock", "true")
+      .load()
+    testStream(input)(
+      AdvanceRateManualClock(seconds = 1),
+      CheckLastBatch((0 until 10).map(v => new java.sql.Timestamp(v * 100L) -> v): _*),
+      StopStream,
+      StartStream(),
+      // Advance 2 seconds because creating a new RateSource will also create a new ManualClock
+      AdvanceRateManualClock(seconds = 2),
+      CheckLastBatch((10 until 20).map(v => new java.sql.Timestamp(v * 100L) -> v): _*)
+    )
+  }
+
   test("microbatch - numPartitions propagated") {
     val reader = new RateStreamV2Reader(
       new DataSourceV2Options(Map("numPartitions" -> "11", "rowsPerSecond" -> "33").asJava))

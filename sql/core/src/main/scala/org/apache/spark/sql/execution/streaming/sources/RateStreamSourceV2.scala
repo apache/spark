@@ -32,13 +32,14 @@ import org.apache.spark.sql.sources.v2.DataSourceV2Options
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{ManualClock, SystemClock}
 
 class RateStreamV2Reader(options: DataSourceV2Options)
   extends MicroBatchReader {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
-  val clock = new SystemClock
+  val clock = if (options.get("useManualClock").orElse("false").toBoolean) new ManualClock
+      else new SystemClock
 
   private val numPartitions =
     options.get(RateStreamSourceV2.NUM_PARTITIONS).orElse("5").toInt

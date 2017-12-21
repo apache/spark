@@ -35,6 +35,12 @@ case class DataSourceV2Relation(
   }
 }
 
+class StreamingDataSourceV2Relation(
+    fullOutput: Seq[AttributeReference],
+    reader: DataSourceV2Reader) extends DataSourceV2Relation(fullOutput, reader) {
+  override def isStreaming: Boolean = true
+}
+
 object DataSourceV2Relation {
   def apply(reader: DataSourceV2Reader): DataSourceV2Relation = {
     new DataSourceV2Relation(reader.readSchema().toAttributes, reader)
