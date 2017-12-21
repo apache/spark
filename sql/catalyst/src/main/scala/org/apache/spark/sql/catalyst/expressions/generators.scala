@@ -201,11 +201,6 @@ case class Stack(children: Seq[Expression]) extends Generator {
     // Rows - we write these into an array.
     val rowData = ctx.addMutableState("InternalRow[]", "rows",
       v => s"$v = new InternalRow[$numRows];")
-    // Create the collection.
-    val wrapperClass = classOf[mutable.WrappedArray[_]].getName
-    ev.value = ctx.addMutableState(s"$wrapperClass<InternalRow>", ev.value,
-      v => s"$v = $wrapperClass$$.MODULE$$.make($rowData);")
-
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
     val code = ctx.splitExpressionsWithCurrentInputs(Seq.tabulate(numRows) { row =>
@@ -217,7 +212,13 @@ case class Stack(children: Seq[Expression]) extends Generator {
       s"${eval.code}\n$rowData[$row] = ${eval.value};"
     })
 
-    ev.copy(code = code, isNull = "false")
+    // Create the collection.
+    val wrapperClass = classOf[mutable.WrappedArray[_]].getName
+    ev.copy(code =
+      s"""
+         |$code
+         |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
+       """.stripMargin, isNull = "false")
   }
 }
 

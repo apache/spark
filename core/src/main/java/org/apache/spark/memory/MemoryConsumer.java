@@ -88,7 +88,7 @@ public abstract class MemoryConsumer {
    * `LongArray` is too large to fit in a single page. The caller side should take care of these
    * two exceptions, or make sure the `size` is small enough that won't trigger exceptions.
    *
-   * @throws OutOfMemoryError
+   * @throws SparkOutOfMemoryError
    * @throws TooLargePageException
    */
   public LongArray allocateArray(long size) {
@@ -154,6 +154,6 @@ public abstract class MemoryConsumer {
       taskMemoryManager.freePage(page, this);
     }
     taskMemoryManager.showMemoryUsage();
-    throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
+    throw new SparkOutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
   }
 }
