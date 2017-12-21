@@ -17,15 +17,13 @@
 
 package org.apache.spark.ml.stat
 
-import org.scalatest.exceptions.TestFailedException
-
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, Statistics}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.Row
 
 class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -201,6 +199,16 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       case (x1: Any, x2: Any) =>
         throw new Exception(s"type mismatch: ${x1.getClass} ${x2.getClass} $x1 $x2")
     }
+  }
+
+  test("no element") {
+    val df = Seq[Tuple1[Vector]]().toDF("features")
+    val c = df.col("features")
+    intercept[SparkException] {
+      df.select(metrics("mean").summary(c), mean(c)).first()
+    }
+    compareRow(df.select(metrics("count").summary(c), count(c)).first(),
+      Row(Row(0L), 0L))
   }
 
   val singleElem = Vectors.dense(0.0, 1.0, 2.0)
