@@ -374,7 +374,7 @@ class QuantileDiscretizerSuite
     }
   }
 
-  test("multiple columns: read/write") {
+  test("Multiple Columns: read/write") {
     val discretizer = new QuantileDiscretizer()
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("result1", "result2"))
@@ -382,16 +382,33 @@ class QuantileDiscretizerSuite
     testDefaultReadWrite(discretizer)
   }
 
-  test("multiple columns: Both inputCol and inputCols are set") {
+  test("Multiple Columns: Both inputCol and inputCols are set") {
+    val spark = this.spark
+    import spark.implicits._
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setOutputCol("result")
+      .setNumBuckets(3)
+      .setInputCols(Array("input1", "input2"))
+    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+      .map(Tuple1.apply).toDF("input")
+    // When both inputCol and inputCols are set, we throw Exception.
     intercept[IllegalArgumentException] {
-      new QuantileDiscretizer().setInputCol("in").setInputCols(Array("in1", "in2")).getInOutCols
+      discretizer.fit(df)
     }
   }
 
-  test("multiple columns: Mismatched sizes of inputCols / outputCols") {
+  test("Multiple Columns: Mismatched sizes of inputCols / outputCols") {
+    val spark = this.spark
+    import spark.implicits._
+    val discretizer = new QuantileDiscretizer()
+      .setInputCols(Array("input"))
+      .setOutputCols(Array("result1", "result2"))
+      .setNumBuckets(3)
+    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+      .map(Tuple1.apply).toDF("input")
     intercept[IllegalArgumentException] {
-      new QuantileDiscretizer().setInputCols(Array("in1", "in2"))
-        .setOutputCols(Array("out1")).getInOutCols
+      discretizer.fit(df)
     }
   }
 }
