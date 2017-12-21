@@ -59,8 +59,8 @@ class DiskStoreSuite extends SparkFunSuite {
     val notMapped = diskStoreNotMapped.getBytes(blockId).toByteBuffer()
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
-    assert(notMapped.getClass.getName.endsWith("HeapByteBuffer"),
-      "Expected HeapByteBuffer for un-mapped read")
+    assert(notMapped.getClass.getName.endsWith("DirectByteBuffer"),
+      "Expected DirectByteBuffer for un-mapped read")
     assert(mapped.isInstanceOf[MappedByteBuffer],
       "Expected MappedByteBuffer for mapped read")
 
