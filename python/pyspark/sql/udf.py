@@ -33,19 +33,23 @@ def _wrap_function(sc, func, returnType):
 
 
 def _create_udf(f, returnType, evalType):
-    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
+
+    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF or \
+            evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         import inspect
+        from pyspark.sql.utils import _require_minimum_pyarrow_version
+
+        _require_minimum_pyarrow_version()
         argspec = inspect.getargspec(f)
-        if len(argspec.args) == 0 and argspec.varargs is None:
+
+        if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF and len(argspec.args) == 0 and \
+                argspec.varargs is None:
             raise ValueError(
                 "Invalid function: 0-arg pandas_udfs are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-    elif evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
-        import inspect
-        argspec = inspect.getargspec(f)
-        if len(argspec.args) != 1:
+        if evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF and len(argspec.args) != 1:
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUP_MAP "
                 "must take a single arg that is a pandas DataFrame."

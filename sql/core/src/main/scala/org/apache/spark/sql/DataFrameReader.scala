@@ -33,7 +33,8 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options, ReadSupport, ReadSupportWithSchema}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -184,9 +185,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val options = new DataSourceV2Options(extraOptions.asJava)
+      val ds = cls.newInstance()
+      val options = new DataSourceV2Options((extraOptions ++
+        DataSourceV2Utils.extractSessionConfigs(
+          ds = ds.asInstanceOf[DataSourceV2],
+          conf = sparkSession.sessionState.conf)).asJava)
 
-      val reader = (cls.newInstance(), userSpecifiedSchema) match {
+      val reader = (ds, userSpecifiedSchema) match {
         case (ds: ReadSupportWithSchema, Some(schema)) =>
           ds.createReader(schema, options)
 

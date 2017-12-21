@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sources
 
 import java.util.Optional
 
@@ -27,6 +27,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.streaming.RateStreamOffset
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
@@ -59,7 +60,9 @@ class RateStreamV2Reader(options: DataSourceV2Options)
   private var start: RateStreamOffset = _
   private var end: RateStreamOffset = _
 
-  override def setOffsetRange(start: Optional[Offset], end: Optional[Offset]): Unit = {
+  override def setOffsetRange(
+      start: Optional[Offset],
+      end: Optional[Offset]): Unit = {
     this.start = start.orElse(
       RateStreamSourceV2.createInitialOffset(numPartitions, creationTimeMs))
       .asInstanceOf[RateStreamOffset]

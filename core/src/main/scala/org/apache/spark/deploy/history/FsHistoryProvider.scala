@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
-import java.util.{Date, UUID}
+import java.util.{Date, ServiceLoader, UUID}
 import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -325,9 +325,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
       attempt.info.startTime.getTime(),
       attempt.info.appSparkVersion)
-    AppStatusPlugin.loadPlugins().foreach { plugin =>
-      plugin.setupUI(ui)
-    }
+    loadPlugins().foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
 
@@ -657,9 +655,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val listener = new AppStatusListener(trackingStore, replayConf, false,
       lastUpdateTime = Some(lastUpdated))
     replayBus.addListener(listener)
-    AppStatusPlugin.loadPlugins().foreach { plugin =>
-      plugin.setupListeners(replayConf, trackingStore, l => replayBus.addListener(l), false)
-    }
+
+    for {
+      plugin <- loadPlugins()
+      listener <- plugin.createListeners(conf, trackingStore)
+    } replayBus.addListener(listener)
 
     try {
       replay(eventLog, replayBus)
@@ -793,6 +793,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val status = fs.getFileStatus(new Path(logDir, attempt.logPath))
     rebuildAppStore(store, status, attempt.info.lastUpdated.getTime())
     store
+  }
+
+  private def loadPlugins(): Iterable[AppHistoryServerPlugin] = {
+    ServiceLoader.load(classOf[AppHistoryServerPlugin], Utils.getContextOrSparkClassLoader).asScala
   }
 
   /** For testing. Returns internal data about a single attempt. */
