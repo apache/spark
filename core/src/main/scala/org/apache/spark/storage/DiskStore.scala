@@ -209,7 +209,10 @@ private class EncryptedBlockData(
     conf: SparkConf,
     key: Array[Byte]) extends BlockData {
 
-  override def toInputStream(): InputStream = new NioBufferedFileInputStream(file)
+  override def toInputStream(): InputStream = {
+    val fileInput = new NioBufferedFileInputStream(file)
+    CryptoStreamUtils.createCryptoInputStream(fileInput, conf, key)
+  }
 
   override def toNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
 
