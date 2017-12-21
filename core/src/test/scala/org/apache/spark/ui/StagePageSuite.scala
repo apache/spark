@@ -22,7 +22,6 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.mockito.Matchers.anyString
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 
 import org.apache.spark._
@@ -31,7 +30,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.config._
 import org.apache.spark.ui.jobs.{StagePage, StagesTab}
-import org.apache.spark.util.Utils
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -55,12 +53,12 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
    */
   private def renderStagePage(): Seq[Node] = {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    val bus = new ReplayListenerBus()
-    val store = AppStatusStore.createLiveStore(conf, l => bus.addListener(l))
+    val statusStore = AppStatusStore.createLiveStore(conf)
+    val listener = statusStore.listener.get
 
     try {
       val tab = mock(classOf[StagesTab], RETURNS_SMART_NULLS)
-      when(tab.store).thenReturn(store)
+      when(tab.store).thenReturn(statusStore)
 
       val request = mock(classOf[HttpServletRequest])
       when(tab.conf).thenReturn(conf)
@@ -68,7 +66,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
       when(tab.headerTabs).thenReturn(Seq.empty)
       when(request.getParameter("id")).thenReturn("0")
       when(request.getParameter("attempt")).thenReturn("0")
-      val page = new StagePage(tab, store)
+      val page = new StagePage(tab, statusStore)
 
       // Simulate a stage in job progress listener
       val stageInfo = new StageInfo(0, 0, "dummy", 1, Seq.empty, Seq.empty, "details")
@@ -77,17 +75,17 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         taskId =>
           val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY,
             false)
-          bus.postToAll(SparkListenerStageSubmitted(stageInfo))
-          bus.postToAll(SparkListenerTaskStart(0, 0, taskInfo))
+          listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
+          listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
           taskInfo.markFinished(TaskState.FINISHED, System.currentTimeMillis())
           val taskMetrics = TaskMetrics.empty
           taskMetrics.incPeakExecutionMemory(peakExecutionMemory)
-          bus.postToAll(SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, taskMetrics))
+          listener.onTaskEnd(SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, taskMetrics))
       }
-      bus.postToAll(SparkListenerStageCompleted(stageInfo))
+      listener.onStageCompleted(SparkListenerStageCompleted(stageInfo))
       page.render(request)
     } finally {
-      store.close()
+      statusStore.close()
     }
   }
 

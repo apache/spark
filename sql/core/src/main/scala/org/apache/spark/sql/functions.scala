@@ -2798,6 +2798,21 @@ object functions {
   }
 
   /**
+   * Returns timestamp truncated to the unit specified by the format.
+   *
+   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
+   *                'month', 'mon', 'mm' for truncate by month,
+   *                'day', 'dd' for truncate by day,
+   *                Other options are: 'second', 'minute', 'hour', 'week', 'month', 'quarter'
+   *
+   * @group datetime_funcs
+   * @since 2.3.0
+   */
+  def date_trunc(format: String, timestamp: Column): Column = withExpr {
+    TruncTimestamp(Literal(format), timestamp.expr)
+  }
+
+  /**
    * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
    * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
    * '2017-07-14 03:40:00.0'.

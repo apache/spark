@@ -112,15 +112,15 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
-    val pattern = ctx.freshName("pattern")
 
     if (right.foldable) {
       val rVal = right.eval()
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-        ctx.addMutableState(patternClass, pattern,
-          s"""$pattern = ${patternClass}.compile("$regexStr");""")
+        // inline mutable state since not many Like operations in a task
+        val pattern = ctx.addMutableState(patternClass, "patternLike",
+          v => s"""$v = ${patternClass}.compile("$regexStr");""", forceInline = true)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -139,6 +139,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
         """)
       }
     } else {
+      val pattern = ctx.freshName("pattern")
       val rightStr = ctx.freshName("rightStr")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
@@ -187,15 +188,15 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
-    val pattern = ctx.freshName("pattern")
 
     if (right.foldable) {
       val rVal = right.eval()
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
-        ctx.addMutableState(patternClass, pattern,
-          s"""$pattern = ${patternClass}.compile("$regexStr");""")
+        // inline mutable state since not many RLike operations in a task
+        val pattern = ctx.addMutableState(patternClass, "patternRLike",
+          v => s"""$v = ${patternClass}.compile("$regexStr");""", forceInline = true)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -215,6 +216,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       }
     } else {
       val rightStr = ctx.freshName("rightStr")
+      val pattern = ctx.freshName("pattern")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = ${eval2}.toString();
@@ -316,11 +318,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def prettyName: String = "regexp_replace"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val termLastRegex = ctx.freshName("lastRegex")
-    val termPattern = ctx.freshName("pattern")
-
-    val termLastReplacement = ctx.freshName("lastReplacement")
-    val termLastReplacementInUTF8 = ctx.freshName("lastReplacementInUTF8")
     val termResult = ctx.freshName("termResult")
 
     val classNamePattern = classOf[Pattern].getCanonicalName
@@ -328,11 +325,10 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     val matcher = ctx.freshName("matcher")
 
-    ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
-    ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
-    ctx.addMutableState("String", termLastReplacement, s"${termLastReplacement} = null;")
-    ctx.addMutableState("UTF8String",
-      termLastReplacementInUTF8, s"${termLastReplacementInUTF8} = null;")
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+    val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
+    val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
 
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
@@ -414,14 +410,12 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val termLastRegex = ctx.freshName("lastRegex")
-    val termPattern = ctx.freshName("pattern")
     val classNamePattern = classOf[Pattern].getCanonicalName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
 
-    ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
-    ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
 
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"

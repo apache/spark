@@ -48,7 +48,7 @@ private[spark] class AppStatusListener(
 
   import config._
 
-  private var sparkVersion = SPARK_VERSION
+  private val sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
   private var coresPerTask: Int = 1
@@ -328,10 +328,6 @@ private[spark] class AppStatusListener(
       .filter(_.stageIds.contains(event.stageInfo.stageId))
       .toSeq
     stage.jobIds = stage.jobs.map(_.jobId).toSet
-
-    stage.schedulingPool = Option(event.properties).flatMap { p =>
-      Option(p.getProperty("spark.scheduler.pool"))
-    }.getOrElse(SparkUI.DEFAULT_POOL_NAME)
 
     stage.description = Option(event.properties).flatMap { p =>
       Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))

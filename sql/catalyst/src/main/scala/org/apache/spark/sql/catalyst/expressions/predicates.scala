@@ -285,7 +285,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
          |${valueGen.code}
          |byte $tmpResult = $HAS_NULL;
          |if (!${valueGen.isNull}) {
-         |  $tmpResult = 0;
+         |  $tmpResult = $NOT_MATCHED;
          |  $javaDataType $valueArg = ${valueGen.value};
          |  do {
          |    $codes
