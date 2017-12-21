@@ -118,7 +118,7 @@ abstract class Expression extends TreeNode[Expression] {
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
     if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
-      val setIsNull = if ("false" != eval.isNull && "true" != eval.isNull) {
+      val setIsNull = if ("false" != s"${eval.isNull}" && "true" != s"${eval.isNull}") {
         val globalIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
         eval.isNull = GlobalValue(globalIsNull)
