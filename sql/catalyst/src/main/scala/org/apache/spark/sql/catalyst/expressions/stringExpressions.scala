@@ -27,7 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -48,19 +48,25 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
       > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
   """)
-case class Concat(children: Seq[Expression], isBinaryMode: Boolean = false)
-  extends Expression with ImplicitCastInputTypes {
+case class Concat(children: Seq[Expression]) extends Expression {
 
-  def this(children: Seq[Expression]) = this(children, false)
+  private lazy val isBinaryMode: Boolean = dataType == BinaryType
 
-  override def inputTypes: Seq[AbstractDataType] =
-    if (isBinaryMode) {
-      Seq.fill(children.size)(BinaryType)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      TypeCheckResult.TypeCheckSuccess
     } else {
-      Seq.fill(children.size)(StringType)
+      val childTypes = children.map(_.dataType)
+      if (childTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
+        return TypeCheckResult.TypeCheckFailure(
+          s"input to function $prettyName should have StringType or BinaryType, but it's " +
+            childTypes.map(_.simpleString).mkString("[", ", ", "]"))
+      }
+      TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
     }
+  }
 
-  override def dataType: DataType = if (isBinaryMode) BinaryType else StringType
+  override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)

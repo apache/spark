@@ -569,22 +569,6 @@ object TypeCoercion {
   }
 
   /**
-   * When all inputs in [[Concat]] are binary, coerces an output type to binary
-   */
-  case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformExpressionsUp {
-      case c @ Concat(children, isBinaryMode)
-          if !conf.concatBinaryAsString &&
-            !isBinaryMode &&
-            c.childrenResolved &&
-            children.nonEmpty &&
-            children.forall(_.dataType == BinaryType) =>
-        c.copy(children, isBinaryMode = true)
-    }
-  }
-
-  /**
    * Hive only performs integral division with the DIV operator. The arguments to / are always
    * converted to fractional types.
    */
@@ -673,6 +657,30 @@ object TypeCoercion {
             Literal.create(null, s.findDataType(index))
           case (e, _) => e
         })
+    }
+  }
+
+  /**
+   * Coerces the types of [[Concat]] children to expected ones.
+   *
+   * If `spark.sql.function.concatBinaryAsString` is false and all children types are binary,
+   * the expected types are binary. Otherwise, the expected ones are strings.
+   */
+  case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformExpressionsUp {
+      // Skip nodes if unresolved or empty children
+      case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
+
+      case c @ Concat(children) if !children.map(_.dataType).forall(_ == BinaryType) =>
+        val newChildren = children.map { e =>
+          ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+        }
+        c.copy(children = newChildren)
+
+      case c @ Concat(children) if conf.concatBinaryAsString =>
+        val newChildren = children.map(Cast(_, StringType))
+        c.copy(children = newChildren)
     }
   }
 
