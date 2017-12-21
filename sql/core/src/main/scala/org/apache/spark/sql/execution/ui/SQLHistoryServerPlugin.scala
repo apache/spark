@@ -28,7 +28,9 @@ class SQLHistoryServerPlugin extends AppHistoryServerPlugin {
   }
 
   override def setupUI(ui: SparkUI): Unit = {
-    val kvStore = ui.store.store
-    new SQLTab(new SQLAppStatusStore(kvStore), ui)
+    val sqlStatusStore = new SQLAppStatusStore(ui.store.store)
+    if (sqlStatusStore.executionsCount() > 0) {
+      new SQLTab(sqlStatusStore, ui)
+    }
   }
 }
