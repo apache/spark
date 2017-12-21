@@ -25,21 +25,17 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
-import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.scheduler.SparkListener
-import org.apache.spark.status.{AppStatusPlugin, ElementTrackingStore}
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.KVUtils.KVIndexParam
-import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.KVStore
 
 /**
  * Provides a view of a KVStore with methods that make it easy to query SQL-specific state. There's
  * no state kept in this class, so it's ok to have multiple instances of it in an application.
  */
-private[sql] class SQLAppStatusStore(
+class SQLAppStatusStore(
     store: KVStore,
-    listener: Option[SQLAppStatusListener] = None) {
+    val listener: Option[SQLAppStatusListener] = None) {
 
   def executionsList(): Seq[SQLExecutionUIData] = {
     store.view(classOf[SQLExecutionUIData]).asScala.toSeq
@@ -74,48 +70,9 @@ private[sql] class SQLAppStatusStore(
   def planGraph(executionId: Long): SparkPlanGraph = {
     store.read(classOf[SparkPlanGraphWrapper], executionId).toSparkPlanGraph()
   }
-
 }
 
-/**
- * An AppStatusPlugin for handling the SQL UI and listeners.
- */
-private[sql] class SQLAppStatusPlugin extends AppStatusPlugin {
-
-  override def setupListeners(
-      conf: SparkConf,
-      store: ElementTrackingStore,
-      addListenerFn: SparkListener => Unit,
-      live: Boolean): Unit = {
-    // For live applications, the listener is installed in [[setupUI]]. This also avoids adding
-    // the listener when the UI is disabled. Force installation during testing, though.
-    if (!live || Utils.isTesting) {
-      val listener = new SQLAppStatusListener(conf, store, live, None)
-      addListenerFn(listener)
-    }
-  }
-
-  override def setupUI(ui: SparkUI): Unit = {
-    ui.sc match {
-      case Some(sc) =>
-        // If this is a live application, then install a listener that will enable the SQL
-        // tab as soon as there's a SQL event posted to the bus.
-        val listener = new SQLAppStatusListener(sc.conf,
-          ui.store.store.asInstanceOf[ElementTrackingStore], true, Some(ui))
-        sc.listenerBus.addToStatusQueue(listener)
-
-      case _ =>
-        // For a replayed application, only add the tab if the store already contains SQL data.
-        val sqlStore = new SQLAppStatusStore(ui.store.store)
-        if (sqlStore.executionsCount() > 0) {
-          new SQLTab(sqlStore, ui)
-        }
-    }
-  }
-
-}
-
-private[sql] class SQLExecutionUIData(
+class SQLExecutionUIData(
     @KVIndexParam val executionId: Long,
     val description: String,
     val details: String,
@@ -133,10 +90,9 @@ private[sql] class SQLExecutionUIData(
      * from the SQL listener instance.
      */
     @JsonDeserialize(keyAs = classOf[JLong])
-    val metricValues: Map[Long, String]
-    )
+    val metricValues: Map[Long, String])
 
-private[sql] class SparkPlanGraphWrapper(
+class SparkPlanGraphWrapper(
     @KVIndexParam val executionId: Long,
     val nodes: Seq[SparkPlanGraphNodeWrapper],
     val edges: Seq[SparkPlanGraphEdge]) {
@@ -147,7 +103,7 @@ private[sql] class SparkPlanGraphWrapper(
 
 }
 
-private[sql] class SparkPlanGraphClusterWrapper(
+class SparkPlanGraphClusterWrapper(
     val id: Long,
     val name: String,
     val desc: String,
@@ -163,7 +119,7 @@ private[sql] class SparkPlanGraphClusterWrapper(
 }
 
 /** Only one of the values should be set. */
-private[sql] class SparkPlanGraphNodeWrapper(
+class SparkPlanGraphNodeWrapper(
     val node: SparkPlanGraphNode,
     val cluster: SparkPlanGraphClusterWrapper) {
 
@@ -174,7 +130,7 @@ private[sql] class SparkPlanGraphNodeWrapper(
 
 }
 
-private[sql] case class SQLPlanMetric(
+case class SQLPlanMetric(
     name: String,
     accumulatorId: Long,
     metricType: String)
