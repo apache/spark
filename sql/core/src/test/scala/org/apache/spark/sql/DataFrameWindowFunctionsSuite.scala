@@ -110,7 +110,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(1, 2, null, 3, null) :: Row(2, 3, 3, null, 1) :: Row(3, null, 1, 2, 2) :: Nil)
   }
 
-
   test("Order by without frame defaults to range between unbounded_preceding - current_row") {
     val df = Seq(8, 2, 2, 1).toDF("value")
 
@@ -209,9 +208,18 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(1, 4) :: Row(2, 3) :: Row(3, 2) :: Row(4, 1) :: Nil)
   }
 
+  test("filter by column produced by window function") {
+    val df = Seq(("a", 1), ("a", 2), ("b", 4), ("b", 8)).toDF("k", "v")
+
+    checkAnswer(
+      df.select('v, avg('v).over(Window.partitionBy('k)).as("v_avg")).where('v > 'v_avg),
+      Row(2, 1.5) :: Row(8, 6.0) :: Nil)
+  }
+
   // it can be enabled when SPARK-16418 is resolved
   ignore("window functions in filter") {
     val df = Seq(("a", 1), ("a", 2), ("b", 4), ("b", 8)).toDF("k", "v")
+
     checkAnswer(
       df.select('v).where('v > avg('v).over(Window.partitionBy('k))),
       Row(2) :: Row(8) :: Nil)
