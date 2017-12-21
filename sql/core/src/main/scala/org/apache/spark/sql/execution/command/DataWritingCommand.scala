@@ -40,7 +40,7 @@ trait DataWritingCommand extends Command {
    */
   def query: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = query :: Nil
+  override final def children: Seq[LogicalPlan] = query :: Nil
 
   // Output columns of the analyzed input query plan
   def outputColumns: Seq[Attribute]
@@ -60,5 +60,5 @@ trait DataWritingCommand extends Command {
     new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
   }
 
-  def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row]
+  def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]
 }

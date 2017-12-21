@@ -118,14 +118,14 @@ class FileStreamSink(
           throw new RuntimeException(s"Partition column $col not found in schema ${data.schema}")
         }
       }
-      val plan = data.queryExecution.executedPlan
+      val qe = data.queryExecution
 
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        plan = plan,
+        plan = qe.executedPlan,
         fileFormat = fileFormat,
         committer = committer,
-        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, plan.output),
+        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, qe.analyzed.output),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = None,

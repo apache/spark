@@ -76,9 +76,7 @@ case class InsertIntoHiveTable(
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
    */
-  override def run(sparkSession: SparkSession, physicalChildren: Seq[SparkPlan]): Seq[Row] = {
-    assert(physicalChildren.length == 1)
-
+  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
@@ -98,8 +96,7 @@ case class InsertIntoHiveTable(
     val tmpLocation = getExternalTmpPath(sparkSession, hadoopConf, tableLocation)
 
     try {
-      processInsert(sparkSession, externalCatalog, hadoopConf, tableDesc, tmpLocation,
-        physicalChildren)
+      processInsert(sparkSession, externalCatalog, hadoopConf, tableDesc, tmpLocation, child)
     } finally {
       // Attempt to delete the staging directory and the inclusive files. If failed, the files are
       // expected to be dropped at the normal termination of VM since deleteOnExit is used.
@@ -125,7 +122,7 @@ case class InsertIntoHiveTable(
       hadoopConf: Configuration,
       tableDesc: TableDesc,
       tmpLocation: Path,
-      physicalChildren: Seq[SparkPlan]): Unit = {
+      child: SparkPlan): Unit = {
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
@@ -197,7 +194,7 @@ case class InsertIntoHiveTable(
 
     saveAsHiveFile(
       sparkSession = sparkSession,
-      plan = physicalChildren.head,
+      plan = child,
       hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,

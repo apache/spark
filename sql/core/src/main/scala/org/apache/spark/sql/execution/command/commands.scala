@@ -92,28 +92,21 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
  * saves the result to prevent multiple executions.
  *
  * @param cmd the `DataWritingCommand` this operator will run.
- * @param children the children physical plans ran by the `DataWritingCommand`.
+ * @param child the physical plan child ran by the `DataWritingCommand`.
  */
-case class DataWritingCommandExec(cmd: DataWritingCommand, children: Seq[SparkPlan])
+case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   extends SparkPlan {
 
   override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
 
-  /**
-   * A concrete command should override this lazy field to wrap up any side effects caused by the
-   * command or any other computation that should be evaluated exactly once. The value of this field
-   * can be used as the contents of the corresponding RDD generated from the physical plan of this
-   * command.
-   *
-   * The `execute()` method of all the physical command classes should reference `sideEffectResult`
-   * so that the command can be executed eagerly right after the command query is created.
-   */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val rows = cmd.run(sqlContext.sparkSession, children)
+    val rows = cmd.run(sqlContext.sparkSession, child)
 
     rows.map(converter(_).asInstanceOf[InternalRow])
   }
+
+  override def children: Seq[QueryPlan[_]] = cmd :: Nil
 
   override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 

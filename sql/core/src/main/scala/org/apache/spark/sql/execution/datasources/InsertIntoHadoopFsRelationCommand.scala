@@ -58,9 +58,7 @@ case class InsertIntoHadoopFsRelationCommand(
   extends DataWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
-  override def run(sparkSession: SparkSession, physicalChildren: Seq[SparkPlan]): Seq[Row] = {
-    assert(physicalChildren.length == 1)
-
+  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
     SchemaUtils.checkSchemaColumnNameDuplication(
       query.schema,
@@ -143,7 +141,7 @@ case class InsertIntoHadoopFsRelationCommand(
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
-          plan = physicalChildren.head,
+          plan = child,
           fileFormat = fileFormat,
           committer = committer,
           outputSpec = FileFormatWriter.OutputSpec(

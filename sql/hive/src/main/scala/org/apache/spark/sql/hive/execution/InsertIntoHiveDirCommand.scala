@@ -59,8 +59,7 @@ case class InsertIntoHiveDirCommand(
     overwrite: Boolean,
     outputColumns: Seq[Attribute]) extends SaveAsHiveFile {
 
-  override def run(sparkSession: SparkSession, physicalChildren: Seq[SparkPlan]): Seq[Row] = {
-    assert(physicalChildren.length == 1)
+  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(storage.locationUri.nonEmpty)
 
     val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
@@ -102,7 +101,7 @@ case class InsertIntoHiveDirCommand(
     try {
       saveAsHiveFile(
         sparkSession = sparkSession,
-        plan = physicalChildren.head,
+        plan = child,
         hadoopConf = hadoopConf,
         fileSinkConf = fileSinkConf,
         outputLocation = tmpPath.toString,
