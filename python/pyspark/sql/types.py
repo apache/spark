@@ -1642,29 +1642,28 @@ def to_arrow_schema(schema):
 def from_arrow_type(at):
     """ Convert pyarrow type to Spark data type.
     """
-    # TODO: newer pyarrow has is_boolean(at) functions that would be better to check type
-    import pyarrow as pa
-    if at == pa.bool_():
+    import pyarrow.types as types
+    if types.is_boolean(at):
         spark_type = BooleanType()
-    elif at == pa.int8():
+    elif types.is_int8(at):
         spark_type = ByteType()
-    elif at == pa.int16():
+    elif types.is_int16(at):
         spark_type = ShortType()
-    elif at == pa.int32():
+    elif types.is_int32(at):
         spark_type = IntegerType()
-    elif at == pa.int64():
+    elif types.is_int64(at):
         spark_type = LongType()
-    elif at == pa.float32():
+    elif types.is_float32(at):
         spark_type = FloatType()
-    elif at == pa.float64():
+    elif types.is_float64(at):
         spark_type = DoubleType()
-    elif type(at) == pa.DecimalType:
+    elif types.is_decimal(at):
         spark_type = DecimalType(precision=at.precision, scale=at.scale)
-    elif at == pa.string():
+    elif types.is_string(at):
         spark_type = StringType()
-    elif at == pa.date32():
+    elif types.is_date32(at):
         spark_type = DateType()
-    elif type(at) == pa.TimestampType:
+    elif types.is_timestamp(at):
         spark_type = TimestampType()
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
