@@ -307,6 +307,18 @@ class CodegenContext {
   }
 
   /**
+   * Return true if a given variable has been described as a global variable
+   */
+  def isDeclaredMutableState(varName: String): Boolean = {
+    val j = varName.indexOf("[")
+    val qualifiedName = if (j < 0) varName else varName.substring(0, j)
+    mutableStates.find { s =>
+      val i = s._2.indexOf("[")
+      qualifiedName == (if (i < 0) s._2 else s._2.substring(0, i))
+    }.isDefined
+  }
+
+  /**
    * Code statements to initialize states that depend on the partition index.
    * An integer `partitionIndex` will be made available within the scope.
    */
@@ -878,7 +890,8 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
    * @param extraArguments the list of (type, name) of the arguments of the split function,
-   *                       except for the current inputs like `ctx.INPUT_ROW`.
+   *                       except for the current inputs like `ctx.INPUT_ROW`. Name must not be
+   *                       mutable state.
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
    * @param foldFunctions folds the split function calls.
@@ -912,7 +925,8 @@ class CodegenContext {
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
-   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param arguments the list of (type, name) of the arguments of the split function. Name must
+   *                  not be mutable state
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
    * @param foldFunctions folds the split function calls.
@@ -931,7 +945,10 @@ class CodegenContext {
       blocks.head
     } else {
       val func = freshName(funcName)
-      val argString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
+      val argString = arguments.map { case (t, name) =>
+        assert(!isDeclaredMutableState(name),
+          s"$name in arguments should not be declared as a global variable")
+        s"$t $name" }.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
         val name = s"${func}_$i"
         val code = s"""
