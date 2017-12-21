@@ -2157,7 +2157,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        +----------+--------------+------------+
        |slen(name)|to_upper(name)|add_one(age)|
        +----------+--------------+------------+
-       |         8|          JOHN|          22|
+       |         8|      JOHN DOE|          22|
        +----------+--------------+------------+
 
     2. GROUP_MAP
