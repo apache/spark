@@ -200,7 +200,7 @@ class CodegenContext {
    * `addImmutableStateIfNotExists`. Each entry contains the name of the mutable state as key and
    * its Java type and init code as value.
    */
-  val singleMutableStates: mutable.Map[String, (String, String)] =
+  private val immutableStates: mutable.Map[String, (String, String)] =
     mutable.Map.empty[String, (String, String)]
 
   /**
@@ -279,12 +279,12 @@ class CodegenContext {
       javaType: String,
       variableName: String,
       initFunc: String => String = _ => ""): Unit = {
-    val existingMutableState = singleMutableStates.get(variableName)
-    if (existingMutableState.isEmpty) {
+    val existingImmutableState = immutableStates.get(variableName)
+    if (existingImmutableState.isEmpty) {
       addMutableState(javaType, variableName, initFunc, useFreshName = false, forceInline = true)
-      singleMutableStates(variableName) = (javaType, initFunc(variableName))
+      immutableStates(variableName) = (javaType, initFunc(variableName))
     } else {
-      val (prevJavaType, prevInitCode) = existingMutableState.get
+      val (prevJavaType, prevInitCode) = existingImmutableState.get
       assert(prevJavaType == javaType, s"$variableName has already been defined with type " +
         s"$prevJavaType and now it is tried to define again with type $javaType.")
       assert(prevInitCode == initFunc(variableName), s"$variableName has already been defined " +
