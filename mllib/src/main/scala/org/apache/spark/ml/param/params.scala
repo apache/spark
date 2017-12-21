@@ -260,10 +260,6 @@ object ParamValidators {
     model match {
       case m: HasInputCols with HasInputCol if m.isSet(m.inputCols) && m.isSet(m.inputCol) =>
         raiseIncompatibleParamsException("inputCols", "inputCol")
-      case m: HasOutputCols with HasInputCol if m.isSet(m.outputCols) && m.isSet(m.inputCol) =>
-        raiseIncompatibleParamsException("outputCols", "inputCol")
-      case m: HasInputCols with HasOutputCol if m.isSet(m.inputCols) && m.isSet(m.outputCol) =>
-        raiseIncompatibleParamsException("inputCols", "outputCol")
       case m: HasOutputCols with HasOutputCol if m.isSet(m.outputCols) && m.isSet(m.outputCol) =>
         raiseIncompatibleParamsException("outputCols", "outputCol")
       case _ =>
