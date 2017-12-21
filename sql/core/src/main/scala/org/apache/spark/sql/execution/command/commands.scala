@@ -108,8 +108,6 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
   override def children: Seq[SparkPlan] = child :: Nil
 
-  override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
-
   override def output: Seq[Attribute] = cmd.output
 
   override def nodeName: String = "Execute " + cmd.nodeName
