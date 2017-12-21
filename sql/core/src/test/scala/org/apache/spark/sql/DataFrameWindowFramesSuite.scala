@@ -152,10 +152,22 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 1))
     )
 
-    val e = intercept[AnalysisException](
+    val e1 = intercept[AnalysisException](
+      df.select(
+        min("key").over(window.rangeBetween(Window.unboundedPreceding, 1))))
+    assert(e1.message.contains("A range window frame with value boundaries cannot be used in a " +
+      "window specification with multiple order by expressions"))
+
+    val e2 = intercept[AnalysisException](
+      df.select(
+        min("key").over(window.rangeBetween(-1, Window.unboundedFollowing))))
+    assert(e2.message.contains("A range window frame with value boundaries cannot be used in a " +
+      "window specification with multiple order by expressions"))
+
+    val e3 = intercept[AnalysisException](
       df.select(
         min("key").over(window.rangeBetween(-1, 1))))
-    assert(e.message.contains("A range window frame with value boundaries cannot be used in a " +
+    assert(e3.message.contains("A range window frame with value boundaries cannot be used in a " +
       "window specification with multiple order by expressions"))
   }
 
@@ -170,10 +182,22 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
           window.rangeBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
       Row("non_numeric", "non_numeric") :: Nil)
 
-    val e = intercept[AnalysisException](
+    val e1 = intercept[AnalysisException](
+      df.select(
+        min("value").over(window.rangeBetween(Window.unboundedPreceding, 1))))
+    assert(e1.message.contains("The data type of the upper bound 'StringType " +
+      "does not match the expected data type"))
+
+    val e2 = intercept[AnalysisException](
+      df.select(
+        min("value").over(window.rangeBetween(-1, Window.unboundedFollowing))))
+    assert(e2.message.contains("The data type of the lower bound 'StringType " +
+      "does not match the expected data type"))
+
+    val e3 = intercept[AnalysisException](
       df.select(
         min("value").over(window.rangeBetween(-1, 1))))
-    assert(e.message.contains("The data type of the lower bound 'StringType " +
+    assert(e3.message.contains("The data type of the lower bound 'StringType " +
       "does not match the expected data type"))
   }
 
