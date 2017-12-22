@@ -118,7 +118,7 @@ def _require_minimum_pandas_version():
     from distutils.version import LooseVersion
     import pandas
     if LooseVersion(pandas.__version__) < LooseVersion('0.19.2'):
-        raise ImportError("pandas >= 0.19.2 must be installed on calling Python process")
+        raise ImportError("Pandas >= 0.19.2 must be installed on calling Python process")
 
 
 def _require_minimum_pyarrow_version():
