@@ -276,7 +276,7 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "select * from t lateral view explode(x) expl as x",
       table("t")
-        .generate(explode, join = true, outer = false, omitGeneratorChild = false,
+        .generate(explode, join = true, outer = false, omitGeneratorReferences = false,
           Some("expl"), Seq("x"))
         .select(star()))
 
@@ -287,15 +287,15 @@ class PlanParserSuite extends AnalysisTest {
         |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
       table("t")
-        .generate(explode, join = true, outer = false, omitGeneratorChild = false,
+        .generate(explode, join = true, outer = false, omitGeneratorReferences = false,
           Some("expl"), Seq.empty)
-        .generate(jsonTuple, join = true, outer = true, omitGeneratorChild = false,
+        .generate(jsonTuple, join = true, outer = true, omitGeneratorReferences = false,
           Some("jtup"), Seq("q", "z"))
         .select(star()))
 
     // Multi-Insert lateral views.
     val from = table("t1").generate(explode, join = true, outer = false,
-      omitGeneratorChild = false, Some("expl"), Seq("x"))
+      omitGeneratorReferences = false, Some("expl"), Seq("x"))
     assertEqual(
       """from t1
         |lateral view explode(x) expl as x
@@ -307,7 +307,7 @@ class PlanParserSuite extends AnalysisTest {
         |where s < 10
       """.stripMargin,
       Union(from
-        .generate(jsonTuple, join = true, outer = false, omitGeneratorChild = false,
+        .generate(jsonTuple, join = true, outer = false, omitGeneratorReferences = false,
           Some("jtup"), Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
@@ -319,7 +319,7 @@ class PlanParserSuite extends AnalysisTest {
         UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
         join = true,
         outer = false,
-        omitGeneratorChild = false,
+        omitGeneratorReferences = false,
         Some("posexpl"),
         Seq("x", "y"))
       .select(star())

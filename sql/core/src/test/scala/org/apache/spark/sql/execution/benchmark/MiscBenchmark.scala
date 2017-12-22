@@ -228,19 +228,18 @@ class MiscBenchmark extends BenchmarkBase {
      */
   }
 
-  ignore("generate explode big struct array") {
-    val BASE = 1234567890
-    val N = 40000
+  test("generate explode big struct array") {
+    val N = 60000
 
     val spark = sparkSession
     import spark.implicits._
     import org.apache.spark.sql.functions._
 
     val df = sparkSession.sparkContext.parallelize(
-      List(("1234567890", (BASE to (BASE + N)).map(
+      List(("1", (1 to N).map(
         x => (x.toString, (x + 1).toString, (x + 2).toString, (x + 3).toString)).toArray)))
       .toDF("c1", "c_arr")
-      .select(col("c1"), explode(col("c_arr")))
+      .withColumn("col", explode(col("c_arr")))
       .selectExpr("c1", "col.*")
 
     df.cache.count
@@ -250,8 +249,8 @@ class MiscBenchmark extends BenchmarkBase {
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
     Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
 
-    test for impact of adding optimization of omitGeneratorChild boolean in GenerateExec
-    Before: 16 secs
+    test for impact of adding optimization of omitGeneratorReferences boolean in GenerateExec
+    Before: 29 secs
     After: 1 secs
     */
 }

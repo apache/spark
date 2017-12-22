@@ -51,8 +51,8 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
- * @param omitGeneratorChild when true, output rows will not contain the generator's child. Used
- *                           to prevent unnecessary duplications of data.
+ * @param omitGeneratorReferences when true, output rows will not contain the generator's child.
+ *                                Used to prevent unnecessary duplications of data.
  * @param generatorOutput the qualified output attributes of the generator of this node, which
  *                        constructed in analysis phase, and we can not change it, as the
  *                        parent node bound with it already.
@@ -61,21 +61,21 @@ case class GenerateExec(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
-    omitGeneratorChild: Boolean,
+    omitGeneratorReferences: Boolean,
     generatorOutput: Seq[Attribute],
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  private def projectedChildOutput = generator match {
-    case g: UnaryExpression if omitGeneratorChild =>
-      child.output diff Seq(g.child)
-    case _ =>
-      child.output
+  private def requiredChildOutput = if (omitGeneratorReferences) {
+    val generatorReferences = generator.references
+    child.output.filterNot(generatorReferences.contains)
+  } else {
+    child.output
   }
 
   override def output: Seq[Attribute] = {
     if (join) {
-      projectedChildOutput ++ generatorOutput
+      requiredChildOutput ++ generatorOutput
     } else {
       generatorOutput
     }
@@ -97,23 +97,18 @@ case class GenerateExec(
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
       val rows = if (join) {
 
-        lazy val project = UnsafeProjection.create(
-          projectedChildOutput,
-          child.output,
-          subexpressionEliminationEnabled)
+        val pruneChildForResult: InternalRow => InternalRow =
+          if (requiredChildOutput == child.output) {
+            identity
+          } else {
+            UnsafeProjection.create(requiredChildOutput, child.output)
+          }
 
         val joinedRow = new JoinedRow
         iter.flatMap { row =>
 
-          val projectedRow = if (omitGeneratorChild) {
-            project.initialize(index)
-            project(row)
-          } else {
-            row
-          }
-
           // we should always set the left (child output)
-          joinedRow.withLeft(projectedRow)
+          joinedRow.withLeft(pruneChildForResult(row))
           val outputRows = boundGenerator.eval(row)
           if (outer && outputRows.isEmpty) {
             joinedRow.withRight(generatorNullRow) :: Nil

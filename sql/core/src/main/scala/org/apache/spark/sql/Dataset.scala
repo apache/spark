@@ -2045,7 +2045,7 @@ class Dataset[T] private[sql](
     val generator = UserDefinedGenerator(elementSchema, rowFunction, input.map(_.expr))
 
     withPlan {
-      Generate(generator, join = true, outer = false, omitGeneratorChild = false,
+      Generate(generator, join = true, outer = false, omitGeneratorReferences = false,
         qualifier = None, generatorOutput = Nil, logicalPlan)
     }
   }
@@ -2086,7 +2086,7 @@ class Dataset[T] private[sql](
     val generator = UserDefinedGenerator(elementSchema, rowFunction, apply(inputColumn).expr :: Nil)
 
     withPlan {
-      Generate(generator, join = true, outer = false, omitGeneratorChild = false,
+      Generate(generator, join = true, outer = false, omitGeneratorReferences = false,
         qualifier = None, generatorOutput = Nil, logicalPlan)
     }
   }

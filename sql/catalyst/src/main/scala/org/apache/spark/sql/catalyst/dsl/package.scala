@@ -361,10 +361,11 @@ package object dsl {
         generator: Generator,
         join: Boolean = false,
         outer: Boolean = false,
-        omitGeneratorChild: Boolean = false,
+        omitGeneratorReferences: Boolean = false,
         alias: Option[String] = None,
         outputNames: Seq[String] = Nil): LogicalPlan =
-        Generate(generator, join = join, outer = outer, omitGeneratorChild = omitGeneratorChild,
+        Generate(generator, join = join, outer = outer,
+          omitGeneratorReferences = omitGeneratorReferences,
           alias, outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =

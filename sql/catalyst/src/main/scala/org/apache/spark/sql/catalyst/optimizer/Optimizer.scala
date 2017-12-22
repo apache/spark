@@ -450,10 +450,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, g: Generate) if g.join && p.references.subsetOf(g.generatedSet) =>
       p.copy(child = g.copy(join = false))
 
-    // Turn on `omitGeneratorChild` for Generate if it's child column is not used
+    // Turn on `omitGeneratorReferences` for Generate if its child column is not used
     case p @ Project(_, g @ Generate(gu: UnaryExpression, true, _, false, _, _, _))
       if (AttributeSet(Seq(gu.child)) -- p.references).nonEmpty =>
-      p.copy(child = g.copy(omitGeneratorChild = true))
+      p.copy(child = g.copy(omitGeneratorReferences = true))
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _) =>

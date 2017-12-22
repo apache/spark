@@ -625,7 +625,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions),
       join = true,
       outer = ctx.OUTER != null,
-      omitGeneratorChild = false,
+      omitGeneratorReferences = false,
       Some(ctx.tblName.getText.toLowerCase),
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),
       query)

@@ -64,7 +64,7 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer =
       input
         .select('a, 'c)
-        .generate(Explode('c), join = true, omitGeneratorChild = true,
+        .generate(Explode('c), join = true, omitGeneratorReferences = true,
                   outputNames = "explode" :: Nil)
         .select('a, 'explode)
         .analyze
