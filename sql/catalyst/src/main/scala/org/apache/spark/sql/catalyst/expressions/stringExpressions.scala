@@ -58,7 +58,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
     } else {
       val childTypes = children.map(_.dataType)
       if (childTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
-        return TypeCheckResult.TypeCheckFailure(
+        TypeCheckResult.TypeCheckFailure(
           s"input to function $prettyName should have StringType or BinaryType, but it's " +
             childTypes.map(_.simpleString).mkString("[", ", ", "]"))
       }
@@ -94,7 +94,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
       """
     }
 
-    val (javaClass, initCode) = if (isBinaryMode) {
+    val (concatenator, initCode) = if (isBinaryMode) {
       (classOf[ByteArray].getName, s"byte[][] $args = new byte[${evals.length}][];")
     } else {
       ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
@@ -106,7 +106,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
     ev.copy(s"""
       $initCode
       $codes
-      ${ctx.javaType(dataType)} ${ev.value} = $javaClass.concat($args);
+      ${ctx.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
