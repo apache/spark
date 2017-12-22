@@ -434,6 +434,16 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(list(range(3)), l1)
         self.assertEqual(1, l2)
 
+    def test_nondeterministic_udf(self):
+        from pyspark.sql.functions import udf
+        import random
+        udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
+        df = self.spark.createDataFrame([Row(1)]).select(udf_random_col().alias('RAND'))
+        random.seed(1234)
+        udf_add_ten = udf(lambda rand: rand + 10, IntegerType())
+        [row] = df.withColumn('RAND_PLUS_TEN', udf_add_ten('RAND')).collect()
+        self.assertEqual(row[0] + 10, row[1])
+
     def test_broadcast_in_udf(self):
         bar = {"a": "aa", "b": "bb", "c": "abc"}
         foo = self.sc.broadcast(bar)
