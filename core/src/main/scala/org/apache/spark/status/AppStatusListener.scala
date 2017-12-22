@@ -48,7 +48,7 @@ private[spark] class AppStatusListener(
 
   import config._
 
-  private val sparkVersion = SPARK_VERSION
+  private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
   private var coresPerTask: Int = 1
@@ -88,6 +88,11 @@ private[spark] class AppStatusListener(
     if (!live) {
       flush()
     }
+  }
+
+  override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+    case SparkListenerLogStart(version) => sparkVersion = version
+    case _ =>
   }
 
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
