@@ -79,6 +79,7 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
     doReturn(2L).when(manager).sizeOf(meq(leaseB.tmpPath))
     val dstB = leaseB.commit("app2", None)
     assert(manager.free() === 0)
+    assert(manager.committed() === 2)
 
     // Rollback C and D, now there should be 1 left.
     leaseC.rollback()
@@ -88,6 +89,7 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
     // Release app 2 to make it available for eviction.
     doReturn(2L).when(manager).sizeOf(meq(dstB))
     manager.release("app2", None)
+    assert(manager.committed() === 2)
 
     // Emulate an updated event log by replacing the store for lease B. Lease 1, and commit with
     // size 3.
@@ -95,15 +97,18 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
     doReturn(3L).when(manager).sizeOf(meq(leaseE.tmpPath))
     val dstE = leaseE.commit("app2", None)
     assert(dstE === dstB)
-    assert(dstB.exists())
+    assert(dstE.exists())
+    doReturn(3L).when(manager).sizeOf(meq(dstE))
     assert(!leaseE.tmpPath.exists())
     assert(manager.free() === 0)
     manager.release("app2", None)
+    assert(manager.committed() === 3)
 
     // Try a big lease that should cause the released app to be evicted.
     val leaseF = manager.lease(6)
     assert(!dstB.exists())
     assert(manager.free() === 0)
+    assert(manager.committed() === 0)
 
     // Leasing when no free space is available should still be allowed.
     manager.lease(1)

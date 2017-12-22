@@ -66,10 +66,11 @@ private class HistoryServerDiskManager(
 
   private val maxUsage = conf.get(MAX_LOCAL_DISK_USAGE)
   private val currentUsage = new AtomicLong(0L)
+  private val committedUsage = new AtomicLong(0L)
   private val active = new HashMap[(String, Option[String]), Long]()
 
   def initialize(): Unit = {
-    updateUsage(sizeOf(appStoreDir))
+    updateUsage(sizeOf(appStoreDir), committed = true)
 
     // Clean up any temporary stores during start up. This assumes that they're leftover from other
     // instances and are not useful.
@@ -146,13 +147,16 @@ private class HistoryServerDiskManager(
 
     oldSizeOpt.foreach { oldSize =>
       val path = appStorePath(appId, attemptId)
-      updateUsage(-oldSize)
+      updateUsage(-oldSize, committed = true)
       if (path.isDirectory()) {
         if (delete) {
-          FileUtils.deleteDirectory(path)
-          listing.delete(classOf[ApplicationStoreInfo], path.getAbsolutePath())
+          deleteStore(path)
         } else {
-          updateUsage(sizeOf(path))
+          val newSize = sizeOf(path)
+          val newInfo = listing.read(classOf[ApplicationStoreInfo], path.getAbsolutePath())
+            .copy(size = newSize)
+          listing.write(newInfo)
+          updateUsage(newSize, committed = true)
         }
       }
     }
@@ -179,6 +183,14 @@ private class HistoryServerDiskManager(
     math.max(maxUsage - currentUsage.get(), 0L)
   }
 
+  /** Current committed space. */
+  def committed(): Long = committedUsage.get()
+
+  private def deleteStore(path: File): Unit = {
+    FileUtils.deleteDirectory(path)
+    listing.delete(classOf[ApplicationStoreInfo], path.getAbsolutePath())
+  }
+
   private def makeRoom(size: Long): Unit = {
     if (free() < size) {
       logDebug(s"Not enough free space, looking at candidates for deletion...")
@@ -201,8 +213,8 @@ private class HistoryServerDiskManager(
 
       evicted.foreach { info =>
         logInfo(s"Deleting store for ${info.appId}/${info.attemptId}.")
-        FileUtils.deleteDirectory(new File(info.path))
-        listing.delete(info.getClass(), info.path)
+        deleteStore(new File(info.path))
+        updateUsage(-info.size, committed = true)
       }
       logDebug(s"Deleted a total of ${evicted.size} app stores.")
     }
@@ -220,13 +232,19 @@ private class HistoryServerDiskManager(
     listing.write(info)
   }
 
-  private def updateUsage(delta: Long): Long = {
+  private def updateUsage(delta: Long, committed: Boolean = false): Unit = {
     val updated = currentUsage.addAndGet(delta)
     if (updated < 0) {
       throw new IllegalStateException(
         s"Disk usage tracker went negative (now = $updated, delta = $delta)")
     }
-    updated
+    if (committed) {
+      val updatedCommitted = committedUsage.addAndGet(delta)
+      if (updatedCommitted < 0) {
+        throw new IllegalStateException(
+          s"Disk usage tracker went negative (now = $updatedCommitted, delta = $delta)")
+      }
+    }
   }
 
   /** Visible for testing. Return the size of a directory. */
@@ -247,8 +265,8 @@ private class HistoryServerDiskManager(
 
         if (dst.isDirectory()) {
           val size = sizeOf(dst)
-          FileUtils.deleteDirectory(dst)
-          updateUsage(-size)
+          deleteStore(dst)
+          updateUsage(-size, committed = true)
         }
       }
 
@@ -258,9 +276,9 @@ private class HistoryServerDiskManager(
       makeRoom(newSize)
       tmpPath.renameTo(dst)
 
-      val currentUsage = updateUsage(newSize)
-      if (currentUsage > maxUsage) {
-        val current = Utils.bytesToString(currentUsage)
+      updateUsage(newSize, committed = true)
+      if (committedUsage.get() > maxUsage) {
+        val current = Utils.bytesToString(committedUsage.get())
         val max = Utils.bytesToString(maxUsage)
         logWarning(s"Commit of application $appId / $attemptId causes maximum disk usage to be " +
           s"exceeded ($current > $max)")
