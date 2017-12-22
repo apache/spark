@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.sql.types.DataType
@@ -31,7 +30,7 @@ import org.apache.spark.sql.types.DataType
  */
 private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
-  val inMemoryTableScan: InMemoryTableScanExec = null
+  def vectorTypes: Option[Seq[String]] = None
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -69,28 +68,26 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
    */
   // TODO: return ColumnarBatch.Rows instead
   override protected def doProduce(ctx: CodegenContext): String = {
-    val input = ctx.freshName("input")
     // PhysicalRDD always just has one input
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val input = ctx.addMutableState("scala.collection.Iterator", "input",
+      v => s"$v = inputs[0];")
 
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
-    val scanTimeTotalNs = ctx.freshName("scanTime")
-    ctx.addMutableState("long", scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
+    val scanTimeTotalNs = ctx.addMutableState(ctx.JAVA_LONG, "scanTime") // init as scanTime = 0
 
-    val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
-    val batch = ctx.freshName("batch")
-    ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
+    val columnarBatchClz = classOf[ColumnarBatch].getName
+    val batch = ctx.addMutableState(columnarBatchClz, "batch")
 
-    val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
-    val idx = ctx.freshName("batchIdx")
-    ctx.addMutableState("int", idx, s"$idx = 0;")
-    val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
-    val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
-      ctx.addMutableState(columnVectorClz, name, s"$name = null;")
-      s"$name = $batch.column($i);"
-    }
+    val idx = ctx.addMutableState(ctx.JAVA_INT, "batchIdx") // init as batchIdx = 0
+    val columnVectorClzs = vectorTypes.getOrElse(
+      Seq.fill(output.indices.size)(classOf[ColumnVector].getName))
+    val (colVars, columnAssigns) = columnVectorClzs.zipWithIndex.map {
+      case (columnVectorClz, i) =>
+        val name = ctx.addMutableState(columnVectorClz, s"colInstance$i")
+        (name, s"$name = ($columnVectorClz) $batch.column($i);")
+    }.unzip
 
     val nextBatch = ctx.freshName("nextBatch")
     val nextBatchFuncName = ctx.addNewFunction(nextBatch,
@@ -114,7 +111,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
     val numRows = ctx.freshName("numRows")
-    val shouldStop = if (isShouldStopRequired) {
+    val shouldStop = if (parent.needStopCheck) {
       s"if (shouldStop()) { $idx = $rowidx + 1; return; }"
     } else {
       "// shouldStop check is eliminated"

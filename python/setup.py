@@ -151,6 +151,8 @@ try:
         long_description = pypandoc.convert('README.md', 'rst')
     except ImportError:
         print("Could not import pypandoc - required to package PySpark", file=sys.stderr)
+    except OSError:
+        print("Could not convert - pandoc is not installed", file=sys.stderr)
 
     setup(
         name='pyspark',
@@ -199,7 +201,7 @@ try:
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
-            'sql': ['pandas>=0.13.0']
+            'sql': ['pandas>=0.19.2']
         },
         classifiers=[
             'Development Status :: 5 - Production/Stable',

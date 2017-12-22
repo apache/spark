@@ -71,9 +71,9 @@ private[hive] class SparkExecuteStatementOperation(
 
   def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
-    sqlContext.sparkContext.clearJobGroup()
     logDebug(s"CLOSING $statementId")
     cleanup(OperationState.CLOSED)
+    sqlContext.sparkContext.clearJobGroup()
   }
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
@@ -170,6 +170,7 @@ private[hive] class SparkExecuteStatementOperation(
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
+              registerCurrentOperationLog()
               try {
                 execute()
               } catch {
@@ -273,9 +274,6 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def cancel(): Unit = {
     logInfo(s"Cancel '$statement' with $statementId")
-    if (statementId != null) {
-      sqlContext.sparkContext.cancelJobGroup(statementId)
-    }
     cleanup(OperationState.CANCELED)
   }
 
@@ -286,6 +284,9 @@ private[hive] class SparkExecuteStatementOperation(
       if (backgroundHandle != null) {
         backgroundHandle.cancel(true)
       }
+    }
+    if (statementId != null) {
+      sqlContext.sparkContext.cancelJobGroup(statementId)
     }
   }
 }

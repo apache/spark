@@ -32,6 +32,8 @@ only_commits:
     - sql/core/src/main/scala/org/apache/spark/sql/api/r/
     - core/src/main/scala/org/apache/spark/api/r/
     - mllib/src/main/scala/org/apache/spark/ml/r/
+    - core/src/test/scala/org/apache/spark/deploy/SparkSubmitSuite.scala
+    - bin/*.cmd
 
 cache:
   - C:\Users\appveyor\.m2
@@ -40,7 +42,9 @@ install:
   # Install maven and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests
-  - cmd: R -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
+  - cmd: R -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
+  # Here, we use the fixed version of testthat. For more details, please see SPARK-22817.
+  - cmd: R -e "devtools::install_version('testthat', version = '1.0.2', repos='http://cran.us.r-project.org')"
   - cmd: R -e "packageVersion('knitr'); packageVersion('rmarkdown'); packageVersion('testthat'); packageVersion('e1071'); packageVersion('survival')"
 
 build_script:

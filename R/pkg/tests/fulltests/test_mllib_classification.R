@@ -66,9 +66,24 @@ test_that("spark.svmLinear", {
   feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
   data <- as.data.frame(cbind(label, feature))
   df <- createDataFrame(data)
-  model <- spark.svmLinear(df, label ~ feature, regParam = 0.1)
+  model <- spark.svmLinear(df, label ~ feature, regParam = 0.1, maxIter = 5)
   prediction <- collect(select(predict(model, df), "prediction"))
   expect_equal(sort(prediction$prediction), c("0.0", "0.0", "0.0", "1.0", "1.0"))
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.svmLinear(traindf, clicked ~ ., regParam = 0.1, maxIter = 5)
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.svmLinear(traindf, clicked ~ ., regParam = 0.1,
+                           handleInvalid = "skip", maxIter = 5)
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "list")
 
 })
 
@@ -263,6 +278,21 @@ test_that("spark.logit", {
   virginicaCoefs <- summary$coefficients[, "virginica"]
   expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
   expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.logit(traindf, clicked ~ ., regParam = 0.5)
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.logit(traindf, clicked ~ ., regParam = 0.5, handleInvalid = "keep")
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "character")
+
 })
 
 test_that("spark.mlp", {
@@ -344,6 +374,21 @@ test_that("spark.mlp", {
   expect_equal(summary$numOfOutputs, 3)
   expect_equal(summary$layers, c(4, 3))
   expect_equal(length(summary$weights), 15)
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 3))
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 3), handleInvalid = "skip")
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "list")
+
 })
 
 test_that("spark.naiveBayes", {
@@ -427,6 +472,20 @@ test_that("spark.naiveBayes", {
   expect_equal(as.double(s$apriori[1, 1]), 0.5833333, tolerance = 1e-6)
   expect_equal(sum(s$apriori), 1)
   expect_equal(as.double(s$tables[1, "Age_Adult"]), 0.5714286, tolerance = 1e-6)
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.naiveBayes(traindf, clicked ~ ., smoothing = 0.0)
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.naiveBayes(traindf, clicked ~ ., smoothing = 0.0, handleInvalid = "keep")
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "character")
 })
 
 sparkR.session.stop()

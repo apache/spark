@@ -35,6 +35,7 @@ from py4j.java_gateway import JavaClass
 
 from pyspark import SparkContext
 from pyspark.serializers import CloudPickleSerializer
+from pyspark.util import _exception_message
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -440,14 +441,22 @@ class StructField(DataType):
     def fromInternal(self, obj):
         return self.dataType.fromInternal(obj)
 
+    def typeName(self):
+        raise TypeError(
+            "StructField does not have typeName. "
+            "Use typeName on its type explicitly instead.")
+
 
 class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
 
     This is the data type representing a :class:`Row`.
 
-    Iterating a :class:`StructType` will iterate its :class:`StructField`s.
+    Iterating a :class:`StructType` will iterate its :class:`StructField`\\s.
     A contained :class:`StructField` can be accessed by name or position.
+
+    .. note:: `names` attribute is deprecated in 2.3. Use `fieldNames` method instead
+        to get a list of field names.
 
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
@@ -475,7 +484,9 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
+        self._needConversion = [f.needConversion() for f in self]
+        self._needSerializeAnyField = any(self._needConversion)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -520,7 +531,9 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
+        self._needConversion = [f.needConversion() for f in self]
+        self._needSerializeAnyField = any(self._needConversion)
         return self
 
     def __iter__(self):
@@ -563,6 +576,16 @@ class StructType(DataType):
     def fromJson(cls, json):
         return StructType([StructField.fromJson(f) for f in json["fields"]])
 
+    def fieldNames(self):
+        """
+        Returns all field names in a list.
+
+        >>> struct = StructType([StructField("f1", StringType(), True)])
+        >>> struct.fieldNames()
+        ['f1']
+        """
+        return list(self.names)
+
     def needConversion(self):
         # We need convert Row()/namedtuple into tuple()
         return True
@@ -572,13 +595,17 @@ class StructType(DataType):
             return
 
         if self._needSerializeAnyField:
+            # Only calling toInternal function for fields that need conversion
             if isinstance(obj, dict):
-                return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(obj.get(n)) if c else obj.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             elif isinstance(obj, (tuple, list)):
-                return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
+                return tuple(f.toInternal(v) if c else v
+                             for f, v, c in zip(self.fields, obj, self._needConversion))
             elif hasattr(obj, "__dict__"):
                 d = obj.__dict__
-                return tuple(f.toInternal(d.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(d.get(n)) if c else d.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
@@ -601,7 +628,9 @@ class StructType(DataType):
             # it's already converted by pickler
             return obj
         if self._needSerializeAnyField:
-            values = [f.fromInternal(v) for f, v in zip(self.fields, obj)]
+            # Only calling fromInternal function for fields that need conversion
+            values = [f.fromInternal(v) if c else v
+                      for f, v, c in zip(self.fields, obj, self._needConversion)]
         else:
             values = obj
         return _create_row(self.names, values)
@@ -1174,135 +1203,6 @@ def _create_converter(dataType):
     return convert_struct
 
 
-def _split_schema_abstract(s):
-    """
-    split the schema abstract into fields
-
-    >>> _split_schema_abstract("a b  c")
-    ['a', 'b', 'c']
-    >>> _split_schema_abstract("a(a b)")
-    ['a(a b)']
-    >>> _split_schema_abstract("a b[] c{a b}")
-    ['a', 'b[]', 'c{a b}']
-    >>> _split_schema_abstract(" ")
-    []
-    """
-
-    r = []
-    w = ''
-    brackets = []
-    for c in s:
-        if c == ' ' and not brackets:
-            if w:
-                r.append(w)
-            w = ''
-        else:
-            w += c
-            if c in _BRACKETS:
-                brackets.append(c)
-            elif c in _BRACKETS.values():
-                if not brackets or c != _BRACKETS[brackets.pop()]:
-                    raise ValueError("unexpected " + c)
-
-    if brackets:
-        raise ValueError("brackets not closed: %s" % brackets)
-    if w:
-        r.append(w)
-    return r
-
-
-def _parse_field_abstract(s):
-    """
-    Parse a field in schema abstract
-
-    >>> _parse_field_abstract("a")
-    StructField(a,NullType,true)
-    >>> _parse_field_abstract("b(c d)")
-    StructField(b,StructType(...c,NullType,true),StructField(d...
-    >>> _parse_field_abstract("a[]")
-    StructField(a,ArrayType(NullType,true),true)
-    >>> _parse_field_abstract("a{[]}")
-    StructField(a,MapType(NullType,ArrayType(NullType,true),true),true)
-    """
-    if set(_BRACKETS.keys()) & set(s):
-        idx = min((s.index(c) for c in _BRACKETS if c in s))
-        name = s[:idx]
-        return StructField(name, _parse_schema_abstract(s[idx:]), True)
-    else:
-        return StructField(s, NullType(), True)
-
-
-def _parse_schema_abstract(s):
-    """
-    parse abstract into schema
-
-    >>> _parse_schema_abstract("a b  c")
-    StructType...a...b...c...
-    >>> _parse_schema_abstract("a[b c] b{}")
-    StructType...a,ArrayType...b...c...b,MapType...
-    >>> _parse_schema_abstract("c{} d{a b}")
-    StructType...c,MapType...d,MapType...a...b...
-    >>> _parse_schema_abstract("a b(t)").fields[1]
-    StructField(b,StructType(List(StructField(t,NullType,true))),true)
-    """
-    s = s.strip()
-    if not s:
-        return NullType()
-
-    elif s.startswith('('):
-        return _parse_schema_abstract(s[1:-1])
-
-    elif s.startswith('['):
-        return ArrayType(_parse_schema_abstract(s[1:-1]), True)
-
-    elif s.startswith('{'):
-        return MapType(NullType(), _parse_schema_abstract(s[1:-1]))
-
-    parts = _split_schema_abstract(s)
-    fields = [_parse_field_abstract(p) for p in parts]
-    return StructType(fields)
-
-
-def _infer_schema_type(obj, dataType):
-    """
-    Fill the dataType with types inferred from obj
-
-    >>> schema = _parse_schema_abstract("a b c d")
-    >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
-    >>> _infer_schema_type(row, schema)
-    StructType...LongType...DoubleType...StringType...DateType...
-    >>> row = [[1], {"key": (1, 2.0)}]
-    >>> schema = _parse_schema_abstract("a[] b{c d}")
-    >>> _infer_schema_type(row, schema)
-    StructType...a,ArrayType...b,MapType(StringType,...c,LongType...
-    """
-    if isinstance(dataType, NullType):
-        return _infer_type(obj)
-
-    if not obj:
-        return NullType()
-
-    if isinstance(dataType, ArrayType):
-        eType = _infer_schema_type(obj[0], dataType.elementType)
-        return ArrayType(eType, True)
-
-    elif isinstance(dataType, MapType):
-        k, v = next(iter(obj.items()))
-        return MapType(_infer_schema_type(k, dataType.keyType),
-                       _infer_schema_type(v, dataType.valueType))
-
-    elif isinstance(dataType, StructType):
-        fs = dataType.fields
-        assert len(fs) == len(obj), \
-            "Obj(%s) have different length with fields(%s)" % (obj, fs)
-        fields = [StructField(f.name, _infer_schema_type(o, f.dataType), True)
-                  for o, f in zip(obj, fs)]
-        return StructType(fields)
-
-    else:
-        raise TypeError("Unexpected dataType: %s" % type(dataType))
-
-
 _acceptable_types = {
     BooleanType: (bool,),
     ByteType: (int, long),
@@ -1696,6 +1596,185 @@ class DatetimeConverter(object):
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
+
+
+def to_arrow_type(dt):
+    """ Convert Spark data type to pyarrow type
+    """
+    import pyarrow as pa
+    if type(dt) == BooleanType:
+        arrow_type = pa.bool_()
+    elif type(dt) == ByteType:
+        arrow_type = pa.int8()
+    elif type(dt) == ShortType:
+        arrow_type = pa.int16()
+    elif type(dt) == IntegerType:
+        arrow_type = pa.int32()
+    elif type(dt) == LongType:
+        arrow_type = pa.int64()
+    elif type(dt) == FloatType:
+        arrow_type = pa.float32()
+    elif type(dt) == DoubleType:
+        arrow_type = pa.float64()
+    elif type(dt) == DecimalType:
+        arrow_type = pa.decimal(dt.precision, dt.scale)
+    elif type(dt) == StringType:
+        arrow_type = pa.string()
+    elif type(dt) == DateType:
+        arrow_type = pa.date32()
+    elif type(dt) == TimestampType:
+        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
+        arrow_type = pa.timestamp('us', tz='UTC')
+    else:
+        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+    return arrow_type
+
+
+def to_arrow_schema(schema):
+    """ Convert a schema from Spark to Arrow
+    """
+    import pyarrow as pa
+    fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+              for field in schema]
+    return pa.schema(fields)
+
+
+def from_arrow_type(at):
+    """ Convert pyarrow type to Spark data type.
+    """
+    import pyarrow.types as types
+    if types.is_boolean(at):
+        spark_type = BooleanType()
+    elif types.is_int8(at):
+        spark_type = ByteType()
+    elif types.is_int16(at):
+        spark_type = ShortType()
+    elif types.is_int32(at):
+        spark_type = IntegerType()
+    elif types.is_int64(at):
+        spark_type = LongType()
+    elif types.is_float32(at):
+        spark_type = FloatType()
+    elif types.is_float64(at):
+        spark_type = DoubleType()
+    elif types.is_decimal(at):
+        spark_type = DecimalType(precision=at.precision, scale=at.scale)
+    elif types.is_string(at):
+        spark_type = StringType()
+    elif types.is_date32(at):
+        spark_type = DateType()
+    elif types.is_timestamp(at):
+        spark_type = TimestampType()
+    else:
+        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+    return spark_type
+
+
+def from_arrow_schema(arrow_schema):
+    """ Convert schema from Arrow to Spark.
+    """
+    return StructType(
+        [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+         for field in arrow_schema])
+
+
+def _old_pandas_exception_message(e):
+    """ Create an error message for importing old Pandas.
+    """
+    msg = "note: Pandas (>=0.19.2) must be installed and available on calling Python process"
+    return "%s\n%s" % (_exception_message(e), msg)
+
+
+def _check_dataframe_localize_timestamps(pdf, timezone):
+    """
+    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
+
+    :param pdf: pandas.DataFrame
+    :param timezone: the timezone to convert. if None then use local timezone
+    :return pandas.DataFrame where any timezone aware columns have been converted to tz-naive
+    """
+    try:
+        from pandas.api.types import is_datetime64tz_dtype
+    except ImportError as e:
+        raise ImportError(_old_pandas_exception_message(e))
+    tz = timezone or 'tzlocal()'
+    for column, series in pdf.iteritems():
+        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+        if is_datetime64tz_dtype(series.dtype):
+            pdf[column] = series.dt.tz_convert(tz).dt.tz_localize(None)
+    return pdf
+
+
+def _check_series_convert_timestamps_internal(s, timezone):
+    """
+    Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
+    Spark internal storage
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
+    """
+    try:
+        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+    except ImportError as e:
+        raise ImportError(_old_pandas_exception_message(e))
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64_dtype(s.dtype):
+        tz = timezone or 'tzlocal()'
+        return s.dt.tz_localize(tz).dt.tz_convert('UTC')
+    elif is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert('UTC')
+    else:
+        return s
+
+
+def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param from_timezone: the timezone to convert from. if None then use local timezone
+    :param to_timezone: the timezone to convert to. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    try:
+        import pandas as pd
+        from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
+    except ImportError as e:
+        raise ImportError(_old_pandas_exception_message(e))
+    from_tz = from_timezone or 'tzlocal()'
+    to_tz = to_timezone or 'tzlocal()'
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert(to_tz).dt.tz_localize(None)
+    elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
+        # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
+        return s.apply(lambda ts: ts.tz_localize(from_tz).tz_convert(to_tz).tz_localize(None)
+                       if ts is not pd.NaT else pd.NaT)
+    else:
+        return s
+
+
+def _check_series_convert_timestamps_local_tz(s, timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert to. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    return _check_series_convert_timestamps_localize(s, None, timezone)
+
+
+def _check_series_convert_timestamps_tz_local(s, timezone):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param s: a pandas.Series
+    :param timezone: the timezone to convert from. if None then use local timezone
+    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    """
+    return _check_series_convert_timestamps_localize(s, timezone, None)
 
 
 def _test():

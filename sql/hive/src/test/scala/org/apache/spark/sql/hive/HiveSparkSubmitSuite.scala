@@ -18,17 +18,11 @@
 package org.apache.spark.sql.hive
 
 import java.io.{BufferedWriter, File, FileWriter}
-import java.sql.Timestamp
-import java.util.Date
 
-import scala.collection.mutable.ArrayBuffer
 import scala.tools.nsc.Properties
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.Timeouts
-import org.scalatest.exceptions.TestFailedDueToTimeoutException
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -38,7 +32,6 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
@@ -46,11 +39,10 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
  * This suite tests spark-submit with applications using HiveContext.
  */
 class HiveSparkSubmitSuite
-  extends SparkFunSuite
+  extends SparkSubmitTestUtils
   with Matchers
   with BeforeAndAfterEach
-  with ResetSystemProperties
-  with Timeouts {
+  with ResetSystemProperties {
 
   // TODO: rewrite these or mark them as slow tests to be run sparingly
 
@@ -332,71 +324,6 @@ class HiveSparkSubmitSuite
       "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(argsForShowTables)
-  }
-
-  // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
-  // This is copied from org.apache.spark.deploy.SparkSubmitSuite
-  private def runSparkSubmit(args: Seq[String]): Unit = {
-    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    val history = ArrayBuffer.empty[String]
-    val sparkSubmit = if (Utils.isWindows) {
-      // On Windows, `ProcessBuilder.directory` does not change the current working directory.
-      new File("..\\..\\bin\\spark-submit.cmd").getAbsolutePath
-    } else {
-      "./bin/spark-submit"
-    }
-    val commands = Seq(sparkSubmit) ++ args
-    val commandLine = commands.mkString("'", "' '", "'")
-
-    val builder = new ProcessBuilder(commands: _*).directory(new File(sparkHome))
-    val env = builder.environment()
-    env.put("SPARK_TESTING", "1")
-    env.put("SPARK_HOME", sparkHome)
-
-    def captureOutput(source: String)(line: String): Unit = {
-      // This test suite has some weird behaviors when executed on Jenkins:
-      //
-      // 1. Sometimes it gets extremely slow out of unknown reason on Jenkins.  Here we add a
-      //    timestamp to provide more diagnosis information.
-      // 2. Log lines are not correctly redirected to unit-tests.log as expected, so here we print
-      //    them out for debugging purposes.
-      val logLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
-      // scalastyle:off println
-      println(logLine)
-      // scalastyle:on println
-      history += logLine
-    }
-
-    val process = builder.start()
-    new ProcessOutputCapturer(process.getInputStream, captureOutput("stdout")).start()
-    new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
-
-    try {
-      val exitCode = failAfter(300.seconds) { process.waitFor() }
-      if (exitCode != 0) {
-        // include logs in output. Note that logging is async and may not have completed
-        // at the time this exception is raised
-        Thread.sleep(1000)
-        val historyLog = history.mkString("\n")
-        fail {
-          s"""spark-submit returned with exit code $exitCode.
-             |Command line: $commandLine
-             |
-             |$historyLog
-           """.stripMargin
-        }
-      }
-    } catch {
-      case to: TestFailedDueToTimeoutException =>
-        val historyLog = history.mkString("\n")
-        fail(s"Timeout of $commandLine" +
-            s" See the log4j logs for more detail." +
-            s"\n$historyLog", to)
-        case t: Throwable => throw t
-    } finally {
-      // Ensure we still kill the process in case it timed out
-      process.destroy()
-    }
   }
 }
 

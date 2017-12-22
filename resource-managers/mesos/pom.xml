@@ -29,7 +29,7 @@
   <name>Spark Project Mesos</name>
   <properties>
     <sbt.project.name>mesos</sbt.project.name>
-    <mesos.version>1.0.0</mesos.version>
+    <mesos.version>1.4.0</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
   </properties>
 
@@ -72,6 +72,17 @@
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-exec</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-metastore</artifactId>
+      <scope>provided</scope>
     </dependency>
 
     <!-- Explicitly depend on shaded dependencies from the parent, since shaded deps aren't transitive -->

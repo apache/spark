@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -464,9 +463,9 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
-      sessionCatalog.alterTableSchema(
+      sessionCatalog.alterTableDataSchema(
         TableIdentifier("t1", Some("default")),
-        StructType(oldTab.dataSchema.add("c3", IntegerType) ++ oldTab.partitionSchema))
+        StructType(oldTab.dataSchema.add("c3", IntegerType)))
 
       val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
       // construct the expected table schema
@@ -481,8 +480,8 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
       val e = intercept[AnalysisException] {
-        sessionCatalog.alterTableSchema(
-          TableIdentifier("t1", Some("default")), StructType(oldTab.schema.drop(1)))
+        sessionCatalog.alterTableDataSchema(
+          TableIdentifier("t1", Some("default")), StructType(oldTab.dataSchema.drop(1)))
       }.getMessage
       assert(e.contains("We don't support dropping columns yet."))
     }
@@ -510,17 +509,6 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("get option of table metadata") {
-    withBasicCatalog { catalog =>
-      assert(catalog.getTableMetadataOption(TableIdentifier("tbl1", Some("db2")))
-        == Option(catalog.externalCatalog.getTable("db2", "tbl1")))
-      assert(catalog.getTableMetadataOption(TableIdentifier("unknown_table", Some("db2"))).isEmpty)
-      intercept[NoSuchDatabaseException] {
-        catalog.getTableMetadataOption(TableIdentifier("tbl1", Some("unknown_db")))
-      }
-    }
-  }
-
   test("lookup table relation") {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
@@ -529,14 +517,14 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       catalog.setCurrentDatabase("db2")
       // If we explicitly specify the database, we'll look up the relation in that database
       assert(catalog.lookupRelation(TableIdentifier("tbl1", Some("db2"))).children.head
-        .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
+        .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
       // Otherwise, we'll first look up a temporary table with the same name
       assert(catalog.lookupRelation(TableIdentifier("tbl1"))
         == SubqueryAlias("tbl1", tempTable1))
       // Then, if that does not exist, look up the relation in the current database
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
       assert(catalog.lookupRelation(TableIdentifier("tbl1")).children.head
-        .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
+        .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
     }
   }
 

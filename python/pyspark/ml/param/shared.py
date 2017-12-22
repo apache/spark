@@ -608,6 +608,53 @@ class HasAggregationDepth(Params):
         return self.getOrDefault(self.aggregationDepth)
 
 
+class HasParallelism(Params):
+    """
+    Mixin for param parallelism: the number of threads to use when running parallel algorithms (>= 1).
+    """
+
+    parallelism = Param(Params._dummy(), "parallelism", "the number of threads to use when running parallel algorithms (>= 1).", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasParallelism, self).__init__()
+        self._setDefault(parallelism=1)
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    def getParallelism(self):
+        """
+        Gets the value of parallelism or its default value.
+        """
+        return self.getOrDefault(self.parallelism)
+
+
+class HasLoss(Params):
+    """
+    Mixin for param loss: the loss function to be optimized.
+    """
+
+    loss = Param(Params._dummy(), "loss", "the loss function to be optimized.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasLoss, self).__init__()
+
+    def setLoss(self, value):
+        """
+        Sets the value of :py:attr:`loss`.
+        """
+        return self._set(loss=value)
+
+    def getLoss(self):
+        """
+        Gets the value of loss or its default value.
+        """
+        return self.getOrDefault(self.loss)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.

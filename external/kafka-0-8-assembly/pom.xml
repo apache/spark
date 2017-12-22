@@ -65,8 +65,8 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>net.jpountz.lz4</groupId>
-      <artifactId>lz4</artifactId>
+      <groupId>org.lz4</groupId>
+      <artifactId>lz4-java</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>

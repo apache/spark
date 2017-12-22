@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
@@ -51,6 +54,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
   }
 
   def create(schema1: StructType, schema2: StructType): UnsafeRowJoiner = {
+    val ctx = new CodegenContext
     val offset = Platform.BYTE_ARRAY_OFFSET
     val getLong = "Platform.getLong"
     val putLong = "Platform.putLong"
@@ -88,8 +92,14 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
           s"$getLong(obj2, offset2 + ${(i - bitset1Words) * 8})"
         }
       }
-      s"$putLong(buf, ${offset + i * 8}, $bits);"
-    }.mkString("\n")
+      s"$putLong(buf, ${offset + i * 8}, $bits);\n"
+    }
+
+    val copyBitsets = ctx.splitExpressions(
+      expressions = copyBitset,
+      funcName = "copyBitsetFunc",
+      arguments = ("java.lang.Object", "obj1") :: ("long", "offset1") ::
+                  ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
     var cursor = offset + outputBitsetWords * 8
@@ -150,11 +160,14 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
             s"(${(outputBitsetWords - bitset2Words + schema1.size) * 8}L + numBytesVariableRow1)"
           }
         val cursor = offset + outputBitsetWords * 8 + i * 8
-        s"""
-           |$putLong(buf, $cursor, $getLong(buf, $cursor) + ($shift << 32));
-         """.stripMargin
+        s"$putLong(buf, $cursor, $getLong(buf, $cursor) + ($shift << 32));\n"
       }
-    }.mkString("\n")
+    }
+
+    val updateOffsets = ctx.splitExpressions(
+      expressions = updateOffset,
+      funcName = "copyBitsetFunc",
+      arguments = ("long", "numBytesVariableRow1") :: Nil)
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val codeBody = s"""
@@ -165,6 +178,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
        |  private byte[] buf = new byte[64];
        |  private UnsafeRow out = new UnsafeRow(${schema1.size + schema2.size});
+       |
+       |  ${ctx.declareAddedFunctions()}
        |
        |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
@@ -180,12 +195,12 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    final java.lang.Object obj2 = row2.getBaseObject();
        |    final long offset2 = row2.getBaseOffset();
        |
-       |    $copyBitset
+       |    $copyBitsets
        |    $copyFixedLengthRow1
        |    $copyFixedLengthRow2
        |    $copyVariableLengthRow1
        |    $copyVariableLengthRow2
-       |    $updateOffset
+       |    $updateOffsets
        |
        |    out.pointTo(buf, sizeInBytes);
        |
@@ -196,7 +211,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val code = CodeFormatter.stripOverlappingComments(new CodeAndComment(codeBody, Map.empty))
     logDebug(s"SpecificUnsafeRowJoiner($schema1, $schema2):\n${CodeFormatter.format(code)}")
 
-    val c = CodeGenerator.compile(code)
-    c.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
   }
 }

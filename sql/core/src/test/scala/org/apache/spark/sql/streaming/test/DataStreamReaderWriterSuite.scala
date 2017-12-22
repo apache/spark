@@ -88,7 +88,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
         import spark.implicits._
 
-        Seq[Int]().toDS().toDF()
+        spark.internalCreateDataFrame(spark.sparkContext.emptyRDD, schema, isStreaming = true)
       }
 
       override def stop() {}

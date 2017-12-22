@@ -267,16 +267,17 @@ class ExpressionParserSuite extends PlanTest {
     // Range/Row
     val frameTypes = Seq(("rows", RowFrame), ("range", RangeFrame))
     val boundaries = Seq(
-      ("10 preceding", ValuePreceding(10), CurrentRow),
-      ("3 + 1 following", ValueFollowing(4), CurrentRow), // Will fail during analysis
+      ("10 preceding", -Literal(10), CurrentRow),
+      ("2147483648 preceding", -Literal(2147483648L), CurrentRow),
+      ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow),
       ("unbounded preceding", UnboundedPreceding, CurrentRow),
       ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
       ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),
       ("between unbounded preceding and unbounded following",
         UnboundedPreceding, UnboundedFollowing),
-      ("between 10 preceding and current row", ValuePreceding(10), CurrentRow),
-      ("between current row and 5 following", CurrentRow, ValueFollowing(5)),
-      ("between 10 preceding and 5 following", ValuePreceding(10), ValueFollowing(5))
+      ("between 10 preceding and current row", -Literal(10), CurrentRow),
+      ("between current row and 5 following", CurrentRow, Literal(5)),
+      ("between 10 preceding and 5 following", -Literal(10), Literal(5))
     )
     frameTypes.foreach {
       case (frameTypeSql, frameType) =>
@@ -288,13 +289,9 @@ class ExpressionParserSuite extends PlanTest {
         }
     }
 
-    // We cannot use non integer constants.
-    intercept("foo(*) over (partition by a order by b rows 10.0 preceding)",
-      "Frame bound value must be a constant integer.")
-
     // We cannot use an arbitrary expression.
     intercept("foo(*) over (partition by a order by b rows exp(b) preceding)",
-      "Frame bound value must be a constant integer.")
+      "Frame bound value must be a literal.")
   }
 
   test("row constructor") {
@@ -593,11 +590,6 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
     assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
-  }
-
-  test("current date/timestamp braceless expressions") {
-    assertEqual("current_date", CurrentDate())
-    assertEqual("current_timestamp", CurrentTimestamp())
   }
 
   test("SPARK-17364, fully qualified column name which starts with number") {

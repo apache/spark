@@ -22,8 +22,8 @@ import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -38,7 +38,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
   // only works on UNIX-based systems now because it uses signals for child management, so we can
   // also fall back to launching workers (pyspark/worker.py) directly.
-  val useDaemon = !System.getProperty("os.name").startsWith("Windows")
+  val useDaemon = {
+    val useDaemonEnabled = SparkEnv.get.conf.getBoolean("spark.python.use.daemon", true)
+
+    // This flag is ignored on Windows as it's unable to fork.
+    !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
+  }
 
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))

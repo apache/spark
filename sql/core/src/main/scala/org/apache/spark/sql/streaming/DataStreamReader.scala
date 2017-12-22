@@ -195,6 +195,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * (e.g. 00012)</li>
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
+   * <li>`allowUnquotedControlChars` (default `false`): allows JSON Strings to contain unquoted
+   * control characters (ASCII characters with value less than 32, including tab and line feed
+   * characters) or not.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.
    *   <ul>
@@ -294,6 +297,21 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def csv(path: String): DataFrame = format("csv").load(path)
+
+  /**
+   * Loads a ORC file stream, returning the result as a `DataFrame`.
+   *
+   * You can set the following ORC-specific option(s) for reading ORC files:
+   * <ul>
+   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
+   * considered in every trigger.</li>
+   * </ul>
+   *
+   * @since 2.3.0
+   */
+  def orc(path: String): DataFrame = {
+    format("orc").load(path)
+  }
 
   /**
    * Loads a Parquet file stream, returning the result as a `DataFrame`.

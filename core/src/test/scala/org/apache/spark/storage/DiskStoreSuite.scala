@@ -26,8 +26,8 @@ import io.netty.channel.FileRegion
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.{ByteArrayWritableChannel, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
-import org.apache.spark.util.io.ChunkedByteBuffer
 import org.apache.spark.util.Utils
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 class DiskStoreSuite extends SparkFunSuite {
 
@@ -50,18 +50,18 @@ class DiskStoreSuite extends SparkFunSuite {
     val diskStoreMapped = new DiskStore(conf.clone().set(confKey, "0"), diskBlockManager,
       securityManager)
     diskStoreMapped.putBytes(blockId, byteBuffer)
-    val mapped = diskStoreMapped.getBytes(blockId).asInstanceOf[ByteBufferBlockData].buffer
+    val mapped = diskStoreMapped.getBytes(blockId).toByteBuffer()
     assert(diskStoreMapped.remove(blockId))
 
     val diskStoreNotMapped = new DiskStore(conf.clone().set(confKey, "1m"), diskBlockManager,
       securityManager)
     diskStoreNotMapped.putBytes(blockId, byteBuffer)
-    val notMapped = diskStoreNotMapped.getBytes(blockId).asInstanceOf[ByteBufferBlockData].buffer
+    val notMapped = diskStoreNotMapped.getBytes(blockId).toByteBuffer()
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
-    assert(notMapped.getChunks().forall(_.getClass.getName.endsWith("HeapByteBuffer")),
+    assert(notMapped.getClass.getName.endsWith("HeapByteBuffer"),
       "Expected HeapByteBuffer for un-mapped read")
-    assert(mapped.getChunks().forall(_.isInstanceOf[MappedByteBuffer]),
+    assert(mapped.isInstanceOf[MappedByteBuffer],
       "Expected MappedByteBuffer for mapped read")
 
     def arrayFromByteBuffer(in: ByteBuffer): Array[Byte] = {
@@ -70,8 +70,8 @@ class DiskStoreSuite extends SparkFunSuite {
       array
     }
 
-    assert(Arrays.equals(mapped.toArray, bytes))
-    assert(Arrays.equals(notMapped.toArray, bytes))
+    assert(Arrays.equals(new ChunkedByteBuffer(mapped).toArray, bytes))
+    assert(Arrays.equals(new ChunkedByteBuffer(notMapped).toArray, bytes))
   }
 
   test("block size tracking") {
@@ -90,6 +90,44 @@ class DiskStoreSuite extends SparkFunSuite {
     assert(diskStore.getSize(blockId) === 32L)
     diskStore.remove(blockId)
     assert(diskStore.getSize(blockId) === 0L)
+  }
+
+  test("blocks larger than 2gb") {
+    val conf = new SparkConf()
+      .set("spark.storage.memoryMapLimitForTests", "10k" )
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
+
+    val blockId = BlockId("rdd_1_2")
+    diskStore.put(blockId) { chan =>
+      val arr = new Array[Byte](1024)
+      for {
+        _ <- 0 until 20
+      } {
+        val buf = ByteBuffer.wrap(arr)
+        while (buf.hasRemaining()) {
+          chan.write(buf)
+        }
+      }
+    }
+
+    val blockData = diskStore.getBytes(blockId)
+    assert(blockData.size == 20 * 1024)
+
+    val chunkedByteBuffer = blockData.toChunkedByteBuffer(ByteBuffer.allocate)
+    val chunks = chunkedByteBuffer.chunks
+    assert(chunks.size === 2)
+    for (chunk <- chunks) {
+      assert(chunk.limit() === 10 * 1024)
+    }
+
+    val e = intercept[IllegalArgumentException]{
+      blockData.toByteBuffer()
+    }
+
+    assert(e.getMessage ===
+      s"requirement failed: can't create a byte buffer of size ${blockData.size}" +
+      " since it exceeds 10.0 KB.")
   }
 
   test("block data encryption") {

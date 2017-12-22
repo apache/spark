@@ -69,7 +69,7 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
    * Shorthand for calling redactString() without specifying redacting rules
    */
   private def redact(text: String): String = {
-    Utils.redact(SparkSession.getActiveSession.get.sparkContext.conf, text)
+    Utils.redact(sqlContext.sessionState.conf.stringRedationPattern, text)
   }
 }
 
@@ -110,8 +110,7 @@ case class RowDataSourceScanExec(
   override protected def doProduce(ctx: CodegenContext): String = {
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     // PhysicalRDD always just has one input
-    val input = ctx.freshName("input")
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];")
     val exprRows = output.zipWithIndex.map{ case (a, i) =>
       BoundReference(i, a.dataType, a.nullable)
     }
@@ -123,7 +122,7 @@ case class RowDataSourceScanExec(
        |while ($input.hasNext()) {
        |  InternalRow $row = (InternalRow) $input.next();
        |  $numOutputRows.add(1);
-       |  ${consume(ctx, columnsRowInput, null).trim}
+       |  ${consume(ctx, columnsRowInput).trim}
        |  if (shouldStop()) return;
        |}
      """.stripMargin
@@ -139,7 +138,7 @@ case class RowDataSourceScanExec(
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
-  override lazy val canonicalized: SparkPlan =
+  override def doCanonicalize(): SparkPlan =
     copy(
       fullOutput.map(QueryPlan.normalizeExprId(_, fullOutput)),
       rdd = null,
@@ -173,6 +172,12 @@ case class FileSourceScanExec(
   } else {
     false
   }
+
+  override def vectorTypes: Option[Seq[String]] =
+    relation.fileFormat.vectorTypes(
+      requiredSchema = requiredSchema,
+      partitionSchema = relation.partitionSchema,
+      relation.sparkSession.sessionState.conf)
 
   @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
@@ -347,21 +352,22 @@ case class FileSourceScanExec(
     }
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     // PhysicalRDD always just has one input
-    val input = ctx.freshName("input")
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
-    val exprRows = output.zipWithIndex.map{ case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable)
-    }
+    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];")
     val row = ctx.freshName("row")
+
     ctx.INPUT_ROW = row
     ctx.currentVars = null
-    val columnsRowInput = exprRows.map(_.genCode(ctx))
+    // Always provide `outputVars`, so that the framework can help us build unsafe row if the input
+    // row is not unsafe row, i.e. `needsUnsafeRowConversion` is true.
+    val outputVars = output.zipWithIndex.map{ case (a, i) =>
+      BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+    }
     val inputRow = if (needsUnsafeRowConversion) null else row
     s"""
        |while ($input.hasNext()) {
        |  InternalRow $row = (InternalRow) $input.next();
        |  $numOutputRows.add(1);
-       |  ${consume(ctx, columnsRowInput, inputRow).trim}
+       |  ${consume(ctx, outputVars, inputRow).trim}
        |  if (shouldStop()) return;
        |}
      """.stripMargin
@@ -464,7 +470,7 @@ case class FileSourceScanExec(
       currentSize = 0
     }
 
-    // Assign files to partitions using "First Fit Decreasing" (FFD)
+    // Assign files to partitions using "Next Fit Decreasing"
     splitFiles.foreach { file =>
       if (currentSize + file.length > maxSplitBytes) {
         closePartition()
@@ -517,7 +523,7 @@ case class FileSourceScanExec(
     }
   }
 
-  override lazy val canonicalized: FileSourceScanExec = {
+  override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
       output.map(QueryPlan.normalizeExprId(_, output)),

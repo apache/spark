@@ -152,7 +152,10 @@ if __name__ == "__main__":
         ("varianceCol", "column name for the biased sample variance of prediction.",
          None, "TypeConverters.toString"),
         ("aggregationDepth", "suggested depth for treeAggregate (>= 2).", "2",
-         "TypeConverters.toInt")]
+         "TypeConverters.toInt"),
+        ("parallelism", "the number of threads to use when running parallel algorithms (>= 1).",
+         "1", "TypeConverters.toInt"),
+        ("loss", "the loss function to be optimized.", None, "TypeConverters.toString")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:

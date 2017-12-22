@@ -21,7 +21,6 @@ import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.execution.arrow.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -29,12 +28,13 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * A column vector backed by Apache Arrow.
  */
-public final class ArrowColumnVector extends ReadOnlyColumnVector {
+public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
-  private final int valueCount;
+  private ArrowColumnVector[] childColumns;
 
   private void ensureAccessible(int index) {
+    int valueCount = accessor.getValueCount();
     if (index < 0 || index >= valueCount) {
       throw new IndexOutOfBoundsException(
         String.format("index: %d, valueCount: %d", index, valueCount));
@@ -42,6 +42,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
   }
 
   private void ensureAccessible(int index, int count) {
+    int valueCount = accessor.getValueCount();
     if (index < 0 || index + count > valueCount) {
       throw new IndexOutOfBoundsException(
         String.format("index range: [%d, %d), valueCount: %d", index, index + count, valueCount));
@@ -49,13 +50,8 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
   }
 
   @Override
-  public long nullsNativeAddress() {
-    throw new RuntimeException("Cannot get native address for arrow column");
-  }
-
-  @Override
-  public long valuesNativeAddress() {
-    throw new RuntimeException("Cannot get native address for arrow column");
+  public int numNulls() {
+    return accessor.getNullCount();
   }
 
   @Override
@@ -158,11 +154,6 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     return array;
   }
 
-  @Override
-  public int getDictId(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
   //
   // APIs dealing with Longs
   //
@@ -239,11 +230,6 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     return accessor.getArrayOffset(rowId);
   }
 
-  @Override
-  public void loadBytes(ColumnVector.Array array) {
-    throw new UnsupportedOperationException();
-  }
-
   //
   // APIs dealing with Decimals
   //
@@ -274,37 +260,51 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     return accessor.getBinary(rowId);
   }
 
-  public ArrowColumnVector(ValueVector vector) {
-    super(vector.getValueCapacity(), ArrowUtils.fromArrowField(vector.getField()),
-      MemoryMode.OFF_HEAP);
+  /**
+   * Returns the data for the underlying array.
+   */
+  @Override
+  public ArrowColumnVector arrayData() { return childColumns[0]; }
 
-    if (vector instanceof NullableBitVector) {
-      accessor = new BooleanAccessor((NullableBitVector) vector);
-    } else if (vector instanceof NullableTinyIntVector) {
-      accessor = new ByteAccessor((NullableTinyIntVector) vector);
-    } else if (vector instanceof NullableSmallIntVector) {
-      accessor = new ShortAccessor((NullableSmallIntVector) vector);
-    } else if (vector instanceof NullableIntVector) {
-      accessor = new IntAccessor((NullableIntVector) vector);
-    } else if (vector instanceof NullableBigIntVector) {
-      accessor = new LongAccessor((NullableBigIntVector) vector);
-    } else if (vector instanceof NullableFloat4Vector) {
-      accessor = new FloatAccessor((NullableFloat4Vector) vector);
-    } else if (vector instanceof NullableFloat8Vector) {
-      accessor = new DoubleAccessor((NullableFloat8Vector) vector);
-    } else if (vector instanceof NullableDecimalVector) {
-      accessor = new DecimalAccessor((NullableDecimalVector) vector);
-    } else if (vector instanceof NullableVarCharVector) {
-      accessor = new StringAccessor((NullableVarCharVector) vector);
-    } else if (vector instanceof NullableVarBinaryVector) {
-      accessor = new BinaryAccessor((NullableVarBinaryVector) vector);
+  /**
+   * Returns the ordinal's child data column.
+   */
+  @Override
+  public ArrowColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
+
+  public ArrowColumnVector(ValueVector vector) {
+    super(ArrowUtils.fromArrowField(vector.getField()));
+
+    if (vector instanceof BitVector) {
+      accessor = new BooleanAccessor((BitVector) vector);
+    } else if (vector instanceof TinyIntVector) {
+      accessor = new ByteAccessor((TinyIntVector) vector);
+    } else if (vector instanceof SmallIntVector) {
+      accessor = new ShortAccessor((SmallIntVector) vector);
+    } else if (vector instanceof IntVector) {
+      accessor = new IntAccessor((IntVector) vector);
+    } else if (vector instanceof BigIntVector) {
+      accessor = new LongAccessor((BigIntVector) vector);
+    } else if (vector instanceof Float4Vector) {
+      accessor = new FloatAccessor((Float4Vector) vector);
+    } else if (vector instanceof Float8Vector) {
+      accessor = new DoubleAccessor((Float8Vector) vector);
+    } else if (vector instanceof DecimalVector) {
+      accessor = new DecimalAccessor((DecimalVector) vector);
+    } else if (vector instanceof VarCharVector) {
+      accessor = new StringAccessor((VarCharVector) vector);
+    } else if (vector instanceof VarBinaryVector) {
+      accessor = new BinaryAccessor((VarBinaryVector) vector);
+    } else if (vector instanceof DateDayVector) {
+      accessor = new DateAccessor((DateDayVector) vector);
+    } else if (vector instanceof TimeStampMicroTZVector) {
+      accessor = new TimestampAccessor((TimeStampMicroTZVector) vector);
     } else if (vector instanceof ListVector) {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
 
-      childColumns = new ColumnVector[1];
+      childColumns = new ArrowColumnVector[1];
       childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
-      resultArray = new ColumnVector.Array(childColumns[0]);
     } else if (vector instanceof MapVector) {
       MapVector mapVector = (MapVector) vector;
       accessor = new StructAccessor(mapVector);
@@ -313,40 +313,29 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         childColumns[i] = new ArrowColumnVector(mapVector.getVectorById(i));
       }
-      resultStruct = new ColumnarBatch.Row(childColumns);
     } else {
       throw new UnsupportedOperationException();
     }
-    valueCount = accessor.getValueCount();
-    numNulls = accessor.getNullCount();
-    anyNullsSet = numNulls > 0;
   }
 
-  private static abstract class ArrowVectorAccessor {
+  private abstract static class ArrowVectorAccessor {
 
     private final ValueVector vector;
-    private final ValueVector.Accessor nulls;
-
-    private final int valueCount;
-    private final int nullCount;
 
     ArrowVectorAccessor(ValueVector vector) {
       this.vector = vector;
-      this.nulls = vector.getAccessor();
-      this.valueCount = nulls.getValueCount();
-      this.nullCount = nulls.getNullCount();
     }
 
     final boolean isNullAt(int rowId) {
-      return nulls.isNull(rowId);
+      return vector.isNull(rowId);
     }
 
     final int getValueCount() {
-      return valueCount;
+      return vector.getValueCount();
     }
 
     final int getNullCount() {
-      return nullCount;
+      return vector.getNullCount();
     }
 
     final void close() {
@@ -404,11 +393,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class BooleanAccessor extends ArrowVectorAccessor {
 
-    private final NullableBitVector.Accessor accessor;
+    private final BitVector accessor;
 
-    BooleanAccessor(NullableBitVector vector) {
+    BooleanAccessor(BitVector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -419,11 +408,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class ByteAccessor extends ArrowVectorAccessor {
 
-    private final NullableTinyIntVector.Accessor accessor;
+    private final TinyIntVector accessor;
 
-    ByteAccessor(NullableTinyIntVector vector) {
+    ByteAccessor(TinyIntVector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -434,11 +423,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class ShortAccessor extends ArrowVectorAccessor {
 
-    private final NullableSmallIntVector.Accessor accessor;
+    private final SmallIntVector accessor;
 
-    ShortAccessor(NullableSmallIntVector vector) {
+    ShortAccessor(SmallIntVector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -449,11 +438,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class IntAccessor extends ArrowVectorAccessor {
 
-    private final NullableIntVector.Accessor accessor;
+    private final IntVector accessor;
 
-    IntAccessor(NullableIntVector vector) {
+    IntAccessor(IntVector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -464,11 +453,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class LongAccessor extends ArrowVectorAccessor {
 
-    private final NullableBigIntVector.Accessor accessor;
+    private final BigIntVector accessor;
 
-    LongAccessor(NullableBigIntVector vector) {
+    LongAccessor(BigIntVector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -479,11 +468,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class FloatAccessor extends ArrowVectorAccessor {
 
-    private final NullableFloat4Vector.Accessor accessor;
+    private final Float4Vector accessor;
 
-    FloatAccessor(NullableFloat4Vector vector) {
+    FloatAccessor(Float4Vector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -494,11 +483,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class DoubleAccessor extends ArrowVectorAccessor {
 
-    private final NullableFloat8Vector.Accessor accessor;
+    private final Float8Vector accessor;
 
-    DoubleAccessor(NullableFloat8Vector vector) {
+    DoubleAccessor(Float8Vector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -509,11 +498,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class DecimalAccessor extends ArrowVectorAccessor {
 
-    private final NullableDecimalVector.Accessor accessor;
+    private final DecimalVector accessor;
 
-    DecimalAccessor(NullableDecimalVector vector) {
+    DecimalAccessor(DecimalVector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -525,12 +514,12 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class StringAccessor extends ArrowVectorAccessor {
 
-    private final NullableVarCharVector.Accessor accessor;
+    private final VarCharVector accessor;
     private final NullableVarCharHolder stringResult = new NullableVarCharHolder();
 
-    StringAccessor(NullableVarCharVector vector) {
+    StringAccessor(VarCharVector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -548,11 +537,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private static class BinaryAccessor extends ArrowVectorAccessor {
 
-    private final NullableVarBinaryVector.Accessor accessor;
+    private final VarBinaryVector accessor;
 
-    BinaryAccessor(NullableVarBinaryVector vector) {
+    BinaryAccessor(VarBinaryVector vector) {
       super(vector);
-      this.accessor = vector.getAccessor();
+      this.accessor = vector;
     }
 
     @Override
@@ -561,23 +550,53 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     }
   }
 
+  private static class DateAccessor extends ArrowVectorAccessor {
+
+    private final DateDayVector accessor;
+
+    DateAccessor(DateDayVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final int getInt(int rowId) {
+      return accessor.get(rowId);
+    }
+  }
+
+  private static class TimestampAccessor extends ArrowVectorAccessor {
+
+    private final TimeStampMicroTZVector accessor;
+
+    TimestampAccessor(TimeStampMicroTZVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final long getLong(int rowId) {
+      return accessor.get(rowId);
+    }
+  }
+
   private static class ArrayAccessor extends ArrowVectorAccessor {
 
-    private final UInt4Vector.Accessor accessor;
+    private final ListVector accessor;
 
     ArrayAccessor(ListVector vector) {
       super(vector);
-      this.accessor = vector.getOffsetVector().getAccessor();
+      this.accessor = vector;
     }
 
     @Override
     final int getArrayLength(int rowId) {
-      return accessor.get(rowId + 1) - accessor.get(rowId);
+      return accessor.getInnerValueCountAt(rowId);
     }
 
     @Override
     final int getArrayOffset(int rowId) {
-      return accessor.get(rowId);
+      return accessor.getOffsetBuffer().getInt(rowId * accessor.OFFSET_WIDTH);
     }
   }
 

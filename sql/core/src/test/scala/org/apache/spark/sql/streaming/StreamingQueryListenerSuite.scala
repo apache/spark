@@ -23,10 +23,10 @@ import scala.collection.mutable
 import scala.language.reflectiveCalls
 
 import org.scalactic.TolerantNumerics
-import org.scalatest.concurrent.AsyncAssertions.Waiter
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.concurrent.Waiters.Waiter
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._

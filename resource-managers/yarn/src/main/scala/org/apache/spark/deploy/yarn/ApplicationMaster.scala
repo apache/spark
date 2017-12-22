@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URI, URL}
+import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.collection.mutable.HashMap
@@ -28,6 +29,7 @@ import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -49,18 +51,70 @@ import org.apache.spark.util._
 /**
  * Common application master functionality for Spark on Yarn.
  */
-private[spark] class ApplicationMaster(
-    args: ApplicationMasterArguments,
-    client: YarnRMClient)
-  extends Logging {
+private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends Logging {
 
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
-  private val sparkConf = new SparkConf()
-  private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    .asInstanceOf[YarnConfiguration]
   private val isClusterMode = args.userClass != null
+
+  private val sparkConf = new SparkConf()
+  if (args.propertiesFile != null) {
+    Utils.getPropertiesFromFile(args.propertiesFile).foreach { case (k, v) =>
+      sparkConf.set(k, v)
+    }
+  }
+
+  private val securityMgr = new SecurityManager(sparkConf)
+
+  // Set system properties for each config entry. This covers two use cases:
+  // - The default configuration stored by the SparkHadoopUtil class
+  // - The user application creating a new SparkConf in cluster mode
+  //
+  // Both cases create a new SparkConf object which reads these configs from system properties.
+  sparkConf.getAll.foreach { case (k, v) =>
+    sys.props(k) = v
+  }
+
+  private val yarnConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
+
+  private val ugi = {
+    val original = UserGroupInformation.getCurrentUser()
+
+    // If a principal and keytab were provided, log in to kerberos, and set up a thread to
+    // renew the kerberos ticket when needed. Because the UGI API does not expose the TTL
+    // of the TGT, use a configuration to define how often to check that a relogin is necessary.
+    // checkTGTAndReloginFromKeytab() is a no-op if the relogin is not yet needed.
+    val principal = sparkConf.get(PRINCIPAL).orNull
+    val keytab = sparkConf.get(KEYTAB).orNull
+    if (principal != null && keytab != null) {
+      UserGroupInformation.loginUserFromKeytab(principal, keytab)
+
+      val renewer = new Thread() {
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          while (true) {
+            TimeUnit.SECONDS.sleep(sparkConf.get(KERBEROS_RELOGIN_PERIOD))
+            UserGroupInformation.getCurrentUser().checkTGTAndReloginFromKeytab()
+          }
+        }
+      }
+      renewer.setName("am-kerberos-renewer")
+      renewer.setDaemon(true)
+      renewer.start()
+
+      // Transfer the original user's tokens to the new user, since that's needed to connect to
+      // YARN. It also copies over any delegation tokens that might have been created by the
+      // client, which will then be transferred over when starting executors (until new ones
+      // are created by the periodic task).
+      val newUser = UserGroupInformation.getCurrentUser()
+      SparkHadoopUtil.get.transferCredentials(original, newUser)
+      newUser
+    } else {
+      SparkHadoopUtil.get.createSparkUser()
+    }
+  }
+
+  private val client = doAsUser { new YarnRMClient() }
 
   // Default to twice the number of executors (twice the maximum number of executors if dynamic
   // allocation is enabled), with a minimum of 3.
@@ -89,6 +143,9 @@ private[spark] class ApplicationMaster(
 
   @volatile private var reporterThread: Thread = _
   @volatile private var allocator: YarnAllocator = _
+
+  // A flag to check whether user has initialized spark context
+  @volatile private var registered = false
 
   private val userClassLoader = {
     val classpath = Client.getUserClasspath(sparkConf)
@@ -127,7 +184,6 @@ private[spark] class ApplicationMaster(
   private var nextAllocationInterval = initialAllocationInterval
 
   private var rpcEnv: RpcEnv = null
-  private var amEndpoint: RpcEndpointRef = _
 
   // In cluster mode, used to tell the AM when the user's SparkContext has been initialized.
   private val sparkContextPromise = Promise[SparkContext]()
@@ -137,7 +193,7 @@ private[spark] class ApplicationMaster(
   // Load the list of localized files set by the client. This is used when launching executors,
   // and is loaded here so that these configs don't pollute the Web UI's environment page in
   // cluster mode.
-  private val localResources = {
+  private val localResources = doAsUser {
     logInfo("Preparing Local resources")
     val resources = HashMap[String, LocalResource]()
 
@@ -199,6 +255,13 @@ private[spark] class ApplicationMaster(
   }
 
   final def run(): Int = {
+    doAsUser {
+      runImpl()
+    }
+    exitCode
+  }
+
+  private def runImpl(): Unit = {
     try {
       val appAttemptId = client.getAttemptId()
 
@@ -252,11 +315,6 @@ private[spark] class ApplicationMaster(
         }
       }
 
-      // Call this to force generation of secret so it gets populated into the
-      // Hadoop UGI. This has to happen before the startUserApplication which does a
-      // doAs in order for the credentials to be passed on to the executor containers.
-      val securityMgr = new SecurityManager(sparkConf)
-
       // If the credentials file config is present, we must periodically renew tokens. So create
       // a new AMDelegationTokenRenewer
       if (sparkConf.contains(CREDENTIALS_FILE_PATH)) {
@@ -270,7 +328,7 @@ private[spark] class ApplicationMaster(
             val credentialManager = new YARNHadoopDelegationTokenManager(
               sparkConf,
               yarnConf,
-              conf => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, conf))
+              conf => YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, conf))
 
             val credentialRenewer =
               new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)
@@ -283,9 +341,9 @@ private[spark] class ApplicationMaster(
       }
 
       if (isClusterMode) {
-        runDriver(securityMgr)
+        runDriver()
       } else {
-        runExecutorLauncher(securityMgr)
+        runExecutorLauncher()
       }
     } catch {
       case e: Exception =>
@@ -295,7 +353,6 @@ private[spark] class ApplicationMaster(
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + e)
     }
-    exitCode
   }
 
   /**
@@ -319,7 +376,7 @@ private[spark] class ApplicationMaster(
    */
   final def unregister(status: FinalApplicationStatus, diagnostics: String = null): Unit = {
     synchronized {
-      if (!unregistered) {
+      if (registered && !unregistered) {
         logInfo(s"Unregistering ApplicationMaster with $status" +
           Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
         unregistered = true
@@ -332,10 +389,15 @@ private[spark] class ApplicationMaster(
     synchronized {
       if (!finished) {
         val inShutdown = ShutdownHookManager.inShutdown()
-        logInfo(s"Final app status: $status, exitCode: $code" +
+        if (registered) {
+          exitCode = code
+          finalStatus = status
+        } else {
+          finalStatus = FinalApplicationStatus.FAILED
+          exitCode = ApplicationMaster.EXIT_SC_NOT_INITED
+        }
+        logInfo(s"Final app status: $finalStatus, exitCode: $exitCode" +
           Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
-        exitCode = code
-        finalStatus = status
         finalMsg = msg
         finished = true
         if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
@@ -362,8 +424,7 @@ private[spark] class ApplicationMaster(
       _sparkConf: SparkConf,
       _rpcEnv: RpcEnv,
       driverRef: RpcEndpointRef,
-      uiAddress: Option[String],
-      securityMgr: SecurityManager) = {
+      uiAddress: Option[String]) = {
     val appId = client.getAttemptId().getApplicationId().toString()
     val attemptId = client.getAttemptId().getAttemptId().toString()
     val historyAddress =
@@ -397,32 +458,26 @@ private[spark] class ApplicationMaster(
       securityMgr,
       localResources)
 
+    // Initialize the AM endpoint *after* the allocator has been initialized. This ensures
+    // that when the driver sends an initial executor request (e.g. after an AM restart),
+    // the allocator is ready to service requests.
+    rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
+
     allocator.allocateResources()
     reporterThread = launchReporterThread()
   }
 
   /**
-   * Create an [[RpcEndpoint]] that communicates with the driver.
-   *
-   * In cluster mode, the AM and the driver belong to same process
-   * so the AMEndpoint need not monitor lifecycle of the driver.
-   *
-   * @return A reference to the driver's RPC endpoint.
+   * @return An [[RpcEndpoint]] that communicates with the driver's scheduler backend.
    */
-  private def runAMEndpoint(
-      host: String,
-      port: String,
-      isClusterMode: Boolean): RpcEndpointRef = {
-    val driverEndpoint = rpcEnv.setupEndpointRef(
+  private def createSchedulerRef(host: String, port: String): RpcEndpointRef = {
+    rpcEnv.setupEndpointRef(
       RpcAddress(host, port.toInt),
       YarnSchedulerBackend.ENDPOINT_NAME)
-    amEndpoint =
-      rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpoint, isClusterMode))
-    driverEndpoint
   }
 
-  private def runDriver(securityMgr: SecurityManager): Unit = {
-    addAmIpFilter()
+  private def runDriver(): Unit = {
+    addAmIpFilter(None)
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
@@ -434,17 +489,15 @@ private[spark] class ApplicationMaster(
         Duration(totalWaitTime, TimeUnit.MILLISECONDS))
       if (sc != null) {
         rpcEnv = sc.env.rpcEnv
-        val driverRef = runAMEndpoint(
+        val driverRef = createSchedulerRef(
           sc.getConf.get("spark.driver.host"),
-          sc.getConf.get("spark.driver.port"),
-          isClusterMode = true)
-        registerAM(sc.getConf, rpcEnv, driverRef, sc.ui.map(_.webUrl), securityMgr)
+          sc.getConf.get("spark.driver.port"))
+        registerAM(sc.getConf, rpcEnv, driverRef, sc.ui.map(_.webUrl))
+        registered = true
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
         // if the user app did not create a SparkContext.
-        if (!finished) {
-          throw new IllegalStateException("SparkContext is null but app is still running!")
-        }
+        throw new IllegalStateException("User did not initialize spark context!")
       }
       userClassThread.join()
     } catch {
@@ -458,15 +511,15 @@ private[spark] class ApplicationMaster(
     }
   }
 
-  private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
+  private def runExecutorLauncher(): Unit = {
     val hostname = Utils.localHostName
     val amCores = sparkConf.get(AM_CORES)
     rpcEnv = RpcEnv.create("sparkYarnAM", hostname, hostname, -1, sparkConf, securityMgr,
       amCores, true)
     val driverRef = waitForSparkDriver()
-    addAmIpFilter()
-    registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"),
-      securityMgr)
+    addAmIpFilter(Some(driverRef))
+    registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"))
+    registered = true
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
@@ -567,10 +620,6 @@ private[spark] class ApplicationMaster(
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       if (!preserveFiles) {
         stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
-        if (stagingDirPath == null) {
-          logError("Staging directory is null")
-          return
-        }
         logInfo("Deleting staging directory " + stagingDirPath)
         val fs = stagingDirPath.getFileSystem(yarnConf)
         fs.delete(stagingDirPath, true)
@@ -612,20 +661,21 @@ private[spark] class ApplicationMaster(
 
     sparkConf.set("spark.driver.host", driverHost)
     sparkConf.set("spark.driver.port", driverPort.toString)
-
-    runAMEndpoint(driverHost, driverPort.toString, isClusterMode = false)
+    createSchedulerRef(driverHost, driverPort.toString)
   }
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
-  private def addAmIpFilter() = {
+  private def addAmIpFilter(driver: Option[RpcEndpointRef]) = {
     val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
     val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
-    if (isClusterMode) {
-      System.setProperty("spark.ui.filters", amFilter)
-      params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
-    } else {
-      amEndpoint.send(AddWebUIFilter(amFilter, params.toMap, proxyBase))
+    driver match {
+      case Some(d) =>
+        d.send(AddWebUIFilter(amFilter, params.toMap, proxyBase))
+
+      case None =>
+        System.setProperty("spark.ui.filters", amFilter)
+        params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     }
   }
 
@@ -648,6 +698,7 @@ private[spark] class ApplicationMaster(
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
       // TODO(davies): add R dependencies here
     }
+
     val mainMethod = userClassLoader.loadClass(args.userClass)
       .getMethod("main", classOf[Array[String]])
 
@@ -696,18 +747,11 @@ private[spark] class ApplicationMaster(
   /**
    * An [[RpcEndpoint]] that communicates with the driver's scheduler backend.
    */
-  private class AMEndpoint(
-      override val rpcEnv: RpcEnv, driver: RpcEndpointRef, isClusterMode: Boolean)
+  private class AMEndpoint(override val rpcEnv: RpcEnv, driver: RpcEndpointRef)
     extends RpcEndpoint with Logging {
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
-    }
-
-    override def receive: PartialFunction[Any, Unit] = {
-      case x: AddWebUIFilter =>
-        logInfo(s"Add WebUI Filter. $x")
-        driver.send(x)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -753,6 +797,12 @@ private[spark] class ApplicationMaster(
     }
   }
 
+  private def doAsUser[T](fn: => T): T = {
+    ugi.doAs(new PrivilegedExceptionAction[T]() {
+      override def run: T = fn
+    })
+  }
+
 }
 
 object ApplicationMaster extends Logging {
@@ -772,19 +822,8 @@ object ApplicationMaster extends Logging {
   def main(args: Array[String]): Unit = {
     SignalUtils.registerLogger(log)
     val amArgs = new ApplicationMasterArguments(args)
-
-    // Load the properties file with the Spark configuration and set entries as system properties,
-    // so that user code run inside the AM also has access to them.
-    // Note: we must do this before SparkHadoopUtil instantiated
-    if (amArgs.propertiesFile != null) {
-      Utils.getPropertiesFromFile(amArgs.propertiesFile).foreach { case (k, v) =>
-        sys.props(k) = v
-      }
-    }
-    SparkHadoopUtil.get.runAsSparkUser { () =>
-      master = new ApplicationMaster(amArgs, new YarnRMClient)
-      System.exit(master.run())
-    }
+    master = new ApplicationMaster(amArgs)
+    System.exit(master.run())
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {

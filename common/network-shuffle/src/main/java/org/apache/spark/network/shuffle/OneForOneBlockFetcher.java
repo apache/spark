@@ -18,11 +18,11 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.nio.file.Files;
 import java.util.Arrays;
 
 import org.slf4j.Logger;
@@ -58,7 +58,7 @@ public class OneForOneBlockFetcher {
   private final BlockFetchingListener listener;
   private final ChunkReceivedCallback chunkCallback;
   private final TransportConf transportConf;
-  private final TempShuffleFileManager tempShuffleFileManager;
+  private final TempFileManager tempFileManager;
 
   private StreamHandle streamHandle = null;
 
@@ -79,14 +79,14 @@ public class OneForOneBlockFetcher {
       String[] blockIds,
       BlockFetchingListener listener,
       TransportConf transportConf,
-      TempShuffleFileManager tempShuffleFileManager) {
+      TempFileManager tempFileManager) {
     this.client = client;
     this.openMessage = new OpenBlocks(appId, execId, blockIds);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
     this.transportConf = transportConf;
-    this.tempShuffleFileManager = tempShuffleFileManager;
+    this.tempFileManager = tempFileManager;
   }
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */
@@ -125,7 +125,7 @@ public class OneForOneBlockFetcher {
           // Immediately request all chunks -- we expect that the total size of the request is
           // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
           for (int i = 0; i < streamHandle.numChunks; i++) {
-            if (tempShuffleFileManager != null) {
+            if (tempFileManager != null) {
               client.stream(OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, i),
                 new DownloadCallback(i));
             } else {
@@ -164,8 +164,8 @@ public class OneForOneBlockFetcher {
     private int chunkIndex;
 
     DownloadCallback(int chunkIndex) throws IOException {
-      this.targetFile = tempShuffleFileManager.createTempShuffleFile();
-      this.channel = Channels.newChannel(new FileOutputStream(targetFile));
+      this.targetFile = tempFileManager.createTempFile();
+      this.channel = Channels.newChannel(Files.newOutputStream(targetFile.toPath()));
       this.chunkIndex = chunkIndex;
     }
 
@@ -180,7 +180,7 @@ public class OneForOneBlockFetcher {
       ManagedBuffer buffer = new FileSegmentManagedBuffer(transportConf, targetFile, 0,
         targetFile.length());
       listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
-      if (!tempShuffleFileManager.registerTempShuffleFileToClean(targetFile)) {
+      if (!tempFileManager.registerTempFileToClean(targetFile)) {
         targetFile.delete();
       }
     }

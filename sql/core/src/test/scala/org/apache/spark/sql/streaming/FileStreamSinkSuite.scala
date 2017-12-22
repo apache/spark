@@ -127,7 +127,7 @@ class FileStreamSinkSuite extends StreamTest {
       // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
       // been inferred
       val hadoopdFsRelations = outputDf.queryExecution.analyzed.collect {
-        case LogicalRelation(baseRelation: HadoopFsRelation, _, _) => baseRelation
+        case LogicalRelation(baseRelation: HadoopFsRelation, _, _, _) => baseRelation
       }
       assert(hadoopdFsRelations.size === 1)
       assert(hadoopdFsRelations.head.location.isInstanceOf[MetadataLogFileIndex])
@@ -303,6 +303,10 @@ class FileStreamSinkSuite extends StreamTest {
   test("parquet") {
     testFormat(None) // should not throw error as default format parquet when not specified
     testFormat(Some("parquet"))
+  }
+
+  test("orc") {
+    testFormat(Some("orc"))
   }
 
   test("text") {

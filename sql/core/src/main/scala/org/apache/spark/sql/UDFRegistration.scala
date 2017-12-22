@@ -82,7 +82,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * Registers a user-defined function (UDF), for a UDF that's already defined using the Dataset
    * API (i.e. of type UserDefinedFunction). To change a UDF to nondeterministic, call the API
    * `UserDefinedFunction.asNondeterministic()`. To change a UDF to nonNullable, call the API
-   * `UserDefinedFunction.asNonNullabe()`.
+   * `UserDefinedFunction.asNonNullable()`.
    *
    * Example:
    * {{{
@@ -90,7 +90,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    *   spark.udf.register("random", foo.asNondeterministic())
    *
    *   val bar = udf(() => "bar")
-   *   spark.udf.register("stringLit", bar.asNonNullabe())
+   *   spark.udf.register("stringLit", bar.asNonNullable())
    * }}}
    *
    * @param name the name of the UDF.
@@ -130,7 +130,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
           }
           functionRegistry.createOrReplaceTempFunction(name, builder)
           val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-          if (nullable) udf else udf.asNonNullabe()
+          if (nullable) udf else udf.asNonNullable()
         }""")
     }
 
@@ -175,7 +175,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -194,7 +194,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -213,7 +213,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -232,7 +232,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -251,7 +251,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -270,7 +270,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -289,7 +289,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -308,7 +308,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -327,7 +327,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -346,7 +346,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -365,7 +365,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -384,7 +384,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -403,7 +403,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -422,7 +422,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -441,7 +441,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -460,7 +460,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -479,7 +479,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -498,7 +498,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -517,7 +517,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -536,7 +536,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -555,7 +555,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -574,7 +574,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -593,7 +593,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

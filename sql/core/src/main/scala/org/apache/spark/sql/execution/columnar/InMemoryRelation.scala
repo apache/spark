@@ -37,8 +37,10 @@ object InMemoryRelation {
       batchSize: Int,
       storageLevel: StorageLevel,
       child: SparkPlan,
-      tableName: Option[String]): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
+      tableName: Option[String],
+      statsOfPlanToCache: Statistics): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)(
+      statsOfPlanToCache = statsOfPlanToCache)
 }
 
 
@@ -60,10 +62,11 @@ case class InMemoryRelation(
     @transient child: SparkPlan,
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator)
+    val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
+    statsOfPlanToCache: Statistics = null)
   extends logical.LeafNode with MultiInstanceRelation {
 
-  override def innerChildren: Seq[SparkPlan] = Seq(child)
+  override protected def innerChildren: Seq[SparkPlan] = Seq(child)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -71,9 +74,8 @@ case class InMemoryRelation(
 
   override def computeStats(): Statistics = {
     if (batchStats.value == 0L) {
-      // Underlying columnar RDD hasn't been materialized, no useful statistics information
-      // available, return the default statistics.
-      Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
+      // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache
+      statsOfPlanToCache
     } else {
       Statistics(sizeInBytes = batchStats.value.longValue)
     }
@@ -142,7 +144,7 @@ case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
-        _cachedColumnBuffers, batchStats)
+        _cachedColumnBuffers, batchStats, statsOfPlanToCache)
   }
 
   override def newInstance(): this.type = {
@@ -154,11 +156,12 @@ case class InMemoryRelation(
       child,
       tableName)(
         _cachedColumnBuffers,
-        batchStats).asInstanceOf[this.type]
+        batchStats,
+        statsOfPlanToCache).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_cachedColumnBuffers, batchStats)
+    Seq(_cachedColumnBuffers, batchStats, statsOfPlanToCache)
 }

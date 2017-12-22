@@ -22,9 +22,9 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
-import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records._
@@ -41,6 +41,7 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
+import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
@@ -109,7 +110,7 @@ private[yarn] class YarnAllocator(
     sparkConf.get(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).getOrElse(-1L)
 
   @volatile private var targetNumExecutors =
-    YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf)
+    SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
 
   private var currentNodeBlacklist = Set.empty[String]
 
@@ -551,8 +552,8 @@ private[yarn] class YarnAllocator(
           updateInternalState()
         }
       } else {
-        logInfo(("Skip launching executorRunnable as runnning Excecutors count: %d " +
-          "reached target Executors count: %d.").format(
+        logInfo(("Skip launching executorRunnable as running executors count: %d " +
+          "reached target executors count: %d.").format(
           numExecutorsRunning.get, targetNumExecutors))
       }
     }

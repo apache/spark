@@ -127,7 +127,7 @@ case class UserDefinedGenerator(
  */
 @ExpressionDescription(
   usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(2, 1, 2, 3);
        1  2
@@ -199,11 +199,11 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Rows - we write these into an array.
-    val rowData = ctx.freshName("rows")
-    ctx.addMutableState("InternalRow[]", rowData, s"$rowData = new InternalRow[$numRows];")
+    val rowData = ctx.addMutableState("InternalRow[]", "rows",
+      v => s"$v = new InternalRow[$numRows];")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
-    val code = ctx.splitExpressions(ctx.INPUT_ROW, Seq.tabulate(numRows) { row =>
+    val code = ctx.splitExpressionsWithCurrentInputs(Seq.tabulate(numRows) { row =>
       val fields = Seq.tabulate(numFields) { col =>
         val index = row * numFields + col
         if (index < values.length) values(index) else Literal(null, dataTypes(col))
@@ -214,11 +214,11 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
     // Create the collection.
     val wrapperClass = classOf[mutable.WrappedArray[_]].getName
-    ctx.addMutableState(
-      s"$wrapperClass<InternalRow>",
-      ev.value,
-      s"${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);")
-    ev.copy(code = code, isNull = "false")
+    ev.copy(code =
+      s"""
+         |$code
+         |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
+       """.stripMargin, isNull = "false")
   }
 }
 
@@ -324,7 +324,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(array(10, 20));
        10
@@ -347,7 +347,7 @@ case class Explode(child: Expression) extends ExplodeBase {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
        0  10
@@ -363,7 +363,7 @@ case class PosExplode(child: Expression) extends ExplodeBase {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Explodes an array of structs into a table.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
        1  a

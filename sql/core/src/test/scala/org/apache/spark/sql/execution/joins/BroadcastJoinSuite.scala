@@ -22,8 +22,8 @@ import scala.reflect.ClassTag
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
+import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -222,5 +222,72 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     assert(HashJoin.rewriteKeyExpr(ss :: Nil) === ss :: Nil)
     assert(HashJoin.rewriteKeyExpr(l :: ss :: Nil) === l :: ss :: Nil)
     assert(HashJoin.rewriteKeyExpr(i :: ss :: Nil) === i :: ss :: Nil)
+  }
+
+  test("Shouldn't change broadcast join buildSide if user clearly specified") {
+    def assertJoinBuildSide(sqlStr: String, joinMethod: String, buildSide: BuildSide): Any = {
+      val executedPlan = sql(sqlStr).queryExecution.executedPlan
+      executedPlan match {
+        case b: BroadcastNestedLoopJoinExec =>
+          assert(b.getClass.getSimpleName === joinMethod)
+          assert(b.buildSide === buildSide)
+        case w: WholeStageCodegenExec =>
+          assert(w.children.head.getClass.getSimpleName === joinMethod)
+          assert(w.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === buildSide)
+      }
+    }
+
+    withTempView("t1", "t2") {
+      spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value").createTempView("t1")
+      spark.createDataFrame(Seq((1, "1"), (2, "12.3"), (2, "123"))).toDF("key", "value")
+        .createTempView("t2")
+
+      val t1Size = spark.table("t1").queryExecution.analyzed.children.head.stats.sizeInBytes
+      val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
+      assert(t1Size < t2Size)
+
+      val bh = BroadcastHashJoinExec.toString
+      val bl = BroadcastNestedLoopJoinExec.toString
+
+      // INNER JOIN && t1Size < t2Size => BuildLeft
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+      // LEFT JOIN => BuildRight
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2 ON t1.key = t2.key", bh, BuildRight)
+      // RIGHT JOIN => BuildLeft
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+      // INNER JOIN && broadcast(t1) => BuildLeft
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+      // INNER JOIN && broadcast(t2) => BuildRight
+      assertJoinBuildSide(
+        "SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildRight)
+
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+        SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        // INNER JOIN && t1Size < t2Size => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2", bl, BuildLeft)
+        // FULL JOIN && t1Size < t2Size => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 FULL JOIN t2", bl, BuildLeft)
+        // LEFT JOIN => BuildRight
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", bl, BuildRight)
+        // RIGHT JOIN => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
+        // INNER JOIN && broadcast(t1) => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2", bl, BuildLeft)
+        // INNER JOIN && broadcast(t2) => BuildRight
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2", bl, BuildRight)
+        // FULL OUTER && broadcast(t1) => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
+        // FULL OUTER && broadcast(t2) => BuildRight
+        assertJoinBuildSide(
+          "SELECT /*+ MAPJOIN(t2) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildRight)
+        // FULL OUTER && t1Size < t2Size => BuildLeft
+        assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
+      }
+    }
   }
 }

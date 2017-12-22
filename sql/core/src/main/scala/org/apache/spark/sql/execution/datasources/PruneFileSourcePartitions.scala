@@ -36,6 +36,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
               _,
               _),
             _,
+            _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
       // The attribute name of predicate could be different than the one in schema in case of

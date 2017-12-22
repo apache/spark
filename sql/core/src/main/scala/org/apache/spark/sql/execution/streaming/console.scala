@@ -18,11 +18,10 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.types.StructType
 
 class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
