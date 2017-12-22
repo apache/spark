@@ -102,24 +102,24 @@ object SparkHiveExample {
     // |  5| val_5|  5| val_5|
     // ...
 
-    // Create Hive managed table with parquet
+    // Create Hive managed table with Parquet
     sql("CREATE TABLE records(key int, value string) STORED AS PARQUET")
-    // Save DataFrame to Hive Managed table as Parquet format
+    // Save DataFrame to Hive managed table as Parquet format
     val hiveTableDF = sql("SELECT * FROM records")
     hiveTableDF.write.mode(SaveMode.Overwrite).saveAsTable("database_name.records")
-    // Create External Hive table with parquet
+    // Create External Hive table with Parquet
     sql("CREATE EXTERNAL TABLE records(key int, value string) " +
       "STORED AS PARQUET LOCATION '/user/hive/warehouse/'")
-    // to make Hive parquet format compatible with spark parquet format
+    // to make Hive Parquet format compatible with Spark Parquet format
     spark.sqlContext.setConf("spark.sql.parquet.writeLegacyFormat", "true")
 
-    // Multiple parquet files could be created accordingly to volume of data under directory given.
+    // Multiple Parquet files could be created accordingly to volume of data under directory given.
     val hiveExternalTableLocation = "/user/hive/warehouse/database_name.db/records"
 
-    // Save DataFrame to Hive External table as compatible parquet format
+    // Save DataFrame to Hive External table as compatible Parquet format
     hiveTableDF.write.mode(SaveMode.Overwrite).parquet(hiveExternalTableLocation)
 
-    // turn on flag for Dynamic Partitioning
+    // Turn on flag for Dynamic Partitioning
     spark.sqlContext.setConf("hive.exec.dynamic.partition", "true")
     spark.sqlContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
 
@@ -127,11 +127,11 @@ object SparkHiveExample {
     hiveTableDF.write.mode(SaveMode.Overwrite).partitionBy("key")
       .parquet(hiveExternalTableLocation)
 
-    // reduce number of files for each partition by repartition
+    // Reduce number of files for each partition by repartition
     hiveTableDF.repartition($"key").write.mode(SaveMode.Overwrite)
       .partitionBy("key").parquet(hiveExternalTableLocation)
 
-    // Control number of files in each partition by coalesce
+    // Control the number of files in each partition by coalesce
     hiveTableDF.coalesce(10).write.mode(SaveMode.Overwrite)
       .partitionBy("key").parquet(hiveExternalTableLocation)
     // $example off:spark_hive$
