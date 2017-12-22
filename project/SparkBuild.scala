@@ -239,20 +239,35 @@ object SparkBuild extends PomBuild {
 
     javacOptions in Compile ++= Seq(
       "-encoding", "UTF-8",
-      "-source", javacJVMVersion.value,
-      "-Xlint:unchecked"
+      "-source", javacJVMVersion.value
     ),
-    // This -target option cannot be set in the Compile configuration scope since `javadoc` doesn't
-    // play nicely with it; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629 for
-    // additional discussion and explanation.
+    // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since
+    // `javadoc` doesn't play nicely with them; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629
+    // for additional discussion and explanation.
     javacOptions in (Compile, compile) ++= Seq(
-      "-target", javacJVMVersion.value
+      "-target", javacJVMVersion.value,
+      "-Xlint:unchecked"
     ),
 
     scalacOptions in Compile ++= Seq(
       s"-target:jvm-${scalacJVMVersion.value}",
       "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
+
+    // Remove certain packages from Scaladoc
+    scalacOptions in (Compile, doc) := Seq(
+      "-groups",
+      "-skip-packages", Seq(
+        "org.apache.spark.api.python",
+        "org.apache.spark.network",
+        "org.apache.spark.deploy",
+        "org.apache.spark.util.collection"
+      ).mkString(":"),
+      "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
+    ) ++ {
+      // Do not attempt to scaladoc javadoc comments under 2.12 since it can't handle inner classes
+      if (scalaBinaryVersion.value == "2.12") Seq("-no-java-comments") else Seq.empty
+    },
 
     // Implements -Xfatal-warnings, ignoring deprecation warnings.
     // Code snippet taken from https://issues.scala-lang.org/browse/SI-8410.
@@ -828,18 +843,7 @@ object TestSettings {
       }
       Seq.empty[File]
     }).value,
-    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-    // Remove certain packages from Scaladoc
-    scalacOptions in (Compile, doc) := Seq(
-      "-groups",
-      "-skip-packages", Seq(
-        "org.apache.spark.api.python",
-        "org.apache.spark.network",
-        "org.apache.spark.deploy",
-        "org.apache.spark.util.collection"
-      ).mkString(":"),
-      "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
-    )
+    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1)
   )
 
 }

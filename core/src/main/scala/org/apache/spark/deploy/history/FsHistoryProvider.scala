@@ -44,7 +44,6 @@ import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
-import org.apache.spark.status.config._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.kvstore._
@@ -322,15 +321,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         (new InMemoryStore(), true)
     }
 
+    val plugins = ServiceLoader.load(
+      classOf[AppHistoryServerPlugin], Utils.getContextOrSparkClassLoader).asScala
     val trackingStore = new ElementTrackingStore(kvstore, conf)
     if (needReplay) {
       val replayBus = new ReplayListenerBus()
       val listener = new AppStatusListener(trackingStore, conf, false,
         lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
       replayBus.addListener(listener)
-      AppStatusPlugin.loadPlugins().foreach { plugin =>
-        plugin.setupListeners(conf, trackingStore, l => replayBus.addListener(l), false)
-      }
+      for {
+        plugin <- plugins
+        listener <- plugin.createListeners(conf, trackingStore)
+      } replayBus.addListener(listener)
       try {
         val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
         replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
@@ -353,9 +355,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
       attempt.info.startTime.getTime(),
       attempt.info.appSparkVersion)
-    AppStatusPlugin.loadPlugins().foreach { plugin =>
-      plugin.setupUI(ui)
-    }
+    plugins.foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
 

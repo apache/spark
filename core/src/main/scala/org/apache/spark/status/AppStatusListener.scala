@@ -90,6 +90,11 @@ private[spark] class AppStatusListener(
     }
   }
 
+  override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+    case SparkListenerLogStart(version) => sparkVersion = version
+    case _ =>
+  }
+
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     assert(event.appId.isDefined, "Application without IDs are not supported.")
 
@@ -328,10 +333,6 @@ private[spark] class AppStatusListener(
       .filter(_.stageIds.contains(event.stageInfo.stageId))
       .toSeq
     stage.jobIds = stage.jobs.map(_.jobId).toSet
-
-    stage.schedulingPool = Option(event.properties).flatMap { p =>
-      Option(p.getProperty("spark.scheduler.pool"))
-    }.getOrElse(SparkUI.DEFAULT_POOL_NAME)
 
     stage.description = Option(event.properties).flatMap { p =>
       Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))

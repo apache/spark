@@ -15,18 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.sql.sources.v2.reader.Offset
+import org.apache.spark.annotation.InterfaceStability;
 
+import java.util.List;
+import java.util.Map;
 
 /**
- * Used when loading a JSON serialized offset from external storage.
- * We are currently not responsible for converting JSON serialized
- * data into an internal (i.e., object) representation. Sources should
- * define a factory method in their source Offset companion objects
- * that accepts a [[SerializedOffset]] for doing the conversion.
+ * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
+ * propagate session configs with the specified key-prefix to all data source operations in this
+ * session.
  */
-case class SerializedOffset(override val json: String) extends Offset
+@InterfaceStability.Evolving
+public interface SessionConfigSupport {
 
-
+    /**
+     * Key prefix of the session configs to propagate. Spark will extract all session configs that
+     * starts with `spark.datasource.$keyPrefix`, turn `spark.datasource.$keyPrefix.xxx -&gt; yyy`
+     * into `xxx -&gt; yyy`, and propagate them to all data source operations in this session.
+     */
+    String keyPrefix();
+}
