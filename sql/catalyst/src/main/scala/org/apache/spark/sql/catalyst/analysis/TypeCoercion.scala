@@ -675,16 +675,16 @@ object TypeCoercion {
       c.copy(children = newChildren)
     }
 
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // Skip nodes if unresolved or empty children
-      case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transform { case p =>
+      p transformExpressionsUp {
+        // Skip nodes if unresolved or empty children
+        case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
 
-      case c @ Concat(children) if !children.map(_.dataType).forall(_ == BinaryType) =>
-        typeCastToString(c)
-
-      case c @ Concat(children) if conf.concatBinaryAsString =>
-        typeCastToString(c)
+        case c @ Concat(children) if !children.map(_.dataType).forall(_ == BinaryType) =>
+          typeCastToString(c)
+        case c @ Concat(children) if conf.concatBinaryAsString =>
+          typeCastToString(c)
+      }
     }
   }
 

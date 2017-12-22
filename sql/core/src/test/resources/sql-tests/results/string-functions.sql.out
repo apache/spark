@@ -42,7 +42,7 @@ struct<plan:string>
 
 == Analyzed Logical Plan ==
 col: string
-Project [concat(cast(concat(cast(concat(cast(col1#xL as string), cast(col2#xL as string)) as string), cast(col3#xL as string)) as string), cast(col4#xL as string)) AS col#x]
+Project [concat(concat(concat(cast(col1#xL as string), cast(col2#xL as string)), cast(col3#xL as string)), cast(col4#xL as string)) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [id#xL AS col1#xL, id#xL AS col2#xL, id#xL AS col3#xL, id#xL AS col4#xL]
       +- Range (0, 10, step=1, splits=None)
