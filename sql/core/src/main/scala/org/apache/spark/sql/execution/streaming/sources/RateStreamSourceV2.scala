@@ -42,7 +42,7 @@ class RateStreamV2Reader(options: DataSourceV2Options)
       else new SystemClock
 
   private val numPartitions =
-    options.get(RateStreamSourceV2.NUM_PARTITIONS).orElse("5").toInt
+    options.get(RateStreamSourceV2.NUM_PARTITIONS).orElse("1").toInt
   private val rowsPerSecond =
     options.get(RateStreamSourceV2.ROWS_PER_SECOND).orElse("6").toLong
 
@@ -112,7 +112,7 @@ class RateStreamV2Reader(options: DataSourceV2Options)
 
       val packedRows = mutable.ListBuffer[(Long, Long)]()
       var outVal = startVal + numPartitions
-      var outTimeMs = startTimeMs + msPerPartitionBetweenRows
+      var outTimeMs = startTimeMs
       while (outVal <= endVal) {
         packedRows.append((outTimeMs, outVal))
         outVal += numPartitions

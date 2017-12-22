@@ -202,7 +202,8 @@ class MicroBatchExecution(
                     source.getBatch(start, end)
                   }
                 case nonV1Tuple =>
-                  throw new IllegalStateException(s"Unexpected V2 source in $nonV1Tuple")
+                  // The V2 API does not have the same weird edge case - we don't need to do
+                  // anything here.
               }
               currentBatchId = latestCommittedBatchId + 1
               committedOffsets ++= availableOffsets
@@ -259,8 +260,9 @@ class MicroBatchExecution(
               // For now, we set the range here to get the available end offset, and set it again
               // for real when executing.
               if (availableOffsets.get(s).isDefined) {
+                val offsetJson = availableOffsets.get(s).get.json
                 s.setOffsetRange(
-                  Optional.of(availableOffsets.tail(s).asInstanceOf[v2.reader.Offset]),
+                  Optional.of(s.deserializeOffset(offsetJson)),
                   Optional.empty())
               } else {
                 s.setOffsetRange(Optional.empty(), Optional.empty())
@@ -343,6 +345,8 @@ class MicroBatchExecution(
           if (prevBatchOff.isDefined) {
             prevBatchOff.get.toStreamProgress(sources).foreach {
               case (src: Source, off) => src.commit(off)
+              case (reader: MicroBatchReader, off) =>
+                reader.commit(reader.deserializeOffset(off.json))
             }
           } else {
             throw new IllegalStateException(s"batch $currentBatchId doesn't exist")
@@ -386,9 +390,9 @@ class MicroBatchExecution(
           Some(source -> batch.logicalPlan)
         case (reader: MicroBatchReader, available)
           if committedOffsets.get(reader).map(_ != available).getOrElse(true) =>
-          val current = committedOffsets.get(reader)
+          val current = committedOffsets.get(reader).map(off => reader.deserializeOffset(off.json))
           reader.setOffsetRange(
-            Optional.ofNullable(current.orNull.asInstanceOf[v2.reader.Offset]),
+            Optional.ofNullable(current.orNull),
             Optional.of(available.asInstanceOf[v2.reader.Offset]))
           logDebug(s"Retrieving data from $reader: $current -> $available")
           Some(reader ->

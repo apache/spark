@@ -35,17 +35,17 @@ class RateSourceV2Suite extends StreamTest {
   import testImplicits._
 
   case class AdvanceRateManualClock(seconds: Long) extends AddData {
-    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+    override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
       assert(query.nonEmpty)
       val rateSource = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source, _) if source.isInstanceOf[RateStreamSource] =>
-          source.asInstanceOf[RateStreamSource]
+        case StreamingExecutionRelation(source: RateStreamV2Reader, _) => source
       }.head
       rateSource.clock.asInstanceOf[ManualClock].advance(TimeUnit.SECONDS.toMillis(seconds))
-      (rateSource, rateSource.getOffset.get)
+      rateSource.setOffsetRange(Optional.empty(), Optional.empty())
+      (rateSource, rateSource.getEndOffset())
     }
   }
-  
+
   test("microbatch in registry") {
     DataSource.lookupDataSource("ratev2", spark.sqlContext.conf).newInstance() match {
       case ds: MicroBatchReadSupport =>
@@ -62,7 +62,7 @@ class RateSourceV2Suite extends StreamTest {
       .option("rowsPerSecond", "10")
       .option("useManualClock", "true")
       .load()
-    testStream(input)(
+    testStream(input, useV2Sink = true)(
       AdvanceRateManualClock(seconds = 1),
       CheckLastBatch((0 until 10).map(v => new java.sql.Timestamp(v * 100L) -> v): _*),
       StopStream,

@@ -167,6 +167,24 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       className = source,
       options = extraOptions.toMap)
     ds match {
+      case s: MicroBatchReadSupport =>
+        val tempReader = s.createMicroBatchReader(
+          java.util.Optional.ofNullable(userSpecifiedSchema.orNull),
+          Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
+          options)
+        // Generate the V1 node to catch errors thrown within generation.
+        try {
+          StreamingRelation(v1DataSource)
+        } catch {
+          case e: UnsupportedOperationException
+              if e.getMessage.contains("does not support streamed reading") =>
+            // If v1 wasn't supported for this source, that's fine; just proceed onwards with v2.
+        }
+        Dataset.ofRows(
+          sparkSession,
+          StreamingRelationV2(
+            s, source, extraOptions.toMap,
+            tempReader.readSchema().toAttributes, v1DataSource)(sparkSession))
       case s: ContinuousReadSupport =>
         val tempReader = s.createContinuousReader(
           java.util.Optional.ofNullable(userSpecifiedSchema.orNull),
