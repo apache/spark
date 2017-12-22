@@ -424,4 +424,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx2.arrayCompactedMutableStates("InternalRow[]").getCurrentIndex == 10)
     assert(ctx2.mutableStateInitCode.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
   }
+
+  test("SPARK-22750: addImmutableStateIfNotExists") {
+    val ctx = new CodegenContext
+    val mutableState1 = "field1"
+    val mutableState2 = "field2"
+    ctx.addImmutableStateIfNotExists("int", mutableState1)
+    ctx.addImmutableStateIfNotExists("int", mutableState1)
+    ctx.addImmutableStateIfNotExists("String", mutableState2)
+    ctx.addImmutableStateIfNotExists("int", mutableState1)
+    ctx.addImmutableStateIfNotExists("String", mutableState2)
+    assert(ctx.inlinedMutableStates.length == 2)
+  }
 }
