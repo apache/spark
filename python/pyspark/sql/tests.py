@@ -53,7 +53,8 @@ _have_old_pandas = False
 try:
     import pandas
     try:
-        import pandas.api
+        from pyspark.sql.utils import require_minimum_pandas_version
+        require_minimum_pandas_version()
         _have_pandas = True
     except:
         _have_old_pandas = True
@@ -2600,7 +2601,7 @@ class SQLTests(ReusedSQLTestCase):
     @unittest.skipIf(not _have_old_pandas, "Old Pandas not installed")
     def test_to_pandas_old(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ImportError, 'Pandas \(.*\) must be installed'):
+            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
                 self._to_pandas()
 
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
@@ -2643,7 +2644,7 @@ class SQLTests(ReusedSQLTestCase):
         pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
                             "d": [pd.Timestamp.now().date()]})
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ImportError, 'Pandas \(.*\) must be installed'):
+            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
                 self.spark.createDataFrame(pdf)
 
 
