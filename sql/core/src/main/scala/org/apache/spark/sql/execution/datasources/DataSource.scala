@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisBarrier, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
@@ -472,7 +472,7 @@ case class DataSource(
       bucketSpec = bucketSpec,
       fileFormat = format,
       options = options,
-      query = data,
+      query = AnalysisBarrier(data),
       mode = mode,
       catalogTable = catalogTable,
       fileIndex = fileIndex,
