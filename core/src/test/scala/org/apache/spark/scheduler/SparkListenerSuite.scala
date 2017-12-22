@@ -44,17 +44,22 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   private val mockSparkContext: SparkContext = Mockito.mock(classOf[SparkContext])
   private val mockMetricsSystem: MetricsSystem = Mockito.mock(classOf[MetricsSystem])
 
-  private def numDroppedEvents(bus: LiveListenerBus): Long = {
-    bus.metrics.metricRegistry.counter(s"queue.$SHARED_QUEUE.numDroppedEvents").getCount
+  private def numDroppedEvents(bus: LiveListenerBus, name: String): Long = {
+    bus.metrics.metricRegistry.counter(s"queue.$name.numDroppedEvents").getCount
   }
 
-  private def queueSize(bus: LiveListenerBus): Int = {
-    bus.metrics.metricRegistry.getGauges().get(s"queue.$SHARED_QUEUE.size").getValue()
+  private def queueSize(bus: LiveListenerBus, name: String): Int = {
+    bus.metrics.metricRegistry.getGauges().get(s"queue.$name.size").getValue()
       .asInstanceOf[Int]
   }
 
   private def eventProcessingTimeCount(bus: LiveListenerBus): Long = {
     bus.metrics.metricRegistry.timer(s"queue.$SHARED_QUEUE.listenerProcessingTime").getCount()
+  }
+
+  private def totalDroppedEvents(bus: LiveListenerBus): Long = {
+    bus.metrics.metricRegistry.counter(s"livelistenerbus.totalDroppedEvents").getCount()
+      .asInstanceOf[Long]
   }
 
   test("don't call sc.stop in listener") {
@@ -77,8 +82,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     // Metrics are initially empty.
     assert(bus.metrics.numEventsPosted.getCount === 0)
-    assert(numDroppedEvents(bus) === 0)
-    assert(queueSize(bus) === 0)
+    assert(numDroppedEvents(bus, SHARED_QUEUE) === 0)
+    assert(queueSize(bus, SHARED_QUEUE) === 0)
     assert(eventProcessingTimeCount(bus) === 0)
 
     // Post five events:
@@ -87,7 +92,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Five messages should be marked as received and queued, but no messages should be posted to
     // listeners yet because the the listener bus hasn't been started.
     assert(bus.metrics.numEventsPosted.getCount === 5)
-    assert(queueSize(bus) === 5)
+    assert(queueSize(bus, SHARED_QUEUE) === 5)
     assert(counter.count === 0)
 
     // Starting listener bus should flush all buffered events
@@ -95,7 +100,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     Mockito.verify(mockMetricsSystem).registerSource(bus.metrics)
     bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(counter.count === 5)
-    assert(queueSize(bus) === 0)
+    assert(queueSize(bus, SHARED_QUEUE) === 0)
     assert(eventProcessingTimeCount(bus) === 5)
 
     // After listener bus has stopped, posting events should not increment counter
@@ -188,22 +193,75 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Post a message to the listener bus and wait for processing to begin:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     listenerStarted.acquire()
-    assert(queueSize(bus) === 0)
-    assert(numDroppedEvents(bus) === 0)
+    assert(queueSize(bus, SHARED_QUEUE) === 0)
+    assert(numDroppedEvents(bus, SHARED_QUEUE) === 0)
 
     // If we post an additional message then it should remain in the queue because the listener is
     // busy processing the first event:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    assert(queueSize(bus) === 1)
-    assert(numDroppedEvents(bus) === 0)
+    assert(queueSize(bus, SHARED_QUEUE) === 1)
+    assert(numDroppedEvents(bus, SHARED_QUEUE) === 0)
 
     // The queue is now full, so any additional events posted to the listener will be dropped:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    assert(queueSize(bus) === 1)
-    assert(numDroppedEvents(bus) === 1)
+    assert(queueSize(bus, SHARED_QUEUE) === 1)
+    assert(numDroppedEvents(bus, SHARED_QUEUE) === 1)
 
     // Allow the the remaining events to be processed so we can stop the listener bus:
     listenerWait.release(2)
+    bus.stop()
+  }
+
+  test("metrics for all dropped listener events") {
+    val bus = new LiveListenerBus(new SparkConf().set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 1))
+
+    val listenerStarted = new Semaphore(0)
+    val listenerWait = new Semaphore(0)
+
+    // shared queue
+    bus.addToSharedQueue(new SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        listenerStarted.release()
+        listenerWait.acquire()
+      }
+    })
+    // app status queue
+    bus.addToStatusQueue(new SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        listenerStarted.release()
+        listenerWait.acquire()
+      }
+    })
+
+    bus.start(mockSparkContext, mockMetricsSystem)
+
+    // Post one message to the listener bus and wait for processing to begin:
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+    listenerStarted.acquire()
+    listenerStarted.acquire()
+    assert(queueSize(bus, SHARED_QUEUE) === 0)
+    assert(queueSize(bus, APP_STATUS_QUEUE) === 0)
+    assert(numDroppedEvents(bus, SHARED_QUEUE) === 0)
+    assert(numDroppedEvents(bus, APP_STATUS_QUEUE) === 0)
+    assert(totalDroppedEvents(bus) === 0)
+
+    // post another messgae
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+
+    // shared queue and app status queue are full now, so any additional events posted to the listener will be dropped:
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+    assert(queueSize(bus, SHARED_QUEUE) === 1)
+    assert(queueSize(bus, APP_STATUS_QUEUE) === 1)
+    assert(numDroppedEvents(bus, SHARED_QUEUE) === 1)
+    assert(numDroppedEvents(bus, APP_STATUS_QUEUE) === 1)
+    assert(totalDroppedEvents(bus) === 0)
+
+    Thread.sleep(2 * 61 * 1000)
+
+    assert(totalDroppedEvents(bus) === 2)
+
+    // Allow the the remaining events to be processed so we can stop the listener bus:
+    listenerWait.release(6)
     bus.stop()
   }
 
