@@ -359,11 +359,27 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   test("aggregation function on invalid column") {
     val df = Seq((1, "1")).toDF("key", "value")
     val e = intercept[AnalysisException](
-      df.select(
-        $"key",
-        count("invalid").over(
-          Window.partitionBy($"value").orderBy($"key"))))
+      df.select($"key", count("invalid").over()))
     assert(e.message.contains("cannot resolve '`invalid`' given input columns: [key, value]"))
+  }
+
+  test("aggregation functions on column with wrong data type") {
+    val df = Seq((1, "a", "b")).toDF("key", "value1", "value2")
+    checkAnswer(
+      df.select($"key",
+        var_pop("value1").over(),
+        variance("value1").over(),
+        stddev_pop("value1").over(),
+        stddev("value1").over(),
+        sum("value1").over(),
+        mean("value1").over(),
+        avg("value1").over(),
+        corr("value1", "value2").over(),
+        covar_pop("value1", "value2").over(),
+        covar_samp("value1", "value2").over(),
+        skewness("value1").over(),
+        kurtosis("value1").over()),
+      Seq(Row(1, null, null, null, null, null, null, null, null, null, null, null, null)))
   }
 
   test("row between should accept integer values as boundary") {
