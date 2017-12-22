@@ -772,7 +772,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }.isDefined
     val lease = sm.lease(status.getLen(), isCompressed)
     val newStorePath = try {
-      val store = KVUtils.open(lease.path, metadata)
+      val store = KVUtils.open(lease.tmpPath, metadata)
       try {
         rebuildAppStore(store, status, attempt.info.lastUpdated.getTime())
       } finally {

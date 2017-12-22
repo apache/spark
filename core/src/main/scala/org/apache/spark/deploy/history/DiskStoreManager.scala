@@ -163,7 +163,7 @@ private class DiskStoreManager(
    * event log.
    */
   def approximateSize(eventLogSize: Long, isCompressed: Boolean): Long = {
-    val expectedSize = if (isCompressed) {
+    if (isCompressed) {
       // For compressed logs, assume that compression reduces the log size a lot, and the disk
       // store will actually grow compared to the log size.
       eventLogSize * 2
@@ -172,10 +172,6 @@ private class DiskStoreManager(
       // size of the logs. This is loosely based on empirical evidence.
       eventLogSize / 2
     }
-
-    // Cap the value at 10% of the max size; this assumes that element cleanup will put a cap on
-    // how large the disk store can get, which may not always be the case.
-    math.min(expectedSize, maxUsage / 10)
   }
 
   /** Current free space. Considers space currently leased out too. */
@@ -236,7 +232,7 @@ private class DiskStoreManager(
   /** Visible for testing. Return the size of a directory. */
   private[history] def sizeOf(path: File): Long = FileUtils.sizeOf(path)
 
-  private[history] class Lease(val path: File, private val leased: Long) {
+  private[history] class Lease(val tmpPath: File, private val leased: Long) {
 
     /**
      * Commits a lease to its final location, and update accounting information. This method
@@ -258,9 +254,9 @@ private class DiskStoreManager(
 
       updateUsage(-leased)
 
-      val newSize = sizeOf(path)
+      val newSize = sizeOf(tmpPath)
       makeRoom(newSize)
-      path.renameTo(dst)
+      tmpPath.renameTo(dst)
 
       val currentUsage = updateUsage(newSize)
       if (currentUsage > maxUsage) {
@@ -281,7 +277,7 @@ private class DiskStoreManager(
     /** Deletes the temporary directory created for the lease. */
     def rollback(): Unit = {
       updateUsage(-leased)
-      FileUtils.deleteDirectory(path)
+      FileUtils.deleteDirectory(tmpPath)
     }
 
   }
