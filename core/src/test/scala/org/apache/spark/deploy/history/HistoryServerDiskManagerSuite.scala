@@ -29,7 +29,7 @@ import org.apache.spark.status.KVUtils
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.util.kvstore.KVStore
 
-class DiskStoreManagerSuite extends SparkFunSuite with BeforeAndAfter {
+class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
   import config._
 
@@ -50,9 +50,9 @@ class DiskStoreManagerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
-  private def mockManager(): DiskStoreManager = {
+  private def mockManager(): HistoryServerDiskManager = {
     val conf = new SparkConf().set(MAX_LOCAL_DISK_USAGE, MAX_USAGE)
-    val manager = spy(new DiskStoreManager(conf, testDir, store, new ManualClock()))
+    val manager = spy(new HistoryServerDiskManager(conf, testDir, store, new ManualClock()))
     doAnswer(AdditionalAnswers.returnsFirstArg[Long]()).when(manager)
       .approximateSize(anyLong(), anyBoolean())
     manager
@@ -146,7 +146,8 @@ class DiskStoreManagerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("approximate size heuristic") {
-    val manager = new DiskStoreManager(new SparkConf(false), testDir, store, new ManualClock())
+    val manager = new HistoryServerDiskManager(new SparkConf(false), testDir, store,
+      new ManualClock())
     assert(manager.approximateSize(50L, false) < 50L)
     assert(manager.approximateSize(50L, true) > 50L)
   }

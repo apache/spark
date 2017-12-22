@@ -46,7 +46,7 @@ import org.apache.spark.util.kvstore.KVStore
  * @param listing The listing store, used to persist usage data.
  * @param clock Clock instance to use.
  */
-private class DiskStoreManager(
+private class HistoryServerDiskManager(
     conf: SparkConf,
     path: File,
     listing: KVStore,

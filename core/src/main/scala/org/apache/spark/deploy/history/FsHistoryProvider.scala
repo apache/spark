@@ -152,8 +152,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }.getOrElse(new InMemoryStore())
 
-  private val storeManager = storePath.map { path =>
-    new DiskStoreManager(conf, path, listing, clock)
+  private val diskManager = storePath.map { path =>
+    new HistoryServerDiskManager(conf, path, listing, clock)
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
@@ -226,7 +226,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   private def startPolling(): Unit = {
-    storeManager.foreach(_.initialize())
+    diskManager.foreach(_.initialize())
 
     // Validate the log directory.
     val path = new Path(logDir)
@@ -309,7 +309,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     secManager.setViewAclsGroups(attempt.viewAclsGroups.getOrElse(""))
 
     val kvstore = try {
-      storeManager match {
+      diskManager match {
         case Some(sm) =>
           loadDiskStore(sm, appId, attempt)
 
@@ -387,11 +387,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         loadedUI.lock.writeLock().unlock()
       }
 
-      storeManager.foreach { sm =>
+      diskManager.foreach { dm =>
         // If the UI is not valid, delete its files from disk, if any. This relies on the fact that
         // ApplicationCache will never call this method concurrently with getAppUI() for the same
         // appId / attemptId.
-        sm.release(appId, attemptId, delete = !loadedUI.valid)
+        dm.release(appId, attemptId, delete = !loadedUI.valid)
       }
     }
   }
@@ -747,20 +747,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   private def loadDiskStore(
-      sm: DiskStoreManager,
+      dm: HistoryServerDiskManager,
       appId: String,
       attempt: AttemptInfoWrapper): KVStore = {
     val metadata = new AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION)
 
     // First check if the store already exists and try to open it. If that fails, then get rid of
     // the existing data.
-    sm.openStore(appId, attempt.info.attemptId).foreach { path =>
+    dm.openStore(appId, attempt.info.attemptId).foreach { path =>
       try {
         return KVUtils.open(path, metadata)
       } catch {
         case e: Exception =>
           logInfo(s"Failed to open existing store for $appId/${attempt.info.attemptId}.", e)
-          sm.release(appId, attempt.info.attemptId, delete = true)
+          dm.release(appId, attempt.info.attemptId, delete = true)
       }
     }
 
@@ -770,7 +770,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val isCompressed = EventLoggingListener.codecName(status.getPath()).flatMap { name =>
       Try(CompressionCodec.getShortName(name)).toOption
     }.isDefined
-    val lease = sm.lease(status.getLen(), isCompressed)
+    val lease = dm.lease(status.getLen(), isCompressed)
     val newStorePath = try {
       val store = KVUtils.open(lease.tmpPath, metadata)
       try {
