@@ -1372,6 +1372,13 @@ the following case-insensitive options:
      This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g., indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. It defaults to <code>false</code>. This option applies only to writing.
    </td>
   </tr>
+  
+  <tr>
+    <td><code>cascadeTruncate</code></td>
+    <td>
+        This is a JDBC writer related option. If enabled and supported by the JDBC database (PostgreSQL and Oracle at the moment), this options allows execution of a <code>TRUNCATE TABLE t CASCADE</code>. This will affect other tables, and thus should be used with case. This option applies only to writing.
+    </td>
+  </tr>
 
   <tr>
     <td><code>createTableOptions</code></td>

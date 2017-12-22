@@ -64,7 +64,7 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
     }
   }
 
-  override def getTruncateQuery(table: String): String = {
-    dialects.head.getTruncateQuery(table)
+  override def getTruncateQuery(table: String, cascade: Boolean = false): String = {
+    dialects.head.getTruncateQuery(table, cascade)
   }
 }

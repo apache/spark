@@ -860,14 +860,41 @@ class JDBCSuite extends SparkFunSuite
     val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     val h2 = JdbcDialects.get(url)
     val derby = JdbcDialects.get("jdbc:derby:db")
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+
     val table = "weblogs"
     val defaultQuery = s"TRUNCATE TABLE $table"
     val postgresQuery = s"TRUNCATE TABLE ONLY $table"
+
     assert(MySQL.getTruncateQuery(table) == defaultQuery)
     assert(Postgres.getTruncateQuery(table) == postgresQuery)
     assert(db2.getTruncateQuery(table) == defaultQuery)
     assert(h2.getTruncateQuery(table) == defaultQuery)
     assert(derby.getTruncateQuery(table) == defaultQuery)
+    assert(oracle.getTruncateQuery(table) == defaultQuery)
+  }
+
+  test("SPARK-22880: Truncate table with CASCADE by jdbc dialect") {
+    // cascade in a truncate should only be applied for databases that support this,
+    // even if the parameter is passed.
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+
+    val table = "weblogs"
+    val defaultQuery = s"TRUNCATE TABLE $table"
+    val postgresQuery = s"TRUNCATE TABLE ONLY $table CASCADE"
+    val oracleQuery = s"TRUNCATE TABLE $table CASCADE"
+
+    assert(MySQL.getTruncateQuery(table, true) == defaultQuery)
+    assert(Postgres.getTruncateQuery(table, true) == postgresQuery)
+    assert(db2.getTruncateQuery(table, true) == defaultQuery)
+    assert(h2.getTruncateQuery(table, true) == defaultQuery)
+    assert(derby.getTruncateQuery(table, true) == defaultQuery)
+    assert(oracle.getTruncateQuery(table, true) == oracleQuery)
   }
 
   test("Test DataFrame.where for Date and Timestamp") {
