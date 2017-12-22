@@ -40,16 +40,17 @@ NULL
 #'
 #' @param x Column to compute on. In \code{window}, it must be a time Column of
 #'          \code{TimestampType}.
-#' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
-#'               Column \code{x} to DateType or TimestampType.
-#'
-#'               For \code{trunc}, it is the string to use to specify the truncation method.
-#'               For example, "year", "yyyy", "yy" for truncate by year, or "month", "mon",
-#'               "mm" for truncate by month.
-#'
-#'               For \code{date_trunc}, it is similar with \code{trunc}'s but additionally
-#'               supports "day", "dd", "second", "minute", "hour", "week" and "quarter".
-#'
+#' @param format The format for the given dates or timestamps in Column \code{x}. See the
+#'               format used in the following methods:
+#'               \itemize{
+#'               \item \code{to_date} and \code{to_timestamp}: it is the string to use to parse
+#'                    Column \code{x} to DateType or TimestampType.
+#'               \item \code{trunc}: it is the string to use to specify the truncation method.
+#'                    For example, "year", "yyyy", "yy" for truncate by year, or "month", "mon",
+#'                    "mm" for truncate by month.
+#'               \item \code{date_trunc}: it is similar with \code{trunc}'s but additionally
+#'                    supports "day", "dd", "second", "minute", "hour", "week" and "quarter".
+#'               }
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
 #' @rdname column_datetime_functions
