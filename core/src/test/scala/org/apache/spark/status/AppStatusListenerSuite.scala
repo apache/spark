@@ -103,6 +103,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   test("scheduler events") {
     val listener = new AppStatusListener(store, conf, true)
 
+    listener.onOtherEvent(SparkListenerLogStart("TestSparkVersion"))
+
     // Start the application.
     time += 1
     listener.onApplicationStart(SparkListenerApplicationStart(
@@ -125,6 +127,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(attempt.endTime.getTime() === -1L)
       assert(attempt.sparkUser === "user")
       assert(!attempt.completed)
+      assert(attempt.appSparkVersion === "TestSparkVersion")
     }
 
     // Start a couple of executors.
