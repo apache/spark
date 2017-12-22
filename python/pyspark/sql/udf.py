@@ -37,9 +37,9 @@ def _create_udf(f, returnType, evalType):
     if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF or \
             evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         import inspect
-        from pyspark.sql.utils import _require_minimum_pyarrow_version
+        from pyspark.sql.utils import require_minimum_pyarrow_version
 
-        _require_minimum_pyarrow_version()
+        require_minimum_pyarrow_version()
         argspec = inspect.getargspec(f)
 
         if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF and len(argspec.args) == 0 and \
