@@ -105,8 +105,7 @@ trait ThreadAudit extends Logging {
   }
 
   private def printRemainingThreadNames(): Unit = {
-    val suiteName = this.getClass.getName
-    val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
+    val shortSuiteName = this.getClass.getName.replaceAll("org.apache.spark", "o.a.s")
 
     if (threadNamesSnapshot.nonEmpty) {
       val remainingThreadNames = runningThreadNames.diff(threadNamesSnapshot)
@@ -116,7 +115,7 @@ trait ThreadAudit extends Logging {
           s"thread names: ${remainingThreadNames.mkString(", ")} =====\n")
       }
     } else {
-      logWarning(s"\n\n===== THREAD AUDIT POST ACTION CALLED " +
+      logWarning("\n\n===== THREAD AUDIT POST ACTION CALLED " +
         s"WITHOUT PRE ACTION IN SUITE $shortSuiteName =====\n")
     }
   }

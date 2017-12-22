@@ -41,7 +41,7 @@ abstract class SparkFunSuite
     if (doThreadAuditInSparkFunSuite) {
       doThreadPreAudit()
     }
-    super.beforeAll
+    super.beforeAll()
   }
 
   protected override def afterAll(): Unit = {
