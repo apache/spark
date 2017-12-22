@@ -74,6 +74,7 @@ class Estimator(Params):
         """
         raise NotImplementedError()
 
+    @since("2.3.0")
     def fitMultiple(self, dataset, params):
         """
         Fits a model to the input dataset for each param map in params.
@@ -83,6 +84,8 @@ class Estimator(Params):
         :return: A thread safe iterable which contains one model for each param map. Each
         call to `next(modelIterator)` will return `(index, model)` where model was fit using
         `params[index]`. Params maps may be fit in an order different than their order in params.
+
+        .. note:: Experimental
         """
         def fitSingleModel(index):
             return self.fit(dataset, params[index])
