@@ -770,6 +770,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val isCompressed = EventLoggingListener.codecName(status.getPath()).flatMap { name =>
       Try(CompressionCodec.getShortName(name)).toOption
     }.isDefined
+    logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
     val lease = dm.lease(status.getLen(), isCompressed)
     val newStorePath = try {
       val store = KVUtils.open(lease.tmpPath, metadata)

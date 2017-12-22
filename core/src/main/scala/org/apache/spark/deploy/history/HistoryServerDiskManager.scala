@@ -85,6 +85,10 @@ private class HistoryServerDiskManager(
     orphans.foreach { info =>
       listing.delete(info.getClass(), info.path)
     }
+
+    logInfo("Initialized disk manager: " +
+      s"current usage = ${Utils.bytesToString(currentUsage.get())}, " +
+      s"max usage = ${Utils.bytesToString(maxUsage)}")
   }
 
   /**
@@ -108,6 +112,12 @@ private class HistoryServerDiskManager(
       PosixFilePermissions.asFileAttribute(perms)).toFile()
 
     updateUsage(needed)
+    val current = currentUsage.get()
+    if (current > maxUsage) {
+      logInfo(s"Lease of ${Utils.bytesToString(needed)} may cause usage to exceed max " +
+        s"(${Utils.bytesToString(current)} > ${Utils.bytesToString(maxUsage)})")
+    }
+
     new Lease(tmp, needed)
   }
 
@@ -211,12 +221,19 @@ private class HistoryServerDiskManager(
         }
       }
 
-      evicted.foreach { info =>
-        logInfo(s"Deleting store for ${info.appId}/${info.attemptId}.")
-        deleteStore(new File(info.path))
-        updateUsage(-info.size, committed = true)
+      if (evicted.nonEmpty) {
+        val freed = evicted.map { info =>
+          logInfo(s"Deleting store for ${info.appId}/${info.attemptId}.")
+          deleteStore(new File(info.path))
+          updateUsage(-info.size, committed = true)
+          info.size
+        }.sum
+
+        logInfo(s"Deleted ${evicted.size} store(s) to free ${Utils.bytesToString(freed)} " +
+          s"(target = ${Utils.bytesToString(size)}).")
+      } else {
+        logWarning(s"Unable to free any space to make room for ${Utils.bytesToString(size)}.")
       }
-      logDebug(s"Deleted a total of ${evicted.size} app stores.")
     }
   }
 
