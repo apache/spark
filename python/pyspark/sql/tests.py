@@ -53,7 +53,8 @@ _have_old_pandas = False
 try:
     import pandas
     try:
-        import pandas.api
+        from pyspark.sql.utils import _require_minimum_pandas_version
+        _require_minimum_pandas_version()
         _have_pandas = True
     except:
         _have_old_pandas = True
