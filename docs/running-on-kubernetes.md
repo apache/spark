@@ -121,21 +121,55 @@ Those dependencies can be added to the classpath by referencing them with `local
 `SPARK_EXTRA_CLASSPATH` environment variable in your Dockerfiles.
 
 ### Using Remote Dependencies
-When there are application dependencies hosted in remote locations like HDFS or HTTP servers, the driver and executor pods need a Kubernetes [init-container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) for downloading the dependencies so the driver and executor containers can use them locally. This requires users to specify the container image for the init-container using the configuration property `spark.kubernetes.initContainer.image`. For example, users simply add the following option to the `spark-submit` command to specify the init-container image:
+When there are application dependencies hosted in remote locations like HDFS or HTTP servers, the driver and executor pods
+need a Kubernetes [init-container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) for downloading
+the dependencies so the driver and executor containers can use them locally. This requires users to specify the container
+image for the init-container using the configuration property `spark.kubernetes.initContainer.image`. For example, users
+simply add the following option to the `spark-submit` command to specify the init-container image:
 
 ```
 --conf spark.kubernetes.initContainer.image=<init-container image>
 ```
 
+The init-container handles remote dependencies specified in `spark.jars` (or the `--jars` option of `spark-submit`) and
+`spark.files` (or the `--files` option of `spark-submit`). It also handles remotely hosted main application resources, e.g.,
+the main application jar. The following shows an example of using remote dependencies with the `spark-submit` command:
+
+```bash
+$ bin/spark-submit \
+    --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
+    --deploy-mode cluster \
+    --name spark-pi \
+    --class org.apache.spark.examples.SparkPi \
+    --jars https://path/to/dependency1.jar,https://path/to/dependency2.jar
+    --files hdfs://host:port/path/to/file1,hdfs://host:port/path/to/file2
+    --conf spark.executor.instances=5 \
+    --conf spark.kubernetes.driver.docker.image=<driver-image> \
+    --conf spark.kubernetes.executor.docker.image=<executor-image> \
+    --conf spark.kubernetes.initContainer.image=<init-container image>
+    https://path/to/examples.jar
+```
+
 ## Secret Management
-In some cases, a Spark application may need to use some credentials, e.g., for accessing data on a secured HDFS cluster or cloud storage that requires users to provide credentials for authentication. This can be done by mounting the credentials into the driver and executor containers using Kubernetes [secrets](https://kubernetes.io/docs/concepts/configuration/secret/). To mount a user-specified secret into the driver container, users can use the configuration property of the form `spark.kubernetes.driver.secrets.[SecretName]=<mount path>`. Similarly, the configuration property of the form `spark.kubernetes.executor.secrets.[SecretName]=<mount path>` can be used to mount a user-specified secret into the executor containers. Note that it is assumed that the secret to be mounted is in the same namespace as that of the driver and executor pods. For example, to mount a secret named `spark-secret` onto the path `/etc/secrets` in both the driver and executor containers, add the following options to the `spark-submit` command:
+In some cases, a Spark application may need to use some credentials, e.g., for accessing data on a secured HDFS cluster
+or cloud storage that requires users to provide credentials for authentication. This can be done by mounting the
+credentials into the driver and executor containers using
+Kubernetes [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/). To mount a user-specified secret into
+the driver container, users can use the configuration property of the form
+`spark.kubernetes.driver.secrets.[SecretName]=<mount path>`. Similarly, the configuration property of the form
+`spark.kubernetes.executor.secrets.[SecretName]=<mount path>` can be used to mount a user-specified secret into the
+executor containers. Note that it is assumed that the secret to be mounted is in the same namespace as that of the driver
+and executor pods. For example, to mount a secret named `spark-secret` onto the path `/etc/secrets` in both the driver
+and executor containers, add the following options to the `spark-submit` command:
 
 ```
 --conf spark.kubernetes.driver.secrets.spark-secret=/etc/secrets
 --conf spark.kubernetes.executor.secrets.spark-secret=/etc/secrets
 ```
 
-Note that if an init-container is used, any secret mounted into the driver container will also be mounted into the init-container of the driver. Similarly, any secret mounted into an executor container will also be mounted into the init-container of the executor.
+Note that if an init-container is used, any secret mounted into the driver container will also be mounted into the
+init-container of the driver. Similarly, any secret mounted into an executor container will also be mounted into the
+init-container of the executor.
 
 ## Introspection and Debugging
 
@@ -593,46 +627,42 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.mountDependencies.mountTimeout</code></td>
+  <td><code>spark.kubernetes.mountDependencies.timeout</code></td>
   <td>5 minutes</td>
   <td>
-   Timeout before aborting the attempt to download and unpack dependencies from remote locations when initializing
-   the driver and executor pods.
+   Timeout before aborting the attempt to download and unpack dependencies from remote locations into the driver and executor pods.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.mountDependencies.maxThreadPoolSize</code></td>
+  <td>5</td>
+  <td>
+   Maximum size of the thread pool for downloading remote dependencies into the driver and executor pods.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.initContainer.image</code></td>
   <td>(none)</td>
   <td>
-   Container image for the init-container of the driver and executors for downloading dependencies.
-   This is usually of the form <code>example.com/repo/spark-init:v1.0.0</code>.
-   This configuration is optional and must be provided by the user if any non-container local dependency is used and
-    must be downloaded remotely.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.initContainer.maxThreadPoolSize</code></td>
-  <td>5</td>
-  <td>
-   Maximum size of the thread pool in the init-container for downloading remote dependencies.
+   Container image for the <a href="https://kubernetes.io/docs/concepts/workloads/pods/init-containers/">init-container</a> of the driver and executors for downloading dependencies. This is usually of the form <code>example.com/repo/spark-init:v1.0.0</code>. This configuration is optional and must be provided by the user if any non-container local dependency is used and must be downloaded remotely.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
   <td>(none)</td>
   <td>
-   Add the secret named <code>SecretName</code> to the driver pod on the path specified in the value. For example,
+   Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the driver pod on the path specified in the value. For example,
    <code>spark.kubernetes.driver.secrets.spark-secret=/etc/secrets</code>. Note that if an init-container is used,
-   the secret will also be add to the init-container in the driver pod.
+   the secret will also be added to the init-container in the driver pod.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.secrets.[SecretName]</code></td>
   <td>5</td>
   <td>
-   Add the secret named <code>SecretName</code> to the executor pod on the path specified in the value. For example,
+   Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the executor pod on the path specified in the value. For example,
    <code>spark.kubernetes.executor.secrets.spark-secret=/etc/secrets</code>. Note that if an init-container is used,
-   the secret will also be add to the init-container in the executor pod.
+   the secret will also be added to the init-container in the executor pod.
   </td>
 </tr>
 </table>
