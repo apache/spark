@@ -90,7 +90,7 @@ class FlatMapGroupsWithState_StateManager(
     val deser = stateEncoder.resolveAndBind().deserializer.transformUp {
       case BoundReference(ordinal, _, _) => GetStructField(boundRefToNestedState, ordinal)
     }
-    CaseWhen(Seq(IsNull(boundRefToNestedState) -> Literal(null)), elseValue = deser).toCodegen()
+    CaseWhen(Seq(IsNull(boundRefToNestedState) -> Literal(null)), elseValue = deser)
   }
 
   // Converters for translating state between rows and Java objects

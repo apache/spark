@@ -23,6 +23,7 @@ import java.util.{Calendar, Locale, TimeZone}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
@@ -826,5 +827,30 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val input = Row(10, Row(12L))
 
     checkEvaluation(cast(Literal.create(input, from), to), input)
+  }
+
+  test("SPARK-22500: cast for struct should not generate codes beyond 64KB") {
+    val N = 25
+
+    val fromInner = new StructType(
+      (1 to N).map(i => StructField(s"s$i", DoubleType)).toArray)
+    val toInner = new StructType(
+      (1 to N).map(i => StructField(s"i$i", IntegerType)).toArray)
+    val inputInner = Row.fromSeq((1 to N).map(i => i + 0.5))
+    val outputInner = Row.fromSeq((1 to N))
+    val fromOuter = new StructType(
+      (1 to N).map(i => StructField(s"s$i", fromInner)).toArray)
+    val toOuter = new StructType(
+      (1 to N).map(i => StructField(s"s$i", toInner)).toArray)
+    val inputOuter = Row.fromSeq((1 to N).map(_ => inputInner))
+    val outputOuter = Row.fromSeq((1 to N).map(_ => outputInner))
+    checkEvaluation(cast(Literal.create(inputOuter, fromOuter), toOuter), outputOuter)
+  }
+
+  test("SPARK-22570: Cast should not create a lot of global variables") {
+    val ctx = new CodegenContext
+    cast("1", IntegerType).genCode(ctx)
+    cast("2", LongType).genCode(ctx)
+    assert(ctx.mutableStates.length == 0)
   }
 }

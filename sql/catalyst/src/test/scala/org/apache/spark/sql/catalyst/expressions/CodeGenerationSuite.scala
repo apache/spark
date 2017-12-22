@@ -77,7 +77,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-13242: case-when expression with large number of branches (or cases)") {
-    val cases = 50
+    val cases = 500
     val clauses = 20
 
     // Generate an individual case
@@ -88,16 +88,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       (condition, Literal(n))
     }
 
-    val expression = CaseWhen((1 to cases).map(generateCase(_)))
+    val expression = CaseWhen((1 to cases).map(generateCase))
 
     val plan = GenerateMutableProjection.generate(Seq(expression))
-    val input = new GenericInternalRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
+    val input = new GenericInternalRow(Array[Any](UTF8String.fromString(s"$clauses:$cases")))
     val actual = plan(input).toSeq(Seq(expression.dataType))
 
-    assert(actual(0) == cases)
+    assert(actual.head == cases)
   }
 
-  test("SPARK-18091: split large if expressions into blocks due to JVM code size limit") {
+  test("SPARK-22543: split large if expressions into blocks due to JVM code size limit") {
     var strExpr: Expression = Literal("abc")
     for (_ <- 1 to 150) {
       strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
@@ -340,5 +340,44 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq(expr), subexpressionEliminationEnabled = true)
     // should not throw exception
     projection(row)
+  }
+
+  test("SPARK-22543: split large predicates into blocks due to JVM code size limit") {
+    val length = 600
+
+    val input = new GenericInternalRow(length)
+    val utf8Str = UTF8String.fromString(s"abc")
+    for (i <- 0 until length) {
+      input.update(i, utf8Str)
+    }
+
+    var exprOr: Expression = Literal(false)
+    for (i <- 0 until length) {
+      exprOr = Or(EqualTo(BoundReference(i, StringType, true), Literal(s"c$i")), exprOr)
+    }
+
+    val planOr = GenerateMutableProjection.generate(Seq(exprOr))
+    val actualOr = planOr(input).toSeq(Seq(exprOr.dataType))
+    assert(actualOr.length == 1)
+    val expectedOr = false
+
+    if (!checkResult(actualOr.head, expectedOr, exprOr.dataType)) {
+      fail(s"Incorrect Evaluation: expressions: $exprOr, actual: $actualOr, expected: $expectedOr")
+    }
+
+    var exprAnd: Expression = Literal(true)
+    for (i <- 0 until length) {
+      exprAnd = And(EqualTo(BoundReference(i, StringType, true), Literal(s"c$i")), exprAnd)
+    }
+
+    val planAnd = GenerateMutableProjection.generate(Seq(exprAnd))
+    val actualAnd = planAnd(input).toSeq(Seq(exprAnd.dataType))
+    assert(actualAnd.length == 1)
+    val expectedAnd = false
+
+    if (!checkResult(actualAnd.head, expectedAnd, exprAnd.dataType)) {
+      fail(
+        s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
+    }
   }
 }

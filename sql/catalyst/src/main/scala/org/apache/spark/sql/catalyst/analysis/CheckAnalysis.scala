@@ -78,8 +78,6 @@ trait CheckAnalysis extends PredicateHelper {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
-      case p if p.analyzed => // Skip already analyzed sub-plans
-
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
@@ -353,8 +351,6 @@ trait CheckAnalysis extends PredicateHelper {
       case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
       case _ =>
     }
-
-    plan.foreach(_.setAnalyzed())
   }
 
   /**

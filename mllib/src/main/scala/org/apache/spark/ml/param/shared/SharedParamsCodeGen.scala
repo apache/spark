@@ -60,6 +60,7 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
+      ParamDesc[Array[String]]("outputCols", "output column names"),
       ParamDesc[Int]("checkpointInterval", "set checkpoint interval (>= 1) or " +
         "disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed " +
         "every 10 iterations", isValid = "(interval: Int) => interval == -1 || interval >= 1"),
@@ -82,7 +83,13 @@ private[shared] object SharedParamsCodeGen {
         "all instance weights as 1.0"),
       ParamDesc[String]("solver", "the solver algorithm for optimization", finalFields = false),
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
-        isValid = "ParamValidators.gtEq(2)", isExpertParam = true))
+        isValid = "ParamValidators.gtEq(2)", isExpertParam = true),
+      ParamDesc[Boolean]("collectSubModels", "If set to false, then only the single best " +
+        "sub-model will be available after fitting. If set to true, then all sub-models will be " +
+        "available. Warning: For large models, collecting all sub-models can cause OOMs on the " +
+        "Spark driver.",
+        Some("false"), isExpertParam = true)
+    )
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
