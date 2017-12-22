@@ -363,7 +363,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("cannot resolve '`invalid`' given input columns: [key, value]"))
   }
 
-  test("aggregation functions on column with wrong data type") {
+  test("numerical aggregate functions on string column") {
     val df = Seq((1, "a", "b")).toDF("key", "value1", "value2")
     checkAnswer(
       df.select($"key",
