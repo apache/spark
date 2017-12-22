@@ -228,7 +228,7 @@ class MiscBenchmark extends BenchmarkBase {
      */
   }
 
-  test("generate explode big struct array") {
+  ignore("generate explode big struct array") {
     val N = 60000
 
     val spark = sparkSession
