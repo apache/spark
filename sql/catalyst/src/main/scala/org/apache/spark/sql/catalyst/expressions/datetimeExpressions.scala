@@ -443,7 +443,8 @@ case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCas
     nullSafeCodeGen(ctx, ev, time => {
       val cal = classOf[Calendar].getName
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = ctx.addMutableState(cal, "cal",
+      val c = "calDayOfWeek"
+      ctx.addImmutableStateIfNotExists(cal, c,
         v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
       s"""
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
@@ -484,8 +485,9 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, time => {
       val cal = classOf[Calendar].getName
+      val c = "calWeekOfYear"
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = ctx.addMutableState(cal, "cal", v =>
+      ctx.addImmutableStateIfNotExists(cal, c, v =>
         s"""
            |$v = $cal.getInstance($dtu.getTimeZone("UTC"));
            |$v.setFirstDayOfWeek($cal.MONDAY);
@@ -1017,7 +1019,8 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val tzTerm = ctx.addMutableState(tzClass, "tz",
           v => s"""$v = $dtu.getTimeZone("$tz");""")
-        val utcTerm = ctx.addMutableState(tzClass, "utc",
+        val utcTerm = "tzUTC"
+        ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
           v => s"""$v = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
@@ -1193,7 +1196,8 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val tzTerm = ctx.addMutableState(tzClass, "tz",
           v => s"""$v = $dtu.getTimeZone("$tz");""")
-        val utcTerm = ctx.addMutableState(tzClass, "utc",
+        val utcTerm = "tzUTC"
+        ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
           v => s"""$v = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
