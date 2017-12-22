@@ -494,11 +494,11 @@ class SparkSession(object):
         """
         from pyspark.serializers import ArrowSerializer, _create_batch
         from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
-        from pyspark.sql.utils import _require_minimum_pandas_version, \
-            _require_minimum_pyarrow_version
+        from pyspark.sql.utils import require_minimum_pandas_version, \
+            require_minimum_pyarrow_version
 
-        _require_minimum_pandas_version()
-        _require_minimum_pyarrow_version()
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
 
         from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
 
