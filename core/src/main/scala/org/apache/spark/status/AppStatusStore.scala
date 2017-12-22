@@ -17,16 +17,14 @@
 
 package org.apache.spark.status
 
-import java.io.File
-import java.util.{Arrays, List => JList}
+import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
-import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.util.Distribution
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
 /**
@@ -34,7 +32,7 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
  */
 private[spark] class AppStatusStore(
     val store: KVStore,
-    listener: Option[AppStatusListener] = None) {
+    val listener: Option[AppStatusListener] = None) {
 
   def applicationInfo(): v1.ApplicationInfo = {
     store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
@@ -346,17 +344,10 @@ private[spark] object AppStatusStore {
 
   /**
    * Create an in-memory store for a live application.
-   *
-   * @param conf Configuration.
-   * @param addListenerFn Function to register a listener with a bus.
    */
-  def createLiveStore(conf: SparkConf, addListenerFn: SparkListener => Unit): AppStatusStore = {
+  def createLiveStore(conf: SparkConf): AppStatusStore = {
     val store = new ElementTrackingStore(new InMemoryStore(), conf)
     val listener = new AppStatusListener(store, conf, true)
-    addListenerFn(listener)
-    AppStatusPlugin.loadPlugins().foreach { p =>
-      p.setupListeners(conf, store, addListenerFn, true)
-    }
     new AppStatusStore(store, listener = Some(listener))
   }
 
