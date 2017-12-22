@@ -120,6 +120,23 @@ by their appropriate remote URIs. Also, application dependencies can be pre-moun
 Those dependencies can be added to the classpath by referencing them with `local://` URIs and/or setting the
 `SPARK_EXTRA_CLASSPATH` environment variable in your Dockerfiles.
 
+### Using Remote Dependencies
+When there are application dependencies hosted in remote locations like HDFS or HTTP servers, the driver and executor pods need a Kubernetes [init-container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) for downloading the dependencies so the driver and executor containers can use them locally. This requires users to specify the container image for the init-container using the configuration property `spark.kubernetes.initContainer.image`. For example, users simply add the following option to the `spark-submit` command to specify the init-container image:
+
+```
+--conf spark.kubernetes.initContainer.image=<init-container image>
+```
+
+## Secret Management
+In some cases, a Spark application may need to use some credentials, e.g., for accessing data on a secured HDFS cluster or cloud storage that requires users to provide credentials for authentication. This can be done by mounting the credentials into the driver and executor containers using Kubernetes [secrets](https://kubernetes.io/docs/concepts/configuration/secret/). To mount a user-specified secret into the driver container, users can use the configuration property of the form `spark.kubernetes.driver.secrets.[SecretName]=<mount path>`. Similarly, the configuration property of the form `spark.kubernetes.executor.secrets.[SecretName]=<mount path>` can be used to mount a user-specified secret into the executor containers. Note that it is assumed that the secret to be mounted is in the same namespace as that of the driver and executor pods. For example, to mount a secret named `spark-secret` onto the path `/etc/secrets` in both the driver and executor containers, add the following options to the `spark-submit` command:
+
+```
+--conf spark.kubernetes.driver.secrets.spark-secret=/etc/secrets
+--conf spark.kubernetes.executor.secrets.spark-secret=/etc/secrets
+```
+
+Note that if an init-container is used, any secret mounted into the driver container will also be mounted into the init-container of the driver. Similarly, any secret mounted into an executor container will also be mounted into the init-container of the executor.
+
 ## Introspection and Debugging
 
 These are the different ways in which you can investigate a running/completed Spark application, monitor progress, and
@@ -275,7 +292,7 @@ specific to Spark on Kubernetes.
   <td><code>(none)</code></td>
   <td>
     Container image to use for the driver.
-    This is usually of the form `example.com/repo/spark-driver:v1.0.0`.
+    This is usually of the form <code>example.com/repo/spark-driver:v1.0.0</code>.
     This configuration is required and must be provided by the user.
   </td>
 </tr>
@@ -284,7 +301,7 @@ specific to Spark on Kubernetes.
   <td><code>(none)</code></td>
   <td>
     Container image to use for the executors.
-    This is usually of the form `example.com/repo/spark-executor:v1.0.0`.
+    This is usually of the form <code>example.com/repo/spark-executor:v1.0.0</code>.
     This configuration is required and must be provided by the user.
   </td>
 </tr>
@@ -528,51 +545,94 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-   <td><code>spark.kubernetes.driver.limit.cores</code></td>
-   <td>(none)</td>
-   <td>
-     Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the driver pod.
-   </td>
- </tr>
- <tr>
-   <td><code>spark.kubernetes.executor.limit.cores</code></td>
-   <td>(none)</td>
-   <td>
-     Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for each executor pod launched for the Spark Application.
-   </td>
- </tr>
- <tr>
-   <td><code>spark.kubernetes.node.selector.[labelKey]</code></td>
-   <td>(none)</td>
-   <td>
-     Adds to the node selector of the driver pod and executor pods, with key <code>labelKey</code> and the value as the
-     configuration's value. For example, setting <code>spark.kubernetes.node.selector.identifier</code> to <code>myIdentifier</code>
-     will result in the driver pod and executors having a node selector with key <code>identifier</code> and value
-      <code>myIdentifier</code>. Multiple node selector keys can be added by setting multiple configurations with this prefix.
-    </td>
-  </tr>
- <tr>
-   <td><code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
-   <td>(none)</td>
-   <td>
-     Add the environment variable specified by <code>EnvironmentVariableName</code> to
-     the Driver process. The user can specify multiple of these to set multiple environment variables.
-   </td>
- </tr>
-  <tr>
-    <td><code>spark.kubernetes.mountDependencies.jarsDownloadDir</code></td>
-    <td><code>/var/spark-data/spark-jars</code></td>
-    <td>
-      Location to download jars to in the driver and executors.
-      This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
-    </td>
-  </tr>
-   <tr>
-     <td><code>spark.kubernetes.mountDependencies.filesDownloadDir</code></td>
-     <td><code>/var/spark-data/spark-files</code></td>
-     <td>
-       Location to download jars to in the driver and executors.
-       This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
-     </td>
-   </tr>
+  <td><code>spark.kubernetes.driver.limit.cores</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the driver pod.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.limit.cores</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for each executor pod launched for the Spark Application.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.node.selector.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds to the node selector of the driver pod and executor pods, with key <code>labelKey</code> and the value as the
+    configuration's value. For example, setting <code>spark.kubernetes.node.selector.identifier</code> to <code>myIdentifier</code>
+    will result in the driver pod and executors having a node selector with key <code>identifier</code> and value
+     <code>myIdentifier</code>. Multiple node selector keys can be added by setting multiple configurations with this prefix.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to
+    the Driver process. The user can specify multiple of these to set multiple environment variables.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.mountDependencies.jarsDownloadDir</code></td>
+  <td><code>/var/spark-data/spark-jars</code></td>
+  <td>
+    Location to download jars to in the driver and executors.
+    This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.mountDependencies.filesDownloadDir</code></td>
+  <td><code>/var/spark-data/spark-files</code></td>
+  <td>
+    Location to download jars to in the driver and executors.
+    This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.mountDependencies.mountTimeout</code></td>
+  <td>5 minutes</td>
+  <td>
+   Timeout before aborting the attempt to download and unpack dependencies from remote locations when initializing
+   the driver and executor pods.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.initContainer.image</code></td>
+  <td>(none)</td>
+  <td>
+   Container image for the init-container of the driver and executors for downloading dependencies.
+   This is usually of the form <code>example.com/repo/spark-init:v1.0.0</code>.
+   This configuration is optional and must be provided by the user if any non-container local dependency is used and
+    must be downloaded remotely.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.initContainer.maxThreadPoolSize</code></td>
+  <td>5</td>
+  <td>
+   Maximum size of the thread pool in the init-container for downloading remote dependencies.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
+  <td>(none)</td>
+  <td>
+   Add the secret named <code>SecretName</code> to the driver pod on the path specified in the value. For example,
+   <code>spark.kubernetes.driver.secrets.spark-secret=/etc/secrets</code>. Note that if an init-container is used,
+   the secret will also be add to the init-container in the driver pod.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.secrets.[SecretName]</code></td>
+  <td>5</td>
+  <td>
+   Add the secret named <code>SecretName</code> to the executor pod on the path specified in the value. For example,
+   <code>spark.kubernetes.executor.secrets.spark-secret=/etc/secrets</code>. Note that if an init-container is used,
+   the secret will also be add to the init-container in the executor pod.
+  </td>
+</tr>
 </table>
