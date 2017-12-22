@@ -72,7 +72,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
+    ev.isNull = GlobalValue(ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull))
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
