@@ -119,7 +119,11 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
    * Returns whether the expression returns null or false when all inputs are nulls.
    */
   private def canFilterOutNull(e: Expression): Boolean = {
-    if (!e.deterministic || SubqueryExpression.hasCorrelatedSubquery(e)) return false
+    if (!e.deterministic ||
+        SubqueryExpression.hasCorrelatedSubquery(e) ||
+        SubExprUtils.containsOuter(e)) {
+      return false
+    }
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
     val boundE = BindReferences.bindReference(e, attributes)
@@ -146,9 +150,44 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def buildNewJoinType(
+      upperJoin: Join,
+      lowerJoin: Join,
+      otherTableOutput: AttributeSet): JoinType = {
+    val conditions = upperJoin.constraints
+    // Find the predicates reference only on the other table.
+    val localConditions = conditions.filter(_.references.subsetOf(otherTableOutput))
+    // Find the predicates reference either the left table or the join predicates
+    // between the left table and the other table.
+    val leftConditions = conditions.filter(_.references.
+      subsetOf(lowerJoin.left.outputSet ++ otherTableOutput)).diff(localConditions)
+    // Find the predicates reference either the right table or the join predicates
+    // between the right table and the other table.
+    val rightConditions = conditions.filter(_.references.
+      subsetOf(lowerJoin.right.outputSet ++ otherTableOutput)).diff(localConditions)
+
+    val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull)
+    val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
+
+    lowerJoin.joinType match {
+      case RightOuter if leftHasNonNullPredicate => Inner
+      case LeftOuter if rightHasNonNullPredicate => Inner
+      case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate => Inner
+      case FullOuter if leftHasNonNullPredicate => LeftOuter
+      case FullOuter if rightHasNonNullPredicate => RightOuter
+      case o => o
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+    case j @ Join(child @ Join(_, _, RightOuter | LeftOuter | FullOuter, _),
+        subquery, LeftSemiOrAnti(joinType), joinCond) =>
+      val newJoinType = buildNewJoinType(j, child, subquery.outputSet)
+      if (newJoinType == child.joinType) j else {
+        Join(child.copy(joinType = newJoinType), subquery, joinType, joinCond)
+      }
   }
 }

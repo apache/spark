@@ -300,7 +300,7 @@ case class Join(
         left.constraints
           .union(right.constraints)
           .union(splitConjunctivePredicates(condition.get).toSet)
-      case LeftSemi if condition.isDefined =>
+      case LeftSemi | LeftAnti if condition.isDefined =>
         left.constraints
           .union(splitConjunctivePredicates(condition.get).toSet)
       case j: ExistenceJoin =>
