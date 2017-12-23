@@ -1671,9 +1671,9 @@ def from_arrow_type(at):
 
 
 def from_arrow_field(field):
-    import pyarrow as pa
+    import pyarrow.types as types
     at = field.type
-    if type(at) == pa.lib.ListType:  # TODO: check with is_list?
+    if types.is_list(at):
         element_type = from_arrow_type(at.value_type)
         element_nullable = field.nullable
         return ArrayType(element_type, element_nullable)
