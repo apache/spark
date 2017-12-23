@@ -135,7 +135,7 @@ object SparkHiveExample {
     hiveTableDF.coalesce(10).write.mode(SaveMode.Overwrite)
       .partitionBy("key").parquet(hiveExternalTableLocation)
     // $example off:spark_hive$
-    
+
     spark.stop()
   }
 }
