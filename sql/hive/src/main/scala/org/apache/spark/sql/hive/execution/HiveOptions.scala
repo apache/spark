@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
@@ -113,14 +113,13 @@ object HiveOptions {
     "lineDelim" -> "line.delim").map { case (k, v) => k.toLowerCase(Locale.ROOT) -> v }
 
   def getHiveWriteCompression(tableInfo: TableDesc, sqlConf: SQLConf): Option[(String, String)] = {
+    val tableProps = tableInfo.getProperties.asScala.toMap
     tableInfo.getOutputFileFormatClassName.toLowerCase match {
       case formatName if formatName.endsWith("parquetoutputformat") =>
-        val compressionCodec = new ParquetOptions(tableInfo.getProperties.asScala.toMap,
-          sqlConf).compressionCodecClassName
+        val compressionCodec = new ParquetOptions(tableProps, sqlConf).compressionCodecClassName
         Option((ParquetOutputFormat.COMPRESSION, compressionCodec))
       case formatName if formatName.endsWith("orcoutputformat") =>
-        val compressionCodec = new OrcOptions(tableInfo.getProperties.asScala.toMap,
-          sqlConf).compressionCodec
+        val compressionCodec = new OrcOptions(tableProps, sqlConf).compressionCodecClassName
         Option((COMPRESS.getAttribute, compressionCodec))
       case _ => None
     }

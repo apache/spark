@@ -70,9 +70,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
     // Set compression by priority
     HiveOptions.getHiveWriteCompression(fileSinkConf.getTableInfo, sparkSession.sessionState.conf)
-      .foreach{ case (compression, codec) =>
-        hadoopConf.set(compression, codec)
-      }
+      .foreach { case (compression, codec) => hadoopConf.set(compression, codec) }
 
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
