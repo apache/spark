@@ -21,6 +21,7 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 import scala.math.log10
 import scala.reflect.ClassTag
 import scala.util.hashing.byteswap32
