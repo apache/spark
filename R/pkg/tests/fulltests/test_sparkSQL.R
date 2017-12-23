@@ -1418,6 +1418,8 @@ test_that("column functions", {
   c22 <- not(c)
   c23 <- trunc(c, "year") + trunc(c, "yyyy") + trunc(c, "yy") +
     trunc(c, "month") + trunc(c, "mon") + trunc(c, "mm")
+  c24 <- date_trunc("hour", c) + date_trunc("minute", c) + date_trunc("week", c) +
+    date_trunc("quarter", c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1729,6 +1731,7 @@ test_that("date functions on a DataFrame", {
   expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
+  expect_equal(collect(select(df2, month(date_trunc("yyyy", df2$b))))[, 1], c(1, 1))
 
   l3 <- list(list(a = 1000), list(a = -1000))
   df3 <- createDataFrame(l3)
