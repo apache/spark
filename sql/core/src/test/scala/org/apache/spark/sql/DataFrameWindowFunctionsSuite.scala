@@ -557,7 +557,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-21258: complex object in combination with spilling") {
     // Make sure we trigger the spilling path.
-    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "0",
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
       SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "17") {
       val sampleSchema = new StructType().
         add("f0", StringType).
