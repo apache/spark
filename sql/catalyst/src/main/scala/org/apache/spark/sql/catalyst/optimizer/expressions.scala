@@ -21,6 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -645,11 +646,16 @@ object CombineConcats extends Rule[LogicalPlan] {
       stack.pop() match {
         case Concat(children) =>
           stack.pushAll(children.reverse)
+        case Cast(Concat(children), StringType, _) =>
+          stack.pushAll(children.reverse)
         case child =>
           flattened += child
       }
     }
-    Concat(flattened)
+    val newChildren = flattened.map { e =>
+      ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+    }
+    Concat(newChildren)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
