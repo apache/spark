@@ -151,16 +151,13 @@ $ bin/spark-submit \
 ```
 
 ## Secret Management
-In some cases, a Spark application may need to use some credentials, e.g., for accessing data on a secured HDFS cluster
-or cloud storage that requires users to provide credentials for authentication. This can be done by mounting the
-credentials into the driver and executor containers using
-Kubernetes [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/). To mount a user-specified secret into
-the driver container, users can use the configuration property of the form
-`spark.kubernetes.driver.secrets.[SecretName]=<mount path>`. Similarly, the configuration property of the form
-`spark.kubernetes.executor.secrets.[SecretName]=<mount path>` can be used to mount a user-specified secret into the
-executor containers. Note that it is assumed that the secret to be mounted is in the same namespace as that of the driver
-and executor pods. For example, to mount a secret named `spark-secret` onto the path `/etc/secrets` in both the driver
-and executor containers, add the following options to the `spark-submit` command:
+Kubernetes [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) can be used to provide credentials for a
+Spark application to access secured services. To mount a user-specified secret into the driver container, users can use
+the configuration property of the form `spark.kubernetes.driver.secrets.[SecretName]=<mount path>`. Similarly, the
+configuration property of the form `spark.kubernetes.executor.secrets.[SecretName]=<mount path>` can be used to mount a
+user-specified secret into the executor containers. Note that it is assumed that the secret to be mounted is in the same
+namespace as that of the driver and executor pods. For example, to mount a secret named `spark-secret` onto the path
+`/etc/secrets` in both the driver and executor containers, add the following options to the `spark-submit` command:
 
 ```
 --conf spark.kubernetes.driver.secrets.spark-secret=/etc/secrets
@@ -634,10 +631,10 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.mountDependencies.maxThreadPoolSize</code></td>
+  <td><code>spark.kubernetes.mountDependencies.maxSimultaneousDownloads</code></td>
   <td>5</td>
   <td>
-   Maximum size of the thread pool for downloading remote dependencies into the driver and executor pods.
+   Maximum number of remote dependencies to download simultaneously in a driver or executor pod.
   </td>
 </tr>
 <tr>
