@@ -82,7 +82,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
     val coordinator = new EpochCoordinator(
-      writer, reader, query, startEpoch, query.id.toString(), session, env.rpcEnv)
+      writer, reader, query, startEpoch, session, env.rpcEnv)
     val ref = env.rpcEnv.setupEndpoint(endpointName(query.runId.toString()), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
@@ -111,7 +111,6 @@ private[continuous] class EpochCoordinator(
     reader: ContinuousReader,
     query: ContinuousExecution,
     startEpoch: Long,
-    queryId: String,
     session: SparkSession,
     override val rpcEnv: RpcEnv)
   extends ThreadSafeRpcEndpoint with Logging {
@@ -137,8 +136,6 @@ private[continuous] class EpochCoordinator(
     if (thisEpochCommits.size == numWriterPartitions &&
       nextEpochOffsets.size == numReaderPartitions) {
       logDebug(s"Epoch $epoch has received commits from all partitions. Committing globally.")
-      val query = session.streams.get(queryId).asInstanceOf[StreamingQueryWrapper]
-        .streamingQuery.asInstanceOf[ContinuousExecution]
       // Sequencing is important here. We must commit to the writer before recording the commit
       // in the query, or we will end up dropping the commit if we restart in the middle.
       writer.commit(epoch, thisEpochCommits.toArray)
@@ -163,8 +160,6 @@ private[continuous] class EpochCoordinator(
       }
 
     case ReportPartitionOffset(partitionId, epoch, offset) =>
-      val query = session.streams.get(queryId).asInstanceOf[StreamingQueryWrapper]
-        .streamingQuery.asInstanceOf[ContinuousExecution]
       partitionOffsets.put((epoch, partitionId), offset)
       val thisEpochOffsets =
         partitionOffsets.collect { case ((e, _), o) if e == epoch => o }
