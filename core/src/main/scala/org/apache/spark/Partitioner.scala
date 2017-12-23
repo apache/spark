@@ -83,7 +83,8 @@ object Partitioner {
    * less than and within a single order of magnitude of the max number of upstream partitions;
    * otherwise, returns false
    */
-  private def isEligiblePartitioner(hasMaxPartitioner: Option[RDD[_]], rdds: Seq[RDD[_]]): Boolean = {
+  private def isEligiblePartitioner(hasMaxPartitioner: Option[RDD[_]],
+                                    rdds: Seq[RDD[_]]): Boolean = {
     if(hasMaxPartitioner.isEmpty){
       return false
     }
