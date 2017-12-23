@@ -59,15 +59,15 @@ object SQLDataSourceExample {
     usersDF.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
     // $example off:write_partitioning$
     // $example on:write_partition_and_bucket$
-    peopleDF
+    usersDF
       .write
       .partitionBy("favorite_color")
       .bucketBy(42, "name")
-      .saveAsTable("people_partitioned_bucketed")
+      .saveAsTable("users_partitioned_bucketed")
     // $example off:write_partition_and_bucket$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed")
-    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
+    spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed")
   }
 
   private def runBasicParquetExample(spark: SparkSession): Unit = {
