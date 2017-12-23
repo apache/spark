@@ -22,7 +22,7 @@ FROM openjdk:8-alpine
 # If this docker file is being used in the context of building your images from a Spark
 # distribution, the docker build command should be invoked from the top level directory
 # of the Spark distribution. E.g.:
-# docker build -t spark-base:latest -f dockerfiles/spark-base/Dockerfile .
+# docker build -t spark-base:latest -f kubernetes/dockerfiles/spark-base/Dockerfile .
 
 RUN set -ex && \
     apk upgrade --no-cache && \
@@ -38,7 +38,7 @@ COPY jars /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY conf /opt/spark/conf
-COPY dockerfiles/spark-base/entrypoint.sh /opt/
+COPY kubernetes/dockerfiles/spark-base/entrypoint.sh /opt/
 
 ENV SPARK_HOME /opt/spark
 

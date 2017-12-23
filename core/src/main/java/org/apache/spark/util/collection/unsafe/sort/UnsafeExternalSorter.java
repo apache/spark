@@ -25,6 +25,7 @@ import java.util.Queue;
 import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -349,7 +350,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         // The pointer array is too big to fix in a single page, spill.
         spill();
         return;
-      } catch (OutOfMemoryError e) {
+      } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
         if (!inMemSorter.hasSpaceForAnotherRecord()) {
           logger.error("Unable to grow the pointer array");

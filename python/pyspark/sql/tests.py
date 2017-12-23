@@ -53,7 +53,8 @@ _have_old_pandas = False
 try:
     import pandas
     try:
-        import pandas.api
+        from pyspark.sql.utils import require_minimum_pandas_version
+        require_minimum_pandas_version()
         _have_pandas = True
     except:
         _have_old_pandas = True
@@ -2600,7 +2601,7 @@ class SQLTests(ReusedSQLTestCase):
     @unittest.skipIf(not _have_old_pandas, "Old Pandas not installed")
     def test_to_pandas_old(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ImportError, 'Pandas \(.*\) must be installed'):
+            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
                 self._to_pandas()
 
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
@@ -2643,7 +2644,7 @@ class SQLTests(ReusedSQLTestCase):
         pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
                             "d": [pd.Timestamp.now().date()]})
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ImportError, 'Pandas \(.*\) must be installed'):
+            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
                 self.spark.createDataFrame(pdf)
 
 
@@ -3339,10 +3340,11 @@ class ArrowTests(ReusedSQLTestCase):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
     def test_createDataFrame_does_not_modify_input(self):
+        import pandas as pd
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
         # Use a nanosecond value to make sure it is not truncated
-        pdf.ix[0, '7_timestamp_t'] = 1
+        pdf.ix[0, '7_timestamp_t'] = pd.Timestamp(1)
         # Integers with nulls will get NaNs filled with 0 and will be casted
         pdf.ix[1, '2_int_t'] = None
         pdf_copy = pdf.copy(deep=True)
@@ -3356,6 +3358,7 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEquals(self.schema, schema_rt)
 
 
+@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class PandasUDFTests(ReusedSQLTestCase):
     def test_pandas_udf_basic(self):
         from pyspark.rdd import PythonEvalType
@@ -3671,9 +3674,9 @@ class VectorizedUDFTests(ReusedSQLTestCase):
     def test_vectorized_udf_wrong_return_type(self):
         from pyspark.sql.functions import pandas_udf, col
         df = self.spark.range(10)
-        f = pandas_udf(lambda x: x * 1.0, StringType())
+        f = pandas_udf(lambda x: x * 1.0, ArrayType(LongType()))
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Invalid.*type'):
+            with self.assertRaisesRegexp(Exception, 'Unsupported.*type.*conversion'):
                 df.select(f(col('id'))).collect()
 
     def test_vectorized_udf_return_scalar(self):
@@ -3974,12 +3977,12 @@ class GroupbyApplyTests(ReusedSQLTestCase):
 
         foo = pandas_udf(
             lambda pdf: pdf,
-            'id long, v string',
+            'id long, v array<int>',
             PandasUDFType.GROUP_MAP
         )
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Invalid.*type'):
+            with self.assertRaisesRegexp(Exception, 'Unsupported.*type.*conversion'):
                 df.groupby('id').apply(foo).sort('id').toPandas()
 
     def test_wrong_args(self):

@@ -23,7 +23,7 @@ package org.apache.spark.sql.sources.v2.reader;
  * restart checkpoints. Sources should provide an Offset implementation which they can use to
  * reconstruct the stream position where the offset was taken.
  */
-public abstract class Offset {
+public abstract class Offset extends org.apache.spark.sql.execution.streaming.Offset {
     /**
      * A JSON-serialized representation of an Offset that is
      * used for saving offsets to the offset log.
@@ -41,8 +41,8 @@ public abstract class Offset {
      */
     @Override
     public boolean equals(Object obj) {
-        if (obj instanceof Offset) {
-            return this.json().equals(((Offset) obj).json());
+        if (obj instanceof org.apache.spark.sql.execution.streaming.Offset) {
+            return this.json().equals(((org.apache.spark.sql.execution.streaming.Offset) obj).json());
         } else {
             return false;
         }

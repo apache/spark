@@ -159,7 +159,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22705: Coalesce should use less global variables") {
     val ctx = new CodegenContext()
     Coalesce(Seq(Literal("a"), Literal("b"))).genCode(ctx)
-    assert(ctx.mutableStates.size == 1)
+    assert(ctx.inlinedMutableStates.size == 1)
   }
 
   test("AtLeastNNonNulls should not throw 64kb exception") {

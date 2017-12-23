@@ -65,4 +65,10 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reade
     default boolean needsReconfiguration() {
         return false;
     }
+
+    /**
+     * Informs the source that Spark has completed processing all data for offsets less than or
+     * equal to `end` and will only request offsets greater than `end` in the future.
+     */
+    void commit(Offset end);
 }

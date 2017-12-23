@@ -32,7 +32,6 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
-import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.{ProcessingTime => DeprecatedProcessingTime, _}
 import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.sql.types._

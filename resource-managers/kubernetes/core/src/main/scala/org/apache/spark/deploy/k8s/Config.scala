@@ -30,21 +30,20 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("default")
 
-  val DRIVER_DOCKER_IMAGE =
-    ConfigBuilder("spark.kubernetes.driver.docker.image")
-      .doc("Docker image to use for the driver. Specify this using the standard Docker tag format.")
+  val DRIVER_CONTAINER_IMAGE =
+    ConfigBuilder("spark.kubernetes.driver.container.image")
+      .doc("Container image to use for the driver.")
       .stringConf
       .createOptional
 
-  val EXECUTOR_DOCKER_IMAGE =
-    ConfigBuilder("spark.kubernetes.executor.docker.image")
-      .doc("Docker image to use for the executors. Specify this using the standard Docker tag " +
-        "format.")
+  val EXECUTOR_CONTAINER_IMAGE =
+    ConfigBuilder("spark.kubernetes.executor.container.image")
+      .doc("Container image to use for the executors.")
       .stringConf
       .createOptional
 
-  val DOCKER_IMAGE_PULL_POLICY =
-    ConfigBuilder("spark.kubernetes.docker.image.pullPolicy")
+  val CONTAINER_IMAGE_PULL_POLICY =
+    ConfigBuilder("spark.kubernetes.container.image.pullPolicy")
       .doc("Kubernetes image pull policy. Valid values are Always, Never, and IfNotPresent.")
       .stringConf
       .checkValues(Set("Always", "Never", "IfNotPresent"))
@@ -103,10 +102,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_ALLOCATION_BATCH_DELAY =
     ConfigBuilder("spark.kubernetes.allocation.batch.delay")
-      .doc("Number of seconds to wait between each round of executor allocation.")
-      .longConf
-      .checkValue(value => value > 0, "Allocation batch delay should be a positive integer")
-      .createWithDefault(1)
+      .doc("Time to wait between each round of executor allocation.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
+      .createWithDefaultString("1s")
 
   val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
     ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")

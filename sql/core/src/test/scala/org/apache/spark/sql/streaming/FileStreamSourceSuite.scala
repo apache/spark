@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.ExistsThrowsExceptionFileSystem._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSQLContext
@@ -84,6 +83,28 @@ abstract class FileStreamSourceTest
       src.mkdirs()
       require(stringToFile(tempFile, content).renameTo(finalFile))
       logInfo(s"Written text '$content' to file $finalFile")
+    }
+  }
+
+  case class AddOrcFileData(data: DataFrame, src: File, tmp: File) extends AddFileData {
+    override def addData(source: FileStreamSource): Unit = {
+      AddOrcFileData.writeToFile(data, src, tmp)
+    }
+  }
+
+  object AddOrcFileData {
+    def apply(seq: Seq[String], src: File, tmp: File): AddOrcFileData = {
+      AddOrcFileData(seq.toDS().toDF(), src, tmp)
+    }
+
+    /** Write orc files in a temp dir, and move the individual files to the 'src' dir */
+    def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
+      val tmpDir = Utils.tempFileWith(new File(tmp, "orc"))
+      df.write.orc(tmpDir.getCanonicalPath)
+      src.mkdirs()
+      tmpDir.listFiles().foreach { f =>
+        f.renameTo(new File(src, s"${f.getName}"))
+      }
     }
   }
 
@@ -245,6 +266,42 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val userSchema = new StructType().add("userColumn", StringType)
       val schema = createFileStreamSourceAndGetSchema(
         format = Some("text"), path = Some(src.getCanonicalPath), schema = Some(userSchema))
+      assert(schema === userSchema)
+    }
+  }
+
+  // =============== ORC file stream schema tests ================
+
+  test("FileStreamSource schema: orc, existing files, no schema") {
+    withTempDir { src =>
+      Seq("a", "b", "c").toDS().as("userColumn").toDF().write
+        .mode(org.apache.spark.sql.SaveMode.Overwrite)
+        .orc(src.getCanonicalPath)
+
+      // Without schema inference, should throw error
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "false") {
+        intercept[IllegalArgumentException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("orc"), path = Some(src.getCanonicalPath), schema = None)
+        }
+      }
+
+      // With schema inference, should infer correct schema
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        val schema = createFileStreamSourceAndGetSchema(
+          format = Some("orc"), path = Some(src.getCanonicalPath), schema = None)
+        assert(schema === new StructType().add("value", StringType))
+      }
+    }
+  }
+
+  test("FileStreamSource schema: orc, existing files, schema") {
+    withTempPath { src =>
+      Seq("a", "b", "c").toDS().as("oldUserColumn").toDF()
+        .write.orc(new File(src, "1").getCanonicalPath)
+      val userSchema = new StructType().add("userColumn", StringType)
+      val schema = createFileStreamSourceAndGetSchema(
+        format = Some("orc"), path = Some(src.getCanonicalPath), schema = Some(userSchema))
       assert(schema === userSchema)
     }
   }
@@ -504,6 +561,59 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           // Should ignore rows that do not have the necessary k column
           AddTextFileData("{'v': 'value4'}", src, tmp),
           CheckAnswer("value0", "value1", "value2", "value3", null))
+      }
+    }
+  }
+
+  // =============== ORC file stream tests ================
+
+  test("read from orc files") {
+    withTempDirs { case (src, tmp) =>
+      val fileStream = createFileStream("orc", src.getCanonicalPath, Some(valueSchema))
+      val filtered = fileStream.filter($"value" contains "keep")
+
+      testStream(filtered)(
+        AddOrcFileData(Seq("drop1", "keep2", "keep3"), src, tmp),
+        CheckAnswer("keep2", "keep3"),
+        StopStream,
+        AddOrcFileData(Seq("drop4", "keep5", "keep6"), src, tmp),
+        StartStream(),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+        AddOrcFileData(Seq("drop7", "keep8", "keep9"), src, tmp),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+      )
+    }
+  }
+
+  test("read from orc files with changing schema") {
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+
+        // Add a file so that we can infer its schema
+        AddOrcFileData.writeToFile(Seq("value0").toDF("k"), src, tmp)
+
+        val fileStream = createFileStream("orc", src.getCanonicalPath)
+
+        // FileStreamSource should infer the column "k"
+        assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
+
+        // After creating DF and before starting stream, add data with different schema
+        // Should not affect the inferred schema any more
+        AddOrcFileData.writeToFile(Seq(("value1", 0)).toDF("k", "v"), src, tmp)
+
+        testStream(fileStream)(
+          // Should not pick up column v in the file added before start
+          AddOrcFileData(Seq("value2").toDF("k"), src, tmp),
+          CheckAnswer("value0", "value1", "value2"),
+
+          // Should read data in column k, and ignore v
+          AddOrcFileData(Seq(("value3", 1)).toDF("k", "v"), src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3"),
+
+          // Should ignore rows that do not have the necessary k column
+          AddOrcFileData(Seq("value5").toDF("v"), src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3", null)
+        )
       }
     }
   }
