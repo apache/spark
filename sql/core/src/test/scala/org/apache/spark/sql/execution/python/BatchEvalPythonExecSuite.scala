@@ -24,6 +24,7 @@ import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.BooleanType
 
@@ -75,13 +76,30 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     assert(qualifiedPlanNodes.size == 2)
   }
 
-  test("Python UDF: no push down on predicates starting from the first non-deterministic") {
-    val df = Seq(("Hello", 4)).toDF("a", "b")
-      .where("dummyPythonUDF(a) and rand() > 0.3 and b > 4")
-    val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
-      case f @ FilterExec(And(_: And, _: GreaterThan), InputAdapter(_: BatchEvalPythonExec)) => f
+  test("Python UDF: push down on deterministic predicates after the first non-deterministic") {
+    Seq(true, false).foreach { outOfOrderPredicateEvaluationEnabled =>
+      val df = Seq(("Hello", 4)).toDF("a", "b")
+        .where("dummyPythonUDF(a) and rand() > 0.3 and b > 4")
+
+      withSQLConf(SQLConf.OUT_OF_ORDER_PREDICATE_EVALUATION_ENABLED.key ->
+          outOfOrderPredicateEvaluationEnabled.toString) {
+        if (outOfOrderPredicateEvaluationEnabled) {
+          val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
+            case f @ FilterExec(
+                And(_: AttributeReference, _: GreaterThan),
+                InputAdapter(_: BatchEvalPythonExec)) => f
+            case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
+          }
+          assert(qualifiedPlanNodes.size == 2)
+        } else {
+          val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
+            case f @ FilterExec(
+                And(_: And, _: GreaterThan), InputAdapter(_: BatchEvalPythonExec)) => f
+          }
+          assert(qualifiedPlanNodes.size == 1)
+        }
+      }
     }
-    assert(qualifiedPlanNodes.size == 1)
   }
 
   test("Python UDF refers to the attributes from more than one child") {

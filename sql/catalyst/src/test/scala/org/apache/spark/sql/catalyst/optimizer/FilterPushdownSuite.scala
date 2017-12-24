@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -828,15 +829,26 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = Union(Seq(testRelation, testRelation2))
       .where('a === 2L && 'b + Rand(10).as("rnd") === 3 && 'c > 5L)
 
-    val optimized = Optimize.execute(originalQuery.analyze)
+    Seq(true, false).foreach { outOfOrderPredicateEvaluationEnabled =>
+      val correctAnswer =
+        if (outOfOrderPredicateEvaluationEnabled) {
+          Union(Seq(
+            testRelation.where('a === 2L && 'c > 5L),
+            testRelation2.where('d === 2L && 'f > 5L)))
+            .where('b + Rand(10).as("rnd") === 3)
+        } else {
+          Union(Seq(
+            testRelation.where('a === 2L),
+            testRelation2.where('d === 2L)))
+            .where('b + Rand(10).as("rnd") === 3 && 'c > 5L)
+        }
 
-    val correctAnswer = Union(Seq(
-      testRelation.where('a === 2L),
-      testRelation2.where('d === 2L)))
-      .where('b + Rand(10).as("rnd") === 3 && 'c > 5L)
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
+      withSQLConf(SQLConf.OUT_OF_ORDER_PREDICATE_EVALUATION_ENABLED.key ->
+          outOfOrderPredicateEvaluationEnabled.toString) {
+        val optimized = Optimize.execute(originalQuery.analyze)
+        comparePlans(optimized, correctAnswer.analyze)
+      }
+    }
   }
 
   test("expand") {
@@ -1138,13 +1150,25 @@ class FilterPushdownSuite extends PlanTest {
     // by the optimizer and others are not.
     val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
       "x.a".attr === Rand(10) && "y.b".attr === 5))
-    val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
-        condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
 
     // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
     // TODO support nondeterministic expressions in join condition.
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
-      checkAnalysis = false)
+
+    Seq(true, false).foreach { outOfOrderPredicateEvaluationEnabled =>
+      val correctAnswer = if (outOfOrderPredicateEvaluationEnabled) {
+        x.where("x.a".attr === 5).join(y.where("y.a".attr === 5 && "y.b".attr === 5),
+          condition = Some("x.a".attr === Rand(10)))
+      } else {
+        x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
+          condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
+      }
+
+      withSQLConf(SQLConf.OUT_OF_ORDER_PREDICATE_EVALUATION_ENABLED.key ->
+          outOfOrderPredicateEvaluationEnabled.toString) {
+        comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
+          checkAnalysis = false)
+      }
+    }
   }
 
   test("watermark pushdown: no pushdown on watermark attribute") {

@@ -18,11 +18,10 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.{LeafExecNode, LocalTableScanExec, SparkPlan}
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.JoinConditionSplitPredicates
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
@@ -95,20 +94,33 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   }
 
   test("conjuncts after nondeterministic") {
-    // All conjuncts after a nondeterministic conjunct shouldn't be split because they don't
-    // commute across it.
     val predicate =
-      (rand() > lit(0)
+      (rand(9) > lit(0)
         && leftColA > leftColB
         && rightColC > rightColD
         && leftColA === rightColC
         && lit(1) === lit(1)).expr
-    val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    assert(split.leftSideOnly.isEmpty)
-    assert(split.rightSideOnly.isEmpty)
-    assert(split.bothSides.contains(predicate))
-    assert(split.full.contains(predicate))
+    Seq(true, false).foreach { outOfOrderPredicateEvaluationEnabled =>
+      withSQLConf(SQLConf.OUT_OF_ORDER_PREDICATE_EVALUATION_ENABLED.key ->
+        outOfOrderPredicateEvaluationEnabled.toString) {
+        if (outOfOrderPredicateEvaluationEnabled) {
+          val split = JoinConditionSplitPredicates(Some(predicate), left, right)
+
+          assert(split.leftSideOnly.contains((leftColA > leftColB && lit(1) === lit(1)).expr))
+          assert(split.rightSideOnly.contains((rightColC > rightColD && lit(1) === lit(1)).expr))
+          assert(split.bothSides.contains((leftColA === rightColC && rand(9) > lit(0)).expr))
+          assert(split.full.contains(predicate))
+        } else {
+          val split = JoinConditionSplitPredicates(Some(predicate), left, right)
+
+          assert(split.leftSideOnly.isEmpty)
+          assert(split.rightSideOnly.isEmpty)
+          assert(split.bothSides.contains(predicate))
+          assert(split.full.contains(predicate))
+        }
+      }
+    }
   }
 
 

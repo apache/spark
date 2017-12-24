@@ -21,9 +21,10 @@ import scala.collection.immutable.TreeSet
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, Predicate => BasePredicate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -47,6 +48,15 @@ trait Predicate extends Expression {
 
 
 trait PredicateHelper {
+
+  protected def partitionByDeterminism(predicates: Seq[Expression]) = {
+    if (SQLConf.get.outOfOrderPredicateEvaluationEnabled) {
+      predicates.partition(_.deterministic)
+    } else {
+      predicates.span(_.deterministic)
+    }
+  }
+
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
