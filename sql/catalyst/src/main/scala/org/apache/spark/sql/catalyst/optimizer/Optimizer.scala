@@ -444,11 +444,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
-    case g: Generate if g.requiredChildOutput.isEmpty && (g.child.outputSet -- g.references).nonEmpty =>
+    case g: Generate
+      if g.requiredChildOutput.isEmpty && (g.child.outputSet -- g.references).nonEmpty =>
       g.copy(child = prunedChild(g.child, g.references))
 
     // Sync Generate's requiredChildOutput with the actual needed outputs
-    case p @ Project(_, g: Generate) if (AttributeSet(g.requiredChildOutput) -- (p.references--g.producedAttributes)).nonEmpty =>
+    case p @ Project(_, g: Generate)
+      if (AttributeSet(g.requiredChildOutput) -- (p.references--g.producedAttributes)).nonEmpty =>
       p.copy(child = g.copy(requiredChildOutput = (p.references--g.producedAttributes).toSeq))
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
