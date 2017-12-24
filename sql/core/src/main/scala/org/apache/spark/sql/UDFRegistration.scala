@@ -42,8 +42,6 @@ import org.apache.spark.util.Utils
  *   spark.udf
  * }}}
  *
- * @note The user-defined functions must be deterministic.
- *
  * @since 1.3.0
  */
 @InterfaceStability.Stable
