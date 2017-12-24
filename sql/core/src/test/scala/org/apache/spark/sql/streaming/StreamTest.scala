@@ -33,13 +33,15 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
+import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -169,6 +171,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
 
+  case class CheckAnswerRowsContains(expectedAnswer: Seq[Row], lastOnly: Boolean = false)
+    extends StreamAction with StreamMustBeRunning {
+    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
+    private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
+  }
+
   case class CheckAnswerRowsByFunc(checkFunction: Row => Unit, lastOnly: Boolean)
       extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"$operatorName: ${checkFunction.toString()}"
@@ -238,6 +246,25 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       AssertOnQuery(query => { func(query); true })
   }
 
+  object AwaitEpoch {
+    def apply(epoch: Long): AssertOnQuery =
+      Execute {
+        case s: ContinuousExecution => s.awaitEpoch(epoch)
+        case _ => throw new IllegalStateException("microbatch cannot await epoch")
+      }
+  }
+
+  object IncrementEpoch {
+    def apply(): AssertOnQuery =
+      Execute {
+        case s: ContinuousExecution =>
+          val newEpoch = EpochCoordinatorRef.get(s.runId.toString, SparkEnv.get)
+            .askSync[Long](IncrementAndGetEpoch)
+          s.awaitEpoch(newEpoch - 1)
+        case _ => throw new IllegalStateException("microbatch cannot increment epoch")
+      }
+  }
+
   /**
    * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
@@ -247,7 +274,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
    */
   def testStream(
       _stream: Dataset[_],
-      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = synchronized {
+      outputMode: OutputMode = OutputMode.Append,
+      useV2Sink: Boolean = false)(actions: StreamAction*): Unit = synchronized {
     import org.apache.spark.sql.streaming.util.StreamManualClock
 
     // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
@@ -260,7 +288,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
-    val sink = new MemorySink(stream.schema, outputMode)
+    val sink = if (useV2Sink) new MemorySinkV2 else new MemorySink(stream.schema, outputMode)
     val resetConfValues = mutable.Map[String, Option[String]]()
 
     @volatile
@@ -309,7 +337,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         ""
       }
 
-    def testState =
+    def testState = {
+      val sinkDebugString = sink match {
+        case s: MemorySink => s.toDebugString
+        case s: MemorySinkV2 => s.toDebugString
+      }
       s"""
          |== Progress ==
          |$testActions
@@ -322,12 +354,13 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
          |${if (streamThreadDeathCause != null) stackTraceToString(streamThreadDeathCause) else ""}
          |
          |== Sink ==
-         |${sink.toDebugString}
+         |$sinkDebugString
          |
          |
          |== Plan ==
          |${if (currentStream != null) currentStream.lastExecution else ""}
          """.stripMargin
+    }
 
     def verify(condition: => Boolean, message: String): Unit = {
       if (!condition) {
@@ -384,7 +417,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         }
       }
 
-      try if (lastOnly) sink.latestBatchData else sink.allData catch {
+      val (latestBatchData, allData) = sink match {
+        case s: MemorySink => (s.latestBatchData, s.allData)
+        case s: MemorySinkV2 => (s.latestBatchData, s.allData)
+      }
+      try if (lastOnly) latestBatchData else allData catch {
         case e: Exception =>
           failTest("Exception while getting data from sink", e)
       }
@@ -424,6 +461,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                   None,
                   Some(metadataRoot),
                   stream,
+                  Map(),
                   sink,
                   outputMode,
                   trigger = trigger,
@@ -592,6 +630,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
             val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
             QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
+              error => failTest(error)
+            }
+
+          case CheckAnswerRowsContains(expectedAnswer, lastOnly) =>
+            val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+            QueryTest.includesRows(expectedAnswer, sparkAnswer).foreach {
               error => failTest(error)
             }
 

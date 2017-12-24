@@ -1046,6 +1046,11 @@ setGeneric("date_sub", function(y, x) { standardGeneric("date_sub") })
 #' @rdname column_datetime_functions
 #' @export
 #' @name NULL
+setGeneric("date_trunc", function(format, x) { standardGeneric("date_trunc") })
+
+#' @rdname column_datetime_functions
+#' @export
+#' @name NULL
 setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 
 #' @rdname column_datetime_functions

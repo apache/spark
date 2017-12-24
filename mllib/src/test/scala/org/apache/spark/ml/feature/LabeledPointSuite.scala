@@ -15,18 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.ml.feature
 
-import org.apache.spark.sql.sources.v2.reader.Offset
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.serializer.KryoSerializer
 
+class LabeledPointSuite extends SparkFunSuite {
+  test("Kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
 
-/**
- * Used when loading a JSON serialized offset from external storage.
- * We are currently not responsible for converting JSON serialized
- * data into an internal (i.e., object) representation. Sources should
- * define a factory method in their source Offset companion objects
- * that accepts a [[SerializedOffset]] for doing the conversion.
- */
-case class SerializedOffset(override val json: String) extends Offset
+    val ser = new KryoSerializer(conf).newInstance()
 
+    val labeled1 = LabeledPoint(1.0, Vectors.dense(Array(1.0, 2.0)))
+    val labeled2 = LabeledPoint(1.0, Vectors.sparse(10, Array(5, 7), Array(1.0, 2.0)))
 
+    Seq(labeled1, labeled2).foreach { l =>
+      val l2 = ser.deserialize[LabeledPoint](ser.serialize(l))
+      assert(l === l2)
+    }
+  }
+}

@@ -72,10 +72,10 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
       sparkConf,
       KUBERNETES_NODE_SELECTOR_PREFIX)
 
-  private val executorDockerImage = sparkConf
-    .get(EXECUTOR_DOCKER_IMAGE)
-    .getOrElse(throw new SparkException("Must specify the executor Docker image"))
-  private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
+  private val executorContainerImage = sparkConf
+    .get(EXECUTOR_CONTAINER_IMAGE)
+    .getOrElse(throw new SparkException("Must specify the executor container image"))
+  private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
   private val blockManagerPort = sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
@@ -166,8 +166,8 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
 
     val executorContainer = new ContainerBuilder()
       .withName("executor")
-      .withImage(executorDockerImage)
-      .withImagePullPolicy(dockerImagePullPolicy)
+      .withImage(executorContainerImage)
+      .withImagePullPolicy(imagePullPolicy)
       .withNewResources()
         .addToRequests("memory", executorMemoryQuantity)
         .addToLimits("memory", executorMemoryLimitQuantity)

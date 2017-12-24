@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sources
 
 import java.util.Optional
 
@@ -27,6 +27,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
@@ -59,7 +60,9 @@ class RateStreamV2Reader(options: DataSourceV2Options)
   private var start: RateStreamOffset = _
   private var end: RateStreamOffset = _
 
-  override def setOffsetRange(start: Optional[Offset], end: Optional[Offset]): Unit = {
+  override def setOffsetRange(
+      start: Optional[Offset],
+      end: Optional[Offset]): Unit = {
     this.start = start.orElse(
       RateStreamSourceV2.createInitialOffset(numPartitions, creationTimeMs))
       .asInstanceOf[RateStreamOffset]
@@ -68,7 +71,7 @@ class RateStreamV2Reader(options: DataSourceV2Options)
       val currentTime = clock.getTimeMillis()
       RateStreamOffset(
         this.start.partitionToValueAndRunTimeMs.map {
-          case startOffset @ (part, (currentVal, currentReadTime)) =>
+          case startOffset @ (part, ValueRunTimeMsPair(currentVal, currentReadTime)) =>
             // Calculate the number of rows we should advance in this partition (based on the
             // current time), and output a corresponding offset.
             val readInterval = currentTime - currentReadTime
@@ -76,9 +79,9 @@ class RateStreamV2Reader(options: DataSourceV2Options)
             if (numNewRows <= 0) {
               startOffset
             } else {
-              (part,
-                (currentVal + (numNewRows * numPartitions),
-                currentReadTime + (numNewRows * msPerPartitionBetweenRows)))
+              (part, ValueRunTimeMsPair(
+                  currentVal + (numNewRows * numPartitions),
+                  currentReadTime + (numNewRows * msPerPartitionBetweenRows)))
             }
         }
       )
@@ -95,15 +98,15 @@ class RateStreamV2Reader(options: DataSourceV2Options)
   }
 
   override def deserializeOffset(json: String): Offset = {
-    RateStreamOffset(Serialization.read[Map[Int, (Long, Long)]](json))
+    RateStreamOffset(Serialization.read[Map[Int, ValueRunTimeMsPair]](json))
   }
 
   override def createReadTasks(): java.util.List[ReadTask[Row]] = {
     val startMap = start.partitionToValueAndRunTimeMs
     val endMap = end.partitionToValueAndRunTimeMs
     endMap.keys.toSeq.map { part =>
-      val (endVal, _) = endMap(part)
-      val (startVal, startTimeMs) = startMap(part)
+      val ValueRunTimeMsPair(endVal, _) = endMap(part)
+      val ValueRunTimeMsPair(startVal, startTimeMs) = startMap(part)
 
       val packedRows = mutable.ListBuffer[(Long, Long)]()
       var outVal = startVal + numPartitions
@@ -155,7 +158,8 @@ object RateStreamSourceV2 {
         // by the increment that will later be applied. The first row output in each
         // partition will have a value equal to the partition index.
         (i,
-          ((i - numPartitions).toLong,
+          ValueRunTimeMsPair(
+            (i - numPartitions).toLong,
             creationTimeMs))
       }.toMap)
   }

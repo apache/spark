@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 
 class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {

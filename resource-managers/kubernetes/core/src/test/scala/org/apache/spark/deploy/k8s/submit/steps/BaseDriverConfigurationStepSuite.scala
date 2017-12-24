@@ -30,7 +30,7 @@ class BaseDriverConfigurationStepSuite extends SparkFunSuite {
   private val APP_ID = "spark-app-id"
   private val RESOURCE_NAME_PREFIX = "spark"
   private val DRIVER_LABELS = Map("labelkey" -> "labelvalue")
-  private val DOCKER_IMAGE_PULL_POLICY = "IfNotPresent"
+  private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val APP_NAME = "spark-test"
   private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
   private val APP_ARGS = Array("arg1", "arg2", "arg 3")
@@ -47,7 +47,7 @@ class BaseDriverConfigurationStepSuite extends SparkFunSuite {
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
       .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "256M")
       .set(org.apache.spark.internal.config.DRIVER_MEMORY_OVERHEAD, 200L)
-      .set(DRIVER_DOCKER_IMAGE, "spark-driver:latest")
+      .set(DRIVER_CONTAINER_IMAGE, "spark-driver:latest")
       .set(s"$KUBERNETES_DRIVER_ANNOTATION_PREFIX$CUSTOM_ANNOTATION_KEY", CUSTOM_ANNOTATION_VALUE)
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY1", "customDriverEnv1")
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY2", "customDriverEnv2")
@@ -56,7 +56,7 @@ class BaseDriverConfigurationStepSuite extends SparkFunSuite {
       APP_ID,
       RESOURCE_NAME_PREFIX,
       DRIVER_LABELS,
-      DOCKER_IMAGE_PULL_POLICY,
+      CONTAINER_IMAGE_PULL_POLICY,
       APP_NAME,
       MAIN_CLASS,
       APP_ARGS,
@@ -71,7 +71,7 @@ class BaseDriverConfigurationStepSuite extends SparkFunSuite {
 
     assert(preparedDriverSpec.driverContainer.getName === DRIVER_CONTAINER_NAME)
     assert(preparedDriverSpec.driverContainer.getImage === "spark-driver:latest")
-    assert(preparedDriverSpec.driverContainer.getImagePullPolicy === DOCKER_IMAGE_PULL_POLICY)
+    assert(preparedDriverSpec.driverContainer.getImagePullPolicy === CONTAINER_IMAGE_PULL_POLICY)
 
     assert(preparedDriverSpec.driverContainer.getEnv.size === 7)
     val envs = preparedDriverSpec.driverContainer
