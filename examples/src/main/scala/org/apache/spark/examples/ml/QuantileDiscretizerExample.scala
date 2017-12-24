@@ -31,12 +31,11 @@ object QuantileDiscretizerExample {
 
     // $example on$
     val data = Array((0, 18.0), (1, 19.0), (2, 8.0), (3, 5.0), (4, 2.2))
-    val df = spark.createDataFrame(data).toDF("id", "hour")
+    val df = spark.createDataFrame(data).toDF("id", "hour").repartition(1)
     // $example off$
     // Output of QuantileDiscretizer for such small datasets can depend on the number of
     // partitions. Here we force a single partition to ensure consistent results.
     // Note this is not necessary for normal use cases
-        .repartition(1)
 
     // $example on$
     val discretizer = new QuantileDiscretizer()
@@ -45,7 +44,7 @@ object QuantileDiscretizerExample {
       .setNumBuckets(3)
 
     val result = discretizer.fit(df).transform(df)
-    result.show()
+    result.show(false)
     // $example off$
 
     spark.stop()
