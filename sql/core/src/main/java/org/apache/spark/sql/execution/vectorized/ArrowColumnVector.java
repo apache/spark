@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.execution.vectorized;
 
+import com.google.common.collect.ImmutableList;
+import io.netty.buffer.ArrowBuf;
+import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
+import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.spark.sql.execution.arrow.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -587,6 +591,24 @@ public final class ArrowColumnVector extends ColumnVector {
     ArrayAccessor(ListVector vector) {
       super(vector);
       this.accessor = vector;
+      // Workaround if vector has all non-null values, see ARROW-1948
+      int valueCount = vector.getValueCount();
+      if (valueCount > 0 && vector.getValidityBuffer().capacity() == 0) {
+        BufferAllocator allocator = vector.getAllocator();
+        ArrowBuf newBuffer = allocator.buffer(BitVectorHelper.getValidityBufferSize(valueCount));
+        int fullBytesCount = valueCount / 8;
+        for (int i = 0; i < fullBytesCount; ++i) {
+          newBuffer.setByte(i, 0xFF);
+        }
+        int remainder = valueCount % 8;
+        if (remainder > 0) {
+          byte bitMask = (byte) (0xFFL >>> ((8 - remainder) & 7));
+          newBuffer.setByte(fullBytesCount, bitMask);
+        }
+        vector.loadFieldBuffers(new ArrowFieldNode(valueCount, 0),
+          ImmutableList.of(newBuffer, vector.getOffsetBuffer()));
+        newBuffer.release();  // loadFieldBuffers will retain a reference count to newBuffer
+      }
     }
 
     @Override
