@@ -307,6 +307,7 @@ def get_hadoop_profiles(hadoop_version):
     sbt_maven_hadoop_profiles = {
         "hadoop2.6": ["-Phadoop-2.6"],
         "hadoop2.7": ["-Phadoop-2.7"],
+        "hadoop2.8": ["-Phadoop-2.8"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
