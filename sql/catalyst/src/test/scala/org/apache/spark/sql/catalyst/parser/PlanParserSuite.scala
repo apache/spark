@@ -281,7 +281,7 @@ class PlanParserSuite extends AnalysisTest {
         .select(star()))
 
     // Multiple lateral views
-    val exploded =  table("t")
+    val exploded = table("t")
       .generate(explode, requiredChildOutput = table("t").references.toSeq, outer = false,
         Some("expl"), Seq.empty)
 
