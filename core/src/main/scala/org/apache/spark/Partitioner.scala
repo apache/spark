@@ -21,7 +21,6 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 import scala.math.log10
 import scala.reflect.ClassTag
 import scala.util.hashing.byteswap32
@@ -62,7 +61,7 @@ object Partitioner {
     val rdds = (Seq(rdd) ++ others)
     val hasPartitioner = rdds.filter(_.partitioner.exists(_.numPartitions > 0))
 
-    val hasMaxPartitioner = if (hasPartitioner.nonEmpty) {
+    val hasMaxPartitioner: Option[RDD[_]] = if (hasPartitioner.nonEmpty) {
       Some(hasPartitioner.maxBy(_.partitions.length))
     } else {
       None
