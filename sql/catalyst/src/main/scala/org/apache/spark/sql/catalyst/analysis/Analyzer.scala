@@ -695,7 +695,7 @@ class Analyzer(
           (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
 
         case oldVersion: Generate
-            if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
+            if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
           (oldVersion, oldVersion.copy(generatorOutput = newOutput))
 
@@ -844,14 +844,14 @@ class Analyzer(
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
-      case g @ Generate(generator, _, _, _, _, _, _) if generator.resolved => g
+      case g @ Generate(generator, _, _, _, _, _) if generator.resolved => g
 
-      case g @ Generate(generator, join, outer, omitGeneratorRefs, qualifier, output, child) =>
+      case g @ Generate(generator, requiredChildOutput, outer, qualifier, output, child) =>
         val newG = resolveExpression(generator, child, throws = true)
         if (newG.fastEquals(generator)) {
           g
         } else {
-          Generate(newG.asInstanceOf[Generator], join, outer, omitGeneratorRefs,
+          Generate(newG.asInstanceOf[Generator], requiredChildOutput, outer,
             qualifier, output, child)
         }
 
@@ -1152,7 +1152,8 @@ class Analyzer(
           // If join is false, we will convert it to true for getting from the child the missing
           // attributes that its child might have or could have.
           val missing = missingAttrs -- g.child.outputSet
-          g.copy(join = true, child = addMissingAttr(g.child, missing))
+          g.copy(requiredChildOutput = g.child.outputSet.toSeq,
+            child = addMissingAttr(g.child, missing))
         case d: Distinct =>
           throw new AnalysisException(s"Can't add $missingAttrs to $d")
         case u: UnaryNode =>
@@ -1606,9 +1607,9 @@ class Analyzer(
             resolvedGenerator =
               Generate(
                 generator,
-                join = projectList.size > 1, // Only join if there are other expressions in SELECT.
+                // Only requiredChildOutput if there are other expressions in SELECT.
+                requiredChildOutput = if (projectList.size > 1) child.output else Nil,
                 outer = outer,
-                omitGeneratorReferences = false,
                 qualifier = None,
                 generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                 child)

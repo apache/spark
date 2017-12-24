@@ -47,39 +47,24 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * terminate().
  *
  * @param generator the generator expression
- * @param join  when true, each output row is implicitly joined with the input tuple that produced
- *              it.
+ * @param requiredChildOutput each output row is implicitly joined with the relevant part from the
+ *                            input tuple that produced it. (that is set in the optimizer)
+ *                            used to prevent unnecessary duplications of data.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
- * @param omitGeneratorReferences when true, output rows will not contain the generator's child.
- *                                Used to prevent unnecessary duplications of data.
  * @param generatorOutput the qualified output attributes of the generator of this node, which
  *                        constructed in analysis phase, and we can not change it, as the
  *                        parent node bound with it already.
  */
 case class GenerateExec(
     generator: Generator,
-    join: Boolean,
+    requiredChildOutput: Seq[Attribute],
     outer: Boolean,
-    omitGeneratorReferences: Boolean,
     generatorOutput: Seq[Attribute],
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  private def requiredChildOutput = if (omitGeneratorReferences) {
-    val generatorReferences = generator.references
-    child.output.filterNot(generatorReferences.contains)
-  } else {
-    child.output
-  }
-
-  override def output: Seq[Attribute] = {
-    if (join) {
-      requiredChildOutput ++ generatorOutput
-    } else {
-      generatorOutput
-    }
-  }
+  override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -95,7 +80,7 @@ case class GenerateExec(
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
-      val rows = if (join) {
+      val rows = if (requiredChildOutput.nonEmpty) {
 
         val pruneChildForResult: InternalRow => InternalRow =
           if (requiredChildOutput == child.output) {
@@ -155,7 +140,7 @@ case class GenerateExec(
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     // Add input rows to the values when we are joining
-    val values = if (join) {
+    val values = if (requiredChildOutput.nonEmpty) {
       input
     } else {
       Seq.empty

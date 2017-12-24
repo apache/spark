@@ -276,26 +276,28 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "select * from t lateral view explode(x) expl as x",
       table("t")
-        .generate(explode, join = true, outer = false, omitGeneratorReferences = false,
+        .generate(explode, requiredChildOutput = table("t").references.toSeq, outer = false,
           Some("expl"), Seq("x"))
         .select(star()))
 
     // Multiple lateral views
+    val exploded =  table("t")
+      .generate(explode, requiredChildOutput = table("t").references.toSeq, outer = false,
+        Some("expl"), Seq.empty)
+
     assertEqual(
       """select *
         |from t
         |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
-      table("t")
-        .generate(explode, join = true, outer = false, omitGeneratorReferences = false,
-          Some("expl"), Seq.empty)
-        .generate(jsonTuple, join = true, outer = true, omitGeneratorReferences = false,
+     exploded
+        .generate(jsonTuple, requiredChildOutput = exploded.references.toSeq, outer = true,
           Some("jtup"), Seq("q", "z"))
         .select(star()))
 
     // Multi-Insert lateral views.
-    val from = table("t1").generate(explode, join = true, outer = false,
-      omitGeneratorReferences = false, Some("expl"), Seq("x"))
+    val from = table("t1").generate(explode, requiredChildOutput = table("t1").references.toSeq,
+                                    outer = false, Some("expl"), Seq("x"))
     assertEqual(
       """from t1
         |lateral view explode(x) expl as x
@@ -307,7 +309,7 @@ class PlanParserSuite extends AnalysisTest {
         |where s < 10
       """.stripMargin,
       Union(from
-        .generate(jsonTuple, join = true, outer = false, omitGeneratorReferences = false,
+        .generate(jsonTuple, requiredChildOutput = from.references.toSeq, outer = false,
           Some("jtup"), Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
@@ -317,9 +319,8 @@ class PlanParserSuite extends AnalysisTest {
     val expected = table("t")
       .generate(
         UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
-        join = true,
+        requiredChildOutput = table("t").references.toSeq,
         outer = false,
-        omitGeneratorReferences = false,
         Some("posexpl"),
         Seq("x", "y"))
       .select(star())
