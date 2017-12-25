@@ -181,7 +181,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        s"cannot cast ${child.dataType} to $dataType")
+        s"cannot cast ${child.dataType.simpleString} to ${dataType.simpleString}")
     }
   }
 
