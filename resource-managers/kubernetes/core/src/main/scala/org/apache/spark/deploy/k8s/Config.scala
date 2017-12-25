@@ -155,8 +155,8 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.mountDependencies.timeout")
       .doc("Timeout before aborting the attempt to download and unpack dependencies from remote " +
         "locations into the driver and executor pods.")
-      .timeConf(TimeUnit.MINUTES)
-      .createWithDefault(5)
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(300)
 
   val INIT_CONTAINER_MAX_THREAD_POOL_SIZE =
     ConfigBuilder("spark.kubernetes.mountDependencies.maxSimultaneousDownloads")

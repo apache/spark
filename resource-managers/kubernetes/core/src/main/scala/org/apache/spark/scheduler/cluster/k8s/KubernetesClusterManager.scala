@@ -49,12 +49,12 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val initContainerConfigMapKey = sparkConf.get(INIT_CONTAINER_CONFIG_MAP_KEY_CONF)
 
     if (initContainerConfigMap.isEmpty) {
-      logWarning("The executor's init-container config map was not specified. Executors will " +
+      logWarning("The executor's init-container config map is not specified. Executors will " +
         "therefore not attempt to fetch remote or submitted dependencies.")
     }
 
     if (initContainerConfigMapKey.isEmpty) {
-      logWarning("The executor's init-container config map key was not specified. Executors will " +
+      logWarning("The executor's init-container config map key is not specified. Executors will " +
         "therefore not attempt to fetch remote or submitted dependencies.")
     }
 

@@ -73,9 +73,9 @@ private[spark] class SparkPodInitContainer(
   private def downloadFiles(
       filesCommaSeparated: Option[String],
       downloadDir: File,
-      errMessageOnDestinationNotADirectory: String): Unit = {
+      errMessage: String): Unit = {
     filesCommaSeparated.foreach { files =>
-      require(downloadDir.isDirectory, errMessageOnDestinationNotADirectory)
+      require(downloadDir.isDirectory, errMessage)
       Utils.stringToSeq(files).foreach { file =>
         Future[Unit] {
           fileFetcher.fetchFile(file, downloadDir)

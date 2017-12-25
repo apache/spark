@@ -127,7 +127,7 @@ private[spark] class DriverConfigOrchestrator(
       Nil
     }
 
-    val initContainerBootstrapStep = if (areAnyFilesNonContainerLocal(sparkJars ++ sparkFiles)) {
+    val initContainerBootstrapStep = if (existNonContainerLocalFiles(sparkJars ++ sparkFiles)) {
       val orchestrator = new InitContainerConfigOrchestrator(
         sparkJars,
         sparkFiles,
@@ -162,7 +162,7 @@ private[spark] class DriverConfigOrchestrator(
       mountSecretsStep
   }
 
-  private def areAnyFilesNonContainerLocal(files: Seq[String]): Boolean = {
+  private def existNonContainerLocalFiles(files: Seq[String]): Boolean = {
     files.exists { uri =>
       Utils.resolveURI(uri).getScheme != "local"
     }
