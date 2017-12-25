@@ -60,6 +60,8 @@ case class HadoopFsRelation(
     }
   }
 
+  private val hadoopFSSizeFactor = sqlContext.conf.hadoopFSSizeFactor
+
   val overlappedPartCols = mutable.Map.empty[String, StructField]
   partitionSchema.foreach { partitionField =>
     if (dataSchema.exists(getColName(_) == getColName(partitionField))) {
@@ -82,7 +84,15 @@ case class HadoopFsRelation(
     }
   }
 
-  override def sizeInBytes: Long = location.sizeInBytes
+  override def sizeInBytes: Long = {
+    val size = location.sizeInBytes * hadoopFSSizeFactor
+    if (size > Long.MaxValue) {
+      Long.MaxValue
+    } else {
+      size.toLong
+    }
+  }
+
 
   override def inputFiles: Array[String] = location.inputFiles
 }

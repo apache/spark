@@ -263,6 +263,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val HADOOPFSRELATION_SIZE_FACTOR = buildConf(
+    "org.apache.spark.sql.execution.datasources.sizeFactor")
+    .internal()
+    .doc("The result of multiplying this factor with the size of data source files is propagated" +
+      " to serve as the stats to choose the best execution plan. In the case where the " +
+      " the in-disk and in-memory size of data is significantly different, users can adjust this" +
+      " factor for a better choice of the execution plan. The default value is 1.0.")
+    .doubleConf
+    .createWithDefault(1.0)
+
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
@@ -1240,6 +1250,8 @@ class SQLConf extends Serializable with Logging {
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+
+  def hadoopFSSizeFactor: Double = getConf(HADOOPFSRELATION_SIZE_FACTOR)
 
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
