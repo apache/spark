@@ -954,7 +954,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>snappy</td>
   <td>
     Sets the compression codec use when writing Parquet files. Acceptable values include:
-    uncompressed, snappy, gzip, lzo.
+    none, uncompressed, snappy, gzip, lzo.
   </td>
 </tr>
 <tr>
