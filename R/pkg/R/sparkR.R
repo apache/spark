@@ -561,7 +561,52 @@ cancelJobGroup <- function(sc, groupId) {
 #' @note setJobDescription since 2.3.0
 setJobDescription <- function(value) {
   sc <- getSparkContext()
+  if (!is.null(value)) {
+    value <- as.character(value)
+  }
   invisible(callJMethod(sc, "setJobDescription", value))
+}
+
+#' Set a local property that affects jobs submitted from this thread, such as the
+#' Spark fair scheduler pool.
+#'
+#' @param key The key for a local property.
+#' @param value The value for a local property.
+#' @rdname setLocalProperty
+#' @name setLocalProperty
+#' @examples
+#'\dontrun{
+#' setLocalProperty("spark.scheduler.pool", "poolA")
+#'}
+#' @note setLocalProperty since 2.3.0
+setLocalProperty <- function(key, value) {
+  sc <- getSparkContext()
+  if (is.null(key)) {
+    stop("key should not be NULL.")
+  }
+  if (!is.null(value)) {
+    value <- as.character(value)
+  }
+  invisible(callJMethod(sc, "setLocalProperty", as.character(key), value))
+}
+
+#' Get a local property set in this thread, or \code{NULL} if it is missing. See
+#' \code{setLocalProperty}.
+#'
+#' @param key The key for a local property.
+#' @rdname getLocalProperty
+#' @name getLocalProperty
+#' @examples
+#'\dontrun{
+#' getLocalProperty("spark.scheduler.pool")
+#'}
+#' @note getLocalProperty since 2.3.0
+getLocalProperty <- function(key) {
+  sc <- getSparkContext()
+  if (is.null(key)) {
+    stop("key should not be NULL.")
+  }
+  invisible(callJMethod(sc, "getLocalProperty", as.character(key)))
 }
 
 sparkConfToSubmitOps <- new.env()

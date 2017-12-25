@@ -76,7 +76,9 @@ exportMethods("glm",
 export("setJobGroup",
        "clearJobGroup",
        "cancelJobGroup",
-       "setJobDescription")
+       "setJobDescription",
+       "setLocalProperty",
+       "getLocalProperty")
 
 # Export Utility methods
 export("setLogLevel")
