@@ -851,7 +851,7 @@ class Analyzer(
         if (newG.fastEquals(generator)) {
           g
         } else {
-          Generate(newG.asInstanceOf[Generator], requiredChildOutput, outer,
+          Generate(newG.asInstanceOf[Generator], child.output, outer,
             qualifier, output, child)
         }
 
