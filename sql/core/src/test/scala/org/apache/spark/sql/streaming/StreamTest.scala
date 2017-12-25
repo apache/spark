@@ -637,17 +637,13 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
               error => failTest(error)
             }
 
-<<<<<<< HEAD
-          case CheckAnswerRowsByFunc(checkFunction, globalCheckFunction, lastOnly) =>
-=======
           case CheckAnswerRowsContains(expectedAnswer, lastOnly) =>
             val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
             QueryTest.includesRows(expectedAnswer, sparkAnswer).foreach {
               error => failTest(error)
             }
 
-          case CheckAnswerRowsByFunc(checkFunction, lastOnly) =>
->>>>>>> master
+          case CheckAnswerRowsByFunc(checkFunction, globalCheckFunction, lastOnly) =>
             val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
             if (checkFunction != null) {
               sparkAnswer.foreach { row =>
