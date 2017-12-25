@@ -118,7 +118,8 @@ def require_minimum_pandas_version():
     from distutils.version import LooseVersion
     import pandas
     if LooseVersion(pandas.__version__) < LooseVersion('0.19.2'):
-        raise ImportError("Pandas >= 0.19.2 must be installed on calling Python process")
+        raise ImportError("Pandas >= 0.19.2 must be installed on calling Python process: %s"
+                          % pandas.__version__)
 
 
 def require_minimum_pyarrow_version():
@@ -127,4 +128,5 @@ def require_minimum_pyarrow_version():
     from distutils.version import LooseVersion
     import pyarrow
     if LooseVersion(pyarrow.__version__) < LooseVersion('0.8.0'):
-        raise ImportError("pyarrow >= 0.8.0 must be installed on calling Python process")
+        raise ImportError("pyarrow >= 0.8.0 must be installed on calling Python process: %s"
+                          % pyarrow.__version__)
