@@ -271,6 +271,7 @@ object SQLConf {
       " the in-disk and in-memory size of data is significantly different, users can adjust this" +
       " factor for a better choice of the execution plan. The default value is 1.0.")
     .doubleConf
+    .checkValue(_ > 0, "the value of sizeFactor must be larger than 0")
     .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
