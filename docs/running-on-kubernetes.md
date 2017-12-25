@@ -625,9 +625,10 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.mountDependencies.timeout</code></td>
-  <td>5 minutes</td>
+  <td>300 seconds</td>
   <td>
-   Timeout before aborting the attempt to download and unpack dependencies from remote locations into the driver and executor pods.
+   Timeout in seconds before aborting the attempt to download and unpack dependencies from remote locations into
+   the driver and executor pods.
   </td>
 </tr>
 <tr>
