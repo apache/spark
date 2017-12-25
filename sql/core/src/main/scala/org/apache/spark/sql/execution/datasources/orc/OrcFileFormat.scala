@@ -94,7 +94,7 @@ class OrcFileFormat
 
     conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, dataSchema.catalogString)
 
-    conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
+    conf.set(COMPRESS.getAttribute, orcOptions.compressionCodecClassName)
 
     conf.asInstanceOf[JobConf]
       .setOutputFormat(classOf[org.apache.orc.mapred.OrcOutputFormat[OrcStruct]])
