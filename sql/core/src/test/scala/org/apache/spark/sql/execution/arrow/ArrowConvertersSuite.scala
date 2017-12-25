@@ -330,36 +330,39 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |    } ]
          |  },
          |  "batches" : [ {
-         |    "count" : 6,
+         |    "count" : 7,
          |    "columns" : [ {
          |      "name" : "a_d",
-         |      "count" : 6,
-         |      "VALIDITY" : [ 1, 1, 1, 1, 1, 1 ],
+         |      "count" : 7,
+         |      "VALIDITY" : [ 1, 1, 1, 1, 1, 1, 1 ],
          |      "DATA" : [
          |        "1000000000000000000",
          |        "2000000000000000000",
          |        "10000000000000000",
          |        "200000000000000000000",
          |        "100000000000000",
-         |        "20000000000000000000000" ]
+         |        "20000000000000000000000",
+         |        "30000000000000000000" ]
          |    }, {
          |      "name" : "b_d",
-         |      "count" : 6,
-         |      "VALIDITY" : [ 1, 0, 0, 1, 0, 1 ],
+         |      "count" : 7,
+         |      "VALIDITY" : [ 1, 0, 0, 1, 0, 1, 0 ],
          |      "DATA" : [
          |        "1100000000000000000",
          |        "0",
          |        "0",
          |        "2200000000000000000",
          |        "0",
-         |        "3300000000000000000" ]
+         |        "3300000000000000000",
+         |        "0" ]
          |    } ]
          |  } ]
          |}
        """.stripMargin
 
-    val a_d = List(1.0, 2.0, 0.01, 200.0, 0.0001, 20000.0).map(Decimal(_))
-    val b_d = List(Some(Decimal(1.1)), None, None, Some(Decimal(2.2)), None, Some(Decimal(3.3)))
+    val a_d = List(1.0, 2.0, 0.01, 200.0, 0.0001, 20000.0, 30.0).map(Decimal(_))
+    val b_d = List(Some(Decimal(1.1)), None, None, Some(Decimal(2.2)), None, Some(Decimal(3.3)),
+      Some(Decimal("123456789012345678901234567890")))
     val df = a_d.zip(b_d).toDF("a_d", "b_d")
 
     collectAndValidate(df, json, "decimalData.json")

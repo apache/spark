@@ -227,8 +227,11 @@ private[arrow] class DecimalWriter(
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val decimal = input.getDecimal(ordinal, precision, scale)
-    decimal.changePrecision(precision, scale)
-    valueVector.setSafe(count, decimal.toJavaBigDecimal)
+    if (decimal.changePrecision(precision, scale)) {
+      valueVector.setSafe(count, decimal.toJavaBigDecimal)
+    } else {
+      setNull()
+    }
   }
 }
 
