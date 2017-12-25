@@ -152,6 +152,10 @@ class CSVOptions(
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
+    // The Univocity parser parses empty strings as `null` by default. This is the default behavior
+    // for Spark too, since `nullValue` defaults to an empty string and has a higher precedence to
+    // setEmptyValue(). But when `nullValue` is set to a different value, that would mean that the
+    // empty string should be parsed not as `null` but as an empty string.
     writerSettings.setEmptyValue("")
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)

@@ -1250,47 +1250,48 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("SPARK-17916: An empty string should not be coerced to null when nullValue is passed.") {
-    val sparkSession = spark
+    val litNull: String = null
+    val df = Seq(
+      (1, "John Doe"),
+      (2, ""),
+      (3, "-"),
+      (4, litNull)
+    ).toDF("id", "name")
 
-    val elems = Seq(("bar"), (""), (null: String))
+    // Checks for new behavior where an empty string is not coerced to null when `nullValue` is
+    // set to anything but an empty string literal.
+    withTempPath { path =>
+      df.write
+        .option("nullValue", "-")
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .option("nullValue", "-")
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, ""),
+        (3, litNull),
+        (4, litNull)
+      ).toDF("id", "name")
 
-    // Checks for new behavior where an empty string is not coerced to null.
-    withTempDir { dir =>
-      val outDir = new File(dir, "out").getCanonicalPath
-      val nullValue = "\\N"
-
-      import sparkSession.implicits._
-      val dsIn = spark.createDataset(elems)
-      dsIn.write
-        .option("nullValue", nullValue)
-        .csv(outDir)
-      val dsOut = spark.read
-        .option("nullValue", nullValue)
-        .schema(dsIn.schema)
-        .csv(outDir)
-        .as[(String)]
-      val computed = dsOut.collect.toSeq
-      val expected = Seq(("bar"), (null: String))
-
-      assert(computed.size === 2)
-      assert(computed.sameElements(expected))
+      checkAnswer(computed, expected)
     }
-    // Keeps the old behavior for when nullValue is not passed.
-    withTempDir { dir =>
-      val outDir = new File(dir, "out").getCanonicalPath
+    // Keeps the old behavior where empty string us coerced to nullValue is not passed.
+    withTempPath { path =>
+      df.write
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, litNull),
+        (3, "-"),
+        (4, litNull)
+      ).toDF("id", "name")
 
-      import sparkSession.implicits._
-      val dsIn = spark.createDataset(elems)
-      dsIn.write.csv(outDir)
-      val dsOut = spark.read
-        .schema(dsIn.schema)
-        .csv(outDir)
-        .as[(String)]
-      val computed = dsOut.collect.toSeq
-      val expected = Seq(("bar"))
-
-      assert(computed.size === 1)
-      assert(computed.sameElements(expected))
+      checkAnswer(computed, expected)
     }
   }
 }
