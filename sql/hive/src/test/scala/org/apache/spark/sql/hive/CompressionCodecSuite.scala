@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 class CompressionCodecSuite extends TestHiveSingleton with SQLTestUtils {
   test("Test `spark.sql.parquet.compression.codec` config") {
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO").foreach { c =>
+    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO").foreach { c =>
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> c) {
         val expected = if (c == "NONE") "UNCOMPRESSED" else c
         val option = new ParquetOptions(Map.empty[String, String], spark.sessionState.conf)
