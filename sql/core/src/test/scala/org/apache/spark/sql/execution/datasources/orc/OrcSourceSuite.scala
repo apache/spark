@@ -134,30 +134,29 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     val conf = spark.sessionState.conf
     val option = new OrcOptions(Map(COMPRESS.getAttribute.toUpperCase(Locale.ROOT) -> "NONE"), conf)
-    assert(option.compressionCodecClassName == "NONE")
+    assert(option.compressionCodecName == "NONE")
   }
 
   test("SPARK-21839: Add SQL config for ORC compression") {
     val conf = spark.sessionState.conf
     // Test if the default of spark.sql.orc.compression.codec is snappy
-    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecClassName == "SNAPPY")
+    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecName == "SNAPPY")
 
     // OrcOptions's parameters have a higher priority than SQL configuration.
     // `compression` -> `orc.compression` -> `spark.sql.orc.compression.codec`
     withSQLConf(SQLConf.ORC_COMPRESSION.key -> "uncompressed") {
-      assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecClassName == "NONE")
+      assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecName == "NONE")
       val map1 = Map(COMPRESS.getAttribute -> "zlib")
       val map2 = Map(COMPRESS.getAttribute -> "zlib", "compression" -> "lzo")
-      assert(new OrcOptions(map1, conf).compressionCodecClassName == "ZLIB")
-      assert(new OrcOptions(map2, conf).compressionCodecClassName == "LZO")
+      assert(new OrcOptions(map1, conf).compressionCodecName == "ZLIB")
+      assert(new OrcOptions(map2, conf).compressionCodecName == "LZO")
     }
 
     // Test all the valid options of spark.sql.orc.compression.codec
     Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
-        assert(
-          new OrcOptions(Map.empty[String, String], conf).compressionCodecClassName == expected)
+        assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecName == expected)
       }
     }
   }
