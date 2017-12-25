@@ -611,6 +611,10 @@ setGeneric("isStreaming", function(x) { standardGeneric("isStreaming") })
 #' @export
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
+#' @rdname localCheckpoint
+#' @export
+setGeneric("localCheckpoint", function(x, eager = TRUE) { standardGeneric("localCheckpoint") })
+
 #' @rdname merge
 #' @export
 setGeneric("merge")
