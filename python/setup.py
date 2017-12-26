@@ -201,6 +201,7 @@ try:
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
+            'sentry': ['raven'],
             'sql': ['pandas>=0.19.2']
         },
         classifiers=[
