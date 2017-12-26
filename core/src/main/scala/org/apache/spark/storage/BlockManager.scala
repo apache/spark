@@ -156,6 +156,9 @@ private[spark] class BlockManager(
   private val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
   private val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
+  private val externalShuffleServiceHost =
+    Utils.getSparkOrYarnConfig(conf, "spark.shuffle.service.host", blockTransferService.hostName)
+
   // Port used by the external shuffle service. In Yarn mode, this may be already be
   // set through the Hadoop configuration as the server is launched in the Yarn NM.
   private val externalShuffleServicePort = {
@@ -247,8 +250,8 @@ private[spark] class BlockManager(
     blockManagerId = if (idFromMaster != null) idFromMaster else id
 
     shuffleServerId = if (externalShuffleServiceEnabled) {
-      logInfo(s"external shuffle service port = $externalShuffleServicePort")
-      BlockManagerId(executorId, blockTransferService.hostName, externalShuffleServicePort)
+      logInfo(s"external shuffle service host:port = $externalShuffleServiceHost:$externalShuffleServicePort")
+      BlockManagerId(executorId, externalShuffleServiceHost, externalShuffleServicePort)
     } else {
       blockManagerId
     }
