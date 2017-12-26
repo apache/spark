@@ -47,9 +47,10 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * terminate().
  *
  * @param generator the generator expression
- * @param requiredChildOutput each output row is implicitly joined with the relevant part from the
- *                            input tuple that produced it. (that is set in the optimizer)
- *                            used to prevent unnecessary duplications of data.
+ * @param unrequiredChildOutput each output row is implicitly joined with the relevant part from the
+ *                              input tuple that produced it. this param is used to prevent
+ *                              unnecessary duplications of data that is going to be projected out
+ *                              later.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
  * @param generatorOutput the qualified output attributes of the generator of this node, which
@@ -58,11 +59,13 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  */
 case class GenerateExec(
     generator: Generator,
-    requiredChildOutput: Seq[Attribute],
+    unrequiredChildOutput: Seq[Attribute],
     outer: Boolean,
     generatorOutput: Seq[Attribute],
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
+
+  private def requiredChildOutput() = child.output.filterNot(unrequiredChildOutput.contains)
 
   override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
 
@@ -83,7 +86,7 @@ case class GenerateExec(
       val rows = if (requiredChildOutput.nonEmpty) {
 
         val pruneChildForResult: InternalRow => InternalRow =
-          if (requiredChildOutput == child.output) {
+          if (unrequiredChildOutput.isEmpty) {
             identity
           } else {
             UnsafeProjection.create(requiredChildOutput, child.output)

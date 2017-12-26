@@ -623,7 +623,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val expressions = expressionList(ctx.expression)
     Generate(
       UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions),
-      requiredChildOutput = query.references.toSeq,
+      unrequiredChildOutput = Nil,
       outer = ctx.OUTER != null,
       Some(ctx.tblName.getText.toLowerCase),
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),

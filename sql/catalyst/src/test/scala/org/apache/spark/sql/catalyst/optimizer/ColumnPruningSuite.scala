@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -38,25 +38,12 @@ class ColumnPruningSuite extends PlanTest {
       CollapseProject) :: Nil
   }
 
-  test("Column pruning for Generate when Generate.requiredChildOutput = Nil") {
-    val input = LocalRelation('a.int, 'b.array(StringType))
-
-    val query = input.generate(Explode('b), requiredChildOutput = Nil).analyze
-
-    val optimized = Optimize.execute(query)
-
-    val correctAnswer = input.select('b).generate(Explode('b), requiredChildOutput = Nil).analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("Column pruning for Generate when Generate.requiredChildOutput not Nil") {
+  test("Column pruning for Generate when Generate.unrequiredChildOutput = Nil") {
     val input = LocalRelation('a.int, 'b.int, 'c.array(StringType))
 
     val query =
       input
-        .generate(Explode('c), requiredChildOutput = input.references.toSeq,
-          outputNames = "explode" :: Nil)
+        .generate(Explode('c), unrequiredChildOutput = Nil, outputNames = "explode" :: Nil)
         .select('a, 'explode)
         .analyze
 
@@ -65,20 +52,19 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer =
       input
         .select('a, 'c)
-        .generate(Explode('c), requiredChildOutput = input.select('a).analyze.output,
-                  outputNames = "explode" :: Nil)
-        .select('a, 'explode)
+        .generate(Explode('c), unrequiredChildOutput = input.select('c).analyze.references.toSeq,
+          outputNames = "explode" :: Nil)
         .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Turn Generate.requiredChildOutput to Nil if possible") {
+  test("Fill Generate.unrequiredChildOutput if possible") {
     val input = LocalRelation('b.array(StringType))
 
     val query =
       input
-        .generate(Explode('b), requiredChildOutput = input.references.toSeq,
+        .generate(Explode('b), unrequiredChildOutput = Nil,
           outputNames = "explode" :: Nil)
         .select(('explode + 1).as("result"))
         .analyze
@@ -87,20 +73,21 @@ class ColumnPruningSuite extends PlanTest {
 
     val correctAnswer =
       input
-        .generate(Explode('b), requiredChildOutput = Nil, outputNames = "explode" :: Nil)
+        .generate(Explode('b), unrequiredChildOutput = input.references.toSeq,
+          outputNames = "explode" :: Nil)
         .select(('explode + 1).as("result"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Turnsible") {
+  test("Another fill Generate.unrequiredChildOutput if possible") {
     val input = LocalRelation('a.int, 'b.int, 'c1.string, 'c2.string)
 
     val query =
       input
         .generate(Explode(CreateArray(Seq('c1, 'c2))),
-          requiredChildOutput = input.references.toSeq, outputNames = "explode" :: Nil)
+          unrequiredChildOutput = Nil, outputNames = "explode" :: Nil)
         .select('a, 'c1, 'explode)
         .analyze
 
@@ -110,9 +97,8 @@ class ColumnPruningSuite extends PlanTest {
       input
         .select('a, 'c1, 'c2)
         .generate(Explode(CreateArray(Seq('c1, 'c2))),
-          requiredChildOutput = input.select('a, 'c1).analyze.output,
+          unrequiredChildOutput = input.select('c2).analyze.output,
           outputNames = "explode" :: Nil)
-        .select('a, 'c1, 'explode)
         .analyze
 
     comparePlans(optimized, correctAnswer)

@@ -276,13 +276,13 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "select * from t lateral view explode(x) expl as x",
       table("t")
-        .generate(explode, requiredChildOutput = table("t").references.toSeq, outer = false,
+        .generate(explode, unrequiredChildOutput = Nil, outer = false,
           Some("expl"), Seq("x"))
         .select(star()))
 
     // Multiple lateral views
     val exploded = table("t")
-      .generate(explode, requiredChildOutput = table("t").references.toSeq, outer = false,
+      .generate(explode, unrequiredChildOutput = Nil, outer = false,
         Some("expl"), Seq.empty)
 
     assertEqual(
@@ -291,12 +291,12 @@ class PlanParserSuite extends AnalysisTest {
         |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
      exploded
-        .generate(jsonTuple, requiredChildOutput = exploded.references.toSeq, outer = true,
+        .generate(jsonTuple, unrequiredChildOutput = Nil, outer = true,
           Some("jtup"), Seq("q", "z"))
         .select(star()))
 
     // Multi-Insert lateral views.
-    val from = table("t1").generate(explode, requiredChildOutput = table("t1").references.toSeq,
+    val from = table("t1").generate(explode, unrequiredChildOutput = Nil,
                                     outer = false, Some("expl"), Seq("x"))
     assertEqual(
       """from t1
@@ -309,7 +309,7 @@ class PlanParserSuite extends AnalysisTest {
         |where s < 10
       """.stripMargin,
       Union(from
-        .generate(jsonTuple, requiredChildOutput = from.references.toSeq, outer = false,
+        .generate(jsonTuple, unrequiredChildOutput = Nil, outer = false,
           Some("jtup"), Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
@@ -319,7 +319,7 @@ class PlanParserSuite extends AnalysisTest {
     val expected = table("t")
       .generate(
         UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
-        requiredChildOutput = table("t").references.toSeq,
+        unrequiredChildOutput = Nil,
         outer = false,
         Some("posexpl"),
         Seq("x", "y"))

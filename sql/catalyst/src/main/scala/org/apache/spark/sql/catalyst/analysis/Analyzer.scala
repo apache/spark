@@ -846,12 +846,12 @@ class Analyzer(
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
       case g @ Generate(generator, _, _, _, _, _) if generator.resolved => g
 
-      case g @ Generate(generator, requiredChildOutput, outer, qualifier, output, child) =>
+      case g @ Generate(generator, unrequiredChildOutput, outer, qualifier, output, child) =>
         val newG = resolveExpression(generator, child, throws = true)
         if (newG.fastEquals(generator)) {
           g
         } else {
-          Generate(newG.asInstanceOf[Generator], child.output, outer,
+          Generate(newG.asInstanceOf[Generator], unrequiredChildOutput, outer,
             qualifier, output, child)
         }
 
@@ -1152,7 +1152,7 @@ class Analyzer(
           // If join is false, we will convert it to true for getting from the child the missing
           // attributes that its child might have or could have.
           val missing = missingAttrs -- g.child.outputSet
-          g.copy(requiredChildOutput = g.child.outputSet.toSeq,
+          g.copy(unrequiredChildOutput = Nil,
             child = addMissingAttr(g.child, missing))
         case d: Distinct =>
           throw new AnalysisException(s"Can't add $missingAttrs to $d")
@@ -1607,8 +1607,8 @@ class Analyzer(
             resolvedGenerator =
               Generate(
                 generator,
-                // Only requiredChildOutput if there are other expressions in SELECT.
-                requiredChildOutput = if (projectList.size > 1) child.output else Nil,
+                // Only unrequiredChildOutput if there are other expressions in SELECT.
+                unrequiredChildOutput = if (projectList.size > 1) Nil else child.output,
                 outer = outer,
                 qualifier = None,
                 generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),

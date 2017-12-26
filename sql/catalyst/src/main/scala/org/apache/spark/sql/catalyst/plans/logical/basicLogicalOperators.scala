@@ -73,9 +73,10 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * their output.
  *
  * @param generator the generator expression
- * @param requiredChildOutput each output row is implicitly joined with the relevant part from the
- *                            input tuple that produced it. (that is set in the optimizer)
- *                            used to prevent unnecessary duplications of data.
+ * @param unrequiredChildOutput each output row is implicitly joined with the relevant part from the
+ *                              input tuple that produced it. this param is used to prevent
+ *                              unnecessary duplications of data that is going to be projected out
+ *                              later.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
  * @param qualifier Qualifier for the attributes of generator(UDTF)
@@ -84,12 +85,15 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  */
 case class Generate(
     generator: Generator,
-    requiredChildOutput: Seq[Attribute],
+    unrequiredChildOutput: Seq[Attribute],
     outer: Boolean,
     qualifier: Option[String],
     generatorOutput: Seq[Attribute],
     child: LogicalPlan)
   extends UnaryNode {
+
+  def requiredChildOutput(): Seq[Attribute] =
+    child.output.filterNot(unrequiredChildOutput.contains)
 
   override lazy val resolved: Boolean = {
     generator.resolved &&
@@ -112,10 +116,7 @@ case class Generate(
     nullableOutput
   }
 
-  def output: Seq[Attribute] = {
-    if (requiredChildOutput.nonEmpty) child.output ++ qualifiedGeneratorOutput
-    else qualifiedGeneratorOutput
-  }
+  def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
