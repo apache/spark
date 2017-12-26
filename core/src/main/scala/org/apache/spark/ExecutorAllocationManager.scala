@@ -191,8 +191,8 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException(
         "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout must be > 0!")
     }
-    if (executorIdleTimeoutS <= 0) {
-      throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be > 0!")
+    if (executorIdleTimeoutS < 0) {
+      throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be >= 0!")
     }
     // Require external shuffle service for dynamic allocation
     // Otherwise, we may lose shuffle files when killing executors
