@@ -66,7 +66,7 @@ object TaskContext {
    * An empty task context that does not represent an actual task.  This is only used in tests.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, null, new Properties, null)
+    new TaskContextImpl(0, 0, 0, 0, 0, null, new Properties, null)
   }
 }
 
@@ -150,6 +150,10 @@ abstract class TaskContext extends Serializable {
    */
   def stageId(): Int
 
+  /**
+   * The attempt ID of the stage that this task belongs to.
+   */
+  def stageAttemptId(): Int
   /**
    * The ID of the RDD partition that is computed by this task.
    */
