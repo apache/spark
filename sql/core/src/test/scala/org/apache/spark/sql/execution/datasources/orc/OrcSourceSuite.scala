@@ -156,8 +156,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
-        assert(
-          new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
+        assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
       }
     }
   }
