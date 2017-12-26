@@ -248,7 +248,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // post another messgae
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
 
-    // shared queue and app status queue are full now, so any additional events posted to the listener will be dropped:
+    // shared queue and app status queue are full now,
+    // so any additional events posted to the listener will be dropped:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     assert(queueSize(bus, SHARED_QUEUE) === 1)
     assert(queueSize(bus, APP_STATUS_QUEUE) === 1)
@@ -256,6 +257,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(numDroppedEvents(bus, APP_STATUS_QUEUE) === 1)
     assert(totalDroppedEvents(bus) === 0)
 
+    // wait for first time total count in LiveListenrBus
     Thread.sleep(2 * 61 * 1000)
 
     assert(totalDroppedEvents(bus) === 2)
