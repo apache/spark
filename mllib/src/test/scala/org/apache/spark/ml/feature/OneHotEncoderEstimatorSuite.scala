@@ -393,11 +393,29 @@ class OneHotEncoderEstimatorSuite
     model.setHandleInvalid("error")
 
     val err = intercept[SparkException] {
-      model.transform(testDF).show
+      model.transform(testDF).collect()
     }
     err.getMessage.contains("Unseen value: 3.0. To handle unseen values")
 
     model.setHandleInvalid("keep")
     model.transform(testDF).collect()
+  }
+
+  test("Transforming on mismatched attributes") {
+    val attr = NominalAttribute.defaultAttr.withValues("small", "medium", "large")
+    val df = Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply).toDF("size")
+      .select(col("size").as("size", attr.toMetadata()))
+    val encoder = new OneHotEncoderEstimator()
+      .setInputCols(Array("size"))
+      .setOutputCols(Array("encoded"))
+    val model = encoder.fit(df)
+
+    val testAttr = NominalAttribute.defaultAttr.withValues("tiny", "small", "medium", "large")
+    val testDF = Seq(0.0, 1.0, 2.0, 3.0).map(Tuple1.apply).toDF("size")
+      .select(col("size").as("size", testAttr.toMetadata()))
+    val err = intercept[Exception] {
+      model.transform(testDF).collect()
+    }
+    err.getMessage.contains("OneHotEncoderModel expected 2 categorical values")
   }
 }
