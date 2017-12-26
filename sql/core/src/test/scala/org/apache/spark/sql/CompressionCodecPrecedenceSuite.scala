@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
 
-class CompressionCodecSuite extends SQLTestUtils with SharedSQLContext {
+class CompressionCodecPrecedenceSuite extends SQLTestUtils with SharedSQLContext {
   test("Test `spark.sql.parquet.compression.codec` config") {
     Seq("NONE", "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO").foreach { c =>
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> c) {
