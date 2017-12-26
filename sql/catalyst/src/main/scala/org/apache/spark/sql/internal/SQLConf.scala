@@ -336,8 +336,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
-    .doc("Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.")
+    .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
+      "versions, when converting Parquet schema to Spark SQL schema and vice versa.")
     .booleanConf
     .createWithDefault(false)
 
