@@ -90,7 +90,7 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
       s"Output column $outputColName already exists.")
 
     val outputField = OneHotEncoderCommon.transformOutputColumnSchema(
-      schema(inputColName), $(dropLast), outputColName)
+      schema(inputColName), outputColName, $(dropLast))
     val outputFields = inputFields :+ outputField
     StructType(outputFields)
   }
@@ -106,7 +106,7 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
 
     val outputAttrGroup = if (outputAttrGroupFromSchema.size < 0) {
       OneHotEncoderCommon.getOutputAttrGroupFromData(
-        dataset, $(dropLast), Seq(inputColName), Seq(outputColName))(0)
+        dataset, Seq(inputColName), Seq(outputColName), $(dropLast))(0)
     } else {
       outputAttrGroupFromSchema
     }
