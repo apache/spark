@@ -37,8 +37,6 @@ trait DataWritingCommand extends Command {
    * The input query plan that produces the data to be written.
    * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns
    *            to [[FileFormatWriter]].
-   *            For performance consideration, it is suggested to construct [[DataWritingCommand]]
-   *            with its input query as [[AnalysisBarrier]] to avoid the query being analyzed again.
    */
   def query: LogicalPlan
 
