@@ -560,10 +560,10 @@ cancelJobGroup <- function(sc, groupId) {
 #'}
 #' @note setJobDescription since 2.3.0
 setJobDescription <- function(value) {
-  sc <- getSparkContext()
   if (!is.null(value)) {
     value <- as.character(value)
   }
+  sc <- getSparkContext()
   invisible(callJMethod(sc, "setJobDescription", value))
 }
 
@@ -580,13 +580,13 @@ setJobDescription <- function(value) {
 #'}
 #' @note setLocalProperty since 2.3.0
 setLocalProperty <- function(key, value) {
-  sc <- getSparkContext()
   if (is.null(key)) {
     stop("key should not be NULL.")
   }
   if (!is.null(value)) {
     value <- as.character(value)
   }
+  sc <- getSparkContext()
   invisible(callJMethod(sc, "setLocalProperty", as.character(key), value))
 }
 
@@ -602,10 +602,10 @@ setLocalProperty <- function(key, value) {
 #'}
 #' @note getLocalProperty since 2.3.0
 getLocalProperty <- function(key) {
-  sc <- getSparkContext()
   if (is.null(key)) {
     stop("key should not be NULL.")
   }
+  sc <- getSparkContext()
   invisible(callJMethod(sc, "getLocalProperty", as.character(key)))
 }
 
