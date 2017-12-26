@@ -1005,7 +1005,7 @@ private[spark] object JsonProtocol {
       val replication = (json \ "Replication").extract[Int]
       StorageLevel(useDisk, useMemory, deserialized, replication)
     case _ =>
-      throw new IllegalArgumentException(json.toString)
+      throw new IllegalArgumentException(s"unexpected json value $json for storage level")
   }
 
   def blockStatusFromJson(json: JValue): BlockStatus = {
