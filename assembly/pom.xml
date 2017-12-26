@@ -208,7 +208,7 @@
                 <configuration>
                   <descriptors>
                     <descriptor>src/main/assembly/assembly.xml</descriptor>
-                </descriptors>
+                  </descriptors>
                 </configuration>
               </execution>
             </executions>
