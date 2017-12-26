@@ -250,7 +250,8 @@ private[spark] class BlockManager(
     blockManagerId = if (idFromMaster != null) idFromMaster else id
 
     shuffleServerId = if (externalShuffleServiceEnabled) {
-      logInfo(s"external shuffle service host:port = $externalShuffleServiceHost:$externalShuffleServicePort")
+      logInfo(s"external shuffle service host:port = " +
+        s"$externalShuffleServiceHost:$externalShuffleServicePort")
       BlockManagerId(executorId, externalShuffleServiceHost, externalShuffleServicePort)
     } else {
       blockManagerId
