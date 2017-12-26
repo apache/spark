@@ -42,9 +42,8 @@ object AssociationRulesExample {
     val results = ar.run(freqItemsets)
 
     results.collect().foreach { rule =>
-      println("[" + rule.antecedent.mkString(",")
-        + "=>"
-        + rule.consequent.mkString(",") + "]," + rule.confidence)
+    println(s"[${rule.antecedent.mkString(",")}=>${rule.consequent.mkString(",")} ]" +
+        s" ${rule.confidence}")
     }
     // $example off$
 
