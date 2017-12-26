@@ -116,7 +116,7 @@ object HiveOptions {
     val tableProps = tableInfo.getProperties.asScala.toMap
     tableInfo.getOutputFileFormatClassName.toLowerCase match {
       case formatName if formatName.endsWith("parquetoutputformat") =>
-        val compressionCodec = new ParquetOptions(tableProps, sqlConf).compressionCodec
+        val compressionCodec = new ParquetOptions(tableProps, sqlConf).compressionCodecClassName
         Option((ParquetOutputFormat.COMPRESSION, compressionCodec))
       case formatName if formatName.endsWith("orcoutputformat") =>
         val compressionCodec = new OrcOptions(tableProps, sqlConf).compressionCodec
