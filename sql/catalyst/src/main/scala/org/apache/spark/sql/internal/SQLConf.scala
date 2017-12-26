@@ -324,10 +324,10 @@ object SQLConf {
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
     .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
-      "none, uncompressed, snappy, gzip, lzo.")
+      "uncompressed, snappy, gzip, lzo.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo"))
+    .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")

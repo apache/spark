@@ -74,7 +74,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
     val configuration = job.getConfiguration
 
-    configuration.set(COMPRESS.getAttribute, orcOptions.compressionCodecClassName)
+    configuration.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
     configuration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
