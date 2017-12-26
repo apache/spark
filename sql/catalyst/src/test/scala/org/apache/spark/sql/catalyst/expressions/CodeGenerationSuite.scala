@@ -21,9 +21,10 @@ import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
@@ -388,11 +389,10 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx.inlinedMutableStates.isEmpty)
   }
 
-  test("SPARK-22696: InitializeJavaBean should not use global variables") {
+  test("SPARK-22696: InitializeObject should not use global variables") {
     val ctx = new CodegenContext
-<<<<<<< HEAD
-    InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
-      Map("add" -> Literal(1))).genCode(ctx)
+    InitializeObject(Literal.fromObject(new java.util.LinkedList[Int]),
+      ("add", Literal(1) :: Nil) :: Nil).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
   }
 
@@ -436,5 +436,17 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     ctx.addImmutableStateIfNotExists("int", mutableState1)
     ctx.addImmutableStateIfNotExists("String", mutableState2)
     assert(ctx.inlinedMutableStates.length == 2)
+  }
+
+  test("InitializeObject") {
+    val bean = new GenericBean(1, "a")
+
+    val encoder = Encoders.bean(classOf[GenericBean])
+    val expressionEncoder = encoder.asInstanceOf[ExpressionEncoder[GenericBean]]
+    val row = expressionEncoder.toRow(bean)
+    val beanFromRow = expressionEncoder.resolveAndBind().fromRow(row)
+
+    assert(beanFromRow.getField1 == bean.getField1)
+    assert(beanFromRow.getField2 == bean.getField2)
   }
 }

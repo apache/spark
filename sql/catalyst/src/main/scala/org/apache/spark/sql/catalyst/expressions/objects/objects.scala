@@ -126,8 +126,7 @@ case class StaticInvoke(
     functionName: String,
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true,
-    returnNullable: Boolean = true,
-    wrapException: Boolean = false) extends InvokeLike {
+    returnNullable: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
 
@@ -151,36 +150,16 @@ case class StaticInvoke(
       ""
     }
 
-    val wrappedCall = if (wrapException)
-      s"""
-        try {
-          ${ev.value} = $callFunc;
-        } catch (Exception e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
-        }
-      """ else
-      s"${ev.value} = $callFunc;"
-
     val evaluate = if (returnNullable) {
       if (ctx.defaultValue(dataType) == "null") {
         s"""
-          $wrappedCall
+          ${ev.value} = $callFunc;
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
-        val wrappedCall = if (wrapException)
-          s"""
-             ${ctx.boxedType(dataType)} $boxedResult = ${ctx.defaultValue(dataType)};
-             try {
-               $boxedResult = $callFunc;
-             } catch (Exception e) {
-               org.apache.spark.unsafe.Platform.throwException(e);
-             }
-           """ else
-          s"${ctx.boxedType(dataType)} $boxedResult = $callFunc;"
         s"""
-          $wrappedCall
+          ${ctx.boxedType(dataType)} $boxedResult = $callFunc;
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -188,7 +167,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      wrappedCall
+      s"${ev.value} = $callFunc;"
     }
 
     val code = s"""
@@ -205,7 +184,6 @@ case class StaticInvoke(
 
 /**
  * Invokes a call to reference to a static field.
- *
  *
  * @param staticObject The target of the static call.  This can either be the object itself
  *                     (methods defined on scala objects), or the class object
@@ -237,6 +215,54 @@ case class StaticField(
   }
 }
 
+/**
+ * Wraps an expression in a try-catch block, which can be used if the body expression may throw a
+ * exception.
+ *
+ * @param body The expression body to wrap in a try-catch block.
+ * @param dataType The return type of the try block.
+ * @param returnNullable When false, indicating the invoked method will always return
+ *                       non-null value.
+  */
+case class WrapException(
+    body: Expression,
+    dataType: DataType,
+    returnNullable: Boolean = true) extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = returnNullable
+  override def children: Seq[Expression] = Seq(body)
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+    val returnName = ctx.freshName("returnName")
+
+    val bodyExpr = body.genCode(ctx)
+
+    val code =
+      s"""
+         |final $javaType $returnName;
+         |try {
+         |  ${bodyExpr.code}
+         |  $returnName = ${bodyExpr.value};
+         |} catch (Exception e) {
+         |  org.apache.spark.unsafe.Platform.throwException(e);
+         |}
+       """.stripMargin
+
+    ev.copy(code = code, isNull = bodyExpr.isNull, value = returnName)
+  }
+}
+
+/**
+ * Returns the value if it is of the specified type, or null otherwise
+ *
+ * @param value       The value to returned
+ * @param checkedType The type to check against the value via instanceOf
+ * @param dataType    The type returned by the expression
+  */
 case class ValueIfType(
   value: Expression,
   checkedType: Class[_],
@@ -262,7 +288,6 @@ case class ValueIfType(
     ev.copy(code = code,
       isNull = s"(${obj.isNull} || !(${obj.value} instanceof ${checkedType.getName}))")
   }
-
 }
 
 /**
@@ -1332,7 +1357,7 @@ case class InitializeObject(
   extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = objectInstance.nullable
-  override def children: Seq[Expression] = null
+  override def children: Seq[Expression] = objectInstance +: setters.flatMap(_._2)
   override def dataType: DataType = objectInstance.dataType
 
   override def eval(input: InternalRow): Any =
@@ -1344,7 +1369,7 @@ case class InitializeObject(
     val objectInstanceName = ctx.freshName("objectInstance")
     val objectInstanceType = ctx.javaType(objectInstance.dataType)
 
-    val initialize = setters.map {
+    lazy val initialize = setters.map {
       case (setterMethod, args) =>
         val argGen = args.map {
           case (arg) =>
