@@ -42,7 +42,7 @@ class ParquetOptions(
    * Compression codec to use. By default use the value specified in SQLConf.
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
    */
-  val compressionCodecName: String = {
+  val compressionCodecClassName: String = {
     // `compression`, `parquet.compression`(i.e., ParquetOutputFormat.COMPRESSION), and
     // `spark.sql.parquet.compression.codec`
     // are in order of precedence from highest to lowest.

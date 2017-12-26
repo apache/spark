@@ -768,7 +768,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
       val option = new ParquetOptions(Map("Compression" -> "uncompressed"), spark.sessionState.conf)
-      assert(option.compressionCodecName == "UNCOMPRESSED")
+      assert(option.compressionCodecClassName == "UNCOMPRESSED")
     }
   }
 }

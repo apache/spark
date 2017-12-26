@@ -15,22 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql
 
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
 
-class CompressionCodecSuite extends TestHiveSingleton with SQLTestUtils {
+class CompressionCodecSuite extends SQLTestUtils with SharedSQLContext {
   test("Test `spark.sql.parquet.compression.codec` config") {
     Seq("NONE", "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO").foreach { c =>
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> c) {
         val expected = if (c == "NONE") "UNCOMPRESSED" else c
         val option = new ParquetOptions(Map.empty[String, String], spark.sessionState.conf)
-        assert(option.compressionCodecName == expected)
+        assert(option.compressionCodecClassName == expected)
       }
     }
   }
@@ -40,14 +39,14 @@ class CompressionCodecSuite extends TestHiveSingleton with SQLTestUtils {
     withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
       val props = Map("compression" -> "uncompressed", ParquetOutputFormat.COMPRESSION -> "gzip")
       val option = new ParquetOptions(props, spark.sessionState.conf)
-      assert(option.compressionCodecName == "UNCOMPRESSED")
+      assert(option.compressionCodecClassName == "UNCOMPRESSED")
     }
 
     // When "compression" is not configured, "parquet.compression" should be the preferred choice.
     withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
       val props = Map(ParquetOutputFormat.COMPRESSION -> "gzip")
       val option = new ParquetOptions(props, spark.sessionState.conf)
-      assert(option.compressionCodecName == "GZIP")
+      assert(option.compressionCodecClassName == "GZIP")
     }
 
     // When both "compression" and "parquet.compression" are not configured,
@@ -55,7 +54,7 @@ class CompressionCodecSuite extends TestHiveSingleton with SQLTestUtils {
     withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
       val props = Map.empty[String, String]
       val option = new ParquetOptions(props, spark.sessionState.conf)
-      assert(option.compressionCodecName == "SNAPPY")
+      assert(option.compressionCodecClassName == "SNAPPY")
     }
   }
 }
