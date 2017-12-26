@@ -89,7 +89,14 @@ class CSVOptions(
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
-  val charToEscapeQuoteEscaping = getChar("charToEscapeQuoteEscaping", '\u0000')
+  val charToEscapeQuoteEscaping = parameters.get("charToEscapeQuoteEscaping") match {
+    case None => None
+    case Some(null) => None
+    case Some(value) if value.length == 0 => None
+    case Some(value) if value.length == 1 => Some(value.charAt(0))
+    case _ =>
+      throw new RuntimeException("charToEscapeQuoteEscaping cannot be more than one character")
+  }
   val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
@@ -149,9 +156,7 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    if (charToEscapeQuoteEscaping != '\u0000') {
-      format.setCharToEscapeQuoteEscaping(charToEscapeQuoteEscaping)
-    }
+    charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
@@ -169,9 +174,7 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    if (charToEscapeQuoteEscaping != '\u0000') {
-      format.setCharToEscapeQuoteEscaping(charToEscapeQuoteEscaping)
-    }
+    charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)

@@ -411,8 +411,9 @@ class DataFrameReader(OptionUtils):
         :param multiLine: parse records, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
         :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
-                                          the quote character. If None is set, it uses the default
-                                          value, ``\0``.
+                                          the quote character. If None is set, the default value is
+                                          escape character when escape and quote characters are
+                                          different, ``\0`` otherwise.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -866,8 +867,9 @@ class DataFrameWriter(OptionUtils):
                                          values being written should be skipped. If None is set, it
                                          uses the default value, ``true``.
         :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
-                                          the quote character. If None is set, it uses the default
-                                          value, ``\0``.
+                                          the quote character. If None is set, the default value is
+                                          escape character when escape and quote characters are
+                                          different, ``\0`` otherwise..
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """

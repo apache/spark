@@ -622,8 +622,9 @@ class DataStreamReader(OptionUtils):
         :param multiLine: parse one record, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
         :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
-                                          the quote character. If None is set, it uses the default
-                                          value, ``\0``.
+                                          the quote character. If None is set, the default value is
+                                          escape character when escape and quote characters are
+                                          different, ``\0`` otherwise..
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming

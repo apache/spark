@@ -596,8 +596,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * (null character).</li>
    * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
    * an already quoted value.</li>
-   * <li>`charToEscapeQuoteEscaping` (default `\0`): sets a single character used for escaping
-   * the escape for the quote character.</li>
+   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
+   * escaping the escape for the quote character. The default value is escape character when escape
+   * and quote characters are different, `\0` otherwise.</li>
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
