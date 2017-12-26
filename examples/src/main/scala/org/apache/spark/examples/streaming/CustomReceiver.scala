@@ -82,9 +82,9 @@ class CustomReceiver(host: String, port: Int)
    var socket: Socket = null
    var userInput: String = null
    try {
-     logInfo("Connecting to " + host + ":" + port)
+     logInfo(s"Connecting to $host $port")
      socket = new Socket(host, port)
-     logInfo("Connected to " + host + ":" + port)
+     logInfo(s"Connected to $host : $port")
      val reader = new BufferedReader(
        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
      userInput = reader.readLine()
@@ -98,7 +98,7 @@ class CustomReceiver(host: String, port: Int)
      restart("Trying to connect again")
    } catch {
      case e: java.net.ConnectException =>
-       restart("Error connecting to " + host + ":" + port, e)
+       restart(s"Error connecting to $host : $port", e)
      case t: Throwable =>
        restart("Error receiving data", t)
    }
