@@ -25,7 +25,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.DynamicVariable
+
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
+
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -56,12 +58,16 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends Logging {
   private val DROPPED_EVENTS_UPDATE_INTERVAL = 2 * 60 * 1000
 
   /** A counter for total dropped events from all queues. */
-  private val totalDroppedEvents = metrics.metricRegistry.counter(s"livelistenerbus.totalDroppedEvents")
+  private val totalDroppedEvents =
+    metrics.metricRegistry.counter(
+      s"livelistenerbus.totalDroppedEvents")
 
   /** When `droppedEventsCounter` was logged last time in milliseconds. */
   @volatile private var lastReportTimestamp = 0L
 
-  private val droppedEventsUpdateScheduler = ThreadUtils.newDaemonSingleThreadScheduledExecutor("droppedevents-collect-scheduler")
+  private val droppedEventsUpdateScheduler =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "droppedevents-collect-scheduler")
 
   private val queues = new CopyOnWriteArrayList[AsyncEventQueue]()
 
