@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.sources.v2.streaming;
 
 import java.util.Optional;
 
-import org.apache.spark.sql.sources.v2.reader.ContinuousReader;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
+import org.apache.spark.sql.sources.v2.DataSourceV2;
+import org.apache.spark.sql.sources.v2.DataSourceV2Options;
+import org.apache.spark.sql.sources.v2.streaming.reader.ContinuousReader;
 import org.apache.spark.sql.types.StructType;
 
 /**
