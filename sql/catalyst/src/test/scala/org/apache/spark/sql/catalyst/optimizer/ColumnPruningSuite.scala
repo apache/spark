@@ -54,6 +54,7 @@ class ColumnPruningSuite extends PlanTest {
         .select('a, 'c)
         .generate(Explode('c), unrequiredChildOutput = input.select('c).analyze.references.toSeq,
           outputNames = "explode" :: Nil)
+        .select('a, 'explode)
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -99,6 +100,7 @@ class ColumnPruningSuite extends PlanTest {
         .generate(Explode(CreateArray(Seq('c1, 'c2))),
           unrequiredChildOutput = input.select('c2).analyze.output,
           outputNames = "explode" :: Nil)
+        .select('a, 'c1, 'explode)
         .analyze
 
     comparePlans(optimized, correctAnswer)
