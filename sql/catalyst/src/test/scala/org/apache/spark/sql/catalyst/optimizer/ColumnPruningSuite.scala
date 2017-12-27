@@ -43,7 +43,7 @@ class ColumnPruningSuite extends PlanTest {
 
     val query =
       input
-        .generate(Explode('c), unrequiredChildOutput = Nil, outputNames = "explode" :: Nil)
+        .generate(Explode('c), outputNames = "explode" :: Nil)
         .select('a, 'explode)
         .analyze
 
@@ -65,8 +65,7 @@ class ColumnPruningSuite extends PlanTest {
 
     val query =
       input
-        .generate(Explode('b), unrequiredChildOutput = Nil,
-          outputNames = "explode" :: Nil)
+        .generate(Explode('b), outputNames = "explode" :: Nil)
         .select(('explode + 1).as("result"))
         .analyze
 
@@ -76,7 +75,7 @@ class ColumnPruningSuite extends PlanTest {
       input
         .generate(Explode('b), unrequiredChildOutput = input.references.toSeq,
           outputNames = "explode" :: Nil)
-        .select(('explode + 1).as("result"))
+         .select(('explode + 1).as("result"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -87,8 +86,7 @@ class ColumnPruningSuite extends PlanTest {
 
     val query =
       input
-        .generate(Explode(CreateArray(Seq('c1, 'c2))),
-          unrequiredChildOutput = Nil, outputNames = "explode" :: Nil)
+        .generate(Explode(CreateArray(Seq('c1, 'c2))), outputNames = "explode" :: Nil)
         .select('a, 'c1, 'explode)
         .analyze
 

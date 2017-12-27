@@ -65,7 +65,10 @@ case class GenerateExec(
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  private def requiredChildOutput() = child.output.filterNot(unrequiredChildOutput.contains)
+  private lazy val requiredChildOutput = {
+    val unrequiredSet = AttributeSet(unrequiredChildOutput)
+    child.output.filterNot(unrequiredSet.contains)
+  }
 
   override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
 

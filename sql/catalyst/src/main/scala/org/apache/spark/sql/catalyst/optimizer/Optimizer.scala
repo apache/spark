@@ -445,6 +445,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
 
+    // prune unrequired references
+    case g : Generate
+      if (AttributeSet(g.unrequiredChildOutput) -- g.generator.references).nonEmpty =>
+        g.copy(child = prunedChild(g.child,
+                        g.child.outputSet -- g.unrequiredChildOutput ++ g.generator.references),
+               unrequiredChildOutput = g.generator.references.toSeq)
+
     // Sync Generate's unrequiredChildOutput with the actual needed outputs
     case p @ Project(_, g: Generate) =>
       val actualUnrequired = g.child.outputSet -- p.references
@@ -453,13 +460,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
       } else {
         p.copy(child = g.copy(unrequiredChildOutput = actualUnrequired.toSeq))
       }
-
-    // prune unrequired references
-    case g : Generate
-      if (AttributeSet(g.unrequiredChildOutput) -- g.generator.references).nonEmpty =>
-        g.copy(child = prunedChild(g.child,
-                           g.child.outputSet -- g.unrequiredChildOutput ++ g.generator.references),
-               unrequiredChildOutput = g.generator.references.toSeq)
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _) =>

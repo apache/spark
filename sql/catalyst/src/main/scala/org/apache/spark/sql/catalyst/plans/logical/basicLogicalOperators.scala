@@ -92,8 +92,10 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
-  def requiredChildOutput(): Seq[Attribute] =
-    child.output.filterNot(unrequiredChildOutput.contains)
+  def requiredChildOutput(): Seq[Attribute] = {
+    val unrequiredSet = AttributeSet(unrequiredChildOutput)
+    child.output.filterNot(unrequiredSet.contains)
+  }
 
   override lazy val resolved: Boolean = {
     generator.resolved &&

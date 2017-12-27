@@ -276,14 +276,12 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "select * from t lateral view explode(x) expl as x",
       table("t")
-        .generate(explode, unrequiredChildOutput = Nil, outer = false,
-          Some("expl"), Seq("x"))
+        .generate(explode, alias = Some("expl"), outputNames = Seq("x"))
         .select(star()))
 
     // Multiple lateral views
     val exploded = table("t")
-      .generate(explode, unrequiredChildOutput = Nil, outer = false,
-        Some("expl"), Seq.empty)
+      .generate(explode, alias = Some("expl"))
 
     assertEqual(
       """select *
@@ -291,13 +289,11 @@ class PlanParserSuite extends AnalysisTest {
         |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
      exploded
-        .generate(jsonTuple, unrequiredChildOutput = Nil, outer = true,
-          Some("jtup"), Seq("q", "z"))
+        .generate(jsonTuple, outer = true, alias = Some("jtup"), outputNames = Seq("q", "z"))
         .select(star()))
 
     // Multi-Insert lateral views.
-    val from = table("t1").generate(explode, unrequiredChildOutput = Nil,
-                                    outer = false, Some("expl"), Seq("x"))
+    val from = table("t1").generate(explode, alias = Some("expl"), outputNames = Seq("x"))
     assertEqual(
       """from t1
         |lateral view explode(x) expl as x
@@ -309,8 +305,7 @@ class PlanParserSuite extends AnalysisTest {
         |where s < 10
       """.stripMargin,
       Union(from
-        .generate(jsonTuple, unrequiredChildOutput = Nil, outer = false,
-          Some("jtup"), Seq("q", "z"))
+        .generate(jsonTuple, alias = Some("jtup"), outputNames = Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
         from.where('s < 10).select(star()).insertInto("t3")))
@@ -319,10 +314,8 @@ class PlanParserSuite extends AnalysisTest {
     val expected = table("t")
       .generate(
         UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
-        unrequiredChildOutput = Nil,
-        outer = false,
-        Some("posexpl"),
-        Seq("x", "y"))
+        alias = Some("posexpl"),
+        outputNames = Seq("x", "y"))
       .select(star())
     assertEqual(
       "select * from t lateral view posexplode(x) posexpl as x, y",
