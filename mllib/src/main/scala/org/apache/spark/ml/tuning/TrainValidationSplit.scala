@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import java.util.{List => JList, Locale}
+import java.util.{Iterator => JIterator, List => JList, Locale}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -141,40 +141,46 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
       Some(Array.fill[Model[_]](epm.length)(null))
     } else None
 
+    val modelIter = est.fitMultiple(trainingDataset, epm)
+      .asInstanceOf[JIterator[(Integer, Model[_])]]
+
     // Fit models in a Future for training in parallel
     logDebug(s"Train split with multiple sets of parameters.")
-    val modelFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
-      Future[Model[_]] {
-        val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
+    val modelFutures = epm.map { _ =>
+      Future[(Int, Model[_])] {
+        val next = modelIter.next()
+        val paramIndex = next._1
+        val model = next._2
 
         if (collectSubModelsParam) {
           subModels.get(paramIndex) = model
         }
-        model
+        Tuple2[Int, Model[_]](paramIndex, model)
       } (executionContext)
     }
 
     // Unpersist training data only when all models have trained
-    Future.sequence[Model[_], Iterable](modelFutures)(implicitly, executionContext)
+    Future.sequence[Any, Iterable](modelFutures)(implicitly, executionContext)
       .onComplete { _ => trainingDataset.unpersist() } (executionContext)
 
     // Evaluate models in a Future that will calulate a metric and allow model to be cleaned up
     val metricFutures = modelFutures.zip(epm).map { case (modelFuture, paramMap) =>
-      modelFuture.map { model =>
+      modelFuture.map { case (paramIndex, model) =>
         // TODO: duplicate evaluator to take extra params from input
         val metric = eval.evaluate(model.transform(validationDataset, paramMap))
         logDebug(s"Got metric $metric for model trained with $paramMap.")
-        metric
+        (paramIndex, metric)
       } (executionContext)
     }
 
     // Wait for all metrics to be calculated
-    val metrics = metricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+    val metricsMap = metricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf)).toMap
+    val metrics = epm.indices.map(metricsMap)
 
     // Unpersist validation set once all metrics have been produced
     validationDataset.unpersist()
 
-    logInfo(s"Train validation split metrics: ${metrics.toSeq}")
+    logInfo(s"Train validation split metrics: ${metrics}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
@@ -182,7 +188,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     instr.logSuccess(bestModel)
-    copyValues(new TrainValidationSplitModel(uid, bestModel, metrics)
+    copyValues(new TrainValidationSplitModel(uid, bestModel, metrics.toArray)
       .setSubModels(subModels).setParent(this))
   }
 

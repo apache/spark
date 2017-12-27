@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import java.util.{List => JList, Locale}
+import java.util.{Iterator => JIterator, List => JList, Locale}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -146,17 +146,24 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
+      val modelIter = est.fitMultiple(trainingDataset, epm)
+        .asInstanceOf[JIterator[(Integer, Model[_])]]
+
       // Fit models in a Future for training in parallel
-      val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
-        Future[Double] {
-          val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
+      val foldMetricFutures = epm.map { _ =>
+        Future[(Int, Double)] {
+          val next = modelIter.next()
+          val paramIndex = next._1
+          val model = next._2
+          val paramMap = epm(paramIndex)
+
           if (collectSubModelsParam) {
             subModels.get(splitIndex)(paramIndex) = model
           }
           // TODO: duplicate evaluator to take extra params from input
           val metric = eval.evaluate(model.transform(validationDataset, paramMap))
           logDebug(s"Got metric $metric for model trained with $paramMap.")
-          metric
+          (paramIndex, metric)
         } (executionContext)
       }
 
@@ -164,7 +171,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
       trainingDataset.unpersist()
       validationDataset.unpersist()
-      foldMetrics
+      epm.indices.map(foldMetrics.toMap).toArray
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
 
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
