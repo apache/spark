@@ -69,7 +69,7 @@ building using the supplied script, or manually.
 
 To launch Spark Pi in cluster mode,
 
-{% highlight bash %}
+```bash
 $ bin/spark-submit \
     --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
     --deploy-mode cluster \
@@ -79,7 +79,7 @@ $ bin/spark-submit \
     --conf spark.kubernetes.driver.container.image=<driver-image> \
     --conf spark.kubernetes.executor.container.image=<executor-image> \
     local:///path/to/examples.jar
-{% endhighlight %}
+```
 
 The Spark master, specified either via passing the `--master` command line argument to `spark-submit` or by setting
 `spark.master` in the application's configuration, must be a URL with the format `k8s://<api_server_url>`. Prefixing the
