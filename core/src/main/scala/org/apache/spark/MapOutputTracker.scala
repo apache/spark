@@ -829,14 +829,14 @@ private[spark] object MapOutputTracker extends Logging {
         // deserialize the Broadcast, pull .value array out of it, and then deserialize that
         val bcast = deserializeObject(bytes, 1, bytes.length - 1).
           asInstanceOf[Broadcast[Array[Byte]]]
+        try {
         logInfo("Broadcast mapstatuses size = " + bytes.length +
           ", actual size = " + bcast.value.length)
         // Important - ignore the DIRECT tag ! Start from offset 1
-        try {
           deserializeObject(bcast.value, 1, bcast.value.length - 1).asInstanceOf[Array[MapStatus]]
         } catch {
           case e: IOException =>
-            bcast.destroy()
+            SparkEnv.get.blockManager.removeBroadcast(bcast.id, false)
             throw new IOException(s"Failed to read broadcast for mapstatuses", e)
         }
       case _ => throw new IllegalArgumentException("Unexpected byte tag = " + bytes(0))
