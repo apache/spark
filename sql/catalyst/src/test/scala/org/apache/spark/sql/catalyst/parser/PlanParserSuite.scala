@@ -288,7 +288,7 @@ class PlanParserSuite extends AnalysisTest {
         |from t
         |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
-     exploded
+      exploded
         .generate(jsonTuple, outer = true, alias = Some("jtup"), outputNames = Seq("q", "z"))
         .select(star()))
 
