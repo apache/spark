@@ -29,4 +29,4 @@ The Python packaging for Spark is not intended to replace all of the other use c
 
 ## Python Requirements
 
-At its core PySpark depends on Py4J (currently version 0.10.6), but additional sub-packages have their own requirements (including numpy, pandas, and pyarrow).
+At its core PySpark depends on Py4J (currently version 0.10.6), but additional sub-packages might have their own requirements declared as "Extras" (including numpy, pandas, and pyarrow). You can install the requirements by specifying their extra names.
