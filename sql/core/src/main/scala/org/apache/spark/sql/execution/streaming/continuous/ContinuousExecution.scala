@@ -228,8 +228,7 @@ class ContinuousExecution(
           triggerExecutor.execute(() => {
             startTrigger()
 
-            if (reader.needsReconfiguration()) {
-              state.set(RECONFIGURING)
+            if (reader.needsReconfiguration() && state.compareAndSet(ACTIVE, RECONFIGURING)) {
               stopSources()
               if (queryExecutionThread.isAlive) {
                 sparkSession.sparkContext.cancelJobGroup(runId.toString)

@@ -24,7 +24,8 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.ForeachWriter
+import org.apache.spark.sql.{ForeachWriter, Row}
+import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.TestSparkSession
@@ -89,6 +90,26 @@ class ContinuousKafkaSuite extends KafkaSourceTest {
       AddKafkaData(Set(topic), scala.Range(10, 20): _*),
       CheckAnswer(1, 2, 3, 4, 5, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
     )
+  }
+
+  test("kafka sink") {
+    val query = spark.readStream
+      .format("rate")
+      .option("numPartitions", "6")
+      .option("rowsPerSecond", "10")
+      .load()
+      .select('value)
+      .writeStream
+      .format("memory")
+      .queryName("kafkaSink")
+      .trigger(Trigger.Continuous(100))
+      .start()
+
+    eventually(timeout(streamingTimeout)) {
+      val results = spark.read.table("kafkaSink").collect()
+      assert(Range(0, 20).map(Row(_)).toSet.subsetOf(results.toSet))
+    }
+    query.stop()
   }
 }
 

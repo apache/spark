@@ -198,20 +198,16 @@ class ContinuousKafkaDataReader(
   private var currentRecord: ConsumerRecord[Array[Byte], Array[Byte]] = _
 
   override def next(): Boolean = {
-    try {
-      var r: ConsumerRecord[Array[Byte], Array[Byte]] = null
-      while (r == null) {
-        r = consumer.get(
-          nextKafkaOffset,
-          untilOffset = Long.MaxValue,
-          pollTimeoutMs = Long.MaxValue,
-          failOnDataLoss)
-      }
-      nextKafkaOffset = r.offset + 1
-      currentRecord = r
-    } catch {
-      case _: WakeupException if closed.get() => return false
+    var r: ConsumerRecord[Array[Byte], Array[Byte]] = null
+    while (r == null) {
+      r = consumer.get(
+        nextKafkaOffset,
+        untilOffset = Long.MaxValue,
+        pollTimeoutMs = Long.MaxValue,
+        failOnDataLoss)
     }
+    nextKafkaOffset = r.offset + 1
+    currentRecord = r
     true
   }
 
@@ -243,7 +239,6 @@ class ContinuousKafkaDataReader(
   }
 
   override def close(): Unit = {
-    closed.set(true)
-    consumer.wakeup()
+    consumer.close()
   }
 }
