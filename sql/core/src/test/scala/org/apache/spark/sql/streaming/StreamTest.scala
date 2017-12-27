@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.StreamingQueryListener._
@@ -403,25 +403,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     def fetchStreamAnswer(currentStream: StreamExecution, lastOnly: Boolean) = {
       verify(currentStream != null, "stream not running")
-      // Get the map of source index to the current source objects
-      val indexToSource: Map[Int, BaseStreamingSource] =
-        currentStream
-          .logicalPlan
-          .collect { case StreamingExecutionRelation(s, _) => s }
-          .zipWithIndex
-          .map(_.swap)
-          .toMap ++
-        currentStream.lastExecution
-          .logical
-          .collect { case DataSourceV2Relation(_, r: BaseStreamingSource) => r }
-          .zipWithIndex
-          .map(_.swap)
-          .toMap
 
       // Block until all data added has been processed for all the source
       awaiting.foreach { case (sourceIndex, offset) =>
         failAfter(streamingTimeout) {
-          currentStream.awaitOffset(indexToSource(sourceIndex), offset)
+          currentStream.awaitOffset(sourceIndex, offset)
         }
       }
 
@@ -480,6 +466,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             // after starting the query.
             try {
               currentStream.awaitInitialization(streamingTimeout.toMillis)
+              currentStream match {
+                case s: ContinuousExecution => s.awaitEpoch(0)
+                case _ =>
+              }
             } catch {
               case _: StreamingQueryException =>
                 // Ignore the exception. `StopStream` or `ExpectFailure` will catch it as well.

@@ -199,11 +199,14 @@ class ContinuousKafkaDataReader(
 
   override def next(): Boolean = {
     try {
-      val r = consumer.get(
-        nextKafkaOffset,
-        untilOffset = Long.MaxValue,
-        pollTimeoutMs = Long.MaxValue,
-        failOnDataLoss)
+      var r: ConsumerRecord[Array[Byte], Array[Byte]] = null
+      while (r == null) {
+        r = consumer.get(
+          nextKafkaOffset,
+          untilOffset = Long.MaxValue,
+          pollTimeoutMs = Long.MaxValue,
+          failOnDataLoss)
+      }
       nextKafkaOffset = r.offset + 1
       currentRecord = r
     } catch {
