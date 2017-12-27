@@ -38,7 +38,7 @@ class ColumnPruningSuite extends PlanTest {
       CollapseProject) :: Nil
   }
 
-  test("Column pruning for Generate when Generate.unrequiredChildOutput = Nil") {
+  test("Column pruning for Generate when Generate.unrequiredChildOutput = Nil ") {
     val input = LocalRelation('a.int, 'b.int, 'c.array(StringType))
 
     val query =
