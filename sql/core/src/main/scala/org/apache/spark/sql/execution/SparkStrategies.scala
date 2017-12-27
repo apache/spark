@@ -158,45 +158,65 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       def smallerSide =
         if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
 
-      val buildRight = canBuildRight && right.stats.hints.broadcast
-      val buildLeft = canBuildLeft && left.stats.hints.broadcast
-
-      if (buildRight && buildLeft) {
+      if (canBuildRight && canBuildLeft) {
         // Broadcast smaller side base on its estimated physical size
         // if both sides have broadcast hint
         smallerSide
-      } else if (buildRight) {
+      } else if (canBuildRight) {
         BuildRight
-      } else if (buildLeft) {
+      } else if (canBuildLeft) {
         BuildLeft
-      } else if (canBuildRight && canBuildLeft) {
+      } else {
         // for the last default broadcast nested loop join
         smallerSide
-      } else {
-        throw new AnalysisException("Can not decide which side to broadcast for this join")
       }
+    }
+
+    private def needsBroadcastByHints(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+      : Boolean = {
+      val buildLeft = canBuildLeft(joinType) && left.stats.hints.broadcast
+      val buildRight = canBuildRight(joinType) && right.stats.hints.broadcast
+      buildLeft || buildRight
+    }
+
+    private def broadcastSideByHints(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+      : BuildSide = {
+      val buildLeft = canBuildLeft(joinType) && left.stats.hints.broadcast
+      val buildRight = canBuildRight(joinType) && right.stats.hints.broadcast
+      broadcastSide(buildLeft, buildRight, left, right)
+    }
+
+    private def needsBroadcastByConfig(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+      : Boolean = {
+      val buildLeft = canBuildLeft(joinType) && canBroadcast(left)
+      val buildRight = canBuildRight(joinType) && canBroadcast(right)
+      buildLeft || buildRight
+    }
+
+    private def broadcastSideByConfig(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+      : BuildSide = {
+      val buildLeft = canBuildLeft(joinType) && canBroadcast(left)
+      val buildRight = canBuildRight(joinType) && canBroadcast(right)
+      broadcastSide(buildLeft, buildRight, left, right)
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // --- BroadcastHashJoin --------------------------------------------------------------------
 
+      // broadcast hints were specified
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if (canBuildRight(joinType) && right.stats.hints.broadcast) ||
-          (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
-        val buildSide = broadcastSide(canBuildLeft(joinType), canBuildRight(joinType), left, right)
+          if needsBroadcastByHints(joinType, left, right) =>
+        val buildSide = broadcastSideByHints(joinType, left, right)
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
+      // broadcast hints were not specified, so need to infer from conf
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if canBuildRight(joinType) && canBroadcast(right) =>
+          if needsBroadcastByConfig(joinType, left, right) =>
+        val buildSide = broadcastSideByConfig(joinType, left, right)
         Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
-
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if canBuildLeft(joinType) && canBroadcast(left) =>
-        Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
       // --- ShuffledHashJoin ---------------------------------------------------------------------
 
@@ -225,27 +245,24 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcasted
       case j @ logical.Join(left, right, joinType, condition)
-        if (canBuildRight(joinType) && right.stats.hints.broadcast) ||
-          (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
-        val buildSide = broadcastSide(canBuildLeft(joinType), canBuildRight(joinType), left, right)
+          if needsBroadcastByHints(joinType, left, right) =>
+        val buildSide = broadcastSideByHints(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       case j @ logical.Join(left, right, joinType, condition)
-          if canBuildRight(joinType) && canBroadcast(right) =>
+          if needsBroadcastByConfig(joinType, left, right) =>
+        val buildSide = broadcastSideByConfig(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
-      case j @ logical.Join(left, right, joinType, condition)
-          if canBuildLeft(joinType) && canBroadcast(left) =>
-        joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), BuildLeft, joinType, condition) :: Nil
+          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       // Pick CartesianProduct for InnerJoin
       case logical.Join(left, right, _: InnerLike, condition) =>
         joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>
-        val buildSide = broadcastSide(canBuildLeft = true, canBuildRight = true, left, right)
+        val buildSide = broadcastSide(
+          left.stats.hints.broadcast, right.stats.hints.broadcast, left, right)
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
