@@ -82,8 +82,9 @@ class Estimator(Params):
         :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`.
         :param params: A list/tuple of param maps.
         :return: A thread safe iterable which contains one model for each param map. Each
-        call to `next(modelIterator)` will return `(index, model)` where model was fit using
-        `params[index]`. Params maps may be fit in an order different than their order in params.
+                 call to `next(modelIterator)` will return `(index, model)` where model was fit
+                 using `params[index]`. Params maps may be fit in an order different than their
+                 order in params.
 
         .. note:: Experimental
         """
