@@ -40,7 +40,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
       TypeCheckResult.TypeCheckFailure(
-        s"type of predicate expression in If should be boolean, not ${predicate.dataType}")
+        "type of predicate expression in If should be boolean, " +
+          s"not ${predicate.dataType.simpleString}")
     } else if (!trueValue.dataType.sameType(falseValue.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
@@ -190,7 +191,7 @@ case class CaseWhen(
     // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
     // We won't go on anymore on the computation.
     val resultState = ctx.freshName("caseWhenResultState")
-    val tmpResult = ctx.addMutableState(ctx.javaType(dataType), "caseWhenTmpResult")
+    ev.value = ctx.addMutableState(ctx.javaType(dataType), ev.value)
 
     // these blocks are meant to be inside a
     // do {
@@ -205,7 +206,7 @@ case class CaseWhen(
          |if (!${cond.isNull} && ${cond.value}) {
          |  ${res.code}
          |  $resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
-         |  $tmpResult = ${res.value};
+         |  ${ev.value} = ${res.value};
          |  continue;
          |}
        """.stripMargin
@@ -216,7 +217,7 @@ case class CaseWhen(
       s"""
          |${res.code}
          |$resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
-         |$tmpResult = ${res.value};
+         |${ev.value} = ${res.value};
        """.stripMargin
     }
 
@@ -264,13 +265,11 @@ case class CaseWhen(
     ev.copy(code =
       s"""
          |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
-         |$tmpResult = ${ctx.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
          |// TRUE if any condition is met and the result is null, or no any condition is met.
          |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
-         |final ${ctx.javaType(dataType)} ${ev.value} = $tmpResult;
        """.stripMargin)
   }
 }

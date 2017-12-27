@@ -40,10 +40,17 @@ NULL
 #'
 #' @param x Column to compute on. In \code{window}, it must be a time Column of
 #'          \code{TimestampType}.
-#' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
-#'               Column \code{x} to DateType or TimestampType. For \code{trunc}, it is the string
-#'               to use to specify the truncation method. For example, "year", "yyyy", "yy" for
-#'               truncate by year, or "month", "mon", "mm" for truncate by month.
+#' @param format The format for the given dates or timestamps in Column \code{x}. See the
+#'               format used in the following methods:
+#'               \itemize{
+#'               \item \code{to_date} and \code{to_timestamp}: it is the string to use to parse
+#'                    Column \code{x} to DateType or TimestampType.
+#'               \item \code{trunc}: it is the string to use to specify the truncation method.
+#'                    For example, "year", "yyyy", "yy" for truncate by year, or "month", "mon",
+#'                    "mm" for truncate by month.
+#'               \item \code{date_trunc}: it is similar with \code{trunc}'s but additionally
+#'                    supports "day", "dd", "second", "minute", "hour", "week" and "quarter".
+#'               }
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
 #' @rdname column_datetime_functions
@@ -3476,5 +3483,24 @@ setMethod("trunc",
           function(x, format) {
             jc <- callJStatic("org.apache.spark.sql.functions", "trunc",
                               x@jc, as.character(format))
+            column(jc)
+          })
+
+#' @details
+#' \code{date_trunc}: Returns timestamp truncated to the unit specified by the format.
+#'
+#' @rdname column_datetime_functions
+#' @aliases date_trunc date_trunc,character,Column-method
+#' @export
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, df$time, date_trunc("hour", df$time), date_trunc("minute", df$time),
+#'             date_trunc("week", df$time), date_trunc("quarter", df$time)))}
+#' @note date_trunc since 2.3.0
+setMethod("date_trunc",
+          signature(format = "character", x = "Column"),
+          function(format, x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "date_trunc", format, x@jc)
             column(jc)
           })

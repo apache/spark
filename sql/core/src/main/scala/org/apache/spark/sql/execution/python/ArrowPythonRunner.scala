@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.JavaConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.stream.{ArrowStreamReader, ArrowStreamWriter}
+import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
 
 import org.apache.spark._
 import org.apache.spark.api.python._
@@ -74,13 +74,9 @@ class ArrowPythonRunner(
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
         val arrowWriter = ArrowWriter.create(root)
 
-        var closed = false
-
         context.addTaskCompletionListener { _ =>
-          if (!closed) {
-            root.close()
-            allocator.close()
-          }
+          root.close()
+          allocator.close()
         }
 
         val writer = new ArrowStreamWriter(root, null, dataOut)
@@ -102,7 +98,6 @@ class ArrowPythonRunner(
           writer.end()
           root.close()
           allocator.close()
-          closed = true
         }
       }
     }
@@ -126,18 +121,11 @@ class ArrowPythonRunner(
       private var schema: StructType = _
       private var vectors: Array[ColumnVector] = _
 
-      private var closed = false
-
       context.addTaskCompletionListener { _ =>
-        // todo: we need something like `reader.end()`, which release all the resources, but leave
-        // the input stream open. `reader.close()` will close the socket and we can't reuse worker.
-        // So here we simply not close the reader, which is problematic.
-        if (!closed) {
-          if (root != null) {
-            root.close()
-          }
-          allocator.close()
+        if (reader != null) {
+          reader.close(false)
         }
+        allocator.close()
       }
 
       private var batchLoaded = true
@@ -154,9 +142,8 @@ class ArrowPythonRunner(
               batch.setNumRows(root.getRowCount)
               batch
             } else {
-              root.close()
+              reader.close(false)
               allocator.close()
-              closed = true
               // Reach end of stream. Call `read()` again to read control data.
               read()
             }

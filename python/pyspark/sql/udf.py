@@ -33,19 +33,23 @@ def _wrap_function(sc, func, returnType):
 
 
 def _create_udf(f, returnType, evalType):
-    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
+
+    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF or \
+            evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         import inspect
+        from pyspark.sql.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
         argspec = inspect.getargspec(f)
-        if len(argspec.args) == 0 and argspec.varargs is None:
+
+        if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF and len(argspec.args) == 0 and \
+                argspec.varargs is None:
             raise ValueError(
                 "Invalid function: 0-arg pandas_udfs are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-    elif evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
-        import inspect
-        argspec = inspect.getargspec(f)
-        if len(argspec.args) != 1:
+        if evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF and len(argspec.args) != 1:
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUP_MAP "
                 "must take a single arg that is a pandas DataFrame."
@@ -88,6 +92,7 @@ class UserDefinedFunction(object):
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
         self.evalType = evalType
+        self._deterministic = True
 
     @property
     def returnType(self):
@@ -125,7 +130,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.evalType)
+            self._name, wrapped_func, jdt, self.evalType, self._deterministic)
         return judf
 
     def __call__(self, *cols):
@@ -157,5 +162,15 @@ class UserDefinedFunction(object):
         wrapper.func = self.func
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
+        wrapper.asNondeterministic = self.asNondeterministic
 
         return wrapper
+
+    def asNondeterministic(self):
+        """
+        Updates UserDefinedFunction to nondeterministic.
+
+        .. versionadded:: 2.3
+        """
+        self._deterministic = False
+        return self

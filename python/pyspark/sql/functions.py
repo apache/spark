@@ -2093,9 +2093,14 @@ class PandasUDFType(object):
 def udf(f=None, returnType=StringType()):
     """Creates a user defined function (UDF).
 
-    .. note:: The user-defined functions must be deterministic. Due to optimization,
-        duplicate invocations may be eliminated or the function may even be invoked more times than
-        it is present in the query.
+    .. note:: The user-defined functions are considered deterministic by default. Due to
+        optimization, duplicate invocations may be eliminated or the function may even be invoked
+        more times than it is present in the query. If your function is not deterministic, call
+        `asNondeterministic` on the user defined function. E.g.:
+
+    >>> from pyspark.sql.types import IntegerType
+    >>> import random
+    >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
 
     .. note:: The user-defined functions do not support conditional expressions or short curcuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
@@ -2159,16 +2164,17 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> from pyspark.sql.types import IntegerType, StringType
-       >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
-       >>> @pandas_udf(StringType())
+       >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())  # doctest: +SKIP
+       >>> @pandas_udf(StringType())  # doctest: +SKIP
        ... def to_upper(s):
        ...     return s.str.upper()
        ...
-       >>> @pandas_udf("integer", PandasUDFType.SCALAR)
+       >>> @pandas_udf("integer", PandasUDFType.SCALAR)  # doctest: +SKIP
        ... def add_one(x):
        ...     return x + 1
        ...
-       >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+       >>> df = spark.createDataFrame([(1, "John Doe", 21)],
+       ...                            ("id", "name", "age"))  # doctest: +SKIP
        >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")) \\
        ...     .show()  # doctest: +SKIP
        +----------+--------------+------------+
@@ -2189,8 +2195,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> df = spark.createDataFrame(
        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-       ...     ("id", "v"))
-       >>> @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)
+       ...     ("id", "v"))  # doctest: +SKIP
+       >>> @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)  # doctest: +SKIP
        ... def normalize(pdf):
        ...     v = pdf.v
        ...     return pdf.assign(v=(v - v.mean()) / v.std())

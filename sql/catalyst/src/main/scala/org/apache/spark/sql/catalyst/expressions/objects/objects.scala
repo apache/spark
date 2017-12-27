@@ -1148,17 +1148,21 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
-    val (serializerClass, serializerInstanceClass) = {
+    val (serializer, serializerClass, serializerInstanceClass) = {
       if (kryo) {
-        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+        ("kryoSerializer",
+          classOf[KryoSerializer].getName,
+          classOf[KryoSerializerInstance].getName)
       } else {
-        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+        ("javaSerializer",
+          classOf[JavaSerializer].getName,
+          classOf[JavaSerializerInstance].getName)
       }
     }
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializer = ctx.addMutableState(serializerInstanceClass, "serializerForEncode", v =>
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, v =>
       s"""
          |if ($env == null) {
          |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
@@ -1193,17 +1197,21 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
-    val (serializerClass, serializerInstanceClass) = {
+    val (serializer, serializerClass, serializerInstanceClass) = {
       if (kryo) {
-        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+        ("kryoSerializer",
+          classOf[KryoSerializer].getName,
+          classOf[KryoSerializerInstance].getName)
       } else {
-        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+        ("javaSerializer",
+          classOf[JavaSerializer].getName,
+          classOf[JavaSerializerInstance].getName)
       }
     }
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializer = ctx.addMutableState(serializerInstanceClass, "serializerForDecode", v =>
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, v =>
       s"""
          |if ($env == null) {
          |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
