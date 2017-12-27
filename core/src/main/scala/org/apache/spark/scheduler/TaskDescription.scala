@@ -47,6 +47,7 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
 private[spark] class TaskDescription(
     val taskId: Long,
     val attemptNumber: Int,
+    val attemptNumberCountingFailedStages: Int,
     val executorId: String,
     val name: String,
     val index: Int,    // Index within this task's TaskSet

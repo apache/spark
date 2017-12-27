@@ -344,7 +344,7 @@ private[spark] class Executor(
         val value = try {
           val res = task.run(
             taskAttemptId = taskId,
-            attemptNumber = taskDescription.attemptNumber,
+            attemptNumber = taskDescription.attemptNumberCountingFailedStages,
             metricsSystem = env.metricsSystem)
           threwException = false
           res

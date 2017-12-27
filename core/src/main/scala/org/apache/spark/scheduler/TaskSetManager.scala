@@ -52,6 +52,7 @@ private[spark] class TaskSetManager(
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
     blacklistTracker: Option[BlacklistTracker] = None,
+    tsmForLatestFailedStage: Option[TaskSetManager] = None,
     clock: Clock = new SystemClock()) extends Schedulable with Logging {
 
   private val conf = sched.sc.conf
@@ -89,6 +90,14 @@ private[spark] class TaskSetManager(
   private val killedByOtherAttempt: Array[Boolean] = new Array[Boolean](numTasks)
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
+  // accumulated attemptId for partitions of the stage taking into account failure stages.
+  val partitionToAttempt = new HashMap[Int, Int]
+
+  tsmForLatestFailedStage.foreach { tsm =>
+    val tasks = tsm.taskSet.tasks
+    partitionToAttempt ++= tasks.map(t =>
+      t.partitionId -> tsm.partitionToAttempt.getOrElse(t.partitionId, 0))
+  }
   private[scheduler] var tasksSuccessful = 0
 
   val weight = 1
@@ -121,6 +130,10 @@ private[spark] class TaskSetManager(
   // state in order to continue to track and account for the running tasks.
   // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
   private[scheduler] var isZombie = false
+
+  // True if fetch failed occurred, this fetchfailed state is used to tell task scheduler whether to
+  // clear some taskSet info across all stages
+  var isFetchFailed = false
 
   // Set of pending tasks for each executor. These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
@@ -470,6 +483,10 @@ private[spark] class TaskSetManager(
           execId, host, taskLocality, speculative)
         taskInfos(taskId) = info
         taskAttempts(index) = info :: taskAttempts(index)
+        // global attempt number taking failure stages into account
+        val attemptNumCountingFailedStages = partitionToAttempt.get(task.partitionId)
+                                             .map(_ + 1).getOrElse(0)
+        partitionToAttempt(task.partitionId) = attemptNumCountingFailedStages
         // Update our locality level for delay scheduling
         // NO_PREF will not affect the variables related to delay scheduling
         if (maxLocality != TaskLocality.NO_PREF) {
@@ -508,6 +525,7 @@ private[spark] class TaskSetManager(
         new TaskDescription(
           taskId,
           attemptNum,
+          attemptNumCountingFailedStages,
           execId,
           taskName,
           index,
@@ -523,7 +541,7 @@ private[spark] class TaskSetManager(
 
   private def maybeFinishTaskSet() {
     if (isZombie && runningTasks == 0) {
-      sched.taskSetFinished(this)
+      sched.taskSetFinished(this, isFetchFailed)
       if (tasksSuccessful == numTasks) {
         blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(
           taskSet.stageId,
@@ -789,6 +807,7 @@ private[spark] class TaskSetManager(
           tasksSuccessful += 1
         }
         isZombie = true
+        isFetchFailed = true
 
         if (fetchFailed.bmAddress != null) {
           blacklistTracker.foreach(_.updateBlacklistForFetchFailure(

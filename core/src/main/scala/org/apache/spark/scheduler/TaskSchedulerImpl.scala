@@ -88,6 +88,7 @@ private[spark] class TaskSchedulerImpl(
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
+  private val taskSetsForlatestStageAttempt = new HashMap[Int, TaskSetManager]
 
   // Protected by `this`
   private[scheduler] val taskIdToTaskSetManager = new HashMap[Long, TaskSetManager]
@@ -186,6 +187,7 @@ private[spark] class TaskSchedulerImpl(
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
       stageTaskSets(taskSet.stageAttemptId) = manager
+      taskSetsForlatestStageAttempt(taskSet.stageId) = manager
       val conflictingTaskSet = stageTaskSets.exists { case (_, ts) =>
         ts.taskSet != taskSet && !ts.isZombie
       }
@@ -217,7 +219,9 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
+    val latestFailedTaskSetManagerOpt = taskSetsForlatestStageAttempt.get(taskSet.stageId)
+    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt,
+      latestFailedTaskSetManagerOpt)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -257,12 +261,16 @@ private[spark] class TaskSchedulerImpl(
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
    * cleaned up.
    */
-  def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
+  def taskSetFinished(manager: TaskSetManager,
+    isFetchFailed: Boolean = false): Unit = synchronized {
     taskSetsByStageIdAndAttempt.get(manager.taskSet.stageId).foreach { taskSetsForStage =>
       taskSetsForStage -= manager.taskSet.stageAttemptId
       if (taskSetsForStage.isEmpty) {
         taskSetsByStageIdAndAttempt -= manager.taskSet.stageId
       }
+    }
+    if (!isFetchFailed) {
+      taskSetsForlatestStageAttempt.remove(manager.taskSet.stageId)
     }
     manager.parent.removeSchedulable(manager)
     logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +

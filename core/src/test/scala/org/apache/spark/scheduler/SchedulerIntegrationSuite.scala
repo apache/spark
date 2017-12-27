@@ -514,9 +514,9 @@ class TestTaskScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
     super.submitTasks(taskSet)
   }
 
-  override def taskSetFinished(manager: TaskSetManager): Unit = {
+  override def taskSetFinished(manager: TaskSetManager, isFetchFailed: Boolean): Unit = {
     runningTaskSets -= manager.taskSet
-    super.taskSetFinished(manager)
+    super.taskSetFinished(manager, isFetchFailed)
   }
 }
 

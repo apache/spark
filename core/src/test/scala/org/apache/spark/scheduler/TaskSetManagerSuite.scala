@@ -124,7 +124,8 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     }
   }
 
-  override def taskSetFinished(manager: TaskSetManager): Unit = finishedManagers += manager
+  override def taskSetFinished(manager: TaskSetManager,
+    isFetchFailed: Boolean): Unit = finishedManagers += manager
 
   override def isExecutorAlive(execId: String): Boolean = executors.contains(execId)
 
@@ -443,7 +444,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // within the taskset.
     val mockListenerBus = mock(classOf[LiveListenerBus])
     val blacklistTrackerOpt = Some(new BlacklistTracker(mockListenerBus, conf, None, clock))
-    val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, clock)
+    val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, None, clock)
 
     {
       val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
