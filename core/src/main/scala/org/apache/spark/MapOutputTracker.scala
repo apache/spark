@@ -832,7 +832,13 @@ private[spark] object MapOutputTracker extends Logging {
         logInfo("Broadcast mapstatuses size = " + bytes.length +
           ", actual size = " + bcast.value.length)
         // Important - ignore the DIRECT tag ! Start from offset 1
-        deserializeObject(bcast.value, 1, bcast.value.length - 1).asInstanceOf[Array[MapStatus]]
+        try {
+          deserializeObject(bcast.value, 1, bcast.value.length - 1).asInstanceOf[Array[MapStatus]]
+        } catch {
+          case e: IOException =>
+            bcast.destroy()
+            throw new IOException(s"Failed to read broadcast for mapstatuses", e)
+        }
       case _ => throw new IllegalArgumentException("Unexpected byte tag = " + bytes(0))
     }
   }
