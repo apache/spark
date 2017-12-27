@@ -168,11 +168,13 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }.collect()
     assert(stageAttemptIds.toSet === Set(0))
 
-    // Check stage attemptIds that are resubmitted when task fails
+    // Check stage attemptIds that are resubmitted when tasks have FetchFailedException
     val stageAttemptIdsWithFailedStage =
       sc.parallelize(Seq(1, 2, 3, 4), 4).repartition(1).mapPartitions { _ =>
       val stageAttemptId = TaskContext.get().stageAttemptId()
       if (stageAttemptId < 2) {
+        // Throw FetchFailedException to explicitly trigger stage resubmission. A normal exception
+        // will only trigger task resubmission in the same stage.
         throw new FetchFailedException(null, 0, 0, 0, "Fake")
       }
       Seq(stageAttemptId).iterator
