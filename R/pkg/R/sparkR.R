@@ -580,8 +580,8 @@ setJobDescription <- function(value) {
 #'}
 #' @note setLocalProperty since 2.3.0
 setLocalProperty <- function(key, value) {
-  if (is.null(key)) {
-    stop("key should not be NULL.")
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
   }
   if (!is.null(value)) {
     value <- as.character(value)
@@ -602,11 +602,11 @@ setLocalProperty <- function(key, value) {
 #'}
 #' @note getLocalProperty since 2.3.0
 getLocalProperty <- function(key) {
-  if (is.null(key)) {
-    stop("key should not be NULL.")
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
   }
   sc <- getSparkContext()
-  invisible(callJMethod(sc, "getLocalProperty", as.character(key)))
+  callJMethod(sc, "getLocalProperty", as.character(key))
 }
 
 sparkConfToSubmitOps <- new.env()
