@@ -223,7 +223,7 @@ case class StaticField(
  * @param dataType The return type of the try block.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
-  */
+ */
 case class WrapException(
     body: Expression,
     dataType: DataType,
@@ -257,36 +257,33 @@ case class WrapException(
 }
 
 /**
- * Returns the value if it is of the specified type, or null otherwise
+ * Determines if the given value is an instanceof a given class
  *
- * @param value       The value to returned
- * @param checkedType The type to check against the value via instanceOf
- * @param dataType    The type returned by the expression
-  */
-case class ValueIfType(
-  value: Expression,
-  checkedType: Class[_],
-  dataType: DataType) extends Expression with NonSQLExpression {
+ * @param value the value to check
+ * @param checkedType the class to check the value against
+ */
+case class InstanceOf(
+    value: Expression,
+    checkedType: Class[_]) extends Expression with NonSQLExpression {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
   override def children: Seq[Expression] = value :: Nil
+  override def dataType: DataType = BooleanType
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
+
     val obj = value.genCode(ctx)
 
-    val code = s"""
-      ${obj.code}
-      final $javaType ${ev.value} = ${obj.value} instanceof ${checkedType.getName} ?
-        (${checkedType.getName}) ${obj.value} :
-        null;
-    """
+    val code =
+      s"""
+         ${obj.code}
+         final boolean ${ev.value} = ${obj.value} instanceof ${checkedType.getName};
+       """
 
-    ev.copy(code = code,
-      isNull = s"(${obj.isNull} || !(${obj.value} instanceof ${checkedType.getName}))")
+    ev.copy(code = code, isNull = "false")
   }
 }
 
