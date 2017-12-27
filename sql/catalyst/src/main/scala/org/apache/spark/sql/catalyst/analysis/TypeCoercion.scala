@@ -214,7 +214,6 @@ object TypeCoercion {
       .orElse(findWiderTypeForDecimal(t1, t2))
       .orElse(stringPromotion(t1, t2))
       .orElse(findWiderTypeForTwoComplex(t1, t2, findWiderTypeForTwo))
-
   }
 
   private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {

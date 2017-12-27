@@ -390,23 +390,49 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
 
     widenTest(
-      ArrayType(StringType, containsNull=true),
-      ArrayType(StringType, containsNull=false),
-      Some(ArrayType(StringType, containsNull=true)))
+      ArrayType(StringType, containsNull = true),
+      ArrayType(StringType, containsNull = false),
+      Some(ArrayType(StringType, containsNull = true)))
     widenTest(
-      MapType(StringType, StringType, valueContainsNull=true),
-      MapType(StringType, StringType, valueContainsNull=false),
-      Some(MapType(StringType, StringType, valueContainsNull=true)))
+      MapType(StringType, StringType, valueContainsNull = true),
+      MapType(StringType, StringType, valueContainsNull = false),
+      Some(MapType(StringType, StringType, valueContainsNull = true)))
+    widenTest(
+      StructType(Seq(StructField("a", StringType, nullable = true))),
+      StructType(Seq(StructField("a", StringType, nullable = false))),
+      Some(StructType(Seq(StructField("a", StringType, nullable = true)))))
 
     widenTest(
-      StructType(StructField("a", ArrayType(StringType, containsNull=true)) :: Nil),
-      StructType(StructField("a", ArrayType(StringType, containsNull=false)) :: Nil),
-      Some(StructType(StructField("a", ArrayType(StringType, containsNull=true)) :: Nil)))
-    widenTest(
-      StructType(StructField("a", MapType(StringType, StringType, valueContainsNull=true)) :: Nil),
-      StructType(StructField("a", MapType(StringType, StringType, valueContainsNull=false)) :: Nil),
+      StructType(
+        Seq(StructField("a", ArrayType(StringType, containsNull = true), nullable = true))),
+      StructType(
+        Seq(StructField("a", ArrayType(StringType, containsNull = false), nullable = false))),
       Some(StructType(
-        StructField("a", MapType(StringType, StringType, valueContainsNull=true)) :: Nil)))
+        Seq(StructField("a", ArrayType(StringType, containsNull = true), nullable = true)))))
+    widenTest(
+      StructType(
+        Seq(StructField("a", MapType(StringType, StringType, valueContainsNull = true)))),
+      StructType(
+        Seq(StructField("a", MapType(StringType, StringType, valueContainsNull = false)))),
+      Some(StructType(
+        Seq(StructField("a", MapType(StringType, StringType, valueContainsNull = true))))))
+    widenTest(
+      ArrayType(
+        StructType(Seq(StructField("a", StringType, nullable = true))), containsNull = true),
+      ArrayType(
+        StructType(Seq(StructField("a", StringType, nullable = false))), containsNull = false),
+      Some(ArrayType(
+        StructType(Seq(StructField("a", StringType, nullable = true))), containsNull = true)))
+    widenTest(
+      MapType(
+        StringType,
+        StructType(Seq(StructField("a", StringType, nullable = true))), valueContainsNull = true),
+      MapType(
+        StringType,
+        StructType(Seq(StructField("a", StringType, nullable = false))), valueContainsNull = false),
+      Some(MapType(
+        StringType,
+        StructType(Seq(StructField("a", StringType, nullable = true))), valueContainsNull = true)))
 
     widenTest(
       StructType(Seq(StructField("a", IntegerType))),
@@ -450,7 +476,7 @@ class TypeCoercionSuite extends AnalysisTest {
     }
   }
 
-  test("wider common type for decimal and array") {
+  test("wider common type for decimal and complex types") {
     def widenTestWithStringPromotion(
         t1: DataType,
         t2: DataType,
@@ -481,18 +507,58 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(DoubleType, containsNull = false),
       Some(ArrayType(DoubleType, containsNull = true)))
     widenTestWithStringPromotion(
-      ArrayType(TimestampType, containsNull = false),
-      ArrayType(StringType, containsNull = true),
+      ArrayType(ArrayType(IntegerType), containsNull = true),
+      ArrayType(ArrayType(LongType), containsNull = false),
+      Some(ArrayType(ArrayType(LongType), containsNull = true)))
+    widenTestWithStringPromotion(
+      ArrayType(StringType), ArrayType(TimestampType), Some(ArrayType(StringType)))
+    widenTestWithStringPromotion(
+      StructType(
+        Seq(StructField("a", ArrayType(LongType, containsNull = true), nullable = true))),
+      StructType(
+        Seq(StructField("a", ArrayType(StringType, containsNull = false), nullable = false))),
+      Some(StructType(
+        Seq(StructField("a", ArrayType(StringType, containsNull = true), nullable = true)))))
+
+    // MapType
+    widenTestWithStringPromotion(
+      MapType(StringType, ShortType, valueContainsNull = true),
+      MapType(StringType, DoubleType, valueContainsNull = false),
+      Some(MapType(StringType, DoubleType, valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      MapType(StringType, MapType(StringType, IntegerType, valueContainsNull = true),
+        valueContainsNull = true),
+      MapType(StringType, MapType(StringType, LongType, valueContainsNull = false),
+        valueContainsNull = false),
+      Some(MapType(StringType, MapType(StringType, LongType, valueContainsNull = true),
+        valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      StructType(Seq(StructField("a", MapType(
+        StringType, LongType, valueContainsNull = true), nullable = true))),
+      StructType(Seq(StructField("a", MapType(
+        StringType, StringType, valueContainsNull = false), nullable = false))),
+      Some(StructType(Seq(StructField("a", MapType(
+        StringType, StringType, valueContainsNull = true), nullable = true)))))
+
+    // String promotion
+    widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
+    widenTestWithStringPromotion(StringType, TimestampType, Some(StringType))
+    widenTestWithStringPromotion(
+      ArrayType(TimestampType, containsNull = true),
+      ArrayType(StringType, containsNull = false),
       Some(ArrayType(StringType, containsNull = true)))
     widenTestWithStringPromotion(
-      ArrayType(ArrayType(IntegerType), containsNull = false),
-      ArrayType(ArrayType(LongType), containsNull = false),
-      Some(ArrayType(ArrayType(LongType), containsNull = false)))
+      ArrayType(LongType, containsNull = true),
+      ArrayType(StringType, containsNull = false),
+      Some(ArrayType(StringType, containsNull = true)))
     widenTestWithStringPromotion(
-      StructType(StructField("a", ArrayType(LongType)) :: Nil),
-      StructType(StructField("a", ArrayType(StringType)) :: Nil),
-      Some(StructType(StructField("a", ArrayType(StringType)) :: Nil)))
-
+      MapType(StringType, TimestampType, valueContainsNull = true),
+      MapType(StringType, StringType, valueContainsNull = false),
+      Some(MapType(StringType, StringType, valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      MapType(StringType, LongType, valueContainsNull = true),
+      MapType(StringType, StringType, valueContainsNull = false),
+      Some(MapType(StringType, StringType, valueContainsNull = true)))
 
     // Without string promotion
     widenTestWithoutStringPromotion(IntegerType, StringType, None)
@@ -500,17 +566,29 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTestWithoutStringPromotion(ArrayType(LongType), ArrayType(StringType), None)
     widenTestWithoutStringPromotion(ArrayType(StringType), ArrayType(TimestampType), None)
     widenTestWithoutStringPromotion(
-      StructType(StructField("a", ArrayType(LongType)) :: Nil),
-      StructType(StructField("a", ArrayType(StringType)) :: Nil),
+      StructType(Seq(StructField("a", ArrayType(LongType)))),
+      StructType(Seq(StructField("a", ArrayType(StringType)))),
       None)
-
-    // String promotion
-    widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
-    widenTestWithStringPromotion(StringType, TimestampType, Some(StringType))
-    widenTestWithStringPromotion(
-      ArrayType(LongType), ArrayType(StringType), Some(ArrayType(StringType)))
-    widenTestWithStringPromotion(
-      ArrayType(StringType), ArrayType(TimestampType), Some(ArrayType(StringType)))
+    widenTestWithoutStringPromotion(
+      MapType(StringType, LongType),
+      MapType(StringType, TimestampType),
+      None)
+    widenTestWithoutStringPromotion(
+      MapType(StringType, StringType),
+      MapType(StringType, TimestampType),
+      None)
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", MapType(StringType, LongType)))),
+      StructType(Seq(StructField("a", MapType(StringType, StringType)))),
+      None)
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", ArrayType(LongType)))),
+      StructType(Seq(StructField("a", ArrayType(StringType)))),
+      None)
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", MapType(StringType, LongType)))),
+      StructType(Seq(StructField("a", MapType(StringType, StringType)))),
+      None)
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
