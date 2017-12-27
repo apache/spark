@@ -76,8 +76,8 @@ $ bin/spark-submit \
     --name spark-pi \
     --class org.apache.spark.examples.SparkPi \
     --conf spark.executor.instances=5 \
-    --conf spark.kubernetes.driver.docker.image=<driver-image> \
-    --conf spark.kubernetes.executor.docker.image=<executor-image> \
+    --conf spark.kubernetes.driver.container.image=<driver-image> \
+    --conf spark.kubernetes.executor.container.image=<executor-image> \
     local:///path/to/examples.jar
 {% endhighlight %}
 
@@ -144,8 +144,8 @@ $ bin/spark-submit \
     --jars https://path/to/dependency1.jar,https://path/to/dependency2.jar
     --files hdfs://host:port/path/to/file1,hdfs://host:port/path/to/file2
     --conf spark.executor.instances=5 \
-    --conf spark.kubernetes.driver.docker.image=<driver-image> \
-    --conf spark.kubernetes.executor.docker.image=<executor-image> \
+    --conf spark.kubernetes.driver.container.image=<driver-image> \
+    --conf spark.kubernetes.executor.container.image=<executor-image> \
     --conf spark.kubernetes.initContainer.image=<init-container image>
     https://path/to/examples.jar
 ```
@@ -625,7 +625,7 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.mountDependencies.timeout</code></td>
-  <td>300 seconds</td>
+  <td>300s</td>
   <td>
    Timeout in seconds before aborting the attempt to download and unpack dependencies from remote locations into
    the driver and executor pods.
