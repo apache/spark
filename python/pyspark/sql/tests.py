@@ -435,6 +435,15 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(list(range(3)), l1)
         self.assertEqual(1, l2)
 
+    def test_nondeterministic_udf(self):
+        from pyspark.sql.functions import udf
+        import random
+        udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
+        df = self.spark.createDataFrame([Row(1)]).select(udf_random_col().alias('RAND'))
+        udf_add_ten = udf(lambda rand: rand + 10, IntegerType())
+        [row] = df.withColumn('RAND_PLUS_TEN', udf_add_ten('RAND')).collect()
+        self.assertEqual(row[0] + 10, row[1])
+
     def test_broadcast_in_udf(self):
         bar = {"a": "aa", "b": "bb", "c": "abc"}
         foo = self.sc.broadcast(bar)
@@ -3142,6 +3151,7 @@ class ArrowTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         from datetime import datetime
+        from decimal import Decimal
         ReusedSQLTestCase.setUpClass()
 
         # Synchronize default timezone between Python and Java
@@ -3158,11 +3168,15 @@ class ArrowTests(ReusedSQLTestCase):
             StructField("3_long_t", LongType(), True),
             StructField("4_float_t", FloatType(), True),
             StructField("5_double_t", DoubleType(), True),
-            StructField("6_date_t", DateType(), True),
-            StructField("7_timestamp_t", TimestampType(), True)])
-        cls.data = [(u"a", 1, 10, 0.2, 2.0, datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
-                    (u"b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
-                    (u"c", 3, 30, 0.8, 6.0, datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+            StructField("6_decimal_t", DecimalType(38, 18), True),
+            StructField("7_date_t", DateType(), True),
+            StructField("8_timestamp_t", TimestampType(), True)])
+        cls.data = [(u"a", 1, 10, 0.2, 2.0, Decimal("2.0"),
+                     datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+                    (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
+                     datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                    (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
+                     datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
 
     @classmethod
     def tearDownClass(cls):
@@ -3190,10 +3204,11 @@ class ArrowTests(ReusedSQLTestCase):
         return pd.DataFrame(data=data_dict)
 
     def test_unsupported_datatype(self):
-        schema = StructType([StructField("decimal", DecimalType(), True)])
+        schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
-            self.assertRaises(Exception, lambda: df.toPandas())
+            with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
+                df.toPandas()
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
@@ -3293,7 +3308,7 @@ class ArrowTests(ReusedSQLTestCase):
             self.assertNotEqual(result_ny, result_la)
 
             # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
-            result_la_corrected = [Row(**{k: v - timedelta(hours=3) if k == '7_timestamp_t' else v
+            result_la_corrected = [Row(**{k: v - timedelta(hours=3) if k == '8_timestamp_t' else v
                                           for k, v in row.asDict().items()})
                                    for row in result_la]
             self.assertEqual(result_ny, result_la_corrected)
@@ -3317,11 +3332,11 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
         # Test that schema as a list of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=list('abcdefg'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
+        df = self.spark.createDataFrame(pdf, schema=list('abcdefgh'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
         # Test that schema as tuple of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefg'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
+        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefgh'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
 
     def test_createDataFrame_column_name_encoding(self):
         import pandas as pd
@@ -3344,7 +3359,7 @@ class ArrowTests(ReusedSQLTestCase):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
         # Use a nanosecond value to make sure it is not truncated
-        pdf.ix[0, '7_timestamp_t'] = pd.Timestamp(1)
+        pdf.ix[0, '8_timestamp_t'] = pd.Timestamp(1)
         # Integers with nulls will get NaNs filled with 0 and will be casted
         pdf.ix[1, '2_int_t'] = None
         pdf_copy = pdf.copy(deep=True)
@@ -3514,6 +3529,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             col('id').alias('long'),
             col('id').cast('float').alias('float'),
             col('id').cast('double').alias('double'),
+            col('id').cast('decimal').alias('decimal'),
             col('id').cast('boolean').alias('bool'))
         f = lambda x: x
         str_f = pandas_udf(f, StringType())
@@ -3521,10 +3537,12 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         long_f = pandas_udf(f, LongType())
         float_f = pandas_udf(f, FloatType())
         double_f = pandas_udf(f, DoubleType())
+        decimal_f = pandas_udf(f, DecimalType())
         bool_f = pandas_udf(f, BooleanType())
         res = df.select(str_f(col('str')), int_f(col('int')),
                         long_f(col('long')), float_f(col('float')),
-                        double_f(col('double')), bool_f(col('bool')))
+                        double_f(col('double')), decimal_f('decimal'),
+                        bool_f(col('bool')))
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_null_boolean(self):
@@ -3590,6 +3608,16 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         res = df.select(double_f(col('double')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_null_decimal(self):
+        from decimal import Decimal
+        from pyspark.sql.functions import pandas_udf, col
+        data = [(Decimal(3.0),), (Decimal(5.0),), (Decimal(-1.0),), (None,)]
+        schema = StructType().add("decimal", DecimalType(38, 18))
+        df = self.spark.createDataFrame(data, schema)
+        decimal_f = pandas_udf(lambda x: x, DecimalType(38, 18))
+        res = df.select(decimal_f(col('decimal')))
+        self.assertEquals(df.collect(), res.collect())
+
     def test_vectorized_udf_null_string(self):
         from pyspark.sql.functions import pandas_udf, col
         data = [("foo",), (None,), ("bar",), ("bar",)]
@@ -3607,6 +3635,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             col('id').alias('long'),
             col('id').cast('float').alias('float'),
             col('id').cast('double').alias('double'),
+            col('id').cast('decimal').alias('decimal'),
             col('id').cast('boolean').alias('bool'))
         f = lambda x: x
         str_f = pandas_udf(f, 'string')
@@ -3614,10 +3643,12 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         long_f = pandas_udf(f, 'long')
         float_f = pandas_udf(f, 'float')
         double_f = pandas_udf(f, 'double')
+        decimal_f = pandas_udf(f, 'decimal(38, 18)')
         bool_f = pandas_udf(f, 'boolean')
         res = df.select(str_f(col('str')), int_f(col('int')),
                         long_f(col('long')), float_f(col('float')),
-                        double_f(col('double')), bool_f(col('bool')))
+                        double_f(col('double')), decimal_f('decimal'),
+                        bool_f(col('bool')))
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_complex(self):
@@ -3713,12 +3744,12 @@ class VectorizedUDFTests(ReusedSQLTestCase):
 
     def test_vectorized_udf_unsupported_types(self):
         from pyspark.sql.functions import pandas_udf, col
-        schema = StructType([StructField("dt", DecimalType(), True)])
+        schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
-        f = pandas_udf(lambda x: x, DecimalType())
+        f = pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
-                df.select(f(col('dt'))).collect()
+                df.select(f(col('map'))).collect()
 
     def test_vectorized_udf_null_date(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -4012,7 +4043,8 @@ class GroupbyApplyTests(ReusedSQLTestCase):
     def test_unsupported_types(self):
         from pyspark.sql.functions import pandas_udf, col, PandasUDFType
         schema = StructType(
-            [StructField("id", LongType(), True), StructField("dt", DecimalType(), True)])
+            [StructField("id", LongType(), True),
+             StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(1, None,)], schema=schema)
         f = pandas_udf(lambda x: x, df.schema, PandasUDFType.GROUP_MAP)
         with QuietTest(self.sc):

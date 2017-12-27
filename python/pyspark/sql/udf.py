@@ -92,6 +92,7 @@ class UserDefinedFunction(object):
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
         self.evalType = evalType
+        self._deterministic = True
 
     @property
     def returnType(self):
@@ -129,7 +130,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.evalType)
+            self._name, wrapped_func, jdt, self.evalType, self._deterministic)
         return judf
 
     def __call__(self, *cols):
@@ -161,5 +162,15 @@ class UserDefinedFunction(object):
         wrapper.func = self.func
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
+        wrapper.asNondeterministic = self.asNondeterministic
 
         return wrapper
+
+    def asNondeterministic(self):
+        """
+        Updates UserDefinedFunction to nondeterministic.
+
+        .. versionadded:: 2.3
+        """
+        self._deterministic = False
+        return self

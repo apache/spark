@@ -2093,9 +2093,14 @@ class PandasUDFType(object):
 def udf(f=None, returnType=StringType()):
     """Creates a user defined function (UDF).
 
-    .. note:: The user-defined functions must be deterministic. Due to optimization,
-        duplicate invocations may be eliminated or the function may even be invoked more times than
-        it is present in the query.
+    .. note:: The user-defined functions are considered deterministic by default. Due to
+        optimization, duplicate invocations may be eliminated or the function may even be invoked
+        more times than it is present in the query. If your function is not deterministic, call
+        `asNondeterministic` on the user defined function. E.g.:
+
+    >>> from pyspark.sql.types import IntegerType
+    >>> import random
+    >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
 
     .. note:: The user-defined functions do not support conditional expressions or short curcuiting
         in boolean expressions and it ends up with being executed all internally. If the functions

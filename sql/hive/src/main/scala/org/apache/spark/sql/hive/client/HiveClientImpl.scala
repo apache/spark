@@ -186,7 +186,7 @@ private[hive] class HiveClientImpl(
   /** Returns the configuration for the current session. */
   def conf: HiveConf = state.getConf
 
-  private val userName = state.getAuthenticator.getUserName
+  private val userName = conf.getUser
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)

@@ -23,6 +23,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
@@ -41,8 +42,6 @@ import org.apache.spark.util.Utils
  *   spark.udf
  * }}}
  *
- * @note The user-defined functions must be deterministic.
- *
  * @since 1.3.0
  */
 @InterfaceStability.Stable
@@ -58,6 +57,8 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         | pythonIncludes: ${udf.func.pythonIncludes}
         | pythonExec: ${udf.func.pythonExec}
         | dataType: ${udf.dataType}
+        | pythonEvalType: ${PythonEvalType.toString(udf.pythonEvalType)}
+        | udfDeterministic: ${udf.udfDeterministic}
       """.stripMargin)
 
     functionRegistry.createOrReplaceTempFunction(name, udf.builder)

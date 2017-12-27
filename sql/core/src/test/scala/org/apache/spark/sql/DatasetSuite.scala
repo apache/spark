@@ -660,7 +660,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       df.as[KryoData]
     }.message
-    assert(e.contains("cannot cast IntegerType to BinaryType"))
+    assert(e.contains("cannot cast int to binary"))
   }
 
   test("Java encoder") {
