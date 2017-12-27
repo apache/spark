@@ -977,7 +977,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
     }
   }
 
-  test("stress test for failOnDataLoss=false") {
+  ignore("stress test for failOnDataLoss=false") {
     val reader = spark
       .readStream
       .format("kafka")
