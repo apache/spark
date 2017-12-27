@@ -336,8 +336,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
-    .doc("Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.")
+    .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
+      "versions, when converting Parquet schema to Spark SQL schema and vice versa.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1044,6 +1044,22 @@ object SQLConf {
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
 
+  val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
+    buildConf("spark.sql.streaming.continuous.executorQueueSize")
+    .internal()
+    .doc("The size (measured in number of rows) of the queue used in continuous execution to" +
+      " buffer the results of a ContinuousDataReader.")
+    .intConf
+    .createWithDefault(1024)
+
+  val CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS =
+    buildConf("spark.sql.streaming.continuous.executorPollIntervalMs")
+      .internal()
+      .doc("The interval at which continuous execution readers will poll to check whether" +
+        " the epoch has advanced on the driver.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(100)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1356,6 +1372,11 @@ class SQLConf extends Serializable with Logging {
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
+
+  def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
+
+  def continuousStreamingExecutorPollIntervalMs: Long =
+    getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
   /** ********************** SQLConf functionality methods ************ */
 

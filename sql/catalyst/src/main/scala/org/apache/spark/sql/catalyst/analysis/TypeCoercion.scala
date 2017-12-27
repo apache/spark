@@ -324,9 +324,11 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ BinaryArithmetic(left @ StringType(), right) =>
+      case a @ BinaryArithmetic(left @ StringType(), right)
+        if right.dataType != CalendarIntervalType =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
-      case a @ BinaryArithmetic(left, right @ StringType()) =>
+      case a @ BinaryArithmetic(left, right @ StringType())
+        if left.dataType != CalendarIntervalType =>
         a.makeCopy(Array(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
