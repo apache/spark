@@ -215,7 +215,7 @@ object PhysicalAggregation {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
           case agg: AggregateExpression
             if !equivalentAggregateExpressions.addExpr(agg) => agg
-          case agg @ PythonUDF(_, _, _, _, PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF)
+          case agg @ PythonUDF(_, _, _, _, PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF, _)
             if !equivalentAggregateExpressions.addExpr(agg) => agg
         }
       }
@@ -244,6 +244,9 @@ object PhysicalAggregation {
             // so replace each aggregate expression by its corresponding attribute in the set:
             equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
+          case ue: PythonUDF =>
+            equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
+              .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
           case expression =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding

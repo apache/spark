@@ -25,20 +25,20 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, Expression, JoinedRow, NamedExpression, PythonUDF, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 case class AggregateInPandasExec(
-    groupingExpressions: Seq[Expression],
+    groupingExpressions: Seq[NamedExpression],
     udfExpressions: Seq[PythonUDF],
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryExecNode {
 
-  override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
+  override val output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -80,13 +80,11 @@ case class AggregateInPandasExec(
     val allInputs = new ArrayBuffer[Expression]
     val dataTypes = new ArrayBuffer[DataType]
 
-    allInputs.appendAll(groupingExpressions)
-
     val argOffsets = inputs.map { input =>
       input.map { e =>
         allInputs += e
         dataTypes += e.dataType
-        allInputs.length - 1 - groupingExpressions.length
+        allInputs.length - 1
       }.toArray
     }.toArray
 
@@ -94,17 +92,16 @@ case class AggregateInPandasExec(
       StructField(s"_$i", dt)
     })
 
+    val input = groupingExpressions.map(_.toAttribute) ++ udfExpressions.map(_.resultAttribute)
+
     inputRDD.mapPartitionsInternal { iter =>
       val grouped = if (groupingExpressions.isEmpty) {
         Iterator((null, iter))
       } else {
         val groupedIter = GroupedIterator(iter, groupingExpressions, child.output)
-
-        val dropGrouping =
-          UnsafeProjection.create(allInputs.drop(groupingExpressions.length), child.output)
-
+        val proj = UnsafeProjection.create(allInputs, child.output)
         groupedIter.map {
-          case (k, groupedRowIter) => (k, groupedRowIter.map(dropGrouping))
+          case (k, groupedRowIter) => (k, groupedRowIter.map(proj))
         }
       }
 
@@ -131,7 +128,7 @@ case class AggregateInPandasExec(
         .compute(projectedRowIter, context.partitionId(), context)
 
       val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(output, output)
+      val resultProj = UnsafeProjection.create(resultExpressions, input)
 
       columnarBatchIter.map(_.rowIterator.next()).map { outputRow =>
         val leftRow = queue.remove()

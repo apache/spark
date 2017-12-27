@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.api.python.PythonFunction
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -29,14 +30,16 @@ case class PythonUDF(
     dataType: DataType,
     children: Seq[Expression],
     evalType: Int,
-    udfDeterministic: Boolean)
+    udfDeterministic: Boolean,
+    resultId: ExprId = NamedExpression.newExprId)
   extends Expression with Unevaluable with NonSQLExpression with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  lazy val resultAttribute: Attribute = AttributeReference(name, dataType)()
-
   override def toString: String = s"$name(${children.mkString(", ")})"
+
+  lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
+    exprId = resultId)
 
   override def nullable: Boolean = true
 }

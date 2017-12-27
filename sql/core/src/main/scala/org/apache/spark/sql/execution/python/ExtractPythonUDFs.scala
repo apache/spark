@@ -34,6 +34,12 @@ import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
  */
 object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 
+  private def isPythonUDF(e: Expression): Boolean = {
+    e.isInstanceOf[PythonUDF] &&
+      Set(PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_PANDAS_SCALAR_UDF
+      ).contains(e.asInstanceOf[PythonUDF].evalType)
+  }
+
   /**
    * Returns whether the expression could only be evaluated within aggregate.
    */
@@ -44,50 +50,34 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 
   private def hasPythonUdfOverAggregate(expr: Expression, agg: Aggregate): Boolean = {
     expr.find {
-      e => e.isInstanceOf[PythonUDF] && e.find(belongAggregate(_, agg)).isDefined
+      e => isPythonUDF(e) && e.find(belongAggregate(_, agg)).isDefined
     }.isDefined
   }
-
-  private def isPandasGroupAggUdf(expr: Expression): Boolean = expr match {
-      case PythonUDF(_, _, _, _, PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF) => true
-      case Alias(child, _) => isPandasGroupAggUdf(child)
-      case _ => false
-  }
-
-  private def hasPandasGroupAggUdf(agg: Aggregate): Boolean = {
-    val actualAggExpr = agg.aggregateExpressions.drop(agg.groupingExpressions.length)
-    actualAggExpr.exists(isPandasGroupAggUdf)
-  }
-
 
   private def extract(agg: Aggregate): LogicalPlan = {
     val projList = new ArrayBuffer[NamedExpression]()
     val aggExpr = new ArrayBuffer[NamedExpression]()
 
-    if (hasPandasGroupAggUdf(agg)) {
-      Aggregate(agg.groupingExpressions, agg.aggregateExpressions, agg.child)
-    } else {
-      agg.aggregateExpressions.foreach { expr =>
-        if (hasPythonUdfOverAggregate(expr, agg)) {
-          // Python UDF can only be evaluated after aggregate
-          val newE = expr transformDown {
-            case e: Expression if belongAggregate(e, agg) =>
-              val alias = e match {
-                case a: NamedExpression => a
-                case o => Alias(e, "agg")()
-              }
-              aggExpr += alias
-              alias.toAttribute
-          }
-          projList += newE.asInstanceOf[NamedExpression]
-        } else {
-          aggExpr += expr
-          projList += expr.toAttribute
+    agg.aggregateExpressions.foreach { expr =>
+      if (hasPythonUdfOverAggregate(expr, agg)) {
+        // Python UDF can only be evaluated after aggregate
+        val newE = expr transformDown {
+          case e: Expression if belongAggregate(e, agg) =>
+            val alias = e match {
+              case a: NamedExpression => a
+              case o => Alias(e, "agg")()
+            }
+            aggExpr += alias
+            alias.toAttribute
         }
+        projList += newE.asInstanceOf[NamedExpression]
+      } else {
+        aggExpr += expr
+        projList += expr.toAttribute
       }
-      // There is no Python UDF over aggregate expression
-      Project(projList, agg.copy(aggregateExpressions = aggExpr))
     }
+    // There is no Python UDF over aggregate expression
+    Project(projList, agg.copy(aggregateExpressions = aggExpr))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -109,8 +99,14 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  */
 object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
+  private def isPythonUDF(e: Expression): Boolean = {
+    e.isInstanceOf[PythonUDF] &&
+    Set(PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_PANDAS_SCALAR_UDF
+    ).contains(e.asInstanceOf[PythonUDF].evalType)
+  }
+
   private def hasPythonUDF(e: Expression): Boolean = {
-    e.find(_.isInstanceOf[PythonUDF]).isDefined
+    e.find(isPythonUDF).isDefined
   }
 
   private def canEvaluateInPython(e: PythonUDF): Boolean = {
@@ -123,14 +119,13 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   }
 
   private def collectEvaluatableUDF(expr: Expression): Seq[PythonUDF] = expr match {
-    case udf: PythonUDF if canEvaluateInPython(udf) => Seq(udf)
+    case udf: PythonUDF if isPythonUDF(udf) && canEvaluateInPython(udf) => Seq(udf)
     case e => e.children.flatMap(collectEvaluatableUDF)
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
     // AggregateInPandasExec and FlatMapGroupsInPandas can be evaluated directly in python worker
     // Therefore we don't need to extract the UDFs
-    case plan: AggregateInPandasExec => plan
     case plan: FlatMapGroupsInPandasExec => plan
     case plan: SparkPlan => extract(plan)
   }
@@ -231,5 +226,51 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
         }
       case o => o
     }
+  }
+}
+
+
+/**
+ * Extract all the group aggregate Pandas UDFs in logical aggregation, evaluate the UDFs first
+ * and then the expressions that depend on the result of the UDFs.
+ */
+object ExtractGroupAggPandasUDFFromAggregate extends Rule[LogicalPlan] {
+
+  private def isPandasGroupAggUdf(expr: Expression): Boolean = {
+    expr.isInstanceOf[PythonUDF] &&
+      expr.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF
+  }
+
+  private def hasPandasGroupAggUdf(expr: Expression): Boolean = {
+    expr.find(isPandasGroupAggUdf).isDefined
+  }
+
+  private def extract(agg: Aggregate): LogicalPlan = {
+    val projList = new ArrayBuffer[NamedExpression]()
+    val aggExpr = new ArrayBuffer[NamedExpression]()
+
+    agg.aggregateExpressions.foreach { expr =>
+      if (hasPandasGroupAggUdf(expr)) {
+        val newE = expr transformDown {
+          case e: PythonUDF if isPandasGroupAggUdf(e) =>
+            // Wrap the UDF with alias to make it a NamedExpression
+            // The alias is intermediate, its attribute name doesn't affect the final result
+            val alias = Alias(e, "agg")(exprId = e.resultId)
+            aggExpr += alias
+            alias.toAttribute
+        }
+        projList += newE.asInstanceOf[NamedExpression]
+      } else {
+        aggExpr += expr
+        projList += expr.toAttribute
+      }
+    }
+
+    Project(projList, agg.copy(aggregateExpressions = aggExpr))
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case agg: Aggregate if agg.aggregateExpressions.exists(hasPandasGroupAggUdf) =>
+      extract(agg)
   }
 }
