@@ -201,7 +201,7 @@ try:
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
-            'sql': ['pandas>=0.19.2']
+            'sql': ['pandas>=0.19.2', 'pyarrow>=0.8.0']
         },
         classifiers=[
             'Development Status :: 5 - Production/Stable',
