@@ -587,7 +587,7 @@ case class HashAggregateExec(
           fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
         ctx.addInnerClass(generatedMap)
 
-        // inline mutable state since not many aggregation operations in a task
+        // Inline mutable state since not many aggregation operations in a task
         fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, "vectorizedHastHashMap",
           v => s"$v = new $fastHashMapClassName();", forceInline = true)
         ctx.addMutableState(s"java.util.Iterator<InternalRow>", "vectorizedFastHashMapIter",
@@ -597,7 +597,7 @@ case class HashAggregateExec(
           fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
         ctx.addInnerClass(generatedMap)
 
-        // inline mutable state since not many aggregation operations in a task
+        // Inline mutable state since not many aggregation operations in a task
         fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, "fastHashMap",
           v => s"$v = new $fastHashMapClassName(" +
             s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());",
@@ -609,7 +609,7 @@ case class HashAggregateExec(
     }
 
     // Create a name for the iterator from the regular hash map.
-    // inline mutable state since not many aggregation operations in a task
+    // Inline mutable state since not many aggregation operations in a task
     val iterTerm = ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName,
       "mapIter", forceInline = true)
     // create hashMap
