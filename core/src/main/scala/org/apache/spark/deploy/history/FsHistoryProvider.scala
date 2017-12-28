@@ -43,7 +43,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
-import org.apache.spark.status.api.v1
+import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.kvstore._
@@ -252,19 +252,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def getListing(): Iterator[ApplicationHistoryInfo] = {
+  override def getListing(): Iterator[ApplicationInfo] = {
     // Return the listing in end time descending order.
     listing.view(classOf[ApplicationInfoWrapper])
       .index("endTime")
       .reverse()
       .iterator()
       .asScala
-      .map(_.toAppHistoryInfo())
+      .map(_.toApplicationInfo())
   }
 
-  override def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo] = {
+  override def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     try {
-      Some(load(appId).toAppHistoryInfo())
+      Some(load(appId).toApplicationInfo())
     } catch {
       case e: NoSuchElementException =>
         None
@@ -304,6 +304,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val (kvstore, needReplay) = uiStorePath match {
       case Some(path) =>
         try {
+          // The store path is not guaranteed to exist - maybe it hasn't been created, or was
+          // invalidated because changes to the event log were detected. Need to replay in that
+          // case.
           val _replay = !path.isDirectory()
           (createDiskStore(path, conf), _replay)
         } catch {
@@ -318,24 +321,26 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         (new InMemoryStore(), true)
     }
 
+    val plugins = ServiceLoader.load(
+      classOf[AppHistoryServerPlugin], Utils.getContextOrSparkClassLoader).asScala
+    val trackingStore = new ElementTrackingStore(kvstore, conf)
     if (needReplay) {
       val replayBus = new ReplayListenerBus()
-      val listener = new AppStatusListener(kvstore, conf, false,
+      val listener = new AppStatusListener(trackingStore, conf, false,
         lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
       replayBus.addListener(listener)
-      AppStatusPlugin.loadPlugins().foreach { plugin =>
-        plugin.setupListeners(conf, kvstore, l => replayBus.addListener(l), false)
-      }
+      for {
+        plugin <- plugins
+        listener <- plugin.createListeners(conf, trackingStore)
+      } replayBus.addListener(listener)
       try {
         val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
         replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
-        listener.flush()
+        trackingStore.close(false)
       } catch {
         case e: Exception =>
-          try {
-            kvstore.close()
-          } catch {
-            case _e: Exception => logInfo("Error closing store.", _e)
+          Utils.tryLogNonFatalError {
+            trackingStore.close()
           }
           uiStorePath.foreach(Utils.deleteRecursively)
           if (e.isInstanceOf[FileNotFoundException]) {
@@ -350,9 +355,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
       attempt.info.startTime.getTime(),
       attempt.info.appSparkVersion)
-    AppStatusPlugin.loadPlugins().foreach { plugin =>
-      plugin.setupUI(ui)
-    }
+    plugins.foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
 
@@ -795,24 +798,16 @@ private[history] case class LogInfo(
     fileSize: Long)
 
 private[history] class AttemptInfoWrapper(
-    val info: v1.ApplicationAttemptInfo,
+    val info: ApplicationAttemptInfo,
     val logPath: String,
     val fileSize: Long,
     val adminAcls: Option[String],
     val viewAcls: Option[String],
     val adminAclsGroups: Option[String],
-    val viewAclsGroups: Option[String]) {
-
-  def toAppAttemptInfo(): ApplicationAttemptInfo = {
-    ApplicationAttemptInfo(info.attemptId, info.startTime.getTime(),
-      info.endTime.getTime(), info.lastUpdated.getTime(), info.sparkUser,
-      info.completed, info.appSparkVersion)
-  }
-
-}
+    val viewAclsGroups: Option[String])
 
 private[history] class ApplicationInfoWrapper(
-    val info: v1.ApplicationInfo,
+    val info: ApplicationInfo,
     val attempts: List[AttemptInfoWrapper]) {
 
   @JsonIgnore @KVIndexParam
@@ -824,9 +819,7 @@ private[history] class ApplicationInfoWrapper(
   @JsonIgnore @KVIndexParam("oldestAttempt")
   def oldestAttempt(): Long = attempts.map(_.info.lastUpdated.getTime()).min
 
-  def toAppHistoryInfo(): ApplicationHistoryInfo = {
-    ApplicationHistoryInfo(info.id, info.name, attempts.map(_.toAppAttemptInfo()))
-  }
+  def toApplicationInfo(): ApplicationInfo = info.copy(attempts = attempts.map(_.info))
 
 }
 
@@ -883,7 +876,7 @@ private[history] class AppListingListener(log: FileStatus, clock: Clock) extends
     var memoryPerExecutorMB: Option[Int] = None
 
     def toView(): ApplicationInfoWrapper = {
-      val apiInfo = new v1.ApplicationInfo(id, name, coresGranted, maxCores, coresPerExecutor,
+      val apiInfo = ApplicationInfo(id, name, coresGranted, maxCores, coresPerExecutor,
         memoryPerExecutorMB, Nil)
       new ApplicationInfoWrapper(apiInfo, List(attempt.toView()))
     }
@@ -906,7 +899,7 @@ private[history] class AppListingListener(log: FileStatus, clock: Clock) extends
     var viewAclsGroups: Option[String] = None
 
     def toView(): AttemptInfoWrapper = {
-      val apiInfo = new v1.ApplicationAttemptInfo(
+      val apiInfo = ApplicationAttemptInfo(
         attemptId,
         startTime,
         endTime,

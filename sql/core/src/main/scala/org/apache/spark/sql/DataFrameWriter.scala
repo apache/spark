@@ -30,9 +30,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options, WriteSupport}
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -234,16 +235,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    val cls = DataSource.lookupDataSource(source)
+    val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      cls.newInstance() match {
-        case ds: WriteSupport =>
-          val options = new DataSourceV2Options(extraOptions.asJava)
+      val ds = cls.newInstance()
+      ds match {
+        case ws: WriteSupport =>
+          val options = new DataSourceV2Options((extraOptions ++
+            DataSourceV2Utils.extractSessionConfigs(
+              ds = ds.asInstanceOf[DataSourceV2],
+              conf = df.sparkSession.sessionState.conf)).asJava)
           // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
           // enough as there won't be tons of writing jobs created at the same second.
           val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
             .format(new Date()) + "-" + UUID.randomUUID()
-          val writer = ds.createWriter(jobId, df.logicalPlan.schema, mode, options)
+          val writer = ws.createWriter(jobId, df.logicalPlan.schema, mode, options)
           if (writer.isPresent) {
             runCommand(df.sparkSession, "save") {
               WriteToDataSourceV2(writer.get(), df.logicalPlan)

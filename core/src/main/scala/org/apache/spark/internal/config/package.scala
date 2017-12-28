@@ -41,6 +41,10 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
+  private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.memoryOverhead")
+    .bytesConf(ByteUnit.MiB)
+    .createOptional
+
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
       .booleanConf
@@ -79,6 +83,10 @@ package object config {
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
+
+  private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
+    .bytesConf(ByteUnit.MiB)
+    .createOptional
 
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
@@ -231,11 +239,6 @@ package object config {
   private[spark] val PYSPARK_PYTHON = ConfigBuilder("spark.pyspark.python")
     .stringConf
     .createOptional
-
-  // To limit memory usage, we only track information for a fixed number of tasks
-  private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
-    .intConf
-    .createWithDefault(100000)
 
   // To limit how many applications are shown in the History Server summary ui
   private[spark] val HISTORY_UI_MAX_APPS =

@@ -73,7 +73,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
         }
       """
     }
-    val codes = ctx.splitExpressions(
+    val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = inputs,
       funcName = "valueConcat",
       extraArguments = ("UTF8String[]", args) :: Nil)
@@ -152,7 +152,7 @@ case class ConcatWs(children: Seq[Expression])
           ""
         }
       }
-      val codes = ctx.splitExpressions(
+      val codes = ctx.splitExpressionsWithCurrentInputs(
           expressions = inputs,
           funcName = "valueConcatWs",
           extraArguments = ("UTF8String[]", args) :: Nil)
@@ -200,31 +200,32 @@ case class ConcatWs(children: Seq[Expression])
         }
       }.unzip
 
-      val codes = ctx.splitExpressions(evals.map(_.code))
-      val varargCounts = ctx.splitExpressions(
+      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code))
+
+      val varargCounts = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargCount,
         funcName = "varargCountsConcatWs",
-        arguments = ("InternalRow", ctx.INPUT_ROW) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
-           int $varargNum = 0;
-           $body
-           return $varargNum;
-           """,
-        foldFunctions = _.mkString(s"$varargNum += ", s";\n$varargNum += ", ";"))
-      val varargBuilds = ctx.splitExpressions(
+             |int $varargNum = 0;
+             |$body
+             |return $varargNum;
+           """.stripMargin,
+        foldFunctions = _.map(funcCall => s"$varargNum += $funcCall;").mkString("\n"))
+
+      val varargBuilds = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargBuild,
         funcName = "varargBuildsConcatWs",
-        arguments =
-          ("InternalRow", ctx.INPUT_ROW) :: ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
+        extraArguments = ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
-           $body
-           return $idxInVararg;
-           """,
-        foldFunctions = _.mkString(s"$idxInVararg = ", s";\n$idxInVararg = ", ";"))
+             |$body
+             |return $idxInVararg;
+           """.stripMargin,
+        foldFunctions = _.map(funcCall => s"$idxInVararg = $funcCall;").mkString("\n"))
+
       ev.copy(
         s"""
         $codes
@@ -288,53 +289,55 @@ case class Elt(children: Seq[Expression])
     val index = indexExpr.genCode(ctx)
     val strings = stringExprs.map(_.genCode(ctx))
     val indexVal = ctx.freshName("index")
-    val stringVal = ctx.freshName("stringVal")
+    val indexMatched = ctx.freshName("eltIndexMatched")
+
+    val stringVal = ctx.addMutableState(ctx.javaType(dataType), "stringVal")
+
     val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
       s"""
-        case ${index + 1}:
-          ${eval.code}
-          $stringVal = ${eval.isNull} ? null : ${eval.value};
-          break;
-      """
+         |if ($indexVal == ${index + 1}) {
+         |  ${eval.code}
+         |  $stringVal = ${eval.isNull} ? null : ${eval.value};
+         |  $indexMatched = true;
+         |  continue;
+         |}
+      """.stripMargin
     }
 
-    val cases = ctx.buildCodeBlocks(assignStringValue)
-    val codes = if (cases.length == 1) {
-      s"""
-        UTF8String $stringVal = null;
-        switch ($indexVal) {
-          ${cases.head}
-        }
-       """
-    } else {
-      var prevFunc = "null"
-      for (c <- cases.reverse) {
-        val funcName = ctx.freshName("eltFunc")
-        val funcBody = s"""
-         private UTF8String $funcName(InternalRow ${ctx.INPUT_ROW}, int $indexVal) {
-           UTF8String $stringVal = null;
-           switch ($indexVal) {
-             $c
-             default:
-               return $prevFunc;
-           }
-           return $stringVal;
-         }
-        """
-        val fullFuncName = ctx.addNewFunction(funcName, funcBody)
-        prevFunc = s"$fullFuncName(${ctx.INPUT_ROW}, $indexVal)"
-      }
-      s"UTF8String $stringVal = $prevFunc;"
-    }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = assignStringValue,
+      funcName = "eltFunc",
+      extraArguments = ("int", indexVal) :: Nil,
+      returnType = ctx.JAVA_BOOLEAN,
+      makeSplitFunction = body =>
+        s"""
+           |${ctx.JAVA_BOOLEAN} $indexMatched = false;
+           |do {
+           |  $body
+           |} while (false);
+           |return $indexMatched;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$indexMatched = $funcCall;
+           |if ($indexMatched) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
 
     ev.copy(
       s"""
-      ${index.code}
-      final int $indexVal = ${index.value};
-      $codes
-      UTF8String ${ev.value} = $stringVal;
-      final boolean ${ev.isNull} = ${ev.value} == null;
-    """)
+         |${index.code}
+         |final int $indexVal = ${index.value};
+         |${ctx.JAVA_BOOLEAN} $indexMatched = false;
+         |$stringVal = null;
+         |do {
+         |  $codes
+         |} while (false);
+         |final UTF8String ${ev.value} = $stringVal;
+         |final boolean ${ev.isNull} = ${ev.value} == null;
+       """.stripMargin)
   }
 }
 
@@ -528,14 +531,11 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val termLastMatching = ctx.freshName("lastMatching")
-    val termLastReplace = ctx.freshName("lastReplace")
-    val termDict = ctx.freshName("dict")
     val classNameDict = classOf[JMap[Character, Character]].getCanonicalName
 
-    ctx.addMutableState("UTF8String", termLastMatching, s"$termLastMatching = null;")
-    ctx.addMutableState("UTF8String", termLastReplace, s"$termLastReplace = null;")
-    ctx.addMutableState(classNameDict, termDict, s"$termDict = null;")
+    val termLastMatching = ctx.addMutableState("UTF8String", "lastMatching")
+    val termLastReplace = ctx.addMutableState("UTF8String", "lastReplace")
+    val termDict = ctx.addMutableState(classNameDict, "dict")
 
     nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
       val check = if (matchingExpr.foldable && replaceExpr.foldable) {
@@ -1380,7 +1380,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
          $argList[$index] = $value;
        """
     }
-    val argListCodes = ctx.splitExpressions(
+    val argListCodes = ctx.splitExpressionsWithCurrentInputs(
       expressions = argListCode,
       funcName = "valueFormatString",
       extraArguments = ("Object[]", argList) :: Nil)
@@ -2061,15 +2061,12 @@ case class FormatNumber(x: Expression, d: Expression)
       // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
       // as a decimal separator.
       val usLocale = "US"
-      val lastDValue = ctx.freshName("lastDValue")
-      val pattern = ctx.freshName("pattern")
-      val numberFormat = ctx.freshName("numberFormat")
       val i = ctx.freshName("i")
       val dFormat = ctx.freshName("dFormat")
-      ctx.addMutableState(ctx.JAVA_INT, lastDValue, s"$lastDValue = -100;")
-      ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
-      ctx.addMutableState(df, numberFormat,
-      s"""$numberFormat = new $df("", new $dfs($l.$usLocale));""")
+      val lastDValue = ctx.addMutableState(ctx.JAVA_INT, "lastDValue", v => s"$v = -100;")
+      val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
+      val numberFormat = ctx.addMutableState(df, "numberFormat",
+        v => s"""$v = new $df("", new $dfs($l.$usLocale));""")
 
       s"""
         if ($d >= 0) {

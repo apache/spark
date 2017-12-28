@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.util.*;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -40,10 +41,10 @@ public final class ColumnarBatch {
   private final StructType schema;
   private final int capacity;
   private int numRows;
-  final ColumnVector[] columns;
+  private final ColumnVector[] columns;
 
-  // Staging row returned from getRow.
-  final ColumnarRow row;
+  // Staging row returned from `getRow`.
+  private final MutableColumnarRow row;
 
   /**
    * Called to close all the columns in this batch. It is not valid to access the data after
@@ -58,10 +59,10 @@ public final class ColumnarBatch {
   /**
    * Returns an iterator over the rows in this batch. This skips rows that are filtered out.
    */
-  public Iterator<ColumnarRow> rowIterator() {
+  public Iterator<InternalRow> rowIterator() {
     final int maxRows = numRows;
-    final ColumnarRow row = new ColumnarRow(columns);
-    return new Iterator<ColumnarRow>() {
+    final MutableColumnarRow row = new MutableColumnarRow(columns);
+    return new Iterator<InternalRow>() {
       int rowId = 0;
 
       @Override
@@ -70,7 +71,7 @@ public final class ColumnarBatch {
       }
 
       @Override
-      public ColumnarRow next() {
+      public InternalRow next() {
         if (rowId >= maxRows) {
           throw new NoSuchElementException();
         }
@@ -133,9 +134,8 @@ public final class ColumnarBatch {
   /**
    * Returns the row in this batch at `rowId`. Returned row is reused across calls.
    */
-  public ColumnarRow getRow(int rowId) {
-    assert(rowId >= 0);
-    assert(rowId < numRows);
+  public InternalRow getRow(int rowId) {
+    assert(rowId >= 0 && rowId < numRows);
     row.rowId = rowId;
     return row;
   }
@@ -144,6 +144,6 @@ public final class ColumnarBatch {
     this.schema = schema;
     this.columns = columns;
     this.capacity = capacity;
-    this.row = new ColumnarRow(columns);
+    this.row = new MutableColumnarRow(columns);
   }
 }

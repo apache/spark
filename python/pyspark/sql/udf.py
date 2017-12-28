@@ -34,19 +34,23 @@ def _wrap_function(sc, func, returnType):
 
 
 def _create_udf(f, returnType, evalType):
-    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
+
+    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF or \
+            evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         import inspect
+        from pyspark.sql.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
         argspec = inspect.getargspec(f)
-        if len(argspec.args) == 0 and argspec.varargs is None:
+
+        if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF and len(argspec.args) == 0 and \
+                argspec.varargs is None:
             raise ValueError(
                 "Invalid function: 0-arg pandas_udfs are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-    elif evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
-        import inspect
-        argspec = inspect.getargspec(f)
-        if len(argspec.args) != 1:
+        if evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF and len(argspec.args) != 1:
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUP_MAP "
                 "must take a single arg that is a pandas DataFrame."
@@ -90,6 +94,7 @@ class UserDefinedFunction(object):
             else func.__class__.__name__)
         self.evalType = evalType
         self.nullable = True
+        self._deterministic = True
 
     @property
     def returnType(self):
@@ -107,14 +112,6 @@ class UserDefinedFunction(object):
                              "pandas_udf with function type GROUP_MAP")
 
         return self._returnType_placeholder
-
-    def asNonNullable(self):
-        if not self.nullable:
-            return self
-        else:
-            udf = copy.copy(self)
-            udf.nullable = False
-            return udf
 
     @property
     def _judf(self):
@@ -135,8 +132,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.evalType)
-        judf = judf if self.nullable else judf.asNonNullable()
+            self._name, wrapped_func, jdt, self.evalType, self._deterministic, self.nullable)
         return judf
 
     def __call__(self, *cols):
@@ -161,9 +157,6 @@ class UserDefinedFunction(object):
         def wrapper(*args):
             return self(*args)
 
-        def asNonNullable():
-            return self.asNonNullable()._wrapped
-
         wrapper.__name__ = self._name
         wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
                               else self.func.__class__.__module__)
@@ -171,7 +164,26 @@ class UserDefinedFunction(object):
         wrapper.func = self.func
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
+        wrapper.asNondeterministic = self.asNondeterministic
+        wrapper.asNonNullable = self.asNonNullable
         wrapper.nullable = self.nullable
-        wrapper.asNonNullable = asNonNullable
 
         return wrapper
+
+    def asNondeterministic(self):
+        """
+        Updates UserDefinedFunction to nondeterministic.
+
+        .. versionadded:: 2.3
+        """
+        self._deterministic = False
+        return self
+
+    def asNonNullable(self):
+        """
+        Updates UserDefinedFunction to non-nonullable.
+
+        .. versionadded:: 2.4
+        """
+        self.nullable = False
+        return self._wrapped()
