@@ -187,6 +187,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_HIVE_TIMESTAMP_TYPE_PARTITION_PRUNING =
+    buildConf("spark.sql.hive.metastore.partition.pruning.timestamps.enabled")
+      .internal()
+      .doc("When true, predicates for columns of type timestamp are pushed to hive metastore.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ENABLE_HIVE_FRACTIONAL_TYPES_PARTITION_PRUNING =
+    buildConf("spark.sql.hive.metastore.partition.pruning.fractionals.enabled")
+      .internal()
+      .doc("When true, predicates for columns of type fractional (double, float, decimal) " +
+        "are pushed to hive metastore.")
+      .booleanConf
+      .createWithDefault(false)
+
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
     buildConf("spark.sql.statistics.fallBackToHdfs")
     .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
@@ -1221,6 +1236,12 @@ class SQLConf extends Serializable with Logging {
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
+
+  def pruneTimestampPartitionColumns: Boolean =
+    getConf(ENABLE_HIVE_TIMESTAMP_TYPE_PARTITION_PRUNING)
+
+  def pruneFractionalPartitionColumns: Boolean =
+    getConf(ENABLE_HIVE_FRACTIONAL_TYPES_PARTITION_PRUNING)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 

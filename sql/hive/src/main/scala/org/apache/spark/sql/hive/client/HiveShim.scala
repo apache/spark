@@ -20,16 +20,15 @@ package org.apache.spark.sql.hive.client
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
 import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
-import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
+import java.util.{Locale, ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{EnvironmentContext, Function => HiveFunction, FunctionType}
+import org.apache.hadoop.hive.metastore.api.{EnvironmentContext, FunctionType, Function => HiveFunction}
 import org.apache.hadoop.hive.metastore.api.{MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
@@ -38,15 +37,16 @@ import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegralType, StringType}
+import org.apache.spark.sql.types.{FractionalType, IntegralType, StringType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -598,9 +598,17 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     object ExtractableLiteral {
+      val pruneTimestamps = SQLConf.get.pruneTimestampPartitionColumns
+      val pruneFractionals = SQLConf.get.pruneFractionalPartitionColumns
+
       def unapply(expr: Expression): Option[String] = expr match {
         case Literal(value, _: IntegralType) => Some(value.toString)
         case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
+        case Literal(value, _: FractionalType) if pruneFractionals => Some(value.toString)
+        // Timestamp must be converted to yyyy-mm-dd hh:mm:ss[.fffffffff] format before
+        // it can be used for partition pruning
+        case Literal(value: SQLTimestamp, _: TimestampType) if pruneTimestamps =>
+          Some(s"'${DateTimeUtils.timestampToString(value, DateTimeUtils.TimeZoneUTC)}'")
         case _ => None
       }
     }
@@ -641,6 +649,10 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
           col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
         .map(col => col.getName).toSet
+      if (varcharKeys.nonEmpty) {
+        logDebug(s"Following table columns will be ignored in " +
+          s"partition pruning because their type is varchar: $varcharKeys")
+      }
 
       def unapply(attr: Attribute): Option[String] = {
         if (varcharKeys.contains(attr.name)) {
@@ -687,7 +699,10 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       case _ => None
     }
 
-    filters.flatMap(convert).mkString(" and ")
+    val result = filters.flatMap(convert).mkString(" and ")
+    logDebug(s"Conversion of $filters for metastore partition pruning resulted in $result")
+
+    result
   }
 
   private def quoteStringLiteral(str: String): String = {
@@ -714,7 +729,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       if (filter.isEmpty) {
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
       } else {
-        logDebug(s"Hive metastore filter is '$filter'.")
         val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
         // We should get this config value from the metaStore. otherwise hit SPARK-18681.
         // To be compatible with hive-0.12 and hive-0.13, In the future we can achieve this by:
