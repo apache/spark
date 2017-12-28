@@ -1141,11 +1141,9 @@ class Analyzer(
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, g.child)
             (newExprs, g.copy(join = true, child = newChild))
 
-          // For `Distinct`, we can't recursively resolve and add attributes via its children.
-          case d: Distinct =>
-            (exprs.map(resolveExpression(_, d)), d)
-
-          case u: UnaryNode =>
+          // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
+          // via its children.
+          case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias] =>
             val maybeResolvedExprs = exprs.map(resolveExpression(_, u))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child)
             (newExprs, u.withNewChildren(Seq(newChild)))
