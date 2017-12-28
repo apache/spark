@@ -1562,7 +1562,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("multi-insert with lateral view") {
-    withTempView("t1") {
+    withTempView("source") {
       spark.range(10)
         .select(array($"id", $"id" + 1).as("arr"), $"id")
         .createOrReplaceTempView("source")
