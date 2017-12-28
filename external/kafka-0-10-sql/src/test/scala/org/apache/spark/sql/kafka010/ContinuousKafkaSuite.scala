@@ -93,23 +93,39 @@ class ContinuousKafkaSuite extends KafkaSourceTest {
   }
 
   test("kafka sink") {
-    val query = spark.readStream
-      .format("rate")
-      .option("numPartitions", "6")
-      .option("rowsPerSecond", "10")
-      .load()
-      .select('value)
-      .writeStream
-      .format("memory")
-      .queryName("kafkaSink")
-      .trigger(Trigger.Continuous(100))
-      .start()
+    withTempDir { dir =>
+      val topic = newTopic()
+      testUtils.createTopic(topic)
+      val query = spark.readStream
+        .format("rate")
+        .option("numPartitions", "6")
+        .option("rowsPerSecond", "10")
+        .load()
+        .select('value)
+        .selectExpr("CAST(value as STRING) value")
+        .writeStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("topic", topic)
+        .option("checkpointLocation", dir.getCanonicalPath)
+        .trigger(Trigger.Continuous(100))
+        .start()
 
-    eventually(timeout(streamingTimeout)) {
-      val results = spark.read.table("kafkaSink").collect()
-      assert(Range(0, 20).map(Row(_)).toSet.subsetOf(results.toSet))
+      eventually(timeout(streamingTimeout)) {
+        val results = spark.read
+          .format("kafka")
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("startingOffsets", "earliest")
+          .option("endingOffsets", "latest")
+          .option("subscribe", topic)
+          .load()
+          .selectExpr("CAST(value as STRING) value")
+          .selectExpr("CAST(value as INT) value")
+          .collect()
+        assert(Range(0, 20).map(Row(_)).toSet.subsetOf(results.toSet))
+      }
+      query.stop()
     }
-    query.stop()
   }
 }
 
