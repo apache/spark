@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.util.Benchmark
 
-import scala.collection.mutable
 
 /**
  * Benchmark to measure whole stage codegen performance.
