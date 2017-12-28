@@ -108,9 +108,12 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
       val sources = query.get.logicalPlan.collect {
         case StreamingExecutionRelation(source: KafkaSource, _) => source
-      } ++ query.get.lastExecution.logical.collect {
-        case DataSourceV2Relation(_, reader: ContinuousKafkaReader) => reader
-      }
+      } ++ (query.get.lastExecution match {
+        case null => Seq()
+        case e => e.logical.collect {
+          case DataSourceV2Relation(_, reader: ContinuousKafkaReader) => reader
+        }
+      })
       if (sources.isEmpty) {
         throw new Exception(
           "Could not find Kafka source in the StreamExecution logical plan to add data to")
@@ -460,50 +463,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
       AddKafkaData(Set(topic2), 4, 5, 6),
       CheckAnswer(2, 3, 4, 5, 6, 7)
     )
-  }
-
-  test("continuous with reconfigure") {
-    val topicPrefix = newTopic()
-    testUtils.createTopic(s"$topicPrefix-1", partitions = 3)
-    testUtils.sendMessages(s"$topicPrefix-1", Array("0"))
-    require(testUtils.getLatestOffsets(Set(s"$topicPrefix-1")).size === 3)
-
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("subscribe", s"$topicPrefix-1")
-      .option("kafka.metadata.max.age.ms", "100")
-
-    val kafka = reader.load()
-      .selectExpr("CAST(value AS STRING)")
-      .as[String]
-    val mapped = kafka.map(_.toInt)
-    val query = mapped.writeStream
-      .format("memory")
-      .queryName("memory")
-      .trigger(Trigger.Continuous(1000))
-      .start()
-      .asInstanceOf[ContinuousExecution]
-    query.awaitInitialization(streamingTimeout.toMillis)
-
-    Thread.sleep(1000)
-
-    testUtils.addPartitions(s"$topicPrefix-1", 5)
-
-    require(testUtils.getLatestOffsets(Set(s"$topicPrefix-1")).size === 5)
-
-    print(testUtils.sendMessages(s"$topicPrefix-1", Seq(1, 2, 3).map{ _.toString }.toArray))
-    Thread.sleep(5500)
-
-    val sink = query.lastExecution.executedPlan.find(_.isInstanceOf[WriteToDataSourceV2Exec]).get
-      .asInstanceOf[WriteToDataSourceV2Exec].writer.asInstanceOf[ContinuousMemoryWriter]
-      .sink
-    try {
-      assert(sink.allData.sortBy(_.getInt(0)) == Seq(1, 2, 3).sorted.map(Row(_)))
-    } finally {
-      query.stop()
-    }
   }
 
   test("bad source options") {
