@@ -393,7 +393,7 @@ class MicroBatchExecution(
           val current = committedOffsets.get(reader).map(off => reader.deserializeOffset(off.json))
           reader.setOffsetRange(
             Optional.ofNullable(current.orNull),
-            Optional.of(available.asInstanceOf[v2.reader.Offset]))
+            Optional.of(available.asInstanceOf[v2.streaming.reader.Offset]))
           logDebug(s"Retrieving data from $reader: $current -> $available")
           Some(reader ->
             new StreamingDataSourceV2Relation(reader.readSchema().toAttributes, reader))
