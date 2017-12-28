@@ -39,5 +39,8 @@ public interface ContinuousReadSupport extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  ContinuousReader createContinuousReader(Optional<StructType> schema, String checkpointLocation, DataSourceV2Options options);
+  ContinuousReader createContinuousReader(
+    Optional<StructType> schema,
+    String checkpointLocation,
+    DataSourceV2Options options);
 }
