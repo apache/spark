@@ -305,7 +305,7 @@ object OrcReadBenchmark {
         spark.range(values).map(_ => Random.nextLong).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql(s"SELECT * FROM t1"))
+        prepareTable(dir, spark.sql("SELECT * FROM t1"))
 
         sqlBenchmark.addCase("Native ORC") { _ =>
           spark.sql(s"SELECT sum(c$middle) FROM nativeOrcTable").collect()
