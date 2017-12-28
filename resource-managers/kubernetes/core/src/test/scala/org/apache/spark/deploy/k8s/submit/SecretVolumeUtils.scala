@@ -14,17 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit.steps
+package org.apache.spark.deploy.k8s.submit
 
-import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
+import scala.collection.JavaConverters._
 
-/**
- * Represents a step in configuring the Spark driver pod.
- */
-private[spark] trait DriverConfigurationStep {
+import io.fabric8.kubernetes.api.model.{Container, Pod}
 
-  /**
-   * Apply some transformation to the previous state of the driver to add a new feature to it.
-   */
-  def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec
+private[spark] object SecretVolumeUtils {
+
+  def podHasVolume(driverPod: Pod, volumeName: String): Boolean = {
+    driverPod.getSpec.getVolumes.asScala.exists(volume => volume.getName == volumeName)
+  }
+
+  def containerHasVolume(
+      driverContainer: Container,
+      volumeName: String,
+      mountPath: String): Boolean = {
+    driverContainer.getVolumeMounts.asScala.exists(volumeMount =>
+      volumeMount.getName == volumeName && volumeMount.getMountPath == mountPath)
+  }
 }

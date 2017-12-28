@@ -21,25 +21,31 @@ import java.util.UUID
 import com.google.common.primitives.Longs
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.steps._
+import org.apache.spark.deploy.k8s.submit.steps.initcontainer.InitContainerConfigOrchestrator
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.SystemClock
+import org.apache.spark.util.Utils
 
 /**
- * Constructs the complete list of driver configuration steps to run to deploy the Spark driver.
+ * Figures out and returns the complete ordered list of needed DriverConfigurationSteps to
+ * configure the Spark driver pod. The returned steps will be applied one by one in the given
+ * order to produce a final KubernetesDriverSpec that is used in KubernetesClientApplication
+ * to construct and create the driver pod. It uses the InitContainerConfigOrchestrator to
+ * configure the driver init-container if one is needed, i.e., when there are remote dependencies
+ * to localize.
  */
-private[spark] class DriverConfigurationStepsOrchestrator(
-    namespace: String,
+private[spark] class DriverConfigOrchestrator(
     kubernetesAppId: String,
     launchTime: Long,
     mainAppResource: Option[MainAppResource],
     appName: String,
     mainClass: String,
     appArgs: Array[String],
-    submissionSparkConf: SparkConf) {
+    sparkConf: SparkConf) {
 
   // The resource name prefix is derived from the Spark application name, making it easy to connect
   // the names of the Kubernetes resources from e.g. kubectl or the Kubernetes dashboard to the
@@ -49,13 +55,14 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     s"$appName-$uuid".toLowerCase.replaceAll("\\.", "-")
   }
 
-  private val imagePullPolicy = submissionSparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
-  private val jarsDownloadPath = submissionSparkConf.get(JARS_DOWNLOAD_LOCATION)
-  private val filesDownloadPath = submissionSparkConf.get(FILES_DOWNLOAD_LOCATION)
+  private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
+  private val initContainerConfigMapName = s"$kubernetesResourceNamePrefix-init-config"
+  private val jarsDownloadPath = sparkConf.get(JARS_DOWNLOAD_LOCATION)
+  private val filesDownloadPath = sparkConf.get(FILES_DOWNLOAD_LOCATION)
 
-  def getAllConfigurationSteps(): Seq[DriverConfigurationStep] = {
-    val driverCustomLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
-      submissionSparkConf,
+  def getAllConfigurationSteps: Seq[DriverConfigurationStep] = {
+    val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf,
       KUBERNETES_DRIVER_LABEL_PREFIX)
     require(!driverCustomLabels.contains(SPARK_APP_ID_LABEL), "Label with key " +
       s"$SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping " +
@@ -64,11 +71,15 @@ private[spark] class DriverConfigurationStepsOrchestrator(
       s"$SPARK_ROLE_LABEL is not allowed as it is reserved for Spark bookkeeping " +
       "operations.")
 
+    val secretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf,
+      KUBERNETES_DRIVER_SECRETS_PREFIX)
+
     val allDriverLabels = driverCustomLabels ++ Map(
       SPARK_APP_ID_LABEL -> kubernetesAppId,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
 
-    val initialSubmissionStep = new BaseDriverConfigurationStep(
+    val initialSubmissionStep = new BasicDriverConfigurationStep(
       kubernetesAppId,
       kubernetesResourceNamePrefix,
       allDriverLabels,
@@ -76,16 +87,16 @@ private[spark] class DriverConfigurationStepsOrchestrator(
       appName,
       mainClass,
       appArgs,
-      submissionSparkConf)
+      sparkConf)
 
-    val driverAddressStep = new DriverServiceBootstrapStep(
+    val serviceBootstrapStep = new DriverServiceBootstrapStep(
       kubernetesResourceNamePrefix,
       allDriverLabels,
-      submissionSparkConf,
+      sparkConf,
       new SystemClock)
 
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsStep(
-      submissionSparkConf, kubernetesResourceNamePrefix)
+      sparkConf, kubernetesResourceNamePrefix)
 
     val additionalMainAppJar = if (mainAppResource.nonEmpty) {
        val mayBeResource = mainAppResource.get match {
@@ -98,28 +109,62 @@ private[spark] class DriverConfigurationStepsOrchestrator(
       None
     }
 
-    val sparkJars = submissionSparkConf.getOption("spark.jars")
+    val sparkJars = sparkConf.getOption("spark.jars")
       .map(_.split(","))
       .getOrElse(Array.empty[String]) ++
       additionalMainAppJar.toSeq
-    val sparkFiles = submissionSparkConf.getOption("spark.files")
+    val sparkFiles = sparkConf.getOption("spark.files")
       .map(_.split(","))
       .getOrElse(Array.empty[String])
 
-    val maybeDependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
-      Some(new DependencyResolutionStep(
+    val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
+      Seq(new DependencyResolutionStep(
         sparkJars,
         sparkFiles,
         jarsDownloadPath,
         filesDownloadPath))
     } else {
-      None
+      Nil
+    }
+
+    val initContainerBootstrapStep = if (existNonContainerLocalFiles(sparkJars ++ sparkFiles)) {
+      val orchestrator = new InitContainerConfigOrchestrator(
+        sparkJars,
+        sparkFiles,
+        jarsDownloadPath,
+        filesDownloadPath,
+        imagePullPolicy,
+        initContainerConfigMapName,
+        INIT_CONTAINER_PROPERTIES_FILE_NAME,
+        sparkConf)
+      val bootstrapStep = new DriverInitContainerBootstrapStep(
+        orchestrator.getAllConfigurationSteps,
+        initContainerConfigMapName,
+        INIT_CONTAINER_PROPERTIES_FILE_NAME)
+
+      Seq(bootstrapStep)
+    } else {
+      Nil
+    }
+
+    val mountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
+      Seq(new DriverMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
+    } else {
+      Nil
     }
 
     Seq(
       initialSubmissionStep,
-      driverAddressStep,
+      serviceBootstrapStep,
       kubernetesCredentialsStep) ++
-      maybeDependencyResolutionStep.toSeq
+      dependencyResolutionStep ++
+      initContainerBootstrapStep ++
+      mountSecretsStep
+  }
+
+  private def existNonContainerLocalFiles(files: Seq[String]): Boolean = {
+    files.exists { uri =>
+      Utils.resolveURI(uri).getScheme != "local"
+    }
   }
 }

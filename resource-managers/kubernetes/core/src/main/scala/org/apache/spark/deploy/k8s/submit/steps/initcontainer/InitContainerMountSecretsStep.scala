@@ -14,17 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit.steps
+package org.apache.spark.deploy.k8s.submit.steps.initcontainer
 
-import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
+import org.apache.spark.deploy.k8s.MountSecretsBootstrap
 
 /**
- * Represents a step in configuring the Spark driver pod.
+ * An init-container configuration step for mounting user-specified secrets onto user-specified
+ * paths.
+ *
+ * @param bootstrap a utility actually handling mounting of the secrets
  */
-private[spark] trait DriverConfigurationStep {
+private[spark] class InitContainerMountSecretsStep(
+    bootstrap: MountSecretsBootstrap) extends InitContainerConfigurationStep {
 
-  /**
-   * Apply some transformation to the previous state of the driver to add a new feature to it.
-   */
-  def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec
+  override def configureInitContainer(spec: InitContainerSpec) : InitContainerSpec = {
+    val (driverPod, initContainer) = bootstrap.mountSecrets(
+      spec.driverPod,
+      spec.initContainer)
+    spec.copy(
+      driverPod = driverPod,
+      initContainer = initContainer
+    )
+  }
 }
