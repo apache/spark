@@ -668,13 +668,6 @@ object TypeCoercion {
    */
   case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
 
-    private def typeCastToString(c: Concat): Concat = {
-      val newChildren = c.children.map { e =>
-        ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
-      }
-      c.copy(children = newChildren)
-    }
-
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transform { case p =>
       p transformExpressionsUp {
         // Skip nodes if unresolved or empty children
@@ -682,7 +675,10 @@ object TypeCoercion {
 
         case c @ Concat(children) if conf.concatBinaryAsString ||
             !children.map(_.dataType).forall(_ == BinaryType) =>
-          typeCastToString(c)
+          val newChildren = c.children.map { e =>
+            ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+          }
+          c.copy(children = newChildren)
       }
     }
   }
