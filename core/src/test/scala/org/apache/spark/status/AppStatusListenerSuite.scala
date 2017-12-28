@@ -942,6 +942,24 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("driver logs") {
+    val listener = new AppStatusListener(store, conf, true)
+
+    val driver = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "localhost", 42)
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(time, driver, 42L))
+    listener.onApplicationStart(SparkListenerApplicationStart(
+      "name",
+      Some("id"),
+      time,
+      "user",
+      Some("attempt"),
+      Some(Map("stdout" -> "file.txt"))))
+
+    check[ExecutorSummaryWrapper](SparkContext.DRIVER_IDENTIFIER) { d =>
+      assert(d.info.executorLogs("stdout") === "file.txt")
+    }
+  }
+
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptId)
 
   private def check[T: ClassTag](key: Any)(fn: T => Unit): Unit = {
