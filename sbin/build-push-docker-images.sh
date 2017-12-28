@@ -20,7 +20,8 @@
 # with Kubernetes support.
 
 declare -A path=( [spark-driver]=kubernetes/dockerfiles/driver/Dockerfile \
-                  [spark-executor]=kubernetes/dockerfiles/executor/Dockerfile )
+                  [spark-executor]=kubernetes/dockerfiles/executor/Dockerfile \
+                  [spark-init]=kubernetes/dockerfiles/init-container/Dockerfile )
 
 function build {
   docker build -t spark-base -f kubernetes/dockerfiles/spark-base/Dockerfile .
