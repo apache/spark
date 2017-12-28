@@ -25,7 +25,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 
-class BaseDriverConfigurationStepSuite extends SparkFunSuite {
+class BasicDriverConfigurationStepSuite extends SparkFunSuite {
 
   private val APP_ID = "spark-app-id"
   private val RESOURCE_NAME_PREFIX = "spark"
@@ -52,7 +52,7 @@ class BaseDriverConfigurationStepSuite extends SparkFunSuite {
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY1", "customDriverEnv1")
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY2", "customDriverEnv2")
 
-    val submissionStep = new BaseDriverConfigurationStep(
+    val submissionStep = new BasicDriverConfigurationStep(
       APP_ID,
       RESOURCE_NAME_PREFIX,
       DRIVER_LABELS,
