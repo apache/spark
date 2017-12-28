@@ -186,14 +186,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       broadcastSide(buildLeft, buildRight, left, right)
     }
 
-    private def canBroadcastBySize(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+    private def canBroadcastBySizes(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
       : Boolean = {
       val buildLeft = canBuildLeft(joinType) && canBroadcast(left)
       val buildRight = canBuildRight(joinType) && canBroadcast(right)
       buildLeft || buildRight
     }
 
-    private def broadcastSideBySize(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+    private def broadcastSideBySizes(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
       : BuildSide = {
       val buildLeft = canBuildLeft(joinType) && canBroadcast(left)
       val buildRight = canBuildRight(joinType) && canBroadcast(right)
@@ -213,8 +213,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // broadcast hints were not specified, so need to infer it from size and configuration.
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if canBroadcastBySize(joinType, left, right) =>
-        val buildSide = broadcastSideBySize(joinType, left, right)
+        if canBroadcastBySizes(joinType, left, right) =>
+        val buildSide = broadcastSideBySizes(joinType, left, right)
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
@@ -251,8 +251,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       case j @ logical.Join(left, right, joinType, condition)
-          if canBroadcastBySize(joinType, left, right) =>
-        val buildSide = broadcastSideBySize(joinType, left, right)
+          if canBroadcastBySizes(joinType, left, right) =>
+        val buildSide = broadcastSideBySizes(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
