@@ -82,7 +82,7 @@ class CustomReceiver(host: String, port: Int)
    var socket: Socket = null
    var userInput: String = null
    try {
-     logInfo(s"Connecting to $host $port")
+     logInfo(s"Connecting to $host : $port")
      socket = new Socket(host, port)
      logInfo(s"Connected to $host : $port")
      val reader = new BufferedReader(

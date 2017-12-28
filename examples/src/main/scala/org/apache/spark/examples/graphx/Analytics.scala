@@ -145,9 +145,11 @@ object Analytics extends Logging {
           // TriangleCount requires the graph to be partitioned
           .partitionBy(partitionStrategy.getOrElse(RandomVertexCut)).cache()
         val triangles = TriangleCount.run(graph)
-        println(s"Triangles: ${triangles.vertices.map {
+        val triangleTypes = triangles.vertices.map {
           case (vid, data) => data.toLong
-        }.reduce(_ + _) / 3}")
+        }.reduce(_ + _) / 3
+
+        println(s"Triangles: ${triangleTypes}")
         sc.stop()
 
       case _ =>
