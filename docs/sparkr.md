@@ -657,3 +657,9 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
  - By default, derby.log is now saved to `tempdir()`. This will be created when instantiating the SparkSession with `enableHiveSupport` set to `TRUE`.
  - `spark.lda` was not setting the optimizer correctly. It has been corrected.
  - Several model summary outputs are updated to have `coefficients` as `matrix`. This includes `spark.logit`, `spark.kmeans`, `spark.glm`. Model summary outputs for `spark.gaussianMixture` have added log-likelihood as `loglik`.
+
+## Upgrading to SparkR 2.3.0
+
+ - The `stringsAsFactors` parameter was previously ignored with `collect`, for example, in `collect(createDataFrame(iris), stringsAsFactors = TRUE))`. It has been corrected.
+ - For `summary`, option for statistics to compute has been added. Its output is changed from that from `describe`.
+ - A warning can be raised if the version of SparkR package and the Spark JVM do not match.
