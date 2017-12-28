@@ -172,7 +172,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
     }
 
-    private def needsBroadcastByHints(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+    private def canBroadcastByHints(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
       : Boolean = {
       val buildLeft = canBuildLeft(joinType) && left.stats.hints.broadcast
       val buildRight = canBuildRight(joinType) && right.stats.hints.broadcast
@@ -186,14 +186,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       broadcastSide(buildLeft, buildRight, left, right)
     }
 
-    private def needsBroadcastByConfig(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+    private def canBroadcastBySize(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
       : Boolean = {
       val buildLeft = canBuildLeft(joinType) && canBroadcast(left)
       val buildRight = canBuildRight(joinType) && canBroadcast(right)
       buildLeft || buildRight
     }
 
-    private def broadcastSideByConfig(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+    private def broadcastSideBySize(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
       : BuildSide = {
       val buildLeft = canBuildLeft(joinType) && canBroadcast(left)
       val buildRight = canBuildRight(joinType) && canBroadcast(right)
@@ -206,15 +206,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // broadcast hints were specified
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-          if needsBroadcastByHints(joinType, left, right) =>
+        if canBroadcastByHints(joinType, left, right) =>
         val buildSide = broadcastSideByHints(joinType, left, right)
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
-      // broadcast hints were not specified, so need to infer from conf
+      // broadcast hints were not specified, so need to infer it from size and configuration.
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-          if needsBroadcastByConfig(joinType, left, right) =>
-        val buildSide = broadcastSideByConfig(joinType, left, right)
+        if canBroadcastBySize(joinType, left, right) =>
+        val buildSide = broadcastSideBySize(joinType, left, right)
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
@@ -245,14 +245,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcasted
       case j @ logical.Join(left, right, joinType, condition)
-          if needsBroadcastByHints(joinType, left, right) =>
+          if canBroadcastByHints(joinType, left, right) =>
         val buildSide = broadcastSideByHints(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       case j @ logical.Join(left, right, joinType, condition)
-          if needsBroadcastByConfig(joinType, left, right) =>
-        val buildSide = broadcastSideByConfig(joinType, left, right)
+          if canBroadcastBySize(joinType, left, right) =>
+        val buildSide = broadcastSideBySize(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
