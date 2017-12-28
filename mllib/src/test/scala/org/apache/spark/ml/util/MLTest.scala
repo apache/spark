@@ -58,7 +58,6 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       transformer: Transformer,
       firstResultCol: String,
       otherResultCols: String*)
-      (checkFunction: Row => Unit)
       (globalCheckFunction: Seq[Row] => Unit): Unit = {
 
     val columnNames = dataframe.schema.fieldNames
@@ -71,7 +70,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       .select(firstResultCol, otherResultCols: _*)
     testStream(streamOutput) (
       AddData(stream, data: _*),
-      CheckAnswer(checkFunction, globalCheckFunction)
+      CheckAnswer(globalCheckFunction)
     )
   }
 
@@ -80,18 +79,10 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       transformer: Transformer,
       firstResultCol: String,
       otherResultCols: String*)
-      (checkFunction: Row => Unit)
       (globalCheckFunction: Seq[Row] => Unit): Unit = {
     val dfOutput = transformer.transform(dataframe)
     val outputs = dfOutput.select(firstResultCol, otherResultCols: _*).collect()
-    if (checkFunction != null) {
-      outputs.foreach { row =>
-        checkFunction(row)
-      }
-    }
-    if (globalCheckFunction != null) {
-      globalCheckFunction(outputs)
-    }
+    globalCheckFunction(outputs)
   }
 
   def testTransformer[A : Encoder](
@@ -100,10 +91,11 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       firstResultCol: String,
       otherResultCols: String*)
       (checkFunction: Row => Unit): Unit = {
-    testTransformerOnStreamData(dataframe, transformer, firstResultCol,
-      otherResultCols: _*)(checkFunction)(null)
-    testTransformerOnDF(dataframe, transformer, firstResultCol,
-      otherResultCols: _*)(checkFunction)(null)
+    testTransformerByGlobalCheckFunc(
+      dataframe,
+      transformer,
+      firstResultCol,
+      otherResultCols: _*) { rows: Seq[Row] => rows.foreach(checkFunction(_)) }
   }
 
   def testTransformerByGlobalCheckFunc[A : Encoder](
@@ -113,8 +105,8 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       otherResultCols: String*)
       (globalCheckFunction: Seq[Row] => Unit): Unit = {
     testTransformerOnStreamData(dataframe, transformer, firstResultCol,
-      otherResultCols: _*)(null)(globalCheckFunction)
+      otherResultCols: _*)(globalCheckFunction)
     testTransformerOnDF(dataframe, transformer, firstResultCol,
-      otherResultCols: _*)(null)(globalCheckFunction)
+      otherResultCols: _*)(globalCheckFunction)
   }
 }

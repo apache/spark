@@ -137,9 +137,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, false, false)
 
-    def apply(checkFunction: Row => Unit,
-        globalCheckFunction: Seq[Row] => Unit): CheckAnswerRowsByFunc =
-      CheckAnswerRowsByFunc(checkFunction, globalCheckFunction, false)
+    def apply(globalCheckFunction: Seq[Row] => Unit): CheckAnswerRowsByFunc =
+      CheckAnswerRowsByFunc(globalCheckFunction, false)
   }
 
   /**
@@ -162,9 +161,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, true, false)
 
-    def apply(checkFunction: Row => Unit,
-        globalCheckFunction: Seq[Row] => Unit): CheckAnswerRowsByFunc =
-      CheckAnswerRowsByFunc(checkFunction, globalCheckFunction, true)
+    def apply(globalCheckFunction: Seq[Row] => Unit): CheckAnswerRowsByFunc =
+      CheckAnswerRowsByFunc(globalCheckFunction, true)
   }
 
   case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean, isSorted: Boolean)
@@ -180,7 +178,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   }
 
   case class CheckAnswerRowsByFunc(
-      checkFunction: Row => Unit,
       globalCheckFunction: Seq[Row] => Unit,
       lastOnly: Boolean) extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"$operatorName"
@@ -643,23 +640,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
               error => failTest(error)
             }
 
-          case CheckAnswerRowsByFunc(checkFunction, globalCheckFunction, lastOnly) =>
+          case CheckAnswerRowsByFunc(globalCheckFunction, lastOnly) =>
             val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
-            if (checkFunction != null) {
-              sparkAnswer.foreach { row =>
-                try {
-                  checkFunction(row)
-                } catch {
-                  case e: Throwable => failTest(e.toString)
-                }
-              }
-            }
-            if (globalCheckFunction != null) {
-              try {
-                globalCheckFunction(sparkAnswer)
-              } catch {
-                case e: Throwable => failTest(e.toString)
-              }
+            try {
+              globalCheckFunction(sparkAnswer)
+            } catch {
+              case e: Throwable => failTest(e.toString)
             }
         }
         pos += 1
