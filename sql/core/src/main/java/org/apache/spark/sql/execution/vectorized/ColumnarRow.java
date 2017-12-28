@@ -28,7 +28,8 @@ import org.apache.spark.unsafe.types.UTF8String;
  * to be reused, callers should copy the data out if it needs to be stored.
  */
 public final class ColumnarRow extends InternalRow {
-  // The data for this row. E.g. the value of 3rd int field is `data.getChildColumn(3).getInt(rowId)`.
+  // The data for this row.
+  // E.g. the value of 3rd int field is `data.getChildColumn(3).getInt(rowId)`.
   private final ColumnVector data;
   private final int rowId;
   private final int numFields;

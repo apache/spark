@@ -79,8 +79,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private boolean[] missingColumns;
 
   /**
-   * The timezone that timestamp INT96 values should be converted to. Null if no conversion. Here to workaround
-   * incompatibilities between different engines when writing timestamp values.
+   * The timezone that timestamp INT96 values should be converted to. Null if no conversion. Here to
+   * workaround incompatibilities between different engines when writing timestamp values.
    */
   private TimeZone convertTz = null;
 
