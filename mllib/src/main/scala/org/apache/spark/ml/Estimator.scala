@@ -116,13 +116,14 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
     val counter = new AtomicInteger(0)
     new JIterator[(Integer, M)] {
       def next(): (Integer, M) = {
-        val index = counter.getAndIncrement()
-        if (index < numModel) {
-          (index, fit(dataset, paramMaps(index)))
-        } else {
-          counter.set(numModel)
-          throw new NoSuchElementException("Iterator finished.")
-        }
+        var index: Int = _
+        do {
+          index = counter.get()
+          if (index >= numModel) {
+            throw new NoSuchElementException("Iterator finished.")
+          }
+        } while (!counter.compareAndSet(index, index + 1))
+        (index, fit(dataset, paramMaps(index)))
       }
 
       override def hasNext: Boolean = counter.get() < numModel
