@@ -83,7 +83,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   @Since("2.0.0")
   def fit(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
     val modelIter = fitMultiple(dataset, paramMaps)
-    val models = paramMaps.map{ _ =>
+    val models = paramMaps.map { _ =>
       val (index, model) = modelIter.next()
       (index.toInt, model)
     }
