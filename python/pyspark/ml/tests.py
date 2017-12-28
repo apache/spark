@@ -2359,7 +2359,7 @@ class UnaryTransformerTests(SparkSessionTestCase):
             self.assertEqual(res.input + shiftVal, res.output)
 
 
-class TestFit(unittest.TestCase):
+class EstimatorTest(unittest.TestCase):
 
     def testDefaultFitMultiple(self):
         N = 4

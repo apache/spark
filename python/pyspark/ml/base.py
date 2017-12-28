@@ -27,14 +27,26 @@ from pyspark.sql.functions import udf
 from pyspark.sql.types import StructField, StructType
 
 
-class FitMutlipleIterator(object):
+class FitMultipleIterator(object):
     """
     Used by default implementation of Estimator.fitMultiple to produce models in a thread safe
-    iterator.
+    iterator. This class handles the simple case of fitMultiple where each param map should be
+    fit independently.
+
+    :param fitSingleModel: Function: (int => Model) which fits an estimator to a dataset.
+        `fitSingleModel` may be called up to `numModels` times, with a unique index each time.
+        Each call to `fitSingleModel` with an index should return the Model associated with
+        that index.
+    :param numModel: Number of models this iterator should produce.
+
+    See Estimator.fitMultiple for more info.
     """
-    def __init__(self, fitSingleModel, numModel):
+    def __init__(self, fitSingleModel, numModels):
+        """
+
+        """
         self.fitSingleModel = fitSingleModel
-        self.numModel = numModel
+        self.numModel = numModels
         self.counter = 0
         self.lock = threading.Lock()
 
@@ -80,17 +92,21 @@ class Estimator(Params):
         Fits a model to the input dataset for each param map in params.
 
         :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`.
-        :param params: A list/tuple of param maps.
+        :param params: A Sequence of param maps.
         :return: A thread safe iterable which contains one model for each param map. Each
                  call to `next(modelIterator)` will return `(index, model)` where model was fit
                  using `params[index]`. Params maps may be fit in an order different than their
                  order in params.
 
+        .. note:: DeveloperApi
         .. note:: Experimental
         """
+        estimator = self.copy()
+
         def fitSingleModel(index):
-            return self.fit(dataset, params[index])
-        return FitMutlipleIterator(fitSingleModel, len(params))
+            return estimator.fit(dataset, params[index])
+
+        return FitMultipleIterator(fitSingleModel, len(params))
 
     @since("1.3.0")
     def fit(self, dataset, params=None):
