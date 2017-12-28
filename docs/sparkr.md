@@ -662,4 +662,4 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 
  - The `stringsAsFactors` parameter was previously ignored with `collect`, for example, in `collect(createDataFrame(iris), stringsAsFactors = TRUE))`. It has been corrected.
  - For `summary`, option for statistics to compute has been added. Its output is changed from that from `describe`.
- - A warning can be raised if the version of SparkR package and the Spark JVM do not match.
+ - A warning can be raised if versions of SparkR package and the Spark JVM do not match.
