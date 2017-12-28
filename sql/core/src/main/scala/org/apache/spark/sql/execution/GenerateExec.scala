@@ -47,10 +47,13 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * terminate().
  *
  * @param generator the generator expression
- * @param unrequiredChildOutput each output row is implicitly joined with the relevant part from the
- *                              input tuple that produced it. this param is used to prevent
- *                              unnecessary duplications of data that is going to be projected out
- *                              later.
+ * @param unrequiredChildOutput this paramter starts as Nil and gets filled by the Optimizer.
+ *                              It's used as an optimization for omitting data generation that will
+ *                              be discarded next by a projection.
+ *                              A common use case is when we explode(array(..)) and are interested
+ *                              only in the exploded data and not in the original array. before this
+ *                              optimization the array got duplicated for each of its elements,
+ *                              causing O(n^^2) memory consumption. (see [SPARK-21657])
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
  * @param generatorOutput the qualified output attributes of the generator of this node, which
@@ -97,8 +100,7 @@ case class GenerateExec(
 
         val joinedRow = new JoinedRow
         iter.flatMap { row =>
-
-          // we should always set the left (child output)
+          // we should always set the left (required child output)
           joinedRow.withLeft(pruneChildForResult(row))
           val outputRows = boundGenerator.eval(row)
           if (outer && outputRows.isEmpty) {

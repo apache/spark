@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.util.Benchmark
 
+import scala.collection.mutable
+
 /**
  * Benchmark to measure whole stage codegen performance.
  * To run this:
@@ -232,25 +234,40 @@ class MiscBenchmark extends BenchmarkBase {
     val N = 60000
 
     val spark = sparkSession
-    import spark.implicits._
     import org.apache.spark.sql.functions._
+    import spark.implicits._
 
-    val df = sparkSession.sparkContext.parallelize(
-      List(("1", (1 to N).map(
-        x => (x.toString, (x + 1).toString, (x + 2).toString, (x + 3).toString)).toArray)))
-      .toDF("c1", "c_arr")
-      .withColumn("col", explode(col("c_arr")))
-      .selectExpr("c1", "col.*")
+    val df = sparkSession.sparkContext.parallelize(Seq(("1",
+      Array.fill(N)({
+        val i = math.random
+        (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
+      })))).toDF("col", "arr")
 
-    df.cache.count
+    runBenchmark("generate big struct array", N) {
+      df.withColumn("arr_col", explode('arr)).select("col", "arr_col.*").count
+    }
+
   }
 
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
     Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
 
-    test for impact of adding optimization of omitGeneratorReferences boolean in GenerateExec
-    Before: 29 secs
-    After: 1 secs
+    test the impact of adding the optimization of Generate.unrequiredChildOutput,
+    we can see enormous imporvment of x250 in this case! and it grows O(n^2).
+
+    with Optimization ON:
+
+    generate big struct array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate big struct array wholestage off       331 /  378          0.2        5524.9       1.0X
+    generate big struct array wholestage on        205 /  232          0.3        3413.1       1.6X
+
+    with Optimization OFF:
+
+    generate big struct array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate big struct array wholestage off    49697 / 51496          0.0      828277.7       1.0X
+    generate big struct array wholestage on     50558 / 51434          0.0      842641.6       1.0X
     */
 }

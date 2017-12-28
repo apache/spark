@@ -1607,8 +1607,7 @@ class Analyzer(
             resolvedGenerator =
               Generate(
                 generator,
-                // unrequiredChildOutput=Nil if there are other expressions in SELECT.
-                unrequiredChildOutput = if (projectList.size > 1) Nil else child.output,
+                unrequiredChildOutput = Nil,
                 outer = outer,
                 qualifier = None,
                 generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),

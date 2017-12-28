@@ -38,7 +38,7 @@ class ColumnPruningSuite extends PlanTest {
       CollapseProject) :: Nil
   }
 
-  test("Column pruning for Generate when Generate.unrequiredChildOutput = Nil") {
+  test("Column pruning for Generate when Generate.unrequiredChildOutput = child.output") {
     val input = LocalRelation('a.int, 'b.int, 'c.array(StringType))
 
     val query =
@@ -52,9 +52,7 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer =
       input
         .select('c)
-        .generate(Explode('c), unrequiredChildOutput = Nil,
-          outputNames = "explode" :: Nil)
-        .select('c, 'explode)
+        .generate(Explode('c), outputNames = "explode" :: Nil)
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -98,7 +96,6 @@ class ColumnPruningSuite extends PlanTest {
         .generate(Explode(CreateArray(Seq('c1, 'c2))),
           unrequiredChildOutput = input.output(3) :: Nil,
           outputNames = "explode" :: Nil)
-        .select('a, 'c1, 'explode)
         .analyze
 
     comparePlans(optimized, correctAnswer)

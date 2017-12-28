@@ -280,15 +280,13 @@ class PlanParserSuite extends AnalysisTest {
         .select(star()))
 
     // Multiple lateral views
-    val exploded = table("t")
-      .generate(explode, alias = Some("expl"))
-
     assertEqual(
       """select *
         |from t
         |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
-      exploded
+      table("t")
+        .generate(explode, alias = Some("expl"))
         .generate(jsonTuple, outer = true, alias = Some("jtup"), outputNames = Seq("q", "z"))
         .select(star()))
 
