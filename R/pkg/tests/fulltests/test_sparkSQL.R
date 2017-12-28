@@ -1405,7 +1405,7 @@ test_that("column functions", {
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
-  c12 <- variance(c)
+  c12 <- variance(c) + ltrim(c, "a") + rtrim(c, "b") + trim(c, "c")
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
   c14 <- cume_dist() + ntile(1) + corr(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
@@ -1419,7 +1419,7 @@ test_that("column functions", {
   c23 <- trunc(c, "year") + trunc(c, "yyyy") + trunc(c, "yy") +
     trunc(c, "month") + trunc(c, "mon") + trunc(c, "mm")
   c24 <- date_trunc("hour", c) + date_trunc("minute", c) + date_trunc("week", c) +
-    date_trunc("quarter", c)
+    date_trunc("quarter", c) + current_date() + current_timestamp()
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
