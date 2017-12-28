@@ -3551,7 +3551,7 @@ setMethod("date_trunc",
 #' @export
 #' @examples
 #' \dontrun{
-#' head(select(df, current_date(), current_timestamp()))
+#' head(select(df, current_date(), current_timestamp()))}
 #' @note current_date since 2.3.0
 setMethod("current_date",
           signature("missing"),
