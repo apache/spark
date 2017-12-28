@@ -957,6 +957,28 @@ test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
   }
 })
 
+test_that("localCheckpoint() on a DataFrame", {
+  if (windows_with_hadoop()) {
+    # Checkpoint directory shouldn't matter in localCheckpoint.
+    checkpointDir <- file.path(tempdir(), "lcproot")
+    expect_true(length(list.files(path = checkpointDir, all.files = TRUE, recursive = TRUE)) == 0)
+    setCheckpointDir(checkpointDir)
+
+    textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+    writeLines(mockLines, textPath)
+    # Read it lazily and then locally checkpoint eagerly.
+    df <- read.df(textPath, "text")
+    df <- localCheckpoint(df, eager = TRUE)
+    # Here, we remove the source path to check eagerness.
+    unlink(textPath)
+    expect_is(df, "SparkDataFrame")
+    expect_equal(colnames(df), c("value"))
+    expect_equal(count(df), 3)
+
+    expect_true(length(list.files(path = checkpointDir, all.files = TRUE, recursive = TRUE)) == 0)
+  }
+})
+
 test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
   df <- read.json(jsonPath)
   testSchema <- schema(df)
