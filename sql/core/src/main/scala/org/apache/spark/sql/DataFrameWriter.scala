@@ -594,13 +594,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * You can set the following CSV-specific option(s) for writing CSV files:
    * <ul>
-   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * <li>`sep` (default `,`): sets a single character as a separator for each
    * field and value.</li>
-   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
+   * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
    * the separator can be part of the value. If an empty string is set, it uses `u0000`
    * (null character).</li>
-   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
    * an already quoted value.</li>
+   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
+   * escaping the escape for the quote character. The default value is escape character when escape
+   * and quote characters are different, `\0` otherwise.</li>
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
