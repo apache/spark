@@ -213,6 +213,27 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("SPARK-22745 - read Hive's statistics for partition") {
+    val tableName = "hive_stats_part_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2017-01-01') SELECT * FROM src")
+      var partition = spark.sessionState.catalog
+        .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
+
+      assert(partition.stats.get.sizeInBytes == 5812)
+      assert(partition.stats.get.rowCount.isEmpty)
+
+      hiveClient
+        .runSqlHive(s"ANALYZE TABLE $tableName PARTITION (ds='2017-01-01') COMPUTE STATISTICS")
+      partition = spark.sessionState.catalog
+        .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
+
+      assert(partition.stats.get.sizeInBytes == 5812)
+      assert(partition.stats.get.rowCount == Some(500))
+    }
+  }
+
   test("SPARK-21079 - analyze table with location different than that of individual partitions") {
     val tableName = "analyzeTable_part"
     withTable(tableName) {
@@ -352,15 +373,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       createPartition("2010-01-02", 10, "SELECT '1', 'A' from src")
       createPartition("2010-01-02", 11,
         "SELECT '1', 'A' from src UNION ALL SELECT '1', 'A' from src")
-
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
-
-      assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
-      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
-      assert(queryStats("2010-01-02", "10") === None)
-      assert(queryStats("2010-01-02", "11") === None)
-
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
 
       assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
       assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
@@ -631,7 +643,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
        """.stripMargin)
     sql(s"INSERT INTO TABLE $tabName SELECT * FROM src")
     if (analyzedBySpark) sql(s"ANALYZE TABLE $tabName COMPUTE STATISTICS")
-    // This is to mimic the scenario in which Hive genrates statistics before we reading it
+    // This is to mimic the scenario in which Hive generates statistics before we read it
     if (analyzedByHive) hiveClient.runSqlHive(s"ANALYZE TABLE $tabName COMPUTE STATISTICS")
     val describeResult1 = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
 

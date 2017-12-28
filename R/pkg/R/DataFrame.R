@@ -3782,6 +3782,33 @@ setMethod("checkpoint",
             dataFrame(df)
           })
 
+#' localCheckpoint
+#'
+#' Returns a locally checkpointed version of this SparkDataFrame. Checkpointing can be used to
+#' truncate the logical plan, which is especially useful in iterative algorithms where the plan
+#' may grow exponentially. Local checkpoints are stored in the executors using the caching
+#' subsystem and therefore they are not reliable.
+#'
+#' @param x A SparkDataFrame
+#' @param eager whether to locally checkpoint this SparkDataFrame immediately
+#' @return a new locally checkpointed SparkDataFrame
+#' @family SparkDataFrame functions
+#' @aliases localCheckpoint,SparkDataFrame-method
+#' @rdname localCheckpoint
+#' @name localCheckpoint
+#' @export
+#' @examples
+#'\dontrun{
+#' df <- localCheckpoint(df)
+#' }
+#' @note localCheckpoint since 2.3.0
+setMethod("localCheckpoint",
+          signature(x = "SparkDataFrame"),
+          function(x, eager = TRUE) {
+            df <- callJMethod(x@sdf, "localCheckpoint", as.logical(eager))
+            dataFrame(df)
+          })
+
 #' cube
 #'
 #' Create a multi-dimensional cube for the SparkDataFrame using the specified columns.

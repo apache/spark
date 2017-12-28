@@ -181,7 +181,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        s"cannot cast ${child.dataType} to $dataType")
+        s"cannot cast ${child.dataType.simpleString} to ${dataType.simpleString}")
     }
   }
 
@@ -605,7 +605,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c));"""
       case TimestampType =>
-        val tz = ctx.addReferenceMinorObj(timeZone)
+        val tz = ctx.addReferenceObj("timeZone", timeZone)
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
       case _ =>
@@ -633,7 +633,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
        """
     case TimestampType =>
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
       (c, evPrim, evNull) =>
         s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L, $tz);"
     case _ =>
@@ -713,7 +713,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
       val longOpt = ctx.freshName("longOpt")
       (c, evPrim, evNull) =>
         s"""
@@ -730,7 +730,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case _: IntegralType =>
       (c, evPrim, evNull) => s"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
       (c, evPrim, evNull) =>
         s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c, $tz) * 1000;"
     case DecimalType() =>

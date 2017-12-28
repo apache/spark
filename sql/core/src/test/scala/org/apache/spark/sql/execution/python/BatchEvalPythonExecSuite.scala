@@ -109,4 +109,5 @@ class MyDummyPythonUDF extends UserDefinedPythonFunction(
   name = "dummyUDF",
   func = new DummyUDF,
   dataType = BooleanType,
-  pythonEvalType = PythonEvalType.SQL_BATCHED_UDF)
+  pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+  udfDeterministic = true)

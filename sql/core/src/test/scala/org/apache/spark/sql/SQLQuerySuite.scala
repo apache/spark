@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.File
 import java.math.MathContext
 import java.net.{MalformedURLException, URL}
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
@@ -2760,6 +2760,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-22894: DateTimeOperations should accept SQL like string type") {
+    val date = "2017-12-24"
+    val str = sql(s"SELECT CAST('$date' as STRING) + interval 2 months 2 seconds")
+    val dt = sql(s"SELECT CAST('$date' as DATE) + interval 2 months 2 seconds")
+    val ts = sql(s"SELECT CAST('$date' as TIMESTAMP) + interval 2 months 2 seconds")
+
+    checkAnswer(str, Row("2018-02-24 00:00:02") :: Nil)
+    checkAnswer(dt, Row(Date.valueOf("2018-02-24")) :: Nil)
+    checkAnswer(ts, Row(Timestamp.valueOf("2018-02-24 00:00:02")) :: Nil)
+  }
+
   // Only New OrcFileFormat supports this
   Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
       "parquet").foreach { format =>
@@ -2772,34 +2783,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         val df = spark.read.format(format).load(path)
         assert(df.schema.sameType(emptyDf.schema))
         checkAnswer(df, emptyDf)
-      }
-    }
-  }
-
-  test("SPARK-21791 ORC should support column names with dot") {
-    val orc = classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
-    withTempDir { dir =>
-      val path = new File(dir, "orc").getCanonicalPath
-      Seq(Some(1), None).toDF("col.dots").write.format(orc).save(path)
-      assert(spark.read.format(orc).load(path).collect().length == 2)
-    }
-  }
-
-  test("SPARK-20728 Make ORCFileFormat configurable between sql/hive and sql/core") {
-    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
-      val e = intercept[AnalysisException] {
-        sql("CREATE TABLE spark_20728(a INT) USING ORC")
-      }
-      assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
-    }
-
-    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
-      withTable("spark_20728") {
-        sql("CREATE TABLE spark_20728(a INT) USING ORC")
-        val fileFormat = sql("SELECT * FROM spark_20728").queryExecution.analyzed.collectFirst {
-          case l: LogicalRelation => l.relation.asInstanceOf[HadoopFsRelation].fileFormat.getClass
-        }
-        assert(fileFormat == Some(classOf[OrcFileFormat]))
       }
     }
   }

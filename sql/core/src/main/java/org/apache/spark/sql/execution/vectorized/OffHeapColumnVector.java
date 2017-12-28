@@ -110,7 +110,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public void putNull(int rowId) {
     Platform.putByte(null, nulls + rowId, (byte) 1);
     ++numNulls;
-    anyNullsSet = true;
   }
 
   @Override
@@ -119,13 +118,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 1);
     }
-    anyNullsSet = true;
     numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (!anyNullsSet) return;
+    if (numNulls == 0) return;
     long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 0);
@@ -547,7 +545,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     } else if (type instanceof LongType || type instanceof DoubleType ||
         DecimalType.is64BitDecimalType(type) || type instanceof TimestampType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 8, newCapacity * 8);
-    } else if (resultStruct != null) {
+    } else if (childColumns != null) {
       // Nothing to store.
     } else {
       throw new RuntimeException("Unhandled " + type);

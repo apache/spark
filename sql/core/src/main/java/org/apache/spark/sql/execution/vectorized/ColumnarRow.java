@@ -28,30 +28,32 @@ import org.apache.spark.unsafe.types.UTF8String;
  * to be reused, callers should copy the data out if it needs to be stored.
  */
 public final class ColumnarRow extends InternalRow {
-  protected int rowId;
-  private final ColumnVector[] columns;
+  // The data for this row. E.g. the value of 3rd int field is `data.getChildColumn(3).getInt(rowId)`.
+  private final ColumnVector data;
+  private final int rowId;
+  private final int numFields;
 
-  // Ctor used if this is a struct.
-  ColumnarRow(ColumnVector[] columns) {
-    this.columns = columns;
+  ColumnarRow(ColumnVector data, int rowId) {
+    assert (data.dataType() instanceof StructType);
+    this.data = data;
+    this.rowId = rowId;
+    this.numFields = ((StructType) data.dataType()).size();
   }
 
-  public ColumnVector[] columns() { return columns; }
-
   @Override
-  public int numFields() { return columns.length; }
+  public int numFields() { return numFields; }
 
   /**
    * Revisit this. This is expensive. This is currently only used in test paths.
    */
   @Override
   public InternalRow copy() {
-    GenericInternalRow row = new GenericInternalRow(columns.length);
+    GenericInternalRow row = new GenericInternalRow(numFields);
     for (int i = 0; i < numFields(); i++) {
       if (isNullAt(i)) {
         row.setNullAt(i);
       } else {
-        DataType dt = columns[i].dataType();
+        DataType dt = data.getChildColumn(i).dataType();
         if (dt instanceof BooleanType) {
           row.setBoolean(i, getBoolean(i));
         } else if (dt instanceof ByteType) {
@@ -91,65 +93,65 @@ public final class ColumnarRow extends InternalRow {
   }
 
   @Override
-  public boolean isNullAt(int ordinal) { return columns[ordinal].isNullAt(rowId); }
+  public boolean isNullAt(int ordinal) { return data.getChildColumn(ordinal).isNullAt(rowId); }
 
   @Override
-  public boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
+  public boolean getBoolean(int ordinal) { return data.getChildColumn(ordinal).getBoolean(rowId); }
 
   @Override
-  public byte getByte(int ordinal) { return columns[ordinal].getByte(rowId); }
+  public byte getByte(int ordinal) { return data.getChildColumn(ordinal).getByte(rowId); }
 
   @Override
-  public short getShort(int ordinal) { return columns[ordinal].getShort(rowId); }
+  public short getShort(int ordinal) { return data.getChildColumn(ordinal).getShort(rowId); }
 
   @Override
-  public int getInt(int ordinal) { return columns[ordinal].getInt(rowId); }
+  public int getInt(int ordinal) { return data.getChildColumn(ordinal).getInt(rowId); }
 
   @Override
-  public long getLong(int ordinal) { return columns[ordinal].getLong(rowId); }
+  public long getLong(int ordinal) { return data.getChildColumn(ordinal).getLong(rowId); }
 
   @Override
-  public float getFloat(int ordinal) { return columns[ordinal].getFloat(rowId); }
+  public float getFloat(int ordinal) { return data.getChildColumn(ordinal).getFloat(rowId); }
 
   @Override
-  public double getDouble(int ordinal) { return columns[ordinal].getDouble(rowId); }
+  public double getDouble(int ordinal) { return data.getChildColumn(ordinal).getDouble(rowId); }
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getDecimal(rowId, precision, scale);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getDecimal(rowId, precision, scale);
   }
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getUTF8String(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getUTF8String(rowId);
   }
 
   @Override
   public byte[] getBinary(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getBinary(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getBinary(rowId);
   }
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
-    final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    final int months = data.getChildColumn(ordinal).getChildColumn(0).getInt(rowId);
+    final long microseconds = data.getChildColumn(ordinal).getChildColumn(1).getLong(rowId);
     return new CalendarInterval(months, microseconds);
   }
 
   @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getStruct(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getStruct(rowId);
   }
 
   @Override
   public ColumnarArray getArray(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
-    return columns[ordinal].getArray(rowId);
+    if (data.getChildColumn(ordinal).isNullAt(rowId)) return null;
+    return data.getChildColumn(ordinal).getArray(rowId);
   }
 
   @Override

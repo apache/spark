@@ -422,10 +422,9 @@ case class SortMergeJoinExec(
    */
   private def genScanner(ctx: CodegenContext): (String, String) = {
     // Create class member for next row from both sides.
-    val leftRow = ctx.freshName("leftRow")
-    ctx.addMutableState("InternalRow", leftRow)
-    val rightRow = ctx.freshName("rightRow")
-    ctx.addMutableState("InternalRow", rightRow, s"$rightRow = null;")
+    // Inline mutable state since not many join operations in a task
+    val leftRow = ctx.addMutableState("InternalRow", "leftRow", forceInline = true)
+    val rightRow = ctx.addMutableState("InternalRow", "rightRow", forceInline = true)
 
     // Create variables for join keys from both sides.
     val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
@@ -436,14 +435,14 @@ case class SortMergeJoinExec(
     val rightKeyVars = copyKeys(ctx, rightKeyTmpVars)
 
     // A list to hold all matched rows from right side.
-    val matches = ctx.freshName("matches")
     val clsName = classOf[ExternalAppendOnlyUnsafeRowArray].getName
 
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
 
-    ctx.addMutableState(clsName, matches,
-      s"$matches = new $clsName($inMemoryThreshold, $spillThreshold);")
+    // Inline mutable state since not many join operations in a task
+    val matches = ctx.addMutableState(clsName, "matches",
+      v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold);", forceInline = true)
     // Copy the left keys as class members so they could be used in next function call.
     val matchedKeyVars = copyKeys(ctx, leftKeyVars)
 
@@ -507,32 +506,38 @@ case class SortMergeJoinExec(
   }
 
   /**
-   * Creates variables for left part of result row.
+   * Creates variables and declarations for left part of result row.
    *
    * In order to defer the access after condition and also only access once in the loop,
    * the variables should be declared separately from accessing the columns, we can't use the
    * codegen of BoundReference here.
    */
-  private def createLeftVars(ctx: CodegenContext, leftRow: String): Seq[ExprCode] = {
+  private def createLeftVars(ctx: CodegenContext, leftRow: String): (Seq[ExprCode], Seq[String]) = {
     ctx.INPUT_ROW = leftRow
     left.output.zipWithIndex.map { case (a, i) =>
       val value = ctx.freshName("value")
       val valueCode = ctx.getValue(leftRow, a.dataType, i.toString)
-      // declare it as class member, so we can access the column before or in the loop.
-      ctx.addMutableState(ctx.javaType(a.dataType), value)
+      val javaType = ctx.javaType(a.dataType)
+      val defaultValue = ctx.defaultValue(a.dataType)
       if (a.nullable) {
         val isNull = ctx.freshName("isNull")
-        ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
         val code =
           s"""
              |$isNull = $leftRow.isNullAt($i);
-             |$value = $isNull ? ${ctx.defaultValue(a.dataType)} : ($valueCode);
+             |$value = $isNull ? $defaultValue : ($valueCode);
            """.stripMargin
-        ExprCode(code, isNull, value)
+        val leftVarsDecl =
+          s"""
+             |boolean $isNull = false;
+             |$javaType $value = $defaultValue;
+           """.stripMargin
+        (ExprCode(code, isNull, value), leftVarsDecl)
       } else {
-        ExprCode(s"$value = $valueCode;", "false", value)
+        val code = s"$value = $valueCode;"
+        val leftVarsDecl = s"""$javaType $value = $defaultValue;"""
+        (ExprCode(code, "false", value), leftVarsDecl)
       }
-    }
+    }.unzip
   }
 
   /**
@@ -572,15 +577,16 @@ case class SortMergeJoinExec(
   override def needCopyResult: Boolean = true
 
   override def doProduce(ctx: CodegenContext): String = {
-    val leftInput = ctx.freshName("leftInput")
-    ctx.addMutableState("scala.collection.Iterator", leftInput, s"$leftInput = inputs[0];")
-    val rightInput = ctx.freshName("rightInput")
-    ctx.addMutableState("scala.collection.Iterator", rightInput, s"$rightInput = inputs[1];")
+    // Inline mutable state since not many join operations in a task
+    val leftInput = ctx.addMutableState("scala.collection.Iterator", "leftInput",
+      v => s"$v = inputs[0];", forceInline = true)
+    val rightInput = ctx.addMutableState("scala.collection.Iterator", "rightInput",
+      v => s"$v = inputs[1];", forceInline = true)
 
     val (leftRow, matches) = genScanner(ctx)
 
     // Create variables for row from both sides.
-    val leftVars = createLeftVars(ctx, leftRow)
+    val (leftVars, leftVarDecl) = createLeftVars(ctx, leftRow)
     val rightRow = ctx.freshName("rightRow")
     val rightVars = createRightVar(ctx, rightRow)
 
@@ -617,6 +623,7 @@ case class SortMergeJoinExec(
 
     s"""
        |while (findNextInnerJoinRows($leftInput, $rightInput)) {
+       |  ${leftVarDecl.mkString("\n")}
        |  ${beforeLoop.trim}
        |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
        |  while ($iterator.hasNext()) {

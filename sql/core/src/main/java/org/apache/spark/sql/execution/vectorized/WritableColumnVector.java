@@ -36,8 +36,10 @@ import org.apache.spark.unsafe.types.UTF8String;
  * elements. This means that the put() APIs do not check as in common cases (i.e. flat schemas),
  * the lengths are known up front.
  *
- * A ColumnVector should be considered immutable once originally created. In other words, it is not
- * valid to call put APIs after reads until reset() is called.
+ * A WritableColumnVector should be considered immutable once originally created. In other words,
+ * it is not valid to call put APIs after reads until reset() is called.
+ *
+ * WritableColumnVector are intended to be reused.
  */
 public abstract class WritableColumnVector extends ColumnVector {
 
@@ -52,12 +54,11 @@ public abstract class WritableColumnVector extends ColumnVector {
         ((WritableColumnVector) c).reset();
       }
     }
-    numNulls = 0;
     elementsAppended = 0;
-    if (anyNullsSet) {
+    if (numNulls > 0) {
       putNotNulls(0, capacity);
-      anyNullsSet = false;
     }
+    numNulls = 0;
   }
 
   @Override
@@ -74,7 +75,6 @@ public abstract class WritableColumnVector extends ColumnVector {
       dictionaryIds = null;
     }
     dictionary = null;
-    resultStruct = null;
   }
 
   public void reserve(int requiredCapacity) {
@@ -103,8 +103,57 @@ public abstract class WritableColumnVector extends ColumnVector {
   @Override
   public int numNulls() { return numNulls; }
 
-  @Override
-  public boolean anyNullsSet() { return anyNullsSet; }
+  /**
+   * Returns the dictionary Id for rowId.
+   *
+   * This should only be called when this `WritableColumnVector` represents dictionaryIds.
+   * We have this separate method for dictionaryIds as per SPARK-16928.
+   */
+  public abstract int getDictId(int rowId);
+
+  /**
+   * The Dictionary for this column.
+   *
+   * If it's not null, will be used to decode the value in getXXX().
+   */
+  protected Dictionary dictionary;
+
+  /**
+   * Reusable column for ids of dictionary.
+   */
+  protected WritableColumnVector dictionaryIds;
+
+  /**
+   * Returns true if this column has a dictionary.
+   */
+  public boolean hasDictionary() { return this.dictionary != null; }
+
+  /**
+   * Returns the underlying integer column for ids of dictionary.
+   */
+  public WritableColumnVector getDictionaryIds() {
+    return dictionaryIds;
+  }
+
+  /**
+   * Update the dictionary.
+   */
+  public void setDictionary(Dictionary dictionary) {
+    this.dictionary = dictionary;
+  }
+
+  /**
+   * Reserve a integer column for ids of dictionary.
+   */
+  public WritableColumnVector reserveDictionaryIds(int capacity) {
+    if (dictionaryIds == null) {
+      dictionaryIds = reserveNewColumn(capacity, DataTypes.IntegerType);
+    } else {
+      dictionaryIds.reset();
+      dictionaryIds.reserve(capacity);
+    }
+    return dictionaryIds;
+  }
 
   /**
    * Ensures that there is enough storage to store capacity elements. That is, the put() APIs
@@ -588,12 +637,6 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected int numNulls;
 
   /**
-   * True if there is at least one NULL byte set. This is an optimization for the writer, to skip
-   * having to clear NULL bits.
-   */
-  protected boolean anyNullsSet;
-
-  /**
    * True if this column's values are fixed. This means the column values never change, even
    * across resets.
    */
@@ -613,36 +656,6 @@ public abstract class WritableColumnVector extends ColumnVector {
    * If this is a nested type (array or struct), the column for the child data.
    */
   protected WritableColumnVector[] childColumns;
-
-  /**
-   * Update the dictionary.
-   */
-  public void setDictionary(Dictionary dictionary) {
-    this.dictionary = dictionary;
-  }
-
-  /**
-   * Reserve a integer column for ids of dictionary.
-   */
-  public WritableColumnVector reserveDictionaryIds(int capacity) {
-    WritableColumnVector dictionaryIds = (WritableColumnVector) this.dictionaryIds;
-    if (dictionaryIds == null) {
-      dictionaryIds = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.dictionaryIds = dictionaryIds;
-    } else {
-      dictionaryIds.reset();
-      dictionaryIds.reserve(capacity);
-    }
-    return dictionaryIds;
-  }
-
-  /**
-   * Returns the underlying integer column for ids of dictionary.
-   */
-  @Override
-  public WritableColumnVector getDictionaryIds() {
-    return (WritableColumnVector) dictionaryIds;
-  }
 
   /**
    * Reserve a new column.
@@ -673,23 +686,19 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewColumn(childCapacity, childType);
-      this.resultStruct = null;
     } else if (type instanceof StructType) {
       StructType st = (StructType)type;
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
-      this.resultStruct = new ColumnarRow(this.childColumns);
     } else if (type instanceof CalendarIntervalType) {
       // Two columns. Months as int. Microseconds as Long.
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
-      this.resultStruct = new ColumnarRow(this.childColumns);
     } else {
       this.childColumns = null;
-      this.resultStruct = null;
     }
   }
 }

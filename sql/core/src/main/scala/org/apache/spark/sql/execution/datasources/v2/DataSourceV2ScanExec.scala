@@ -26,7 +26,10 @@ import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousDataSourceRDD, ContinuousExecution, EpochCoordinatorRef, SetReaderPartitions}
 import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.streaming.reader.ContinuousReader
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -52,10 +55,20 @@ case class DataSourceV2ScanExec(
         }.asJava
     }
 
-    val inputRDD = new DataSourceRDD(sparkContext, readTasks)
-      .asInstanceOf[RDD[InternalRow]]
+    val inputRDD = reader match {
+      case _: ContinuousReader =>
+        EpochCoordinatorRef.get(
+          sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
+          .askSync[Unit](SetReaderPartitions(readTasks.size()))
+
+        new ContinuousDataSourceRDD(sparkContext, sqlContext, readTasks)
+
+      case _ =>
+        new DataSourceRDD(sparkContext, readTasks)
+    }
+
     val numOutputRows = longMetric("numOutputRows")
-    inputRDD.map { r =>
+    inputRDD.asInstanceOf[RDD[InternalRow]].map { r =>
       numOutputRows += 1
       r
     }
@@ -73,7 +86,7 @@ class RowToUnsafeRowReadTask(rowReadTask: ReadTask[Row], schema: StructType)
   }
 }
 
-class RowToUnsafeDataReader(rowReader: DataReader[Row], encoder: ExpressionEncoder[Row])
+class RowToUnsafeDataReader(val rowReader: DataReader[Row], encoder: ExpressionEncoder[Row])
   extends DataReader[UnsafeRow] {
 
   override def next: Boolean = rowReader.next

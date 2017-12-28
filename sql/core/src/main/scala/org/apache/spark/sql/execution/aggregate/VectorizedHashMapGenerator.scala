@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnarRow, MutableColumnarRow, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, MutableColumnarRow, OnHeapColumnVector}
 import org.apache.spark.sql.types._
 
 /**
@@ -53,7 +54,7 @@ class VectorizedHashMapGenerator(
     val generatedSchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         (groupingKeySchema ++ bufferSchema).map { key =>
-          val keyName = ctx.addReferenceMinorObj(key.name)
+          val keyName = ctx.addReferenceObj("keyName", key.name)
           key.dataType match {
             case d: DecimalType =>
               s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
@@ -66,7 +67,7 @@ class VectorizedHashMapGenerator(
     val generatedAggBufferSchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         bufferSchema.map { key =>
-          val keyName = ctx.addReferenceMinorObj(key.name)
+          val keyName = ctx.addReferenceObj("keyName", key.name)
           key.dataType match {
             case d: DecimalType =>
               s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
@@ -231,7 +232,7 @@ class VectorizedHashMapGenerator(
 
   protected def generateRowIterator(): String = {
     s"""
-       |public java.util.Iterator<${classOf[ColumnarRow].getName}> rowIterator() {
+       |public java.util.Iterator<${classOf[InternalRow].getName}> rowIterator() {
        |  batch.setNumRows(numRows);
        |  return batch.rowIterator();
        |}

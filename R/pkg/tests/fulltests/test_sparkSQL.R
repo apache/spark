@@ -957,6 +957,28 @@ test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
   }
 })
 
+test_that("localCheckpoint() on a DataFrame", {
+  if (windows_with_hadoop()) {
+    # Checkpoint directory shouldn't matter in localCheckpoint.
+    checkpointDir <- file.path(tempdir(), "lcproot")
+    expect_true(length(list.files(path = checkpointDir, all.files = TRUE, recursive = TRUE)) == 0)
+    setCheckpointDir(checkpointDir)
+
+    textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+    writeLines(mockLines, textPath)
+    # Read it lazily and then locally checkpoint eagerly.
+    df <- read.df(textPath, "text")
+    df <- localCheckpoint(df, eager = TRUE)
+    # Here, we remove the source path to check eagerness.
+    unlink(textPath)
+    expect_is(df, "SparkDataFrame")
+    expect_equal(colnames(df), c("value"))
+    expect_equal(count(df), 3)
+
+    expect_true(length(list.files(path = checkpointDir, all.files = TRUE, recursive = TRUE)) == 0)
+  }
+})
+
 test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
   df <- read.json(jsonPath)
   testSchema <- schema(df)
@@ -1418,6 +1440,8 @@ test_that("column functions", {
   c22 <- not(c)
   c23 <- trunc(c, "year") + trunc(c, "yyyy") + trunc(c, "yy") +
     trunc(c, "month") + trunc(c, "mon") + trunc(c, "mm")
+  c24 <- date_trunc("hour", c) + date_trunc("minute", c) + date_trunc("week", c) +
+    date_trunc("quarter", c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1729,6 +1753,7 @@ test_that("date functions on a DataFrame", {
   expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
+  expect_equal(collect(select(df2, month(date_trunc("yyyy", df2$b))))[, 1], c(1, 1))
 
   l3 <- list(list(a = 1000), list(a = -1000))
   df3 <- createDataFrame(l3)

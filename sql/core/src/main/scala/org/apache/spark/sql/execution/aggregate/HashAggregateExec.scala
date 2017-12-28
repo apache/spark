@@ -178,8 +178,7 @@ case class HashAggregateExec(
   private var bufVars: Seq[ExprCode] = _
 
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
-    val initAgg = ctx.freshName("initAgg")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, initAgg, s"$initAgg = false;")
+    val initAgg = ctx.addMutableState(ctx.JAVA_BOOLEAN, "initAgg")
     // The generated function doesn't have input row in the code context.
     ctx.INPUT_ROW = null
 
@@ -187,10 +186,8 @@ case class HashAggregateExec(
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
     bufVars = initExpr.map { e =>
-      val isNull = ctx.freshName("bufIsNull")
-      val value = ctx.freshName("bufValue")
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, isNull)
-      ctx.addMutableState(ctx.javaType(e.dataType), value)
+      val isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "bufIsNull")
+      val value = ctx.addMutableState(ctx.javaType(e.dataType), "bufValue")
       // The initial expression should not access any column
       val ev = e.genCode(ctx)
       val initVars = s"""
@@ -568,8 +565,7 @@ case class HashAggregateExec(
   }
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
-    val initAgg = ctx.freshName("initAgg")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, initAgg, s"$initAgg = false;")
+    val initAgg = ctx.addMutableState(ctx.JAVA_BOOLEAN, "initAgg")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
     } else {
@@ -583,44 +579,45 @@ case class HashAggregateExec(
     val thisPlan = ctx.addReferenceObj("plan", this)
 
     // Create a name for the iterator from the fast hash map.
-    val iterTermForFastHashMap = ctx.freshName("fastHashMapIter")
-    if (isFastHashMapEnabled) {
+    val iterTermForFastHashMap = if (isFastHashMapEnabled) {
       // Generates the fast hash map class and creates the fash hash map term.
-      fastHashMapTerm = ctx.freshName("fastHashMap")
       val fastHashMapClassName = ctx.freshName("FastHashMap")
       if (isVectorizedHashMapEnabled) {
         val generatedMap = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
           fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
         ctx.addInnerClass(generatedMap)
 
-        ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
-          s"$fastHashMapTerm = new $fastHashMapClassName();")
-        ctx.addMutableState(
-          s"java.util.Iterator<${classOf[ColumnarRow].getName}>",
-          iterTermForFastHashMap)
+        // Inline mutable state since not many aggregation operations in a task
+        fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, "vectorizedHastHashMap",
+          v => s"$v = new $fastHashMapClassName();", forceInline = true)
+        ctx.addMutableState(s"java.util.Iterator<InternalRow>", "vectorizedFastHashMapIter",
+          forceInline = true)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
           fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
         ctx.addInnerClass(generatedMap)
 
-        ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
-          s"$fastHashMapTerm = new $fastHashMapClassName(" +
-            s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());")
+        // Inline mutable state since not many aggregation operations in a task
+        fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, "fastHashMap",
+          v => s"$v = new $fastHashMapClassName(" +
+            s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());",
+          forceInline = true)
         ctx.addMutableState(
           "org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>",
-          iterTermForFastHashMap)
+          "fastHashMapIter", forceInline = true)
       }
     }
 
     // Create a name for the iterator from the regular hash map.
-    val iterTerm = ctx.freshName("mapIter")
-    ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm)
+    // Inline mutable state since not many aggregation operations in a task
+    val iterTerm = ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName,
+      "mapIter", forceInline = true)
     // create hashMap
-    hashMapTerm = ctx.freshName("hashMap")
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
-    ctx.addMutableState(hashMapClassName, hashMapTerm, s"$hashMapTerm = $thisPlan.createHashMap();")
-    sorterTerm = ctx.freshName("sorter")
-    ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, sorterTerm)
+    hashMapTerm = ctx.addMutableState(hashMapClassName, "hashMap",
+      v => s"$v = $thisPlan.createHashMap();", forceInline = true)
+    sorterTerm = ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, "sorter",
+      forceInline = true)
 
     val doAgg = ctx.freshName("doAggregateWithKeys")
     val peakMemory = metricTerm(ctx, "peakMemory")
@@ -674,7 +671,7 @@ case class HashAggregateExec(
        """.stripMargin
     }
 
-    // Iterate over the aggregate rows and convert them from ColumnarRow to UnsafeRow
+    // Iterate over the aggregate rows and convert them from InternalRow to UnsafeRow
     def outputFromVectorizedMap: String = {
       val row = ctx.freshName("fastHashMapRow")
       ctx.currentVars = null
@@ -687,10 +684,9 @@ case class HashAggregateExec(
         bufferSchema.toAttributes.zipWithIndex.map { case (attr, i) =>
           BoundReference(groupingKeySchema.length + i, attr.dataType, attr.nullable)
         })
-      val columnarRowCls = classOf[ColumnarRow].getName
       s"""
          |while ($iterTermForFastHashMap.hasNext()) {
-         |  $columnarRowCls $row = ($columnarRowCls) $iterTermForFastHashMap.next();
+         |  InternalRow $row = (InternalRow) $iterTermForFastHashMap.next();
          |  ${generateKeyRow.code}
          |  ${generateBufferRow.code}
          |  $outputFunc(${generateKeyRow.value}, ${generateBufferRow.value});
@@ -761,8 +757,7 @@ case class HashAggregateExec(
 
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
     incCounter) = if (testFallbackStartsAt.isDefined) {
-      val countTerm = ctx.freshName("fallbackCounter")
-      ctx.addMutableState(ctx.JAVA_INT, countTerm, s"$countTerm = 0;")
+      val countTerm = ctx.addMutableState(ctx.JAVA_INT, "fallbackCounter")
       (s"$countTerm < ${testFallbackStartsAt.get._1}",
         s"$countTerm < ${testFallbackStartsAt.get._2}", s"$countTerm = 0;", s"$countTerm += 1;")
     } else {
