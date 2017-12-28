@@ -27,7 +27,8 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceV2Options, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.DataSourceV2Options
+import org.apache.spark.sql.sources.v2.streaming.ContinuousReadSupport
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
