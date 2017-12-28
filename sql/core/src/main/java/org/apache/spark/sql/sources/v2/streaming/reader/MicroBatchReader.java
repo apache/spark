@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.sql.sources.v2.streaming.reader;
 
-import org.apache.spark.sql.sources.v2.reader.Offset;
+import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 
 import java.util.Optional;

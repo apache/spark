@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.ContinuousWriteSupport
+import org.apache.spark.sql.sources.v2.streaming.ContinuousWriteSupport
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
