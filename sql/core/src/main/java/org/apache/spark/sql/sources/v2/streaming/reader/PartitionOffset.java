@@ -26,5 +26,4 @@ import java.io.Serializable;
  * These offsets must be serializable.
  */
 public interface PartitionOffset extends Serializable {
-    
 }

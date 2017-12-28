@@ -154,6 +154,7 @@ public abstract class MemoryConsumer {
       taskMemoryManager.freePage(page, this);
     }
     taskMemoryManager.showMemoryUsage();
-    throw new SparkOutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
+    throw new SparkOutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " +
+      got);
   }
 }
