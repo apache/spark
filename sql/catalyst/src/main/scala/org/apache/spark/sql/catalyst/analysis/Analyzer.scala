@@ -716,7 +716,7 @@ class Analyzer(
           right
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-          val newRight = right transformUp {
+          right transformUp {
             case r if r == oldRelation => newRelation
           } transformUp {
             case other => other transformExpressions {
@@ -726,7 +726,6 @@ class Analyzer(
                 s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
             }
           }
-          newRight
       }
     }
 
