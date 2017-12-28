@@ -231,10 +231,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
     }
     val colStat = colStatsMap(attr)
     val rowCountValue = childStats.rowCount.get
-    val nullPercent: BigDecimal = if (rowCountValue == 0) {
+    val nullPercent: Double = if (rowCountValue == 0) {
       0
     } else {
-      BigDecimal(colStat.nullCount) / BigDecimal(rowCountValue)
+      (BigDecimal(colStat.nullCount) / BigDecimal(rowCountValue)).toDouble
     }
 
     if (update) {
@@ -252,7 +252,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       1.0 - nullPercent
     }
 
-    Some(percent.toDouble)
+    Some(percent)
   }
 
   /**

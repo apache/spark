@@ -102,7 +102,7 @@ object EstimationUtils {
 
   def fromDouble(double: Double, dataType: DataType): Any = {
     dataType match {
-      case BooleanType => double.toLong == 1
+      case BooleanType => double.toInt == 1
       case DateType => double.toInt
       case TimestampType => double.toLong
       case ByteType => double.toByte
