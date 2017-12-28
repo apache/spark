@@ -203,25 +203,6 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
                "\n\nResult:\n%s\n%s" % (result, result.dtypes))
         self.assertTrue(expected.equals(result), msg=msg)
 
-    def printPlans(self, df):
-        df._jdf.queryExecution().optimizedPlan()
-        print()
-        print("****************** Optimized ********************")
-        print(df._jdf.queryExecution().optimizedPlan().toString())
-        print("*************************************************")
-
-        df._jdf.queryExecution().sparkPlan()
-        print()
-        print("****************** Spark Plan *******************")
-        print(df._jdf.queryExecution().sparkPlan().toString())
-        print("*************************************************")
-
-        df._jdf.queryExecution().executedPlan()
-        print()
-        print("**************** Executed Plan ******************")
-        print(df._jdf.queryExecution().executedPlan().toString())
-        print("*************************************************")
-
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
@@ -562,7 +543,6 @@ class SQLTests(ReusedSQLTestCase):
         sel = df.groupBy(my_copy(col("key")).alias("k"))\
             .agg(sum(my_strlen(col("value"))).alias("s"))\
             .select(my_add(col("k"), col("s")).alias("t"))
-        self.printPlans(sel)
         self.assertEqual(sel.collect(), [Row(t=4), Row(t=3)])
 
     def test_udf_in_generate(self):
@@ -4430,8 +4410,6 @@ class GroupbyAggTests(ReusedSQLTestCase):
 
     def test_basic(self):
         from pyspark.sql.functions import col, lit, sum, mean
-
-        self.spark.conf.set("spark.sql.codegen.wholeStage", False)
 
         df = self.data
         weighted_mean_udf = self.weighted_mean_udf
