@@ -672,7 +672,6 @@ object TypeCoercion {
       p transformExpressionsUp {
         // Skip nodes if unresolved or empty children
         case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
-
         case c @ Concat(children) if conf.concatBinaryAsString ||
             !children.map(_.dataType).forall(_ == BinaryType) =>
           val newChildren = c.children.map { e =>

@@ -25,7 +25,7 @@ select left(null, -2), left("abcd", -2), left("abcd", 0), left("abcd", 'a');
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null);
 select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 
--- turn on concatBinaryAsString
+-- turn off concatBinaryAsString
 set spark.sql.function.concatBinaryAsString=false;
 
 -- Check if catalyst combine nested `Concat`s if concatBinaryAsString=false
