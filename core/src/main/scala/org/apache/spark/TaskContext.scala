@@ -151,7 +151,9 @@ abstract class TaskContext extends Serializable {
   def stageId(): Int
 
   /**
-   * An ID that is unique to the stage attempt that this task belongs to.
+   * An ID that is unique to the stage attempt that this task belongs to. It represents how many
+   * times the stage has been attempted. The first stage attempt will be assigned stageAttemptId = 0
+   * , and subsequent attempts will increasing stageAttemptId one by one.
    */
   def stageAttemptId(): Int
 
