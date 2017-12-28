@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.File
 import java.math.MathContext
 import java.net.{MalformedURLException, URL}
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
@@ -2758,17 +2758,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           .as[String].collect().mkString(",").contains("i,p,j"))
       }
     }
-  }
-
-  test("SPARK-22894: DateTimeOperations should accept SQL like string type") {
-    val date = "2017-12-24"
-    val str = sql(s"SELECT CAST('$date' as STRING) + interval 2 months 2 seconds")
-    val dt = sql(s"SELECT CAST('$date' as DATE) + interval 2 months 2 seconds")
-    val ts = sql(s"SELECT CAST('$date' as TIMESTAMP) + interval 2 months 2 seconds")
-
-    checkAnswer(str, Row("2018-02-24 00:00:02") :: Nil)
-    checkAnswer(dt, Row(Date.valueOf("2018-02-24")) :: Nil)
-    checkAnswer(ts, Row(Timestamp.valueOf("2018-02-24 00:00:02")) :: Nil)
   }
 
   // Only New OrcFileFormat supports this
