@@ -95,9 +95,6 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
-  unrequiredChildOutput.foreach(a =>
-    assert(a.resolved, "Generate.unrequiredChildOutput must all be resolved"))
-
   lazy val requiredChildOutput: Seq[Attribute] = {
     val unrequiredSet = AttributeSet(unrequiredChildOutput)
     child.output.filterNot(unrequiredSet.contains)
@@ -107,7 +104,8 @@ case class Generate(
     generator.resolved &&
       childrenResolved &&
       generator.elementSchema.length == generatorOutput.length &&
-      generatorOutput.forall(_.resolved)
+      generatorOutput.forall(_.resolved) &&
+      unrequiredChildOutput.forall(_.resolved)
   }
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
