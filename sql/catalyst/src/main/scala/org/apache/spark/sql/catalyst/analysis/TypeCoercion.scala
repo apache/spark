@@ -680,9 +680,8 @@ object TypeCoercion {
         // Skip nodes if unresolved or empty children
         case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
 
-        case c @ Concat(children) if !children.map(_.dataType).forall(_ == BinaryType) =>
-          typeCastToString(c)
-        case c @ Concat(children) if conf.concatBinaryAsString =>
+        case c @ Concat(children) if conf.concatBinaryAsString ||
+            !children.map(_.dataType).forall(_ == BinaryType) =>
           typeCastToString(c)
       }
     }

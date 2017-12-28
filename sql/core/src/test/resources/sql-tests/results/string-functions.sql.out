@@ -129,7 +129,7 @@ spark.sql.function.concatBinaryAsString	false
 
 
 -- !query 13
-EXPLAIN EXTENDED SELECT ((col1 || col2) || (col3 || col4)) col
+EXPLAIN SELECT ((col1 || col2) || (col3 || col4)) col
 FROM (
   SELECT
     string(id) col1,
@@ -141,23 +141,6 @@ FROM (
 -- !query 13 schema
 struct<plan:string>
 -- !query 13 output
-== Parsed Logical Plan ==
-'Project [concat(concat('col1, 'col2), concat('col3, 'col4)) AS col#x]
-+- 'SubqueryAlias __auto_generated_subquery_name
-   +- 'Project ['string('id) AS col1#x, 'string(('id + 1)) AS col2#x, 'encode('string(('id + 2)), utf-8) AS col3#x, 'encode('string(('id + 3)), utf-8) AS col4#x]
-      +- 'UnresolvedTableValuedFunction range, [10]
-
-== Analyzed Logical Plan ==
-col: string
-Project [concat(concat(col1#x, col2#x), cast(concat(col3#x, col4#x) as string)) AS col#x]
-+- SubqueryAlias __auto_generated_subquery_name
-   +- Project [cast(id#xL as string) AS col1#x, cast((id#xL + cast(1 as bigint)) as string) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8) AS col4#x]
-      +- Range (0, 10, step=1, splits=None)
-
-== Optimized Logical Plan ==
-Project [concat(cast(id#xL as string), cast((id#xL + 1) as string), cast(encode(cast((id#xL + 2) as string), utf-8) as string), cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]
-+- Range (0, 10, step=1, splits=None)
-
 == Physical Plan ==
 *Project [concat(cast(id#xL as string), cast((id#xL + 1) as string), cast(encode(cast((id#xL + 2) as string), utf-8) as string), cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]
 +- *Range (0, 10, step=1, splits=2)

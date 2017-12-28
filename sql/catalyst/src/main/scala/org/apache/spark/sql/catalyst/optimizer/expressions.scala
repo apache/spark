@@ -646,16 +646,17 @@ object CombineConcats extends Rule[LogicalPlan] {
       stack.pop() match {
         case Concat(children) =>
           stack.pushAll(children.reverse)
-        case Cast(Concat(children), StringType, _) =>
-          stack.pushAll(children.reverse)
+        // If `spark.sql.function.concatBinaryAsString` is false, nested `Concat` exprs possibly
+        // have `Concat`s with binary output. Since `TypeCoercion` casts them into strings,
+        // we need to handle the case to combine all nested `Concat`s.
+        case c @ Cast(Concat(children), StringType, _) =>
+          val newChildren = children.map { e => c.copy(child = e) }
+          stack.pushAll(newChildren.reverse)
         case child =>
           flattened += child
       }
     }
-    val newChildren = flattened.map { e =>
-      ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
-    }
-    Concat(newChildren)
+    Concat(flattened)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {

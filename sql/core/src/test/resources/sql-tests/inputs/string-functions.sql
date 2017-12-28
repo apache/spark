@@ -29,7 +29,7 @@ select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 set spark.sql.function.concatBinaryAsString=false;
 
 -- Check if catalyst combine nested `Concat`s if concatBinaryAsString=false
-EXPLAIN EXTENDED SELECT ((col1 || col2) || (col3 || col4)) col
+EXPLAIN SELECT ((col1 || col2) || (col3 || col4)) col
 FROM (
   SELECT
     string(id) col1,
