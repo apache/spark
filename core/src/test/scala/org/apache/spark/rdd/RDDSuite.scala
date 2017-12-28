@@ -855,6 +855,25 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(b.intersection(a).collect().sorted === intersection)
   }
 
+  test("scan") {
+    val n = 10
+    val data = sc.parallelize(1 to n, 3)
+
+    val cumsum = data.scan(0.0)(_ + _, _ + _)
+    var cum1 = 0.0
+    cumsum.collect().foreach { case (x, cum) =>
+      cum1 += x
+      assert(cum1 === cum)
+    }
+
+    val cumprod = data.scan(1L)(_ * _, _ * _)
+    var cum2 = 1L
+    cumprod.collect().foreach { case (x, cum) =>
+      cum2 *= x
+      assert(cum2 === cum)
+    }
+  }
+
   test("zipWithIndex") {
     val n = 10
     val data = sc.parallelize(0 until n, 3)
