@@ -289,6 +289,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
+        require(
+          !aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF),
+          "Streaming aggregation doesn't support group aggregate pandas UDF"
+        )
+
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
           aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
@@ -378,7 +383,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             planLater(child)))
         } else {
           throw new IllegalArgumentException(
-            "Cannot use mixture of aggregation function and pandas group aggregation UDF")
+            "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
         }
 
       case _ => Nil

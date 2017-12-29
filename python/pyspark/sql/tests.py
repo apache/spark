@@ -4701,6 +4701,30 @@ class GroupbyAggTests(ReusedSQLTestCase):
             else:
                 self.spark.conf.set("spark.sql.retainGroupColumns", orig_value)
 
+    def test_invalid_args(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        plus_one = self.plus_one
+        mean_udf = self.mean_udf
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    'nor.*aggregate function'):
+                df.groupby(df.id).agg(plus_one(df.v)).collect()
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    'aggregate function.*argument.*aggregate function'):
+                df.groupby(df.id).agg(mean_udf(mean_udf(df.v))).collect()
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    Exception,
+                    'mixture.*aggregate function.*group aggregate pandas UDF'):
+                df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *

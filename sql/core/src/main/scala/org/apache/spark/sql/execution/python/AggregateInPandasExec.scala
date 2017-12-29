@@ -79,12 +79,15 @@ case class AggregateInPandasExec(
 
     val allInputs = new ArrayBuffer[Expression]
     val dataTypes = new ArrayBuffer[DataType]
-
     val argOffsets = inputs.map { input =>
       input.map { e =>
-        allInputs += e
-        dataTypes += e.dataType
-        allInputs.length - 1
+        if (allInputs.exists(_.semanticEquals(e))) {
+          allInputs.indexWhere(_.semanticEquals(e))
+        } else {
+          allInputs += e
+          dataTypes += e.dataType
+          allInputs.length - 1
+        }
       }.toArray
     }.toArray
 

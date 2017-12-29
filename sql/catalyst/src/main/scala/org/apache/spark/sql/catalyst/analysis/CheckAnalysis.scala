@@ -153,11 +153,20 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${condition.dataType.simpleString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
+            def isAggregateExpression(expr: Expression) = {
+              expr.isInstanceOf[AggregateExpression] ||
+                PythonUDF.isGroupAggPandasUDF(expr)
+            }
+
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case aggExpr: AggregateExpression =>
-                aggExpr.aggregateFunction.children.foreach { child =>
+              case expr: Expression if isAggregateExpression(expr) =>
+                val aggFunction = expr match {
+                  case agg: AggregateExpression => agg.aggregateFunction
+                  case udf: PythonUDF => udf
+                }
+                aggFunction.children.foreach { child =>
                   child.foreach {
-                    case agg: AggregateExpression =>
+                    case expr: Expression if isAggregateExpression(expr) =>
                       failAnalysis(
                         s"It is not allowed to use an aggregate function in the argument of " +
                           s"another aggregate function. Please use the inner aggregate function " +
@@ -171,7 +180,6 @@ trait CheckAnalysis extends PredicateHelper {
                         s"appear in the arguments of an aggregate function.")
                   }
                 }
-              case _: PythonUDF => // OK
               case e: Attribute if groupingExprs.isEmpty =>
                 // Collect all [[AggregateExpressions]]s.
                 val aggExprs = aggregateExprs.filter(_.collect {
