@@ -170,7 +170,7 @@ object TypeCoercion {
       widerTypeFunc: (DataType, DataType) => Option[DataType]): Option[DataType] = {
     (t1, t2) match {
       case (t1 @ ArrayType(pointType1, nullable1),
-          t2@ ArrayType(pointType2, nullable2)) if t1.sameType(t2)=>
+          t2@ ArrayType(pointType2, nullable2)) if t1.sameType(t2) =>
         val dataType = widerTypeFunc.apply(pointType1, pointType2)
 
         dataType.map(ArrayType(_, nullable1 || nullable2))
