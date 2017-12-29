@@ -624,14 +624,14 @@ class FilterPushdownSuite extends PlanTest {
   test("generate: predicate referenced no generated column") {
     val originalQuery = {
       testRelationWithArrayType
-        .generate(Explode('c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), alias = Some("arr"))
         .where(('b >= 5) && ('a > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where(('b >= 5) && ('a > 6))
-        .generate(Explode('c_arr), true, false, Some("arr")).analyze
+        .generate(Explode('c_arr), alias = Some("arr")).analyze
     }
 
     comparePlans(optimized, correctAnswer)
@@ -640,14 +640,14 @@ class FilterPushdownSuite extends PlanTest {
   test("generate: non-deterministic predicate referenced no generated column") {
     val originalQuery = {
       testRelationWithArrayType
-        .generate(Explode('c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), alias = Some("arr"))
         .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('col > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where('b >= 5)
-        .generate(Explode('c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), alias = Some("arr"))
         .where('a + Rand(10).as("rnd") > 6 && 'col > 6)
         .analyze
     }
@@ -659,14 +659,14 @@ class FilterPushdownSuite extends PlanTest {
     val generator = Explode('c_arr)
     val originalQuery = {
       testRelationWithArrayType
-        .generate(generator, true, false, Some("arr"))
+        .generate(generator, alias = Some("arr"))
         .where(('b >= 5) && ('c > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val referenceResult = {
       testRelationWithArrayType
         .where('b >= 5)
-        .generate(generator, true, false, Some("arr"))
+        .generate(generator, alias = Some("arr"))
         .where('c > 6).analyze
     }
 
@@ -687,7 +687,7 @@ class FilterPushdownSuite extends PlanTest {
   test("generate: all conjuncts referenced generated column") {
     val originalQuery = {
       testRelationWithArrayType
-        .generate(Explode('c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), alias = Some("arr"))
         .where(('col > 6) || ('b > 5)).analyze
     }
     val optimized = Optimize.execute(originalQuery)
