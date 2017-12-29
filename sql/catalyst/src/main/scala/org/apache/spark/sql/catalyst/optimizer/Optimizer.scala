@@ -456,12 +456,15 @@ object ColumnPruning extends Rule[LogicalPlan] {
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
-    case g: Generate if !g.join && (g.child.outputSet -- g.references).nonEmpty =>
-      g.copy(child = prunedChild(g.child, g.references))
 
-    // Turn off `join` for Generate if no column from it's child is used
-    case p @ Project(_, g: Generate) if g.join && p.references.subsetOf(g.generatedSet) =>
-      p.copy(child = g.copy(join = false))
+    // prune unrequired references
+    case p @ Project(_, g: Generate) if p.references != g.outputSet =>
+      val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
+      val newChild = prunedChild(g.child, requiredAttrs)
+      val unrequired = g.generator.references -- p.references
+      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
+        .map(_._2)
+      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _) =>

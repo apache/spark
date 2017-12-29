@@ -696,7 +696,7 @@ class Analyzer(
           (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
 
         case oldVersion: Generate
-            if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
+            if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
           (oldVersion, oldVersion.copy(generatorOutput = newOutput))
 
@@ -1138,7 +1138,7 @@ class Analyzer(
           case g: Generate =>
             val maybeResolvedExprs = exprs.map(resolveExpression(_, g))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, g.child)
-            (newExprs, g.copy(join = true, child = newChild))
+            (newExprs, g.copy(unrequiredChildIndex = Nil, child = newChild))
 
           // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
           // via its children.
@@ -1578,7 +1578,7 @@ class Analyzer(
             resolvedGenerator =
               Generate(
                 generator,
-                join = projectList.size > 1, // Only join if there are other expressions in SELECT.
+                unrequiredChildIndex = Nil,
                 outer = outer,
                 qualifier = None,
                 generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
