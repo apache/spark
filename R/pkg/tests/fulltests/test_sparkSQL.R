@@ -2130,6 +2130,11 @@ test_that("arrange() and orderBy() on a DataFrame", {
 
   sorted7 <- arrange(df, "name", decreasing = FALSE)
   expect_equal(collect(sorted7)[2, "age"], 19)
+
+  df <- createDataFrame(cars, numPartitions = 10)
+  expect_equal(getNumPartitions(df), 10)
+  sorted8 <- arrange(df, "dist", withinPartitions = TRUE)
+  expect_equal(collect(sorted8)[5:6, "dist"], c(22, 10))
 })
 
 test_that("filter() on a DataFrame", {
