@@ -21,6 +21,7 @@ import javax.annotation.Nullable
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
