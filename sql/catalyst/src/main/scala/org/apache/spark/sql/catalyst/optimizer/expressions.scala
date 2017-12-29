@@ -659,12 +659,14 @@ object CombineConcats extends Rule[LogicalPlan] {
     Concat(flattened)
   }
 
+  private def hasNestedConcats(concat: Concat): Boolean = concat.children.exists {
+    case c: Concat => true
+    case c @ Cast(Concat(children), StringType, _) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
-    case concat: Concat if concat.children.exists {
-          case c: Concat => true
-          case c @ Cast(Concat(children), StringType, _) => true
-          case _ => false
-        } =>
+    case concat: Concat if hasNestedConcats(concat) =>
       flattenConcats(concat)
   }
 }
