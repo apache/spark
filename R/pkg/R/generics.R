@@ -1027,6 +1027,17 @@ setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 #' @name NULL
 setGeneric("cume_dist", function(x = "missing") { standardGeneric("cume_dist") })
 
+#' @rdname column_datetime_functions
+#' @export
+#' @name NULL
+setGeneric("current_date", function(x = "missing") { standardGeneric("current_date") })
+
+#' @rdname column_datetime_functions
+#' @export
+#' @name NULL
+setGeneric("current_timestamp", function(x = "missing") { standardGeneric("current_timestamp") })
+
+
 #' @rdname column_datetime_diff_functions
 #' @export
 #' @name NULL
@@ -1230,7 +1241,7 @@ setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 #' @rdname column_string_functions
 #' @export
 #' @name NULL
-setGeneric("ltrim", function(x) { standardGeneric("ltrim") })
+setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
 
 #' @rdname column_collection_functions
 #' @export
@@ -1380,7 +1391,7 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @rdname column_string_functions
 #' @export
 #' @name NULL
-setGeneric("rtrim", function(x) { standardGeneric("rtrim") })
+setGeneric("rtrim", function(x, trimString) { standardGeneric("rtrim") })
 
 #' @rdname column_aggregate_functions
 #' @export
@@ -1520,7 +1531,7 @@ setGeneric("translate", function(x, matchingString, replaceString) { standardGen
 #' @rdname column_string_functions
 #' @export
 #' @name NULL
-setGeneric("trim", function(x) { standardGeneric("trim") })
+setGeneric("trim", function(x, trimString) { standardGeneric("trim") })
 
 #' @rdname column_string_functions
 #' @export
