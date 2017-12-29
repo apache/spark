@@ -660,7 +660,11 @@ object CombineConcats extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
-    case concat: Concat if concat.children.exists(_.isInstanceOf[Concat]) =>
+    case concat: Concat if concat.children.exists {
+          case c: Concat => true
+          case c @ Cast(Concat(children), StringType, _) => true
+          case _ => false
+        } =>
       flattenConcats(concat)
   }
 }

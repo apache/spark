@@ -38,3 +38,12 @@ FROM (
     encode(string(id + 3), 'utf-8') col4
   FROM range(10)
 );
+
+EXPLAIN SELECT (col1 || (col3 || col4)) col
+FROM (
+  SELECT
+    string(id) col1,
+    encode(string(id + 2), 'utf-8') col3,
+    encode(string(id + 3), 'utf-8') col4
+  FROM range(10)
+)
