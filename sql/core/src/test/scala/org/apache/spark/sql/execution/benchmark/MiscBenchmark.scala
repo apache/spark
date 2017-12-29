@@ -253,7 +253,7 @@ class MiscBenchmark extends BenchmarkBase {
     Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
 
     test the impact of adding the optimization of Generate.unrequiredChildIndex,
-    we can see enormous imporvment of x250 in this case! and it grows O(n^2).
+    we can see enormous improvement of x250 in this case! and it grows O(n^2).
 
     with Optimization ON:
 
