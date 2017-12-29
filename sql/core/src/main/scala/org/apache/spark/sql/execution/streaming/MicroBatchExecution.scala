@@ -89,6 +89,16 @@ class MicroBatchExecution(
           // "df.logicalPlan" has already used attributes of the previous `output`.
           StreamingExecutionRelation(reader, output)(sparkSession)
         })
+      case s @ StreamingRelationV2(_, _, _, output, v1DataSource) =>
+        v2ToExecutionRelationMap.getOrElseUpdate(s, {
+          // Materialize source to avoid creating it in every batch
+          val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+          val source = v1DataSource.createSource(metadataPath)
+          nextSourceId += 1
+          // We still need to use the previous `output` instead of `source.schema` as attributes in
+          // "df.logicalPlan" has already used attributes of the previous `output`.
+          StreamingExecutionRelation(source, output)(sparkSession)
+        })
     }
     sources = _logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
     uniqueSources = sources.distinct
