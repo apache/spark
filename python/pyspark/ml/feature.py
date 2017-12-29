@@ -57,6 +57,7 @@ __all__ = ['Binarizer',
            'Tokenizer',
            'VectorAssembler',
            'VectorIndexer', 'VectorIndexerModel',
+           'VectorSizeHint',
            'VectorSlicer',
            'Word2Vec', 'Word2VecModel']
 
@@ -3470,9 +3471,14 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
 class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReadable,
                      JavaMLWritable):
     """
+    .. note:: Experimental
+
     A feature transformer that adds size information to the metadata of a vector column.
     VectorAssembler needs size information for its input columns and cannot be used on streaming
     dataframes without this metadata.
+
+    .. note:: VectorSizeHint modifies `inputCol` to include size metadata and does not have an
+        outputCol.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml import Pipeline, PipelineModel
@@ -3495,21 +3501,18 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
     True
 
     .. versionadded:: 2.3.0
-    .. note:: Experimental
     """
 
     size = Param(Params._dummy(), "size", "Size of vectors in column.",
                  typeConverter=TypeConverters.toInt)
 
-    @since("2.3.0")
-    def getSize(self):
-        """ Gets size param, the size of vectors in `inputCol`."""
-        self.getOrDefault(self.size)
-
-    @since("2.3.0")
-    def setSize(self, value):
-        """ Sets size param, the size of vectors in `inputCol`."""
-        self._set(size=value)
+    handleInvalid = Param(Params._dummy(), "handleInvalid",
+                          "How to handle invalid vectors in inputCol. Invalid vectors include "
+                            "nulls and vectors with the wrong size. The options are `skip` (filter "
+                            "out rows with invalid vectors), `error` (throw an error) and "
+                            "`optimistic` (do not check the vector size, and keep all rows). "
+                            "`error` by default.",
+                          TypeConverters.toString)
 
     @keyword_only
     def __init__(self, inputCol=None, size=None, handleInvalid="error"):
@@ -3530,6 +3533,16 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    @since("2.3.0")
+    def getSize(self):
+        """ Gets size param, the size of vectors in `inputCol`."""
+        self.getOrDefault(self.size)
+
+    @since("2.3.0")
+    def setSize(self, value):
+        """ Sets size param, the size of vectors in `inputCol`."""
+        self._set(size=value)
 
 
 if __name__ == "__main__":
