@@ -52,3 +52,4 @@ object AssociationRulesExample {
 
 }
 // scalastyle:on println
+
