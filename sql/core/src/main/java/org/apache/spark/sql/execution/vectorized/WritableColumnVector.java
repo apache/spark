@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -586,7 +587,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (isNull) {
       appendNull();
       for (ColumnVector c: childColumns) {
-        if (c.type instanceof StructType) {
+        if (c.dataType() instanceof StructType) {
           ((WritableColumnVector) c).appendStruct(true);
         } else {
           ((WritableColumnVector) c).appendNull();
