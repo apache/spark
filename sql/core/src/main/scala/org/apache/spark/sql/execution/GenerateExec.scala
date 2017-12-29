@@ -47,7 +47,7 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * terminate().
  *
  * @param generator the generator expression
- * @param unrequiredChildOutput this paramter starts as Nil and gets filled by the Optimizer.
+ * @param unrequiredChildIndex this paramter starts as Nil and gets filled by the Optimizer.
  *                              It's used as an optimization for omitting data generation that will
  *                              be discarded next by a projection.
  *                              A common use case is when we explode(array(..)) and are interested
@@ -62,15 +62,15 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  */
 case class GenerateExec(
     generator: Generator,
-    unrequiredChildOutput: Seq[Attribute],
+    unrequiredChildIndex: Seq[Int],
     outer: Boolean,
     generatorOutput: Seq[Attribute],
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
   private lazy val requiredChildOutput = {
-    val unrequiredSet = AttributeSet(unrequiredChildOutput)
-    child.output.filterNot(unrequiredSet.contains)
+    val unrequiredSet = unrequiredChildIndex.toSet
+    child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
   }
 
   override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
@@ -92,7 +92,7 @@ case class GenerateExec(
       val rows = if (requiredChildOutput.nonEmpty) {
 
         val pruneChildForResult: InternalRow => InternalRow =
-          if (unrequiredChildOutput.isEmpty) {
+          if (unrequiredChildIndex.isEmpty) {
             identity
           } else {
             UnsafeProjection.create(requiredChildOutput, child.output)

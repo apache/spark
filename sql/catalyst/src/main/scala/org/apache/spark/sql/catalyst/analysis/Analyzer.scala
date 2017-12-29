@@ -1138,7 +1138,7 @@ class Analyzer(
           case g: Generate =>
             val maybeResolvedExprs = exprs.map(resolveExpression(_, g))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, g.child)
-            (newExprs, g.copy(unrequiredChildOutput = Nil, child = newChild))
+            (newExprs, g.copy(unrequiredChildIndex = Nil, child = newChild))
 
           // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
           // via its children.
@@ -1578,7 +1578,7 @@ class Analyzer(
             resolvedGenerator =
               Generate(
                 generator,
-                unrequiredChildOutput = Nil,
+                unrequiredChildIndex = Nil,
                 outer = outer,
                 qualifier = None,
                 generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),

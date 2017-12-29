@@ -73,7 +73,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * their output.
  *
  * @param generator the generator expression
- * @param unrequiredChildOutput this paramter starts as Nil and gets filled by the Optimizer.
+ * @param unrequiredChildIndex this paramter starts as Nil and gets filled by the Optimizer.
  *                              It's used as an optimization for omitting data generation that will
  *                              be discarded next by a projection.
  *                              A common use case is when we explode(array(..)) and are interested
@@ -87,25 +87,24 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * @param child Children logical plan node
  */
 case class Generate(
-    generator: Generator,
-    unrequiredChildOutput: Seq[Attribute],
-    outer: Boolean,
-    qualifier: Option[String],
-    generatorOutput: Seq[Attribute],
-    child: LogicalPlan)
+     generator: Generator,
+     unrequiredChildIndex: Seq[Int],
+     outer: Boolean,
+     qualifier: Option[String],
+     generatorOutput: Seq[Attribute],
+     child: LogicalPlan)
   extends UnaryNode {
 
   lazy val requiredChildOutput: Seq[Attribute] = {
-    val unrequiredSet = AttributeSet(unrequiredChildOutput)
-    child.output.filterNot(unrequiredSet.contains)
+    val unrequiredSet = unrequiredChildIndex.toSet
+    child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
   }
 
   override lazy val resolved: Boolean = {
     generator.resolved &&
       childrenResolved &&
       generator.elementSchema.length == generatorOutput.length &&
-      generatorOutput.forall(_.resolved) &&
-      unrequiredChildOutput.forall(_.resolved)
+      generatorOutput.forall(_.resolved)
   }
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)

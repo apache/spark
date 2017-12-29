@@ -38,7 +38,7 @@ class ColumnPruningSuite extends PlanTest {
       CollapseProject) :: Nil
   }
 
-  test("Column pruning for Generate when Generate.unrequiredChildOutput = child.output") {
+  test("Column pruning for Generate when Generate.unrequiredChildIndex = child.output") {
     val input = LocalRelation('a.int, 'b.int, 'c.array(StringType))
 
     val query =
@@ -58,7 +58,7 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Fill Generate.unrequiredChildOutput if possible") {
+  test("Fill Generate.unrequiredChildIndex if possible") {
     val input = LocalRelation('b.array(StringType))
 
     val query =
@@ -71,7 +71,7 @@ class ColumnPruningSuite extends PlanTest {
 
     val correctAnswer =
       input
-        .generate(Explode('b), unrequiredChildOutput = input.output,
+        .generate(Explode('b), unrequiredChildIndex = input.output.zipWithIndex.map(_._2),
           outputNames = "explode" :: Nil)
          .select(('explode + 1).as("result"))
         .analyze
@@ -79,7 +79,7 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Another fill Generate.unrequiredChildOutput if possible") {
+  test("Another fill Generate.unrequiredChildIndex if possible") {
     val input = LocalRelation('a.int, 'b.int, 'c1.string, 'c2.string)
 
     val query =
@@ -94,7 +94,7 @@ class ColumnPruningSuite extends PlanTest {
       input
         .select('a, 'c1, 'c2)
         .generate(Explode(CreateArray(Seq('c1, 'c2))),
-          unrequiredChildOutput = input.output(3) :: Nil,
+          unrequiredChildIndex = Seq(2),
           outputNames = "explode" :: Nil)
         .analyze
 

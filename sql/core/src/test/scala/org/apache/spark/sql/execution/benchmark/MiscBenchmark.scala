@@ -252,7 +252,7 @@ class MiscBenchmark extends BenchmarkBase {
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
     Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
 
-    test the impact of adding the optimization of Generate.unrequiredChildOutput,
+    test the impact of adding the optimization of Generate.unrequiredChildIndex,
     we can see enormous imporvment of x250 in this case! and it grows O(n^2).
 
     with Optimization ON:
