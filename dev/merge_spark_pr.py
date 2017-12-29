@@ -242,8 +242,8 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     cur_summary = issue.fields.summary
     cur_assignee = issue.fields.assignee
     if cur_assignee is None:
-        cur_assignee = choose_jira_assignee(issue)
-    # Check again, we might not have chose an assignee
+        cur_assignee = choose_jira_assignee(issue, asf_jira)
+    # Check again, we might not have chosen an assignee
     if cur_assignee is None:
         cur_assignee = "NOT ASSIGNED!!!"
     else:
