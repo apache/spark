@@ -79,7 +79,7 @@ private[spark] abstract class Task[T](
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
     context = new TaskContextImpl(
       stageId,
-      stageAttemptId,
+      stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
       partitionId,
       taskAttemptId,
       attemptNumber,

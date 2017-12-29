@@ -42,7 +42,7 @@ import org.apache.spark.util._
  */
 private[spark] class TaskContextImpl(
     override val stageId: Int,
-    override val stageAttemptId: Int,
+    override val stageAttemptNumber: Int,
     override val partitionId: Int,
     override val taskAttemptId: Long,
     override val attemptNumber: Int,

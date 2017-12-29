@@ -159,28 +159,28 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(attemptIdsWithFailedTask.toSet === Set(0, 1))
   }
 
-  test("TaskContext.stageAttemptId getter") {
+  test("TaskContext.stageAttemptNumber getter") {
     sc = new SparkContext("local[1,2]", "test")
 
-    // Check stage attemptIds are 0 for initial stage
-    val stageAttemptIds = sc.parallelize(Seq(1, 2), 2).mapPartitions { _ =>
-      Seq(TaskContext.get().stageAttemptId()).iterator
+    // Check stageAttemptNumbers are 0 for initial stage
+    val stageAttemptNumbers = sc.parallelize(Seq(1, 2), 2).mapPartitions { _ =>
+      Seq(TaskContext.get().stageAttemptNumber()).iterator
     }.collect()
-    assert(stageAttemptIds.toSet === Set(0))
+    assert(stageAttemptNumbers.toSet === Set(0))
 
-    // Check stage attemptIds that are resubmitted when tasks have FetchFailedException
-    val stageAttemptIdsWithFailedStage =
+    // Check stageAttemptNumbers that are resubmitted when tasks have FetchFailedException
+    val stageAttemptNumbersWithFailedStage =
       sc.parallelize(Seq(1, 2, 3, 4), 4).repartition(1).mapPartitions { _ =>
-      val stageAttemptId = TaskContext.get().stageAttemptId()
-      if (stageAttemptId < 2) {
+      val stageAttemptNumber = TaskContext.get().stageAttemptNumber()
+      if (stageAttemptNumber < 2) {
         // Throw FetchFailedException to explicitly trigger stage resubmission. A normal exception
         // will only trigger task resubmission in the same stage.
         throw new FetchFailedException(null, 0, 0, 0, "Fake")
       }
-      Seq(stageAttemptId).iterator
+      Seq(stageAttemptNumber).iterator
     }.collect()
 
-    assert(stageAttemptIdsWithFailedStage.toSet === Set(2))
+    assert(stageAttemptNumbersWithFailedStage.toSet === Set(2))
   }
 
   test("accumulators are updated on exception failures") {

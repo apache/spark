@@ -70,7 +70,7 @@ class UnsafeFixedWidthAggregationMapSuite
 
       TaskContext.setTaskContext(new TaskContextImpl(
         stageId = 0,
-        stageAttemptId = 0,
+        stageAttemptNumber = 0,
         partitionId = 0,
         taskAttemptId = Random.nextInt(10000),
         attemptNumber = 0,
