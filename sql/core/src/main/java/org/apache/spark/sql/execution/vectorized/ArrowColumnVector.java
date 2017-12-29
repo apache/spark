@@ -17,14 +17,9 @@
 
 package org.apache.spark.sql.execution.vectorized;
 
-import com.google.common.collect.ImmutableList;
-
-import io.netty.buffer.ArrowBuf;
-import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
-import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 
 import org.apache.spark.sql.execution.arrow.ArrowUtils;
 import org.apache.spark.sql.types.*;
@@ -593,33 +588,16 @@ public final class ArrowColumnVector extends ColumnVector {
     ArrayAccessor(ListVector vector) {
       super(vector);
       this.accessor = vector;
-      applyValidityVectorFix();
-    }
-
-    private void applyValidityVectorFix() {
-      int valueCount = accessor.getValueCount();
-      if (valueCount > 0 && accessor.getValidityBuffer().capacity() == 0) {
-        BufferAllocator allocator = accessor.getAllocator();
-        ArrowBuf newBuffer = allocator.buffer(BitVectorHelper.getValidityBufferSize(valueCount));
-        int fullBytesCount = valueCount / 8;
-        for (int i = 0; i < fullBytesCount; ++i) {
-          newBuffer.setByte(i, 0xFF);
-        }
-        int remainder = valueCount % 8;
-        if (remainder > 0) {
-          byte bitMask = (byte) (0xFFL >>> ((8 - remainder) & 7));
-          newBuffer.setByte(fullBytesCount, bitMask);
-        }
-        accessor.loadFieldBuffers(new ArrowFieldNode(valueCount, 0),
-          ImmutableList.of(newBuffer, accessor.getOffsetBuffer()));
-        newBuffer.release();  // loadFieldBuffers will retain a reference count to newBuffer
-      }
     }
 
     @Override
     final boolean isNullAt(int rowId) {
-      applyValidityVectorFix();
-      return super.isNullAt(rowId);
+      // TODO: Workaround if vector has all non-null values, see ARROW-1948
+      if (accessor.getValueCount() > 0 && accessor.getValidityBuffer().capacity() == 0) {
+        return false;
+      } else {
+        return super.isNullAt(rowId);
+      }
     }
 
     @Override
