@@ -29,20 +29,14 @@ import org.apache.spark.unsafe.types.UTF8String;
 public final class ColumnarArray extends ArrayData {
   // The data for this array. This array contains elements from
   // data[offset] to data[offset + length).
-  public final ColumnVector data;
-  public int length;
-  public int offset;
+  private final ColumnVector data;
+  private final int offset;
+  private final int length;
 
-  // Populate if binary data is required for the Array. This is stored here as an optimization
-  // for string data.
-  public byte[] byteArray;
-  public int byteArrayOffset;
-
-  // Reused staging buffer, used for loading from offheap.
-  protected byte[] tmpByteArray = new byte[1];
-
-  ColumnarArray(ColumnVector data) {
+  ColumnarArray(ColumnVector data, int offset, int length) {
     this.data = data;
+    this.offset = offset;
+    this.length = length;
   }
 
   @Override

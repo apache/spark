@@ -42,7 +42,7 @@ import org.apache.spark.util.Clock
 trait ProgressReporter extends Logging {
 
   case class ExecutionStats(
-    inputRows: Map[Source, Long],
+    inputRows: Map[BaseStreamingSource, Long],
     stateOperators: Seq[StateOperatorProgress],
     eventTimeStats: Map[String, String])
 
@@ -53,11 +53,11 @@ trait ProgressReporter extends Logging {
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
-  protected def newData: Map[Source, DataFrame]
+  protected def newData: Map[BaseStreamingSource, DataFrame]
   protected def availableOffsets: StreamProgress
   protected def committedOffsets: StreamProgress
-  protected def sources: Seq[Source]
-  protected def sink: Sink
+  protected def sources: Seq[BaseStreamingSource]
+  protected def sink: BaseStreamingSink
   protected def offsetSeqMetadata: OffsetSeqMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
@@ -230,7 +230,7 @@ trait ProgressReporter extends Logging {
     }
     val allLogicalPlanLeaves = lastExecution.logical.collectLeaves() // includes non-streaming
     val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()
-    val numInputRows: Map[Source, Long] =
+    val numInputRows: Map[BaseStreamingSource, Long] =
       if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
         val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
           case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }

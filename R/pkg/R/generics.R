@@ -611,6 +611,10 @@ setGeneric("isStreaming", function(x) { standardGeneric("isStreaming") })
 #' @export
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
+#' @rdname localCheckpoint
+#' @export
+setGeneric("localCheckpoint", function(x, eager = TRUE) { standardGeneric("localCheckpoint") })
+
 #' @rdname merge
 #' @export
 setGeneric("merge")
@@ -1042,6 +1046,11 @@ setGeneric("date_format", function(y, x) { standardGeneric("date_format") })
 #' @export
 #' @name NULL
 setGeneric("date_sub", function(y, x) { standardGeneric("date_sub") })
+
+#' @rdname column_datetime_functions
+#' @export
+#' @name NULL
+setGeneric("date_trunc", function(format, x) { standardGeneric("date_trunc") })
 
 #' @rdname column_datetime_functions
 #' @export

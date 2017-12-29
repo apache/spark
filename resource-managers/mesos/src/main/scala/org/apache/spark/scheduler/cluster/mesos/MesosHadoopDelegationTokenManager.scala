@@ -63,7 +63,7 @@ private[spark] class MesosHadoopDelegationTokenManager(
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       val rt = tokenManager.obtainDelegationTokens(hadoopConf, creds)
       logInfo(s"Initialized tokens: ${SparkHadoopUtil.get.dumpTokens(creds)}")
-      (SparkHadoopUtil.get.serialize(creds), rt)
+      (SparkHadoopUtil.get.serialize(creds), SparkHadoopUtil.getDateOfNextUpdate(rt, 0.75))
     } catch {
       case e: Exception =>
         logError(s"Failed to fetch Hadoop delegation tokens $e")

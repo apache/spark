@@ -668,7 +668,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schema = restoreTableMetadata(rawTable).schema
 
     // convert table statistics to properties so that we can persist them through hive client
-    var statsProperties =
+    val statsProperties =
       if (stats.isDefined) {
         statsToProperties(stats.get, schema)
       } else {
@@ -1098,14 +1098,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schema = restoreTableMetadata(rawTable).schema
 
     // convert partition statistics to properties so that we can persist them through hive api
-    val withStatsProps = lowerCasedParts.map(p => {
+    val withStatsProps = lowerCasedParts.map { p =>
       if (p.stats.isDefined) {
         val statsProperties = statsToProperties(p.stats.get, schema)
         p.copy(parameters = p.parameters ++ statsProperties)
       } else {
         p
       }
-    })
+    }
 
     // Note: Before altering table partitions in Hive, you *must* set the current database
     // to the one that contains the table of interest. Otherwise you will end up with the

@@ -49,9 +49,15 @@ else:
     import unittest
 
 _have_pandas = False
+_have_old_pandas = False
 try:
     import pandas
-    _have_pandas = True
+    try:
+        from pyspark.sql.utils import require_minimum_pandas_version
+        require_minimum_pandas_version()
+        _have_pandas = True
+    except:
+        _have_old_pandas = True
 except:
     # No Pandas, but that's okay, we'll skip those tests
     pass
@@ -428,6 +434,15 @@ class SQLTests(ReusedSQLTestCase):
         [(l1, l2)] = self.spark.sql("select copylist(l), maplen(d) from test").collect()
         self.assertEqual(list(range(3)), l1)
         self.assertEqual(1, l2)
+
+    def test_nondeterministic_udf(self):
+        from pyspark.sql.functions import udf
+        import random
+        udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
+        df = self.spark.createDataFrame([Row(1)]).select(udf_random_col().alias('RAND'))
+        udf_add_ten = udf(lambda rand: rand + 10, IntegerType())
+        [row] = df.withColumn('RAND_PLUS_TEN', udf_add_ten('RAND')).collect()
+        self.assertEqual(row[0] + 10, row[1])
 
     def test_broadcast_in_udf(self):
         bar = {"a": "aa", "b": "bb", "c": "abc"}
@@ -2565,21 +2580,38 @@ class SQLTests(ReusedSQLTestCase):
             .mode("overwrite").saveAsTable("pyspark_bucket"))
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
+    def _to_pandas(self):
+        from datetime import datetime, date
+        import numpy as np
+        schema = StructType().add("a", IntegerType()).add("b", StringType())\
+                             .add("c", BooleanType()).add("d", FloatType())\
+                             .add("dt", DateType()).add("ts", TimestampType())
+        data = [
+            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+            (2, "foo", True, 5.0, None, None),
+            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3)),
+            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4)),
+        ]
+        df = self.spark.createDataFrame(data, schema)
+        return df.toPandas()
+
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas(self):
         import numpy as np
-        schema = StructType().add("a", IntegerType()).add("b", StringType())\
-                             .add("c", BooleanType()).add("d", FloatType())
-        data = [
-            (1, "foo", True, 3.0), (2, "foo", True, 5.0),
-            (3, "bar", False, -1.0), (4, "bar", False, 6.0),
-        ]
-        df = self.spark.createDataFrame(data, schema)
-        types = df.toPandas().dtypes
+        pdf = self._to_pandas()
+        types = pdf.dtypes
         self.assertEquals(types[0], np.int32)
         self.assertEquals(types[1], np.object)
         self.assertEquals(types[2], np.bool)
         self.assertEquals(types[3], np.float32)
+        self.assertEquals(types[4], 'datetime64[ns]')
+        self.assertEquals(types[5], 'datetime64[ns]')
+
+    @unittest.skipIf(not _have_old_pandas, "Old Pandas not installed")
+    def test_to_pandas_old(self):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
+                self._to_pandas()
 
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas_avoid_astype(self):
@@ -2613,6 +2645,16 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
+
+    @unittest.skipIf(not _have_old_pandas, "Old Pandas not installed")
+    def test_create_dataframe_from_old_pandas(self):
+        import pandas as pd
+        from datetime import datetime
+        pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
+                            "d": [pd.Timestamp.now().date()]})
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
+                self.spark.createDataFrame(pdf)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
@@ -3103,12 +3145,13 @@ class DataTypeVerificationTests(unittest.TestCase):
                 _make_type_verifier(data_type, nullable=False)(obj)
 
 
-@unittest.skipIf(not _have_arrow, "Arrow not installed")
+@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class ArrowTests(ReusedSQLTestCase):
 
     @classmethod
     def setUpClass(cls):
         from datetime import datetime
+        from decimal import Decimal
         ReusedSQLTestCase.setUpClass()
 
         # Synchronize default timezone between Python and Java
@@ -3125,11 +3168,15 @@ class ArrowTests(ReusedSQLTestCase):
             StructField("3_long_t", LongType(), True),
             StructField("4_float_t", FloatType(), True),
             StructField("5_double_t", DoubleType(), True),
-            StructField("6_date_t", DateType(), True),
-            StructField("7_timestamp_t", TimestampType(), True)])
-        cls.data = [(u"a", 1, 10, 0.2, 2.0, datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
-                    (u"b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
-                    (u"c", 3, 30, 0.8, 6.0, datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+            StructField("6_decimal_t", DecimalType(38, 18), True),
+            StructField("7_date_t", DateType(), True),
+            StructField("8_timestamp_t", TimestampType(), True)])
+        cls.data = [(u"a", 1, 10, 0.2, 2.0, Decimal("2.0"),
+                     datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+                    (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
+                     datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                    (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
+                     datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
 
     @classmethod
     def tearDownClass(cls):
@@ -3157,10 +3204,11 @@ class ArrowTests(ReusedSQLTestCase):
         return pd.DataFrame(data=data_dict)
 
     def test_unsupported_datatype(self):
-        schema = StructType([StructField("decimal", DecimalType(), True)])
+        schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
-            self.assertRaises(Exception, lambda: df.toPandas())
+            with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
+                df.toPandas()
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
@@ -3169,15 +3217,46 @@ class ArrowTests(ReusedSQLTestCase):
         null_counts = pdf.isnull().sum().tolist()
         self.assertTrue(all([c == 1 for c in null_counts]))
 
-    def test_toPandas_arrow_toggle(self):
-        df = self.spark.createDataFrame(self.data, schema=self.schema)
+    def _toPandas_arrow_toggle(self, df):
         self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
         try:
             pdf = df.toPandas()
         finally:
             self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
         pdf_arrow = df.toPandas()
+        return pdf, pdf_arrow
+
+    def test_toPandas_arrow_toggle(self):
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
         self.assertFramesEqual(pdf_arrow, pdf)
+
+    def test_toPandas_respect_session_timezone(self):
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        orig_tz = self.spark.conf.get("spark.sql.session.timeZone")
+        try:
+            timezone = "America/New_York"
+            self.spark.conf.set("spark.sql.session.timeZone", timezone)
+            self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "false")
+            try:
+                pdf_la, pdf_arrow_la = self._toPandas_arrow_toggle(df)
+                self.assertFramesEqual(pdf_arrow_la, pdf_la)
+            finally:
+                self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
+            pdf_ny, pdf_arrow_ny = self._toPandas_arrow_toggle(df)
+            self.assertFramesEqual(pdf_arrow_ny, pdf_ny)
+
+            self.assertFalse(pdf_ny.equals(pdf_la))
+
+            from pyspark.sql.types import _check_series_convert_timestamps_local_tz
+            pdf_la_corrected = pdf_la.copy()
+            for field in self.schema:
+                if isinstance(field.dataType, TimestampType):
+                    pdf_la_corrected[field.name] = _check_series_convert_timestamps_local_tz(
+                        pdf_la_corrected[field.name], timezone)
+            self.assertFramesEqual(pdf_ny, pdf_la_corrected)
+        finally:
+            self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
     def test_pandas_round_trip(self):
         pdf = self.create_pandas_data_frame()
@@ -3192,15 +3271,49 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf.columns[0], "i")
         self.assertTrue(pdf.empty)
 
-    def test_createDataFrame_toggle(self):
-        pdf = self.create_pandas_data_frame()
+    def _createDataFrame_toggle(self, pdf, schema=None):
         self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
         try:
-            df_no_arrow = self.spark.createDataFrame(pdf)
+            df_no_arrow = self.spark.createDataFrame(pdf, schema=schema)
         finally:
             self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-        df_arrow = self.spark.createDataFrame(pdf)
+        df_arrow = self.spark.createDataFrame(pdf, schema=schema)
+        return df_no_arrow, df_arrow
+
+    def test_createDataFrame_toggle(self):
+        pdf = self.create_pandas_data_frame()
+        df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf, schema=self.schema)
         self.assertEquals(df_no_arrow.collect(), df_arrow.collect())
+
+    def test_createDataFrame_respect_session_timezone(self):
+        from datetime import timedelta
+        pdf = self.create_pandas_data_frame()
+        orig_tz = self.spark.conf.get("spark.sql.session.timeZone")
+        try:
+            timezone = "America/New_York"
+            self.spark.conf.set("spark.sql.session.timeZone", timezone)
+            self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "false")
+            try:
+                df_no_arrow_la, df_arrow_la = self._createDataFrame_toggle(pdf, schema=self.schema)
+                result_la = df_no_arrow_la.collect()
+                result_arrow_la = df_arrow_la.collect()
+                self.assertEqual(result_la, result_arrow_la)
+            finally:
+                self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
+            df_no_arrow_ny, df_arrow_ny = self._createDataFrame_toggle(pdf, schema=self.schema)
+            result_ny = df_no_arrow_ny.collect()
+            result_arrow_ny = df_arrow_ny.collect()
+            self.assertEqual(result_ny, result_arrow_ny)
+
+            self.assertNotEqual(result_ny, result_la)
+
+            # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
+            result_la_corrected = [Row(**{k: v - timedelta(hours=3) if k == '8_timestamp_t' else v
+                                          for k, v in row.asDict().items()})
+                                   for row in result_la]
+            self.assertEqual(result_ny, result_la_corrected)
+        finally:
+            self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
     def test_createDataFrame_with_schema(self):
         pdf = self.create_pandas_data_frame()
@@ -3219,11 +3332,11 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
         # Test that schema as a list of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=list('abcdefg'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
+        df = self.spark.createDataFrame(pdf, schema=list('abcdefgh'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
         # Test that schema as tuple of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefg'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefg'))
+        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefgh'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
 
     def test_createDataFrame_column_name_encoding(self):
         import pandas as pd
@@ -3242,10 +3355,11 @@ class ArrowTests(ReusedSQLTestCase):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
     def test_createDataFrame_does_not_modify_input(self):
+        import pandas as pd
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
         # Use a nanosecond value to make sure it is not truncated
-        pdf.ix[0, '7_timestamp_t'] = 1
+        pdf.ix[0, '8_timestamp_t'] = pd.Timestamp(1)
         # Integers with nulls will get NaNs filled with 0 and will be casted
         pdf.ix[1, '2_int_t'] = None
         pdf_copy = pdf.copy(deep=True)
@@ -3259,6 +3373,7 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEquals(self.schema, schema_rt)
 
 
+@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class PandasUDFTests(ReusedSQLTestCase):
     def test_pandas_udf_basic(self):
         from pyspark.rdd import PythonEvalType
@@ -3385,6 +3500,27 @@ class PandasUDFTests(ReusedSQLTestCase):
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class VectorizedUDFTests(ReusedSQLTestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
+
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedSQLTestCase.tearDownClass()
+
     def test_vectorized_udf_basic(self):
         from pyspark.sql.functions import pandas_udf, col
         df = self.spark.range(10).select(
@@ -3393,6 +3529,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             col('id').alias('long'),
             col('id').cast('float').alias('float'),
             col('id').cast('double').alias('double'),
+            col('id').cast('decimal').alias('decimal'),
             col('id').cast('boolean').alias('bool'))
         f = lambda x: x
         str_f = pandas_udf(f, StringType())
@@ -3400,10 +3537,12 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         long_f = pandas_udf(f, LongType())
         float_f = pandas_udf(f, FloatType())
         double_f = pandas_udf(f, DoubleType())
+        decimal_f = pandas_udf(f, DecimalType())
         bool_f = pandas_udf(f, BooleanType())
         res = df.select(str_f(col('str')), int_f(col('int')),
                         long_f(col('long')), float_f(col('float')),
-                        double_f(col('double')), bool_f(col('bool')))
+                        double_f(col('double')), decimal_f('decimal'),
+                        bool_f(col('bool')))
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_null_boolean(self):
@@ -3469,6 +3608,16 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         res = df.select(double_f(col('double')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_null_decimal(self):
+        from decimal import Decimal
+        from pyspark.sql.functions import pandas_udf, col
+        data = [(Decimal(3.0),), (Decimal(5.0),), (Decimal(-1.0),), (None,)]
+        schema = StructType().add("decimal", DecimalType(38, 18))
+        df = self.spark.createDataFrame(data, schema)
+        decimal_f = pandas_udf(lambda x: x, DecimalType(38, 18))
+        res = df.select(decimal_f(col('decimal')))
+        self.assertEquals(df.collect(), res.collect())
+
     def test_vectorized_udf_null_string(self):
         from pyspark.sql.functions import pandas_udf, col
         data = [("foo",), (None,), ("bar",), ("bar",)]
@@ -3486,6 +3635,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             col('id').alias('long'),
             col('id').cast('float').alias('float'),
             col('id').cast('double').alias('double'),
+            col('id').cast('decimal').alias('decimal'),
             col('id').cast('boolean').alias('bool'))
         f = lambda x: x
         str_f = pandas_udf(f, 'string')
@@ -3493,10 +3643,12 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         long_f = pandas_udf(f, 'long')
         float_f = pandas_udf(f, 'float')
         double_f = pandas_udf(f, 'double')
+        decimal_f = pandas_udf(f, 'decimal(38, 18)')
         bool_f = pandas_udf(f, 'boolean')
         res = df.select(str_f(col('str')), int_f(col('int')),
                         long_f(col('long')), float_f(col('float')),
-                        double_f(col('double')), bool_f(col('bool')))
+                        double_f(col('double')), decimal_f('decimal'),
+                        bool_f(col('bool')))
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_complex(self):
@@ -3553,9 +3705,9 @@ class VectorizedUDFTests(ReusedSQLTestCase):
     def test_vectorized_udf_wrong_return_type(self):
         from pyspark.sql.functions import pandas_udf, col
         df = self.spark.range(10)
-        f = pandas_udf(lambda x: x * 1.0, StringType())
+        f = pandas_udf(lambda x: x * 1.0, ArrayType(LongType()))
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Invalid.*type'):
+            with self.assertRaisesRegexp(Exception, 'Unsupported.*type.*conversion'):
                 df.select(f(col('id'))).collect()
 
     def test_vectorized_udf_return_scalar(self):
@@ -3592,12 +3744,12 @@ class VectorizedUDFTests(ReusedSQLTestCase):
 
     def test_vectorized_udf_unsupported_types(self):
         from pyspark.sql.functions import pandas_udf, col
-        schema = StructType([StructField("dt", DecimalType(), True)])
+        schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
-        f = pandas_udf(lambda x: x, DecimalType())
+        f = pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
-                df.select(f(col('dt'))).collect()
+                df.select(f(col('map'))).collect()
 
     def test_vectorized_udf_null_date(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -3621,29 +3773,37 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         data = [(0, datetime(1969, 1, 1, 1, 1, 1)),
                 (1, datetime(2012, 2, 2, 2, 2, 2)),
                 (2, None),
-                (3, datetime(2100, 4, 4, 4, 4, 4))]
+                (3, datetime(2100, 3, 3, 3, 3, 3))]
+
         df = self.spark.createDataFrame(data, schema=schema)
 
         # Check that a timestamp passed through a pandas_udf will not be altered by timezone calc
         f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType())
         df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
 
-        @pandas_udf(returnType=BooleanType())
+        @pandas_udf(returnType=StringType())
         def check_data(idx, timestamp, timestamp_copy):
+            import pandas as pd
+            msgs = []
             is_equal = timestamp.isnull()  # use this array to check values are equal
             for i in range(len(idx)):
                 # Check that timestamps are as expected in the UDF
-                is_equal[i] = (is_equal[i] and data[idx[i]][1] is None) or \
-                    timestamp[i].to_pydatetime() == data[idx[i]][1]
-            return is_equal
+                if (is_equal[i] and data[idx[i]][1] is None) or \
+                        timestamp[i].to_pydatetime() == data[idx[i]][1]:
+                    msgs.append(None)
+                else:
+                    msgs.append(
+                        "timestamp values are not equal (timestamp='%s': data[%d][1]='%s')"
+                        % (timestamp[i], idx[i], data[idx[i]][1]))
+            return pd.Series(msgs)
 
-        result = df.withColumn("is_equal", check_data(col("idx"), col("timestamp"),
-                                                      col("timestamp_copy"))).collect()
+        result = df.withColumn("check_data", check_data(col("idx"), col("timestamp"),
+                                                        col("timestamp_copy"))).collect()
         # Check that collection values are correct
         self.assertEquals(len(data), len(result))
         for i in range(len(result)):
             self.assertEquals(data[i][1], result[i][1])  # "timestamp" col
-            self.assertTrue(result[i][3])  # "is_equal" data in udf was as expected
+            self.assertIsNone(result[i][3])  # "check_data" col
 
     def test_vectorized_udf_return_timestamp_tz(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -3682,6 +3842,48 @@ class VectorizedUDFTests(ReusedSQLTestCase):
                 self.spark.conf.unset("spark.sql.execution.arrow.maxRecordsPerBatch")
             else:
                 self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", orig_value)
+
+    def test_vectorized_udf_timestamps_respect_session_timezone(self):
+        from pyspark.sql.functions import pandas_udf, col
+        from datetime import datetime
+        import pandas as pd
+        schema = StructType([
+            StructField("idx", LongType(), True),
+            StructField("timestamp", TimestampType(), True)])
+        data = [(1, datetime(1969, 1, 1, 1, 1, 1)),
+                (2, datetime(2012, 2, 2, 2, 2, 2)),
+                (3, None),
+                (4, datetime(2100, 3, 3, 3, 3, 3))]
+        df = self.spark.createDataFrame(data, schema=schema)
+
+        f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType())
+        internal_value = pandas_udf(
+            lambda ts: ts.apply(lambda ts: ts.value if ts is not pd.NaT else None), LongType())
+
+        orig_tz = self.spark.conf.get("spark.sql.session.timeZone")
+        try:
+            timezone = "America/New_York"
+            self.spark.conf.set("spark.sql.session.timeZone", timezone)
+            self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "false")
+            try:
+                df_la = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
+                    .withColumn("internal_value", internal_value(col("timestamp")))
+                result_la = df_la.select(col("idx"), col("internal_value")).collect()
+                # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
+                diff = 3 * 60 * 60 * 1000 * 1000 * 1000
+                result_la_corrected = \
+                    df_la.select(col("idx"), col("tscopy"), col("internal_value") + diff).collect()
+            finally:
+                self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
+
+            df_ny = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
+                .withColumn("internal_value", internal_value(col("timestamp")))
+            result_ny = df_ny.select(col("idx"), col("tscopy"), col("internal_value")).collect()
+
+            self.assertNotEqual(result_ny, result_la)
+            self.assertEqual(result_ny, result_la_corrected)
+        finally:
+            self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
@@ -3806,12 +4008,12 @@ class GroupbyApplyTests(ReusedSQLTestCase):
 
         foo = pandas_udf(
             lambda pdf: pdf,
-            'id long, v string',
+            'id long, v array<int>',
             PandasUDFType.GROUP_MAP
         )
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Invalid.*type'):
+            with self.assertRaisesRegexp(Exception, 'Unsupported.*type.*conversion'):
                 df.groupby('id').apply(foo).sort('id').toPandas()
 
     def test_wrong_args(self):
@@ -3841,7 +4043,8 @@ class GroupbyApplyTests(ReusedSQLTestCase):
     def test_unsupported_types(self):
         from pyspark.sql.functions import pandas_udf, col, PandasUDFType
         schema = StructType(
-            [StructField("id", LongType(), True), StructField("dt", DecimalType(), True)])
+            [StructField("id", LongType(), True),
+             StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(1, None,)], schema=schema)
         f = pandas_udf(lambda x: x, df.schema, PandasUDFType.GROUP_MAP)
         with QuietTest(self.sc):

@@ -73,7 +73,8 @@ object KinesisUtils {
     // Setting scope to override receiver stream's scope of "receiver stream"
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
         cleanedHandler, DefaultCredentials, None, None)
     }
   }
@@ -129,7 +130,8 @@ object KinesisUtils {
         awsAccessKeyId = awsAccessKeyId,
         awsSecretKey = awsSecretKey)
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
         cleanedHandler, kinesisCredsProvider, None, None)
     }
   }
@@ -198,7 +200,8 @@ object KinesisUtils {
           awsAccessKeyId = awsAccessKeyId,
           awsSecretKey = awsSecretKey))
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
         cleanedHandler, kinesisCredsProvider, None, None)
     }
   }
@@ -243,7 +246,8 @@ object KinesisUtils {
     // Setting scope to override receiver stream's scope of "receiver stream"
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
         KinesisInputDStream.defaultMessageHandler, DefaultCredentials, None, None)
     }
   }
@@ -293,7 +297,8 @@ object KinesisUtils {
         awsAccessKeyId = awsAccessKeyId,
         awsSecretKey = awsSecretKey)
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
         KinesisInputDStream.defaultMessageHandler, kinesisCredsProvider, None, None)
     }
   }

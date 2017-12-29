@@ -39,7 +39,7 @@ object HdfsTest {
       val start = System.currentTimeMillis()
       for (x <- mapped) { x + 2 }
       val end = System.currentTimeMillis()
-      println("Iteration " + iter + " took " + (end-start) + " ms")
+      println(s"Iteration $iter took ${end-start} ms")
     }
     spark.stop()
   }

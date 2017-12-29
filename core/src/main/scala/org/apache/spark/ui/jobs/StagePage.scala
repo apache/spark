@@ -32,7 +32,6 @@ import org.apache.spark.scheduler.TaskLocality
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui._
-import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Distribution, Utils}
 
 /** Page showing statistics and task list for a given stage */

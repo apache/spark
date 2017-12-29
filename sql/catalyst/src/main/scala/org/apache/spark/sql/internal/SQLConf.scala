@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
+import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
@@ -139,6 +140,13 @@ object SQLConf {
       .doc("When true, enable partition pruning for in-memory columnar tables.")
       .booleanConf
       .createWithDefault(true)
+
+  val COLUMN_VECTOR_OFFHEAP_ENABLED =
+    buildConf("spark.sql.columnVector.offheap.enabled")
+      .internal()
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .booleanConf
+      .createWithDefault(false)
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
@@ -284,6 +292,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_INT96_TIMESTAMP_CONVERSION = buildConf("spark.sql.parquet.int96TimestampConversion")
+    .doc("This controls whether timestamp adjustments should be applied to INT96 data when " +
+      "converting to timestamps, for data written by Impala.  This is necessary because Impala " +
+      "stores INT96 data with a different timezone offset than Hive & Spark.")
+    .booleanConf
+    .createWithDefault(false)
+
   object ParquetOutputTimestampType extends Enumeration {
     val INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
   }
@@ -321,8 +336,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
-    .doc("Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.")
+    .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
+      "versions, when converting Parquet schema to Spark SQL schema and vice versa.")
     .booleanConf
     .createWithDefault(false)
 
@@ -355,6 +370,14 @@ object SQLConf {
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
     .createWithDefault("snappy")
+
+  val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
+    .doc("When native, use the native version of ORC support instead of the ORC library in Hive " +
+      "1.2.1. It is 'hive' by default prior to Spark 2.3.")
+    .internal()
+    .stringConf
+    .checkValues(Set("hive", "native"))
+    .createWithDefault("native")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
@@ -591,12 +614,6 @@ object SQLConf {
       " fail to compile generated code")
     .booleanConf
     .createWithDefault(true)
-
-  val MAX_CASES_BRANCHES = buildConf("spark.sql.codegen.maxCaseBranches")
-    .internal()
-    .doc("The maximum number of switches supported with codegen.")
-    .intConf
-    .createWithDefault(20)
 
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
     .internal()
@@ -997,6 +1014,15 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE =
+    buildConf("spark.sql.execution.pandas.respectSessionTimeZone")
+      .internal()
+      .doc("When true, make Pandas DataFrame with timestamp type respecting session local " +
+        "timezone when converting to/from Pandas DataFrame. This configuration will be " +
+        "deprecated in the future releases.")
+      .booleanConf
+      .createWithDefault(true)
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -1009,6 +1035,30 @@ object SQLConf {
       " condition(s) of the right node.")
     .booleanConf
     .createWithDefault(true)
+
+  val SQL_STRING_REDACTION_PATTERN =
+    ConfigBuilder("spark.sql.redaction.string.regex")
+      .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
+        "information. When this regex matches a string part, that string part is replaced by a " +
+        "dummy value. This is currently used to redact the output of SQL explain commands. " +
+        "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
+      .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
+
+  val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
+    buildConf("spark.sql.streaming.continuous.executorQueueSize")
+    .internal()
+    .doc("The size (measured in number of rows) of the queue used in continuous execution to" +
+      " buffer the results of a ContinuousDataReader.")
+    .intConf
+    .createWithDefault(1024)
+
+  val CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS =
+    buildConf("spark.sql.streaming.continuous.executorPollIntervalMs")
+      .internal()
+      .doc("The interval at which continuous execution readers will poll to check whether" +
+        " the epoch has advanced on the driver.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(100)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1133,8 +1183,6 @@ class SQLConf extends Serializable with Logging {
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
-  def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
-
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
@@ -1149,6 +1197,8 @@ class SQLConf extends Serializable with Logging {
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+
+  def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -1190,6 +1240,8 @@ class SQLConf extends Serializable with Logging {
 
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
+  def isParquetINT96TimestampConversion: Boolean = getConf(PARQUET_INT96_TIMESTAMP_CONVERSION)
+
   def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
 
   def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
@@ -1209,6 +1261,8 @@ class SQLConf extends Serializable with Logging {
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
+
+  def offHeapColumnVectorEnabled: Boolean = getConf(COLUMN_VECTOR_OFFHEAP_ENABLED)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
@@ -1315,7 +1369,14 @@ class SQLConf extends Serializable with Logging {
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
+  def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
+
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
+
+  def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
+
+  def continuousStreamingExecutorPollIntervalMs: Long =
+    getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
   /** ********************** SQLConf functionality methods ************ */
 
@@ -1350,7 +1411,7 @@ class SQLConf extends Serializable with Logging {
     Option(settings.get(key)).
       orElse {
         // Try to use the default value
-        Option(sqlConfEntries.get(key)).map(_.defaultValueString)
+        Option(sqlConfEntries.get(key)).map { e => e.stringConverter(e.readFrom(reader)) }
       }.
       getOrElse(throw new NoSuchElementException(key))
   }
@@ -1388,14 +1449,21 @@ class SQLConf extends Serializable with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    if (defaultValue != null && defaultValue != "<undefined>") {
+    if (defaultValue != null && defaultValue != ConfigEntry.UNDEFINED) {
       val entry = sqlConfEntries.get(key)
       if (entry != null) {
         // Only verify configs in the SQLConf object
         entry.valueConverter(defaultValue)
       }
     }
-    Option(settings.get(key)).getOrElse(defaultValue)
+    Option(settings.get(key)).getOrElse {
+      // If the key is not set, need to check whether the config entry is registered and is
+      // a fallback conf, so that we can check its parent.
+      sqlConfEntries.get(key) match {
+        case e: FallbackConfigEntry[_] => getConfString(e.fallback.key, defaultValue)
+        case _ => defaultValue
+      }
+    }
   }
 
   /**
@@ -1411,7 +1479,8 @@ class SQLConf extends Serializable with Logging {
    */
   def getAllDefinedConfs: Seq[(String, String, String)] = sqlConfEntries.synchronized {
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
-      (entry.key, getConfString(entry.key, entry.defaultValueString), entry.doc)
+      val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
+      (entry.key, displayValue, entry.doc)
     }.toSeq
   }
 
