@@ -87,12 +87,12 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * @param child Children logical plan node
  */
 case class Generate(
-     generator: Generator,
-     unrequiredChildIndex: Seq[Int],
-     outer: Boolean,
-     qualifier: Option[String],
-     generatorOutput: Seq[Attribute],
-     child: LogicalPlan)
+    generator: Generator,
+    unrequiredChildIndex: Seq[Int],
+    outer: Boolean,
+    qualifier: Option[String],
+    generatorOutput: Seq[Attribute],
+    child: LogicalPlan)
   extends UnaryNode {
 
   lazy val requiredChildOutput: Seq[Attribute] = {
