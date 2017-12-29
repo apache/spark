@@ -161,22 +161,20 @@ object TypeCoercion {
 
   /**
    * Case 2 type widening over complex types. `widerTypeFunc` is a function that finds the wider
-   * type over point types, and additionally specifies whether types should be promoted to
-   * StringType or not.
+   * type over point types. The `widerTypeFunc` specifies behavior over whether types should be
+   * promoted to StringType.
    */
   private def findWiderTypeForTwoComplex(
       t1: DataType,
       t2: DataType,
       widerTypeFunc: (DataType, DataType) => Option[DataType]): Option[DataType] = {
     (t1, t2) match {
-      case (t1 @ ArrayType(pointType1, nullable1),
-          t2@ ArrayType(pointType2, nullable2)) if t1.sameType(t2) =>
+      case (ArrayType(pointType1, nullable1), ArrayType(pointType2, nullable2)) =>
         val dataType = widerTypeFunc.apply(pointType1, pointType2)
 
         dataType.map(ArrayType(_, nullable1 || nullable2))
 
-      case (t1 @ MapType(keyType1, valueType1, nullable1),
-          t2 @ MapType(keyType2, valueType2, nullable2)) if t1.sameType(t2) =>
+      case (MapType(keyType1, valueType1, nullable1), MapType(keyType2, valueType2, nullable2)) =>
         val keyType = widerTypeFunc.apply(keyType1, keyType2)
         val valueType = widerTypeFunc.apply(valueType1, valueType2)
 
@@ -186,7 +184,7 @@ object TypeCoercion {
           None
         }
 
-      case (t1 @ StructType(fields1), t2 @ StructType(fields2)) if t1.sameType(t2) =>
+      case (StructType(fields1), StructType(fields2)) =>
         val fieldTypes = fields1.zip(fields2).map { case (f1, f2) =>
           widerTypeFunc(f1.dataType, f2.dataType)
         }
