@@ -215,8 +215,9 @@ object PhysicalAggregation {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
           case agg: AggregateExpression
             if !equivalentAggregateExpressions.addExpr(agg) => agg
-          case udf: PythonUDF if udf.evalType == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF &&
-            !equivalentAggregateExpressions.addExpr(udf) => udf
+          case udf: PythonUDF
+            if PythonUDF.isGroupAggPandasUDF(udf) &&
+              !equivalentAggregateExpressions.addExpr(udf) => udf
         }
       }
 
@@ -245,7 +246,7 @@ object PhysicalAggregation {
             equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
             // Similar to AggregateExpression
-          case ue: PythonUDF if ue.evalType == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF =>
+          case ue: PythonUDF if PythonUDF.isGroupAggPandasUDF(ue) =>
             equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
               .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
           case expression =>

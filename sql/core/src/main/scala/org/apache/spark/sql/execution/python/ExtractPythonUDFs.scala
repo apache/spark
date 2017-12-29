@@ -150,8 +150,9 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           udf.references.subsetOf(child.outputSet)
         }
         if (validUdfs.nonEmpty) {
-          require(validUdfs.forall(PythonUDF.isScalarPythonUDF),
-          "Can only extract scalar vectorized udf or sql batch udf")
+          require(
+            validUdfs.forall(PythonUDF.isScalarPythonUDF),
+            "Can only extract scalar vectorized udf or sql batch udf")
 
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
@@ -214,4 +215,3 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
     }
   }
 }
-
