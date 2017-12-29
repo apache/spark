@@ -133,7 +133,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null) :: Nil)
   }
 
-
   test("from_json array support") {
     val df = Seq("""[{"a": 1, "b": "a"}, {"a": 2}, { }]""").toDS()
     val schema = ArrayType(

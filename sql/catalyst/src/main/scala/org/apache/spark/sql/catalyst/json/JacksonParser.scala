@@ -373,18 +373,14 @@ class JacksonParser private (
       record: T,
       createParser: (JsonFactory, T) => JsonParser,
       recordLiteral: T => UTF8String): Seq[InternalRow] = {
-    val rows = parseWithArrayOfPrimitiveSupport(record, createParser, recordLiteral)
-    if (!isSeqOfInternalRow(rows)) {
-      throw BadRecordException(() => recordLiteral(record), () => None,
+    schema match {
+      case _: ArrayType => throw BadRecordException(() => recordLiteral(record), () => None,
         new RuntimeException("`parse` is only used to parse the JSON input to a set of " +
           "`InternalRow`s. It can parse JSON objects and array of JSON objects. Use " +
           "`parseWithArrayOfPrimitiveSupport` when parsing array of primitive data is needed."))
+      case _: StructType => parseWithArrayOfPrimitiveSupport(
+        record, createParser, recordLiteral).asInstanceOf[Seq[InternalRow]]
     }
-    rows.asInstanceOf[Seq[InternalRow]]
-  }
-
-  def isSeqOfInternalRow[T](rows: T)(implicit tag: TypeTag[T]): Boolean = {
-    tag.tpe <:< typeTag[Seq[InternalRow]].tpe
   }
 
   /**
