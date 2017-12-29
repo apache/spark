@@ -169,12 +169,14 @@ object TypeCoercion {
       t2: DataType,
       widerTypeFunc: (DataType, DataType) => Option[DataType]): Option[DataType] = {
     (t1, t2) match {
-      case (ArrayType(pointType1, nullable1), ArrayType(pointType2, nullable2)) =>
+      case (t1 @ ArrayType(pointType1, nullable1),
+          t2@ ArrayType(pointType2, nullable2)) if t1.sameType(t2)=>
         val dataType = widerTypeFunc.apply(pointType1, pointType2)
 
         dataType.map(ArrayType(_, nullable1 || nullable2))
 
-      case (MapType(keyType1, valueType1, nullable1), MapType(keyType2, valueType2, nullable2)) =>
+      case (t1 @ MapType(keyType1, valueType1, nullable1),
+          t2 @ MapType(keyType2, valueType2, nullable2)) if t1.sameType(t2) =>
         val keyType = widerTypeFunc.apply(keyType1, keyType2)
         val valueType = widerTypeFunc.apply(valueType1, valueType2)
 
@@ -184,7 +186,7 @@ object TypeCoercion {
           None
         }
 
-      case (StructType(fields1), StructType(fields2)) =>
+      case (t1 @ StructType(fields1), t2 @ StructType(fields2)) if t1.sameType(t2) =>
         val fieldTypes = fields1.zip(fields2).map { case (f1, f2) =>
           widerTypeFunc(f1.dataType, f2.dataType)
         }
