@@ -148,7 +148,8 @@ object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case InsertIntoTable(r: HiveTableRelation, partSpec, query, overwrite, ifPartitionNotExists)
         if DDLUtils.isHiveTable(r.tableMeta) =>
-      InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite, ifPartitionNotExists)
+      InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
+        ifPartitionNotExists, query.output)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc)
@@ -163,7 +164,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
 
-      InsertIntoHiveDirCommand(isLocal, storage, child, overwrite)
+      InsertIntoHiveDirCommand(isLocal, storage, child, overwrite, child.output)
   }
 }
 
