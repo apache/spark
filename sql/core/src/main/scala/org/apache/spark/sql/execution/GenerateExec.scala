@@ -47,13 +47,7 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * terminate().
  *
  * @param generator the generator expression
- * @param requiredChildOutput this paramter starts as Nil and gets filled by the Optimizer.
- *                            It's used as an optimization for omitting data generation that will
- *                            be discarded next by a projection.
- *                            A common use case is when we explode(array(..)) and are interested
- *                            only in the exploded data and not in the original array. before this
- *                            optimization the array got duplicated for each of its elements,
- *                            causing O(n^^2) memory consumption. (see [SPARK-21657])
+ * @param requiredChildOutput required attributes from child's output
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
  * @param generatorOutput the qualified output attributes of the generator of this node, which
@@ -87,7 +81,7 @@ case class GenerateExec(
       val rows = if (requiredChildOutput.nonEmpty) {
 
         val pruneChildForResult: InternalRow => InternalRow =
-          if ((child.outputSet -- requiredChildOutput).isEmpty) {
+          if (child.outputSet == AttributeSet(requiredChildOutput)) {
             identity
           } else {
             UnsafeProjection.create(requiredChildOutput, child.output)
