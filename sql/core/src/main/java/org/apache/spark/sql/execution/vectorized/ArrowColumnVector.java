@@ -330,7 +330,8 @@ public final class ArrowColumnVector extends ColumnVector {
       this.vector = vector;
     }
 
-    final boolean isNullAt(int rowId) {
+    // TODO: should be final after removing ArrayAccessor workaround
+    boolean isNullAt(int rowId) {
       return vector.isNull(rowId);
     }
 
@@ -591,10 +592,13 @@ public final class ArrowColumnVector extends ColumnVector {
     ArrayAccessor(ListVector vector) {
       super(vector);
       this.accessor = vector;
-      // Workaround if vector has all non-null values, see ARROW-1948
-      int valueCount = vector.getValueCount();
-      if (valueCount > 0 && vector.getValidityBuffer().capacity() == 0) {
-        BufferAllocator allocator = vector.getAllocator();
+      applyValidityVectorFix();
+    }
+
+    private void applyValidityVectorFix() {
+      int valueCount = accessor.getValueCount();
+      if (valueCount > 0 && accessor.getValidityBuffer().capacity() == 0) {
+        BufferAllocator allocator = accessor.getAllocator();
         ArrowBuf newBuffer = allocator.buffer(BitVectorHelper.getValidityBufferSize(valueCount));
         int fullBytesCount = valueCount / 8;
         for (int i = 0; i < fullBytesCount; ++i) {
@@ -605,10 +609,16 @@ public final class ArrowColumnVector extends ColumnVector {
           byte bitMask = (byte) (0xFFL >>> ((8 - remainder) & 7));
           newBuffer.setByte(fullBytesCount, bitMask);
         }
-        vector.loadFieldBuffers(new ArrowFieldNode(valueCount, 0),
-          ImmutableList.of(newBuffer, vector.getOffsetBuffer()));
+        accessor.loadFieldBuffers(new ArrowFieldNode(valueCount, 0),
+          ImmutableList.of(newBuffer, accessor.getOffsetBuffer()));
         newBuffer.release();  // loadFieldBuffers will retain a reference count to newBuffer
       }
+    }
+
+    @Override
+    final boolean isNullAt(int rowId) {
+      applyValidityVectorFix();
+      return super.isNullAt(rowId);
     }
 
     @Override
