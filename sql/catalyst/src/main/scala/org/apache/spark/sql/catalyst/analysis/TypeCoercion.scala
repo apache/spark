@@ -21,12 +21,12 @@ import javax.annotation.Nullable
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -114,7 +114,7 @@ object TypeCoercion {
       Some(StructType(fields1.zip(fields2).map { case (f1, f2) =>
         // Since `t1.sameType(t2)` is true, two StructTypes have the same DataType
         // except `name` (in case of `spark.sql.caseSensitive=false`) and `nullable`.
-        // - Different names: use f1.name
+        // - Names differing in case: use f1.name
         // - Different nullabilities: `nullable` is true iff one of them is nullable.
         val dataType = findTightestCommonType(f1.dataType, f2.dataType).get
         StructField(f1.name, dataType, nullable = f1.nullable || f2.nullable)
@@ -169,6 +169,10 @@ object TypeCoercion {
       t2: DataType,
       widerTypeFunc: (DataType, DataType) => Option[DataType]): Option[DataType] = {
     (t1, t2) match {
+      case (_, _) if t1 == t2 => Some(t1)
+      case (NullType, _) => Some(t1)
+      case (_, NullType) => Some(t1)
+
       case (ArrayType(pointType1, nullable1), ArrayType(pointType2, nullable2)) =>
         val dataType = widerTypeFunc.apply(pointType1, pointType2)
 
@@ -186,7 +190,14 @@ object TypeCoercion {
 
       case (StructType(fields1), StructType(fields2)) =>
         val fieldTypes = fields1.zip(fields2).map { case (f1, f2) =>
-          widerTypeFunc(f1.dataType, f2.dataType)
+          // In order to match Case 2 widening of types, we do not require field data types be the
+          // same type, but fields having different names are considered heterogeneous
+          if ((SQLConf.get.caseSensitiveAnalysis && f1.name.equals(f2.name))
+            || f1.name.equalsIgnoreCase(f2.name)) {
+            widerTypeFunc(f1.dataType, f2.dataType)
+          } else {
+            None
+          }
         }
 
         if (fieldTypes.forall(_.nonEmpty)) {

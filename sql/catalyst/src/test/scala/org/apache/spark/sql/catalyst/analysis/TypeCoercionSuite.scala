@@ -519,6 +519,20 @@ class TypeCoercionSuite extends AnalysisTest {
         Seq(StructField("a", ArrayType(StringType, containsNull = false), nullable = false))),
       Some(StructType(
         Seq(StructField("a", ArrayType(StringType, containsNull = true), nullable = true)))))
+    widenTestWithStringPromotion(
+      ArrayType(StructType(Seq(StructField("a", LongType, nullable = true))), containsNull = true),
+      ArrayType(StructType(
+        Seq(StructField("a", StringType, nullable = false))), containsNull = false),
+      Some(ArrayType(StructType(
+        Seq(StructField("a", StringType, nullable = true))), containsNull = true)))
+    widenTestWithStringPromotion(
+      StructType(Seq(StructField("a", ArrayType(LongType)))),
+      StructType(Seq(StructField("b", ArrayType(StringType)))),
+      None)
+    widenTestWithStringPromotion(
+      ArrayType(StructType(Seq(StructField("a", LongType)))),
+      ArrayType(StructType(Seq(StructField("b", StringType)))),
+      None)
 
     // MapType
     widenTestWithStringPromotion(
@@ -539,6 +553,24 @@ class TypeCoercionSuite extends AnalysisTest {
         StringType, StringType, valueContainsNull = false), nullable = false))),
       Some(StructType(Seq(StructField("a", MapType(
         StringType, StringType, valueContainsNull = true), nullable = true)))))
+    widenTestWithStringPromotion(
+      MapType(StringType,
+        StructType(Seq(StructField("a", LongType, nullable = true))),
+        valueContainsNull = true),
+      MapType(StringType,
+        StructType(Seq(StructField("a", StringType, nullable = false))),
+        valueContainsNull = false),
+      Some(MapType(StringType,
+        StructType(Seq(StructField("a", StringType, nullable = true))),
+        valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      StructType(Seq(StructField("a", MapType(StringType, LongType)))),
+      StructType(Seq(StructField("b", MapType(StringType, StringType)))),
+      None)
+    widenTestWithStringPromotion(
+      MapType(StringType, StructType(Seq(StructField("a", LongType)))),
+      MapType(StringType, StructType(Seq(StructField("b", StringType)))),
+      None)
 
     // String promotion
     widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
@@ -566,10 +598,6 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTestWithoutStringPromotion(ArrayType(LongType), ArrayType(StringType), None)
     widenTestWithoutStringPromotion(ArrayType(StringType), ArrayType(TimestampType), None)
     widenTestWithoutStringPromotion(
-      StructType(Seq(StructField("a", ArrayType(LongType)))),
-      StructType(Seq(StructField("a", ArrayType(StringType)))),
-      None)
-    widenTestWithoutStringPromotion(
       MapType(StringType, LongType),
       MapType(StringType, TimestampType),
       None)
@@ -588,6 +616,29 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTestWithoutStringPromotion(
       StructType(Seq(StructField("a", MapType(StringType, LongType)))),
       StructType(Seq(StructField("a", MapType(StringType, StringType)))),
+      None)
+    widenTestWithoutStringPromotion(
+      ArrayType(StructType(Seq(StructField("a", LongType)))),
+      ArrayType(StructType(Seq(StructField("a", StringType)))),
+      None)
+
+    // Although the data types promotion would not fail, tests should still return None due to field
+    // name mismatch
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", MapType(StringType, LongType)))),
+      StructType(Seq(StructField("b", MapType(StringType, LongType)))),
+      None)
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", ArrayType(LongType)))),
+      StructType(Seq(StructField("b", ArrayType(LongType)))),
+      None)
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", MapType(StringType, LongType)))),
+      StructType(Seq(StructField("b", MapType(StringType, LongType)))),
+      None)
+    widenTestWithStringPromotion(
+      ArrayType(StructType(Seq(StructField("a", LongType)))),
+      ArrayType(StructType(Seq(StructField("b", LongType)))),
       None)
   }
 
