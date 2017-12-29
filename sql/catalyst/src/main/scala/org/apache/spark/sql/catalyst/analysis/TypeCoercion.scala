@@ -194,7 +194,7 @@ object TypeCoercion {
           // In order to match Case 2 widening of types, we do not require field data types be the
           // same type, but fields having different names are considered heterogeneous
           if ((SQLConf.get.caseSensitiveAnalysis && f1.name.equals(f2.name))
-            || f1.name.equalsIgnoreCase(f2.name)) {
+            || (!SQLConf.get.caseSensitiveAnalysis && f1.name.equalsIgnoreCase(f2.name))) {
             widerTypeFunc(f1.dataType, f2.dataType)
           } else {
             None
