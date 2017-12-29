@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.datasources.v2.PushDownOperatorsToDataSource
-import org.apache.spark.sql.execution.python.{ExtractGroupAggPandasUDFFromAggregate, ExtractPythonUDFFromAggregate}
+import org.apache.spark.sql.execution.python.ExtractPythonUDFFromAggregate
 
 class SparkOptimizer(
     catalog: SessionCatalog,
@@ -32,8 +32,6 @@ class SparkOptimizer(
   override def batches: Seq[Batch] = (preOptimizationBatches ++ super.batches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
-    // Batch("Extract group aggregate Pandas UDF from Aggregate",
-    //  Once, ExtractGroupAggPandasUDFFromAggregate) :+
     Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
     Batch("Push down operators to data source scan", Once, PushDownOperatorsToDataSource)) ++
     postHocOptimizationBatches :+
