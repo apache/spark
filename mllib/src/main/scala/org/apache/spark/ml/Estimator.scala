@@ -116,7 +116,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
     val counter = new AtomicInteger(0)
     new JIterator[(Integer, M)] {
       def next(): (Integer, M) = {
-        var index: Int = _
+        var index: Int = 0
         do {
           index = counter.get()
           if (index >= numModel) {
