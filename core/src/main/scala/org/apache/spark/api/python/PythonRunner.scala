@@ -48,7 +48,6 @@ private[spark] object PythonEvalType {
     case SQL_PANDAS_GROUP_MAP_UDF => "SQL_PANDAS_GROUP_MAP_UDF"
     case SQL_PANDAS_GROUP_AGG_UDF => "SQL_PANDAS_GROUP_AGG_UDF"
   }
-
 }
 
 /**

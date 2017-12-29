@@ -95,14 +95,15 @@ case class AggregateInPandasExec(
     val input = groupingExpressions.map(_.toAttribute) ++ udfExpressions.map(_.resultAttribute)
 
     inputRDD.mapPartitionsInternal { iter =>
+      val proj = UnsafeProjection.create(allInputs, child.output)
+
       val grouped = if (groupingExpressions.isEmpty) {
-        Iterator((null, iter))
+        // Use an empty unsafe row as a place holder for the grouping key
+        Iterator((new UnsafeRow(), iter))
       } else {
-        val groupedIter = GroupedIterator(iter, groupingExpressions, child.output)
-        val proj = UnsafeProjection.create(allInputs, child.output)
-        groupedIter.map {
-          case (k, groupedRowIter) => (k, groupedRowIter.map(proj))
-        }
+        GroupedIterator(iter, groupingExpressions, child.output)
+      }.map { case (key, rows) =>
+        (key, rows.map(proj))
       }
 
       val context = TaskContext.get()

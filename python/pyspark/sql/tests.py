@@ -577,7 +577,6 @@ class SQLTests(ReusedSQLTestCase):
         my_copy = udf(lambda x: x, IntegerType())
         df = self.spark.range(10).orderBy("id")
         res = df.select(df.id, my_copy(df.id).alias("copy")).limit(1)
-        res.explain(True)
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
     def test_udf_registration_returns_udf(self):
@@ -4365,7 +4364,7 @@ class GroupbyAggTests(ReusedSQLTestCase):
 
         @udf('double')
         def plus_one(v):
-            assert isinstance(v, float)
+            assert isinstance(v, (int, float))
             return v + 1
         return plus_one
 
@@ -4531,10 +4530,18 @@ class GroupbyAggTests(ReusedSQLTestCase):
                      .agg(plus_two(sum(df.v)).alias("plus_two(sum_udf(v))"))
                      .sort('id'))
 
+        result5 = (df.groupby(plus_one(df.id))
+                   .agg(plus_one(sum_udf(plus_one(df.v))))
+                   .sort('plus_one(id)'))
+        expected5 = (df.groupby(plus_one(df.id))
+                     .agg(plus_one(sum(plus_one(df.v))).alias('plus_one(sum_udf(plus_one(v)))'))
+                     .sort('plus_one(id)'))
+
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
         self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
         self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
         self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
+        self.assertPandasEqual(expected5.toPandas(), result5.toPandas())
 
     def test_multiple(self):
         from pyspark.sql.functions import col, lit, sum, mean
@@ -4573,7 +4580,40 @@ class GroupbyAggTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected1, result1)
         self.assertPandasEqual(expected2, result2)
 
-    def test_complex(self):
+    def test_complex_grouping(self):
+        from pyspark.sql.functions import lit, sum
+
+        df = self.data
+        sum_udf = self.sum_udf
+        plus_one = self.plus_one
+        plus_two = self.plus_two
+
+        result1 = df.groupby(df.id + 1).agg(sum_udf(df.v))
+        expected1 = df.groupby(df.id + 1).agg(sum(df.v).alias('sum_udf(v)'))
+
+        result2 = df.groupby().agg(sum_udf(df.v))
+        expected2 = df.groupby().agg(sum(df.v).alias('sum_udf(v)'))
+
+        result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v))
+        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v).alias('sum_udf(v)'))
+
+        result4 = df.groupby(plus_one(df.id)).agg(sum_udf(df.v))
+        expected4 = df.groupby(plus_one(df.id)).agg(sum(df.v).alias('sum_udf(v)'))
+
+        result5 = df.groupby(plus_two(df.id)).agg(sum_udf(df.v))
+        expected5 = df.groupby(plus_two(df.id)).agg(sum(df.v).alias('sum_udf(v)'))
+
+        result6 = df.groupby(df.id, plus_one(df.id)).agg(sum_udf(df.v))
+        expected6 = df.groupby(df.id, plus_one(df.id)).agg(sum(df.v).alias('sum_udf(v)'))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+        self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
+        self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
+        self.assertPandasEqual(expected5.toPandas(), result5.toPandas())
+        self.assertPandasEqual(expected6.toPandas(), result6.toPandas())
+
+    def test_complex_expression(self):
         from pyspark.sql.functions import col, sum
 
         df = self.data
@@ -4599,7 +4639,7 @@ class GroupbyAggTests(ReusedSQLTestCase):
                           sum(col('v1') + 3).alias('sum_udf((v1 + 3))'),
                           (sum(col('v2')) + 5).alias('(sum_udf(v2) + 5)'),
                           plus_one(sum(col('v1'))).alias('plus_one(sum_udf(v1))'),
-                          sum(col('v2') + 1).alias('sum_udf(plus_one(v2))'))
+                          sum(plus_one(col('v2'))).alias('sum_udf(plus_one(v2))'))
                      .sort('id')
                      .toPandas())
 
@@ -4621,7 +4661,7 @@ class GroupbyAggTests(ReusedSQLTestCase):
                           sum(col('v1') + 3).alias('sum_udf((v1 + 3))'),
                           (sum(col('v2')) + 5).alias('(sum_udf(v2) + 5)'),
                           plus_two(sum(col('v1'))).alias('plus_two(sum_udf(v1))'),
-                          sum(col('v2') + 2).alias('sum_udf(plus_two(v2))'))
+                          sum(plus_two(col('v2'))).alias('sum_udf(plus_two(v2))'))
                      .sort('id')
                      .toPandas())
 

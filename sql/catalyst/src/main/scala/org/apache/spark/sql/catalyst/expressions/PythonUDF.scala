@@ -17,9 +17,27 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.api.python.PythonFunction
+import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types.DataType
+
+/**
+ * Helper functions for PythonUDF
+ */
+object PythonUDF {
+  def isScalarPythonUDF(e: Expression): Boolean = {
+    e.isInstanceOf[PythonUDF] &&
+      Set(
+        PythonEvalType.SQL_BATCHED_UDF,
+        PythonEvalType.SQL_PANDAS_SCALAR_UDF
+      ).contains(e.asInstanceOf[PythonUDF].evalType)
+  }
+
+  def isGroupAggPandasUDF(e: Expression): Boolean = {
+    e.isInstanceOf[PythonUDF] &&
+      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF
+  }
+}
 
 /**
  * A serialized version of a Python lambda function.

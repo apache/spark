@@ -27,30 +27,24 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 
-
 /**
  * Extracts all the Python UDFs in logical aggregate, which depends on aggregate expression or
  * grouping key, evaluate them after aggregate.
  */
 object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 
-  private def isPythonUDF(e: Expression): Boolean = {
-    e.isInstanceOf[PythonUDF] &&
-      Set(PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_PANDAS_SCALAR_UDF
-      ).contains(e.asInstanceOf[PythonUDF].evalType)
-  }
-
   /**
    * Returns whether the expression could only be evaluated within aggregate.
    */
   private def belongAggregate(e: Expression, agg: Aggregate): Boolean = {
     e.isInstanceOf[AggregateExpression] ||
+      PythonUDF.isGroupAggPandasUDF(e) ||
       agg.groupingExpressions.exists(_.semanticEquals(e))
   }
 
   private def hasPythonUdfOverAggregate(expr: Expression, agg: Aggregate): Boolean = {
     expr.find {
-      e => isPythonUDF(e) && e.find(belongAggregate(_, agg)).isDefined
+      e => PythonUDF.isScalarPythonUDF(e) && e.find(belongAggregate(_, agg)).isDefined
     }.isDefined
   }
 
@@ -99,14 +93,8 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  */
 object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
-  private def isPythonUDF(e: Expression): Boolean = {
-    e.isInstanceOf[PythonUDF] &&
-    Set(PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_PANDAS_SCALAR_UDF
-    ).contains(e.asInstanceOf[PythonUDF].evalType)
-  }
-
   private def hasPythonUDF(e: Expression): Boolean = {
-    e.find(isPythonUDF).isDefined
+    e.find(PythonUDF.isScalarPythonUDF).isDefined
   }
 
   private def canEvaluateInPython(e: PythonUDF): Boolean = {
@@ -119,7 +107,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   }
 
   private def collectEvaluatableUDF(expr: Expression): Seq[PythonUDF] = expr match {
-    case udf: PythonUDF if isPythonUDF(udf) && canEvaluateInPython(udf) => Seq(udf)
+    case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf) => Seq(udf)
     case e => e.children.flatMap(collectEvaluatableUDF)
   }
 
@@ -162,10 +150,8 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           udf.references.subsetOf(child.outputSet)
         }
         if (validUdfs.nonEmpty) {
-          require(validUdfs.forall(udf =>
-            udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
-            udf.evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF
-          ), "Can only extract scalar vectorized udf or sql batch udf")
+          require(validUdfs.forall(PythonUDF.isScalarPythonUDF),
+          "Can only extract scalar vectorized udf or sql batch udf")
 
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
@@ -236,13 +222,8 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
  */
 object ExtractGroupAggPandasUDFFromAggregate extends Rule[LogicalPlan] {
 
-  private def isPandasGroupAggUdf(expr: Expression): Boolean = {
-    expr.isInstanceOf[PythonUDF] &&
-      expr.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF
-  }
-
   private def hasPandasGroupAggUdf(expr: Expression): Boolean = {
-    expr.find(isPandasGroupAggUdf).isDefined
+    expr.find(PythonUDF.isGroupAggPandasUDF).isDefined
   }
 
   private def extract(agg: Aggregate): LogicalPlan = {
@@ -252,7 +233,7 @@ object ExtractGroupAggPandasUDFFromAggregate extends Rule[LogicalPlan] {
     agg.aggregateExpressions.foreach { expr =>
       if (hasPandasGroupAggUdf(expr)) {
         val newE = expr transformDown {
-          case e: PythonUDF if isPandasGroupAggUdf(e) =>
+          case e: PythonUDF if PythonUDF.isGroupAggPandasUDF(e) =>
             // Wrap the UDF with alias to make it a NamedExpression
             // The alias is intermediate, its attribute name doesn't affect the final result
             val alias = Alias(e, "agg")(exprId = e.resultId)
