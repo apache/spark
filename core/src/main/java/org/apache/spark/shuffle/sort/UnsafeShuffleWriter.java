@@ -440,6 +440,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final long[] spillInputChannelPositions = new long[spills.length];
     FileChannel mergedFileOutputChannel = null;
 
+    final long writeStartTime = System.nanoTime();
     boolean threwException = true;
     try {
       for (int i = 0; i < spills.length; i++) {
@@ -454,14 +455,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         for (int i = 0; i < spills.length; i++) {
           final long partitionLengthInSpill = spills[i].partitionLengths[partition];
           final FileChannel spillInputChannel = spillInputChannels[i];
-          final long writeStartTime = System.nanoTime();
           Utils.copyFileStreamNIO(
             spillInputChannel,
             mergedFileOutputChannel,
             spillInputChannelPositions[i],
             partitionLengthInSpill);
           spillInputChannelPositions[i] += partitionLengthInSpill;
-          writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
           bytesWrittenToMergedFile += partitionLengthInSpill;
           partitionLengths[partition] += partitionLengthInSpill;
         }
@@ -488,6 +487,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         Closeables.close(spillInputChannels[i], threwException);
       }
       Closeables.close(mergedFileOutputChannel, threwException);
+      writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
     }
     return partitionLengths;
   }

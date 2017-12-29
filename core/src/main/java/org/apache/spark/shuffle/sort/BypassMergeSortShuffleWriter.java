@@ -188,8 +188,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
     // This file needs to opened in append mode in order to work around a Linux kernel bug that
     // affects transferTo; see SPARK-3948 for more details.
-    final FileChannel out = FileChannel.open(outputFile.toPath(), WRITE, APPEND, CREATE);
     final long writeStartTime = System.nanoTime();
+    final FileChannel out = FileChannel.open(outputFile.toPath(), WRITE, APPEND, CREATE);
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
