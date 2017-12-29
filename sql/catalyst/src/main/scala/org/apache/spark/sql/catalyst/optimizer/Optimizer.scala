@@ -803,7 +803,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
       val (candidates, nonDeterministic) =
-        partitionByDeterminism(splitConjunctivePredicates(condition))
+        splitConjunctivePredicates(condition).partition(_.deterministic)
 
       val (pushDown, rest) = candidates.partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
@@ -833,7 +833,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
 
       val (candidates, nonDeterministic) =
-        partitionByDeterminism(splitConjunctivePredicates(condition))
+        splitConjunctivePredicates(condition).partition(_.deterministic)
 
       val (pushDown, rest) = candidates.partition { cond =>
         cond.references.subsetOf(partitionAttrs)
@@ -851,7 +851,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val (pushDown, stayUp) = partitionByDeterminism(splitConjunctivePredicates(condition))
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(_.deterministic)
 
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
@@ -875,14 +875,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     case filter @ Filter(condition, watermark: EventTimeWatermark) =>
-      val (pushDown, stayUp) = {
-        val pushDownCondition: Expression => Boolean =
-          p => p.deterministic && !p.references.contains(watermark.eventTime)
-        if (SQLConf.get.outOfOrderPredicateEvaluationEnabled) {
-          splitConjunctivePredicates(condition).span(pushDownCondition)
-        } else {
-          splitConjunctivePredicates(condition).partition(pushDownCondition)
-        }
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { p =>
+        p.deterministic && !p.references.contains(watermark.eventTime)
       }
 
       if (pushDown.nonEmpty) {
@@ -925,7 +919,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
     val (candidates, nonDeterministic) =
-      partitionByDeterminism(splitConjunctivePredicates(filter.condition))
+      splitConjunctivePredicates(filter.condition).partition(_.deterministic)
 
     val (pushDown, rest) = candidates.partition { cond =>
       cond.references.subsetOf(grandchild.outputSet)
@@ -980,7 +974,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, nonDeterministic) = partitionByDeterminism(condition)
+    val (pushDownCandidates, nonDeterministic) = condition.partition(_.deterministic)
     val (leftEvaluateCondition, rest) =
       pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =

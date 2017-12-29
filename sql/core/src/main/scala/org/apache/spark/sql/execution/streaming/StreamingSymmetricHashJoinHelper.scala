@@ -110,7 +110,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           // Span rather than partition, because nondeterministic expressions don't commute
           // across AND.
           val (deterministicConjuncts, nonDeterministicConjuncts) =
-            partitionByDeterminism(splitConjunctivePredicates(condition.get))
+            splitConjunctivePredicates(condition.get).partition(_.deterministic)
 
           val (leftConjuncts, nonLeftConjuncts) = deterministicConjuncts.partition { cond =>
             cond.references.subsetOf(left.outputSet)

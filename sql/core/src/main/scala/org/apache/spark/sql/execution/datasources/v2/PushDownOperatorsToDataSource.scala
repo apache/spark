@@ -41,7 +41,7 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] with PredicateHel
     val filterPushed = plan transformUp {
       case FilterAndProject(fields, condition, r @ DataSourceV2Relation(_, reader)) =>
         val (candidates, nonDeterministic) =
-          partitionByDeterminism(splitConjunctivePredicates(condition))
+          splitConjunctivePredicates(condition).partition(_.deterministic)
 
         val stayUpFilters: Seq[Expression] = reader match {
           case r: SupportsPushDownCatalystFilters =>

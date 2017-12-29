@@ -100,27 +100,12 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
         && rightColC > rightColD
         && leftColA === rightColC
         && lit(1) === lit(1)).expr
+    val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    Seq(true, false).foreach { outOfOrderPredicateEvaluationEnabled =>
-      withSQLConf(SQLConf.OUT_OF_ORDER_PREDICATE_EVALUATION_ENABLED.key ->
-        outOfOrderPredicateEvaluationEnabled.toString) {
-        if (outOfOrderPredicateEvaluationEnabled) {
-          val split = JoinConditionSplitPredicates(Some(predicate), left, right)
-
-          assert(split.leftSideOnly.contains((leftColA > leftColB && lit(1) === lit(1)).expr))
-          assert(split.rightSideOnly.contains((rightColC > rightColD && lit(1) === lit(1)).expr))
-          assert(split.bothSides.contains((leftColA === rightColC && rand(9) > lit(0)).expr))
-          assert(split.full.contains(predicate))
-        } else {
-          val split = JoinConditionSplitPredicates(Some(predicate), left, right)
-
-          assert(split.leftSideOnly.isEmpty)
-          assert(split.rightSideOnly.isEmpty)
-          assert(split.bothSides.contains(predicate))
-          assert(split.full.contains(predicate))
-        }
-      }
-    }
+    assert(split.leftSideOnly.contains((leftColA > leftColB && lit(1) === lit(1)).expr))
+    assert(split.rightSideOnly.contains((rightColC > rightColD && lit(1) === lit(1)).expr))
+    assert(split.bothSides.contains((leftColA === rightColC && rand(9) > lit(0)).expr))
+    assert(split.full.contains(predicate))
   }
 
 

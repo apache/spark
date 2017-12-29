@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -829,26 +828,15 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = Union(Seq(testRelation, testRelation2))
       .where('a === 2L && 'b + Rand(10).as("rnd") === 3 && 'c > 5L)
 
-    Seq(true, false).foreach { outOfOrderPredicateEvaluationEnabled =>
-      val correctAnswer =
-        if (outOfOrderPredicateEvaluationEnabled) {
-          Union(Seq(
-            testRelation.where('a === 2L && 'c > 5L),
-            testRelation2.where('d === 2L && 'f > 5L)))
-            .where('b + Rand(10).as("rnd") === 3)
-        } else {
-          Union(Seq(
-            testRelation.where('a === 2L),
-            testRelation2.where('d === 2L)))
-            .where('b + Rand(10).as("rnd") === 3 && 'c > 5L)
-        }
+    val optimized = Optimize.execute(originalQuery.analyze)
 
-      withSQLConf(SQLConf.OUT_OF_ORDER_PREDICATE_EVALUATION_ENABLED.key ->
-          outOfOrderPredicateEvaluationEnabled.toString) {
-        val optimized = Optimize.execute(originalQuery.analyze)
-        comparePlans(optimized, correctAnswer.analyze)
-      }
-    }
+    val correctAnswer = Union(Seq(
+      testRelation.where('a === 2L && 'c > 5L),
+      testRelation2.where('d === 2L && 'f > 5L)))
+      .where('b + Rand(10).as("rnd") === 3)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
   test("expand") {
@@ -1146,41 +1134,30 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    // Verify that all conditions preceding the first non-deterministic condition are pushed down
+    // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
     val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
       "x.a".attr === Rand(10) && "y.b".attr === 5))
+    val correctAnswer =
+      x.where("x.a".attr === 5).join(y.where("y.a".attr === 5 && "y.b".attr === 5),
+        condition = Some("x.a".attr === Rand(10)))
 
     // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
     // TODO support nondeterministic expressions in join condition.
-
-    Seq(true, false).foreach { outOfOrderPredicateEvaluationEnabled =>
-      val correctAnswer = if (outOfOrderPredicateEvaluationEnabled) {
-        x.where("x.a".attr === 5).join(y.where("y.a".attr === 5 && "y.b".attr === 5),
-          condition = Some("x.a".attr === Rand(10)))
-      } else {
-        x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
-          condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
-      }
-
-      withSQLConf(SQLConf.OUT_OF_ORDER_PREDICATE_EVALUATION_ENABLED.key ->
-          outOfOrderPredicateEvaluationEnabled.toString) {
-        comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
-          checkAnalysis = false)
-      }
-    }
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
+      checkAnalysis = false)
   }
 
-  test("watermark pushdown: no pushdown on watermark attribute") {
+  test("watermark pushdown: no pushdown on watermark attribute #1") {
     val interval = new CalendarInterval(2, 2000L)
 
-    // Verify that all conditions preceding the first watermark touching condition are pushed down
+    // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
     val originalQuery = EventTimeWatermark('b, interval, testRelation)
       .where('a === 5 && 'b === 10 && 'c === 5)
     val correctAnswer = EventTimeWatermark(
-      'b, interval, testRelation.where('a === 5))
-      .where('b === 10 && 'c === 5)
+      'b, interval, testRelation.where('a === 5 && 'c === 5))
+      .where('b === 10)
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
@@ -1189,7 +1166,7 @@ class FilterPushdownSuite extends PlanTest {
   test("watermark pushdown: no pushdown for nondeterministic filter") {
     val interval = new CalendarInterval(2, 2000L)
 
-    // Verify that all conditions preceding the first watermark touching condition are pushed down
+    // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
     val originalQuery = EventTimeWatermark('c, interval, testRelation)
       .where('a === 5 && 'b === Rand(10) && 'c === 5)
@@ -1204,7 +1181,7 @@ class FilterPushdownSuite extends PlanTest {
   test("watermark pushdown: full pushdown") {
     val interval = new CalendarInterval(2, 2000L)
 
-    // Verify that all conditions preceding the first watermark touching condition are pushed down
+    // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
     val originalQuery = EventTimeWatermark('c, interval, testRelation)
       .where('a === 5 && 'b === 10)
@@ -1215,15 +1192,15 @@ class FilterPushdownSuite extends PlanTest {
       checkAnalysis = false)
   }
 
-  test("watermark pushdown: empty pushdown") {
+  test("watermark pushdown: no pushdown on watermark attribute #2") {
     val interval = new CalendarInterval(2, 2000L)
 
-    // Verify that all conditions preceding the first watermark touching condition are pushed down
-    // by the optimizer and others are not.
     val originalQuery = EventTimeWatermark('a, interval, testRelation)
       .where('a === 5 && 'b === 10)
+    val correctAnswer = EventTimeWatermark(
+      'a, interval, testRelation.where('b === 10)).where('a === 5)
 
-    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze,
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
   }
 }

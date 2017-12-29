@@ -768,13 +768,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val OUT_OF_ORDER_PREDICATE_EVALUATION_ENABLED =
-    buildConf("spark.sql.evaluatePredicatesOutOfOrder.enabled")
-      .doc("When true, the predicates in the join/filter conditions are executed out of order. " +
-        "Currently, even if it is set to true, we do not enforce the in-order evaluation.")
-      .internal()
-      .booleanConf
-      .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -1289,9 +1282,6 @@ class SQLConf extends Serializable with Logging {
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
-
-  def outOfOrderPredicateEvaluationEnabled: Boolean =
-    getConf(OUT_OF_ORDER_PREDICATE_EVALUATION_ENABLED)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
