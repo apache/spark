@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.json
 import java.io.ByteArrayOutputStream
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import com.fasterxml.jackson.core._
@@ -372,13 +373,18 @@ class JacksonParser private (
       record: T,
       createParser: (JsonFactory, T) => JsonParser,
       recordLiteral: T => UTF8String): Seq[InternalRow] = {
-    parseWithArrayOfPrimitiveSupport(record, createParser, recordLiteral) match {
-      case rows: Seq[InternalRow] => rows
-      case _: Seq[_] => throw BadRecordException(() => recordLiteral(record), () => None,
+    val rows = parseWithArrayOfPrimitiveSupport(record, createParser, recordLiteral)
+    if (!isSeqOfInternalRow(rows)) {
+      throw BadRecordException(() => recordLiteral(record), () => None,
         new RuntimeException("`parse` is only used to parse the JSON input to a set of " +
-          "`InternalRow`s. It can parse JSON obejcts and array of JSON objects. Use " +
+          "`InternalRow`s. It can parse JSON objects and array of JSON objects. Use " +
           "`parseWithArrayOfPrimitiveSupport` when parsing array of primitive data is needed."))
     }
+    rows.asInstanceOf[Seq[InternalRow]]
+  }
+
+  def isSeqOfInternalRow[T](rows: T)(implicit tag: TypeTag[T]): Boolean = {
+    tag.tpe <:< typeTag[Seq[InternalRow]].tpe
   }
 
   /**
