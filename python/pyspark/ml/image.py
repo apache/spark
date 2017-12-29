@@ -25,6 +25,8 @@
 """
 
 import numpy as np
+from collections import namedtuple
+
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
 from pyspark.sql import DataFrame, SparkSession
@@ -40,8 +42,23 @@ class _ImageSchema(object):
     def __init__(self):
         self._imageSchema = None
         self._ocvTypes = None
+        self._ocvTypesByName = None
+        self._ocvTypesByMode = None
         self._imageFields = None
         self._undefinedImageType = None
+
+    _OcvType = namedtuple("OcvType", ["name", "mode", "nChannels", "dataType", "nptype"])
+
+    _ocvToNumpyMap = {
+        "N/A": "N/A",
+        "8U": np.dtype("uint8"),
+        "8S": np.dtype("int8"),
+        "16U": np.dtype('uint16'),
+        "16S": np.dtype('int16'),
+        "32S": np.dtype('int32'),
+        "32F": np.dtype('float32'),
+        "64F": np.dtype('float64')}
+    _numpyToOcvMap = {x[1]: x[0] for x in _ocvToNumpyMap.items()}
 
     @property
     def imageSchema(self):
@@ -55,7 +72,7 @@ class _ImageSchema(object):
         """
 
         if self._imageSchema is None:
-            ctx = SparkContext._active_spark_context
+            ctx = SparkContext.getOrCreate()
             jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageSchema()
             self._imageSchema = _parse_datatype_json_string(jschema.json())
         return self._imageSchema
@@ -71,9 +88,30 @@ class _ImageSchema(object):
         """
 
         if self._ocvTypes is None:
-            ctx = SparkContext._active_spark_context
-            self._ocvTypes = dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema.javaOcvTypes())
-        return self._ocvTypes
+            ctx = SparkContext.getOrCreate()
+            ocvTypeList = ctx._jvm.org.apache.spark.ml.image.ImageSchema.javaOcvTypes()
+            self._ocvTypes = [self._OcvType(name=x.name(),
+                                            mode=x.mode(),
+                                            nChannels=x.nChannels(),
+                                            dataType=x.dataType(),
+                                            nptype=self._ocvToNumpyMap[x.dataType()])
+                              for x in ocvTypeList]
+        return self._ocvTypes[:]
+
+    def ocvTypeByName(self, name):
+        if self._ocvTypesByName is None:
+            self._ocvTypesByName = {x.name: x for x in self.ocvTypes}
+        if name not in self._ocvTypesByName:
+            raise ValueError(
+                "Can not find matching OpenCvFormat for type = '%s'; supported formats are = %s" %
+                (name, str(
+                    self._ocvTypesByName.keys())))
+        return self._ocvTypesByName[name]
+
+    def ocvTypeByMode(self, mode):
+        if self._ocvTypesByMode is None:
+            self._ocvTypesByMode = {x.mode: x for x in self.ocvTypes}
+        return self._ocvTypesByMode[mode]
 
     @property
     def imageFields(self):
@@ -86,7 +124,7 @@ class _ImageSchema(object):
         """
 
         if self._imageFields is None:
-            ctx = SparkContext._active_spark_context
+            ctx = SparkContext.getOrCreate()
             self._imageFields = list(ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageFields())
         return self._imageFields
 
@@ -99,7 +137,7 @@ class _ImageSchema(object):
         """
 
         if self._undefinedImageType is None:
-            ctx = SparkContext._active_spark_context
+            ctx = SparkContext.getOrCreate()
             self._undefinedImageType = \
                 ctx._jvm.org.apache.spark.ml.image.ImageSchema.undefinedImageType()
         return self._undefinedImageType
@@ -128,11 +166,17 @@ class _ImageSchema(object):
         height = image.height
         width = image.width
         nChannels = image.nChannels
+        ocvType = self.ocvTypeByMode(image.mode)
+        if nChannels != ocvType.nChannels:
+            raise ValueError(
+                "Image has %d channels but OcvType '%s' expects %d channels." %
+                (nChannels, ocvType.name, ocvType.nChannels))
+        itemSz = ocvType.nptype.itemsize
         return np.ndarray(
             shape=(height, width, nChannels),
-            dtype=np.uint8,
+            dtype=ocvType.nptype,
             buffer=image.data,
-            strides=(width * nChannels, nChannels, 1))
+            strides=(width * nChannels * itemSz, nChannels * itemSz, itemSz))
 
     def toImage(self, array, origin=""):
         """
@@ -150,29 +194,27 @@ class _ImageSchema(object):
                 "array argument should be numpy.ndarray; however, it got [%s]." % type(array))
 
         if array.ndim != 3:
-            raise ValueError("Invalid array shape")
+            raise ValueError("Invalid array shape %s" % str(array.shape))
 
         height, width, nChannels = array.shape
-        ocvTypes = ImageSchema.ocvTypes
-        if nChannels == 1:
-            mode = ocvTypes["CV_8UC1"]
-        elif nChannels == 3:
-            mode = ocvTypes["CV_8UC3"]
-        elif nChannels == 4:
-            mode = ocvTypes["CV_8UC4"]
-        else:
-            raise ValueError("Invalid number of channels")
+        dtype = array.dtype
+        if dtype not in self._numpyToOcvMap:
+            raise ValueError(
+                "Unsupported array data type '%s', currently only supported formats are %s" %
+                (str(array.dtype), str(self._numpyToOcvMap.keys())))
+        ocvName = "CV_%sC%d" % (self._numpyToOcvMap[dtype], nChannels)
+        ocvType = self.ocvTypeByName(ocvName)
 
         # Running `bytearray(numpy.array([1]))` fails in specific Python versions
         # with a specific Numpy version, for example in Python 3.6.0 and NumPy 1.13.3.
         # Here, it avoids it by converting it to bytes.
-        data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+        data = bytearray(array.tobytes())
 
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order
         # when the new DataFrame is created by UDF
         return _create_row(self.imageFields,
-                           [origin, height, width, nChannels, mode, data])
+                           [origin, height, width, nChannels, ocvType.mode, data])
 
     def readImages(self, path, recursive=False, numPartitions=-1,
                    dropImageFailures=False, sampleRatio=1.0, seed=0):
@@ -201,8 +243,9 @@ class _ImageSchema(object):
         .. versionadded:: 2.3.0
         """
 
-        spark = SparkSession.builder.getOrCreate()
-        image_schema = spark._jvm.org.apache.spark.ml.image.ImageSchema
+        ctx = SparkContext.getOrCreate()
+        spark = SparkSession(ctx)
+        image_schema = ctx._jvm.org.apache.spark.ml.image.ImageSchema
         jsession = spark._jsparkSession
         jresult = image_schema.readImages(path, jsession, recursive, numPartitions,
                                           dropImageFailures, float(sampleRatio), seed)

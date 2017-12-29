@@ -37,20 +37,51 @@ import org.apache.spark.sql.types._
 @Since("2.3.0")
 object ImageSchema {
 
-  val undefinedImageType = "Undefined"
+  /**
+   * OpenCv type representation
+   * @param mode ordinal for the type
+   * @param dataType open cv data type
+   * @param nChannels number of color channels
+   */
+  case class OpenCvType(mode: Int, dataType: String, nChannels: Int) {
+    def name: String = "CV_" + dataType + "C" + nChannels
+    override def toString: String = "OpenCvType(mode = " + mode + ", name = " + name + ")"
+  }
+
+  object OpenCvType {
+    def get(name: String): OpenCvType = {
+      ocvTypes.find(x => x.name == name).getOrElse(
+        throw new IllegalArgumentException("Unknown open cv type " + name))
+    }
+    def get(mode: Int): OpenCvType = {
+      ocvTypes.find(x => x.mode == mode).getOrElse(
+        throw new IllegalArgumentException("Unknown open cv mode " + mode))
+    }
+    val undefinedType = OpenCvType(-1, "N/A", -1)
+  }
 
   /**
-   * (Scala-specific) OpenCV type mapping supported
+   * A Mapping of Type to Numbers in OpenCV
+   *
+   *        C1 C2  C3  C4
+   * CV_8U   0  8  16  24
+   * CV_8S   1  9  17  25
+   * CV_16U  2 10  18  26
+   * CV_16S  3 11  19  27
+   * CV_32S  4 12  20  28
+   * CV_32F  5 13  21  29
+   * CV_64F  6 14  22  30
    */
-  val ocvTypes: Map[String, Int] = Map(
-    undefinedImageType -> -1,
-    "CV_8U" -> 0, "CV_8UC1" -> 0, "CV_8UC3" -> 16, "CV_8UC4" -> 24
-  )
+  val ocvTypes = {
+    val types =
+      for (nc <- Array(1, 2, 3, 4);
+           dt <- Array("8U", "8S", "16U", "16S", "32S", "32F", "64F"))
+        yield (dt, nc)
+    val ordinals = for (i <- 0 to 3; j <- 0 to 6) yield ( i * 8 + j)
+    OpenCvType.undefinedType +: (ordinals zip types).map(x => OpenCvType(x._1, x._2._1, x._2._2))
+  }
 
-  /**
-   * (Java-specific) OpenCV type mapping supported
-   */
-  val javaOcvTypes: java.util.Map[String, Int] = ocvTypes.asJava
+  val javaOcvTypes = ocvTypes.asJava
 
   /**
    * Schema for the image column: Row(String, Int, Int, Int, Int, Array[Byte])
@@ -121,7 +152,7 @@ object ImageSchema {
    * @return Row with the default values
    */
   private[spark] def invalidImageRow(origin: String): Row =
-    Row(Row(origin, -1, -1, -1, ocvTypes(undefinedImageType), Array.ofDim[Byte](0)))
+    Row(Row(origin, -1, -1, -1, OpenCvType.undefinedType.mode, Array.ofDim[Byte](0)))
 
   /**
    * Convert the compressed image (jpeg, png, etc.) into OpenCV
@@ -143,12 +174,12 @@ object ImageSchema {
 
       val height = img.getHeight
       val width = img.getWidth
-      val (nChannels, mode) = if (isGray) {
-        (1, ocvTypes("CV_8UC1"))
+      val (nChannels, mode: Int) = if (isGray) {
+        (1, OpenCvType.get("CV_8UC1").mode)
       } else if (hasAlpha) {
-        (4, ocvTypes("CV_8UC4"))
+        (4, OpenCvType.get("CV_8UC4").mode)
       } else {
-        (3, ocvTypes("CV_8UC3"))
+        (3, OpenCvType.get("CV_8UC3").mode)
       }
 
       val imageSize = height * width * nChannels
