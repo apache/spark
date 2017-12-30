@@ -18,13 +18,12 @@
 package org.apache.spark.network.buffer;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
 
 import com.google.common.base.Objects;
 import com.google.common.io.ByteStreams;
@@ -94,9 +93,9 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
 
   @Override
   public InputStream createInputStream() throws IOException {
-    InputStream is = null;
+    FileInputStream is = null;
     try {
-      is = Files.newInputStream(file.toPath());
+      is = new FileInputStream(file);
       ByteStreams.skipFully(is, offset);
       return new LimitedInputStream(is, length);
     } catch (IOException e) {
@@ -133,7 +132,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     if (conf.lazyFileDescriptor()) {
       return new DefaultFileRegion(file, offset, length);
     } else {
-      FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
+      FileChannel fileChannel = new FileInputStream(file).getChannel();
       return new DefaultFileRegion(fileChannel, offset, length);
     }
   }
