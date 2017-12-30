@@ -35,6 +35,7 @@ import org.apache.spark.sql.types.StructType
  * VectorAssembler needs size information for its input columns and cannot be used on streaming
  * dataframes without this metadata.
  *
+ * Note: VectorSizeHint modifies `inputCol` to include size metadata and does not have an outputCol.
  */
 @Experimental
 @Since("2.3.0")
