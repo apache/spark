@@ -87,8 +87,6 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     val pathExists = fs.exists(qualifiedOutputPath)
-    // If we are appending data to an existing dir.
-    val isAppend = pathExists && (mode == SaveMode.Append)
 
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
@@ -136,6 +134,8 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
+      val newOptions = catalogTable.map(_.properties).getOrElse(Map.empty) ++ options
+
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
@@ -148,8 +148,7 @@ case class InsertIntoHadoopFsRelationCommand(
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-          options = options)
-
+          options = newOptions)
 
       // update metastore partition metadata
       refreshUpdatedPartitions(updatedPartitionPaths)
