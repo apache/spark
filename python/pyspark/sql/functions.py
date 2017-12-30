@@ -1374,7 +1374,8 @@ del _name, _doc
 @ignore_unicode_prefix
 def concat(*cols):
     """
-    Concatenates multiple input string columns together into a single string column.
+    Concatenates multiple input columns together into a single column.
+    If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
 
     >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
     >>> df.select(concat(df.s, df.d).alias('s')).collect()
