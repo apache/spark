@@ -504,7 +504,7 @@ class FilterPushdownSuite extends PlanTest {
     }
     val optimized = Optimize.execute(originalQuery.analyze)
 
-    comparePlans(analysis.EliminateSubqueryAliases(originalQuery.analyze), optimized)
+    comparePlans(originalQuery.analyze, optimized)
   }
 
   test("joins: conjunctive predicates") {
@@ -523,7 +523,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: conjunctive predicates #2") {
@@ -542,7 +542,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: conjunctive predicates #3") {
@@ -566,7 +566,7 @@ class FilterPushdownSuite extends PlanTest {
           condition = Some("z.a".attr === "x.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: push down where clause into left anti join") {
@@ -581,7 +581,7 @@ class FilterPushdownSuite extends PlanTest {
       x.where("x.a".attr > 10)
         .join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
         .analyze
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: only push down join conditions to the right of a left anti join") {
@@ -598,7 +598,7 @@ class FilterPushdownSuite extends PlanTest {
         LeftAnti,
         Some("x.b".attr === "y.b".attr && "x.a".attr > 10))
         .analyze
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: only push down join conditions to the right of an existence join") {
@@ -616,7 +616,7 @@ class FilterPushdownSuite extends PlanTest {
         ExistenceJoin(fillerVal),
         Some("x.a".attr > 1))
       .analyze
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
