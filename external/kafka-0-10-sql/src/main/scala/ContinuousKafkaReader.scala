@@ -97,7 +97,8 @@ class ContinuousKafkaReader(
 
   // Initialized when creating read tasks. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
-  private var knownPartitions: Set[TopicPartition] = _
+  // Exposed outside this object only for unit tests.
+  private[sql] var knownPartitions: Set[TopicPartition] = _
 
   override def readSchema: StructType = KafkaOffsetReader.kafkaSchema
 

@@ -25,7 +25,8 @@ import scala.util.Random
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{ForeachWriter, Row}
-import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingExecutionRelation, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
@@ -75,7 +76,7 @@ class ContinuousKafkaSuite extends KafkaSourceTest with SharedSQLContext {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", topic)
-      .option("kafka.metadata.max.age.ms", "100")
+      .option("kafka.metadata.max.age.ms", "1")
 
     val kafka = reader.load()
       .selectExpr("CAST(value AS STRING)")
@@ -83,10 +84,22 @@ class ContinuousKafkaSuite extends KafkaSourceTest with SharedSQLContext {
       .map(_.toInt + 1)
 
     testStream(kafka, useV2Sink = true)(
-      StartStream(Trigger.Continuous(1000)),
+      StartStream(Trigger.Continuous(100)),
       AddKafkaData(Set(topic), scala.Range(0, 5): _*),
       CheckAnswer(1, 2, 3, 4, 5),
       Execute(_ => testUtils.addPartitions(topic, 5)),
+      Execute { q =>
+        // We have to assert on this first to avoid a race condition in the test framework.
+        // AddKafkaData will not work if the query is in the middle of reconfiguring, because it
+        // assumes it can find the right reader in the plan.
+        eventually(timeout(streamingTimeout)) {
+          assert(
+            q.lastExecution.logical.collectFirst {
+              case DataSourceV2Relation(_, r: ContinuousKafkaReader) => r
+            }.exists(_.knownPartitions.size == 5),
+            "query never reconfigured to 5 partitions")
+        }
+      },
       AddKafkaData(Set(topic), scala.Range(10, 20): _*),
       CheckAnswer(1, 2, 3, 4, 5, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
     )
