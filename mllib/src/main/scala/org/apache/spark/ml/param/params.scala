@@ -269,7 +269,7 @@ object ParamValidators {
   private[spark] def raiseIncompatibleParamsException(
       paramName1: String,
       paramName2: String): Unit = {
-    throw new IllegalArgumentException(s"`$paramName1` and `$paramName2` cannot be both set.")
+    throw new IllegalArgumentException(s"`$paramName1` and `$paramName2` cannot both be set.")
   }
 }
 

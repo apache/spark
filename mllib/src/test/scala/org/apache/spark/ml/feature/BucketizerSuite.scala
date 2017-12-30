@@ -401,7 +401,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     }
   }
 
-  test("assert exception is thrown is both multi-column and single-column params are set") {
+  test("assert exception is thrown if both multi-column and single-column params are set") {
     val df = Seq((0.5, 0.3), (0.5, -0.4)).toDF("feature1", "feature2")
     ParamsSuite.testMultiColumnParams(classOf[Bucketizer], df)
   }

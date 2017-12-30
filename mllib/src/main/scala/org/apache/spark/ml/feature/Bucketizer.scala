@@ -134,20 +134,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   @Since("2.3.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  /**
-   * Determines whether this `Bucketizer` is going to map multiple columns. If and only if
-   * `inputCols` is set, it will map multiple columns. Otherwise, it just maps a column specified
-   * by `inputCol`.
-   */
-  private[feature] def isBucketizeMultipleColumns(): Boolean = {
-    isSet(inputCols)
-  }
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema)
 
-    val (inputColumns, outputColumns) = if (isBucketizeMultipleColumns()) {
+    val (inputColumns, outputColumns) = if (isSet(inputCols)) {
       ($(inputCols).toSeq, $(outputCols).toSeq)
     } else {
       (Seq($(inputCol)), Seq($(outputCol)))
@@ -162,7 +153,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
       }
     }
 
-    val seqOfSplits = if (isBucketizeMultipleColumns()) {
+    val seqOfSplits = if (isSet(inputCols)) {
       $(splitsArray).toSeq
     } else {
       Seq($(splits))
@@ -200,7 +191,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     if (isSet(inputCols) && isSet(splits)) {
       ParamValidators.raiseIncompatibleParamsException("inputCols", "splits")
     }
-    if (isBucketizeMultipleColumns()) {
+    if (isSet(inputCols)) {
       var transformedSchema = schema
       $(inputCols).zip($(outputCols)).zipWithIndex.map { case ((inputCol, outputCol), idx) =>
         SchemaUtils.checkNumericType(transformedSchema, inputCol)

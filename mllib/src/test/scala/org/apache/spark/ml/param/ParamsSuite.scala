@@ -437,7 +437,7 @@ object ParamsSuite extends SparkFunSuite {
   /**
    * Checks that the class throws an exception in case both `inputCols` and `inputCol` are set and
    * in case both `outputCols` and `outputCol` are set.
-   * These checks are performed only whether the class extends respectively both `HasInputCols` and
+   * These checks are performed only when the class extends respectively both `HasInputCols` and
    * `HasInputCol` and both `HasOutputCols` and `HasOutputCol`.
    *
    * @param paramsClass The Class to be checked
