@@ -249,7 +249,7 @@ object SQLConf {
   val CONSTRAINT_PROPAGATION_ENABLED = buildConf("spark.sql.constraintPropagation.enabled")
     .internal()
     .doc("When true, the query optimizer will infer and propagate data constraints in the query " +
-      "plan to optimize them. Constraint propagation can sometimes be computationally expensive" +
+      "plan to optimize them. Constraint propagation can sometimes be computationally expensive " +
       "for certain kinds of query plans (such as those with a large number of predicates and " +
       "aliases) which might negatively impact overall runtime.")
     .booleanConf
@@ -266,10 +266,10 @@ object SQLConf {
   val HADOOPFSRELATION_SIZE_FACTOR = buildConf(
     "org.apache.spark.sql.execution.datasources.sizeFactor")
     .internal()
-    .doc("The result of multiplying this factor with the size of data source files is propagated" +
-      " to serve as the stats to choose the best execution plan. In the case where the " +
-      " the in-disk and in-memory size of data is significantly different, users can adjust this" +
-      " factor for a better choice of the execution plan. The default value is 1.0.")
+    .doc("The result of multiplying this factor with the size of data source files is propagated " +
+      "to serve as the stats to choose the best execution plan. In the case where the " +
+      "in-disk and in-memory size of data is significantly different, users can adjust this " +
+      "factor for a better choice of the execution plan. The default value is 1.0.")
     .doubleConf
     .checkValue(_ > 0, "the value of sizeFactor must be larger than 0")
     .createWithDefault(1.0)
