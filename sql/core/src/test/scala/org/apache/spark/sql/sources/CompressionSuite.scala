@@ -29,21 +29,21 @@ import org.apache.spark.util.Utils
 
 abstract class CompressionTestUtils extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
 
-  var originalParquetCompressionCodeName: String = _
-  var originalOrcCompressionCodeName: String = _
+  var originalParquetCompressionCodecName: String = _
+  var originalOrcCompressionCodecName: String = _
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    originalParquetCompressionCodeName = spark.conf.get(SQLConf.PARQUET_COMPRESSION.key)
-    originalOrcCompressionCodeName = spark.conf.get(SQLConf.ORC_COMPRESSION.key)
+    originalParquetCompressionCodecName = spark.conf.get(SQLConf.PARQUET_COMPRESSION.key)
+    originalOrcCompressionCodecName = spark.conf.get(SQLConf.ORC_COMPRESSION.key)
     spark.conf.set(SQLConf.PARQUET_COMPRESSION.key, "snappy")
     spark.conf.set(SQLConf.ORC_COMPRESSION.key, "snappy")
   }
 
   protected override def afterAll(): Unit = {
     try {
-      spark.conf.set(SQLConf.PARQUET_COMPRESSION.key, originalParquetCompressionCodeName)
-      spark.conf.set(SQLConf.ORC_COMPRESSION.key, originalOrcCompressionCodeName)
+      spark.conf.set(SQLConf.PARQUET_COMPRESSION.key, originalParquetCompressionCodecName)
+      spark.conf.set(SQLConf.ORC_COMPRESSION.key, originalOrcCompressionCodecName)
     } finally {
       super.afterAll()
     }
@@ -156,5 +156,4 @@ class CompressionSuite extends CompressionTestUtils with SharedSQLContext {
       )
     }
   }
-
 }
