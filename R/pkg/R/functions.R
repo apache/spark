@@ -2133,7 +2133,8 @@ setMethod("countDistinct",
           })
 
 #' @details
-#' \code{concat}: Concatenates multiple input string columns together into a single string column.
+#' \code{concat}: Concatenates multiple input columns together into a single column.
+#' If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
 #'
 #' @rdname column_string_functions
 #' @aliases concat concat,Column-method
