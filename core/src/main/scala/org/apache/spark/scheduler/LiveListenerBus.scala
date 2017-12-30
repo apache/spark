@@ -212,6 +212,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends Logging {
     synchronized {
       queues.asScala.foreach(_.stop())
       queues.clear()
+      droppedEventsUpdateScheduler.shutdownNow()
     }
   }
 
