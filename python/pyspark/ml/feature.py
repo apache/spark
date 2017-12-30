@@ -3508,10 +3508,10 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
 
     handleInvalid = Param(Params._dummy(), "handleInvalid",
                           "How to handle invalid vectors in inputCol. Invalid vectors include "
-                            "nulls and vectors with the wrong size. The options are `skip` (filter "
-                            "out rows with invalid vectors), `error` (throw an error) and "
-                            "`optimistic` (do not check the vector size, and keep all rows). "
-                            "`error` by default.",
+                          "nulls and vectors with the wrong size. The options are `skip` (filter "
+                          "out rows with invalid vectors), `error` (throw an error) and "
+                          "`optimistic` (do not check the vector size, and keep all rows). "
+                          "`error` by default.",
                           TypeConverters.toString)
 
     @keyword_only
