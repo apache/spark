@@ -19,17 +19,15 @@ package org.apache.spark.ml.tuning
 
 import scala.annotation.varargs
 import scala.collection.mutable
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Builder for a param grid used in grid search-based model selection.
  */
 @Since("1.2.0")
-class ParamGridBuilder {
-// class ParamGridBuilder @Since("1.2.0") { TODO
+class ParamGridBuilder @Since("1.2.0") {
 
   private val paramGrid = mutable.Map.empty[Param[_], Iterable[_]]
 
@@ -121,18 +119,19 @@ class ParamGridBuilder {
   }
 }
 
-/**
- *
- */
+
 object ParamGridBuilder {
 
   /**
+   * Split the given list of paramMaps in two such that the left list contains the supplied
+   * params and the right list does not.
    *
-   * @param paramMaps
-   * @param params
-   * @return
+   * @param paramMaps Array of paramMaps to split
+   * @param params Array of params that will be in the left list
+   * @return Tuple of two Array[ParamMap]
    */
-  def splitOnParams(paramMaps: Array[ParamMap], params: Array[Param[_]]): (Array[ParamMap], Array[ParamMap])  = {
+  def splitOnParams(paramMaps: Array[ParamMap],
+                    params: Array[Param[_]]): (Array[ParamMap], Array[ParamMap]) = {
     val leftValues = mutable.Map.empty[Param[_], mutable.LinkedHashSet[Any]]
     val rightValues = mutable.Map.empty[Param[_], mutable.LinkedHashSet[Any]]
 
@@ -161,12 +160,16 @@ object ParamGridBuilder {
   }
 
   /**
+   * First split the given list of paramMaps according to [[splitOnParams()]] and then group into
+   * subarrays such that each subarray contains the Array[ParamMap] from the supplied params
+   * combined with the additional Array[ParamMap] from other params.
    *
    * @param paramMaps
    * @param params
    * @return
    */
-  def groupByParams(paramMaps: Array[ParamMap], params: Array[Param[_]]): Array[Array[ParamMap]] = {
+  def groupByParams(paramMaps: Array[ParamMap],
+                    params: Array[Param[_]]): Array[Array[ParamMap]] = {
     val (leftParamMaps, rightParamMaps) = ParamGridBuilder.splitOnParams(paramMaps, params)
 
     // Add the left paramMaps to each right paramMap
