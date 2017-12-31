@@ -714,9 +714,9 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
 
     * Numeric columns:
         For numeric features, the hash value of the column name is used to map the
-        feature value to its index in the feature vector. Numeric features are never
-        treated as categorical, even when they are integers. You must explicitly
-        convert numeric columns containing categorical features to strings first.
+        feature value to its index in the feature vector. By default, numeric features
+        are not treated as categorical (even when they are integers). To treat them
+        as categorical, specify the relevant columns in `categoricalCols`.
 
     * String columns:
         For categorical features, the hash value of the string "column_name=value"
@@ -741,6 +741,8 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
     >>> hasher = FeatureHasher(inputCols=cols, outputCol="features")
     >>> hasher.transform(df).head().features
     SparseVector(262144, {51871: 1.0, 63643: 1.0, 174475: 2.0, 253195: 1.0})
+    >>> hasher.setCategoricalCols(["real"]).transform(df).head().features
+    SparseVector(262144, {51871: 1.0, 63643: 1.0, 171257: 1.0, 253195: 1.0})
     >>> hasherPath = temp_path + "/hasher"
     >>> hasher.save(hasherPath)
     >>> loadedHasher = FeatureHasher.load(hasherPath)
@@ -752,10 +754,14 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
     .. versionadded:: 2.3.0
     """
 
+    categoricalCols = Param(Params._dummy(), "categoricalCols",
+                            "numeric columns to treat as categorical",
+                            typeConverter=TypeConverters.toListString)
+
     @keyword_only
-    def __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None):
+    def __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None):
         """
-        __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None)
+        __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None)
         """
         super(FeatureHasher, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FeatureHasher", self.uid)
@@ -765,13 +771,27 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
 
     @keyword_only
     @since("2.3.0")
-    def setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None):
+    def setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None):
         """
-        setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None)
+        setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None)
         Sets params for this FeatureHasher.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    @since("2.3.0")
+    def setCategoricalCols(self, value):
+        """
+        Sets the value of :py:attr:`categoricalCols`.
+        """
+        return self._set(categoricalCols=value)
+
+    @since("2.3.0")
+    def getCategoricalCols(self):
+        """
+        Gets the value of binary or its default value.
+        """
+        return self.getOrDefault(self.categoricalCols)
 
 
 @inherit_doc
