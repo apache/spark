@@ -121,6 +121,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     transformSchema(schema, logging = true)
     val est = $(estimator)
     val eval = $(evaluator)
+    // Group paramMaps by params the estimator is optimized for, param groups are then parallelized
     val epmGrouped = ParamGridBuilder.groupByParams($(estimatorParamMaps), est.getOptimizedParams)
 
     // Create execution context based on $(parallelism)
