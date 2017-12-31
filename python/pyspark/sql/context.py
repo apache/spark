@@ -174,17 +174,24 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(1.2)
-    def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a python function (including lambda function) as a UDF
+    def registerFunction(self, name, f, returnType=StringType(), deterministic=True):
+        """
+        Registers a Python function (including lambda function) as a UDF
         so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not given it default to a string and conversion will automatically
         be done.  For any other return type, the produced object must match the specified type.
 
+        .. note:: The input Python function is considered deterministic by default. Due to \
+        optimization, duplicate invocations may be eliminated or the function may even be invoked \
+        more times than it is present in the query. If your function is not deterministic, set \
+        `deterministic` parameter to `False`.
+
         :param name: name of the UDF
-        :param f: python function
+        :param f: Python function
         :param returnType: a :class:`pyspark.sql.types.DataType` object
+        :param deterministic: a flag indicating whether this Python function is deterministic
         :return: a wrapped :class:`UserDefinedFunction`
 
         >>> strlen = sqlContext.registerFunction("stringLengthString", lambda x: len(x))
@@ -203,8 +210,19 @@ class SQLContext(object):
         >>> _ = sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
+
+        >>> from pyspark.sql.types import IntegerType
+        >>> import random
+        >>> random_int = sqlContext.registerFunction("randInt",
+        ...   lambda: random.randint(1, 10), IntegerType(), deterministic=False)
+
+        >>> spark.sql("SELECT randInt()").collect()  # doctest: +SKIP
+        [Row(randInt()=4)]
+
+        >>> spark.range(1).toDF("a").select(random_int()).collect()  # doctest: +SKIP
+        [Row(randInt()=9)]
         """
-        return self.sparkSession.catalog.registerFunction(name, f, returnType)
+        return self.sparkSession.catalog.registerFunction(name, f, returnType, deterministic)
 
     @ignore_unicode_prefix
     @since(2.1)
@@ -565,8 +583,8 @@ class UDFRegistration(object):
     def __init__(self, sqlContext):
         self.sqlContext = sqlContext
 
-    def register(self, name, f, returnType=StringType()):
-        return self.sqlContext.registerFunction(name, f, returnType)
+    def register(self, name, f, returnType=StringType(), deterministic=True):
+        return self.sqlContext.registerFunction(name, f, returnType, deterministic)
 
     def registerJavaFunction(self, name, javaClassName, returnType=None):
         self.sqlContext.registerJavaFunction(name, javaClassName, returnType)

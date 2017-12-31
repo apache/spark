@@ -226,17 +226,24 @@ class Catalog(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a python function (including lambda function) as a UDF
+    def registerFunction(self, name, f, returnType=StringType(), deterministic=True):
+        """
+        Registers a Python function (including lambda function) as a UDF
         so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not given it default to a string and conversion will automatically
         be done.  For any other return type, the produced object must match the specified type.
 
+        .. note:: The input Python function is considered deterministic by default. Due to \
+        optimization, duplicate invocations may be eliminated or the function may even be invoked \
+        more times than it is present in the query. If your function is not deterministic, set \
+        `deterministic` parameter to `False`.
+
         :param name: name of the UDF
-        :param f: python function
+        :param f: a Python function
         :param returnType: a :class:`pyspark.sql.types.DataType` object
+        :param deterministic: a flag indicating whether this Python function is deterministic
         :return: a wrapped :class:`UserDefinedFunction`
 
         >>> strlen = spark.catalog.registerFunction("stringLengthString", len)
@@ -255,11 +262,23 @@ class Catalog(object):
         >>> _ = spark.udf.register("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
+
+        >>> from pyspark.sql.types import IntegerType
+        >>> import random
+        >>> random_int = spark.catalog.registerFunction("randInt",
+        ...   lambda: random.randint(1, 10), IntegerType(), deterministic=False)
+
+        >>> spark.sql("SELECT randInt()").collect()  # doctest: +SKIP
+        [Row(randInt()=4)]
+
+        >>> spark.range(1).toDF("a").select(random_int()).collect()  # doctest: +SKIP
+        [Row(randInt()=9)]
         """
         udf = UserDefinedFunction(f, returnType=returnType, name=name,
                                   evalType=PythonEvalType.SQL_BATCHED_UDF)
+        udf_with_determinism = udf if deterministic else udf.asNondeterministic()
         self._jsparkSession.udf().registerPython(name, udf._judf)
-        return udf._wrapped()
+        return udf_with_determinism._wrapped()
 
     @since(2.0)
     def isCached(self, tableName):
