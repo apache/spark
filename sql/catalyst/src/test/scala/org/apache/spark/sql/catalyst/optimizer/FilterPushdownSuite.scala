@@ -39,6 +39,7 @@ class FilterPushdownSuite extends PlanTest {
         PushDownPredicate,
         BooleanSimplification,
         PushPredicateThroughJoin,
+        PushLeftSemiLeftAntiThroughJoin,
         CollapseProject) :: Nil
   }
 
