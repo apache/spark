@@ -3715,8 +3715,8 @@ setMethod("isStreaming",
 #'        '1 minute'. This is a trigger that runs a query periodically based on the processing
 #'        time. If value is '0 seconds', the query will run as fast as possible, this is the
 #'        default. Only one trigger can be set.
-#' @param trigger.once a logical, must be set to \code{TRUE}. This is a trigger that process only
-#'        one batch of data in a streaming query then terminate the query. Only one trigger can be
+#' @param trigger.once a logical, must be set to \code{TRUE}. This is a trigger that processes only
+#'        one batch of data in a streaming query then terminates the query. Only one trigger can be
 #'        set.
 #' @param ... additional external data source specific named options.
 #'
