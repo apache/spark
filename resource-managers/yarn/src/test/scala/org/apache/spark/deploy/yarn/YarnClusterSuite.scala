@@ -95,7 +95,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         "spark.executor.cores" -> "1",
         "spark.executor.memory" -> "512m",
         "spark.executor.instances" -> "2",
-        // Sending some senstive information, which we'll make sure gets redacted
+        // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
       ))

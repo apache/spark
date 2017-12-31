@@ -113,7 +113,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
       if (thread.isAlive) {
         thread.interrupt()
         // If this interrupt does not work, then this thread is most likely running something that
-        // is not interruptible. There is not much point to wait for the thread to termniate, and
+        // is not interruptible. There is not much point to wait for the thread to terminate, and
         // we rather let the JVM terminate the thread on exit.
         fail(
           s"Test '$name' running on o.a.s.util.UninterruptibleThread timed out after" +

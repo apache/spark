@@ -61,7 +61,7 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
 
 /**
  * Keep track of the existing stages when the job was submitted, and those that were
- * completed during the job's execution. This allows a more accurate acounting of how
+ * completed during the job's execution. This allows a more accurate accounting of how
  * many tasks were skipped for the job.
  */
 private[spark] class JobDataWrapper(
