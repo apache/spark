@@ -22,6 +22,9 @@ import java.util.Locale
 
 import scala.reflect.{classTag, ClassTag}
 
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -1099,15 +1102,16 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       """
         |CREATE DATABASE database_name
         |LOCATION '/home/user/db'
-        |WITH DBPROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
+        |WITH DBPROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE, 'd'=[1, 0.1, TRUE, 'e'])
       """.stripMargin
     val parsed = parser.parsePlan(sql)
+    val dValue = compact(render(Seq(1.toString, 0.1.toString, true.toString, "e")))
     val expected = CreateDatabaseCommand(
       "database_name",
       ifNotExists = false,
       Some("/home/user/db"),
       None,
-      Map("a" -> "1", "b" -> "0.1", "c" -> "true"))
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true", "d" -> dValue))
 
     comparePlans(parsed, expected)
   }
@@ -1116,12 +1120,13 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     val sql =
       """
         |ALTER TABLE table_name
-        |SET TBLPROPERTIES ('a' = 1, 'b' = 0.1, 'c' = TRUE)
+        |SET TBLPROPERTIES ('a' = 1, 'b' = 0.1, 'c' = TRUE, 'd'=[1,0.1,TRUE,'e'])
       """.stripMargin
     val parsed = parser.parsePlan(sql)
+    val dValue = compact(render(Seq(1.toString, 0.1.toString, true.toString, "e")))
     val expected = AlterTableSetPropertiesCommand(
       TableIdentifier("table_name"),
-      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true", "d" -> dValue),
       isView = false)
 
     comparePlans(parsed, expected)
@@ -1131,14 +1136,15 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     val sql =
       """
         |CREATE TABLE table_name USING json
-        |OPTIONS (a 1, b 0.1, c TRUE)
+        |OPTIONS (a 1, b 0.1, c TRUE, d [1,  0.1,TRUE, 'e'])
       """.stripMargin
 
+    val dValue = compact(render(Seq(1.toString, 0.1.toString, true.toString, "e")))
     val expectedTableDesc = CatalogTable(
       identifier = TableIdentifier("table_name"),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty.copy(
-        properties = Map("a" -> "1", "b" -> "0.1", "c" -> "true")
+        properties = Map("a" -> "1", "b" -> "0.1", "c" -> "true", "d" -> dValue)
       ),
       schema = new StructType,
       provider = Some("json")
