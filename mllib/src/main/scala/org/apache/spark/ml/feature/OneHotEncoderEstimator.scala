@@ -137,14 +137,19 @@ class OneHotEncoderEstimator @Since("2.3.0") (@Since("2.3.0") override val uid: 
 
   @Since("2.3.0")
   override def transformSchema(schema: StructType): StructType = {
-    // When fitting data, we want the the plain number of categories without `handleInvalid` and
-    // `dropLast` taken into account.
-    validateAndTransformSchema(schema, dropLast = false, keepInvalid = false)
+    val keepInvalid = $(handleInvalid) == OneHotEncoderEstimator.KEEP_INVALID
+    validateAndTransformSchema(schema, dropLast = $(dropLast),
+      keepInvalid = keepInvalid)
   }
 
   @Since("2.3.0")
   override def fit(dataset: Dataset[_]): OneHotEncoderModel = {
-    val transformedSchema = transformSchema(dataset.schema)
+    transformSchema(dataset.schema)
+
+    // Compute the plain number of categories without `handleInvalid` and
+    // `dropLast` taken into account.
+    val transformedSchema = validateAndTransformSchema(dataset.schema, dropLast = false,
+      keepInvalid = false)
     val categorySizes = new Array[Int]($(outputCols).length)
 
     val columnToScanIndices = $(outputCols).zipWithIndex.flatMap { case (outputColName, idx) =>
@@ -200,23 +205,23 @@ class OneHotEncoderModel private[ml] (
 
   import OneHotEncoderModel._
 
-  // The actual number of categories varies due to different setting of `dropLast` and
-  // `handleInvalid`.
-  private def configedCategorySizes: Array[Int] = {
+  // Returns the category size for a given index with `dropLast` and `handleInvalid`
+  // taken into account.
+  private def configedCategorySize(orgCategorySize: Int, idx: Int): Int = {
     val dropLast = getDropLast
     val keepInvalid = getHandleInvalid == OneHotEncoderEstimator.KEEP_INVALID
 
     if (!dropLast && keepInvalid) {
       // When `handleInvalid` is "keep", an extra category is added as last category
       // for invalid data.
-      categorySizes.map(_ + 1)
+      orgCategorySize + 1
     } else if (dropLast && !keepInvalid) {
       // When `dropLast` is true, the last category is removed.
-      categorySizes.map(_ - 1)
+      orgCategorySize - 1
     } else {
       // When `dropLast` is true and `handleInvalid` is "keep", the extra category for invalid
       // data is removed. Thus, it is the same as the plain number of categories.
-      categorySizes
+      orgCategorySize
     }
   }
 
@@ -228,31 +233,28 @@ class OneHotEncoderModel private[ml] (
     val handleInvalid = getHandleInvalid
     val keepInvalid = handleInvalid == OneHotEncoderEstimator.KEEP_INVALID
 
-    udf { (label: Double, size: Int) =>
-      val numCategory = if (!dropLast && keepInvalid) {
-        // When `dropLast` is false and `handleInvalid` is "keep", the last category is
-        // for invalid data.
-        size - 1
-      } else {
-        size
-      }
+    // The udf performed on input data. The first parameter is the input value. The second
+    // parameter is the index of input.
+    udf { (label: Double, idx: Int) =>
+      val plainNumCategories = categorySizes(idx)
+      val size = configedCategorySize(plainNumCategories, idx)
 
       if (label < 0) {
         throw new SparkException(s"Negative value: $label. Input can't be negative.")
-      } else if (label < numCategory) {
-        Vectors.sparse(size, Array(label.toInt), oneValue)
-      } else if (label == numCategory && dropLast && !keepInvalid) {
+      } else if (label == size && dropLast && !keepInvalid) {
         // When `dropLast` is true and `handleInvalid` is not "keep",
         // the last category is removed.
         Vectors.sparse(size, emptyIndices, emptyValues)
-      } else if (dropLast && keepInvalid) {
-        // When `dropLast` is true and `handleInvalid` is "keep",
-        // invalid data is encoded to the removed last category.
-        Vectors.sparse(size, emptyIndices, emptyValues)
-      } else if (keepInvalid) {
-        // When `dropLast` is false and `handleInvalid` is "keep",
-        // invalid data is encoded to the last category.
-        Vectors.sparse(size, Array(numCategory), oneValue)
+      } else if (label >= plainNumCategories && keepInvalid) {
+        // When `handleInvalid` is "keep", encodes invalid data to last category (and removed
+        // if `dropLast` is true)
+        if (dropLast) {
+          Vectors.sparse(size, emptyIndices, emptyValues)
+        } else {
+          Vectors.sparse(size, Array(size - 1), oneValue)
+        }
+      } else if (label < plainNumCategories) {
+        Vectors.sparse(size, Array(label.toInt), oneValue)
       } else {
         assert(handleInvalid == OneHotEncoderEstimator.ERROR_INVALID)
         throw new SparkException(s"Unseen value: $label. To handle unseen values, " +
@@ -306,8 +308,9 @@ class OneHotEncoderModel private[ml] (
       // comparing with expected category number with `handleInvalid` and
       // `dropLast` taken into account.
       if (attrGroup.attributes.nonEmpty) {
-        require(attrGroup.size == configedCategorySizes(idx), "OneHotEncoderModel expected " +
-          s"${configedCategorySizes(idx)} categorical values for input column ${inputColName}, " +
+        val numCategories = configedCategorySize(categorySizes(idx), idx)
+        require(attrGroup.size == numCategories, "OneHotEncoderModel expected " +
+          s"$numCategories categorical values for input column ${inputColName}, " +
             s"but the input column had metadata specifying ${attrGroup.size} values.")
       }
     }
@@ -333,7 +336,7 @@ class OneHotEncoderModel private[ml] (
         outputAttrGroupFromSchema.toMetadata()
       }
 
-      encoder(col(inputColName).cast(DoubleType), lit(configedCategorySizes(idx)))
+      encoder(col(inputColName).cast(DoubleType), lit(idx))
         .as(outputColName, metadata)
     }
     dataset.withColumns($(outputCols), encodedColumns)
