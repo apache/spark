@@ -193,7 +193,8 @@ case class StaticInvoke(
  * @param targetObject An expression that will return the object to call the method on.
  * @param functionName The name of the method to call.
  * @param dataType The expected return type of the function.
- * @param arguments An optional list of expressions, whose evaluation will be passed to the function.
+ * @param arguments An optional list of expressions, whose evaluation will be passed to the
+  *                 function.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function.
  * @param returnNullable When false, indicating the invoked method will always return
