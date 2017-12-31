@@ -768,7 +768,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
