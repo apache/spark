@@ -1547,6 +1547,7 @@ if __name__ == "__main__":
         testcases.append(FlumeStreamTests)
         testcases.append(FlumePollingStreamTests)
     else:
+        raise Exception("ENABLE_FLUME_TESTS: [%s]" % os.environ.get("ENABLE_FLUME_TESTS"))
         sys.stderr.write(
             "Skipped test_flume_stream (enable by setting environment variable %s=1"
             % flume_test_environ_var)
