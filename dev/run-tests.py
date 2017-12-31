@@ -578,10 +578,10 @@ def main():
                                 for f in changed_files):
         # run_java_style_checks()
         pass
-    if not changed_files or any(f.endswith(".py") for f in changed_files):
-        run_python_style_checks()
-    if not changed_files or any(f.endswith(".R") for f in changed_files):
-        run_sparkr_style_checks()
+    # if not changed_files or any(f.endswith(".py") for f in changed_files):
+    #     run_python_style_checks()
+    # if not changed_files or any(f.endswith(".R") for f in changed_files):
+    #     run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
     # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
@@ -603,7 +603,7 @@ def main():
         build_spark_assembly_sbt(hadoop_version)
 
     # run the test suites
-    run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
+    # run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
