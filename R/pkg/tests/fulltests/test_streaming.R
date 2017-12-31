@@ -172,6 +172,106 @@ test_that("Terminated by error", {
   stopQuery(q)
 })
 
+test_that("PartitionBy", {
+  parquetPath <- tempfile(pattern = "sparkr-test", fileext = ".parquet")
+  checkpointPath <- tempfile(pattern = "sparkr-test", fileext = ".checkpoint")
+  textPath <- tempfile(pattern = "sparkr-test", fileext = ".text")
+  df <- read.df(jsonPath, "json", stringSchema)
+  write.df(df, parquetPath, "parquet", "overwrite")
+
+  df <- read.stream(path = parquetPath, schema = stringSchema)
+  q <- write.stream(df, "json", path = textPath, checkpointLocation = "append", partitionBy = "name")
+  awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
+
+  dirs <- list.files(textPath)
+  expect_equal(length(dirs[substring(dirs, 1, nchar("name=")) == "name="]), 3)
+
+  unlink(checkpointPath)
+  unlink(textPath)
+  unlink(parquetPath)
+})
+
+test_that("Watermark", {
+  parquetPath <- tempfile(pattern = "sparkr-test", fileext = ".parquet")
+  schema <- structType(structField("value", "string"))
+  t <- Sys.time()
+  df <- as.DataFrame(lapply(list(t), as.character), schema)
+  write.df(df, parquetPath, "parquet", "append")
+  df <- read.stream(path = parquetPath, schema = "value STRING")
+  df <- withColumn(df, "eventTime", cast(df$value, "timestamp"))
+  df <- withWatermark(df, "eventTime", "10 seconds")
+  counts <- count(group_by(df, "eventTime"))
+  q <- write.stream(counts, "memory", queryName = "times", outputMode = "append")
+
+  # first events
+  df <- as.DataFrame(lapply(list(t + 1, t, t + 2), as.character), schema)
+  write.df(df, parquetPath, "parquet", "append")
+  awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
+
+  # advance watermark to 15
+  df <- as.DataFrame(lapply(list(t + 25), as.character), schema)
+  write.df(df, parquetPath, "parquet", "append")
+  awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
+
+  # old events, should be dropped
+  df <- as.DataFrame(lapply(list(t), as.character), schema)
+  write.df(df, parquetPath, "parquet", "append")
+  awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
+
+  # evict events less than previous watermark
+  df <- as.DataFrame(lapply(list(t + 25), as.character), schema)
+  write.df(df, parquetPath, "parquet", "append")
+  awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
+
+  times <- collect(sql("SELECT * FROM times"))
+  expect_equal(times[times$eventTime == as.character(t), 2], 2)
+
+  stopQuery(q)
+  unlink(parquetPath)
+})
+
+test_that("Trigger", {
+  parquetPath <- tempfile(pattern = "sparkr-test", fileext = ".parquet")
+  schema <- structType(structField("value", "string"))
+  df <- as.DataFrame(lapply(list(Sys.time()), as.character), schema)
+  write.df(df, parquetPath, "parquet", "append")
+  df <- read.stream(path = parquetPath, schema = "value STRING")
+
+  expect_error(write.stream(df, "memory", queryName = "times", outputMode = "append",
+               trigger.processingTime = "", trigger.once = ""), "Multiple triggers not allowed.")
+
+  expect_error(write.stream(df, "memory", queryName = "times", outputMode = "append",
+               trigger.processingTime = ""),
+               "Value for trigger.processingTime must be a non-empty string.")
+
+  expect_error(write.stream(df, "memory", queryName = "times", outputMode = "append",
+               trigger.processingTime = "invalid"), "illegal argument")
+
+  expect_error(write.stream(df, "memory", queryName = "times", outputMode = "append",
+               trigger.once = ""), "Value for trigger.once must be TRUE.")
+
+  expect_error(write.stream(df, "memory", queryName = "times", outputMode = "append",
+               trigger.once = FALSE), "Value for trigger.once must be TRUE.")
+
+  q <- write.stream(df, "memory", queryName = "times", outputMode = "append", trigger.once = TRUE)
+  awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
+  df <- as.DataFrame(lapply(list(Sys.time()), as.character), schema)
+  write.df(df, parquetPath, "parquet", "append")
+  awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
+
+  expect_equal(nrow(collect(sql("SELECT * FROM times"))), 1)
+
+  stopQuery(q)
+  unlink(parquetPath)
+})
+
 unlink(jsonPath)
 unlink(jsonPathNa)
 

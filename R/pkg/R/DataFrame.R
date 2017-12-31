@@ -3708,7 +3708,17 @@ setMethod("isStreaming",
 #' @param df a streaming SparkDataFrame.
 #' @param source a name for external data source.
 #' @param outputMode one of 'append', 'complete', 'update'.
-#' @param ... additional argument(s) passed to the method.
+#' @param partitionBy a name or a list of names of columns to partition the output by on the file
+#'        system. If specified, the output is laid out on the file system similar to Hive's
+#'        partitioning scheme.
+#' @param trigger.processingTime a processing time interval as a string, e.g. '5 seconds',
+#'        '1 minute'. This is a trigger that runs a query periodically based on the processing
+#'        time. If value is '0 seconds', the query will run as fast as possible, this is the
+#'        default. Only one trigger can be set.
+#' @param trigger.once a logical, must be set to \code{TRUE}. This is a trigger that process only
+#'        one batch of data in a streaming query then terminate the query. Only one trigger can be
+#'        set.
+#' @param ... additional external data source specific named options.
 #'
 #' @family SparkDataFrame functions
 #' @seealso \link{read.stream}
@@ -3726,7 +3736,8 @@ setMethod("isStreaming",
 #' # console
 #' q <- write.stream(wordCounts, "console", outputMode = "complete")
 #' # text stream
-#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp")
+#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp"
+#'                   partitionBy = c("year", "month"), trigger.processingTime = "30 seconds")
 #' # memory stream
 #' q <- write.stream(wordCounts, "memory", queryName = "outs", outputMode = "complete")
 #' head(sql("SELECT * from outs"))
@@ -3738,7 +3749,8 @@ setMethod("isStreaming",
 #' @note experimental
 setMethod("write.stream",
           signature(df = "SparkDataFrame"),
-          function(df, source = NULL, outputMode = NULL, ...) {
+          function(df, source = NULL, outputMode = NULL, partitionBy = NULL,
+                   trigger.processingTime = NULL, trigger.once = NULL, ...) {
             if (!is.null(source) && !is.character(source)) {
               stop("source should be character, NULL or omitted. It is the data source specified ",
                    "in 'spark.sql.sources.default' configuration by default.")
@@ -3749,11 +3761,42 @@ setMethod("write.stream",
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
+            cols <- NULL
+            if (!is.null(partitionBy)) {
+              if (!all(sapply(partitionBy, function(c) { is.character(c) }))) {
+                stop("all partitionBy column names should be characters")
+              }
+              cols <- as.list(partitionBy)
+            }
+            jtrigger <- NULL
+            if (!is.null(trigger.processingTime) && !is.na(trigger.processingTime)) {
+              if (!is.null(trigger.once)) {
+                stop("Multiple triggers not allowed.")
+              }
+              interval <- as.character(trigger.processingTime)
+              if (nchar(interval) == 0) {
+                stop("Value for trigger.processingTime must be a non-empty string.")
+              }
+              jtrigger <- handledCallJStatic("org.apache.spark.sql.streaming.Trigger",
+                                             "ProcessingTime",
+                                             interval)
+            } else if (!is.null(trigger.once) && !is.na(trigger.once)) {
+              if (!is.logical(trigger.once) || !trigger.once) {
+                stop("Value for trigger.once must be TRUE.")
+              }
+              jtrigger <- callJStatic("org.apache.spark.sql.streaming.Trigger", "Once")
+            }
             options <- varargsToStrEnv(...)
             write <- handledCallJMethod(df@sdf, "writeStream")
             write <- callJMethod(write, "format", source)
             if (!is.null(outputMode)) {
               write <- callJMethod(write, "outputMode", outputMode)
+            }
+            if (!is.null(cols)) {
+              write <- callJMethod(write, "partitionBy", cols)
+            }
+            if (!is.null(jtrigger)) {
+              write <- callJMethod(write, "trigger", jtrigger)
             }
             write <- callJMethod(write, "options", options)
             ssq <- handledCallJMethod(write, "start")
