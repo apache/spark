@@ -2276,7 +2276,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Clean a closure to make it ready to serialized and send to tasks
+   * Clean a closure to make it ready to be serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
    * If <tt>checkSerializable</tt> is set, <tt>clean</tt> will also proactively
    * check to see if <tt>f</tt> is serializable and throw a <tt>SparkException</tt>

@@ -51,7 +51,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
    *
    * - generate codes for argument.
    * - use ctx.splitExpressions() to not exceed 64kb JVM limit while preparing arguments.
-   * - avoid some of nullabilty checking which are not needed because the expression is not
+   * - avoid some of nullability checking which are not needed because the expression is not
    *   nullable.
    * - when needNullCheck == true, short circuit if we found one of arguments is null because
    *   preparing rest of arguments can be skipped in the case.
@@ -193,7 +193,7 @@ case class StaticInvoke(
  * @param targetObject An expression that will return the object to call the method on.
  * @param functionName The name of the method to call.
  * @param dataType The expected return type of the function.
- * @param arguments An optional list of expressions, whos evaluation will be passed to the function.
+ * @param arguments An optional list of expressions, whose evaluation will be passed to the function.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function.
  * @param returnNullable When false, indicating the invoked method will always return
