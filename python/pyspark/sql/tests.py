@@ -3360,23 +3360,27 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_array_type(self):
         import pandas as pd
         pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [[u"x", u"y"], [u"y", u"z"]]})
-        df = self.spark.createDataFrame(pdf)
+        df, df_arrow = self._createDataFrame_toggle(pdf)
         result = df.collect()
+        result_arrow = df_arrow.collect()
         expected = [tuple(list(e) for e in rec) for rec in pdf.to_records(index=False)]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertTrue(expected[r][e] == result_arrow[r][e] and
+                                result[r][e] == result_arrow[r][e])
 
     def test_toPandas_with_array_type(self):
         expected = [([1, 2], [u"x", u"y"]), ([3, 4], [u"y", u"z"])]
         array_schema = StructType([StructField("a", ArrayType(IntegerType())),
                                    StructField("b", ArrayType(StringType()))])
         df = self.spark.createDataFrame(expected, schema=array_schema)
-        pdf_arrow = df.toPandas()
-        result = [tuple(list(e) for e in rec) for rec in pdf_arrow.to_records(index=False)]
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+        result = [tuple(list(e) for e in rec) for rec in pdf.to_records(index=False)]
+        result_arrow = [tuple(list(e) for e in rec) for rec in pdf_arrow.to_records(index=False)]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertTrue(expected[r][e] == result_arrow[r][e] and
+                                result[r][e] == result_arrow[r][e])
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
