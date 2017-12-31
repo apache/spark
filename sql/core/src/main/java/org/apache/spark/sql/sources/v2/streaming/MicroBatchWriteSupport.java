@@ -41,7 +41,7 @@ public interface MicroBatchWriteSupport extends BaseStreamingSink {
    * @param queryId A unique string for the writing query. It's possible that there are many writing
    *                queries running at the same time, and the returned {@link DataSourceV2Writer}
    *                can use this id to distinguish itself from others.
-   * @param epochId The uniquenumeric ID of the batch within this writing query. This is an
+   * @param epochId The unique numeric ID of the batch within this writing query. This is an
    *                incrementing counter representing a consistent set of data; the same batch may
    *                be started multiple times in failure recovery scenarios, but it will always
    *                contain the same records.

@@ -71,7 +71,7 @@ class ChildProcAppHandle extends AbstractAppHandle {
   }
 
   /**
-   * Wait for the child process to exit and update the handle's state if necessary, accoding to
+   * Wait for the child process to exit and update the handle's state if necessary, according to
    * the exit code.
    */
   void monitorChild() {

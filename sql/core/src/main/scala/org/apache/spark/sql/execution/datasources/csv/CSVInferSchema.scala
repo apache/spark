@@ -150,7 +150,7 @@ private[csv] object CSVInferSchema {
     if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
       TimestampType
     } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
-      // We keep this for backwords competibility.
+      // We keep this for backwards compatibility.
       TimestampType
     } else {
       tryParseBoolean(field, options)
