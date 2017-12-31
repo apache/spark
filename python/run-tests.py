@@ -152,6 +152,8 @@ def parse_opts():
 
 
 def main():
+    print("python/run-tests:\n")
+    print("os.environ: \n%s" % "\n".join(map(lambda p: "%s:%s" % p, os.environ.items())))
     opts = parse_opts()
     if (opts.verbose):
         log_level = logging.DEBUG

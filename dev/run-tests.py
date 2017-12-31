@@ -449,6 +449,8 @@ def run_python_tests(test_modules, parallelism):
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
+    print("dev/run-tests:\n")
+    print("os.environ: \n%s" % "\n".join(map(lambda p: "%s:%s" % p, os.environ.items())))
     run_cmd(command)
 
 
