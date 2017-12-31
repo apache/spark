@@ -124,7 +124,9 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val sparkSession = dataset.sparkSession
     val est = $(estimator)
     val eval = $(evaluator)
-    val epm = $(estimatorParamMaps)
+    // Group paramMaps by params the estimator is optimized for, param groups are then parallelized
+    val epmGrouped = ParamGridBuilder.groupByParams($(estimatorParamMaps), est.getOptimizedParams)
+    val epm = epmGrouped.flatten
 
     // Create execution context based on $(parallelism)
     val executionContext = getExecutionContext
@@ -147,21 +149,23 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       // Fit models in a Future for training in parallel
-      val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
-        Future[Double] {
-          val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
-          if (collectSubModelsParam) {
-            subModels.get(splitIndex)(paramIndex) = model
-          }
+      val foldMetricFutures = epmGrouped.zipWithIndex.map { case (paramMaps, groupIndex) =>
+        Future[Seq[Double]] {
+          val models = est.fit(trainingDataset, paramMaps).asInstanceOf[Seq[Model[_]]]
           // TODO: duplicate evaluator to take extra params from input
-          val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-          logDebug(s"Got metric $metric for model trained with $paramMap.")
-          metric
+          models.zip(paramMaps).zipWithIndex.map { case ((model, paramMap), paramIndex) =>
+            if (collectSubModelsParam) {
+              subModels.get(splitIndex)(paramIndex + groupIndex * paramMaps.length) = model
+            }
+            val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+            logDebug(s"Got metric $metric for model trained with $paramMap.")
+            metric
+          }
         } (executionContext)
       }
 
       // Wait for metrics to be calculated before unpersisting validation dataset
-      val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+      val foldMetrics = foldMetricFutures.flatMap(ThreadUtils.awaitResult(_, Duration.Inf))
       trainingDataset.unpersist()
       validationDataset.unpersist()
       foldMetrics
