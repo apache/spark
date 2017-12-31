@@ -20,7 +20,6 @@ if sys.version >= "3":
     from io import BytesIO
 else:
     from StringIO import StringIO
-import warnings
 
 from py4j.protocol import Py4JJavaError
 
