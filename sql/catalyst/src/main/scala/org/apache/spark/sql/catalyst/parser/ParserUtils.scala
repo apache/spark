@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import java.util
+
 import scala.collection.mutable.StringBuilder
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
@@ -37,6 +39,17 @@ object ParserUtils {
 
   def operationNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
     throw new ParseException(s"Operation not allowed: $message", ctx)
+  }
+
+  def duplicateClausesNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
+    throw new ParseException(s"Found duplicate clauses: $message", ctx)
+  }
+
+  def checkDuplicateClauses(
+      nodes: util.List[TerminalNode], clauseName: String, ctx: ParserRuleContext): Unit = {
+    if (nodes.size() > 1) {
+      throw new ParseException(s"Found duplicate clauses: $clauseName", ctx)
+    }
   }
 
   /** Check if duplicate keys exist in a set of key-value pairs. */
