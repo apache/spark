@@ -1220,7 +1220,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
             ctx)
         }
 
-        val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
+        val hasStorageProperties = (ctx.createFileFormat.size != 0) || (ctx.rowFormat.size != 0)
         if (conf.convertCTAS && !hasStorageProperties) {
           // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
           // are empty Maps.
