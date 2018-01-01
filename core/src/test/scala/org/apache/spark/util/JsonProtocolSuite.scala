@@ -22,7 +22,7 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
+import org.json4s.JsonAST.{JArray, JInt, JObject, JString, JValue}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions
@@ -437,6 +437,19 @@ class JsonProtocolSuite extends SparkFunSuite {
     testAccumValue(Some("anything"), 123, JString("123"))
   }
 
+  test("StorageLevel backward compatibility") {
+    testStorageLevelLegacyFormat(StorageLevel.NONE)
+    testStorageLevelLegacyFormat(StorageLevel.DISK_ONLY)
+    testStorageLevelLegacyFormat(StorageLevel.DISK_ONLY_2)
+    testStorageLevelLegacyFormat(StorageLevel.MEMORY_ONLY)
+    testStorageLevelLegacyFormat(StorageLevel.MEMORY_ONLY_2)
+    testStorageLevelLegacyFormat(StorageLevel.MEMORY_ONLY_SER)
+    testStorageLevelLegacyFormat(StorageLevel.MEMORY_ONLY_SER_2)
+    testStorageLevelLegacyFormat(StorageLevel.MEMORY_AND_DISK)
+    testStorageLevelLegacyFormat(StorageLevel.MEMORY_AND_DISK_2)
+    testStorageLevelLegacyFormat(StorageLevel.MEMORY_AND_DISK_SER)
+    testStorageLevelLegacyFormat(StorageLevel.MEMORY_AND_DISK_SER_2)
+  }
 }
 
 
@@ -471,6 +484,16 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def testStorageLevel(level: StorageLevel) {
     val newLevel = JsonProtocol.storageLevelFromJson(JsonProtocol.storageLevelToJson(level))
+    assertEquals(level, newLevel)
+  }
+
+  private def testStorageLevelLegacyFormat(level: StorageLevel) {
+    val levelJson = JObject(
+      "Use Disk" -> level.useDisk,
+      "Use Memory" -> level.useMemory,
+      "Deserialized" -> level.deserialized,
+      "Replication" -> level.replication)
+    val newLevel = JsonProtocol.storageLevelFromJson(levelJson)
     assertEquals(level, newLevel)
   }
 
