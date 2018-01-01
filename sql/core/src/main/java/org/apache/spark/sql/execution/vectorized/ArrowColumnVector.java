@@ -326,7 +326,8 @@ public final class ArrowColumnVector extends ColumnVector {
       this.vector = vector;
     }
 
-    final boolean isNullAt(int rowId) {
+    // TODO: should be final after removing ArrayAccessor workaround
+    boolean isNullAt(int rowId) {
       return vector.isNull(rowId);
     }
 
@@ -587,6 +588,16 @@ public final class ArrowColumnVector extends ColumnVector {
     ArrayAccessor(ListVector vector) {
       super(vector);
       this.accessor = vector;
+    }
+
+    @Override
+    final boolean isNullAt(int rowId) {
+      // TODO: Workaround if vector has all non-null values, see ARROW-1948
+      if (accessor.getValueCount() > 0 && accessor.getValidityBuffer().capacity() == 0) {
+        return false;
+      } else {
+        return super.isNullAt(rowId);
+      }
     }
 
     @Override
