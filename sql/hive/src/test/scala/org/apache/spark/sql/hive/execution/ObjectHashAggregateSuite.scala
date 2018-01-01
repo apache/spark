@@ -23,8 +23,6 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMax
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}

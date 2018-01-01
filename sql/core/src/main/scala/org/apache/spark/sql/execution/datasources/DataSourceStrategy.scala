@@ -78,11 +78,11 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
           s"assigned constant values.")
     }
 
-    if (providedPartitions.size != targetPartitionSchema.fields.size) {
+    if (providedPartitions.size != targetPartitionSchema.fields.length) {
       throw new AnalysisException(
         s"The data to be inserted needs to have the same number of " +
           s"partition columns as the target table: target table " +
-          s"has ${targetPartitionSchema.fields.size} partition column(s) but the inserted " +
+          s"has ${targetPartitionSchema.fields.length} partition column(s) but the inserted " +
           s"data has ${providedPartitions.size} partition columns specified.")
     }
 
@@ -124,9 +124,9 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 
     assert(partitionList.take(staticPartitions.size).forall(_.isDefined))
     val projectList =
-      sourceAttributes.take(targetAttributes.size - targetPartitionSchema.fields.size) ++
+      sourceAttributes.take(targetAttributes.size - targetPartitionSchema.fields.length) ++
         partitionList.take(staticPartitions.size).map(_.get) ++
-        sourceAttributes.takeRight(targetPartitionSchema.fields.size - staticPartitions.size)
+        sourceAttributes.takeRight(targetPartitionSchema.fields.length - staticPartitions.size)
 
     projectList
   }
