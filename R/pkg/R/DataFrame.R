@@ -4029,6 +4029,7 @@ setMethod("broadcast",
 #' to be at least \code{delayThreshold} behind the actual event time.  In some cases we may still
 #' process records that arrive more than \code{delayThreshold} late.
 #'
+#' @param x a streaming SparkDataFrame
 #' @param eventTime a string specifying the name of the Column that contains the event time of the
 #'                  row.
 #' @param delayThreshold a string specifying the minimum delay to wait to data to arrive late,
