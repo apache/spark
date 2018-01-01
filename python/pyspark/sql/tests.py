@@ -3825,6 +3825,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
 
     def test_vectorized_udf_check_config(self):
         from pyspark.sql.functions import pandas_udf, col
+        import pandas as pd
         orig_value = self.spark.conf.get("spark.sql.execution.arrow.maxRecordsPerBatch", None)
         self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", 3)
         try:
@@ -3832,11 +3833,11 @@ class VectorizedUDFTests(ReusedSQLTestCase):
 
             @pandas_udf(returnType=LongType())
             def check_records_per_batch(x):
-                self.assertTrue(x.size <= 3)
-                return x
+                return pd.Series(x.size).repeat(x.size)
 
-            result = df.select(check_records_per_batch(col("id")))
-            self.assertEqual(df.collect(), result.collect())
+            result = df.select(check_records_per_batch(col("id"))).collect()
+            for (r,) in result:
+                self.assertTrue(r <= 3)
         finally:
             if orig_value is None:
                 self.spark.conf.unset("spark.sql.execution.arrow.maxRecordsPerBatch")

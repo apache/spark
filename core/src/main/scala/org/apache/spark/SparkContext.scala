@@ -1575,10 +1575,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def getExecutorIds(): Seq[String] = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.getExecutorIds()
       case _ =>
-        logWarning("Requesting executors is only supported in coarse-grained mode")
+        logWarning("Requesting executors is not supported by current scheduler.")
         Nil
     }
   }
@@ -1604,10 +1604,10 @@ class SparkContext(config: SparkConf) extends Logging {
       hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]
     ): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.requestTotalExecutors(numExecutors, localityAwareTasks, hostToLocalTaskCount)
       case _ =>
-        logWarning("Requesting executors is only supported in coarse-grained mode")
+        logWarning("Requesting executors is not supported by current scheduler.")
         false
     }
   }
@@ -1620,10 +1620,10 @@ class SparkContext(config: SparkConf) extends Logging {
   @DeveloperApi
   def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.requestExecutors(numAdditionalExecutors)
       case _ =>
-        logWarning("Requesting executors is only supported in coarse-grained mode")
+        logWarning("Requesting executors is not supported by current scheduler.")
         false
     }
   }
@@ -1642,10 +1642,10 @@ class SparkContext(config: SparkConf) extends Logging {
   @DeveloperApi
   def killExecutors(executorIds: Seq[String]): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.killExecutors(executorIds, replace = false, force = true).nonEmpty
       case _ =>
-        logWarning("Killing executors is only supported in coarse-grained mode")
+        logWarning("Killing executors is not supported by current scheduler.")
         false
     }
   }
@@ -1680,10 +1680,10 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.killExecutors(Seq(executorId), replace = true, force = true).nonEmpty
       case _ =>
-        logWarning("Killing executors is only supported in coarse-grained mode")
+        logWarning("Killing executors is not supported by current scheduler.")
         false
     }
   }
