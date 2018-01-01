@@ -81,6 +81,9 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    * @return fitted models, matching the input parameter maps
    */
   @Since("2.0.0")
+  @deprecated(
+    "`fit` with multiple paramMaps has been deprecated, use `fitMultiple` instead.",
+    "2.3.0")
   def fit(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
     val modelIter = fitMultiple(dataset, paramMaps)
     val models = paramMaps.map { _ =>
@@ -88,7 +91,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
       (index.toInt, model)
     }
     paramMaps.indices.map(models.toMap)
-}
+  }
 
   /**
    * Fits multiple models to the input data with multiple sets of parameters. The default
