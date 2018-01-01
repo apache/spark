@@ -45,7 +45,7 @@ object QuantileDiscretizerExample {
       .setNumBuckets(3)
 
     val result = discretizer.fit(df).transform(df)
-    result.show()
+    result.show(false)
     // $example off$
 
     spark.stop()
