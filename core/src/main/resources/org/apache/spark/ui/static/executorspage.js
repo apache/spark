@@ -181,8 +181,8 @@ $(document).ready(function () {
     executorsSummary = $("#active-executors");
 
     getStandAloneppId(function (appId) {
-
-        var endPoint = createRESTEndPoint(appId);
+        var encodedAppId = encodeURIComponent(appId);
+        var endPoint = createRESTEndPoint(encodedAppId);
         $.getJSON(endPoint, function (response, status, jqXHR) {
             var summary = [];
             var allExecCnt = 0;
