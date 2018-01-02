@@ -276,6 +276,7 @@ class ExpressionParserSuite extends PlanTest {
 
     val frameTypes = Seq(("rows", RowFrame), ("range", RangeFrame))
     val boundaries = Seq(
+      // No between combinations
       ("unbounded preceding", UnboundedPreceding, CurrentRow),
       ("2147483648 preceding", -Literal(2147483648L), CurrentRow),
       ("10 preceding", -Literal(10), CurrentRow),
@@ -288,24 +289,24 @@ class ExpressionParserSuite extends PlanTest {
       ("2147483649 following", Literal(2147483649L), CurrentRow),
       ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
 
+      // Between combinations
       ("between unbounded preceding and 5 following",
         UnboundedPreceding, Literal(5)),
       ("between unbounded preceding and 3 + 1 following",
         UnboundedPreceding, Add(Literal(3), Literal(1))),
       ("between unbounded preceding and 2147483649 following",
         UnboundedPreceding, Literal(2147483649L)),
-
       ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),
       ("between 2147483648 preceding and current row", -Literal(2147483648L), CurrentRow),
       ("between 10 preceding and current row", -Literal(10), CurrentRow),
       ("between 3 + 1 preceding and current row", -Add(Literal(3), Literal(1)), CurrentRow),
       ("between 0 preceding and current row", -Literal(0), CurrentRow),
       ("between current row and current row", CurrentRow, CurrentRow),
+      ("between current row and 0 following", CurrentRow, Literal(0)),
       ("between current row and 5 following", CurrentRow, Literal(5)),
       ("between current row and 3 + 1 following", CurrentRow, Add(Literal(3), Literal(1))),
       ("between current row and 2147483649 following", CurrentRow, Literal(2147483649L)),
       ("between current row and unbounded following", CurrentRow, UnboundedFollowing),
-
       ("between 2147483648 preceding and unbounded following",
         -Literal(2147483648L), UnboundedFollowing),
       ("between 10 preceding and unbounded following",
@@ -314,6 +315,7 @@ class ExpressionParserSuite extends PlanTest {
         -Add(Literal(3), Literal(1)), UnboundedFollowing),
       ("between 0 preceding and unbounded following", -Literal(0), UnboundedFollowing),
 
+      // Between partial and full range
       ("between 10 preceding and 5 following", -Literal(10), Literal(5)),
       ("between unbounded preceding and unbounded following",
         UnboundedPreceding, UnboundedFollowing)
