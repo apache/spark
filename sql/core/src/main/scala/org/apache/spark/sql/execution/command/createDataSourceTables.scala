@@ -203,12 +203,13 @@ case class CreateDataSourceTableAsSelectCommand(
       tableExists: Boolean): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
+    val options = table.properties ++ table.storage.properties ++ pathOption
     val dataSource = DataSource(
       session,
       className = table.provider.get,
       partitionColumns = table.partitionColumnNames,
       bucketSpec = table.bucketSpec,
-      options = table.storage.properties ++ pathOption,
+      options = options,
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
