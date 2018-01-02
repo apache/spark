@@ -89,14 +89,14 @@ class GroupedData(object):
         [Row(name=u'Alice', count(1)=1), Row(name=u'Bob', count(1)=1)]
 
         >>> from pyspark.sql import functions as F
-        >>> sorted(gdf.agg(F.min(df.age)).collect())  # doctest: +SKIP
+        >>> sorted(gdf.agg(F.min(df.age)).collect())
         [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> @pandas_udf('int', PandasUDFType.GROUP_AGG)
         ... def min_udf(v):
         ...     return v.min()
-        >>> sorted(gdf.agg(min_udf(df.age)).collect())
+        >>> sorted(gdf.agg(min_udf(df.age)).collect())  # doctest: +SKIP
         [Row(name=u'Alice', min_udf(age)=2), Row(name=u'Bob', min_udf(age)=5)]
         """
         assert exprs, "exprs should not be empty"
