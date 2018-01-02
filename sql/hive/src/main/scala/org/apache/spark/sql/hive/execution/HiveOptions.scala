@@ -112,7 +112,7 @@ object HiveOptions {
     "mapkeyDelim" -> "mapkey.delim",
     "lineDelim" -> "line.delim").map { case (k, v) => k.toLowerCase(Locale.ROOT) -> v }
 
-  def getHiveWriteCompression(tableInfo: TableDesc, sqlConf: SQLConf): Option[(String, String)]= {
+  def getHiveWriteCompression(tableInfo: TableDesc, sqlConf: SQLConf): Option[(String, String)] = {
     val tableProps = tableInfo.getProperties.asScala.toMap
     tableInfo.getOutputFileFormatClassName.toLowerCase match {
       case formatName if formatName.endsWith("parquetoutputformat") =>
