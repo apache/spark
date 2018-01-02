@@ -73,11 +73,6 @@ object SQLConf {
    * See [[get]] for more information.
    */
   private lazy val fallbackConf = new ThreadLocal[SQLConf] {
-    if (Utils.isTesting && SparkEnv.get != null) {
-      // assert that we're only accessing it on the driver.
-      assert(SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER)
-    }
-
     override def initialValue: SQLConf = new SQLConf
   }
 
@@ -1093,6 +1088,11 @@ object SQLConf {
  */
 class SQLConf extends Serializable with Logging {
   import SQLConf._
+
+  if (Utils.isTesting && SparkEnv.get != null) {
+    // assert that we're only accessing it on the driver.
+    assert(SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER)
+  }
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
