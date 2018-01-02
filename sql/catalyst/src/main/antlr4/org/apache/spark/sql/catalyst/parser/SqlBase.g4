@@ -153,7 +153,7 @@ statement
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
-    | UNCACHE TABLE (IF EXISTS)? tableIdentifier                       #uncacheTable
+    | UNCACHE LAZY? TABLE (IF EXISTS)? tableIdentifier                 #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData

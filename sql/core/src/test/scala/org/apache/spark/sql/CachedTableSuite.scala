@@ -254,6 +254,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
+  test("SPARK-22613 'CACHE TABLE' and 'UNCACHE LAZY TABLE' SQL statement") {
+    sql("CACHE TABLE testData")
+    assertCached(spark.table("testData"))
+
+    val rddId = rddIdOf("testData")
+    assert(
+      isMaterialized(rddId),
+      "Eagerly cached in-memory table should have already been materialized")
+
+    sql("UNCACHE LAZY TABLE testData")
+    assert(!spark.catalog.isCached("testData"), "Table 'testData' should not be cached")
+  }
+
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
     withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")

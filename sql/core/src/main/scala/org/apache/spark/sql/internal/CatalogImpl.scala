@@ -442,6 +442,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Removes the specified table or view from the in-memory cache.
+   *
+   * @group cachemgmt
+   * @since 2.2.3
+   */
+  override def uncacheTable(tableName: String, blocking: Boolean): Unit = {
+    sparkSession.sharedState.cacheManager.uncacheQuery(
+      sparkSession.table(tableName),
+      blocking = blocking)
+  }
+
+  /**
    * Removes all cached tables or views from the in-memory cache.
    *
    * @group cachemgmt

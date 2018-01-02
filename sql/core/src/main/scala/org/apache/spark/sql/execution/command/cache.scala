@@ -50,12 +50,13 @@ case class CacheTableCommand(
 
 case class UncacheTableCommand(
     tableIdent: TableIdentifier,
-    ifExists: Boolean) extends RunnableCommand {
+    ifExists: Boolean,
+    isLazy: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val tableId = tableIdent.quotedString
     if (!ifExists || sparkSession.catalog.tableExists(tableId)) {
-      sparkSession.catalog.uncacheTable(tableId)
+      sparkSession.catalog.uncacheTable(tableId, !isLazy)
     }
     Seq.empty[Row]
   }
