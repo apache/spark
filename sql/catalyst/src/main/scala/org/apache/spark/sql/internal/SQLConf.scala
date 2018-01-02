@@ -1091,7 +1091,8 @@ class SQLConf extends Serializable with Logging {
 
   if (Utils.isTesting && SparkEnv.get != null) {
     // assert that we're only accessing it on the driver.
-    assert(SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER)
+    assert(SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER,
+      "SQLConf should only be created and accessed on the driver.")
   }
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
