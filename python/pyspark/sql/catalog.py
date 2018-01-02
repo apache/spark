@@ -267,13 +267,11 @@ class Catalog(object):
 
         if hasattr(f, 'asNondeterministic'):
             udf = f._set_name(name, returnType)
-            self._jsparkSession.udf().registerPython(name, udf._judf)
-            return udf._wrapped()
         else:
             udf = UserDefinedFunction(f, returnType=returnType, name=name,
                                       evalType=PythonEvalType.SQL_BATCHED_UDF)
-            self._jsparkSession.udf().registerPython(name, udf._judf)
-            return udf._wrapped()
+        self._jsparkSession.udf().registerPython(name, udf._judf)
+        return udf._wrapped()
 
     @since(2.0)
     def isCached(self, tableName):
