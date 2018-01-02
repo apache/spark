@@ -4013,6 +4013,23 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         expected = expected.assign(norm=expected.norm.astype('float64'))
         self.assertFramesEqual(expected, result)
 
+    def test_groupkey(self):
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        df = self.data
+        pdf = df.toPandas()
+
+        @pandas_udf('v double, v_norm double', PandasUDFType.GROUP_MAP)
+        def normalize(pdf):
+            v = pdf['v']
+            return pd.DataFrame({'v': v, 'v_norm': v - v.mean()})
+
+        result = df.groupby('id').apply(normalize).toPandas()
+        expected = pdf.groupby('id').apply(normalize.func)
+
+        print(result)
+        print(expected)
+
     def test_empty_groupby(self):
         from pyspark.sql.functions import pandas_udf, col, PandasUDFType
         df = self.data
