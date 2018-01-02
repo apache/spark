@@ -69,9 +69,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         'v,
-        lead("v", 1).over(Window.orderBy("k1", "k2")),
-        lead("v", 1).over(Window.orderBy("k2", "k1"))),
-      Row(1, 2, 4) :: Row(4, 3, 2) :: Row(2, 4, 3) :: Row(3, null, null) :: Nil)
+        rank.over(Window.orderBy("k1", "k2")),
+        rank.over(Window.orderBy("k2", "k1"))),
+      Row(1, 1, 1) :: Row(2, 2, 3) :: Row(3, 4, 4) :: Row(4, 3, 2) :: Nil)
   }
 
   test("Multiple orderBy clauses with desc") {
@@ -80,10 +80,10 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         'v,
-        lead("v", 1).over(Window.orderBy($"k1".desc, $"k2")),
-        lead("v", 1).over(Window.orderBy($"k1", $"k2".desc)),
-        lead("v", 1).over(Window.orderBy($"k1".desc, $"k2".desc))),
-      Row(1, 2, 3, null) :: Row(2, null, 1, 1) :: Row(3, 1, 4, 4) :: Row(4, 3, null, 2) :: Nil)
+        rank.over(Window.orderBy($"k1".desc, $"k2")),
+        rank.over(Window.orderBy($"k1", $"k2".desc)),
+        rank.over(Window.orderBy($"k1".desc, $"k2".desc))),
+      Row(1, 3, 2, 4) :: Row(2, 4, 1, 3) :: Row(3, 2, 3, 1) :: Row(4, 1, 4, 2) :: Nil)
   }
 
   test("Null values sorted to first by asc, last by desc ordering by default") {
@@ -92,9 +92,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         'value,
-        lead("value", 1).over(Window.orderBy($"key")),
-        lead("value", 1).over(Window.orderBy($"key".desc))),
-      Row(1, 2, null) :: Row(2, 3, 1) :: Row(3, null, 2) :: Nil)
+        rank.over(Window.orderBy($"key")),
+        rank.over(Window.orderBy($"key".desc))),
+      Row(1, 1, 3) :: Row(2, 2, 2) :: Row(3, 3, 1) :: Nil)
   }
 
   test("Ordering of null values can be explicitly controlled") {
@@ -103,11 +103,11 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         'value,
-        lead("value", 1).over(Window.orderBy($"key".asc_nulls_first)),
-        lead("value", 1).over(Window.orderBy($"key".asc_nulls_last)),
-        lead("value", 1).over(Window.orderBy($"key".desc_nulls_first)),
-        lead("value", 1).over(Window.orderBy($"key".desc_nulls_last))),
-      Row(1, 2, null, 3, null) :: Row(2, 3, 3, null, 1) :: Row(3, null, 1, 2, 2) :: Nil)
+        rank.over(Window.orderBy($"key".asc_nulls_first)),
+        rank.over(Window.orderBy($"key".asc_nulls_last)),
+        rank.over(Window.orderBy($"key".desc_nulls_first)),
+        rank.over(Window.orderBy($"key".desc_nulls_last))),
+      Row(1, 1, 3, 1, 3) :: Row(2, 2, 1, 3, 2) :: Row(3, 3, 2, 2, 1) :: Nil)
   }
 
   test("Order by without frame defaults to range between unbounded_preceding - current_row") {
