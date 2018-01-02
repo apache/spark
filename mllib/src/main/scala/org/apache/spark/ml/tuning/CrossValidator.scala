@@ -150,10 +150,11 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
       // Fit models in a Future for training in parallel
       val foldMetricFutures = epmGrouped.zipWithIndex.map { case (paramMaps, groupIndex) =>
-        Future[Seq[Double]] {
-          val models = est.fit(trainingDataset, paramMaps).asInstanceOf[Seq[Model[_]]]
+        Future[Iterator[Double]] {
+          val modelIter = est.fit(trainingDataset, paramMaps).asInstanceOf[Seq[Model[_]]].iterator
+          val paramMapIter = paramMaps.iterator
           // TODO: duplicate evaluator to take extra params from input
-          models.zip(paramMaps).zipWithIndex.map { case ((model, paramMap), paramIndex) =>
+          modelIter.zip(paramMapIter).zipWithIndex.map { case ((model, paramMap), paramIndex) =>
             if (collectSubModelsParam) {
               subModels.get(splitIndex)(paramIndex + groupIndex * paramMaps.length) = model
             }
