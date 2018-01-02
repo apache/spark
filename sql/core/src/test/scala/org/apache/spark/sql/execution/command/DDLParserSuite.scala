@@ -1252,7 +1252,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
         |AS SELECT * FROM src
-       """.stripMargin
+      """.stripMargin
 
     val s2 =
       """
