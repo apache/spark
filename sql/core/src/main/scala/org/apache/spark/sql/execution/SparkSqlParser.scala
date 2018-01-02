@@ -383,11 +383,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * {{{
    *   CREATE [TEMPORARY] TABLE [IF NOT EXISTS] [db_name.]table_name
    *   USING table_provider
-   *   [OPTIONS table_property_list]
    *   create_table_clauses
    *   [[AS] select_statement];
    *
    *   create_table_clauses (order insensitive):
+   *     [OPTIONS table_property_list]
    *     [PARTITIONED BY (col_name, col_name, ...)]
    *     [CLUSTERED BY (col_name, col_name, ...)
    *       [SORTED BY (col_name [ASC|DESC], ...)]
@@ -408,6 +408,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
     checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
 
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
@@ -417,17 +419,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         .map(visitIdentifierList(_).toArray)
         .getOrElse(Array.empty[String])
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val bucketSpec = if (ctx.bucketSpec().size > 1) {
-      duplicateClausesNotAllowed("CLUSTERED BY", ctx)
-    } else {
-      ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
-    }
+    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
 
-    val location = if (ctx.locationSpec.size > 1) {
-      duplicateClausesNotAllowed("LOCATION", ctx)
-    } else {
-      ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
-    }
+    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
     val storage = DataSource.buildStorageFormatFromOptions(options)
 
     if (location.isDefined && storage.locationUri.isDefined) {
@@ -1131,16 +1125,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
     checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
+    checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
+    checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
 
     val dataCols = Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
     val partitionCols = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val selectQuery = Option(ctx.query).map(plan)
-    val bucketSpec = if (ctx.bucketSpec().size > 1) {
-      duplicateClausesNotAllowed("CLUSTERED BY", ctx)
-    } else {
-      ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
-    }
+    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
 
     // Note: Hive requires partition columns to be distinct from the schema, so we need
     // to include the partition columns here explicitly
@@ -1149,23 +1143,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     // Storage format
     val defaultStorage = HiveSerDe.getDefaultStorage(conf)
     validateRowFormatFileFormat(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
-    val fileStorage = if (ctx.createFileFormat.size > 1) {
-      duplicateClausesNotAllowed("STORED AS/BY", ctx)
-    } else {
-      ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
-        .getOrElse(CatalogStorageFormat.empty)
-    }
-    val rowStorage = if (ctx.rowFormat.size > 1) {
-      duplicateClausesNotAllowed("ROW FORMAT", ctx)
-    } else {
-      ctx.rowFormat.asScala.headOption.map(visitRowFormat)
-        .getOrElse(CatalogStorageFormat.empty)
-    }
-    val location = if (ctx.locationSpec.size > 1) {
-      duplicateClausesNotAllowed("LOCATION", ctx)
-    } else {
-      ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
-    }
+    val fileStorage = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+    val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
     // If we are creating an EXTERNAL table, then the LOCATION field is required
     if (external && location.isEmpty) {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)

@@ -41,12 +41,8 @@ object ParserUtils {
     throw new ParseException(s"Operation not allowed: $message", ctx)
   }
 
-  def duplicateClausesNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
-    throw new ParseException(s"Found duplicate clauses: $message", ctx)
-  }
-
-  def checkDuplicateClauses(
-      nodes: util.List[TerminalNode], clauseName: String, ctx: ParserRuleContext): Unit = {
+  def checkDuplicateClauses[T](
+      nodes: util.List[T], clauseName: String, ctx: ParserRuleContext): Unit = {
     if (nodes.size() > 1) {
       throw new ParseException(s"Found duplicate clauses: $clauseName", ctx)
     }
