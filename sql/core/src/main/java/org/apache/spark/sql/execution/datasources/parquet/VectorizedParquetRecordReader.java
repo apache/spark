@@ -251,6 +251,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (WritableColumnVector vector : columnVectors) {
       vector.reset();
     }
+    columnarBatch.setNumRows(0);
     if (rowsReturned >= totalRowCount) return false;
     checkEndOfRowGroup();
 
