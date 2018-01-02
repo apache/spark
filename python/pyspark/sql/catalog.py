@@ -266,7 +266,7 @@ class Catalog(object):
         """
 
         if hasattr(f, 'asNondeterministic'):
-            udf = f._set_name(name, returnType)
+            udf = f._set_name_type(name, returnType)
         else:
             udf = UserDefinedFunction(f, returnType=returnType, name=name,
                                       evalType=PythonEvalType.SQL_BATCHED_UDF)

@@ -138,7 +138,7 @@ class UserDefinedFunction(object):
         sc = SparkContext._active_spark_context
         return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
-    def _set_name(self, name, returnType=StringType()):
+    def _set_name_type(self, name, returnType=StringType()):
         """
         Updates the name of UserDefinedFunction.
         """
@@ -179,7 +179,7 @@ class UserDefinedFunction(object):
         wrapper._judf = self._judf
         wrapper._create_judf = self._create_judf
         wrapper._wrapped = self._wrapped
-        wrapper._set_name = self._set_name
+        wrapper._set_name_type = self._set_name_type
 
         return wrapper
 
