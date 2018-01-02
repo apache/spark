@@ -697,18 +697,18 @@ object TypeCoercion {
       p transformExpressionsUp {
         // Skip nodes if unresolved or not enough children
         case c @ Elt(children) if !c.childrenResolved || children.size < 2 => c
-        case c @ Elt(children) if conf.eltOutputAsString ||
-            !children.tail.map(_.dataType).forall(_ == BinaryType) =>
-          val index = children.head
-          val newIndex = ImplicitTypeCasts.implicitCast(index, IntegerType).getOrElse(index)
-          val newInputs = children.tail.map { e =>
-            ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
-          }
-          c.copy(children = newIndex +: newInputs)
         case c @ Elt(children) =>
           val index = children.head
           val newIndex = ImplicitTypeCasts.implicitCast(index, IntegerType).getOrElse(index)
-          c.copy(children = newIndex +: children.tail)
+          val newInputs = if (conf.eltOutputAsString ||
+              !children.tail.map(_.dataType).forall(_ == BinaryType)) {
+            children.tail.map { e =>
+              ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+            }
+          } else {
+            children.tail
+          }
+          c.copy(children = newIndex +: newInputs)
       }
     }
   }
