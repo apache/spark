@@ -263,7 +263,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val HADOOPFSRELATION_SIZE_FACTOR = buildConf(
+  val DISK_TO_MEMORY_SIZE_FACTOR = buildConf(
     "org.apache.spark.sql.execution.datasources.sizeFactor")
     .internal()
     .doc("The result of multiplying this factor with the size of data source files is propagated " +
@@ -1252,7 +1252,7 @@ class SQLConf extends Serializable with Logging {
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
-  def hadoopFSSizeFactor: Double = getConf(HADOOPFSRELATION_SIZE_FACTOR)
+  def sizeToMemorySizeFactor: Double = getConf(DISK_TO_MEMORY_SIZE_FACTOR)
 
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
