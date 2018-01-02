@@ -89,7 +89,7 @@ class GroupedData(object):
         [Row(name=u'Alice', count(1)=1), Row(name=u'Bob', count(1)=1)]
 
         >>> from pyspark.sql import functions as F
-        >>> sorted(gdf.agg(F.min(df.age)).collect())
+        >>> sorted(gdf.agg(F.min(df.age)).collect())  # doctest: +SKIP
         [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
