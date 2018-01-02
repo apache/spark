@@ -31,6 +31,14 @@ import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
+/**
+ * Physical node for aggregation with group aggregate Pandas UDF.
+ *
+ * This plan works by sending the necessary (projected) input grouped data as Arrow record batches
+ * to the python worker, the python worker invokes the UDF and sends the results to the executor,
+ * finally the executor evaluates any post-aggregation expressions and join the result with the
+ * grouped key.
+ */
 case class AggregateInPandasExec(
     groupingExpressions: Seq[NamedExpression],
     udfExpressions: Seq[PythonUDF],
