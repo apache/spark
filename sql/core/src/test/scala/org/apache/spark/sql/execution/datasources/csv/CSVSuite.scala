@@ -54,6 +54,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val simpleSparseFile = "test-data/simple_sparse.csv"
   private val numbersFile = "test-data/numbers.csv"
   private val datesFile = "test-data/dates.csv"
+  private val datesAndTimestampsFile = "test-data/dates-and-timestamps.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
 
@@ -564,6 +565,44 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         Seq(new Timestamp(dateFormat.parse("27/10/2014 18:30").getTime)),
         Seq(new Timestamp(dateFormat.parse("28/01/2016 20:00").getTime)))
     assert(results.toSeq.map(_.toSeq) === expected)
+  }
+
+  test("inferring timestamp types and date types via custom formats") {
+    val options = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "timestampFormat" -> "dd/MM/yyyy HH:mm:ss.SSS",
+      "dateFormat" -> "dd/MM/yyyy")
+    val results = spark.read
+      .format("csv")
+      .options(options)
+      .load(testFile(datesAndTimestampsFile))
+    assert(results.schema{0}.dataType===TimestampType)
+    assert(results.schema{1}.dataType===DateType)
+    val timestamps = spark.read
+      .format("csv")
+      .options(options)
+      .load(testFile(datesAndTimestampsFile))
+      .select("timestamp")
+      .collect()
+    val timestampFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss.SSS", Locale.US)
+    val timestampExpected =
+      Seq(Seq(new Timestamp(timestampFormat.parse("26/08/2015 22:31:46.913").getTime)),
+        Seq(new Timestamp(timestampFormat.parse("27/10/2014 22:33:31.601").getTime)),
+        Seq(new Timestamp(timestampFormat.parse("28/01/2016 22:33:52.888").getTime)))
+    assert(timestamps.toSeq.map(_.toSeq) === timestampExpected)
+    val dates = spark.read
+      .format("csv")
+      .options(options)
+      .load(testFile(datesAndTimestampsFile))
+      .select("date")
+      .collect()
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.US)
+    val dateExpected =
+      Seq(Seq(new Date(dateFormat.parse("27/09/2015").getTime)),
+        Seq(new Date(dateFormat.parse("26/12/2016").getTime)),
+        Seq(new Date(dateFormat.parse("28/01/2017").getTime)))
+    assert(dates.toSeq.map(_.toSeq) === dateExpected)
   }
 
   test("load date types via custom date format") {
