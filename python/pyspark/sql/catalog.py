@@ -255,11 +255,25 @@ class Catalog(object):
         >>> _ = spark.udf.register("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
+
+        >>> import random
+        >>> from pyspark.sql.functions import udf
+        >>> from pyspark.sql.types import IntegerType, StringType
+        >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
+        >>> spark.catalog.registerFunction("random_udf", random_udf, StringType())
+        >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
+        [Row(random_udf()=u'82')]
         """
-        udf = UserDefinedFunction(f, returnType=returnType, name=name,
-                                  evalType=PythonEvalType.SQL_BATCHED_UDF)
-        self._jsparkSession.udf().registerPython(name, udf._judf)
-        return udf._wrapped()
+
+        if hasattr(f, 'asNondeterministic'):
+            udf = f._set_name(name, returnType)
+            self._jsparkSession.udf().registerPython(name, udf._judf)
+            return udf._wrapped()
+        else:
+            udf = UserDefinedFunction(f, returnType=returnType, name=name,
+                                      evalType=PythonEvalType.SQL_BATCHED_UDF)
+            self._jsparkSession.udf().registerPython(name, udf._judf)
+            return udf._wrapped()
 
     @since(2.0)
     def isCached(self, tableName):

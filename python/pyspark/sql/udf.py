@@ -138,6 +138,19 @@ class UserDefinedFunction(object):
         sc = SparkContext._active_spark_context
         return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
+    def _set_name(self, name, returnType=StringType()):
+        """
+        Updates the name of UserDefinedFunction.
+        """
+        # reset _judf
+        self._judf_placeholder = None
+        self._returnType_placeholder = None
+        self._name = name or (
+            func.__name__ if hasattr(func, '__name__')
+            else func.__class__.__name__)
+        self._returnType = returnType
+        return self
+
     def _wrapped(self):
         """
         Wrap this udf with a function and attach docstring from func
@@ -163,6 +176,10 @@ class UserDefinedFunction(object):
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
         wrapper.asNondeterministic = self.asNondeterministic
+        wrapper._judf = self._judf
+        wrapper._create_judf = self._create_judf
+        wrapper._wrapped = self._wrapped
+        wrapper._set_name = self._set_name
 
         return wrapper
 
