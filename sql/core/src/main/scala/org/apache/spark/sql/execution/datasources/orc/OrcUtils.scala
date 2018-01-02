@@ -115,7 +115,8 @@ object OrcUtils extends Logging {
   def getFixedTypeDescription(
       schema: TypeDescription,
       dataSchema: StructType): TypeDescription = {
-    if (schema.getFieldNames.asScala.forall(_.startsWith("_col"))) {
+    val fieldNames = schema.getFieldNames.asScala
+    if (fieldNames.length == dataSchema.length && fieldNames.forall(_.startsWith("_col"))) {
       var schemaString = schema.toString
       dataSchema.zipWithIndex.foreach { case (field: StructField, index: Int) =>
         schemaString = schemaString.replace(s"_col$index:", s"${field.name}:")

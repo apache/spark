@@ -24,18 +24,18 @@ import org.apache.orc.mapred.OrcInputFormat
 import org.apache.orc.storage.ql.exec.vector._
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized._
 
 
 /**
  * To support vectorization in WholeStageCodeGen, this reader returns ColumnarBatch.
  * After creating, `initialize` and `setRequiredSchema` should be called sequentially.
  */
-private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBatch] with Logging {
+private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBatch] {
   import OrcColumnarBatchReader._
 
   /**
@@ -69,7 +69,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
   private var columnarBatch: ColumnarBatch = _
 
   /**
-   * Writable columnVectors of ColumnarBatch.
+   * Writable column vectors of ColumnarBatch.
    */
   private var columnVectors: Seq[WritableColumnVector] = _
 
@@ -117,6 +117,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
 
     val options = OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart, fileSplit.getLength)
     recordReader = reader.rows(options)
+    totalRowCount = reader.getNumberOfRows
   }
 
   /**
@@ -130,14 +131,12 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
       requiredSchema: StructType,
       partitionValues: InternalRow): Unit = {
     batch = orcSchema.createRowBatch(DEFAULT_SIZE)
-    assert(!batch.selectedInUse)
-    totalRowCount = reader.getNumberOfRows
-    logDebug(s"totalRowCount = $totalRowCount")
+    assert(!batch.selectedInUse, "No filters are allowed")
 
     this.requiredSchema = requiredSchema
     this.requestedColIds = requestedColIds
 
-    val capacity = ColumnarBatch.DEFAULT_BATCH_SIZE
+    val capacity = DEFAULT_SIZE
     if (DEFAULT_MEMORY_MODE == MemoryMode.OFF_HEAP) {
       columnVectors = OffHeapColumnVector.allocateColumns(capacity, resultSchema)
     } else {
@@ -152,6 +151,14 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
         columnVectors(i + partitionIdx).setIsConstant()
       }
     }
+
+    // Initialize the missing columns once.
+    for (i <- 0 until requiredSchema.length) {
+      if (requestedColIds(i) < 0) {
+        columnVectors(i).putNulls(0, columnarBatch.capacity)
+        columnVectors(i).setIsConstant()
+      }
+    }
   }
 
   /**
@@ -164,12 +171,13 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
     }
 
     recordReader.nextBatch(batch)
+    assert(!batch.selectedInUse, "No filters are allowed")
     val batchSize = batch.size
     if (batchSize == 0) {
       return false
     }
     rowsReturned += batchSize
-    columnarBatch.reset()
+    columnVectors.foreach(_.reset)
     columnarBatch.setNumRows(batchSize)
 
     var i = 0
@@ -177,9 +185,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
       val field = requiredSchema(i)
       val toColumn = columnVectors(i)
 
-      if (requestedColIds(i) < 0) {
-        toColumn.appendNulls(batchSize)
-      } else {
+      if (requestedColIds(i) >= 0) {
         val fromColumn = batch.cols(requestedColIds(i))
 
         if (fromColumn.isRepeating) {
@@ -305,51 +311,130 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
               throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
           }
         } else {
-          for (index <- 0 until batchSize) {
-            if (fromColumn.isNull(index)) {
-              toColumn.appendNull()
-            } else {
-              field.dataType match {
-                case BooleanType =>
-                  val data = fromColumn.asInstanceOf[LongColumnVector].vector(index) == 1
-                  toColumn.appendBoolean(data)
-
-                case ByteType =>
-                  val data = fromColumn.asInstanceOf[LongColumnVector].vector(index).toByte
-                  toColumn.appendByte(data)
-                case ShortType =>
-                  val data = fromColumn.asInstanceOf[LongColumnVector].vector(index).toShort
-                  toColumn.appendShort(data)
-                case IntegerType | DateType =>
-                  val data = fromColumn.asInstanceOf[LongColumnVector].vector(index).toInt
-                  toColumn.appendInt(data)
-                case LongType =>
-                  val data = fromColumn.asInstanceOf[LongColumnVector].vector(index)
-                  toColumn.appendLong(data)
-
-                case TimestampType =>
-                  val data = fromColumn.asInstanceOf[TimestampColumnVector]
-                  toColumn.appendLong(fromTimestampColumnVector(data, index))
-
-                case FloatType =>
-                  val data = fromColumn.asInstanceOf[DoubleColumnVector].vector(index).toFloat
-                  toColumn.appendFloat(data)
-                case DoubleType =>
-                  val data = fromColumn.asInstanceOf[DoubleColumnVector].vector(index)
-                  toColumn.appendDouble(data)
-
-                case StringType | BinaryType =>
-                  val v = fromColumn.asInstanceOf[BytesColumnVector]
-                  toColumn.appendByteArray(v.vector(index), v.start(index), v.length(index))
-
-                case DecimalType.Fixed(precision, scale) =>
-                  val d = fromColumn.asInstanceOf[DecimalColumnVector].vector(index)
-                  appendDecimalWritable(toColumn, precision, scale, d)
-
-                case dt =>
-                  throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
+          field.dataType match {
+            case BooleanType =>
+              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  toColumn.appendBoolean(vector(index) == 1)
+                }
+                index += 1
               }
-            }
+
+            case ByteType =>
+              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  toColumn.appendByte(vector(index).toByte)
+                }
+                index += 1
+              }
+
+            case ShortType =>
+              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  toColumn.appendShort(vector(index).toShort)
+                }
+                index += 1
+              }
+
+            case IntegerType | DateType =>
+              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  toColumn.appendInt(vector(index).toInt)
+                }
+                index += 1
+              }
+
+            case LongType =>
+              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  toColumn.appendLong(vector(index))
+                }
+                index += 1
+              }
+
+            case TimestampType =>
+              val vector = fromColumn.asInstanceOf[TimestampColumnVector]
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  toColumn.appendLong(fromTimestampColumnVector(vector, index))
+                }
+                index += 1
+              }
+
+            case FloatType =>
+              val vector = fromColumn.asInstanceOf[DoubleColumnVector].vector
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  toColumn.appendFloat(vector(index).toFloat)
+                }
+                index += 1
+              }
+
+            case DoubleType =>
+              val vector = fromColumn.asInstanceOf[DoubleColumnVector].vector
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  toColumn.appendDouble(vector(index))
+                }
+                index += 1
+              }
+
+            case StringType | BinaryType =>
+              val vector = fromColumn.asInstanceOf[BytesColumnVector]
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  toColumn.appendByteArray(
+                    vector.vector(index), vector.start(index), vector.length(index))
+                }
+                index += 1
+              }
+
+            case DecimalType.Fixed(precision, scale) =>
+              val vector = fromColumn.asInstanceOf[DecimalColumnVector].vector
+              var index = 0
+              while (index < batchSize) {
+                if (fromColumn.isNull(index)) {
+                  toColumn.appendNull()
+                } else {
+                  appendDecimalWritable(toColumn, precision, scale, vector(index))
+                }
+                index += 1
+              }
+
+            case dt =>
+              throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
           }
         }
       }
