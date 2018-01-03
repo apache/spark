@@ -266,7 +266,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           outputMode,
           extraOptions,
           deleteCheckpointOnStop))
-      case _ =>
+      case (_: ContinuousWriteSupport, t) if !t.isInstanceOf[ContinuousTrigger] =>
         throw new AnalysisException(
           "Sink only supports continuous writes, but a continuous trigger was not specified.")
     }
