@@ -260,13 +260,17 @@ class Catalog(object):
         >>> from pyspark.sql.functions import udf
         >>> from pyspark.sql.types import IntegerType, StringType
         >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
-        >>> spark.catalog.registerFunction("random_udf", random_udf, StringType())  # doctest: +SKIP
+        >>> newRandom_udf = spark.catalog.registerFunction("random_udf", random_udf, StringType())  # doctest: +SKIP
         >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
         [Row(random_udf()=u'82')]
+        >>> spark.range(1).select(newRandom_udf()).collect()
+        [Row(random_udf()=u'62')]
         """
 
         if hasattr(f, 'asNondeterministic'):
-            udf = f._set_name_type(name, returnType)
+            udf = UserDefinedFunction(f.func, returnType=returnType, name=name,
+                                      evalType=PythonEvalType.SQL_BATCHED_UDF)
+            udf = udf if (f._deterministic) else udf.asNondeterministic()
         else:
             udf = UserDefinedFunction(f, returnType=returnType, name=name,
                                       evalType=PythonEvalType.SQL_BATCHED_UDF)
