@@ -264,14 +264,14 @@ object SQLConf {
     .createWithDefault(false)
 
   val DISK_TO_MEMORY_SIZE_FACTOR = buildConf(
-    "org.apache.spark.sql.execution.datasources.sizeFactor")
+    "org.apache.spark.sql.execution.datasources.fileDataSizeFactor")
     .internal()
     .doc("The result of multiplying this factor with the size of data source files is propagated " +
       "to serve as the stats to choose the best execution plan. In the case where the " +
       "in-disk and in-memory size of data is significantly different, users can adjust this " +
       "factor for a better choice of the execution plan. The default value is 1.0.")
     .doubleConf
-    .checkValue(_ > 0, "the value of sizeFactor must be larger than 0")
+    .checkValue(_ > 0, "the value of fileDataSizeFactor must be larger than 0")
     .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
@@ -1252,7 +1252,7 @@ class SQLConf extends Serializable with Logging {
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
-  def sizeToMemorySizeFactor: Double = getConf(DISK_TO_MEMORY_SIZE_FACTOR)
+  def diskToMemorySizeFactor: Double = getConf(DISK_TO_MEMORY_SIZE_FACTOR)
 
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
