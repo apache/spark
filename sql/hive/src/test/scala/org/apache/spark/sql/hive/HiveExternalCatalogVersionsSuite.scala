@@ -61,7 +61,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     for (i <- 0 until 3) {
       val preferredMirror =
         getStringFromUrl("https://www.apache.org/dyn/closer.lua?preferred=true")
-      logWarning("Mirror is " + preferredMirror)
       val filename = s"spark-$version-bin-hadoop2.7.tgz"
       val url = s"$preferredMirror/spark/spark-$version/" + filename
       logInfo(s"Downloading Spark $version from $url")
@@ -101,11 +100,9 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       outDir.mkdirs()
     }
 
-    logWarning("Download url is " + urlString)
-    logWarning("Target file is " + outDir.getAbsolutePath + File.separator + filename)
     try {
       val result = Utils.doFetchFile(urlString, outDir, filename, conf, securityManager, hadoopConf)
-        result.exists()
+      result.exists()
     } catch {
       case ex: Exception => logError("Could not get file from url " + urlString + ": "
         + ex.getMessage)
