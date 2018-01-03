@@ -163,6 +163,7 @@ class UserDefinedFunction(object):
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
         wrapper.asNondeterministic = self.asNondeterministic
+        wrapper._deterministic = self._deterministic
 
         return wrapper
 

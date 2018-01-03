@@ -203,6 +203,17 @@ class SQLContext(object):
         >>> _ = sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
+
+        >>> import random
+        >>> from pyspark.sql.functions import udf
+        >>> from pyspark.sql.types import IntegerType, StringType
+        >>> random_udf = udf(lambda: random.randint(0, 100), IntegerType()).asNondeterministic()
+        >>> newRandom_udf = sqlContext.registerFunction(
+        ...     "random_udf", random_udf, StringType())  # doctest: +SKIP
+        >>> sqlContext.sql("SELECT random_udf()").collect()  # doctest: +SKIP
+        [Row(random_udf()=u'82')]
+        >>> sqlContext.range(1).select(newRandom_udf()).collect()  # doctest: +SKIP
+        [Row(random_udf()=u'62')]
         """
         return self.sparkSession.catalog.registerFunction(name, f, returnType)
 
