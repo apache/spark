@@ -167,8 +167,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       userSpecifiedSchema = userSpecifiedSchema,
       className = source,
       options = extraOptions.toMap)
-    val v1Relation = v1DataSource match {
-      case ds: StreamSourceProvider => Some(StreamingRelation(ds))
+    val v1Relation = ds match {
+      case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
       case _ => None
     }
     ds match {

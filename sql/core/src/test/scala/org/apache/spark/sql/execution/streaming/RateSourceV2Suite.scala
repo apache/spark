@@ -59,6 +59,7 @@ class RateSourceV2Suite extends StreamTest {
   test("basic microbatch execution") {
     val input = spark.readStream
       .format("rateV2")
+      .option("numPartitions", "1")
       .option("rowsPerSecond", "10")
       .option("useManualClock", "true")
       .load()
