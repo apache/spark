@@ -141,6 +141,9 @@ class UserDefinedFunction(object):
         sc = SparkContext._active_spark_context
         return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
+    # This function is for improving the online help system in the interactive interpreter.
+    # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and
+    # argument annotation. (See: SPARK-19161)
     def _wrapped(self):
         """
         Wrap this udf with a function and attach docstring from func
