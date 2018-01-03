@@ -49,9 +49,9 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  *                                  directories under destination path.
  */
 class HadoopMapReduceCommitProtocol(
-     jobId: String,
-     path: String,
-     dynamicPartitionOverwrite: Boolean = false)
+    jobId: String,
+    path: String,
+    dynamicPartitionOverwrite: Boolean = false)
   extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
@@ -107,7 +107,7 @@ class HadoopMapReduceCommitProtocol(
     val stagingDir: Path = committer match {
       case _ if dynamicPartitionOverwrite =>
         assert(dir.isDefined,
-          "The dataset to be written must be partitioned when runtimeOverwritePartition is true.")
+          "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
         partitionPaths += dir.get
         this.stagingDir
       // For FileOutputCommitter it has its own staging path called "work path".
