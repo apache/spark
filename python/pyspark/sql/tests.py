@@ -378,6 +378,13 @@ class SQLTests(ReusedSQLTestCase):
         [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
+    def test_non_deterministic_udf(self):
+        import random
+        self.spark.catalog.registerFunction(
+            "randInt", lambda: random.randint(6, 6), IntegerType(), deterministic=False)
+        [row] = self.spark.sql("SELECT randInt()").collect()
+        self.assertEqual(row[0], 6)
+
     def test_chained_udf(self):
         self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())
         [row] = self.spark.sql("SELECT double(1)").collect()
