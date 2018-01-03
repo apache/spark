@@ -28,8 +28,6 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2797,20 +2795,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTable("t") {
       Seq(Seq(Seq(1, 2), Seq(3), Seq(4, 5, 6))).toDF("a").write.saveAsTable("t")
       val df = sql("SELECT CAST(a AS STRING) FROM t")
-      checkAnswer(df, Row("[WrappedArray(1, 2), WrappedArray(3), WrappedArray(4, 5, 6)]"))
+      checkAnswer(df, Row("[[1, 2], [3], [4, 5, 6]]"))
     }
 
     withTable("t") {
       Seq(Seq(Map(1 -> "a", 2 -> "b"), Map(3 -> "c"), Map(4 -> "d", 5 -> "e"))).toDF("a")
         .write.saveAsTable("t")
       val df = sql("SELECT CAST(a AS STRING) FROM t")
-      checkAnswer(df, Row("[Map(1 -> a, 2 -> b), Map(3 -> c), Map(4 -> d, 5 -> e)]"))
+      checkAnswer(df, Row("[[1 -> a, 2 -> b], [3 -> c], [4 -> d, 5 -> e]]"))
     }
 
     withTable("t") {
       Seq(Seq((1, "a"), (2, "b")), Seq((3, "c"))).toDF("a").write.saveAsTable("t")
       val df = sql("SELECT CAST(a AS STRING) FROM t")
-      checkAnswer(df, Row("[[1,a], [2,b]]") :: Row("[[3,c]]") :: Nil)
+      checkAnswer(df, Row("[[1, a], [2, b]]") :: Row("[[3, c]]") :: Nil)
     }
   }
 }

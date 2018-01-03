@@ -24,9 +24,7 @@ import scala.collection.mutable.WrappedArray
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -607,6 +605,112 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     """
   }
 
+  private[this] def writeElemToBufferCode(
+      dataType: DataType,
+      buffer: String,
+      elemTerm: String,
+      ctx: CodegenContext): String = dataType match {
+    case BinaryType => s"$buffer.append($elemTerm)"
+    case StringType => s"$buffer.append($elemTerm.getBytes())"
+    case DateType => s"""$buffer.append(
+      org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($elemTerm))"""
+    case TimestampType => s"""$buffer.append(
+      org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($elemTerm))"""
+    case map: MapType => s"${codegenWriteMapToBuffer(map, buffer, ctx)}($elemTerm)"
+    case ar: ArrayType => s"${codegenWriteArrayToBuffer(ar, buffer, ctx)}($elemTerm)"
+    case st: StructType => s"${codegenWriteStructToBuffer(st, buffer, ctx)}($elemTerm)"
+    case _ => s"$buffer.append(String.valueOf($elemTerm))"
+  }
+
+  private[this] def codegenWriteStructToBuffer(
+      st: StructType, buffer: String, ctx: CodegenContext): String = {
+    val writeStructToBuffer = ctx.freshName("writeStructToBuffer")
+    val rowTerm = ctx.freshName("rowTerm")
+    val writeToBufferCode = st.zipWithIndex.map { case (f, i) =>
+      val fieldTerm = ctx.freshName("fieldTerm")
+      val writeFieldCode = writeElemToBufferCode(f.dataType, buffer, fieldTerm, ctx)
+      s"""
+         |${ctx.javaType(st(i).dataType)} $fieldTerm = ${ctx.getValue(rowTerm, f.dataType, s"$i")};
+         |$writeFieldCode;
+       """.stripMargin
+    }
+    ctx.addNewFunction(writeStructToBuffer,
+      s"""
+         |private void $writeStructToBuffer(InternalRow $rowTerm) {
+         |  $buffer.append("[");
+         |  ${writeToBufferCode.mkString(s"""$buffer.append(", ");""" + "\n")}
+         |  $buffer.append("]");
+         |}
+       """.stripMargin)
+  }
+
+  private[this] def codegenWriteMapToBuffer(
+      map: MapType, buffer: String, ctx: CodegenContext): String = {
+    val loopIndex = ctx.freshName("loopIndex")
+    val writeMapToBuffer = ctx.freshName("writeMapToBuffer")
+    val mapTerm = ctx.freshName("mapTerm")
+    val keyTerm = ctx.freshName("keyTerm")
+    val valueTerm = ctx.freshName("valueTerm")
+    val writeKeyCode = writeElemToBufferCode(map.keyType, buffer, keyTerm, ctx)
+    val writeValueCode = writeElemToBufferCode(map.valueType, buffer, valueTerm, ctx)
+    def writeToBufferCode(i: String) = {
+      s"""
+         |${ctx.javaType(map.keyType)} $keyTerm =
+         |  ${ctx.getValue(s"$mapTerm.keyArray()", map.keyType, i)};
+         |${ctx.javaType(map.valueType)} $valueTerm =
+         |  ${ctx.getValue(s"$mapTerm.valueArray()", map.valueType, i)};
+         |
+         |// Write a key-value pair in the buffer
+         |$writeKeyCode;
+         |$buffer.append(" -> ");
+         |$writeValueCode;
+       """.stripMargin
+    }
+    ctx.addNewFunction(writeMapToBuffer,
+      s"""
+         |private void $writeMapToBuffer(MapData $mapTerm) {
+         |  $buffer.append("[");
+         |  if ($mapTerm.numElements() > 0) {
+         |    ${writeToBufferCode("0")}
+         |  }
+         |  for (int $loopIndex = 1; $loopIndex < $mapTerm.numElements(); $loopIndex++) {
+         |    $buffer.append(", ");
+         |    ${writeToBufferCode(loopIndex)}
+         |  }
+         |  $buffer.append("]");
+         |}
+       """.stripMargin)
+  }
+
+  private[this] def codegenWriteArrayToBuffer(
+      ar: ArrayType, buffer: String, ctx: CodegenContext): String = {
+    val loopIndex = ctx.freshName("loopIndex")
+    val writeArrayToBuffer = ctx.freshName("writeArrayToBuffer")
+    val arTerm = ctx.freshName("arTerm")
+    val elemTerm = ctx.freshName("elemTerm")
+    val writeElemCode = writeElemToBufferCode(ar.elementType, buffer, elemTerm, ctx)
+    def writeToBufferCode(i: String) = {
+      s"""
+         |${ctx.javaType(ar.elementType)} $elemTerm = ${ctx.getValue(arTerm, ar.elementType, i)};
+         |$writeElemCode;
+       """.stripMargin
+    }
+    ctx.addNewFunction(writeArrayToBuffer,
+      s"""
+         |private void $writeArrayToBuffer(ArrayData $arTerm) {
+         |  $buffer.append("[");
+         |  if ($arTerm.numElements() > 0) {
+         |    ${writeToBufferCode("0")}
+         |  }
+         |  for (int $loopIndex = 1; $loopIndex < $arTerm.numElements(); $loopIndex++) {
+         |    $buffer.append(", ");
+         |    ${writeToBufferCode(loopIndex)}
+         |  }
+         |  $buffer.append("]");
+         |}
+       """.stripMargin)
+  }
+
   private[this] def castToStringCode(from: DataType, ctx: CodegenContext, ev: ExprCode)
     : CastFunction = {
     from match {
@@ -620,25 +724,20 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
       case ar: ArrayType =>
-        // Generate code to recursively convert a catalyst array type `ArrayData` into
-        // a Scala array type by using an array encoder.
-        val staticInvoke = RowEncoder.deserializerFor(child, ar).asInstanceOf[StaticInvoke]
-        val arVal = ctx.freshName("arVal")
-        val arNull = ctx.freshName("arNull")
-        val inputExprCode = ExprCode(
-          code =
-            s"""${ctx.javaType(ar)} $arVal = ${ev.value}
-               |boolean $arNull = ${ev.isNull}
-             """.stripMargin,
-          isNull = arNull,
-          value = arVal
-        )
-        val expr = staticInvoke.doGenCode(ctx, inputExprCode)
-        ev.code = expr.code
-        ev.isNull = expr.isNull
-        ev.value = expr.value
+        val bufferClass = classOf[StringWriterBuffer].getName
+        val buffer = ctx.addMutableState(bufferClass, "buffer", v => s"$v = new $bufferClass();")
+        val writeArrayToBuffer = codegenWriteArrayToBuffer(ar, buffer, ctx)
+        val arrayToStringCode =
+          s"""
+             |if (!${ev.isNull}) {
+             |  $buffer.reset();
+             |  $writeArrayToBuffer(${ev.value});
+             |}
+           """.stripMargin
+        ev.code = ev.code ++ arrayToStringCode
+        ev.value = buffer
         (c, evPrim, evNull) =>
-          s"""$evPrim = UTF8String.fromString($c.mkString("[", ", ", "]"));"""
+          s"""$evPrim = UTF8String.fromBytes($buffer.getBytes());"""
       case _ =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
