@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
+import java.io.{File, FileInputStream}
 import java.nio.file.Files
 
+import scala.io.Codec
+import scala.io.Source
 import scala.sys.process._
 
-import org.apache.spark.TestUtils
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.{SecurityManager, SparkConf, TestUtils}
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
@@ -56,10 +60,12 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     // Try mirrors a few times until one succeeds
     for (i <- 0 until 3) {
       val preferredMirror =
-        Seq("wget", "https://www.apache.org/dyn/closer.lua?preferred=true", "-q", "-O", "-").!!.trim
-      val url = s"$preferredMirror/spark/spark-$version/spark-$version-bin-hadoop2.7.tgz"
+        getStringFromUrl("https://www.apache.org/dyn/closer.lua?preferred=true")
+      logWarning("Mirror is " + preferredMirror)
+      val filename = s"spark-$version-bin-hadoop2.7.tgz"
+      val url = s"$preferredMirror/spark/spark-$version/" + filename
       logInfo(s"Downloading Spark $version from $url")
-      if (Seq("wget", url, "-q", "-P", path).! == 0) {
+      if (getFileFromUrl(url, path, filename)) {
         return
       }
       logWarning(s"Failed to download Spark $version from $url")
@@ -83,6 +89,45 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
   private def genDataDir(name: String): String = {
     new File(tmpDataDir, name).getCanonicalPath
+  }
+
+  def getFileFromUrl(urlString: String, targetDir: String, filename: String): Boolean = {
+    val conf = new SparkConf
+    val securityManager = new SecurityManager(conf)
+    val hadoopConf = new Configuration
+
+    val outDir = new File(targetDir)
+    if (!outDir.exists()) {
+      outDir.mkdirs()
+    }
+
+    logWarning("Download url is " + urlString)
+    logWarning("Target file is " + outDir.getAbsolutePath + File.separator + filename)
+    try {
+      val result = Utils.doFetchFile(urlString, outDir, filename, conf, securityManager, hadoopConf)
+        result.exists()
+    } catch {
+      case ex: Exception => logError("Could not get file from url " + urlString + ": "
+        + ex.getMessage)
+        false
+    }
+  }
+
+  def getStringFromUrl(urlString: String, encoding: String = "UTF-8"): String = {
+    val outDir = Files.createTempDirectory("string-")
+    val filename = "string-out.txt"
+
+    if (!getFileFromUrl(urlString, outDir.toString, filename)) {
+      throw new java.io.IOException("Could not get string from url " + urlString)
+    }
+
+    val outputFile = new File(outDir.toString + File.separator + filename)
+    val fis = new FileInputStream(outputFile)
+    val result = Source.fromInputStream(fis)(Codec(encoding)).mkString
+    fis.close()
+    outputFile.delete()
+    outDir.toFile.delete()
+    result
   }
 
   override def beforeAll(): Unit = {
