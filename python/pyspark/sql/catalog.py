@@ -263,7 +263,7 @@ class Catalog(object):
         >>> newRandom_udf = spark.catalog.registerFunction("random_udf", random_udf, StringType())  # doctest: +SKIP
         >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
         [Row(random_udf()=u'82')]
-        >>> spark.range(1).select(newRandom_udf()).collect()
+        >>> spark.range(1).select(newRandom_udf()).collect()  # doctest: +SKIP
         [Row(random_udf()=u'62')]
         """
 
