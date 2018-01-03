@@ -478,7 +478,7 @@ class MicroBatchExecution(
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
           case s: MicroBatchWriteSupport =>
-            // Execute the V2 writer node in the query plan.
+            // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
         }
       }
