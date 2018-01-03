@@ -89,14 +89,15 @@ class MicroBatchExecution(
             Optional.empty(), // user specified schema
             metadataPath,
             new DataSourceV2Options(options.asJava))
-          nextSourceId += 1]
+          nextSourceId += 1
           StreamingExecutionRelation(reader, output)(sparkSession)
         })
-      case s @ StreamingRelationV2(_, _, _, output, v1DataSource) =>
+      case s @ StreamingRelationV2(_, _, _, output, v1Relation) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          val source = v1DataSource.createSource(metadataPath)
+          assert(v1Relation.isDefined, "v2 execution didn't match but v1 was unavailable")
+          val source = v1Relation.get.dataSource.createSource(metadataPath)
           nextSourceId += 1
           StreamingExecutionRelation(source, output)(sparkSession)
         })

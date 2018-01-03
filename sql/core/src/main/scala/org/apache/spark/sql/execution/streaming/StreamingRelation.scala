@@ -92,7 +92,7 @@ case class StreamingRelationV2(
     sourceName: String,
     extraOptions: Map[String, String],
     output: Seq[Attribute],
-    v1DataSource: DataSource)(session: SparkSession)
+    v1Relation: Option[StreamingRelation])(session: SparkSession)
   extends LeafNode {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName

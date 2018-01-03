@@ -27,6 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
+import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
 import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
 import org.apache.spark.sql.types.StructType
@@ -166,37 +167,31 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       userSpecifiedSchema = userSpecifiedSchema,
       className = source,
       options = extraOptions.toMap)
+    val v1Relation = v1DataSource match {
+      case ds: StreamSourceProvider => Some(StreamingRelation(ds))
+      case _ => None
+    }
     ds match {
       case s: MicroBatchReadSupport =>
         val tempReader = s.createMicroBatchReader(
           java.util.Optional.ofNullable(userSpecifiedSchema.orNull),
           Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
           options)
-        // Generate the V1 node to catch errors thrown within generation.
-        try {
-          StreamingRelation(v1DataSource)
-        } catch {
-          case e: UnsupportedOperationException
-              if e.getMessage.contains("does not support streamed reading") =>
-            // If v1 wasn't supported for this source, that's fine; just proceed onwards with v2.
-        }
         Dataset.ofRows(
           sparkSession,
           StreamingRelationV2(
             s, source, extraOptions.toMap,
-            tempReader.readSchema().toAttributes, v1DataSource)(sparkSession))
+            tempReader.readSchema().toAttributes, v1Relation)(sparkSession))
       case s: ContinuousReadSupport =>
         val tempReader = s.createContinuousReader(
           java.util.Optional.ofNullable(userSpecifiedSchema.orNull),
           Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
           options)
-        // Generate the V1 node to catch errors thrown within generation.
-        StreamingRelation(v1DataSource)
         Dataset.ofRows(
           sparkSession,
           StreamingRelationV2(
             s, source, extraOptions.toMap,
-            tempReader.readSchema().toAttributes, v1DataSource)(sparkSession))
+            tempReader.readSchema().toAttributes, v1Relation)(sparkSession))
       case _ =>
         // Code path for data source v1.
         Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
