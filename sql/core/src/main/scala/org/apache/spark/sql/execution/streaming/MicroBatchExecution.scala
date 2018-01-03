@@ -213,8 +213,8 @@ class MicroBatchExecution(
                     source.getBatch(start, end)
                   }
                 case nonV1Tuple =>
-                  // The V2 API does not have the same weird edge case - we don't need to do
-                  // anything here.
+                  // The V2 API does not have the same edge case requiring getBatch to be called
+                  // here, so we do nothing here.
               }
               currentBatchId = latestCommittedBatchId + 1
               committedOffsets ++= availableOffsets
@@ -258,6 +258,7 @@ class MicroBatchExecution(
     val hasNewData = {
       awaitProgressLock.lock()
       try {
+        // Generate a map from each unique source to the next available offset.
         val latestOffsets: Map[BaseStreamingSource, Option[Offset]] = uniqueSources.map {
           case s: Source =>
             updateStatusMessage(s"Getting offsets from $s")
@@ -268,8 +269,8 @@ class MicroBatchExecution(
             updateStatusMessage(s"Getting offsets from $s")
             reportTimeTaken("getOffset") {
               // Once v1 streaming source execution is gone, we can restructure this to be cleaner.
-              // For now, we set the range here to get the available end offset, and set it again
-              // for real when executing.
+              // For now, we set the range here to get the source to infer the available end offset,
+              // get that offset, and then set the range again when we later execute.
               if (availableOffsets.get(s).isDefined) {
                 val offsetJson = availableOffsets.get(s).get.json
                 s.setOffsetRange(
