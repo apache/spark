@@ -413,6 +413,18 @@ class SQLTests(ReusedSQLTestCase):
         pydoc.render_doc(random_udf)
         pydoc.render_doc(random_udf1)
 
+    def test_nondeterministic_udf_in_aggregate(self):
+        from pyspark.sql.functions import udf, sum
+        import random
+        udf_random_col = udf(lambda: int(100 * random.random()), 'int').asNondeterministic()
+        df = self.spark.range(10)
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(AnalysisException, "nondeterministic"):
+                df.groupby('id').agg(sum(udf_random_col())).collect()
+            with self.assertRaisesRegexp(AnalysisException, "nondeterministic"):
+                df.agg(sum(udf_random_col())).collect()
+
     def test_chained_udf(self):
         self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())
         [row] = self.spark.sql("SELECT double(1)").collect()
@@ -3567,6 +3579,18 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         time.tzset()
         ReusedSQLTestCase.tearDownClass()
 
+    @property
+    def random_udf(self):
+        from pyspark.sql.functions import pandas_udf
+
+        @pandas_udf('double')
+        def random_udf(v):
+            import pandas as pd
+            import numpy as np
+            return pd.Series(np.random.random(len(v)))
+        random_udf = random_udf.asNondeterministic()
+        return random_udf
+
     def test_vectorized_udf_basic(self):
         from pyspark.sql.functions import pandas_udf, col
         df = self.spark.range(10).select(
@@ -3949,6 +3973,33 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             self.assertEqual(result_ny, result_la_corrected)
         finally:
             self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
+
+    def test_nondeterministic_udf(self):
+        # Non-deterministic UDFs should be allowed in select and withColumn
+        from pyspark.sql.functions import pandas_udf, col
+
+        random_udf = self.random_udf
+        df = self.spark.range(10)
+
+        result1 = df.select(random_udf(col('id')).alias('rand')).collect()
+        result2 = df.withColumn('rand', random_udf(col('id'))).collect()
+
+        for row in result1:
+            self.assertTrue(0.0 <= row.rand < 1.0)
+        for row in result2:
+            self.assertTrue(0.0 <= row.rand < 1.0)
+
+    def test_nondeterministic_udf_in_aggregate(self):
+        from pyspark.sql.functions import pandas_udf, sum
+
+        df = self.spark.range(10)
+        random_udf = self.random_udf
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
+                df.groupby(df.id).agg(sum(random_udf(df.id))).collect()
+            with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
+                df.agg(sum(random_udf(df.id))).collect()
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
