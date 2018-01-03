@@ -38,11 +38,14 @@ class RateStreamV2Reader(options: DataSourceV2Options)
   extends MicroBatchReader {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
-  val clock = if (options.get("useManualClock").orElse("false").toBoolean) new ManualClock
-      else new SystemClock
+  val clock = {
+    // The option to use a manual clock is provided only for unit testing purposes.
+    if (options.get("useManualClock").orElse("false").toBoolean) new ManualClock
+    else new SystemClock
+  }
 
   private val numPartitions =
-    options.get(RateStreamSourceV2.NUM_PARTITIONS).orElse("1").toInt
+    options.get(RateStreamSourceV2.NUM_PARTITIONS).orElse("5").toInt
   private val rowsPerSecond =
     options.get(RateStreamSourceV2.ROWS_PER_SECOND).orElse("6").toLong
 
