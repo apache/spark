@@ -35,6 +35,10 @@ case class DataSourceV2Relation(
   }
 }
 
+/**
+ * A specialization of DataSourceV2Relation with the streaming bit set to true. Otherwwise identical
+ * to the non-streaming relation.
+ */
 class StreamingDataSourceV2Relation(
     fullOutput: Seq[AttributeReference],
     reader: DataSourceV2Reader) extends DataSourceV2Relation(fullOutput, reader) {
