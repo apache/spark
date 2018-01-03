@@ -586,11 +586,11 @@ public abstract class WritableColumnVector extends ColumnVector {
   public final int appendStruct(boolean isNull) {
     if (isNull) {
       appendNull();
-      for (ColumnVector c: childColumns) {
-        if (c.dataType() instanceof StructType) {
-          ((WritableColumnVector) c).appendStruct(true);
+      for (WritableColumnVector c: childColumns) {
+        if (c.type instanceof StructType) {
+          c.appendStruct(true);
         } else {
-          ((WritableColumnVector) c).appendNull();
+          c.appendNull();
         }
       }
     } else {

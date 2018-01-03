@@ -38,9 +38,10 @@ import org.apache.spark.unsafe.types.UTF8String;
  * ColumnVector is expected to be reused during the entire data loading process, to avoid allocating
  * memory again and again.
  *
- * ColumnVector is meant to maximize CPU efficiency and not storage footprint, implementations
- * should prefer computing efficiency over storage efficiency when design the format. Since it is
- * expected to reuse the ColumnVector instance, the storage footprint is negligible.
+ * ColumnVector is meant to maximize CPU efficiency but not to minimize storage footprint,
+ * implementations should prefer computing efficiency over storage efficiency when design the
+ * format. Since it is expected to reuse the ColumnVector instance while loading data, the storage
+ * footprint is negligible.
  */
 public abstract class ColumnVector implements AutoCloseable {
 
