@@ -260,7 +260,7 @@ class Catalog(object):
         >>> from pyspark.sql.functions import udf
         >>> from pyspark.sql.types import IntegerType, StringType
         >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
-        >>> spark.catalog.registerFunction("random_udf", random_udf, StringType())
+        >>> spark.catalog.registerFunction("random_udf", random_udf, StringType())  # doctest: +SKIP
         >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
         [Row(random_udf()=u'82')]
         """
