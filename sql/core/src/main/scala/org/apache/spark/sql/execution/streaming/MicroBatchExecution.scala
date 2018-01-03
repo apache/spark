@@ -65,6 +65,13 @@ class MicroBatchExecution(
     var nextSourceId = 0L
     val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
     val v2ToExecutionRelationMap = MutableMap[StreamingRelationV2, StreamingExecutionRelation]()
+    // We transform each distinct streaming relation into a StreamingExecutionRelation, keeping a
+    // map as we go to ensure each identical relation gets the same StreamingExecutionRelation
+    // object. For each microbatch, the StreamingExecutionRelation will be replaced with a logical
+    // plan for the data within that batch.
+    // Note that we have to use the previous `output` as attributes in StreamingExecutionRelation,
+    // since the existing logical plan has already used those attributes. The per-microbatch
+    // transformation is responsible for replacing attributes with their final values.
     val _logicalPlan = analyzedPlan.transform {
       case streamingRelation@StreamingRelation(dataSource, _, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
@@ -72,8 +79,6 @@ class MicroBatchExecution(
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           val source = dataSource.createSource(metadataPath)
           nextSourceId += 1
-          // We still need to use the previous `output` instead of `source.schema` as attributes in
-          // "df.logicalPlan" has already used attributes of the previous `output`.
           StreamingExecutionRelation(source, output)(sparkSession)
         })
       case s @ StreamingRelationV2(source: MicroBatchReadSupport, _, options, output, _) =>
@@ -84,9 +89,7 @@ class MicroBatchExecution(
             Optional.empty(), // user specified schema
             metadataPath,
             new DataSourceV2Options(options.asJava))
-          nextSourceId += 1
-          // We still need to use the previous `output` instead of `source.schema` as attributes in
-          // "df.logicalPlan" has already used attributes of the previous `output`.
+          nextSourceId += 1]
           StreamingExecutionRelation(reader, output)(sparkSession)
         })
       case s @ StreamingRelationV2(_, _, _, output, v1DataSource) =>
@@ -95,8 +98,6 @@ class MicroBatchExecution(
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           val source = v1DataSource.createSource(metadataPath)
           nextSourceId += 1
-          // We still need to use the previous `output` instead of `source.schema` as attributes in
-          // "df.logicalPlan" has already used attributes of the previous `output`.
           StreamingExecutionRelation(source, output)(sparkSession)
         })
     }
