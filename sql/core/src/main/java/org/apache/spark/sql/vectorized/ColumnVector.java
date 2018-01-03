@@ -31,15 +31,15 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * ColumnVector supports all the data types including nested types. To handle nested types,
  * ColumnVector can have children and is a tree structure. For struct type, it stores the actual
- * data of each field in the corresponding child ColumnVector, and only store null information in
+ * data of each field in the corresponding child ColumnVector, and only stores null information in
  * the parent ColumnVector. For array type, it stores the actual array elements in the child
- * ColumnVector, and store null information, array offsets and lengths in the parent ColumnVector.
+ * ColumnVector, and stores null information, array offsets and lengths in the parent ColumnVector.
  *
  * ColumnVector is expected to be reused during the entire data loading process, to avoid allocating
  * memory again and again.
  *
- * ColumnVector is meant to maximize CPU efficiency but not to minimize storage footprint,
- * implementations should prefer computing efficiency over storage efficiency when design the
+ * ColumnVector is meant to maximize CPU efficiency but not to minimize storage footprint.
+ * Implementations should prefer computing efficiency over storage efficiency when design the
  * format. Since it is expected to reuse the ColumnVector instance while loading data, the storage
  * footprint is negligible.
  */

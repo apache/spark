@@ -23,9 +23,9 @@ import org.apache.spark.sql.execution.vectorized.MutableColumnarRow;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * This class is a wrapper of multiple ColumnVectors and represents a logical table-like data
- * structure. It provides a row-view of this batch so that Spark can access the data row by row.
- * Instance of it is meant to be reused during the entire data loading process.
+ * This class wraps multiple ColumnVectors as a row-wise table. It provides a row view of this
+ * batch so that Spark can access the data row by row. Instance of it is meant to be reused during
+ * the entire data loading process.
  */
 public final class ColumnarBatch {
   public static final int DEFAULT_BATCH_SIZE = 4 * 1024;
@@ -79,7 +79,7 @@ public final class ColumnarBatch {
   }
 
   /**
-   * Sets the number of rows that are valid in this batch.
+   * Sets the number of rows in this batch.
    */
   public void setNumRows(int numRows) {
     assert(numRows <= this.capacity);
