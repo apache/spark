@@ -17,7 +17,6 @@
 """
 User-defined function related classes and functions
 """
-import copy
 import functools
 
 from pyspark import SparkContext
@@ -172,16 +171,16 @@ class UserDefinedFunction(object):
 
     def asNondeterministic(self):
         """
-        Updates UserDefinedFunction to nondeterministic.
+        Updates :class:`UserDefinedFunction` to nondeterministic.
 
         .. versionadded:: 2.3
         """
         self._deterministic = False
-        return self
+        return self._wrapped()
 
     def asNonNullable(self):
         """
-        Updates UserDefinedFunction to non-nonullable.
+        Updates :class:`UserDefinedFunction` to non-nullable.
 
         .. versionadded:: 2.4
         """
