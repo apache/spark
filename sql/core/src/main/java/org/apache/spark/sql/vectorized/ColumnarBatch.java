@@ -14,26 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.vectorized;
+package org.apache.spark.sql.vectorized;
 
 import java.util.*;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.execution.vectorized.MutableColumnarRow;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * This class is the in memory representation of rows as they are streamed through operators. It
- * is designed to maximize CPU efficiency and not storage footprint. Since it is expected that
- * each operator allocates one of these objects, the storage footprint on the task is negligible.
- *
- * The layout is a columnar with values encoded in their native format. Each RowBatch contains
- * a horizontal partitioning of the data, split into columns.
- *
- * The ColumnarBatch supports either on heap or offheap modes with (mostly) the identical API.
- *
- * TODO:
- *  - There are many TODOs for the existing APIs. They should throw a not implemented exception.
- *  - Compaction: The batch and columns should be able to compact based on a selection vector.
+ * This class wraps multiple ColumnVectors as a row-wise table. It provides a row view of this
+ * batch so that Spark can access the data row by row. Instance of it is meant to be reused during
+ * the entire data loading process.
  */
 public final class ColumnarBatch {
   public static final int DEFAULT_BATCH_SIZE = 4 * 1024;
@@ -57,7 +49,7 @@ public final class ColumnarBatch {
   }
 
   /**
-   * Returns an iterator over the rows in this batch. This skips rows that are filtered out.
+   * Returns an iterator over the rows in this batch.
    */
   public Iterator<InternalRow> rowIterator() {
     final int maxRows = numRows;
@@ -87,19 +79,7 @@ public final class ColumnarBatch {
   }
 
   /**
-   * Resets the batch for writing.
-   */
-  public void reset() {
-    for (int i = 0; i < numCols(); ++i) {
-      if (columns[i] instanceof WritableColumnVector) {
-        ((WritableColumnVector) columns[i]).reset();
-      }
-    }
-    this.numRows = 0;
-  }
-
-  /**
-   * Sets the number of rows that are valid.
+   * Sets the number of rows in this batch.
    */
   public void setNumRows(int numRows) {
     assert(numRows <= this.capacity);

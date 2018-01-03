@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.vectorized;
+package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
@@ -24,8 +24,7 @@ import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * Row abstraction in {@link ColumnVector}. The instance of this class is intended
- * to be reused, callers should copy the data out if it needs to be stored.
+ * Row abstraction in {@link ColumnVector}.
  */
 public final class ColumnarRow extends InternalRow {
   // The data for this row.
@@ -34,7 +33,7 @@ public final class ColumnarRow extends InternalRow {
   private final int rowId;
   private final int numFields;
 
-  ColumnarRow(ColumnVector data, int rowId) {
+  public ColumnarRow(ColumnVector data, int rowId) {
     assert (data.dataType() instanceof StructType);
     this.data = data;
     this.rowId = rowId;
