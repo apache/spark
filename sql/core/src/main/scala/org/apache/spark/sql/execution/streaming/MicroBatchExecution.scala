@@ -431,7 +431,7 @@ class MicroBatchExecution(
 
     // Rewire the plan to use the new attributes that were returned by the source.
     val replacementMap = AttributeMap(replacements)
-    val withNewExprs = withNewSources transformAllExpressions {
+    val newAttributePlan = withNewSources transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) =>
         replacementMap(a).withMetadata(a.metadata)
       case ct: CurrentTimestamp =>
@@ -443,16 +443,16 @@ class MicroBatchExecution(
     }
 
     val triggerLogicalPlan = sink match {
-      case _: Sink => withNewExprs
+      case _: Sink => newAttributePlan
       case s: MicroBatchWriteSupport =>
         val writer = s.createMicroBatchWriter(
           s"$runId",
           currentBatchId,
-          withNewExprs.schema,
+          newAttributePlan.schema,
           outputMode,
           new DataSourceV2Options(extraOptions.asJava))
-        Option(writer.orElse(null)).map(WriteToDataSourceV2(_, withNewExprs)).getOrElse {
-          LocalRelation(withNewExprs.schema.toAttributes, isStreaming = true)
+        Option(writer.orElse(null)).map(WriteToDataSourceV2(_, newAttributePlan)).getOrElse {
+          LocalRelation(newAttributePlan.schema.toAttributes, isStreaming = true)
         }
       case _ => throw new IllegalArgumentException("unknown sink type")
     }
