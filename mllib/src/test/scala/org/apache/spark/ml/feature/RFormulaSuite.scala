@@ -114,7 +114,8 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("encodes string terms") {
     val formula = new RFormula().setFormula("id ~ a + b")
-    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
+    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5),
+      (5, "bar", 6), (6, "foo", 6))
       .toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
@@ -123,7 +124,9 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
         (1, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
         (2, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 2.0),
         (3, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 3.0),
-        (4, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0)
+        (4, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0),
+        (5, "bar", 6, Vectors.dense(1.0, 0.0, 6.0), 5.0),
+        (6, "foo", 6, Vectors.dense(0.0, 1.0, 6.0), 6.0)
       ).toDF("id", "a", "b", "features", "label")
     assert(result.schema.toString == resultSchema.toString)
     assert(result.collect() === expected.collect())
@@ -299,7 +302,8 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   test("index string label") {
     val formula = new RFormula().setFormula("id ~ a + b")
     val original =
-      Seq(("male", "foo", 4), ("female", "bar", 4), ("female", "bar", 5), ("male", "baz", 5))
+      Seq(("male", "foo", 4), ("female", "bar", 4), ("female", "bar", 5), ("male", "baz", 5),
+        ("female", "bar", 6), ("female", "foo", 6))
         .toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
@@ -307,7 +311,9 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
         ("male", "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
         ("female", "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 0.0),
         ("female", "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 0.0),
-        ("male", "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 1.0)
+        ("male", "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 1.0),
+        ("female", "bar", 6, Vectors.dense(1.0, 0.0, 6.0), 0.0),
+        ("female", "foo", 6, Vectors.dense(0.0, 1.0, 6.0), 0.0)
     ).toDF("id", "a", "b", "features", "label")
     // assert(result.schema.toString == resultSchema.toString)
     assert(result.collect() === expected.collect())
@@ -316,7 +322,8 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   test("force to index label even it is numeric type") {
     val formula = new RFormula().setFormula("id ~ a + b").setForceIndexLabel(true)
     val original = spark.createDataFrame(
-      Seq((1.0, "foo", 4), (1.0, "bar", 4), (0.0, "bar", 5), (1.0, "baz", 5))
+      Seq((1.0, "foo", 4), (1.0, "bar", 4), (0.0, "bar", 5), (1.0, "baz", 5),
+      (1.0, "bar", 6), (0.0, "foo", 6))
     ).toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
@@ -325,14 +332,17 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
         (1.0, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 0.0),
         (1.0, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 0.0),
         (0.0, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 1.0),
-        (1.0, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 0.0))
+        (1.0, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 0.0),
+        (1.0, "bar", 6, Vectors.dense(1.0, 0.0, 6.0), 0.0),
+        (0.0, "foo", 6, Vectors.dense(0.0, 1.0, 6.0), 1.0))
     ).toDF("id", "a", "b", "features", "label")
     assert(result.collect() === expected.collect())
   }
 
   test("attribute generation") {
     val formula = new RFormula().setFormula("id ~ a + b")
-    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
+    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5),
+      (1, "bar", 6), (0, "foo", 6))
       .toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)

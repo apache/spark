@@ -26,18 +26,19 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
 private[feature] trait StringIndexerBase extends Params with HasHandleInvalid with HasInputCol
-  with HasOutputCol {
+  with HasOutputCol with HasInputCols with HasOutputCols {
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
@@ -79,26 +80,59 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
   @Since("2.3.0")
   def getStringOrderType: String = $(stringOrderType)
 
-  /** Validates and transforms the input schema. */
-  protected def validateAndTransformSchema(schema: StructType): StructType = {
-    val inputColName = $(inputCol)
+  /** Returns the input and output column names corresponding in pair. */
+  private[feature] def getInOutCols(): (Array[String], Array[String]) = {
+    ParamValidators.checkExclusiveParams(this, "inputCol", "inputCols")
+    ParamValidators.checkExclusiveParams(this, "inputCol", "outputCols")
+    ParamValidators.checkExclusiveParams(this, "outputCol", "outputCols")
+    ParamValidators.checkExclusiveParams(this, "inputCols", "outputCol")
+
+    if (isSet(inputCol)) {
+      (Array($(inputCol)), Array($(outputCol)))
+    } else {
+      require($(inputCols).length == $(outputCols).length,
+        "The number of input columns does not match output columns")
+      ($(inputCols), $(outputCols))
+    }
+  }
+
+  private def validateAndTransformField(
+      schema: StructType,
+      inputColName: String,
+      outputColName: String): StructField = {
     val inputDataType = schema(inputColName).dataType
     require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
       s"The input column $inputColName must be either string type or numeric type, " +
         s"but got $inputDataType.")
-    val inputFields = schema.fields
-    val outputColName = $(outputCol)
-    require(inputFields.forall(_.name != outputColName),
+    require(schema.fields.forall(_.name != outputColName),
       s"Output column $outputColName already exists.")
-    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
-    val outputFields = inputFields :+ attr.toStructField()
-    StructType(outputFields)
+    NominalAttribute.defaultAttr.withName($(outputCol)).toStructField()
+  }
+
+  /** Validates and transforms the input schema. */
+  protected def validateAndTransformSchema(
+      schema: StructType,
+      skipNonExistsCol: Boolean = false): StructType = {
+    val (inputColNames, outputColNames) = getInOutCols()
+
+    val outputFields = for (i <- 0 until inputColNames.length) yield {
+      if (schema.fieldNames.contains(inputColNames(i))) {
+        validateAndTransformField(schema, inputColNames(i), outputColNames(i))
+      } else {
+        if (skipNonExistsCol) {
+          null
+        } else {
+          throw new SparkException(s"Input column ${inputColNames(i)} does not exist.")
+        }
+      }
+    }
+    StructType(schema.fields ++ outputFields.filter(_ != null))
   }
 }
 
 /**
- * A label indexer that maps a string column of labels to an ML column of label indices.
- * If the input column is numeric, we cast it to string and index the string values.
+ * A label indexer that maps string column(s) of labels to ML column(s) of label indices.
+ * If the input columns are numeric, we cast them to string and index the string values.
  * The indices are in [0, numLabels). By default, this is ordered by label frequencies
  * so the most frequent label gets index 0. The ordering behavior is controlled by
  * setting `stringOrderType`.
@@ -130,21 +164,53 @@ class StringIndexer @Since("1.4.0") (
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group setParam */
+  @Since("2.3.0")
+  def setInputCols(value: Array[String]): this.type = set(inputCols, value)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
     transformSchema(dataset.schema, logging = true)
-    val values = dataset.na.drop(Array($(inputCol)))
-      .select(col($(inputCol)).cast(StringType))
-      .rdd.map(_.getString(0))
-    val labels = $(stringOrderType) match {
-      case StringIndexer.frequencyDesc => values.countByValue().toSeq.sortBy(-_._2)
-        .map(_._1).toArray
-      case StringIndexer.frequencyAsc => values.countByValue().toSeq.sortBy(_._2)
-        .map(_._1).toArray
-      case StringIndexer.alphabetDesc => values.distinct.collect.sortWith(_ > _)
-      case StringIndexer.alphabetAsc => values.distinct.collect.sortWith(_ < _)
-    }
-    copyValues(new StringIndexerModel(uid, labels).setParent(this))
+
+    val (inputCols, _) = getInOutCols()
+    val zeroState = Array.fill(inputCols.length)(new OpenHashMap[String, Long]())
+
+    // Counts by the string values in the dataset.
+    val countByValueArray = dataset.na.drop(inputCols)
+      .select(inputCols.map(col(_).cast(StringType)): _*)
+      .rdd.treeAggregate(zeroState)(
+        (state: Array[OpenHashMap[String, Long]], row: Row) => {
+          for (i <- 0 until inputCols.length) {
+            state(i).changeValue(row.getString(i), 1L, _ + 1)
+          }
+          state
+        },
+        (state1: Array[OpenHashMap[String, Long]], state2: Array[OpenHashMap[String, Long]]) => {
+          for (i <- 0 until inputCols.length) {
+            state2(i).foreach { case (key: String, count: Long) =>
+              state1(i).changeValue(key, count, _ + count)
+            }
+          }
+          state1
+        }
+      )
+
+    // In case of equal frequency when frequencyDesc/Asc, we further sort the strings by alphabet.
+    val labelsArray = countByValueArray.map { countByValue =>
+      $(stringOrderType) match {
+        case StringIndexer.frequencyDesc =>
+          countByValue.toSeq.sortBy(_._1).sortBy(-_._2).map(_._1).toArray
+        case StringIndexer.frequencyAsc =>
+          countByValue.toSeq.sortBy(_._1).sortBy(_._2).map(_._1).toArray
+        case StringIndexer.alphabetDesc => countByValue.toSeq.map(_._1).sortWith(_ > _).toArray
+        case StringIndexer.alphabetAsc => countByValue.toSeq.map(_._1).sortWith(_ < _).toArray
+      }
+     }
+    copyValues(new StringIndexerModel(uid, labelsArray).setParent(this))
   }
 
   @Since("1.4.0")
@@ -177,32 +243,47 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 /**
  * Model fitted by [[StringIndexer]].
  *
- * @param labels  Ordered list of labels, corresponding to indices to be assigned.
+ * @param labelsArray Array of ordered list of labels, corresponding to indices to be assigned
+ *                    for each input column.
  *
- * @note During transformation, if the input column does not exist,
- * `StringIndexerModel.transform` would return the input dataset unmodified.
+ * @note During transformation, if any input column does not exist,
+ * `StringIndexerModel.transform` would skip the input column.
+ * If all input columns do not exist, it returns the input dataset unmodified.
  * This is a temporary fix for the case when target labels do not exist during prediction.
  */
 @Since("1.4.0")
 class StringIndexerModel (
     @Since("1.4.0") override val uid: String,
-    @Since("1.5.0") val labels: Array[String])
+    @Since("2.3.0") val labelsArray: Array[Array[String]])
   extends Model[StringIndexerModel] with StringIndexerBase with MLWritable {
 
   import StringIndexerModel._
 
   @Since("1.5.0")
-  def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), labels)
+  def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), Array(labels))
 
-  private val labelToIndex: OpenHashMap[String, Double] = {
-    val n = labels.length
-    val map = new OpenHashMap[String, Double](n)
-    var i = 0
-    while (i < n) {
-      map.update(labels(i), i)
-      i += 1
+  @Since("2.3.0")
+  def this(labelsArray: Array[Array[String]]) = this(Identifiable.randomUID("strIdx"), labelsArray)
+
+  @Since("1.5.0")
+  def labels: Array[String] = {
+    require(labelsArray.length == 1, "This StringIndexerModel is fitted by multi-columns, " +
+      "call for `labelsArray` instead.")
+    labelsArray(0)
+  }
+
+  // Prepares the maps for string values to corresponding index values.
+  private val labelsToIndexArray: Array[OpenHashMap[String, Double]] = {
+    for (labels <- labelsArray) yield {
+      val n = labels.length
+      val map = new OpenHashMap[String, Double](n)
+      var i = 0
+      while (i < n) {
+        map.update(labels(i), i)
+        i += 1
+      }
+      map
     }
-    map
   }
 
   /** @group setParam */
@@ -217,33 +298,32 @@ class StringIndexerModel (
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    if (!dataset.schema.fieldNames.contains($(inputCol))) {
-      logInfo(s"Input column ${$(inputCol)} does not exist during transformation. " +
-        "Skip StringIndexerModel.")
-      return dataset.toDF
-    }
-    transformSchema(dataset.schema, logging = true)
+  /** @group setParam */
+  @Since("2.3.0")
+  def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
-    val filteredLabels = getHandleInvalid match {
-      case StringIndexer.KEEP_INVALID => labels :+ "__unknown"
-      case _ => labels
-    }
+  /** @group setParam */
+  @Since("2.3.0")
+  def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-    val metadata = NominalAttribute.defaultAttr
-      .withName($(outputCol)).withValues(filteredLabels).toMetadata()
-    // If we are skipping invalid records, filter them out.
-    val (filteredDataset, keepInvalid) = getHandleInvalid match {
-      case StringIndexer.SKIP_INVALID =>
-        val filterer = udf { label: String =>
-          labelToIndex.contains(label)
-        }
-        (dataset.na.drop(Array($(inputCol))).where(filterer(dataset($(inputCol)))), false)
-      case _ => (dataset, getHandleInvalid == StringIndexer.KEEP_INVALID)
+  private def filterInvalidData(dataset: Dataset[_], inputColNames: Seq[String]): Dataset[_] = {
+    var filteredDataset = dataset.na.drop(inputColNames.filter(
+      dataset.schema.fieldNames.contains(_)))
+    for (i <- 0 until inputColNames.length) {
+      val inputColName = inputColNames(i)
+      val labelToIndex = labelsToIndexArray(i)
+      val filterer = udf { label: String =>
+        labelToIndex.contains(label)
+      }
+      filteredDataset = filteredDataset.where(filterer(dataset(inputColName)))
     }
+    filteredDataset
+  }
 
-    val indexer = udf { label: String =>
+  private def getIndexer(labels: Seq[String], labelToIndex: OpenHashMap[String, Double]) = {
+    val keepInvalid = (getHandleInvalid == StringIndexer.KEEP_INVALID)
+
+    udf { label: String =>
       if (label == null) {
         if (keepInvalid) {
           labels.length
@@ -257,29 +337,72 @@ class StringIndexerModel (
         } else if (keepInvalid) {
           labels.length
         } else {
-          throw new SparkException(s"Unseen label: $label.  To handle unseen labels, " +
+          throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
             s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
         }
       }
     }.asNondeterministic()
+  }
 
-    filteredDataset.select(col("*"),
-      indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+
+    var (inputColNames, outputColNames) = getInOutCols()
+    val outputColumns = new Array[Column](outputColNames.length)
+
+    // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
+    val filteredDataset = if (getHandleInvalid == StringIndexer.SKIP_INVALID) {
+      filterInvalidData(dataset, inputColNames)
+    } else {
+      dataset
+    }
+
+    for (i <- 0 until outputColNames.length) {
+      val inputColName = inputColNames(i)
+      val outputColName = outputColNames(i)
+      val labelToIndex = labelsToIndexArray(i)
+      val labels = labelsArray(i)
+
+      if (!dataset.schema.fieldNames.contains(inputColName)) {
+        logInfo(s"Input column ${inputColName} does not exist during transformation. " +
+          "Skip StringIndexerModel for this column.")
+        outputColNames(i) = null
+      } else {
+        val filteredLabels = getHandleInvalid match {
+          case StringIndexer.KEEP_INVALID => labels :+ "__unknown"
+          case _ => labels
+        }
+        val metadata = NominalAttribute.defaultAttr
+          .withName(outputColName).withValues(filteredLabels).toMetadata()
+        val keepInvalid = (getHandleInvalid == StringIndexer.KEEP_INVALID)
+
+        val indexer = getIndexer(labels, labelToIndex)
+
+        outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
+          .as(outputColName, metadata)
+      }
+    }
+
+    val filteredOutputColNames = outputColNames.filter(_ != null)
+    val filteredOutputColumns = outputColumns.filter(_ != null)
+
+    require(filteredOutputColNames.length == filteredOutputColumns.length)
+    if (filteredOutputColNames.length > 0) {
+      filteredDataset.withColumns(filteredOutputColNames, filteredOutputColumns)
+    } else {
+      filteredDataset.toDF()
+    }
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    if (schema.fieldNames.contains($(inputCol))) {
-      validateAndTransformSchema(schema)
-    } else {
-      // If the input column does not exist during transformation, we skip StringIndexerModel.
-      schema
-    }
+    validateAndTransformSchema(schema, skipNonExistsCol = true)
   }
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): StringIndexerModel = {
-    val copied = new StringIndexerModel(uid, labels)
+    val copied = new StringIndexerModel(uid, labelsArray)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -293,11 +416,11 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
   private[StringIndexerModel]
   class StringIndexModelWriter(instance: StringIndexerModel) extends MLWriter {
 
-    private case class Data(labels: Array[String])
+    private case class Data(labelsArray: Array[Array[String]])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.labels)
+      val data = Data(instance.labelsArray)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -310,11 +433,23 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
     override def load(path: String): StringIndexerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("labels")
-        .head()
-      val labels = data.getAs[Seq[String]](0).toArray
-      val model = new StringIndexerModel(metadata.uid, labels)
+
+      val (majorVersion, minorVersion) = majorMinorVersion(metadata.sparkVersion)
+      val labelsArray = if (majorVersion < 2 || (majorVersion == 2 && minorVersion <= 2)) {
+        // Spark 2.2 and before.
+        val data = sparkSession.read.parquet(dataPath)
+          .select("labels")
+          .head()
+        val labels = data.getAs[Seq[String]](0).toArray
+        Array(labels)
+      } else {
+        // After Spark 2.3.
+        val data = sparkSession.read.parquet(dataPath)
+          .select("labelsArray")
+          .head()
+        data.getAs[Seq[Seq[String]]](0).map(_.toArray).toArray
+      }
+      val model = new StringIndexerModel(metadata.uid, labelsArray)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }

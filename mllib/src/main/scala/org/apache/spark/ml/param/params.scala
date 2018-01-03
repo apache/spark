@@ -249,6 +249,16 @@ object ParamValidators {
   def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
     value.length > lowerBound
   }
+
+  /** Check if more than one param in a set of exclusive params are set. */
+  def checkExclusiveParams(model: Params, params: String*): Unit = {
+    if (params.filter(paramName => model.hasParam(paramName) &&
+        model.isSet(model.getParam(paramName))).size > 1) {
+      val paramString = params.mkString("`", "`, `", "`")
+      throw new IllegalArgumentException(s"$paramString are exclusive, " +
+        "but more than one among them are set.")
+    }
+  }
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...

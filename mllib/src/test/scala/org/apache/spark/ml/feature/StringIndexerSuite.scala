@@ -33,10 +33,36 @@ class StringIndexerSuite
 
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
-    val model = new StringIndexerModel("indexer", Array("a", "b"))
+    val model = new StringIndexerModel("indexer", Array(Array("a", "b")))
     val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
     ParamsSuite.checkParams(model)
     ParamsSuite.checkParams(modelWithoutUid)
+  }
+
+  test("params: input/output columns") {
+    val stringIndexerSingleCol = new StringIndexer()
+      .setInputCol("in").setOutputCol("out")
+    val inOutCols1 = stringIndexerSingleCol.getInOutCols()
+    assert(inOutCols1._1 === Array("in"))
+    assert(inOutCols1._2 === Array("out"))
+
+    val stringIndexerMultiCol = new StringIndexer()
+      .setInputCols(Array("in1", "in2")).setOutputCols(Array("out1", "out2"))
+    val inOutCols2 = stringIndexerMultiCol.getInOutCols()
+    assert(inOutCols2._1 === Array("in1", "in2"))
+    assert(inOutCols2._2 === Array("out1", "out2"))
+
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCol("in").setOutputCols(Array("out1", "out2")).getInOutCols()
+    }
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCols(Array("in1", "in2")).setOutputCol("out1").getInOutCols()
+    }
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCols(Array("in1", "in2"))
+        .setOutputCols(Array("out1", "out2", "out3"))
+        .getInOutCols()
+    }
   }
 
   test("StringIndexer") {
@@ -167,7 +193,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexerModel should keep silent if the input column does not exist.") {
-    val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
+    val indexerModel = new StringIndexerModel("indexer", Array(Array("a", "b", "c")))
       .setInputCol("label")
       .setOutputCol("labelIndex")
     val df = spark.range(0L, 10L).toDF()
@@ -202,7 +228,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexerModel read/write") {
-    val instance = new StringIndexerModel("myStringIndexerModel", Array("a", "b", "c"))
+    val instance = new StringIndexerModel("myStringIndexerModel", Array(Array("a", "b", "c")))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setHandleInvalid("skip")
@@ -330,5 +356,52 @@ class StringIndexerSuite
 
     val dfWithIndex = model.transform(dfNoBristol)
     assert(dfWithIndex.filter($"CITYIndexed" === 1.0).count == 1)
+  }
+
+  test("StringIndexer multiple input columns") {
+    val data = Seq(
+      Row("a", 0.0, "e", 1.0),
+      Row("b", 2.0, "f", 0.0),
+      Row("c", 1.0, "e", 1.0),
+      Row("a", 0.0, "f", 0.0),
+      Row("a", 0.0, "f", 0.0),
+      Row("c", 1.0, "f", 0.0))
+
+    val schema = StructType(Array(
+        StructField("label1", StringType),
+        StructField("expected1", DoubleType),
+        StructField("label2", StringType),
+        StructField("expected2", DoubleType)))
+
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    val indexer = new StringIndexer()
+      .setInputCols(Array("label1", "label2"))
+      .setOutputCols(Array("labelIndex1", "labelIndex2"))
+    val indexerModel = indexer.fit(df)
+
+    MLTestingUtils.checkCopyAndUids(indexer, indexerModel)
+
+    val transformed = indexerModel.transform(df)
+
+    // Checks output attribute correctness.
+    val attr1 = Attribute.fromStructField(transformed.schema("labelIndex1"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr1.values.get === Array("a", "c", "b"))
+    val attr2 = Attribute.fromStructField(transformed.schema("labelIndex2"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr2.values.get === Array("f", "e"))
+
+    transformed.select("labelIndex1", "expected1").rdd.map { r =>
+     (r.getDouble(0), r.getDouble(1))
+    }.collect().foreach { case (index, expected) =>
+      assert(index == expected)
+    }
+
+    transformed.select("labelIndex2", "expected2").rdd.map { r =>
+     (r.getDouble(0), r.getDouble(1))
+    }.collect().foreach { case (index, expected) =>
+      assert(index == expected)
+    }
   }
 }
