@@ -68,7 +68,8 @@ class UserDefinedFunction(object):
     """
     def __init__(self, func,
                  returnType=StringType(), name=None,
-                 evalType=PythonEvalType.SQL_BATCHED_UDF):
+                 evalType=PythonEvalType.SQL_BATCHED_UDF,
+                 deterministic=True):
         if not callable(func):
             raise TypeError(
                 "Invalid function: not a function or callable (__call__ is not defined): "
@@ -92,7 +93,7 @@ class UserDefinedFunction(object):
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
         self.evalType = evalType
-        self._deterministic = True
+        self.deterministic = deterministic
 
     @property
     def returnType(self):
@@ -130,7 +131,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.evalType, self._deterministic)
+            self._name, wrapped_func, jdt, self.evalType, self.deterministic)
         return judf
 
     def __call__(self, *cols):
@@ -162,8 +163,8 @@ class UserDefinedFunction(object):
         wrapper.func = self.func
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
+        wrapper.deterministic = self.deterministic
         wrapper.asNondeterministic = self.asNondeterministic
-        wrapper._deterministic = self._deterministic
 
         return wrapper
 
@@ -173,5 +174,5 @@ class UserDefinedFunction(object):
 
         .. versionadded:: 2.3
         """
-        self._deterministic = False
-        return self
+        self.deterministic = False
+        return self._wrapped()
