@@ -164,7 +164,8 @@ class UserDefinedFunction(object):
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
         wrapper.asNondeterministic = self.asNondeterministic
-        wrapper.asNonNullable = self.asNonNullable
+        wrapper.asNonNullable = functools.wraps(
+            self.asNonNullable)(lambda: self.asNonNullable()._wrapped())
         wrapper.nullable = self.nullable
 
         return wrapper
@@ -176,7 +177,7 @@ class UserDefinedFunction(object):
         .. versionadded:: 2.3
         """
         self._deterministic = False
-        return self._wrapped()
+        return self
 
     def asNonNullable(self):
         """
@@ -185,4 +186,4 @@ class UserDefinedFunction(object):
         .. versionadded:: 2.4
         """
         self.nullable = False
-        return self._wrapped()
+        return self
