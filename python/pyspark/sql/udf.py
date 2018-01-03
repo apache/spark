@@ -56,7 +56,8 @@ def _create_udf(f, returnType, evalType):
             )
 
     # Set the name of the UserDefinedFunction object to be the name of function f
-    udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, evalType=evalType)
+    udf_obj = UserDefinedFunction(
+        f, returnType=returnType, name=None, evalType=evalType, deterministic=True)
     return udf_obj._wrapped()
 
 
@@ -67,7 +68,8 @@ class UserDefinedFunction(object):
     .. versionadded:: 1.3
     """
     def __init__(self, func,
-                 returnType=StringType(), name=None,
+                 returnType=StringType(),
+                 name=None,
                  evalType=PythonEvalType.SQL_BATCHED_UDF,
                  deterministic=True):
         if not callable(func):
@@ -164,7 +166,7 @@ class UserDefinedFunction(object):
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
         wrapper.deterministic = self.deterministic
-        wrapper.asNondeterministic = self.asNondeterministic
+        wrapper.asNondeterministic = lambda: self.asNondeterministic()._wrapped()
 
         return wrapper
 
@@ -175,4 +177,4 @@ class UserDefinedFunction(object):
         .. versionadded:: 2.3
         """
         self.deterministic = False
-        return self._wrapped()
+        return self
