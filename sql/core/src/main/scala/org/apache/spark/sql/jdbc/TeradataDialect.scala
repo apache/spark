@@ -31,4 +31,19 @@ private case object TeradataDialect extends JdbcDialect {
     case BooleanType => Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
     case _ => None
   }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  /**
+   * The SQL query used to truncate a table.
+   * @param table The table to truncate.
+   * @param cascade Whether or not to cascade the truncation. Default value is the
+   *                value of isCascadingTruncateTable(). Ignored for Teradata as it is unsupported
+   * @return The SQL query to use for truncating a table
+   */
+  override def getTruncateQuery(
+      table: String,
+      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    s"TRUNCATE TABLE $table"
+  }
 }

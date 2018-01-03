@@ -102,7 +102,12 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
-      statement.executeUpdate(dialect.getTruncateQuery(options.table, options.isCascadeTruncate))
+      if (options.isCascadeTruncate.isDefined) {
+        statement.executeUpdate(dialect.getTruncateQuery(options.table,
+          options.isCascadeTruncate))
+      } else {
+        statement.executeUpdate(dialect.getTruncateQuery(options.table))
+      }
     } finally {
       statement.close()
     }
