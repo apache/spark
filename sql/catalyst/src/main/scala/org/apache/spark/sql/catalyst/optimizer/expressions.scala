@@ -508,7 +508,7 @@ object NullPropagation extends Rule[LogicalPlan] {
 /**
  * Replace attributes with aliases of the original foldable expressions if possible.
  * Other optimizations will take advantage of the propagated foldable expressions. For example,
- * This rule can optimize
+ * this rule can optimize
  * {{{
  *   SELECT 1.0 x, 'abc' y, Now() z ORDER BY x, y, 3
  * }}}
@@ -535,7 +535,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     } else {
       CleanupAliases(plan.transformUp {
         // We can only propagate foldables for a subset of unary nodes.
-        case u: UnaryNode if canPropagateFoldables(u) =>
+        case u: UnaryNode if foldableMap.nonEmpty && canPropagateFoldables(u) =>
           u.transformExpressions(replaceFoldable)
 
         // Join derives the output attributes from its child while they are actually not the
@@ -544,7 +544,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         // propagating the foldable expressions.
         // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
         // of outer join.
-        case j @ Join(left, right, joinType, _) =>
+        case j @ Join(left, right, joinType, _) if foldableMap.nonEmpty =>
           val newJoin = j.transformExpressions(replaceFoldable)
           val missDerivedAttrsSet: AttributeSet = AttributeSet(joinType match {
             case _: InnerLike | LeftExistence(_) => Nil
@@ -557,22 +557,16 @@ object FoldablePropagation extends Rule[LogicalPlan] {
           }.toSeq)
           newJoin
 
-        // Similar to Join, Expand also miss-derives output attributes from child attributes, we
-        // should exclude them when propagating.
-        // TODO(hvanhovell): Expand should use new attributes as the output attributes.
-        case expand: Expand =>
-          val newExpand = expand.copy(projections = expand.projections.map { projection =>
+        // We can not replace the attributes in `Expand.output`. If there are other non-leaf
+        // operators that have the `output` field, we should put them here too.
+        case expand: Expand if foldableMap.nonEmpty =>
+          expand.copy(projections = expand.projections.map { projection =>
             projection.map(_.transform(replaceFoldable))
           })
-          val missDerivedAttrsSet = expand.child.outputSet
-          foldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
-            case (attr, _) => missDerivedAttrsSet.contains(attr)
-          }.toSeq)
-          newExpand
 
         // For other plans, they are not safe to apply foldable propagation, and they should not
         // propagate foldable expressions from children.
-        case other =>
+        case other if foldableMap.nonEmpty =>
           val childrenOutputSet = AttributeSet(other.children.flatMap(_.output))
           foldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
             case (attr, _) => childrenOutputSet.contains(attr)
