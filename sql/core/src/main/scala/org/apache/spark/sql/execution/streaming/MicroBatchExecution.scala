@@ -416,7 +416,7 @@ class MicroBatchExecution(
     // A list of attributes that will need to be updated.
     val replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
-    val withNewSources = logicalPlan transform {
+    val newBatchesPlan = logicalPlan transform {
       case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { dataPlan =>
           assert(output.size == dataPlan.output.size,
@@ -431,7 +431,7 @@ class MicroBatchExecution(
 
     // Rewire the plan to use the new attributes that were returned by the source.
     val replacementMap = AttributeMap(replacements)
-    val newAttributePlan = withNewSources transformAllExpressions {
+    val newAttributePlan = newBatchesPlan transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) =>
         replacementMap(a).withMetadata(a.metadata)
       case ct: CurrentTimestamp =>
