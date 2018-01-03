@@ -161,4 +161,23 @@ class FoldablePropagationSuite extends PlanTest {
     val correctAnswer = correctExpand.where(a1.isNotNull).select(a1, a2).analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("Propagate above outer join") {
+    val left = LocalRelation('a.int).select('a, Literal(1).as('b))
+    val right = LocalRelation('c.int).select('c, Literal(1).as("d"))
+
+    val join = left.join(
+      right,
+      joinType = LeftOuter,
+      condition = Some('a === 'c && 'b === 'd))
+    val query = join.select(('b + 3).as('res)).analyze
+    val optimized = Optimize.execute(query)
+
+    val correctAnswer = left.join(
+      right,
+      joinType = LeftOuter,
+      condition = Some('a === 'c && Literal(1) === Literal(1)))
+      .select((Literal(1) + 3).as('res)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
