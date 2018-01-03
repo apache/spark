@@ -382,15 +382,18 @@ class SQLTests(ReusedSQLTestCase):
         import random
         from pyspark.sql.functions import udf
         random_udf = udf(lambda: random.randint(6, 6), IntegerType()).asNondeterministic()
-        self.assertEqual(random_udf._deterministic, False)
+        self.assertEqual(random_udf.deterministic, False)
         random_udf1 = self.spark.catalog.registerFunction("randInt", random_udf, StringType())
-        self.assertEqual(random_udf1._deterministic, False)
+        self.assertEqual(random_udf1.deterministic, False)
         [row] = self.spark.sql("SELECT randInt()").collect()
         self.assertEqual(row[0], "6")
         [row] = self.spark.range(1).select(random_udf1()).collect()
         self.assertEqual(row[0], "6")
         [row] = self.spark.range(1).select(random_udf()).collect()
         self.assertEqual(row[0], 6)
+        pydoc.render_doc(lambda: random.randint(6, 6), IntegerType())
+        pydoc.render_doc(random_udf)
+        pydoc.render_doc(random_udf1)
 
     def test_chained_udf(self):
         self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())

@@ -270,8 +270,8 @@ class Catalog(object):
 
         if hasattr(f, 'asNondeterministic'):
             udf = UserDefinedFunction(f.func, returnType=returnType, name=name,
-                                      evalType=PythonEvalType.SQL_BATCHED_UDF)
-            udf = udf if (f._deterministic) else udf.asNondeterministic()
+                                      evalType=PythonEvalType.SQL_BATCHED_UDF,
+                                      deterministic=f.deterministic)
         else:
             udf = UserDefinedFunction(f, returnType=returnType, name=name,
                                       evalType=PythonEvalType.SQL_BATCHED_UDF)
