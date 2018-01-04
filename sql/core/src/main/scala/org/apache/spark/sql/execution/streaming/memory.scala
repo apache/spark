@@ -122,6 +122,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       batches.slice(sliceStart, sliceEnd)
     }
 
+    if (newBlocks.isEmpty) {
+      return sqlContext.internalCreateDataFrame(
+        sqlContext.sparkContext.emptyRDD, schema, isStreaming = true)
+    }
+
     logDebug(generateDebugString(newBlocks, startOrdinal, endOrdinal))
 
     newBlocks

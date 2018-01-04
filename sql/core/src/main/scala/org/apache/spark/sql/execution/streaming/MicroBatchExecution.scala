@@ -187,10 +187,8 @@ class MicroBatchExecution(
                * batch will be executed before getOffset is called again. */
               availableOffsets.foreach {
                 case (source: Source, end: Offset) =>
-                  if (committedOffsets.get(source).map(_ != end).getOrElse(true)) {
-                    val start = committedOffsets.get(source)
-                    source.getBatch(start, end)
-                  }
+                  val start = committedOffsets.get(source)
+                  source.getBatch(start, end)
                 case nonV1Tuple =>
                   throw new IllegalStateException(s"Unexpected V2 source in $nonV1Tuple")
               }

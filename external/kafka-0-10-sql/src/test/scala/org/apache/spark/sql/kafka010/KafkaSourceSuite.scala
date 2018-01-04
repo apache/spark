@@ -318,6 +318,84 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
+  test("union bug in failover") {
+    def getSpecificDF(range: Range.Inclusive): Dataset[Int] = {
+      val topic = newTopic()
+      testUtils.createTopic(topic, partitions = 1)
+      testUtils.sendMessages(topic, range.map(_.toString).toArray, Some(0))
+
+      val reader = spark
+        .readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.metadata.max.age.ms", "1")
+        .option("maxOffsetsPerTrigger", 5)
+        .option("subscribe", topic)
+        .option("startingOffsets", "earliest")
+
+      reader.load()
+        .selectExpr("CAST(value AS STRING)")
+        .as[String]
+        .map(k => k.toInt)
+    }
+
+    val df1 = getSpecificDF(0 to 9)
+    val df2 = getSpecificDF(100 to 199)
+
+    val kafka = df1.union(df2)
+
+    val clock = new StreamManualClock
+
+    val waitUntilBatchProcessed = AssertOnQuery { q =>
+      eventually(Timeout(streamingTimeout)) {
+        if (!q.exception.isDefined) {
+          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+        }
+      }
+      if (q.exception.isDefined) {
+        throw q.exception.get
+      }
+      true
+    }
+
+    testStream(kafka)(
+      StartStream(ProcessingTime(100), clock),
+      waitUntilBatchProcessed,
+      // 5 from smaller topic, 5 from bigger one
+      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104),
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed,
+      // 5 from smaller topic, 5 from bigger one
+      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104,
+        5, 6, 7, 8, 9, 105, 106, 107, 108, 109
+      ),
+      // smaller topic empty, 5 from bigger one
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed,
+      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104,
+        5, 6, 7, 8, 9, 105, 106, 107, 108, 109,
+        110, 111, 112, 113, 114
+      ),
+      StopStream,
+      StartStream(ProcessingTime(100), clock),
+      waitUntilBatchProcessed,
+      // smallest now empty, 5 from bigger one
+      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104,
+        5, 6, 7, 8, 9, 105, 106, 107, 108, 109,
+        110, 111, 112, 113, 114,
+        115, 116, 117, 118, 119
+      ),
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed,
+      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104,
+        5, 6, 7, 8, 9, 105, 106, 107, 108, 109,
+        110, 111, 112, 113, 114,
+        115, 116, 117, 118, 119,
+        120, 121, 122, 123, 124
+      )
+    )
+  }
+
   test("cannot stop Kafka stream") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 5)
