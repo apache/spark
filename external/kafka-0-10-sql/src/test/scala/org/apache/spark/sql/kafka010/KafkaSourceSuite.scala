@@ -319,7 +319,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
   }
 
   test("union bug in failover") {
-    def getSpecificDF(range: Range.Inclusive): Dataset[Int] = {
+    def getSpecificDF(range: Range.Inclusive): org.apache.spark.sql.Dataset[Int] = {
       val topic = newTopic()
       testUtils.createTopic(topic, partitions = 1)
       testUtils.sendMessages(topic, range.map(_.toString).toArray, Some(0))
