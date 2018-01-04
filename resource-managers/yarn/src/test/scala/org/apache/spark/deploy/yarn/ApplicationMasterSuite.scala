@@ -18,27 +18,26 @@
 package org.apache.spark.deploy.yarn
 
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.ResetSystemProperties
-import org.scalatest.Matchers
 
-class ApplicationMasterUtilSuite extends SparkFunSuite with Matchers with Logging
-  with ResetSystemProperties {
+import org.apache.spark.{SparkConf, SparkFunSuite}
+
+class ApplicationMasterSuite extends SparkFunSuite {
 
   test("history url with hadoop and spark substitutions") {
+    val host = "rm.host.com"
+    val port = 18080
     val sparkConf = new SparkConf()
+
     sparkConf.set("spark.yarn.historyServer.address",
       "http://${hadoopconf-yarn.resourcemanager.hostname}:${spark.history.ui.port}")
-
     val yarnConf = new YarnConfiguration()
-    yarnConf.set("yarn.resourcemanager.hostname", "rm.host.com")
+    yarnConf.set("yarn.resourcemanager.hostname", host)
     val appId = "application_123_1"
     val attemptId = appId + "_1"
 
-    val shsAddr = ApplicationMasterUtil
+    val shsAddr = ApplicationMaster
       .getHistoryServerAddress(sparkConf, yarnConf, appId, attemptId)
 
-    shsAddr shouldEqual "http://rm.host.com:18080/history/application_123_1/application_123_1_1"
+    assert(shsAddr === s"http://${host}:${port}/history/${appId}/${attemptId}")
   }
 }
