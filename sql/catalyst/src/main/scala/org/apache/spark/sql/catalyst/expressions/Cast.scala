@@ -610,8 +610,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buffer: String,
       elemTerm: String,
       ctx: CodegenContext): String = dataType match {
-    case BinaryType => s"$buffer.append($elemTerm)"
-    case StringType => s"$buffer.append($elemTerm.getBytes())"
+    case BinaryType => s"$buffer.append(new String($elemTerm))"
+    case StringType => s"$buffer.append(new String($elemTerm.getBytes()))"
     case DateType => s"""$buffer.append(
       org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($elemTerm))"""
     case TimestampType => s"""$buffer.append(
@@ -619,7 +619,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case map: MapType => s"${codegenWriteMapToBuffer(map, buffer, ctx)}($elemTerm)"
     case ar: ArrayType => s"${codegenWriteArrayToBuffer(ar, buffer, ctx)}($elemTerm)"
     case st: StructType => s"${codegenWriteStructToBuffer(st, buffer, ctx)}($elemTerm)"
-    case _ => s"$buffer.append(String.valueOf($elemTerm))"
+    case _ => s"$buffer.append($elemTerm)"
   }
 
   private[this] def codegenWriteStructToBuffer(
@@ -724,20 +724,21 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
       case ar: ArrayType =>
-        val bufferClass = classOf[StringWriterBuffer].getName
+        val bufferClass = classOf[StringBuffer].getName
         val buffer = ctx.addMutableState(bufferClass, "buffer", v => s"$v = new $bufferClass();")
         val writeArrayToBuffer = codegenWriteArrayToBuffer(ar, buffer, ctx)
         val arrayToStringCode =
           s"""
              |if (!${ev.isNull}) {
-             |  $buffer.reset();
+             |  // Reset buffer first
+             |  $buffer.delete(0, $buffer.length());
              |  $writeArrayToBuffer(${ev.value});
              |}
            """.stripMargin
         ev.code = ev.code ++ arrayToStringCode
         ev.value = buffer
         (c, evPrim, evNull) =>
-          s"""$evPrim = UTF8String.fromBytes($buffer.getBytes());"""
+          s"""$evPrim = UTF8String.fromString($buffer.toString());"""
       case _ =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }

@@ -93,8 +93,4 @@ public class BufferHolder {
   public int totalSize() {
     return cursor - Platform.BYTE_ARRAY_OFFSET;
   }
-
-  public int fixedSize() {
-    return fixedSize;
-  }
 }
