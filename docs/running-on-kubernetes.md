@@ -16,6 +16,8 @@ Kubernetes scheduler that has been added to Spark.
 you may setup a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
   * We recommend using the latest release of minikube with the DNS addon enabled.
+  * Be aware that the default minikube configuration is not enough for running Spark applications.
+  You will need to increase the available memory and number of CPUs.
 * You must have appropriate permissions to list, create, edit and delete
 [pods](https://kubernetes.io/docs/user-guide/pods/) in your cluster. You can verify that you can list these resources
 by running `kubectl auth can-i <list|create|edit|delete> pods`.
@@ -197,7 +199,7 @@ kubectl port-forward <driver-pod-name> 4040:4040
 
 Then, the Spark driver UI can be accessed on `http://localhost:4040`.
 
-### Debugging 
+### Debugging
 
 There may be several kinds of failures. If the Kubernetes API server rejects the request made from spark-submit, or the
 connection is refused for a different reason, the submission logic should indicate the error encountered. However, if there
@@ -215,8 +217,8 @@ If the pod has encountered a runtime error, the status can be probed further usi
 kubectl logs <spark-driver-pod>
 ```
 
-Status and logs of failed executor pods can be checked in similar ways. Finally, deleting the driver pod will clean up the entire spark 
-application, includling all executors, associated service, etc. The driver pod can be thought of as the Kubernetes representation of 
+Status and logs of failed executor pods can be checked in similar ways. Finally, deleting the driver pod will clean up the entire spark
+application, includling all executors, associated service, etc. The driver pod can be thought of as the Kubernetes representation of
 the Spark application.
 
 ## Kubernetes Features
