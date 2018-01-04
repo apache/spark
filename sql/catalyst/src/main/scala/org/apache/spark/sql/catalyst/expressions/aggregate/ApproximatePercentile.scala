@@ -296,8 +296,8 @@ object ApproximatePercentile {
       Ints.BYTES + Doubles.BYTES + Longs.BYTES +
       // length of summary.sampled
       Ints.BYTES +
-      // summary.sampled, Array[Stat(value: Double, g: Int, delta: Int)]
-      summaries.sampled.length * (Doubles.BYTES + Ints.BYTES + Ints.BYTES)
+      // summary.sampled, Array[Stat(value: Double, g: Long, delta: Long)]
+      summaries.sampled.length * (Doubles.BYTES + Longs.BYTES + Longs.BYTES)
     }
 
     final def serialize(obj: PercentileDigest): Array[Byte] = {
