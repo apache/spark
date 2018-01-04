@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.DataType
@@ -25,12 +25,15 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 
 /**
- * Helper trait for abstracting scan functionality using
- * [[ColumnarBatch]]es.
+ * Helper trait for abstracting scan functionality using [[ColumnarBatch]]es.
  */
 private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
   def vectorTypes: Option[Seq[String]] = None
+
+  protected def supportsBatch: Boolean = true
+
+  protected def needsUnsafeRowConversion: Boolean = true
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -71,7 +74,14 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     // PhysicalRDD always just has one input
     val input = ctx.addMutableState("scala.collection.Iterator", "input",
       v => s"$v = inputs[0];")
+    if (supportsBatch) {
+      produceBatches(ctx, input)
+    } else {
+      produceRows(ctx, input)
+    }
+  }
 
+  private def produceBatches(ctx: CodegenContext, input: String): String = {
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
@@ -137,4 +147,25 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
      """.stripMargin
   }
 
+  private def produceRows(ctx: CodegenContext, input: String): String = {
+    val numOutputRows = metricTerm(ctx, "numOutputRows")
+    val row = ctx.freshName("row")
+
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    // Always provide `outputVars`, so that the framework can help us build unsafe row if the input
+    // row is not unsafe row, i.e. `needsUnsafeRowConversion` is true.
+    val outputVars = output.zipWithIndex.map{ case (a, i) =>
+      BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+    }
+    val inputRow = if (needsUnsafeRowConversion) null else row
+    s"""
+       |while ($input.hasNext()) {
+       |  InternalRow $row = (InternalRow) $input.next();
+       |  $numOutputRows.add(1);
+       |  ${consume(ctx, outputVars, inputRow).trim}
+       |  if (shouldStop()) return;
+       |}
+     """.stripMargin
+  }
 }
