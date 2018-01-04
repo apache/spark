@@ -23,11 +23,14 @@ import io.fabric8.kubernetes.api.model.{Container, Pod}
 private[spark] object SecretVolumeUtils {
 
   def podHasVolume(pod: Pod, volumeName: String): Boolean = {
-    pod.getSpec.getVolumes.asScala.exists(volume => volume.getName == volumeName)
+    pod.getSpec.getVolumes.asScala.exists { volume =>
+      volume.getName == volumeName
+    }
   }
 
   def containerHasVolume(container: Container, volumeName: String, mountPath: String): Boolean = {
-    container.getVolumeMounts.asScala.exists(volumeMount =>
-      volumeMount.getName == volumeName && volumeMount.getMountPath == mountPath)
+    container.getVolumeMounts.asScala.exists { volumeMount =>
+      volumeMount.getName == volumeName && volumeMount.getMountPath == mountPath
+    }
   }
 }
