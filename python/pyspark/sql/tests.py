@@ -549,6 +549,12 @@ class SQLTests(ReusedSQLTestCase):
             df.select(add_three("id").alias("plus_three")).collect()
         )
 
+    def test_java_udf(self):
+        self.spark.udf.registerJavaFunction("javaRand", "test.org.apache.spark.sql.JavaRandUDF",
+                                            DoubleType(), deterministic=False)
+        row = self.spark.sql("SELECT javaRand(3)").collect()
+        self.assertTrue(row[0] >= 3.0)
+
     def test_non_existed_udf(self):
         spark = self.spark
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",

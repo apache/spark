@@ -601,7 +601,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Register a Java UDF class using reflection, for use from pyspark
+   * Register a deterministic Java UDF class using reflection, for use from pyspark
    *
    * @param name   udf name
    * @param className   fully qualified class name of udf
@@ -609,7 +609,24 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    *                        via reflection.
    */
   private[sql] def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
+    registerJava(name, className, returnDataType, deterministic = true)
+  }
 
+  /**
+   * Register a Java UDF class using reflection, for use from pyspark
+   *
+   * @param name   udf name
+   * @param className   fully qualified class name of udf
+   * @param returnDataType  return type of udf. If it is null, spark would try to infer
+   *                        via reflection.
+   * @param deterministic  True if the UDF is deterministic. Deterministic UDF returns same result
+   *                       each time it is invoked with a particular input.
+   */
+  private[sql] def registerJava(
+      name: String,
+      className: String,
+      returnDataType: DataType,
+      deterministic: Boolean): Unit = {
     try {
       val clazz = Utils.classForName(className)
       val udfInterfaces = clazz.getGenericInterfaces
@@ -622,40 +639,44 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         throw new AnalysisException(s"It is invalid to implement multiple UDF interfaces, UDF class $className")
       } else {
         try {
-          val udf = clazz.newInstance()
+          val javaUDFClass = clazz.newInstance()
           val udfReturnType = udfInterfaces(0).getActualTypeArguments.last
           var returnType = returnDataType
           if (returnType == null) {
             returnType = JavaTypeInference.inferDataType(udfReturnType)._1
           }
 
-          udfInterfaces(0).getActualTypeArguments.length match {
-            case 1 => register(name, udf.asInstanceOf[UDF0[_]], returnType)
-            case 2 => register(name, udf.asInstanceOf[UDF1[_, _]], returnType)
-            case 3 => register(name, udf.asInstanceOf[UDF2[_, _, _]], returnType)
-            case 4 => register(name, udf.asInstanceOf[UDF3[_, _, _, _]], returnType)
-            case 5 => register(name, udf.asInstanceOf[UDF4[_, _, _, _, _]], returnType)
-            case 6 => register(name, udf.asInstanceOf[UDF5[_, _, _, _, _, _]], returnType)
-            case 7 => register(name, udf.asInstanceOf[UDF6[_, _, _, _, _, _, _]], returnType)
-            case 8 => register(name, udf.asInstanceOf[UDF7[_, _, _, _, _, _, _, _]], returnType)
-            case 9 => register(name, udf.asInstanceOf[UDF8[_, _, _, _, _, _, _, _, _]], returnType)
-            case 10 => register(name, udf.asInstanceOf[UDF9[_, _, _, _, _, _, _, _, _, _]], returnType)
-            case 11 => register(name, udf.asInstanceOf[UDF10[_, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 12 => register(name, udf.asInstanceOf[UDF11[_, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 13 => register(name, udf.asInstanceOf[UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 14 => register(name, udf.asInstanceOf[UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 15 => register(name, udf.asInstanceOf[UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 16 => register(name, udf.asInstanceOf[UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 17 => register(name, udf.asInstanceOf[UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 18 => register(name, udf.asInstanceOf[UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 19 => register(name, udf.asInstanceOf[UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 20 => register(name, udf.asInstanceOf[UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 21 => register(name, udf.asInstanceOf[UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 22 => register(name, udf.asInstanceOf[UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 23 => register(name, udf.asInstanceOf[UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+          import org.apache.spark.sql.functions.udf
+
+          val javaUDF = udfInterfaces(0).getActualTypeArguments.length match {
+            case 1 => udf(javaUDFClass.asInstanceOf[UDF0[_]], returnType)
+            case 2 => udf(javaUDFClass.asInstanceOf[UDF1[_, _]], returnType)
+            case 3 => udf(javaUDFClass.asInstanceOf[UDF2[_, _, _]], returnType)
+            case 4 => udf(javaUDFClass.asInstanceOf[UDF3[_, _, _, _]], returnType)
+            case 5 => udf(javaUDFClass.asInstanceOf[UDF4[_, _, _, _, _]], returnType)
+            case 6 => udf(javaUDFClass.asInstanceOf[UDF5[_, _, _, _, _, _]], returnType)
+            case 7 => udf(javaUDFClass.asInstanceOf[UDF6[_, _, _, _, _, _, _]], returnType)
+            case 8 => udf(javaUDFClass.asInstanceOf[UDF7[_, _, _, _, _, _, _, _]], returnType)
+            case 9 => udf(javaUDFClass.asInstanceOf[UDF8[_, _, _, _, _, _, _, _, _]], returnType)
+            case 10 => udf(javaUDFClass.asInstanceOf[UDF9[_, _, _, _, _, _, _, _, _, _]], returnType)
+            case 11 => udf(javaUDFClass.asInstanceOf[UDF10[_, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 12 => udf(javaUDFClass.asInstanceOf[UDF11[_, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 13 => udf(javaUDFClass.asInstanceOf[UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 14 => udf(javaUDFClass.asInstanceOf[UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 15 => udf(javaUDFClass.asInstanceOf[UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 16 => udf(javaUDFClass.asInstanceOf[UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 17 => udf(javaUDFClass.asInstanceOf[UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 18 => udf(javaUDFClass.asInstanceOf[UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 19 => udf(javaUDFClass.asInstanceOf[UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 20 => udf(javaUDFClass.asInstanceOf[UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 21 => udf(javaUDFClass.asInstanceOf[UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 22 => udf(javaUDFClass.asInstanceOf[UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 23 => udf(javaUDFClass.asInstanceOf[UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
             case n =>
               throw new AnalysisException(s"UDF class with $n type arguments is not supported.")
           }
+          val javaUDFWithDeterminism = if (deterministic) javaUDF else javaUDF.asNondeterministic()
+          register(name, javaUDFWithDeterminism.withName(name))
         } catch {
           case e @ (_: InstantiationException | _: IllegalArgumentException) =>
             throw new AnalysisException(s"Can not instantiate class $className, please make sure it has public non argument constructor")
