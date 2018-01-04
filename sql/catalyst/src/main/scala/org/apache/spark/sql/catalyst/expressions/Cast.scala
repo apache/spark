@@ -638,7 +638,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       s"""
          |private void $writeStructToBuffer(InternalRow $rowTerm) {
          |  $buffer.append("[");
-         |  ${writeToBufferCode.mkString(s"""$buffer.append(", ");""" + "\n")}
+         |  ${writeToBufferCode.mkString(s"""$buffer.append(\", \");\n""")}
          |  $buffer.append("]");
          |}
        """.stripMargin)
@@ -660,7 +660,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
          |${ctx.javaType(map.valueType)} $valueTerm =
          |  ${ctx.getValue(s"$mapTerm.valueArray()", map.valueType, i)};
          |
-         |// Write a key-value pair in the buffer
+         |// Write a key-value pair in buffer
          |$writeKeyCode;
          |$buffer.append(" -> ");
          |$writeValueCode;
