@@ -25,7 +25,7 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{InitContainerBootstrap, MountSecretsBootstrap, PodWithDetachedInitContainer}
+import org.apache.spark.deploy.k8s.{InitContainerBootstrap, MountSecretsBootstrap, PodWithDetachedInitContainer, SecretVolumeUtils}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
@@ -165,17 +165,19 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
 
     val factory = new ExecutorPodFactory(
       conf,
-      None,
+      Some(secretsBootstrap),
       Some(initContainerBootstrap),
       Some(secretsBootstrap))
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
+    assert(executor.getSpec.getVolumes.size() === 1)
+    assert(SecretVolumeUtils.podHasVolume(executor, "secret1-volume"))
+    assert(SecretVolumeUtils.containerHasVolume(
+      executor.getSpec.getContainers.get(0), "secret1-volume", "/var/secret1"))
     assert(executor.getSpec.getInitContainers.size() === 1)
-    assert(executor.getSpec.getInitContainers.get(0).getVolumeMounts.get(0).getName
-      === "secret1-volume")
-    assert(executor.getSpec.getInitContainers.get(0).getVolumeMounts.get(0)
-      .getMountPath === "/var/secret1")
+    assert(SecretVolumeUtils.containerHasVolume(
+      executor.getSpec.getInitContainers.get(0), "secret1-volume", "/var/secret1"))
 
     checkOwnerReferences(executor, driverPodUid)
   }
