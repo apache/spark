@@ -70,8 +70,6 @@ class KafkaDataWriter(
   }
 
   def write(row: InternalRow): Unit = {
-    if (failedWrite != null) return
-
     val projectedRow = projection(row)
     val topic = projectedRow.getUTF8String(0)
     val key = projectedRow.getBinary(1)
@@ -85,7 +83,13 @@ class KafkaDataWriter(
     producer.send(record, callback)
   }
 
-  def commit(): WriterCommitMessage = KafkaWriterCommitMessage()
+  def commit(): WriterCommitMessage = {
+    // Send is asynchronous, but we can't commit until all rows are actually in Kafka.
+    // This requires flushing and then checking that no callbacks produced errors.
+    producer.flush()
+    checkForErrors()
+    KafkaWriterCommitMessage()
+  }
   def abort(): Unit = {}
 
   def close(): Unit = {
