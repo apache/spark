@@ -34,7 +34,7 @@ import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offse
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 import org.apache.spark.util.{ManualClock, SystemClock}
 
-class RateStreamV2Reader(options: DataSourceV2Options)
+class MicroBatchRateStreamReader(options: DataSourceV2Options)
   extends MicroBatchReader {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 

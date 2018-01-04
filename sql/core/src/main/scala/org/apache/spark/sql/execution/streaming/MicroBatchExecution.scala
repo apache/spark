@@ -50,6 +50,11 @@ class MicroBatchExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
+  private def toJava(
+      scalaOption: Option[v2.streaming.reader.Offset]): Optional[v2.streaming.reader.Offset] = {
+    Optional.ofNullable(scalaOption.orNull)
+  }
+
   @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
 
   private val triggerExecutor = trigger match {
@@ -269,17 +274,12 @@ class MicroBatchExecution(
           case s: MicroBatchReader =>
             updateStatusMessage(s"Getting offsets from $s")
             reportTimeTaken("getOffset") {
-              // Once v1 streaming source execution is gone, we can restructure this to be cleaner.
+              // Once v1 streaming source execution is gone, we can refactor this away.
               // For now, we set the range here to get the source to infer the available end offset,
               // get that offset, and then set the range again when we later execute.
-              if (availableOffsets.get(s).isDefined) {
-                val offsetJson = availableOffsets.get(s).get.json
-                s.setOffsetRange(
-                  Optional.of(s.deserializeOffset(offsetJson)),
-                  Optional.empty())
-              } else {
-                s.setOffsetRange(Optional.empty(), Optional.empty())
-              }
+            s.setOffsetRange(
+              toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
+              Optional.empty())
 
               (s, Some(s.getEndOffset))
             }
@@ -405,7 +405,7 @@ class MicroBatchExecution(
           if committedOffsets.get(reader).map(_ != available).getOrElse(true) =>
           val current = committedOffsets.get(reader).map(off => reader.deserializeOffset(off.json))
           reader.setOffsetRange(
-            Optional.ofNullable(current.orNull),
+            toJava(current),
             Optional.of(available.asInstanceOf[v2.streaming.reader.Offset]))
           logDebug(s"Retrieving data from $reader: $current -> $available")
           Some(reader ->
