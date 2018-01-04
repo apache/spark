@@ -105,7 +105,7 @@ class QuantileSummaries(
         if (newSamples.isEmpty || (sampleIdx == sampled.length && opsIdx == sorted.length - 1)) {
           0
         } else {
-          math.floor(2 * relativeError * currentCount).toInt
+          math.floor(2 * relativeError * currentCount).toLong
         }
 
       val tuple = Stats(currentSample, 1, delta)
@@ -192,10 +192,10 @@ class QuantileSummaries(
     }
 
     // Target rank
-    val rank = math.ceil(quantile * count).toInt
+    val rank = math.ceil(quantile * count).toLong
     val targetError = relativeError * count
     // Minimum rank at current sample
-    var minRank = 0
+    var minRank = 0L
     var i = 0
     while (i < sampled.length - 1) {
       val curSample = sampled(i)
