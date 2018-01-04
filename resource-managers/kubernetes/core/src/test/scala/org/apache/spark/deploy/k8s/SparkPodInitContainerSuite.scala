@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.rest.k8s
+package org.apache.spark.deploy.k8s
 
 import java.io.File
 import java.util.UUID

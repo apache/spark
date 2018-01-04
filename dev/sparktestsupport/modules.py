@@ -539,7 +539,7 @@ mesos = Module(
 kubernetes = Module(
     name="kubernetes",
     dependencies=[],
-    source_file_regexes=["resource-managers/kubernetes/core"],
+    source_file_regexes=["resource-managers/kubernetes"],
     build_profile_flags=["-Pkubernetes"],
     sbt_test_goals=["kubernetes/test"]
 )
