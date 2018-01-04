@@ -33,7 +33,7 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val APP_NAME = "spark-test"
   private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
-  private val APP_ARGS = Array("arg1", "arg2", "arg 3")
+  private val APP_ARGS = Array("arg1", "arg2", "\"arg 3\"")
   private val CUSTOM_ANNOTATION_KEY = "customAnnotation"
   private val CUSTOM_ANNOTATION_VALUE = "customAnnotationValue"
   private val DRIVER_CUSTOM_ENV_KEY1 = "customDriverEnv1"
@@ -82,7 +82,7 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
     assert(envs(ENV_SUBMIT_EXTRA_CLASSPATH) === "/opt/spark/spark-examples.jar")
     assert(envs(ENV_DRIVER_MEMORY) === "256M")
     assert(envs(ENV_DRIVER_MAIN_CLASS) === MAIN_CLASS)
-    assert(envs(ENV_DRIVER_ARGS) === "\"arg1\" \"arg2\" \"arg 3\"")
+    assert(envs(ENV_DRIVER_ARGS) === "arg1 arg2 \"arg 3\"")
     assert(envs(DRIVER_CUSTOM_ENV_KEY1) === "customDriverEnv1")
     assert(envs(DRIVER_CUSTOM_ENV_KEY2) === "customDriverEnv2")
 

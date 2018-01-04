@@ -127,6 +127,12 @@ private[spark] class DriverConfigOrchestrator(
       Nil
     }
 
+    val mountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
+      Seq(new DriverMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
+    } else {
+      Nil
+    }
+
     val initContainerBootstrapStep = if (existNonContainerLocalFiles(sparkJars ++ sparkFiles)) {
       val orchestrator = new InitContainerConfigOrchestrator(
         sparkJars,
@@ -147,19 +153,13 @@ private[spark] class DriverConfigOrchestrator(
       Nil
     }
 
-    val mountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
-      Seq(new DriverMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
-    } else {
-      Nil
-    }
-
     Seq(
       initialSubmissionStep,
       serviceBootstrapStep,
       kubernetesCredentialsStep) ++
       dependencyResolutionStep ++
-      initContainerBootstrapStep ++
-      mountSecretsStep
+      mountSecretsStep ++
+      initContainerBootstrapStep
   }
 
   private def existNonContainerLocalFiles(files: Seq[String]): Boolean = {
