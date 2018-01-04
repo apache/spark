@@ -70,8 +70,6 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
 
 /**
  * A Fake [[ChildFirstURLClassLoader]] used for test
- * @param urls
- * @param parent
  */
-class FakeChildFirstURLClassLoader(urls: Array[URL], parent: ClassLoader)
+private[spark] class FakeChildFirstURLClassLoader(urls: Array[URL], parent: ClassLoader)
   extends MutableURLClassLoader(urls, null)
