@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit
+package org.apache.spark.deploy.k8s
 
 import scala.collection.JavaConverters._
 
@@ -22,15 +22,12 @@ import io.fabric8.kubernetes.api.model.{Container, Pod}
 
 private[spark] object SecretVolumeUtils {
 
-  def podHasVolume(driverPod: Pod, volumeName: String): Boolean = {
-    driverPod.getSpec.getVolumes.asScala.exists(volume => volume.getName == volumeName)
+  def podHasVolume(pod: Pod, volumeName: String): Boolean = {
+    pod.getSpec.getVolumes.asScala.exists(volume => volume.getName == volumeName)
   }
 
-  def containerHasVolume(
-      driverContainer: Container,
-      volumeName: String,
-      mountPath: String): Boolean = {
-    driverContainer.getVolumeMounts.asScala.exists(volumeMount =>
+  def containerHasVolume(container: Container, volumeName: String, mountPath: String): Boolean = {
+    container.getVolumeMounts.asScala.exists(volumeMount =>
       volumeMount.getName == volumeName && volumeMount.getMountPath == mountPath)
   }
 }

@@ -28,9 +28,12 @@ private[spark] class InitContainerMountSecretsStep(
     bootstrap: MountSecretsBootstrap) extends InitContainerConfigurationStep {
 
   override def configureInitContainer(spec: InitContainerSpec) : InitContainerSpec = {
+    // Skip adding new secret volumes for the secrets as the volumes have already been added when
+    // mounting the secrets into the main driver container.
     val (driverPod, initContainer) = bootstrap.mountSecrets(
       spec.driverPod,
-      spec.initContainer)
+      spec.initContainer,
+      addNewVolumes = false)
     spec.copy(
       driverPod = driverPod,
       initContainer = initContainer

@@ -214,7 +214,7 @@ private[spark] class ExecutorPodFactory(
 
     val (maybeSecretsMountedPod, maybeSecretsMountedContainer) =
       mountSecretsBootstrap.map { bootstrap =>
-        bootstrap.mountSecrets(executorPod, containerWithLimitCores)
+        bootstrap.mountSecrets(executorPod, containerWithLimitCores, addNewVolumes = true)
       }.getOrElse((executorPod, containerWithLimitCores))
 
     val (bootstrappedPod, bootstrappedContainer) =
@@ -227,7 +227,12 @@ private[spark] class ExecutorPodFactory(
 
         val (pod, mayBeSecretsMountedInitContainer) =
           initContainerMountSecretsBootstrap.map { bootstrap =>
-            bootstrap.mountSecrets(podWithInitContainer.pod, podWithInitContainer.initContainer)
+            // Skip adding new secret volumes for the secrets as the volumes have already been added
+            // above when mounting the secrets into the main executor container.
+            bootstrap.mountSecrets(
+              podWithInitContainer.pod,
+              podWithInitContainer.initContainer,
+              addNewVolumes = false)
           }.getOrElse((podWithInitContainer.pod, podWithInitContainer.initContainer))
 
         val bootstrappedPod = KubernetesUtils.appendInitContainer(

@@ -29,7 +29,7 @@ private[spark] class DriverMountSecretsStep(
 
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     val (pod, container) = bootstrap.mountSecrets(
-      driverSpec.driverPod, driverSpec.driverContainer)
+      driverSpec.driverPod, driverSpec.driverContainer, addNewVolumes = true)
     driverSpec.copy(
       driverPod = pod,
       driverContainer = container

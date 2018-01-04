@@ -28,20 +28,26 @@ private[spark] class MountSecretsBootstrap(secretNamesToMountPaths: Map[String, 
    *
    * @param pod the pod into which the secret volumes are being added.
    * @param container the container into which the secret volumes are being mounted.
+   * @param addNewVolumes whether to add new secret volumes for the secrets.
    * @return the updated pod and container with the secrets mounted.
    */
-  def mountSecrets(pod: Pod, container: Container): (Pod, Container) = {
+  def mountSecrets(
+      pod: Pod,
+      container: Container,
+      addNewVolumes: Boolean): (Pod, Container) = {
     var podBuilder = new PodBuilder(pod)
-    secretNamesToMountPaths.keys.foreach { name =>
-      podBuilder = podBuilder
-        .editOrNewSpec()
+    if (addNewVolumes) {
+      secretNamesToMountPaths.keys.foreach { name =>
+        podBuilder = podBuilder
+          .editOrNewSpec()
           .addNewVolume()
-          .withName(secretVolumeName(name))
-          .withNewSecret()
-            .withSecretName(name)
-            .endSecret()
-          .endVolume()
+            .withName(secretVolumeName(name))
+            .withNewSecret()
+              .withSecretName(name)
+              .endSecret()
+            .endVolume()
           .endSpec()
+      }
     }
 
     var containerBuilder = new ContainerBuilder(container)
