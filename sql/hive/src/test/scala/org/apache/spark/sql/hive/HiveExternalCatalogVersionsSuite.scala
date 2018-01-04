@@ -61,7 +61,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     for (i <- 0 until 3) {
       val preferredMirror =
         getStringFromUrl("https://www.apache.org/dyn/closer.lua?preferred=true")
-      logWarning("The mirror is " + preferredMirror)
       val filename = s"spark-$version-bin-hadoop2.7.tgz"
       val url = s"$preferredMirror/spark/spark-$version/" + filename
       logInfo(s"Downloading Spark $version from $url")
@@ -120,7 +119,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     }
 
     val contentFile = new File(outDir.toFile, filename)
-    logWarning("content file is " + contentFile.getAbsolutePath)
     try {
       Source.fromFile(contentFile)(Codec(encoding)).mkString
     } finally {
