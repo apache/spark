@@ -274,7 +274,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       Some(load(appId).toApplicationInfo())
     } catch {
-      case e: NoSuchElementException =>
+      case _: NoSuchElementException =>
         None
     }
   }
@@ -685,7 +685,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .asScala
       .toList
     stale.foreach { log =>
-      if (!log.appId.isDefined) {
+      if (log.appId.isEmpty) {
         logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
         deleteLog(new Path(log.logPath))
         listing.delete(classOf[LogInfo], log.logPath)
@@ -871,7 +871,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       fs.delete(log, true)
     } catch {
-      case e: AccessControlException =>
+      case _: AccessControlException =>
         logInfo(s"No permission to delete $log, ignoring.")
       case ioe: IOException =>
         logError(s"IOException in cleaning $log", ioe)
