@@ -58,7 +58,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
     } else {
       val childTypes = children.map(_.dataType)
       if (childTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
-        TypeCheckResult.TypeCheckFailure(
+        return TypeCheckResult.TypeCheckFailure(
           s"input to function $prettyName should have StringType or BinaryType, but it's " +
             childTypes.map(_.simpleString).mkString("[", ", ", "]"))
       }
