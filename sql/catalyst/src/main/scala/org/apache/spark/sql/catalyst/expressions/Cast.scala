@@ -199,30 +199,59 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
+  @inline private[this] def buildWriter[T](
+      a: Any, buffer: UTF8StringBuilder, writer: (T, UTF8StringBuilder) => Unit): Unit = {
+    writer(a.asInstanceOf[T], buffer)
+  }
+
+  private[this] def buildElemWriter(
+      from: DataType): (Any, UTF8StringBuilder) => Unit = from match {
+    case BinaryType => buildWriter[Array[Byte]](_, _, (b, buf) => buf.append(b))
+    case StringType => buildWriter[UTF8String](_, _, (b, buf) => buf.append(b))
+    case DateType => buildWriter[Int](_, _,
+      (d, buf) => buf.append(DateTimeUtils.dateToString(d)))
+    case TimestampType => buildWriter[Long](_, _,
+      (t, buf) => buf.append(DateTimeUtils.timestampToString(t)))
+    case ar: ArrayType =>
+      buildWriter[ArrayData](_, _, (array, buf) => {
+         buf.append("[")
+        if (array.numElements > 0) {
+          val writeElemToBuffer = buildElemWriter(ar.elementType)
+          writeElemToBuffer(array.get(0, ar.elementType), buf)
+          var i = 1
+          while (i < array.numElements) {
+            buf.append(", ")
+            writeElemToBuffer(array.get(i, ar.elementType), buf)
+            i += 1
+          }
+        }
+        buf.append("]")
+      })
+    case _ => buildWriter[Any](_, _, (o, buf) => buf.append(String.valueOf(o)))
+  }
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
-    case StringType => buildCast[UTF8String](_, identity)
     case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
     case ar: ArrayType =>
       buildCast[ArrayData](_, array => {
-        val res = new StringBuilder
+        val res = new UTF8StringBuilder
         res.append("[")
         if (array.numElements > 0) {
-          val toStringFunc = castToString(ar.elementType)
-          res.append(toStringFunc(array.get(0, ar.elementType)))
+          val writeElemToBuffer = buildElemWriter(ar.elementType)
+          writeElemToBuffer(array.get(0, ar.elementType), res)
           var i = 1
           while (i < array.numElements) {
             res.append(", ")
-            res.append(toStringFunc(array.get(i, ar.elementType)))
+            writeElemToBuffer(array.get(i, ar.elementType), res)
             i += 1
           }
         }
         res.append("]")
-        UTF8String.fromString(res.toString())
+        UTF8String.fromString(res.toString)
       })
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
@@ -620,21 +649,20 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buffer: String,
       elemTerm: String,
       ctx: CodegenContext): String = dataType match {
-    case BinaryType => s"$buffer.append(new String($elemTerm))"
-    case StringType => s"$buffer.append(new String($elemTerm.getBytes()))"
+    case BinaryType | StringType => s"$buffer.append($elemTerm)"
     case DateType => s"""$buffer.append(
       org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($elemTerm))"""
     case TimestampType => s"""$buffer.append(
       org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($elemTerm))"""
     case ar: ArrayType => s"${codegenWriteArrayToBuffer(ar, ctx)}($elemTerm, $buffer)"
-    case _ => s"$buffer.append($elemTerm)"
+    case _ => s"$buffer.append(String.valueOf($elemTerm))"
   }
 
   private[this] def codegenWriteArrayToBuffer(ar: ArrayType, ctx: CodegenContext): String = {
     val loopIndex = ctx.freshName("loopIndex")
     val writeArrayToBuffer = ctx.freshName("writeArrayToBuffer")
     val arTerm = ctx.freshName("arTerm")
-    val bufferClass = "java.lang.StringBuilder"
+    val bufferClass = classOf[UTF8StringBuilder].getName
     val bufferTerm = ctx.freshName("bufferTerm")
     def writeElemCode(elemTerm: String) = {
       writeElemToBufferCode(ar.elementType, bufferTerm, elemTerm, ctx)
@@ -676,7 +704,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case ar: ArrayType =>
         (c, evPrim, evNull) => {
           val bufferTerm = ctx.freshName("bufferTerm")
-          val bufferClass = "java.lang.StringBuilder"
+          val bufferClass = classOf[UTF8StringBuilder].getName
           val writeArrayToBuffer = codegenWriteArrayToBuffer(ar, ctx)
           s"""
              |$bufferClass $bufferTerm = new $bufferClass();
