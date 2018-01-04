@@ -793,6 +793,10 @@ class DataStreamWriter(object):
         .. note:: Evolving.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
+                               Set a trigger that runs a query periodically based on the processing
+                               time. Only one trigger can be set.
+        :param once: if set to True, set a trigger that processes only one batch of data in a
+                     streaming query then terminates the query. Only one trigger can be set.
 
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
