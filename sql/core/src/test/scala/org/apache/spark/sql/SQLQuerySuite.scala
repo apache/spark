@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.File
 import java.math.MathContext
 import java.net.{MalformedURLException, URL}
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
@@ -2775,40 +2775,46 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-22825 Cast array to string") {
-    // Check non-codegen path
-    val df1 = sql("SELECT CAST(ARRAY(1, 2, 3, 4) AS STRING)")
-    checkAnswer(df1, Row("[1, 2, 3, 4]"))
-    val df2 = sql("SELECT CAST(ARRAY(ARRAY(1, 2), ARRAY(3, 4, 5), ARRAY(6, 7)) AS STRING)")
-    checkAnswer(df2, Row("[WrappedArray(1, 2), WrappedArray(3, 4, 5), WrappedArray(6, 7)]"))
-    val df3 = sql("SELECT CAST(ARRAY(MAP(1, 'a', 2, 'b'), MAP(3, 'c')) AS STRING)")
-    checkAnswer(df3, Row("[Map(1 -> a, 2 -> b), Map(3 -> c)]"))
-    val df4 = sql("SELECT CAST(ARRAY(STRUCT(1, 0.3, 'a'), STRUCT(2, 0.5, 'b')) AS STRING)")
-    checkAnswer(df4, Row("[[1,0.3,a], [2,0.5,b]]"))
-
-    // Check codegen path
-    withTable("t") {
-      Seq(Seq(0, 1, 2, 3, 4)).toDF("a").write.saveAsTable("t")
-      val df = sql("SELECT CAST(a AS STRING) FROM t")
-      checkAnswer(df, Row("[0, 1, 2, 3, 4]"))
-    }
-
-    withTable("t") {
-      Seq(Seq(Seq(1, 2), Seq(3), Seq(4, 5, 6))).toDF("a").write.saveAsTable("t")
-      val df = sql("SELECT CAST(a AS STRING) FROM t")
-      checkAnswer(df, Row("[[1, 2], [3], [4, 5, 6]]"))
-    }
-
-    withTable("t") {
-      Seq(Seq(Map(1 -> "a", 2 -> "b"), Map(3 -> "c"), Map(4 -> "d", 5 -> "e"))).toDF("a")
-        .write.saveAsTable("t")
-      val df = sql("SELECT CAST(a AS STRING) FROM t")
-      checkAnswer(df, Row("[[1 -> a, 2 -> b], [3 -> c], [4 -> d, 5 -> e]]"))
-    }
-
-    withTable("t") {
-      Seq(Seq((1, "a"), (2, "b")), Seq((3, "c"))).toDF("a").write.saveAsTable("t")
-      val df = sql("SELECT CAST(a AS STRING) FROM t")
-      checkAnswer(df, Row("[[1, a], [2, b]]") :: Row("[[3, c]]") :: Nil)
+    Seq("true", "false").foreach { codegen =>
+      withSQLConf("spark.sql.codegen.wholeStage" -> codegen) {
+        withTable("t") {
+          Seq(Seq(0, 1, 2, 3, 4)).toDF("a").write.saveAsTable("t")
+          val df = sql("SELECT CAST(a AS STRING) FROM t")
+          checkAnswer(df, Row("[0, 1, 2, 3, 4]"))
+        }
+        withTable("t") {
+          Seq(Seq("ab", "cde", "f")).toDF("a").write.saveAsTable("t")
+          val df = sql("SELECT CAST(a AS STRING) FROM t")
+          checkAnswer(df, Row("[ab, cde, f]"))
+        }
+        withTable("t") {
+          Seq(Seq("ab".getBytes, "cde".getBytes, "f".getBytes)).toDF("a").write.saveAsTable("t")
+          val df = sql("SELECT CAST(a AS STRING) FROM t")
+          checkAnswer(df, Row("[ab, cde, f]"))
+        }
+        withTable("t") {
+          Seq(Seq("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf))
+            .toDF("a").write.saveAsTable("t")
+          val df = sql("SELECT CAST(a AS STRING) FROM t")
+          checkAnswer(df, Row("[2014-12-03, 2014-12-04, 2014-12-06]"))
+        }
+        withTable("t") {
+          Seq(Seq("2014-12-03 13:01:00", "2014-12-04 15:05:00").map(Timestamp.valueOf))
+            .toDF("a").write.saveAsTable("t")
+          val df = sql("SELECT CAST(a AS STRING) FROM t")
+          checkAnswer(df, Row("[2014-12-03 13:01:00, 2014-12-04 15:05:00]"))
+        }
+        withTable("t") {
+          Seq(Seq(Seq(1, 2), Seq(3), Seq(4, 5, 6))).toDF("a").write.saveAsTable("t")
+          val df = sql("SELECT CAST(a AS STRING) FROM t")
+          checkAnswer(df, Row("[[1, 2], [3], [4, 5, 6]]"))
+        }
+        withTable("t") {
+          Seq(Seq(Seq(Seq("a"), Seq("b", "c")), Seq(Seq("d")))).toDF("a").write.saveAsTable("t")
+          val df = sql("SELECT CAST(a AS STRING) FROM t")
+          checkAnswer(df, Row("[[[a], [b, c]], [[d]]]"))
+        }
+      }
     }
   }
 }

@@ -19,10 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 
-import scala.collection.mutable.WrappedArray
-
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
@@ -205,6 +203,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
+    case StringType => buildCast[UTF8String](_, identity)
     case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
@@ -214,10 +213,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         res.append("[")
         if (array.numElements > 0) {
           val toStringFunc = castToString(ar.elementType)
-          res.append(toStringFunc(array.get(0, ar.elementType)))
-          var i = 1
+          var i = 0
           while (i < array.numElements) {
-            res.append(", ")
+            if (i != 0) res.append(", ")
             res.append(toStringFunc(array.get(i, ar.elementType)))
             i += 1
           }
@@ -562,7 +560,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx, eval)
+    val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
     ev.copy(code = eval.code +
       castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
@@ -574,12 +572,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def nullSafeCastFunction(
       from: DataType,
       to: DataType,
-      ctx: CodegenContext,
-      ev: ExprCode): CastFunction = to match {
+      ctx: CodegenContext): CastFunction = to match {
 
     case _ if from == NullType => (c, evPrim, evNull) => s"$evNull = true;"
     case _ if to == from => (c, evPrim, evNull) => s"$evPrim = $c;"
-    case StringType => castToStringCode(from, ctx, ev)
+    case StringType => castToStringCode(from, ctx)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
@@ -594,9 +591,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DoubleType => castToDoubleCode(from)
 
     case array: ArrayType =>
-      castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx, ev)
-    case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx, ev)
-    case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx, ev)
+      castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
+    case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
+    case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
     case udt: UserDefinedType[_]
       if udt.userClass == from.asInstanceOf[UserDefinedType[_]].userClass =>
       (c, evPrim, evNull) => s"$evPrim = $c;"
@@ -628,79 +625,18 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($elemTerm))"""
     case TimestampType => s"""$buffer.append(
       org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($elemTerm))"""
-    case map: MapType => s"${codegenWriteMapToBuffer(map, buffer, ctx)}($elemTerm)"
-    case ar: ArrayType => s"${codegenWriteArrayToBuffer(ar, buffer, ctx)}($elemTerm)"
-    case st: StructType => s"${codegenWriteStructToBuffer(st, buffer, ctx)}($elemTerm)"
+    case ar: ArrayType => s"${codegenWriteArrayToBuffer(ar, ctx)}($elemTerm, $buffer)"
     case _ => s"$buffer.append($elemTerm)"
   }
 
-  private[this] def codegenWriteStructToBuffer(
-      st: StructType, buffer: String, ctx: CodegenContext): String = {
-    val writeStructToBuffer = ctx.freshName("writeStructToBuffer")
-    val rowTerm = ctx.freshName("rowTerm")
-    val writeToBufferCode = st.zipWithIndex.map { case (f, i) =>
-      val fieldTerm = ctx.freshName("fieldTerm")
-      val writeFieldCode = writeElemToBufferCode(f.dataType, buffer, fieldTerm, ctx)
-      s"""
-         |${ctx.javaType(st(i).dataType)} $fieldTerm = ${ctx.getValue(rowTerm, f.dataType, s"$i")};
-         |$writeFieldCode;
-       """.stripMargin
-    }
-    ctx.addNewFunction(writeStructToBuffer,
-      s"""
-         |private void $writeStructToBuffer(InternalRow $rowTerm) {
-         |  $buffer.append("[");
-         |  ${writeToBufferCode.mkString(s"""$buffer.append(\", \");\n""")}
-         |  $buffer.append("]");
-         |}
-       """.stripMargin)
-  }
-
-  private[this] def codegenWriteMapToBuffer(
-      map: MapType, buffer: String, ctx: CodegenContext): String = {
-    val loopIndex = ctx.freshName("loopIndex")
-    val writeMapToBuffer = ctx.freshName("writeMapToBuffer")
-    val mapTerm = ctx.freshName("mapTerm")
-    val keyTerm = ctx.freshName("keyTerm")
-    val valueTerm = ctx.freshName("valueTerm")
-    val writeKeyCode = writeElemToBufferCode(map.keyType, buffer, keyTerm, ctx)
-    val writeValueCode = writeElemToBufferCode(map.valueType, buffer, valueTerm, ctx)
-    def writeToBufferCode(i: String) = {
-      s"""
-         |${ctx.javaType(map.keyType)} $keyTerm =
-         |  ${ctx.getValue(s"$mapTerm.keyArray()", map.keyType, i)};
-         |${ctx.javaType(map.valueType)} $valueTerm =
-         |  ${ctx.getValue(s"$mapTerm.valueArray()", map.valueType, i)};
-         |
-         |// Write a key-value pair in buffer
-         |$writeKeyCode;
-         |$buffer.append(" -> ");
-         |$writeValueCode;
-       """.stripMargin
-    }
-    ctx.addNewFunction(writeMapToBuffer,
-      s"""
-         |private void $writeMapToBuffer(MapData $mapTerm) {
-         |  $buffer.append("[");
-         |  if ($mapTerm.numElements() > 0) {
-         |    ${writeToBufferCode("0")}
-         |  }
-         |  for (int $loopIndex = 1; $loopIndex < $mapTerm.numElements(); $loopIndex++) {
-         |    $buffer.append(", ");
-         |    ${writeToBufferCode(loopIndex)}
-         |  }
-         |  $buffer.append("]");
-         |}
-       """.stripMargin)
-  }
-
-  private[this] def codegenWriteArrayToBuffer(
-      ar: ArrayType, buffer: String, ctx: CodegenContext): String = {
+  private[this] def codegenWriteArrayToBuffer(ar: ArrayType, ctx: CodegenContext): String = {
     val loopIndex = ctx.freshName("loopIndex")
     val writeArrayToBuffer = ctx.freshName("writeArrayToBuffer")
     val arTerm = ctx.freshName("arTerm")
+    val bufferClass = classOf[StringBuffer].getName
+    val bufferTerm = ctx.freshName("bufferTerm")
     val elemTerm = ctx.freshName("elemTerm")
-    val writeElemCode = writeElemToBufferCode(ar.elementType, buffer, elemTerm, ctx)
+    val writeElemCode = writeElemToBufferCode(ar.elementType, bufferTerm, elemTerm, ctx)
     def writeToBufferCode(i: String) = {
       s"""
          |${ctx.javaType(ar.elementType)} $elemTerm = ${ctx.getValue(arTerm, ar.elementType, i)};
@@ -709,22 +645,18 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     }
     ctx.addNewFunction(writeArrayToBuffer,
       s"""
-         |private void $writeArrayToBuffer(ArrayData $arTerm) {
-         |  $buffer.append("[");
-         |  if ($arTerm.numElements() > 0) {
-         |    ${writeToBufferCode("0")}
-         |  }
-         |  for (int $loopIndex = 1; $loopIndex < $arTerm.numElements(); $loopIndex++) {
-         |    $buffer.append(", ");
+         |private void $writeArrayToBuffer(ArrayData $arTerm, $bufferClass $bufferTerm) {
+         |  $bufferTerm.append("[");
+         |  for (int $loopIndex = 0; $loopIndex < $arTerm.numElements(); $loopIndex++) {
+         |    if ($loopIndex != 0) $bufferTerm.append(", ");
          |    ${writeToBufferCode(loopIndex)}
          |  }
-         |  $buffer.append("]");
+         |  $bufferTerm.append("]");
          |}
        """.stripMargin)
   }
 
-  private[this] def castToStringCode(from: DataType, ctx: CodegenContext, ev: ExprCode)
-    : CastFunction = {
+  private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case BinaryType =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromBytes($c);"
@@ -736,21 +668,19 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
       case ar: ArrayType =>
-        val bufferClass = classOf[StringBuffer].getName
-        val buffer = ctx.addMutableState(bufferClass, "buffer", v => s"$v = new $bufferClass();")
-        val writeArrayToBuffer = codegenWriteArrayToBuffer(ar, buffer, ctx)
-        val arrayToStringCode =
+        (c, evPrim, evNull) => {
+          val bufferTerm = ctx.freshName("bufferTerm")
+          val bufferClass = classOf[StringBuffer].getName
+          val writeArrayToBuffer = codegenWriteArrayToBuffer(ar, ctx)
           s"""
-             |if (!${ev.isNull}) {
-             |  // Reset buffer first
-             |  $buffer.delete(0, $buffer.length());
-             |  $writeArrayToBuffer(${ev.value});
+             |$bufferClass $bufferTerm = new $bufferClass();
+             |if (!$evNull) {
+             |  $writeArrayToBuffer($c, $bufferTerm);
              |}
+             |
+             |$evPrim = UTF8String.fromString($bufferTerm.toString());
            """.stripMargin
-        ev.code = ev.code ++ arrayToStringCode
-        ev.value = buffer
-        (c, evPrim, evNull) =>
-          s"""$evPrim = UTF8String.fromString($buffer.toString());"""
+        }
       case _ =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -1088,8 +1018,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def castArrayCode(
-      fromType: DataType, toType: DataType, ctx: CodegenContext, ev: ExprCode): CastFunction = {
-    val elementCast = nullSafeCastFunction(fromType, toType, ctx, ev)
+      fromType: DataType, toType: DataType, ctx: CodegenContext): CastFunction = {
+    val elementCast = nullSafeCastFunction(fromType, toType, ctx)
     val arrayClass = classOf[GenericArrayData].getName
     val fromElementNull = ctx.freshName("feNull")
     val fromElementPrim = ctx.freshName("fePrim")
@@ -1123,10 +1053,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       """
   }
 
-  private[this] def castMapCode(from: MapType, to: MapType, ctx: CodegenContext, ev: ExprCode)
-    : CastFunction = {
-    val keysCast = castArrayCode(from.keyType, to.keyType, ctx, ev)
-    val valuesCast = castArrayCode(from.valueType, to.valueType, ctx, ev)
+  private[this] def castMapCode(from: MapType, to: MapType, ctx: CodegenContext): CastFunction = {
+    val keysCast = castArrayCode(from.keyType, to.keyType, ctx)
+    val valuesCast = castArrayCode(from.valueType, to.valueType, ctx)
 
     val mapClass = classOf[ArrayBasedMapData].getName
 
@@ -1152,11 +1081,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def castStructCode(
-      from: StructType, to: StructType, ctx: CodegenContext, ev: ExprCode): CastFunction = {
+      from: StructType, to: StructType, ctx: CodegenContext): CastFunction = {
 
     val fieldsCasts = from.fields.zip(to.fields).map {
-      case (fromField, toField) =>
-        nullSafeCastFunction(fromField.dataType, toField.dataType, ctx, ev)
+      case (fromField, toField) => nullSafeCastFunction(fromField.dataType, toField.dataType, ctx)
     }
     val rowClass = classOf[GenericInternalRow].getName
     val tmpResult = ctx.freshName("tmpResult")

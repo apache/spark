@@ -857,11 +857,23 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22825 Cast array to string") {
     val ret1 = cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType)
     checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
-    val ret2 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
-    checkEvaluation(ret2, "[[1, 2, 3], [4, 5]]")
-    val ret3 = cast(Literal.create(Array(Map(1 -> "a"), Map(2 -> "b", 3 -> "c"))), StringType)
-    checkEvaluation(ret3, "[[1 -> a], [2 -> b, 3 -> c]]")
-    val ret4 = cast(Literal.create(Array((1, 3.0, "a"), (3, 1.0, "b"))), StringType)
-    checkEvaluation(ret4, "[[1, 3.0, a], [3, 1.0, b]]")
+    val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
+    checkEvaluation(ret2, "[ab, cde, f]")
+    val ret3 = cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
+    checkEvaluation(ret3, "[ab, cde, f]")
+    val ret4 = cast(
+      Literal.create(Array("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf)),
+      StringType)
+    checkEvaluation(ret4, "[2014-12-03, 2014-12-04, 2014-12-06]")
+    val ret5 = cast(
+      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00").map(Timestamp.valueOf)),
+      StringType)
+    checkEvaluation(ret5, "[2014-12-03 13:01:00, 2014-12-04 15:05:00]")
+    val ret6 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
+    checkEvaluation(ret6, "[[1, 2, 3], [4, 5]]")
+    val ret7 = cast(
+      Literal.create(Array(Array(Array("a"), Array("b", "c")), Array(Array("d")))),
+      StringType)
+    checkEvaluation(ret7, "[[[a], [b, c]], [[d]]]")
   }
 }
