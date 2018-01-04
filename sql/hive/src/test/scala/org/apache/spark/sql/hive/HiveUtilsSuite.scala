@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URL
+
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader}
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
@@ -42,4 +47,31 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
       assert(hiveConf("foo") === "bar")
     }
   }
+
+  test("ChildFirstURLClassLoader's parent is null") {
+    val conf = new SparkConf
+    val contextClassLoader = Thread.currentThread().getContextClassLoader
+    val loader = new FakeChildFirstURLClassLoader(Array(), contextClassLoader)
+    Thread.currentThread().setContextClassLoader(loader)
+    intercept[IllegalArgumentException](
+      HiveUtils.newClientForMetadata(conf, SparkHadoopUtil.newConfiguration(conf)))
+    Thread.currentThread().setContextClassLoader(contextClassLoader)
+  }
+
+  test("ChildFirstURLClassLoader's parent is null, get spark classloader instead") {
+    val conf = new SparkConf
+    val contextClassLoader = Thread.currentThread().getContextClassLoader
+    val loader = new ChildFirstURLClassLoader(Array(), contextClassLoader)
+    Thread.currentThread().setContextClassLoader(loader)
+    HiveUtils.newClientForMetadata(conf, SparkHadoopUtil.newConfiguration(conf))
+    Thread.currentThread().setContextClassLoader(contextClassLoader)
+  }
 }
+
+/**
+ * A Fake [[ChildFirstURLClassLoader]] used for test
+ * @param urls
+ * @param parent
+ */
+class FakeChildFirstURLClassLoader(urls: Array[URL], parent: ClassLoader)
+  extends MutableURLClassLoader(urls, null)
