@@ -147,8 +147,8 @@ class FoldablePropagationSuite extends PlanTest {
   test("Propagate in expand") {
     val c1 = Literal(1).as('a)
     val c2 = Literal(2).as('b)
-    val a1 = c1.toAttribute.withNullability(true)
-    val a2 = c2.toAttribute.withNullability(true)
+    val a1 = c1.toAttribute.newInstance().withNullability(true)
+    val a2 = c2.toAttribute.newInstance().withNullability(true)
     val expand = Expand(
       Seq(Seq(Literal(null), 'b), Seq('a, Literal(null))),
       Seq(a1, a2),
@@ -164,7 +164,7 @@ class FoldablePropagationSuite extends PlanTest {
 
   test("Propagate above outer join") {
     val left = LocalRelation('a.int).select('a, Literal(1).as('b))
-    val right = LocalRelation('c.int).select('c, Literal(1).as("d"))
+    val right = LocalRelation('c.int).select('c, Literal(1).as('d))
 
     val join = left.join(
       right,
