@@ -28,11 +28,28 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
-import org.apache.spark.sql.sources.v2.DataSourceV2Options
+import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
 import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupport
 import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 import org.apache.spark.util.{ManualClock, SystemClock}
+
+/**
+ * This is a temporary register as we build out v2 migration. Microbatch read support should
+ * be implemented in the same register as v1.
+ */
+class RateSourceProviderV2 extends DataSourceV2 with MicroBatchReadSupport with DataSourceRegister {
+  override def createMicroBatchReader(
+      schema: Optional[StructType],
+      checkpointLocation: String,
+      options: DataSourceV2Options): MicroBatchReader = {
+    new MicroBatchRateStreamReader(options)
+  }
+
+  override def shortName(): String = "ratev2"
+}
 
 class MicroBatchRateStreamReader(options: DataSourceV2Options)
   extends MicroBatchReader {
