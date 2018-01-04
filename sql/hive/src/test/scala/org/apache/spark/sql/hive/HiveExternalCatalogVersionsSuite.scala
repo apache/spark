@@ -90,7 +90,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     new File(tmpDataDir, name).getCanonicalPath
   }
 
-  def getFileFromUrl(urlString: String, targetDir: String, filename: String): Boolean = {
+  private def getFileFromUrl(urlString: String, targetDir: String, filename: String): Boolean = {
     val conf = new SparkConf
     val securityManager = new SecurityManager(conf)
     val hadoopConf = new Configuration
@@ -110,7 +110,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     }
   }
 
-  def getStringFromUrl(urlString: String, encoding: String = "UTF-8"): String = {
+  private def getStringFromUrl(urlString: String, encoding: String = "UTF-8"): String = {
     val outDir = Files.createTempDirectory("string-")
     val filename = "string-out.txt"
 
