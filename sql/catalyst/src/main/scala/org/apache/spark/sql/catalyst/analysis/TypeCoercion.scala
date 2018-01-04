@@ -100,9 +100,9 @@ object TypeCoercion {
     case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
       Some(TimestampType)
 
-    case (t1 @ ArrayType(pointType1, nullable1), t2 @ ArrayType(pointType2, nullable2))
+    case (t1 @ ArrayType(elementType1, nullable1), t2 @ ArrayType(elementType2, nullable2))
         if t1.sameType(t2) =>
-      val dataType = findTightestCommonType(pointType1, pointType2).get
+      val dataType = findTightestCommonType(elementType1, elementType2).get
       Some(ArrayType(dataType, nullable1 || nullable2))
 
     case (t1 @ MapType(keyType1, valueType1, nullable1),
@@ -174,8 +174,8 @@ object TypeCoercion {
       case (NullType, _) => Some(t1)
       case (_, NullType) => Some(t1)
 
-      case (ArrayType(pointType1, nullable1), ArrayType(pointType2, nullable2)) =>
-        val dataType = widerTypeFunc.apply(pointType1, pointType2)
+      case (ArrayType(elementType1, nullable1), ArrayType(elementType2, nullable2)) =>
+        val dataType = widerTypeFunc.apply(elementType1, elementType2)
 
         dataType.map(ArrayType(_, nullable1 || nullable2))
 
