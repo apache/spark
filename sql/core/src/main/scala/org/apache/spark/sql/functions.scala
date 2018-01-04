@@ -3267,7 +3267,7 @@ object functions {
       |/**
       | * Defines a Scala closure of $x arguments as user-defined function (UDF).
       | * The data types are automatically inferred based on the Scala closure's
-      | * signature. By default the returned UDF is deterministic, to change it to
+      | * signature. By default the returned UDF is deterministic. To change it to
       | * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
       | *
       | * @group udf_funcs
@@ -3291,7 +3291,7 @@ object functions {
       |/**
       | * Defines a Java UDF$i instance as user-defined function (UDF).
       | * The caller must specify the output data type, and there is no automatic input type coercion.
-      | * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+      | * By default the returned UDF is deterministic. To change it to nondeterministic, call the
       | * API `UserDefinedFunction.asNondeterministic()`.
       | *
       | * @group udf_funcs
@@ -3312,7 +3312,7 @@ object functions {
   /**
    * Defines a Scala closure of 0 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3328,7 +3328,7 @@ object functions {
   /**
    * Defines a Scala closure of 1 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3344,7 +3344,7 @@ object functions {
   /**
    * Defines a Scala closure of 2 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3360,7 +3360,7 @@ object functions {
   /**
    * Defines a Scala closure of 3 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3376,7 +3376,7 @@ object functions {
   /**
    * Defines a Scala closure of 4 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3392,7 +3392,7 @@ object functions {
   /**
    * Defines a Scala closure of 5 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3408,7 +3408,7 @@ object functions {
   /**
    * Defines a Scala closure of 6 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3424,7 +3424,7 @@ object functions {
   /**
    * Defines a Scala closure of 7 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3440,7 +3440,7 @@ object functions {
   /**
    * Defines a Scala closure of 8 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3456,7 +3456,7 @@ object functions {
   /**
    * Defines a Scala closure of 9 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3472,7 +3472,7 @@ object functions {
   /**
    * Defines a Scala closure of 10 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
-   * signature. By default the returned UDF is deterministic, to change it to
+   * signature. By default the returned UDF is deterministic. To change it to
    * nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3492,7 +3492,7 @@ object functions {
   /**
    * Defines a Java UDF0 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3506,7 +3506,7 @@ object functions {
   /**
    * Defines a Java UDF1 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3520,7 +3520,7 @@ object functions {
   /**
    * Defines a Java UDF2 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3534,7 +3534,7 @@ object functions {
   /**
    * Defines a Java UDF3 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3548,7 +3548,7 @@ object functions {
   /**
    * Defines a Java UDF4 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3562,7 +3562,7 @@ object functions {
   /**
    * Defines a Java UDF5 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3576,7 +3576,7 @@ object functions {
   /**
    * Defines a Java UDF6 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3590,7 +3590,7 @@ object functions {
   /**
    * Defines a Java UDF7 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3604,7 +3604,7 @@ object functions {
   /**
    * Defines a Java UDF8 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3618,7 +3618,7 @@ object functions {
   /**
    * Defines a Java UDF9 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3632,7 +3632,7 @@ object functions {
   /**
    * Defines a Java UDF10 instance as user-defined function (UDF).
    * The caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
@@ -3649,7 +3649,7 @@ object functions {
   /**
    * Defines a deterministic user-defined function (UDF) using a Scala closure. For this variant,
    * the caller must specify the output data type, and there is no automatic input type coercion.
-   * By default the returned UDF is deterministic, to change it to nondeterministic, call the
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
    * API `UserDefinedFunction.asNondeterministic()`.
    *
    * @param f  A closure in Scala
