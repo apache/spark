@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.File
 import java.math.MathContext
 import java.net.{MalformedURLException, URL}
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
@@ -2770,55 +2770,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         val df = spark.read.format(format).load(path)
         assert(df.schema.sameType(emptyDf.schema))
         checkAnswer(df, emptyDf)
-      }
-    }
-  }
-
-  test("SPARK-22825 Cast array to string") {
-    Seq("true", "false").foreach { codegen =>
-      withSQLConf("spark.sql.codegen.wholeStage" -> codegen) {
-        withTable("t") {
-          Seq(Seq(0, 1, 2, 3, 4)).toDF("a").write.saveAsTable("t")
-          val df = sql("SELECT CAST(a AS STRING) FROM t")
-          checkAnswer(df, Row("[0, 1, 2, 3, 4]"))
-        }
-        withTable("t") {
-          Seq(Seq("ab", "cde", "f")).toDF("a").write.saveAsTable("t")
-          val df = sql("SELECT CAST(a AS STRING) FROM t")
-          checkAnswer(df, Row("[ab, cde, f]"))
-        }
-        withTable("t") {
-          Seq(Seq("ab", null, "c")).toDF("a").write.saveAsTable("t")
-          val df = sql("SELECT CAST(a AS STRING) FROM t")
-          checkAnswer(df, Row("[ab,, c]"))
-        }
-        withTable("t") {
-          Seq(Seq("ab".getBytes, "cde".getBytes, "f".getBytes)).toDF("a").write.saveAsTable("t")
-          val df = sql("SELECT CAST(a AS STRING) FROM t")
-          checkAnswer(df, Row("[ab, cde, f]"))
-        }
-        withTable("t") {
-          Seq(Seq("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf))
-            .toDF("a").write.saveAsTable("t")
-          val df = sql("SELECT CAST(a AS STRING) FROM t")
-          checkAnswer(df, Row("[2014-12-03, 2014-12-04, 2014-12-06]"))
-        }
-        withTable("t") {
-          Seq(Seq("2014-12-03 13:01:00", "2014-12-04 15:05:00").map(Timestamp.valueOf))
-            .toDF("a").write.saveAsTable("t")
-          val df = sql("SELECT CAST(a AS STRING) FROM t")
-          checkAnswer(df, Row("[2014-12-03 13:01:00, 2014-12-04 15:05:00]"))
-        }
-        withTable("t") {
-          Seq(Seq(Seq(1, 2), Seq(3), Seq(4, 5, 6))).toDF("a").write.saveAsTable("t")
-          val df = sql("SELECT CAST(a AS STRING) FROM t")
-          checkAnswer(df, Row("[[1, 2], [3], [4, 5, 6]]"))
-        }
-        withTable("t") {
-          Seq(Seq(Seq(Seq("a"), Seq("b", "c")), Seq(Seq("d")))).toDF("a").write.saveAsTable("t")
-          val df = sql("SELECT CAST(a AS STRING) FROM t")
-          checkAnswer(df, Row("[[[a], [b, c]], [[d]]]"))
-        }
       }
     }
   }

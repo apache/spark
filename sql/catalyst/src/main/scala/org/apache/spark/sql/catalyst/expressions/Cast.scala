@@ -619,7 +619,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     """
   }
 
-  private[this] def codegenWriteArrayElemCode(et: DataType, ctx: CodegenContext): String = {
+  private def writeArrayToStringBuilder(
+      et: DataType,
+      arTerm: String,
+      bufferTerm: String,
+      ctx: CodegenContext): String = {
     val elementToStringCode = castToStringCode(et, ctx)
     val funcName = ctx.freshName("elementToString")
     val elementToStringFunc = ctx.addNewFunction(funcName,
@@ -632,29 +636,22 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
        """.stripMargin)
 
     val loopIndex = ctx.freshName("loopIndex")
-    val writeArrayToBuffer = ctx.freshName("writeArrayToBuffer")
-    val arTerm = ctx.freshName("arTerm")
-    val bufferClass = classOf[UTF8StringBuilder].getName
-    val bufferTerm = ctx.freshName("bufferTerm")
-    ctx.addNewFunction(writeArrayToBuffer,
-      s"""
-         |private void $writeArrayToBuffer(ArrayData $arTerm, $bufferClass $bufferTerm) {
-         |  $bufferTerm.append("[");
-         |  if ($arTerm.numElements() > 0) {
-         |    if (!$arTerm.isNullAt(0)) {
-         |      $bufferTerm.append($elementToStringFunc(${ctx.getValue(arTerm, et, "0")}));
-         |    }
-         |    for (int $loopIndex = 1; $loopIndex < $arTerm.numElements(); $loopIndex++) {
-         |      $bufferTerm.append(",");
-         |      if (!$arTerm.isNullAt($loopIndex)) {
-         |        $bufferTerm.append(" ");
-         |        $bufferTerm.append($elementToStringFunc(${ctx.getValue(arTerm, et, loopIndex)}));
-         |      }
-         |    }
-         |  }
-         |  $bufferTerm.append("]");
-         |}
-       """.stripMargin)
+    s"""
+       |$bufferTerm.append("[");
+       |if ($arTerm.numElements() > 0) {
+       |  if (!$arTerm.isNullAt(0)) {
+       |    $bufferTerm.append($elementToStringFunc(${ctx.getValue(arTerm, et, "0")}));
+       |  }
+       |  for (int $loopIndex = 1; $loopIndex < $arTerm.numElements(); $loopIndex++) {
+       |    $bufferTerm.append(",");
+       |    if (!$arTerm.isNullAt($loopIndex)) {
+       |      $bufferTerm.append(" ");
+       |      $bufferTerm.append($elementToStringFunc(${ctx.getValue(arTerm, et, loopIndex)}));
+       |    }
+       |  }
+       |}
+       |$bufferTerm.append("]");
+     """.stripMargin
   }
 
   private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
@@ -672,10 +669,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         (c, evPrim, evNull) => {
           val bufferTerm = ctx.freshName("bufferTerm")
           val bufferClass = classOf[UTF8StringBuilder].getName
-          val writeArrayElemCode = codegenWriteArrayElemCode(et, ctx)
+          val writeArrayElemCode = writeArrayToStringBuilder(et, c, bufferTerm, ctx)
           s"""
              |$bufferClass $bufferTerm = new $bufferClass();
-             |$writeArrayElemCode($c, $bufferTerm);
+             |$writeArrayElemCode;
              |$evPrim = $bufferTerm.build();
            """.stripMargin
         }

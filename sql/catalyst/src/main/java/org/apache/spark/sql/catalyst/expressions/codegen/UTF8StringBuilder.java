@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
-import java.nio.charset.StandardCharsets;
-
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A helper class to write `UTF8String`, `String`, and `byte[]` data into an internal byte buffer
- * and get written data as `UTF8String`.
+ * A helper class to write {@link UTF8String}s to an internal buffer and build the concatenated
+ * {@link UTF8String} at the end.
  */
 public class UTF8StringBuilder {
 
