@@ -219,7 +219,7 @@ kubectl logs <spark-driver-pod>
 ```
 
 Status and logs of failed executor pods can be checked in similar ways. Finally, deleting the driver pod will clean up the entire spark
-application, includling all executors, associated service, etc. The driver pod can be thought of as the Kubernetes representation of
+application, including all executors, associated service, etc. The driver pod can be thought of as the Kubernetes representation of
 the Spark application.
 
 ## Kubernetes Features

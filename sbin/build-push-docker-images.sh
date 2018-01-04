@@ -92,7 +92,7 @@ Options:
   -m          Use minikube's Docker daemon.
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
-There is no need to push the images into minikube int that case, they'll be automatically
+There is no need to push the images into minikube in that case, they'll be automatically
 available when running applications inside the minikube cluster.
 
 Check the following documentation for more information on using the minikube Docker daemon:
