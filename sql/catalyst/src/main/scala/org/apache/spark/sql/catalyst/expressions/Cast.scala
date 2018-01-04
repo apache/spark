@@ -199,36 +199,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
-  @inline private[this] def buildWriter[T](
-      a: Any, buffer: UTF8StringBuilder, writer: (T, UTF8StringBuilder) => Unit): Unit = {
-    writer(a.asInstanceOf[T], buffer)
-  }
-
-  private[this] def buildElemWriter(
-      from: DataType): (Any, UTF8StringBuilder) => Unit = from match {
-    case BinaryType => buildWriter[Array[Byte]](_, _, (b, buf) => buf.append(b))
-    case StringType => buildWriter[UTF8String](_, _, (b, buf) => buf.append(b))
-    case DateType => buildWriter[Int](_, _,
-      (d, buf) => buf.append(DateTimeUtils.dateToString(d)))
-    case TimestampType => buildWriter[Long](_, _,
-      (t, buf) => buf.append(DateTimeUtils.timestampToString(t)))
-    case ar: ArrayType =>
-      buildWriter[ArrayData](_, _, (array, buf) => {
-         buf.append("[")
-        if (array.numElements > 0) {
-          val writeElemToBuffer = buildElemWriter(ar.elementType)
-          writeElemToBuffer(array.get(0, ar.elementType), buf)
-          var i = 1
-          while (i < array.numElements) {
-            buf.append(", ")
-            writeElemToBuffer(array.get(i, ar.elementType), buf)
-            i += 1
-          }
-        }
-        buf.append("]")
-      })
-    case _ => buildWriter[Any](_, _, (o, buf) => buf.append(String.valueOf(o)))
-  }
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -241,17 +211,17 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         val res = new UTF8StringBuilder
         res.append("[")
         if (array.numElements > 0) {
-          val writeElemToBuffer = buildElemWriter(ar.elementType)
-          writeElemToBuffer(array.get(0, ar.elementType), res)
+          val toUTF8String = castToString(ar.elementType)
+          res.append(toUTF8String(array.get(0, ar.elementType)).asInstanceOf[UTF8String])
           var i = 1
           while (i < array.numElements) {
             res.append(", ")
-            writeElemToBuffer(array.get(i, ar.elementType), res)
+            res.append(toUTF8String(array.get(i, ar.elementType)).asInstanceOf[UTF8String])
             i += 1
           }
         }
         res.append("]")
-        UTF8String.fromString(res.toString)
+        res.toUTF8String
       })
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
@@ -709,7 +679,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           s"""
              |$bufferClass $bufferTerm = new $bufferClass();
              |$writeArrayToBuffer($c, $bufferTerm);
-             |$evPrim = UTF8String.fromString($bufferTerm.toString());
+             |$evPrim = $bufferTerm.toUTF8String();
            """.stripMargin
         }
       case _ =>

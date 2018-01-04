@@ -19,34 +19,71 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import java.nio.charset.StandardCharsets;
 
+import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A helper class to write `UTF8String`, `String`, and `byte[]` data into an internal buffer
- * and get a final concatenated string.
+ * A helper class to write `UTF8String`, `String`, and `byte[]` data into an internal byte buffer
+ * and get written data as `UTF8String`.
  */
 public class UTF8StringBuilder {
 
-  private StringBuilder buffer;
+  private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
+
+  private byte[] buffer;
+  private int cursor = Platform.BYTE_ARRAY_OFFSET;
 
   public UTF8StringBuilder() {
-    this.buffer = new StringBuilder();
+    // Since initial buffer size is 16 in `StringBuilder`, we set the same size here
+    this.buffer = new byte[16];
+  }
+
+  // Grows the buffer by at least `neededSize`
+  private void grow(int neededSize) {
+    if (neededSize > ARRAY_MAX - totalSize()) {
+      throw new UnsupportedOperationException(
+        "Cannot grow internal buffer by size " + neededSize + " because the size after growing " +
+          "exceeds size limitation " + ARRAY_MAX);
+    }
+    final int length = totalSize() + neededSize;
+    if (buffer.length < length) {
+      int newLength = length < ARRAY_MAX / 2 ? length * 2 : ARRAY_MAX;
+      final byte[] tmp = new byte[newLength];
+      Platform.copyMemory(
+        buffer,
+        Platform.BYTE_ARRAY_OFFSET,
+        tmp,
+        Platform.BYTE_ARRAY_OFFSET,
+        totalSize());
+      buffer = tmp;
+    }
   }
 
   public void append(UTF8String value) {
-    buffer.append(value);
+    grow(value.numBytes());
+    value.writeToMemory(buffer, cursor);
+    cursor += value.numBytes();
   }
 
   public void append(String value) {
-    buffer.append(value);
+    append(value.getBytes(StandardCharsets.UTF_8));
   }
 
   public void append(byte[] value) {
-    buffer.append(new String(value, StandardCharsets.UTF_8));
+    grow(value.length);
+    Platform.copyMemory(value, Platform.BYTE_ARRAY_OFFSET, buffer, cursor, value.length);
+    cursor += value.length;
   }
 
-  @Override
-  public String toString() {
-    return buffer.toString();
+  public UTF8String toUTF8String() {
+    final int len = totalSize();
+    final byte[] bytes = new byte[len];
+    Platform.copyMemory(buffer, Platform.BYTE_ARRAY_OFFSET, bytes, Platform.BYTE_ARRAY_OFFSET, len);
+    return UTF8String.fromBytes(bytes);
+  }
+
+  public int totalSize() {
+    return cursor - Platform.BYTE_ARRAY_OFFSET;
   }
 }
