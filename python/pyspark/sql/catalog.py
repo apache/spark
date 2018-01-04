@@ -227,7 +227,7 @@ class Catalog(object):
     @ignore_unicode_prefix
     @since(2.0)
     def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a python function (including lambda function) as a UDF
+        """Registers a Python function (including lambda function) or a wrapped/native UDF
         so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
@@ -235,7 +235,7 @@ class Catalog(object):
         be done.  For any other return type, the produced object must match the specified type.
 
         :param name: name of the UDF
-        :param f: python function
+        :param f: a Python function, or a wrapped/native UserDefinedFunction
         :param returnType: a :class:`pyspark.sql.types.DataType` object
         :return: a wrapped :class:`UserDefinedFunction`
 
@@ -260,14 +260,14 @@ class Catalog(object):
         >>> from pyspark.sql.functions import udf
         >>> from pyspark.sql.types import IntegerType, StringType
         >>> random_udf = udf(lambda: random.randint(0, 100), IntegerType()).asNondeterministic()
-        >>> newRandom_udf = spark.catalog.registerFunction(
-        ...     "random_udf", random_udf, StringType())  # doctest: +SKIP
+        >>> newRandom_udf = spark.catalog.registerFunction("random_udf", random_udf, StringType())
         >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
         [Row(random_udf()=u'82')]
         >>> spark.range(1).select(newRandom_udf()).collect()  # doctest: +SKIP
         [Row(random_udf()=u'62')]
         """
 
+        # This is to check whether the input function is a wrapped/native UserDefinedFunction
         if hasattr(f, 'asNondeterministic'):
             udf = UserDefinedFunction(f.func, returnType=returnType, name=name,
                                       evalType=PythonEvalType.SQL_BATCHED_UDF,

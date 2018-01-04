@@ -378,7 +378,24 @@ class SQLTests(ReusedSQLTestCase):
         [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
-    def test_non_deterministic_udf(self):
+    def test_udf3(self):
+        twoargs = self.spark.catalog.registerFunction(
+            "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y), IntegerType())
+        self.assertEqual(twoargs.deterministic, True)
+        [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
+        self.assertEqual(row[0], 5)
+
+    def test_nondeterministic_udf(self):
+        from pyspark.sql.functions import udf
+        import random
+        udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
+        self.assertEqual(udf_random_col.deterministic, False)
+        df = self.spark.createDataFrame([Row(1)]).select(udf_random_col().alias('RAND'))
+        udf_add_ten = udf(lambda rand: rand + 10, IntegerType())
+        [row] = df.withColumn('RAND_PLUS_TEN', udf_add_ten('RAND')).collect()
+        self.assertEqual(row[0] + 10, row[1])
+
+    def test_nondeterministic_udf2(self):
         import random
         from pyspark.sql.functions import udf
         random_udf = udf(lambda: random.randint(6, 6), IntegerType()).asNondeterministic()
@@ -391,6 +408,7 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(row[0], "6")
         [row] = self.spark.range(1).select(random_udf()).collect()
         self.assertEqual(row[0], 6)
+        # render_doc() reproduces the help() exception without printing output
         pydoc.render_doc(udf(lambda: random.randint(6, 6), IntegerType()))
         pydoc.render_doc(random_udf)
         pydoc.render_doc(random_udf1)
@@ -451,15 +469,6 @@ class SQLTests(ReusedSQLTestCase):
         [(l1, l2)] = self.spark.sql("select copylist(l), maplen(d) from test").collect()
         self.assertEqual(list(range(3)), l1)
         self.assertEqual(1, l2)
-
-    def test_nondeterministic_udf(self):
-        from pyspark.sql.functions import udf
-        import random
-        udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
-        df = self.spark.createDataFrame([Row(1)]).select(udf_random_col().alias('RAND'))
-        udf_add_ten = udf(lambda rand: rand + 10, IntegerType())
-        [row] = df.withColumn('RAND_PLUS_TEN', udf_add_ten('RAND')).collect()
-        self.assertEqual(row[0] + 10, row[1])
 
     def test_broadcast_in_udf(self):
         bar = {"a": "aa", "b": "bb", "c": "abc"}
