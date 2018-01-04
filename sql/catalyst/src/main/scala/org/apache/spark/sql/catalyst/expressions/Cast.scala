@@ -206,22 +206,27 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
-    case ar: ArrayType =>
+    case ArrayType(et, _) =>
       buildCast[ArrayData](_, array => {
-        val res = new UTF8StringBuilder
-        res.append("[")
+        val builder = new UTF8StringBuilder
+        builder.append("[")
         if (array.numElements > 0) {
-          val toUTF8String = castToString(ar.elementType)
-          res.append(toUTF8String(array.get(0, ar.elementType)).asInstanceOf[UTF8String])
+          val toUTF8String = castToString(et)
+          if (!array.isNullAt(0)) {
+            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
+          }
           var i = 1
           while (i < array.numElements) {
-            res.append(", ")
-            res.append(toUTF8String(array.get(i, ar.elementType)).asInstanceOf[UTF8String])
+            builder.append(",")
+            if (!array.isNullAt(i)) {
+              builder.append(" ")
+              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
+            }
             i += 1
           }
         }
-        res.append("]")
-        res.toUTF8String
+        builder.append("]")
+        builder.build()
       })
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
@@ -614,45 +619,37 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     """
   }
 
-  private[this] def writeElemToBufferCode(
-      dataType: DataType,
-      buffer: String,
-      elemTerm: String,
-      ctx: CodegenContext): String = dataType match {
-    case BinaryType | StringType => s"$buffer.append($elemTerm)"
-    case DateType => s"""$buffer.append(
-      org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($elemTerm))"""
-    case TimestampType => s"""$buffer.append(
-      org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($elemTerm))"""
-    case ar: ArrayType => s"${codegenWriteArrayToBuffer(ar, ctx)}($elemTerm, $buffer)"
-    case _ => s"$buffer.append(String.valueOf($elemTerm))"
-  }
+  private[this] def codegenWriteArrayElemCode(et: DataType, ctx: CodegenContext): String = {
+    val elementToStringCode = castToStringCode(et, ctx)
+    val funcName = ctx.freshName("elementToString")
+    val elementToStringFunc = ctx.addNewFunction(funcName,
+      s"""
+         |private UTF8String $funcName(${ctx.javaType(et)} element) {
+         |  UTF8String elementStr = null;
+         |  ${elementToStringCode("element", "elementStr", null /* resultIsNull won't be used */)}
+         |  return elementStr;
+         |}
+       """.stripMargin)
 
-  private[this] def codegenWriteArrayToBuffer(ar: ArrayType, ctx: CodegenContext): String = {
     val loopIndex = ctx.freshName("loopIndex")
     val writeArrayToBuffer = ctx.freshName("writeArrayToBuffer")
     val arTerm = ctx.freshName("arTerm")
     val bufferClass = classOf[UTF8StringBuilder].getName
     val bufferTerm = ctx.freshName("bufferTerm")
-    def writeElemCode(elemTerm: String) = {
-      writeElemToBufferCode(ar.elementType, bufferTerm, elemTerm, ctx)
-    }
-    def writeToBufferCode(i: String) = {
-      val elemTerm = ctx.freshName("elemTerm")
-      s"""
-         |${ctx.javaType(ar.elementType)} $elemTerm = ${ctx.getValue(arTerm, ar.elementType, i)};
-         |${writeElemCode(elemTerm)};
-       """.stripMargin
-    }
     ctx.addNewFunction(writeArrayToBuffer,
       s"""
          |private void $writeArrayToBuffer(ArrayData $arTerm, $bufferClass $bufferTerm) {
          |  $bufferTerm.append("[");
          |  if ($arTerm.numElements() > 0) {
-         |    ${writeToBufferCode("0")}
+         |    if (!$arTerm.isNullAt(0)) {
+         |      $bufferTerm.append($elementToStringFunc(${ctx.getValue(arTerm, et, "0")}));
+         |    }
          |    for (int $loopIndex = 1; $loopIndex < $arTerm.numElements(); $loopIndex++) {
-         |      $bufferTerm.append(", ");
-         |      ${writeToBufferCode(loopIndex)}
+         |      $bufferTerm.append(",");
+         |      if (!$arTerm.isNullAt($loopIndex)) {
+         |        $bufferTerm.append(" ");
+         |        $bufferTerm.append($elementToStringFunc(${ctx.getValue(arTerm, et, loopIndex)}));
+         |      }
          |    }
          |  }
          |  $bufferTerm.append("]");
@@ -671,15 +668,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         val tz = ctx.addReferenceObj("timeZone", timeZone)
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
-      case ar: ArrayType =>
+      case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
           val bufferTerm = ctx.freshName("bufferTerm")
           val bufferClass = classOf[UTF8StringBuilder].getName
-          val writeArrayToBuffer = codegenWriteArrayToBuffer(ar, ctx)
+          val writeArrayElemCode = codegenWriteArrayElemCode(et, ctx)
           s"""
              |$bufferClass $bufferTerm = new $bufferClass();
-             |$writeArrayToBuffer($c, $bufferTerm);
-             |$evPrim = $bufferTerm.toUTF8String();
+             |$writeArrayElemCode($c, $bufferTerm);
+             |$evPrim = $bufferTerm.build();
            """.stripMargin
         }
       case _ =>

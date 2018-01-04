@@ -2788,6 +2788,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           checkAnswer(df, Row("[ab, cde, f]"))
         }
         withTable("t") {
+          Seq(Seq("ab", null, "c")).toDF("a").write.saveAsTable("t")
+          val df = sql("SELECT CAST(a AS STRING) FROM t")
+          checkAnswer(df, Row("[ab,, c]"))
+        }
+        withTable("t") {
           Seq(Seq("ab".getBytes, "cde".getBytes, "f".getBytes)).toDF("a").write.saveAsTable("t")
           val df = sql("SELECT CAST(a AS STRING) FROM t")
           checkAnswer(df, Row("[ab, cde, f]"))

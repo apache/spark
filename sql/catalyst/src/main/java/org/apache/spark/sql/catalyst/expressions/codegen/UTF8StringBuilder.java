@@ -60,6 +60,10 @@ public class UTF8StringBuilder {
     }
   }
 
+  private int totalSize() {
+    return cursor - Platform.BYTE_ARRAY_OFFSET;
+  }
+
   public void append(UTF8String value) {
     grow(value.numBytes());
     value.writeToMemory(buffer, cursor);
@@ -67,23 +71,10 @@ public class UTF8StringBuilder {
   }
 
   public void append(String value) {
-    append(value.getBytes(StandardCharsets.UTF_8));
+    append(UTF8String.fromString(value));
   }
 
-  public void append(byte[] value) {
-    grow(value.length);
-    Platform.copyMemory(value, Platform.BYTE_ARRAY_OFFSET, buffer, cursor, value.length);
-    cursor += value.length;
-  }
-
-  public UTF8String toUTF8String() {
-    final int len = totalSize();
-    final byte[] bytes = new byte[len];
-    Platform.copyMemory(buffer, Platform.BYTE_ARRAY_OFFSET, bytes, Platform.BYTE_ARRAY_OFFSET, len);
-    return UTF8String.fromBytes(bytes);
-  }
-
-  public int totalSize() {
-    return cursor - Platform.BYTE_ARRAY_OFFSET;
+  public UTF8String build() {
+    return UTF8String.fromBytes(buffer, 0, totalSize());
   }
 }
