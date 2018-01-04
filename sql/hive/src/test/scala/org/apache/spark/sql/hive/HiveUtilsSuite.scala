@@ -52,19 +52,31 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     val conf = new SparkConf
     val contextClassLoader = Thread.currentThread().getContextClassLoader
     val loader = new FakeChildFirstURLClassLoader(Array(), contextClassLoader)
-    Thread.currentThread().setContextClassLoader(loader)
-    intercept[IllegalArgumentException](
-      HiveUtils.newClientForMetadata(conf, SparkHadoopUtil.newConfiguration(conf)))
-    Thread.currentThread().setContextClassLoader(contextClassLoader)
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      intercept[IllegalArgumentException](
+        HiveUtils.newClientForMetadata(
+          conf,
+          SparkHadoopUtil.newConfiguration(conf),
+          HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true)))
+    } finally {
+      Thread.currentThread().setContextClassLoader(contextClassLoader)
+    }
   }
 
   test("ChildFirstURLClassLoader's parent is null, get spark classloader instead") {
     val conf = new SparkConf
     val contextClassLoader = Thread.currentThread().getContextClassLoader
     val loader = new ChildFirstURLClassLoader(Array(), contextClassLoader)
-    Thread.currentThread().setContextClassLoader(loader)
-    HiveUtils.newClientForMetadata(conf, SparkHadoopUtil.newConfiguration(conf))
-    Thread.currentThread().setContextClassLoader(contextClassLoader)
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      HiveUtils.newClientForMetadata(
+        conf,
+        SparkHadoopUtil.newConfiguration(conf),
+        HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true))
+    } finally {
+      Thread.currentThread().setContextClassLoader(contextClassLoader)
+    }
   }
 }
 
