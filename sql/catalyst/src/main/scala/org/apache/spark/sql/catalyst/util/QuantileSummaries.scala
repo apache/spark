@@ -235,7 +235,7 @@ object QuantileSummaries {
    * @param g the minimum rank jump from the previous value's minimum rank
    * @param delta the maximum span of the rank.
    */
-  case class Stats(value: Double, g: Int, delta: Int)
+  case class Stats(value: Double, g: Long, delta: Long)
 
   private def compressImmut(
       currentSamples: IndexedSeq[Stats],
