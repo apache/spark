@@ -165,12 +165,16 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
 
     val factory = new ExecutorPodFactory(
       conf,
-      None,
+      Some(secretsBootstrap),
       Some(initContainerBootstrap),
       Some(secretsBootstrap))
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
+    assert(executor.getSpec.getVolumes.size() === 1)
+    assert(SecretVolumeUtils.podHasVolume(executor, "secret1-volume"))
+    assert(SecretVolumeUtils.containerHasVolume(
+      executor.getSpec.getContainers.get(0), "secret1-volume", "/var/secret1"))
     assert(executor.getSpec.getInitContainers.size() === 1)
     assert(SecretVolumeUtils.containerHasVolume(
       executor.getSpec.getInitContainers.get(0), "secret1-volume", "/var/secret1"))
