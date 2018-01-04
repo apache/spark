@@ -2103,7 +2103,7 @@ def udf(f=None, returnType=StringType()):
     >>> import random
     >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
 
-    .. note:: The user-defined functions do not support conditional expressions or short curcuiting
+    .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
