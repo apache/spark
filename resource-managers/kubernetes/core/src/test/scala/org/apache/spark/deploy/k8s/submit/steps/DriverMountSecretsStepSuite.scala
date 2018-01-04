@@ -17,8 +17,8 @@
 package org.apache.spark.deploy.k8s.submit.steps
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.MountSecretsBootstrap
-import org.apache.spark.deploy.k8s.submit.{KubernetesDriverSpec, SecretVolumeUtils}
+import org.apache.spark.deploy.k8s.{MountSecretsBootstrap, SecretVolumeUtils}
+import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 
 class DriverMountSecretsStepSuite extends SparkFunSuite {
 

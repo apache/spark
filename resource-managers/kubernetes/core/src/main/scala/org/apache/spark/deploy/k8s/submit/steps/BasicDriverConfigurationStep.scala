@@ -119,7 +119,7 @@ private[spark] class BasicDriverConfigurationStep(
         .endEnv()
       .addNewEnv()
         .withName(ENV_DRIVER_ARGS)
-        .withValue(appArgs.map(arg => "\"" + arg + "\"").mkString(" "))
+        .withValue(appArgs.mkString(" "))
         .endEnv()
       .addNewEnv()
         .withName(ENV_DRIVER_BIND_ADDRESS)
