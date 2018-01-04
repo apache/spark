@@ -227,8 +227,8 @@ class Catalog(object):
     @ignore_unicode_prefix
     @since(2.0)
     def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a Python function (including lambda function) or a wrapped/native UDF
-        so it can be used in SQL statements.
+        """Registers a Python function (including lambda function) or a :class:`UserDefinedFunction`
+        as a UDF. The registered UDF can be used in SQL statement.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not given it default to a string and conversion will automatically
