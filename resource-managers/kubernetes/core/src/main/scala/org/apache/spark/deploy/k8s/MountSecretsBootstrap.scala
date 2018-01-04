@@ -24,22 +24,16 @@ import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBui
 private[spark] class MountSecretsBootstrap(secretNamesToMountPaths: Map[String, String]) {
 
   /**
-   * Mounts Kubernetes secrets as secret volumes into the given container in the given pod.
+   * Add new secret volumes for the secrets specified in secretNamesToMountPaths into the given pod.
    *
    * @param pod the pod into which the secret volumes are being added.
-   * @param container the container into which the secret volumes are being mounted.
-   * @param addNewVolumes whether to add new secret volumes for the secrets.
-   * @return the updated pod and container with the secrets mounted.
+   * @return the updated pod with the secret volumes added.
    */
-  def mountSecrets(
-      pod: Pod,
-      container: Container,
-      addNewVolumes: Boolean): (Pod, Container) = {
+  def addSecretVolumes(pod: Pod): Pod = {
     var podBuilder = new PodBuilder(pod)
-    if (addNewVolumes) {
-      secretNamesToMountPaths.keys.foreach { name =>
-        podBuilder = podBuilder
-          .editOrNewSpec()
+    secretNamesToMountPaths.keys.foreach { name =>
+      podBuilder = podBuilder
+        .editOrNewSpec()
           .addNewVolume()
             .withName(secretVolumeName(name))
             .withNewSecret()
@@ -47,9 +41,19 @@ private[spark] class MountSecretsBootstrap(secretNamesToMountPaths: Map[String, 
               .endSecret()
             .endVolume()
           .endSpec()
-      }
     }
 
+    podBuilder.build()
+  }
+
+  /**
+   * Mounts Kubernetes secret volumes of the secrets specified in secretNamesToMountPaths into the
+   * given container.
+   *
+   * @param container the container into which the secret volumes are being mounted.
+   * @return the updated container with the secrets mounted.
+   */
+  def mountSecrets(container: Container): Container = {
     var containerBuilder = new ContainerBuilder(container)
     secretNamesToMountPaths.foreach { case (name, path) =>
       containerBuilder = containerBuilder
@@ -59,7 +63,7 @@ private[spark] class MountSecretsBootstrap(secretNamesToMountPaths: Map[String, 
           .endVolumeMount()
     }
 
-    (podBuilder.build(), containerBuilder.build())
+    containerBuilder.build()
   }
 
   private def secretVolumeName(secretName: String): String = {
