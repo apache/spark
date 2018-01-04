@@ -79,20 +79,33 @@ function push {
 function usage {
   cat <<EOF
 Usage: $0 [options] [command]
-Builds or pushes the built-in Spark docker images.
+Builds or pushes the built-in Spark Docker images.
 
 Commands:
-  build       Build docker images.
+  build       Build images.
   push        Push images to a registry. Requires a repository address to be provided, both
               when building and when pushing the images.
 
 Options:
   -r repo     Repository address.
   -t tag      Tag to apply to built images, or to identify images to be pushed.
-  -m          Use minikube environment when invoking docker.
+  -m          Use minikube's Docker daemon.
 
-Example:
-  $0 -r docker.io/myrepo -t v2.3.0 push
+Using minikube when building images will do so directly into minikube's Docker daemon.
+There is no need to push the images into minikube int that case, they'll be automatically
+available when running applications inside the minikube cluster.
+
+Check the following documentation for more information on using the minikube Docker daemon:
+
+  https://kubernetes.io/docs/getting-started-guides/minikube/#reusing-the-docker-daemon
+
+Examples:
+  - Build images in minikube with tag "testing"
+    $0 -m -t testing build
+
+  - Build and push images with tag "v2.3.0" to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v2.3.0 build
+    $0 -r docker.io/myrepo -t v2.3.0 push
 EOF
 }
 
