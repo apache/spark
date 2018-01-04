@@ -854,7 +854,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx.inlinedMutableStates.length == 0)
   }
 
-  ignore("SPARK-22825 Cast array to string") {
+  test("SPARK-22825 Cast array to string") {
     val ret1 = cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType)
     checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
     val ret2 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)

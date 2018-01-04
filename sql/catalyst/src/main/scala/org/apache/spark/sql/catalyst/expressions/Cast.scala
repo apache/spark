@@ -209,9 +209,21 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
     case ar: ArrayType =>
-      buildCast[ArrayData](_, a => {
-        val arrayData = CatalystTypeConverters.convertToScala(a, ar).asInstanceOf[WrappedArray[_]]
-        UTF8String.fromString(arrayData.mkString("[", ", ", "]"))
+      buildCast[ArrayData](_, array => {
+        val res = new StringBuilder
+        res.append("[")
+        if (array.numElements > 0) {
+          val toStringFunc = castToString(ar.elementType)
+          res.append(toStringFunc(array.get(0, ar.elementType)))
+          var i = 1
+          while (i < array.numElements) {
+            res.append(", ")
+            res.append(toStringFunc(array.get(i, ar.elementType)))
+            i += 1
+          }
+        }
+        res.append("]")
+        UTF8String.fromString(res.toString())
       })
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
