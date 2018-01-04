@@ -378,6 +378,41 @@ class SQLTests(ReusedSQLTestCase):
         [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
+    def test_udf3(self):
+        twoargs = self.spark.catalog.registerFunction(
+            "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y), IntegerType())
+        self.assertEqual(twoargs.deterministic, True)
+        [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
+        self.assertEqual(row[0], 5)
+
+    def test_nondeterministic_udf(self):
+        from pyspark.sql.functions import udf
+        import random
+        udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
+        self.assertEqual(udf_random_col.deterministic, False)
+        df = self.spark.createDataFrame([Row(1)]).select(udf_random_col().alias('RAND'))
+        udf_add_ten = udf(lambda rand: rand + 10, IntegerType())
+        [row] = df.withColumn('RAND_PLUS_TEN', udf_add_ten('RAND')).collect()
+        self.assertEqual(row[0] + 10, row[1])
+
+    def test_nondeterministic_udf2(self):
+        import random
+        from pyspark.sql.functions import udf
+        random_udf = udf(lambda: random.randint(6, 6), IntegerType()).asNondeterministic()
+        self.assertEqual(random_udf.deterministic, False)
+        random_udf1 = self.spark.catalog.registerFunction("randInt", random_udf, StringType())
+        self.assertEqual(random_udf1.deterministic, False)
+        [row] = self.spark.sql("SELECT randInt()").collect()
+        self.assertEqual(row[0], "6")
+        [row] = self.spark.range(1).select(random_udf1()).collect()
+        self.assertEqual(row[0], "6")
+        [row] = self.spark.range(1).select(random_udf()).collect()
+        self.assertEqual(row[0], 6)
+        # render_doc() reproduces the help() exception without printing output
+        pydoc.render_doc(udf(lambda: random.randint(6, 6), IntegerType()))
+        pydoc.render_doc(random_udf)
+        pydoc.render_doc(random_udf1)
+
     def test_chained_udf(self):
         self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())
         [row] = self.spark.sql("SELECT double(1)").collect()
@@ -434,15 +469,6 @@ class SQLTests(ReusedSQLTestCase):
         [(l1, l2)] = self.spark.sql("select copylist(l), maplen(d) from test").collect()
         self.assertEqual(list(range(3)), l1)
         self.assertEqual(1, l2)
-
-    def test_nondeterministic_udf(self):
-        from pyspark.sql.functions import udf
-        import random
-        udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
-        df = self.spark.createDataFrame([Row(1)]).select(udf_random_col().alias('RAND'))
-        udf_add_ten = udf(lambda rand: rand + 10, IntegerType())
-        [row] = df.withColumn('RAND_PLUS_TEN', udf_add_ten('RAND')).collect()
-        self.assertEqual(row[0] + 10, row[1])
 
     def test_broadcast_in_udf(self):
         bar = {"a": "aa", "b": "bb", "c": "abc"}
@@ -567,7 +593,6 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_udf_with_input_file_name(self):
         from pyspark.sql.functions import udf, input_file_name
-        from pyspark.sql.types import StringType
         sourceFile = udf(lambda path: path, StringType())
         filePath = "python/test_support/sql/people1.json"
         row = self.spark.read.json(filePath).select(sourceFile(input_file_name())).first()
@@ -575,7 +600,6 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_udf_with_input_file_name_for_hadooprdd(self):
         from pyspark.sql.functions import udf, input_file_name
-        from pyspark.sql.types import StringType
 
         def filename(path):
             return path
@@ -635,7 +659,6 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_udf_shouldnt_accept_noncallable_object(self):
         from pyspark.sql.functions import UserDefinedFunction
-        from pyspark.sql.types import StringType
 
         non_callable = None
         self.assertRaises(TypeError, UserDefinedFunction, non_callable, StringType())
@@ -1299,7 +1322,6 @@ class SQLTests(ReusedSQLTestCase):
                          df.filter(df.a.between(df.b, df.c)).collect())
 
     def test_struct_type(self):
-        from pyspark.sql.types import StructType, StringType, StructField
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True),
                               StructField("f2", StringType(), True, None)])
@@ -1368,7 +1390,6 @@ class SQLTests(ReusedSQLTestCase):
             _parse_datatype_string("a INT, c DOUBLE"))
 
     def test_metadata_null(self):
-        from pyspark.sql.types import StructType, StringType, StructField
         schema = StructType([StructField("f1", StringType(), True, None),
                              StructField("f2", StringType(), True, {'a': None})])
         rdd = self.sc.parallelize([["a", "b"], ["c", "d"]])
