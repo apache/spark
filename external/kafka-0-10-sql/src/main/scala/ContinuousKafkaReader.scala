@@ -166,7 +166,7 @@ case class ContinuousKafkaReadTask(
 
 class ContinuousKafkaDataReader(
     topicPartition: TopicPartition,
-    start: Long,
+    startOffset: Long,
     kafkaParams: java.util.Map[String, Object],
     failOnDataLoss: Boolean)
   extends ContinuousDataReader[UnsafeRow] {
@@ -176,10 +176,10 @@ class ContinuousKafkaDataReader(
 
   private val closed = new AtomicBoolean(false)
 
-  private var nextKafkaOffset = start match {
+  private var nextKafkaOffset = startOffset match {
     case s if s >= 0 => s
     case KafkaOffsetRangeLimit.EARLIEST => consumer.getAvailableOffsetRange().earliest
-    case _ => throw new IllegalArgumentException(s"Invalid start Kafka offset $start.")
+    case _ => throw new IllegalArgumentException(s"Invalid start Kafka offset $startOffset.")
   }
   private var currentRecord: ConsumerRecord[Array[Byte], Array[Byte]] = _
 
