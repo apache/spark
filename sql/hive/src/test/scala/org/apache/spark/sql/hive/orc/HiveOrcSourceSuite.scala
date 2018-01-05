@@ -70,12 +70,13 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
-       """.
-        stripMargin)
-    spark.sql(
-      "desc formatted normal_orc_as_source_hive").show()
+       """.stripMargin)
+    
+    spark.sql("desc formatted normal_orc_as_source_hive").show()
     checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_as_source_hive"), Row(10))
     assert(HiveSerDe.sourceToSerDe("org.apache.spark.sql.hive.orc")
+      .equals(HiveSerDe.sourceToSerDe("orc")))
+    assert(HiveSerDe.sourceToSerDe("org.apache.spark.sql.orc")
       .equals(HiveSerDe.sourceToSerDe("orc")))
   }
 
