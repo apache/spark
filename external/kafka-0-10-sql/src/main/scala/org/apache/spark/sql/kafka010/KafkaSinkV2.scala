@@ -52,7 +52,7 @@ case class KafkaWriterFactory(
 case class KafkaWriterCommitMessage() extends WriterCommitMessage {}
 
 class KafkaDataWriter(
-    topic: Option[String], producerParams: Map[String, String], inputSchema: Seq[Attribute])
+    targetTopic: Option[String], producerParams: Map[String, String], inputSchema: Seq[Attribute])
   extends DataWriter[InternalRow] {
   import scala.collection.JavaConverters._
 
@@ -104,7 +104,7 @@ class KafkaDataWriter(
   }
 
   private def createProjection: UnsafeProjection = {
-    val topicExpression = topic.map(Literal(_)).orElse {
+    val topicExpression = targetTopic.map(Literal(_)).orElse {
       inputSchema.find(_.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME)
     }.getOrElse {
       throw new IllegalStateException(s"topic option required when no " +
