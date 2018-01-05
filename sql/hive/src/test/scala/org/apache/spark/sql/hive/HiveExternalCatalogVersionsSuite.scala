@@ -106,7 +106,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       outDir.mkdirs()
     }
 
-    // propogate exceptions up to the caller of getFileFromUrl
+    // propagate exceptions up to the caller of getFileFromUrl
     Utils.doFetchFile(urlString, outDir, filename, conf, securityManager, hadoopConf)
   }
 
@@ -114,7 +114,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     val contentFile = File.createTempFile("string-", ".txt")
     contentFile.deleteOnExit()
 
-    // exceptions will propogate to the caller of getStringFromUrl
+    // exceptions will propagate to the caller of getStringFromUrl
     getFileFromUrl(urlString, contentFile.getParent, contentFile.getName)
 
     val contentPath = Paths.get(contentFile.toURI)
