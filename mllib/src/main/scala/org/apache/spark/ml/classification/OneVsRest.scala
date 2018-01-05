@@ -176,8 +176,6 @@ final class OneVsRestModel private[ml] (
     // update the accumulator column with the result of prediction of models
     val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
       case (df, (model, index)) =>
-        model.setRawPredictionCol(tmpRawPredictionColName)
-
         val columns = origCols ++ List(col(tmpRawPredictionColName), col(accColName))
 
         // add temporary column to store intermediate scores and update
@@ -186,6 +184,7 @@ final class OneVsRestModel private[ml] (
           predictions + ((index, prediction(1)))
         }
         model.setFeaturesCol($(featuresCol))
+        model.setRawPredictionCol(tmpRawPredictionColName)
         val transformedDataset = model.transform(df).select(columns: _*)
         val updatedDataset = transformedDataset
           .withColumn(tmpColName, updateUDF(col(accColName), col(tmpRawPredictionColName)))
