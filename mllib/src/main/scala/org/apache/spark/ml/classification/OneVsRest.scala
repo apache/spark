@@ -170,11 +170,15 @@ final class OneVsRestModel private[ml] (
       newDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
+    // temporary column to store intermediate raw prediction
+    val tmpRawPredictionColName = "mbc$tmpraw" + UUID.randomUUID().toString
+
     // update the accumulator column with the result of prediction of models
     val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
       case (df, (model, index)) =>
-        val rawPredictionCol = model.getRawPredictionCol
-        val columns = origCols ++ List(col(rawPredictionCol), col(accColName))
+        model.setRawPredictionCol(tmpRawPredictionColName)
+
+        val columns = origCols ++ List(col(tmpRawPredictionColName), col(accColName))
 
         // add temporary column to store intermediate scores and update
         val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
@@ -184,7 +188,7 @@ final class OneVsRestModel private[ml] (
         model.setFeaturesCol($(featuresCol))
         val transformedDataset = model.transform(df).select(columns: _*)
         val updatedDataset = transformedDataset
-          .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
+          .withColumn(tmpColName, updateUDF(col(accColName), col(tmpRawPredictionColName)))
         val newColumns = origCols ++ List(col(tmpColName))
 
         // switch out the intermediate column with the accumulator column
