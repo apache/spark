@@ -80,10 +80,27 @@ trait MesosSchedulerUtils extends Logging {
     }
     fwInfoBuilder.setHostname(Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
       conf.get(DRIVER_HOST_ADDRESS)))
+    conf.getOption("spark.mesos.principal.file")
+      .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL_FILE"))
+      .foreach { principalFile =>
+        val file = io.Source.fromFile(principalFile)
+        val principal = file.getLines.next()
+        file.close
+        fwInfoBuilder.setPrincipal(principal)
+        credBuilder.setPrincipal(principal)
+      }
     conf.getOption("spark.mesos.principal").foreach { principal =>
       fwInfoBuilder.setPrincipal(principal)
       credBuilder.setPrincipal(principal)
     }
+    conf.getOption("spark.mesos.secret.file")
+      .orElse(Option(conf.getenv("SPARK_MESOS_SECRET_FILE"))
+      .foreach { secretFile =>
+       val file = io.Source.fromFile(secretFile)
+       val secret = file.getLines.next()
+       file.close
+       credBuilder.setSecret(secret)
+      }
     conf.getOption("spark.mesos.secret").foreach { secret =>
       credBuilder.setSecret(secret)
     }
