@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{File, FileInputStream, IOException}
-import java.nio.file.Files
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
-import scala.io.Codec
-import scala.io.Source
 import scala.sys.process._
 
 import org.apache.hadoop.conf.Configuration
@@ -59,15 +58,20 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private def tryDownloadSpark(version: String, path: String): Unit = {
     // Try mirrors a few times until one succeeds
     for (i <- 0 until 3) {
+      // we don't retry on a failure to get mirror url. If we can't get a mirror url,
+      // the test fails (getStringFromUrl will throw an exception)
       val preferredMirror =
         getStringFromUrl("https://www.apache.org/dyn/closer.lua?preferred=true")
+      logWarning(s"Mirror is $preferredMirror")
       val filename = s"spark-$version-bin-hadoop2.7.tgz"
-      val url = s"$preferredMirror/spark/spark-$version/" + filename
+      val url = s"$preferredMirror/spark/spark-$version/$filename"
       logInfo(s"Downloading Spark $version from $url")
-      if (getFileFromUrl(url, path, filename)) {
+      try {
+        getFileFromUrl(url, path, filename)
         return
+      } catch {
+        case ex: Exception => logWarning(s"Failed to download Spark $version from $url", ex)
       }
-      logWarning(s"Failed to download Spark $version from $url")
     }
     fail(s"Unable to download Spark $version")
   }
@@ -90,8 +94,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     new File(tmpDataDir, name).getCanonicalPath
   }
 
-  private def getFileFromUrl(urlString: String, targetDir: String, filename: String): Boolean = {
+  private def getFileFromUrl(urlString: String, targetDir: String, filename: String): Unit = {
     val conf = new SparkConf
+    // if the caller passes the name of an existing file, we want doFetchFile to write over it with
+    // the contents from the specified url.
+    conf.set("spark.files.overwrite", "true")
     val securityManager = new SecurityManager(conf)
     val hadoopConf = new Configuration
 
@@ -100,31 +107,21 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       outDir.mkdirs()
     }
 
-    try {
-      val result = Utils.doFetchFile(urlString, outDir, filename, conf, securityManager, hadoopConf)
-      result.exists()
-    } catch {
-      case ex: Exception => logWarning("Could not get file from url " + urlString + ": "
-        + ex.getMessage)
-        false
-    }
+    // propogate exceptions up to the caller of getFileFromUrl
+    Utils.doFetchFile(urlString, outDir, filename, conf, securityManager, hadoopConf)
   }
 
   private def getStringFromUrl(urlString: String, encoding: String = "UTF-8"): String = {
-    val outDir = Files.createTempDirectory("string-")
-    val filename = "string-out.txt"
+    val contentFile = File.createTempFile("string-", ".txt")
+    contentFile.deleteOnExit()
 
-    if (!getFileFromUrl(urlString, outDir.toString, filename)) {
-      throw new IOException("Could not get string from url " + urlString)
-    }
+    // exceptions will propogate to the caller of getStringFromUrl
+    getFileFromUrl(urlString, contentFile.getParent, contentFile.getName)
 
-    val contentFile = new File(outDir.toFile, filename)
-    try {
-      Source.fromFile(contentFile)(Codec(encoding)).mkString
-    } finally {
-      contentFile.delete()
-      outDir.toFile.delete()
-    }
+    logWarning(s"content file is at ${contentFile.getAbsolutePath}" )
+
+    val contentPath = Paths.get(contentFile.toURI)
+    new String(Files.readAllBytes(contentPath), StandardCharsets.UTF_8)
   }
 
   override def beforeAll(): Unit = {
