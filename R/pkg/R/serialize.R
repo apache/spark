@@ -36,8 +36,10 @@
 
 getSerdeType <- function(object) {
   type <- class(object)[[1]]
-  if (type != "list") {
-    type
+  if (type %in% c("integer", "character", "logical", "double", "numeric", "Date", "POSIXlt", "POSIXct") && length(object) > 1) {
+    "array"
+  } else if (type != "list") {
+     type
   } else {
     # Check if all elements are of same type
     elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
