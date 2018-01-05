@@ -53,35 +53,15 @@ case object KafkaWriterCommitMessage extends WriterCommitMessage
 
 class KafkaContinuousDataWriter(
     targetTopic: Option[String], producerParams: Map[String, String], inputSchema: Seq[Attribute])
-  extends DataWriter[InternalRow] {
+  extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
   import scala.collection.JavaConverters._
 
-  @volatile private var failedWrite: Exception = _
-  private val projection = createProjection
   private lazy val producer = CachedKafkaProducer.getOrCreate(
     new java.util.HashMap[String, Object](producerParams.asJava))
 
-  private val callback = new Callback() {
-    override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
-      if (failedWrite == null && e != null) {
-        failedWrite = e
-      }
-    }
-  }
-
   def write(row: InternalRow): Unit = {
     checkForErrors()
-    val projectedRow = projection(row)
-    val topic = projectedRow.getUTF8String(0)
-    val key = projectedRow.getBinary(1)
-    val value = projectedRow.getBinary(2)
-
-    if (topic == null) {
-      throw new NullPointerException(s"null topic present in the data. Use the " +
-        s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
-    }
-    val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
-    producer.send(record, callback)
+    sendRow(row, producer)
   }
 
   def commit(): WriterCommitMessage = {
@@ -89,7 +69,7 @@ class KafkaContinuousDataWriter(
     // This requires flushing and then checking that no callbacks produced errors.
     producer.flush()
     checkForErrors()
-    KafkaWriterCommitMessage()
+    KafkaWriterCommitMessage
   }
 
   def abort(): Unit = {}
@@ -100,50 +80,6 @@ class KafkaContinuousDataWriter(
       producer.flush()
       checkForErrors()
       CachedKafkaProducer.close(new java.util.HashMap[String, Object](producerParams.asJava))
-    }
-  }
-
-  private def createProjection: UnsafeProjection = {
-    val topicExpression = targetTopic.map(Literal(_)).orElse {
-      inputSchema.find(_.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME)
-    }.getOrElse {
-      throw new IllegalStateException(s"topic option required when no " +
-        s"'${KafkaWriter.TOPIC_ATTRIBUTE_NAME}' attribute is present")
-    }
-    topicExpression.dataType match {
-      case StringType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type $t. ${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
-          "must be a StringType")
-    }
-    val keyExpression = inputSchema.find(_.name == KafkaWriter.KEY_ATTRIBUTE_NAME)
-      .getOrElse(Literal(null, BinaryType))
-    keyExpression.dataType match {
-      case StringType | BinaryType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.KEY_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type $t")
-    }
-    val valueExpression = inputSchema
-      .find(_.name == KafkaWriter.VALUE_ATTRIBUTE_NAME).getOrElse(
-      throw new IllegalStateException("Required attribute " +
-        s"'${KafkaWriter.VALUE_ATTRIBUTE_NAME}' not found")
-    )
-    valueExpression.dataType match {
-      case StringType | BinaryType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.VALUE_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type $t")
-    }
-    UnsafeProjection.create(
-      Seq(topicExpression, Cast(keyExpression, BinaryType),
-        Cast(valueExpression, BinaryType)), inputSchema)
-  }
-
-  private def checkForErrors(): Unit = {
-    if (failedWrite != null) {
-      throw failedWrite
     }
   }
 }
