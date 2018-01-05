@@ -36,7 +36,7 @@ case class DataSourceV2Relation(
 }
 
 /**
- * A specialization of DataSourceV2Relation with the streaming bit set to true. Otherwwise identical
+ * A specialization of DataSourceV2Relation with the streaming bit set to true. Otherwise identical
  * to the non-streaming relation.
  */
 class StreamingDataSourceV2Relation(
