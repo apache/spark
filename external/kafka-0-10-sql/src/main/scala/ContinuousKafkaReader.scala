@@ -183,11 +183,7 @@ class ContinuousKafkaDataReader(
 
   private val closed = new AtomicBoolean(false)
 
-  private var nextKafkaOffset = startOffset match {
-    case s if s >= 0 => s
-    case KafkaOffsetRangeLimit.EARLIEST => consumer.getAvailableOffsetRange().earliest
-    case _ => throw new IllegalArgumentException(s"Invalid start Kafka offset $startOffset.")
-  }
+  private var nextKafkaOffset = startOffset
   private var currentRecord: ConsumerRecord[Array[Byte], Array[Byte]] = _
 
   override def next(): Boolean = {
