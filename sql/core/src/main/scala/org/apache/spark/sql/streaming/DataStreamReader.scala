@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.Locale
+import java.util.{Locale, Optional}
 
 import scala.collection.JavaConverters._
 
@@ -174,7 +174,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     ds match {
       case s: MicroBatchReadSupport =>
         val tempReader = s.createMicroBatchReader(
-          java.util.Optional.ofNullable(userSpecifiedSchema.orNull),
+          Optional.ofNullable(userSpecifiedSchema.orNull),
           Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
           options)
         Dataset.ofRows(
@@ -184,7 +184,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
             tempReader.readSchema().toAttributes, v1Relation)(sparkSession))
       case s: ContinuousReadSupport =>
         val tempReader = s.createContinuousReader(
-          java.util.Optional.ofNullable(userSpecifiedSchema.orNull),
+          Optional.ofNullable(userSpecifiedSchema.orNull),
           Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
           options)
         Dataset.ofRows(
