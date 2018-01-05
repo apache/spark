@@ -172,14 +172,6 @@ class KafkaContinuousStressSuite extends KafkaSourceTest with SharedSQLContext {
     testUtils.setup()
   }
 
-  override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.teardown()
-      testUtils = null
-      super.afterAll()
-    }
-  }
-
   test("stress test for failOnDataLoss=false") {
     val reader = spark
       .readStream
@@ -193,20 +185,11 @@ class KafkaContinuousStressSuite extends KafkaSourceTest with SharedSQLContext {
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
-    val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
-
-      override def open(partitionId: Long, version: Long): Boolean = {
-        true
-      }
-
-      override def process(value: Int): Unit = {
-        // Slow down the processing speed so that messages may be aged out.
-        Thread.sleep(Random.nextInt(500))
-      }
-
-      override def close(errorOrNull: Throwable): Unit = {
-      }
-    }).start()
+    val query = kafka.map(kv => kv._2.toInt).writeStream
+      .format("memory")
+      .queryName("stress")
+      .trigger(Trigger.Continuous(100))
+      .start()
 
     val testTime = 1.minutes
     val startTime = System.currentTimeMillis()
