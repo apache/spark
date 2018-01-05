@@ -110,7 +110,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     Utils.doFetchFile(urlString, outDir, filename, conf, securityManager, hadoopConf)
   }
 
-  private def getStringFromUrl(urlString: String, encoding: String = "UTF-8"): String = {
+  private def getStringFromUrl(urlString: String): String = {
     val contentFile = File.createTempFile("string-", ".txt")
     contentFile.deleteOnExit()
 
