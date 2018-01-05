@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Map => MutableMap}
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -82,11 +82,13 @@ class ContinuousExecution(
       try {
         runContinuous(sparkSessionForStream)
       } catch {
-        case _: InterruptedException if state.get().equals(RECONFIGURING) =>
-          // swallow exception and run again
-          state.set(ACTIVE)
+        // Capture task retries (transformed to an exception by ContinuousDataSourceRDDIter) and
+        // convert them to global retries by letting the while loop spin.
+        case s: SparkException
+            if s.getCause != null && s.getCause.getCause != null &&
+                s.getCause.getCause.isInstanceOf[ContinuousTaskRetryException] => ()
       }
-    } while (state.get() == ACTIVE)
+    } while (state.updateAndGet(stateUpdate) == ACTIVE)
   }
 
   /**

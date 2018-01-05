@@ -53,7 +53,7 @@ class ContinuousDataSourceRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
     if (context.attemptNumber() != 0) {
-      throw new SparkException("Continuous processing does not support task retry")
+      throw new ContinuousTaskRetryException()
     }
 
     val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createDataReader()
