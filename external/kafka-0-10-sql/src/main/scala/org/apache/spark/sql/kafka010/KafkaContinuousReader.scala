@@ -17,22 +17,15 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.io._
-import java.nio.charset.StandardCharsets
-import java.util.concurrent.atomic.AtomicBoolean
-
-import org.apache.commons.io.IOUtils
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.errors.WakeupException
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
-import org.apache.spark.sql.kafka010.KafkaSource.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE, VERSION}
+import org.apache.spark.sql.kafka010.KafkaSource.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
@@ -52,7 +45,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *                       scenarios, where some offsets after the specified initial ones can't be
  *                       properly read.
  */
-class ContinuousKafkaReader(
+class KafkaContinuousReader(
     offsetReader: KafkaOffsetReader,
     kafkaParams: java.util.Map[String, Object],
     sourceOptions: Map[String, String],
@@ -104,7 +97,7 @@ class ContinuousKafkaReader(
 
     startOffsets.toSeq.map {
       case (topicPartition, start) =>
-        ContinuousKafkaReadTask(
+        KafkaContinuousReadTask(
           topicPartition, start, kafkaParams, failOnDataLoss)
           .asInstanceOf[ReadTask[UnsafeRow]]
     }.asJava
@@ -153,13 +146,13 @@ class ContinuousKafkaReader(
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
  */
-case class ContinuousKafkaReadTask(
+case class KafkaContinuousReadTask(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: java.util.Map[String, Object],
     failOnDataLoss: Boolean) extends ReadTask[UnsafeRow] {
-  override def createDataReader(): ContinuousKafkaDataReader = {
-    new ContinuousKafkaDataReader(topicPartition, startOffset, kafkaParams, failOnDataLoss)
+  override def createDataReader(): KafkaContinuousDataReader = {
+    new KafkaContinuousDataReader(topicPartition, startOffset, kafkaParams, failOnDataLoss)
   }
 }
 
@@ -172,7 +165,7 @@ case class ContinuousKafkaReadTask(
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
  */
-class ContinuousKafkaDataReader(
+class KafkaContinuousDataReader(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: java.util.Map[String, Object],

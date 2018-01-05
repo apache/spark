@@ -111,7 +111,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
       } ++ (query.get.lastExecution match {
         case null => Seq()
         case e => e.logical.collect {
-          case DataSourceV2Relation(_, reader: ContinuousKafkaReader) => reader
+          case DataSourceV2Relation(_, reader: KafkaContinuousReader) => reader
         }
       })
       if (sources.isEmpty) {

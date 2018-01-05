@@ -95,7 +95,7 @@ class ContinuousKafkaSuite extends KafkaSourceTest with SharedSQLContext {
         eventually(timeout(streamingTimeout)) {
           assert(
             q.lastExecution.logical.collectFirst {
-              case DataSourceV2Relation(_, r: ContinuousKafkaReader) => r
+              case DataSourceV2Relation(_, r: KafkaContinuousReader) => r
             }.exists(_.knownPartitions.size == 5),
             "query never reconfigured to 5 partitions")
         }

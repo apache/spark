@@ -29,29 +29,29 @@ import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{BinaryType, StringType, StructType}
 
-class ContinuousKafkaWriter(
+class KafkaContinuousWriter(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
   extends ContinuousWriter with SupportsWriteInternalRow {
 
-  override def createInternalRowWriterFactory(): KafkaWriterFactory =
-    KafkaWriterFactory(topic, producerParams, schema)
+  override def createInternalRowWriterFactory(): KafkaContinuousWriterFactory =
+    KafkaContinuousWriterFactory(topic, producerParams, schema)
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
 }
 
-case class KafkaWriterFactory(
+case class KafkaContinuousWriterFactory(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
   extends DataWriterFactory[InternalRow] {
 
   override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
-    new KafkaDataWriter(topic, producerParams, schema.toAttributes)
+    new KafkaContinuousDataWriter(topic, producerParams, schema.toAttributes)
   }
 }
 
 case class KafkaWriterCommitMessage() extends WriterCommitMessage {}
 
-class KafkaDataWriter(
+class KafkaContinuousDataWriter(
     targetTopic: Option[String], producerParams: Map[String, String], inputSchema: Seq[Attribute])
   extends DataWriter[InternalRow] {
   import scala.collection.JavaConverters._

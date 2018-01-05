@@ -109,7 +109,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   override def createContinuousReader(
       schema: java.util.Optional[StructType],
       metadataPath: String,
-      options: DataSourceV2Options): ContinuousKafkaReader = {
+      options: DataSourceV2Options): KafkaContinuousReader = {
     val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
@@ -134,7 +134,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-    new ContinuousKafkaReader(
+    new KafkaContinuousReader(
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
       parameters,
@@ -238,7 +238,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     KafkaWriter.validateQuery(
       schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
 
-    java.util.Optional.of(new ContinuousKafkaWriter(topic, producerParams, schema))
+    java.util.Optional.of(new KafkaContinuousWriter(topic, producerParams, schema))
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
