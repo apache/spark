@@ -647,7 +647,6 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
           }
 
           import org.apache.spark.sql.functions.udf
-
           val javaUDF = udfInterfaces(0).getActualTypeArguments.length match {
             case 1 => udf(javaUDFClass.asInstanceOf[UDF0[_]], returnType)
             case 2 => udf(javaUDFClass.asInstanceOf[UDF1[_, _]], returnType)
