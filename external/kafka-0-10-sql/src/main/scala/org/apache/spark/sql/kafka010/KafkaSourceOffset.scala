@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.sql.execution.streaming.{Offset => LegacyOffset, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.{Offset => OffsetV1, SerializedOffset}
 import org.apache.spark.sql.sources.v2.streaming.reader.{Offset, PartitionOffset}
 
 /**
@@ -39,7 +39,7 @@ case class KafkaSourcePartitionOffset(topicPartition: TopicPartition, partitionO
 /** Companion object of the [[KafkaSourceOffset]] */
 private[kafka010] object KafkaSourceOffset {
 
-  def getPartitionOffsets(offset: LegacyOffset): Map[TopicPartition, Long] = {
+  def getPartitionOffsets(offset: OffsetV1): Map[TopicPartition, Long] = {
     offset match {
       case o: KafkaSourceOffset => o.partitionToOffsets
       case so: SerializedOffset => KafkaSourceOffset(so).partitionToOffsets

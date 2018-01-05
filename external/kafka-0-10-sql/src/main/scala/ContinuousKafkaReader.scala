@@ -38,21 +38,27 @@ import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousDataReader, C
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * A [[ContinuousReader]] for data from kafka.
+ *
+ * @param offsetReader  a reader used to get kafka offsets. Note that the actual data will be
+ *                      read by per-task consumers generated later.
+ * @param kafkaParams   String params for per-task Kafka consumers.
+ * @param sourceOptions The [[org.apache.spark.sql.sources.v2.DataSourceV2Options]] params which
+ *                      are not Kafka consumer params.
+ * @param metadataPath Path to a directory this reader can use for writing metadata.
+ * @param initialOffsets The Kafka offsets to start reading data at.
+ * @param failOnDataLoss Flag indicating whether read task generation should fail if some offsets
+ *                       after the specified initial offsets can't be found.
+ */
 class ContinuousKafkaReader(
-    kafkaReader: KafkaOffsetReader,
-    executorKafkaParams: java.util.Map[String, Object],
+    offsetReader: KafkaOffsetReader,
+    kafkaParams: java.util.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
     initialOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
   extends ContinuousReader with SupportsScanUnsafeRow with Logging {
-
-  override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
-    val mergedMap = offsets.map {
-      case KafkaSourcePartitionOffset(p, o) => Map(p -> o)
-    }.reduce(_ ++ _)
-    KafkaSourceOffset(mergedMap)
-  }
 
   private lazy val session = SparkSession.getActiveSession.get
   private lazy val sc = session.sparkContext
@@ -61,39 +67,6 @@ class ContinuousKafkaReader(
     "kafkaConsumer.pollTimeoutMs",
     sc.conf.getTimeAsMs("spark.network.timeout", "120s").toString
   ).toLong
-
-  private val maxOffsetsPerTrigger =
-    sourceOptions.get("maxOffsetsPerTrigger").map(_.toLong)
-
-  /**
-   * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
-   * called in StreamExecutionThread. Otherwise, interrupting a thread while running
-   * `KafkaConsumer.poll` may hang forever (KAFKA-1894).
-   */
-  private lazy val initialPartitionOffsets = {
-      val offsets = initialOffsets match {
-        case EarliestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
-        case LatestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchLatestOffsets())
-        case SpecificOffsetRangeLimit(p) => fetchAndVerify(p)
-      }
-      logInfo(s"Initial offsets: $offsets")
-      offsets.partitionToOffsets
-  }
-
-  private def fetchAndVerify(specificOffsets: Map[TopicPartition, Long]) = {
-    val result = kafkaReader.fetchSpecificOffsets(specificOffsets)
-    specificOffsets.foreach {
-      case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
-        off != KafkaOffsetRangeLimit.EARLIEST =>
-        if (result(tp) != off) {
-          reportDataLoss(
-            s"startingOffsets for $tp was $off but consumer reset to ${result(tp)}")
-        }
-      case _ =>
-      // no real way to check that beginning or end is reasonable
-    }
-    KafkaSourceOffset(result)
-  }
 
   // Initialized when creating read tasks. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
@@ -106,9 +79,9 @@ class ContinuousKafkaReader(
   override def setOffset(start: java.util.Optional[Offset]): Unit = {
     offset = start.orElse {
       val offsets = initialOffsets match {
-        case EarliestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
-        case LatestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchLatestOffsets())
-        case SpecificOffsetRangeLimit(p) => fetchAndVerify(p)
+        case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
+        case LatestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchLatestOffsets())
+        case SpecificOffsetRangeLimit(p) => offsetReader.fetchSpecificOffsets(p, reportDataLoss)
       }
       logInfo(s"Initial offsets: $offsets")
       offsets
@@ -127,8 +100,8 @@ class ContinuousKafkaReader(
     val oldStartOffsets = KafkaSourceOffset.getPartitionOffsets(offset)
 
     val newPartitions =
-      kafkaReader.fetchLatestOffsets().keySet.diff(oldStartOffsets.keySet)
-    val newPartitionOffsets = kafkaReader.fetchEarliestOffsets(newPartitions.toSeq)
+      offsetReader.fetchLatestOffsets().keySet.diff(oldStartOffsets.keySet)
+    val newPartitionOffsets = offsetReader.fetchEarliestOffsets(newPartitions.toSeq)
     val startOffsets = oldStartOffsets ++ newPartitionOffsets
 
     knownPartitions = startOffsets.keySet
@@ -136,23 +109,30 @@ class ContinuousKafkaReader(
     startOffsets.toSeq.map {
       case (topicPartition, start) =>
         ContinuousKafkaReadTask(
-          topicPartition, start, executorKafkaParams, pollTimeoutMs, failOnDataLoss)
+          topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
           .asInstanceOf[ReadTask[UnsafeRow]]
     }.asJava
   }
 
   /** Stop this source and free any resources it has allocated. */
   def stop(): Unit = synchronized {
-    kafkaReader.close()
+    offsetReader.close()
   }
 
   override def commit(end: Offset): Unit = {}
 
-  override def needsReconfiguration(): Boolean = {
-    knownPartitions != null && kafkaReader.fetchLatestOffsets().keySet != knownPartitions
+  override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
+    val mergedMap = offsets.map {
+      case KafkaSourcePartitionOffset(p, o) => Map(p -> o)
+    }.reduce(_ ++ _)
+    KafkaSourceOffset(mergedMap)
   }
 
-  override def toString(): String = s"KafkaSource[$kafkaReader]"
+  override def needsReconfiguration(): Boolean = {
+    knownPartitions != null && offsetReader.fetchLatestOffsets().keySet != knownPartitions
+  }
+
+  override def toString(): String = s"KafkaSource[$offsetReader]"
 
   /**
    * If `failOnDataLoss` is true, this method will throw an `IllegalStateException`.
