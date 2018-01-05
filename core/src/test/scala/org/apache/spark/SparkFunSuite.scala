@@ -27,6 +27,29 @@ import org.apache.spark.util.AccumulatorContext
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
+ *
+ * Thread audit happens normally here automatically when a new test suite created.
+ * The only prerequisite for that is that the test class must extend [[SparkFunSuite]].
+ *
+ * There are some test suites which are doing initialization before [[SparkFunSuite#beforeAll]]
+ * executed. This case auditing can be moved into another place in the call sequence.
+ *
+ * To do the audit in a custom place/way the following can be done:
+ *
+ * class MyTestSuite extends SparkFunSuite {
+ *
+ *   override val doThreadAuditInSparkFunSuite = false
+ *
+ *   protected override def beforeAll(): Unit = {
+ *     doThreadPreAudit
+ *     super.beforeAll
+ *   }
+ *
+ *   protected override def afterAll(): Unit = {
+ *     super.afterAll
+ *     doThreadPostAudit
+ *   }
+ * }
  */
 abstract class SparkFunSuite
   extends FunSuite
@@ -35,10 +58,10 @@ abstract class SparkFunSuite
   with Logging {
 // scalastyle:on
 
-  protected val doThreadAuditInSparkFunSuite = true
+  protected val enableAutoThreadAudit = true
 
   protected override def beforeAll(): Unit = {
-    if (doThreadAuditInSparkFunSuite) {
+    if (enableAutoThreadAudit) {
       doThreadPreAudit()
     }
     super.beforeAll()
@@ -50,7 +73,7 @@ abstract class SparkFunSuite
       AccumulatorContext.clear()
     } finally {
       super.afterAll()
-      if (doThreadAuditInSparkFunSuite) {
+      if (enableAutoThreadAudit) {
         doThreadPostAudit()
       }
     }

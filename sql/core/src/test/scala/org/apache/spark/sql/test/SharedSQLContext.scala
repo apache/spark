@@ -19,7 +19,12 @@ package org.apache.spark.sql.test
 
 trait SharedSQLContext extends SQLTestUtils with SharedSparkSession {
 
-  override protected val doThreadAuditInSparkFunSuite = false
+  /**
+   * Auto thread audit is turned off here intentionally and done manually.
+   *
+   * Without doing so thread audit will miss the [[SharedSparkSession]] related threads.
+   */
+  override protected val enableAutoThreadAudit = false
 
   protected override def beforeAll(): Unit = {
     doThreadPreAudit()

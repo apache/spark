@@ -30,8 +30,6 @@ class HiveClientSuite(version: String)
     extends HiveVersionSuite(version) with BeforeAndAfterAll {
   import CatalystSqlParser._
 
-  override protected val doThreadAuditInSparkFunSuite = false
-
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
 
   private val testPartitionCount = 3 * 24 * 4
@@ -69,13 +67,8 @@ class HiveClientSuite(version: String)
   }
 
   override def beforeAll() {
-    doThreadPreAudit()
+    super.beforeAll()
     client = init(true)
-  }
-
-  override def afterAll() {
-    super.afterAll()
-    doThreadPostAudit()
   }
 
   test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {

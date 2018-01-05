@@ -25,27 +25,6 @@ import org.apache.spark.internal.Logging
  * Thread audit for test suites.
  *
  * Thread audit happens normally in [[SparkFunSuite]] automatically when a new test suite created.
- * The only prerequisite for that is that the test class must extend [[SparkFunSuite]].
- *
- * There are some test suites which are doing initialization before [[SparkFunSuite#beforeAll]]
- * executed. This case auditing can be moved into another place in the call sequence.
- *
- * To do the audit in a custom place/way the following can be done:
- *
- * class MyTestSuite extends SparkFunSuite {
- *
- *   override val doThreadAuditInSparkFunSuite = false
- *
- *   protected override def beforeAll(): Unit = {
- *     doThreadPreAudit
- *     super.beforeAll
- *   }
- *
- *   protected override def afterAll(): Unit = {
- *     super.afterAll
- *     doThreadPostAudit
- *   }
- * }
  */
 trait ThreadAudit extends Logging {
 
@@ -85,8 +64,7 @@ trait ThreadAudit extends Logging {
     "rpc-server.*",
 
     /**
-     * During [[SparkContext]] creation BlockManager
-     * creates event loops. One is wrapped inside
+     * During [[SparkContext]] creation BlockManager creates event loops. One is wrapped inside
      * [[org.apache.spark.network.server.TransportServer]]
      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
      * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
@@ -97,18 +75,15 @@ trait ThreadAudit extends Logging {
   )
   private var threadNamesSnapshot: Set[String] = Set.empty
 
-  protected def doThreadPreAudit(): Unit = snapshotRunningThreadNames
-  protected def doThreadPostAudit(): Unit = printRemainingThreadNames
-
-  private def snapshotRunningThreadNames(): Unit = {
-    threadNamesSnapshot = runningThreadNames
+  protected def doThreadPreAudit(): Unit = {
+    threadNamesSnapshot = runningThreadNames()
   }
 
-  private def printRemainingThreadNames(): Unit = {
+  protected def doThreadPostAudit(): Unit = {
     val shortSuiteName = this.getClass.getName.replaceAll("org.apache.spark", "o.a.s")
 
     if (threadNamesSnapshot.nonEmpty) {
-      val remainingThreadNames = runningThreadNames.diff(threadNamesSnapshot)
+      val remainingThreadNames = runningThreadNames().diff(threadNamesSnapshot)
         .filterNot { s => threadWhiteList.exists(s.matches(_)) }
       if (remainingThreadNames.nonEmpty) {
         logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
