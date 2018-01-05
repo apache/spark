@@ -16,15 +16,15 @@
  */
 package org.apache.spark.ml.fpm
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
-class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   @transient var dataset: Dataset[_] = _
 
@@ -38,37 +38,43 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       val data = dataset.withColumn("items", col("items").cast(ArrayType(dt)))
       val model = new FPGrowth().setMinSupport(0.5).fit(data)
       val generatedRules = model.setMinConfidence(0.5).associationRules
-      val expectedRules = spark.createDataFrame(Seq(
+      val expectedRules = Seq(
         (Array("2"), Array("1"), 1.0),
         (Array("1"), Array("2"), 0.75)
-      )).toDF("antecedent", "consequent", "confidence")
+      ).toDF("antecedent", "consequent", "confidence")
         .withColumn("antecedent", col("antecedent").cast(ArrayType(dt)))
         .withColumn("consequent", col("consequent").cast(ArrayType(dt)))
       assert(expectedRules.sort("antecedent").rdd.collect().sameElements(
         generatedRules.sort("antecedent").rdd.collect()))
 
       val transformed = model.transform(data)
-      val expectedTransformed = spark.createDataFrame(Seq(
+      transformed.show()
+      val expectedTransformed = Seq(
         (0, Array("1", "2"), Array.emptyIntArray),
         (0, Array("1", "2"), Array.emptyIntArray),
         (0, Array("1", "2"), Array.emptyIntArray),
         (0, Array("1", "3"), Array(2))
-      )).toDF("id", "items", "prediction")
+      ).toDF("id", "items", "expected")
         .withColumn("items", col("items").cast(ArrayType(dt)))
-        .withColumn("prediction", col("prediction").cast(ArrayType(dt)))
-      assert(expectedTransformed.collect().toSet.equals(
-        transformed.collect().toSet))
+//      assert(expectedTransformed.collect().toSet.equals(
+//        transformed.collect().toSet))
+      testTransformer[(Int, Array[String], Array[String])](expectedTransformed, model,
+        "expected", "prediction") {
+        case Row(expected, prediction) => assert(expected === prediction,
+          s"Expected $expected but found $prediction")
+      }
+
     }
   }
 
   test("FPGrowth getFreqItems") {
     val model = new FPGrowth().setMinSupport(0.7).fit(dataset)
-    val expectedFreq = spark.createDataFrame(Seq(
+    val expectedFreq = Seq(
       (Array("1"), 4L),
       (Array("2"), 3L),
       (Array("1", "2"), 3L),
       (Array("2", "1"), 3L) // duplicate as the items sequence is not guaranteed
-    )).toDF("items", "expectedFreq")
+    ).toDF("items", "expectedFreq")
     val freqItems = model.freqItemsets
 
     val checkDF = freqItems.join(expectedFreq, "items")
@@ -76,11 +82,11 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   }
 
   test("FPGrowth getFreqItems with Null") {
-    val df = spark.createDataFrame(Seq(
+    val df = Seq(
       (1, Array("1", "2", "3", "5")),
       (2, Array("1", "2", "3", "4")),
       (3, null.asInstanceOf[Array[String]])
-    )).toDF("id", "items")
+    ).toDF("id", "items")
     val model = new FPGrowth().setMinSupport(0.7).fit(dataset)
     val prediction = model.transform(df)
     assert(prediction.select("prediction").where("id=3").first().getSeq[String](0).isEmpty)
@@ -104,16 +110,25 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   test("FPGrowthModel setMinConfidence should affect rules generation and transform") {
     val model = new FPGrowth().setMinSupport(0.1).setMinConfidence(0.1).fit(dataset)
     val oldRulesNum = model.associationRules.count()
-    val oldPredict = model.transform(dataset)
+    val oldPredict = model.transform(dataset).withColumnRenamed("prediction", "oldPrediction")
 
     model.setMinConfidence(0.8765)
     assert(oldRulesNum > model.associationRules.count())
-    assert(!model.transform(dataset).collect().toSet.equals(oldPredict.collect().toSet))
+    testTransformer[(Int, Array[String], Array[String])](oldPredict, model,
+      "oldPrediction", "prediction") {
+      case Row(oldPrediction, prediction) => assert(oldPrediction !== prediction,
+          "Change in minConfidence was expected to affect prediction but it remained the same")
+    }
 
     // association rules should stay the same for same minConfidence
     model.setMinConfidence(0.1)
     assert(oldRulesNum === model.associationRules.count())
-    assert(model.transform(dataset).collect().toSet.equals(oldPredict.collect().toSet))
+    testTransformer[(Int, Array[String], Array[String])](oldPredict, model,
+      "oldPrediction", "prediction") {
+      case Row(oldPrediction, prediction) => assert(oldPrediction === prediction,
+        "Changing minConfidence back to original value was expected to produce " +
+          s"original predictions. Expected $oldPrediction but found $prediction")
+    }
   }
 
   test("FPGrowth parameter check") {
