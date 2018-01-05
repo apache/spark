@@ -262,17 +262,20 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
-   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * <li>`sep` (default `,`): sets a single character as a separator for each
    * field and value.</li>
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
-   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
+   * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
    * the separator can be part of the value. If you would like to turn off quotations, you need to
    * set not `null` but an empty string. This behaviour is different form
    * `com.databricks.spark.csv`.</li>
-   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
    * an already quoted value.</li>
-   * <li>`comment` (default empty string): sets the single character used for skipping lines
+   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
+   * escaping the escape for the quote character. The default value is escape character when escape
+   * and quote characters are different, `\0` otherwise.</li>
+   * <li>`comment` (default empty string): sets a single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It

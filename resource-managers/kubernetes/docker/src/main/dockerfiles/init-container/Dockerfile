@@ -15,10 +15,11 @@
 # limitations under the License.
 #
 
-FROM spark-base
+ARG base_image
+FROM ${base_image}
 
 # If this docker file is being used in the context of building your images from a Spark distribution, the docker build
 # command should be invoked from the top level directory of the Spark distribution. E.g.:
 # docker build -t spark-init:latest -f kubernetes/dockerfiles/init-container/Dockerfile .
 
-ENTRYPOINT [ "/opt/entrypoint.sh", "/opt/spark/bin/spark-class", "org.apache.spark.deploy.rest.k8s.SparkPodInitContainer" ]
+ENTRYPOINT [ "/opt/entrypoint.sh", "/opt/spark/bin/spark-class", "org.apache.spark.deploy.k8s.SparkPodInitContainer" ]

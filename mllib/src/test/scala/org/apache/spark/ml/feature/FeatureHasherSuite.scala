@@ -78,6 +78,31 @@ class FeatureHasherSuite extends SparkFunSuite
     assert(features.zip(expected).forall { case (e, a) => e ~== a absTol 1e-14 })
   }
 
+  test("setting explicit numerical columns to treat as categorical") {
+    val df = Seq(
+      (2.0, 1, "foo"),
+      (3.0, 2, "bar")
+    ).toDF("real", "int", "string")
+
+    val n = 100
+    val hasher = new FeatureHasher()
+      .setInputCols("real", "int", "string")
+      .setCategoricalCols(Array("real"))
+      .setOutputCol("features")
+      .setNumFeatures(n)
+    val output = hasher.transform(df)
+
+    val features = output.select("features").as[Vector].collect()
+    // Assume perfect hash on field names
+    def idx: Any => Int = murmur3FeatureIdx(n)
+    // check expected indices
+    val expected = Seq(
+      Vectors.sparse(n, Seq((idx("real=2.0"), 1.0), (idx("int"), 1.0), (idx("string=foo"), 1.0))),
+      Vectors.sparse(n, Seq((idx("real=3.0"), 1.0), (idx("int"), 2.0), (idx("string=bar"), 1.0)))
+    )
+    assert(features.zip(expected).forall { case (e, a) => e ~== a absTol 1e-14 })
+  }
+
   test("hashing works for all numeric types") {
     val df = Seq(5.0, 10.0, 15.0).toDF("real")
 

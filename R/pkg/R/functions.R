@@ -39,7 +39,8 @@ NULL
 #' Date time functions defined for \code{Column}.
 #'
 #' @param x Column to compute on. In \code{window}, it must be a time Column of
-#'          \code{TimestampType}.
+#'          \code{TimestampType}. This is not used with \code{current_date} and
+#'          \code{current_timestamp}
 #' @param format The format for the given dates or timestamps in Column \code{x}. See the
 #'               format used in the following methods:
 #'               \itemize{
@@ -1109,10 +1110,11 @@ setMethod("lower",
           })
 
 #' @details
-#' \code{ltrim}: Trims the spaces from left end for the specified string value.
+#' \code{ltrim}: Trims the spaces from left end for the specified string value. Optionally a
+#' \code{trimString} can be specified.
 #'
 #' @rdname column_string_functions
-#' @aliases ltrim ltrim,Column-method
+#' @aliases ltrim ltrim,Column,missing-method
 #' @export
 #' @examples
 #'
@@ -1128,9 +1130,21 @@ setMethod("lower",
 #' head(tmp)}
 #' @note ltrim since 1.5.0
 setMethod("ltrim",
-          signature(x = "Column"),
-          function(x) {
+          signature(x = "Column", trimString = "missing"),
+          function(x, trimString) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ltrim", x@jc)
+            column(jc)
+          })
+
+#' @param trimString a character string to trim with
+#' @rdname column_string_functions
+#' @aliases ltrim,Column,character-method
+#' @export
+#' @note ltrim(Column, character) since 2.3.0
+setMethod("ltrim",
+          signature(x = "Column", trimString = "character"),
+          function(x, trimString) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "ltrim", x@jc, trimString)
             column(jc)
           })
 
@@ -1348,16 +1362,28 @@ setMethod("bround",
           })
 
 #' @details
-#' \code{rtrim}: Trims the spaces from right end for the specified string value.
+#' \code{rtrim}: Trims the spaces from right end for the specified string value. Optionally a
+#' \code{trimString} can be specified.
 #'
 #' @rdname column_string_functions
-#' @aliases rtrim rtrim,Column-method
+#' @aliases rtrim rtrim,Column,missing-method
 #' @export
 #' @note rtrim since 1.5.0
 setMethod("rtrim",
-          signature(x = "Column"),
-          function(x) {
+          signature(x = "Column", trimString = "missing"),
+          function(x, trimString) {
             jc <- callJStatic("org.apache.spark.sql.functions", "rtrim", x@jc)
+            column(jc)
+          })
+
+#' @rdname column_string_functions
+#' @aliases rtrim,Column,character-method
+#' @export
+#' @note rtrim(Column, character) since 2.3.0
+setMethod("rtrim",
+          signature(x = "Column", trimString = "character"),
+          function(x, trimString) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "rtrim", x@jc, trimString)
             column(jc)
           })
 
@@ -1789,16 +1815,28 @@ setMethod("to_timestamp",
           })
 
 #' @details
-#' \code{trim}: Trims the spaces from both ends for the specified string column.
+#' \code{trim}: Trims the spaces from both ends for the specified string column. Optionally a
+#' \code{trimString} can be specified.
 #'
 #' @rdname column_string_functions
-#' @aliases trim trim,Column-method
+#' @aliases trim trim,Column,missing-method
 #' @export
 #' @note trim since 1.5.0
 setMethod("trim",
-          signature(x = "Column"),
-          function(x) {
+          signature(x = "Column", trimString = "missing"),
+          function(x, trimString) {
             jc <- callJStatic("org.apache.spark.sql.functions", "trim", x@jc)
+            column(jc)
+          })
+
+#' @rdname column_string_functions
+#' @aliases trim,Column,character-method
+#' @export
+#' @note trim(Column, character) since 2.3.0
+setMethod("trim",
+          signature(x = "Column", trimString = "character"),
+          function(x, trimString) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "trim", x@jc, trimString)
             column(jc)
           })
 
@@ -2095,7 +2133,8 @@ setMethod("countDistinct",
           })
 
 #' @details
-#' \code{concat}: Concatenates multiple input string columns together into a single string column.
+#' \code{concat}: Concatenates multiple input columns together into a single column.
+#' If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
 #'
 #' @rdname column_string_functions
 #' @aliases concat concat,Column-method
@@ -2777,11 +2816,11 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
           })
 
 #' @details
-#' \code{substring_index}: Returns the substring from string str before count occurrences of
-#' the delimiter delim. If count is positive, everything the left of the final delimiter
-#' (counting from left) is returned. If count is negative, every to the right of the final
-#' delimiter (counting from the right) is returned. substring_index performs a case-sensitive
-#' match when searching for delim.
+#' \code{substring_index}: Returns the substring from string (\code{x}) before \code{count}
+#' occurrences of the delimiter (\code{delim}). If \code{count} is positive, everything the left of
+#' the final delimiter (counting from left) is returned. If \code{count} is negative, every to the
+#' right of the final delimiter (counting from the right) is returned. \code{substring_index}
+#' performs a case-sensitive match when searching for the delimiter.
 #'
 #' @param delim a delimiter string.
 #' @param count number of occurrences of \code{delim} before the substring is returned.
@@ -3502,5 +3541,36 @@ setMethod("date_trunc",
           signature(format = "character", x = "Column"),
           function(format, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "date_trunc", format, x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{current_date}: Returns the current date as a date column.
+#'
+#' @rdname column_datetime_functions
+#' @aliases current_date current_date,missing-method
+#' @export
+#' @examples
+#' \dontrun{
+#' head(select(df, current_date(), current_timestamp()))}
+#' @note current_date since 2.3.0
+setMethod("current_date",
+          signature("missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "current_date")
+            column(jc)
+          })
+
+#' @details
+#' \code{current_timestamp}: Returns the current timestamp as a timestamp column.
+#'
+#' @rdname column_datetime_functions
+#' @aliases current_timestamp current_timestamp,missing-method
+#' @export
+#' @note current_timestamp since 2.3.0
+setMethod("current_timestamp",
+          signature("missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
             column(jc)
           })

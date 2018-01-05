@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.vectorized;
+package org.apache.spark.sql.vectorized;
 
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
@@ -34,11 +34,7 @@ public final class ArrowColumnVector extends ColumnVector {
   private ArrowColumnVector[] childColumns;
 
   private void ensureAccessible(int index) {
-    int valueCount = accessor.getValueCount();
-    if (index < 0 || index >= valueCount) {
-      throw new IndexOutOfBoundsException(
-        String.format("index: %d, valueCount: %d", index, valueCount));
-    }
+    ensureAccessible(index, 1);
   }
 
   private void ensureAccessible(int index, int count) {
@@ -64,19 +60,11 @@ public final class ArrowColumnVector extends ColumnVector {
     accessor.close();
   }
 
-  //
-  // APIs dealing with nulls
-  //
-
   @Override
   public boolean isNullAt(int rowId) {
     ensureAccessible(rowId);
     return accessor.isNullAt(rowId);
   }
-
-  //
-  // APIs dealing with Booleans
-  //
 
   @Override
   public boolean getBoolean(int rowId) {
@@ -94,10 +82,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return array;
   }
 
-  //
-  // APIs dealing with Bytes
-  //
-
   @Override
   public byte getByte(int rowId) {
     ensureAccessible(rowId);
@@ -113,10 +97,6 @@ public final class ArrowColumnVector extends ColumnVector {
     }
     return array;
   }
-
-  //
-  // APIs dealing with Shorts
-  //
 
   @Override
   public short getShort(int rowId) {
@@ -134,10 +114,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return array;
   }
 
-  //
-  // APIs dealing with Ints
-  //
-
   @Override
   public int getInt(int rowId) {
     ensureAccessible(rowId);
@@ -153,10 +129,6 @@ public final class ArrowColumnVector extends ColumnVector {
     }
     return array;
   }
-
-  //
-  // APIs dealing with Longs
-  //
 
   @Override
   public long getLong(int rowId) {
@@ -174,10 +146,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return array;
   }
 
-  //
-  // APIs dealing with floats
-  //
-
   @Override
   public float getFloat(int rowId) {
     ensureAccessible(rowId);
@@ -193,10 +161,6 @@ public final class ArrowColumnVector extends ColumnVector {
     }
     return array;
   }
-
-  //
-  // APIs dealing with doubles
-  //
 
   @Override
   public double getDouble(int rowId) {
@@ -214,10 +178,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return array;
   }
 
-  //
-  // APIs dealing with Arrays
-  //
-
   @Override
   public int getArrayLength(int rowId) {
     ensureAccessible(rowId);
@@ -230,19 +190,11 @@ public final class ArrowColumnVector extends ColumnVector {
     return accessor.getArrayOffset(rowId);
   }
 
-  //
-  // APIs dealing with Decimals
-  //
-
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
     ensureAccessible(rowId);
     return accessor.getDecimal(rowId, precision, scale);
   }
-
-  //
-  // APIs dealing with UTF8Strings
-  //
 
   @Override
   public UTF8String getUTF8String(int rowId) {
@@ -250,25 +202,15 @@ public final class ArrowColumnVector extends ColumnVector {
     return accessor.getUTF8String(rowId);
   }
 
-  //
-  // APIs dealing with Binaries
-  //
-
   @Override
   public byte[] getBinary(int rowId) {
     ensureAccessible(rowId);
     return accessor.getBinary(rowId);
   }
 
-  /**
-   * Returns the data for the underlying array.
-   */
   @Override
   public ArrowColumnVector arrayData() { return childColumns[0]; }
 
-  /**
-   * Returns the ordinal's child data column.
-   */
   @Override
   public ArrowColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
 
@@ -326,7 +268,8 @@ public final class ArrowColumnVector extends ColumnVector {
       this.vector = vector;
     }
 
-    final boolean isNullAt(int rowId) {
+    // TODO: should be final after removing ArrayAccessor workaround
+    boolean isNullAt(int rowId) {
       return vector.isNull(rowId);
     }
 
@@ -587,6 +530,16 @@ public final class ArrowColumnVector extends ColumnVector {
     ArrayAccessor(ListVector vector) {
       super(vector);
       this.accessor = vector;
+    }
+
+    @Override
+    final boolean isNullAt(int rowId) {
+      // TODO: Workaround if vector has all non-null values, see ARROW-1948
+      if (accessor.getValueCount() > 0 && accessor.getValidityBuffer().capacity() == 0) {
+        return false;
+      } else {
+        return super.isNullAt(rowId);
+      }
     }
 
     @Override
