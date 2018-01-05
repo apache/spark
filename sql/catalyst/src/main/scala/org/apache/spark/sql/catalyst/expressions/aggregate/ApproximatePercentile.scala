@@ -296,8 +296,8 @@ object ApproximatePercentile {
       Ints.BYTES + Doubles.BYTES + Longs.BYTES +
       // length of summary.sampled
       Ints.BYTES +
-      // summary.sampled, Array[Stat(value: Double, g: Int, delta: Int)]
-      summaries.sampled.length * (Doubles.BYTES + Ints.BYTES + Ints.BYTES)
+      // summary.sampled, Array[Stat(value: Double, g: Long, delta: Long)]
+      summaries.sampled.length * (Doubles.BYTES + Longs.BYTES + Longs.BYTES)
     }
 
     final def serialize(obj: PercentileDigest): Array[Byte] = {
@@ -312,8 +312,8 @@ object ApproximatePercentile {
       while (i < summary.sampled.length) {
         val stat = summary.sampled(i)
         buffer.putDouble(stat.value)
-        buffer.putInt(stat.g)
-        buffer.putInt(stat.delta)
+        buffer.putLong(stat.g)
+        buffer.putLong(stat.delta)
         i += 1
       }
       buffer.array()
@@ -330,8 +330,8 @@ object ApproximatePercentile {
       var i = 0
       while (i < sampledLength) {
         val value = buffer.getDouble()
-        val g = buffer.getInt()
-        val delta = buffer.getInt()
+        val g = buffer.getLong()
+        val delta = buffer.getLong()
         sampled(i) = Stats(value, g, delta)
         i += 1
       }
