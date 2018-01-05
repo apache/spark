@@ -37,17 +37,20 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
     with HasInputCols with HasOutputCols {
 
   /**
-   * Param for how to handle invalid data.
+   * Param for how to handle invalid data during transform().
    * Options are 'keep' (invalid data presented as an extra categorical feature) or
    * 'error' (throw an error).
+   * Note that this Param is only used during transform; during fitting, invalid data
+   * will result in an error.
    * Default: "error"
    * @group param
    */
   @Since("2.3.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
-    "How to handle invalid data " +
+    "How to handle invalid data during transform(). " +
     "Options are 'keep' (invalid data presented as an extra categorical feature) " +
-    "or error (throw an error).",
+    "or error (throw an error). Note that this Param is only used during transform; " +
+    "during fitting, invalid data will result in an error.",
     ParamValidators.inArray(OneHotEncoderEstimator.supportedHandleInvalids))
 
   setDefault(handleInvalid, OneHotEncoderEstimator.ERROR_INVALID)
