@@ -28,10 +28,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Curre
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
-import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
 import org.apache.spark.sql.sources.v2.streaming.{MicroBatchReadSupport, MicroBatchWriteSupport}
-import org.apache.spark.sql.sources.v2.streaming.reader.MicroBatchReader
+import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.{Clock, Utils}
 
@@ -49,11 +48,6 @@ class MicroBatchExecution(
   extends StreamExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
-
-  private def toJava(
-      scalaOption: Option[v2.streaming.reader.Offset]): Optional[v2.streaming.reader.Offset] = {
-    Optional.ofNullable(scalaOption.orNull)
-  }
 
   @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
 
@@ -274,9 +268,9 @@ class MicroBatchExecution(
           case s: MicroBatchReader =>
             updateStatusMessage(s"Getting offsets from $s")
             reportTimeTaken("getOffset") {
-              // Once v1 streaming source execution is gone, we can refactor this away.
-              // For now, we set the range here to get the source to infer the available end offset,
-              // get that offset, and then set the range again when we later execute.
+            // Once v1 streaming source execution is gone, we can refactor this away.
+            // For now, we set the range here to get the source to infer the available end offset,
+            // get that offset, and then set the range again when we later execute.
             s.setOffsetRange(
               toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
               Optional.empty())
@@ -406,7 +400,7 @@ class MicroBatchExecution(
           val current = committedOffsets.get(reader).map(off => reader.deserializeOffset(off.json))
           reader.setOffsetRange(
             toJava(current),
-            Optional.of(available.asInstanceOf[v2.streaming.reader.Offset]))
+            Optional.of(available.asInstanceOf[OffsetV2]))
           logDebug(s"Retrieving data from $reader: $current -> $available")
           Some(reader ->
             new StreamingDataSourceV2Relation(reader.readSchema().toAttributes, reader))
@@ -491,5 +485,9 @@ class MicroBatchExecution(
     } finally {
       awaitProgressLock.unlock()
     }
+  }
+
+  private def toJava(scalaOption: Option[OffsetV2]): Optional[OffsetV2] = {
+    Optional.ofNullable(scalaOption.orNull)
   }
 }
