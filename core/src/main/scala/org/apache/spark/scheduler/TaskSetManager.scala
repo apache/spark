@@ -102,7 +102,7 @@ private[spark] class TaskSetManager(
 
   private[scheduler] val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
     blacklistTracker.map { _ =>
-      new TaskSetBlacklist(conf, stageId, clock)
+      new TaskSetBlacklist(sched.sc.listenerBus, conf, stageId, taskSet.stageAttemptId, clock)
     }
   }
 

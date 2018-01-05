@@ -92,7 +92,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   }
 
   def createTaskSetBlacklist(stageId: Int = 0): TaskSetBlacklist = {
-    new TaskSetBlacklist(conf, stageId, clock)
+    new TaskSetBlacklist(listenerBusMock, conf, stageId, stageAttemptId = 0, clock = clock)
   }
 
   test("executors can be blacklisted with only a few failures per stage") {

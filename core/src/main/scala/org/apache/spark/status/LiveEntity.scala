@@ -355,6 +355,7 @@ private class LiveExecutorStageSummary(
   var succeededTasks = 0
   var failedTasks = 0
   var killedTasks = 0
+  var isBlacklisted = false
 
   val metrics = new MetricsTracker()
 
@@ -373,7 +374,8 @@ private class LiveExecutorStageSummary(
       metrics.shuffleWriteBytes,
       metrics.shuffleWriteRecords,
       metrics.memoryBytesSpilled,
-      metrics.diskBytesSpilled)
+      metrics.diskBytesSpilled,
+      isBlacklisted)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
 

@@ -121,6 +121,15 @@ case class SparkListenerExecutorBlacklisted(
   extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerExecutorBlacklistedForStage(
+    time: Long,
+    executorId: String,
+    taskFailures: Int,
+    stageId: Int,
+    stageAttemptId: Int)
+  extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerExecutorUnblacklisted(time: Long, executorId: String)
   extends SparkListenerEvent
 
@@ -262,6 +271,12 @@ private[spark] trait SparkListenerInterface {
   def onExecutorBlacklisted(executorBlacklisted: SparkListenerExecutorBlacklisted): Unit
 
   /**
+   * Called when the driver blacklists an executor for a stage.
+   */
+  def onExecutorBlacklistedForStage(
+    executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): Unit
+
+  /**
    * Called when the driver re-enables a previously blacklisted executor.
    */
   def onExecutorUnblacklisted(executorUnblacklisted: SparkListenerExecutorUnblacklisted): Unit
@@ -338,6 +353,9 @@ abstract class SparkListener extends SparkListenerInterface {
 
   override def onExecutorBlacklisted(
       executorBlacklisted: SparkListenerExecutorBlacklisted): Unit = { }
+
+  def onExecutorBlacklistedForStage(
+    executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): Unit = { }
 
   override def onExecutorUnblacklisted(
       executorUnblacklisted: SparkListenerExecutorUnblacklisted): Unit = { }

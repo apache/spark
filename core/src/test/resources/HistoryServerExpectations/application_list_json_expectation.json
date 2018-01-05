@@ -1,4 +1,19 @@
 [ {
+  "id": "app-20180109111548-0000",
+  "name": "Spark shell",
+  "attempts": [ {
+    "startTime": "2018-01-09T10:15:42.372GMT",
+    "endTime": "2018-01-09T10:24:37.606GMT",
+    "lastUpdated": "",
+    "duration": 535234,
+    "sparkUser": "attilapiros",
+    "completed": true,
+    "appSparkVersion": "2.3.0-SNAPSHOT",
+    "startTimeEpoch": 1515492942372,
+    "endTimeEpoch": 1515493477606,
+    "lastUpdatedEpoch": 0
+  } ]
+}, {
   "id" : "app-20161116163331-0000",
   "name" : "Spark shell",
   "attempts" : [ {

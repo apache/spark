@@ -134,7 +134,15 @@ private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
             {Utils.bytesToString(v.diskBytesSpilled)}
           </td>
         }}
-        <td>{executor.map(_.isBlacklisted).getOrElse(false)}</td>
+        {
+          if (executor.map(_.isBlacklisted).getOrElse(false)) {
+            <td>for application</td>
+          } else if (v.isBlacklistedForStage) {
+            <td>for stage</td>
+          } else {
+            <td>false</td>
+          }
+        }
       </tr>
     }
   }
