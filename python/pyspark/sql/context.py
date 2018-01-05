@@ -218,14 +218,17 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(2.1)
-    def registerJavaFunction(self, name, javaClassName, returnType=None):
+    def registerJavaFunction(self, name, javaClassName, returnType=None, deterministic=True):
         """Register a java UDF so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not specified we would infer it via reflection.
+
         :param name:  name of the UDF
         :param javaClassName: fully qualified name of java class
         :param returnType: a :class:`pyspark.sql.types.DataType` object
+        :param deterministic: a flag indicating if the UDF is deterministic. Deterministic UDF
+            returns same result each time it is invoked with a particular input.
 
         >>> sqlContext.registerJavaFunction("javaStringLength",
         ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
@@ -236,11 +239,18 @@ class SQLContext(object):
         >>> sqlContext.sql("SELECT javaStringLength2('test')").collect()
         [Row(UDF:javaStringLength2(test)=4)]
 
+        >>> from pyspark.sql.types import DoubleType
+        >>> sqlContext.registerJavaFunction("javaRand",
+        ...   "test.org.apache.spark.sql.JavaRandUDF", DoubleType(), deterministic=False)
+        >>> sqlContext.sql("SELECT javaRand(3)").collect()  # doctest: +SKIP
+        [Row(UDF:javaRand(3)=3.12345)]
+
         """
         jdt = None
         if returnType is not None:
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
-        self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
+        self.sparkSession._jsparkSession.udf().registerJava(
+            name, javaClassName, jdt, deterministic)
 
     @ignore_unicode_prefix
     @since(2.3)
@@ -578,8 +588,8 @@ class UDFRegistration(object):
     def register(self, name, f, returnType=StringType()):
         return self.sqlContext.registerFunction(name, f, returnType)
 
-    def registerJavaFunction(self, name, javaClassName, returnType=None):
-        self.sqlContext.registerJavaFunction(name, javaClassName, returnType)
+    def registerJavaFunction(self, name, javaClassName, returnType=None, deterministic=True):
+        self.sqlContext.registerJavaFunction(name, javaClassName, returnType, deterministic)
 
     def registerJavaUDAF(self, name, javaClassName):
         self.sqlContext.registerJavaUDAF(name, javaClassName)
