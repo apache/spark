@@ -138,6 +138,7 @@ class KafkaContinuousSuite extends KafkaSourceTest with SharedSQLContext {
         assert(Range(0, 20).map(Row(_)).toSet.subsetOf(results.toSet))
       }
       query.stop()
+      query.awaitTermination()
     }
   }
 }
