@@ -386,8 +386,7 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(row[0], 5)
 
     def test_nondeterministic_udf(self):
-        # Test that the result of nondeterministic UDFs are evaluated only once in
-        # chained UDF evaluations
+        # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
         from pyspark.sql.functions import udf
         import random
         udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
@@ -3977,8 +3976,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
     def test_nondeterministic_udf(self):
-        # Test that the result of nondeterministic UDFs are evaluated only once in
-        # chained UDF evaluations
+        # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
         from pandas.testing import assert_series_equal
         from pyspark.sql.functions import udf, pandas_udf, col
 
