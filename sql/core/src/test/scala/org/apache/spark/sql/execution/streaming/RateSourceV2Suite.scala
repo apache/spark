@@ -63,7 +63,7 @@ class RateSourceV2Suite extends StreamTest {
       .option("rowsPerSecond", "10")
       .option("useManualClock", "true")
       .load()
-    testStream(input, useV2Sink = true)(
+    testStream(input)(
       AdvanceRateManualClock(seconds = 1),
       CheckLastBatch((0 until 10).map(v => new java.sql.Timestamp(v * 100L) -> v): _*),
       StopStream,

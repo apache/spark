@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.OutputMode._
 
@@ -262,7 +263,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AssertOnQuery { q => // purge commit and clear the sink
         val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
         q.commitLog.purge(commit)
-        q.sink.asInstanceOf[MemorySink].clear()
+        q.sink.asInstanceOf[MemorySinkV2].clear()
         true
       },
       StartStream(),

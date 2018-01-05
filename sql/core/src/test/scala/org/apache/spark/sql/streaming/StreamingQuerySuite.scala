@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
@@ -179,7 +180,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery { q =>
         // blow away commit log and sink result
         q.commitLog.purge(1)
-        q.sink.asInstanceOf[MemorySink].clear()
+        q.sink.asInstanceOf[MemorySinkV2].clear()
         true
       },
       StartStream(trigger = Once),

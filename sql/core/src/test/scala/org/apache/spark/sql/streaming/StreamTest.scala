@@ -279,8 +279,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
    */
   def testStream(
       _stream: Dataset[_],
-      outputMode: OutputMode = OutputMode.Append,
-      useV2Sink: Boolean = defaultUseV2Sink)(actions: StreamAction*): Unit = synchronized {
+      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = synchronized {
     import org.apache.spark.sql.streaming.util.StreamManualClock
 
     // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
@@ -293,7 +292,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
-    val sink = if (useV2Sink) new MemorySinkV2 else new MemorySink(stream.schema, outputMode)
+    val sink = new MemorySinkV2
     val resetConfValues = mutable.Map[String, Option[String]]()
 
     @volatile
@@ -343,10 +342,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       }
 
     def testState = {
-      val sinkDebugString = sink match {
-        case s: MemorySink => s.toDebugString
-        case s: MemorySinkV2 => s.toDebugString
-      }
+      val sinkDebugString = sink.toDebugString
+
       s"""
          |== Progress ==
          |$testActions
@@ -415,11 +412,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         }
       }
 
-      val (latestBatchData, allData) = sink match {
-        case s: MemorySink => (s.latestBatchData, s.allData)
-        case s: MemorySinkV2 => (s.latestBatchData, s.allData)
-      }
-      try if (lastOnly) latestBatchData else allData catch {
+      try if (lastOnly) sink.latestBatchData else sink.allData catch {
         case e: Exception =>
           failTest("Exception while getting data from sink", e)
       }

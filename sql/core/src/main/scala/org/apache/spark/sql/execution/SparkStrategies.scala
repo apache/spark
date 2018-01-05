@@ -480,9 +480,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 
-      case MemoryPlan(sink, output) =>
-        val encoder = RowEncoder(sink.schema)
-        LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
       case MemoryPlanV2(sink, output) =>
         val encoder = RowEncoder(StructType.fromAttributes(output))
         LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil

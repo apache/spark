@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -304,7 +305,7 @@ class StreamSuite extends StreamTest {
     // For each batch, we would log the sink change after the execution
     // This checks whether the key of the sink change log is the expected batch id
     def CheckSinkLatestBatchId(expectedId: Int): AssertOnQuery =
-      AssertOnQuery(_.sink.asInstanceOf[MemorySink].latestBatchId.get == expectedId,
+      AssertOnQuery(_.sink.asInstanceOf[MemorySinkV2].latestBatchId.get == expectedId,
         s"sink's lastBatchId should be $expectedId")
 
     val inputData = MemoryStream[Int]
@@ -757,8 +758,10 @@ class StreamSuite extends StreamTest {
         query.awaitTermination()
       }
 
-      assert(e.getMessage.contains(providerClassName))
-      assert(e.getMessage.contains("instantiated"))
+      assert(e.getCause != null)
+      assert(e.getCause.getCause != null)
+      assert(e.getCause.getCause.getMessage.contains(providerClassName))
+      assert(e.getCause.getCause.getMessage.contains("instantiated"))
     }
   }
 

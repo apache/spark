@@ -31,6 +31,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap}
+import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ExistsThrowsExceptionFileSystem._
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -1010,7 +1011,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         .asInstanceOf[StreamingQueryWrapper]
         .streamingQuery
       q.processAllAvailable()
-      val memorySink = q.sink.asInstanceOf[MemorySink]
+      val memorySink = q.sink.asInstanceOf[MemorySinkV2]
       val fileSource = getSourcesFromStreamingQuery(q).head
 
       /** Check the data read in the last batch */
