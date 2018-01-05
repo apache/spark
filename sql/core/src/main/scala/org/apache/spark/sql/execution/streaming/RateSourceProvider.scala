@@ -29,8 +29,8 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousRateStreamReader
-import org.apache.spark.sql.execution.streaming.sources.MicroBatchRateStreamReader
+import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReader
+import org.apache.spark.sql.execution.streaming.sources.RateStreamMicroBatchReader
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
@@ -112,7 +112,7 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister
       schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceV2Options): ContinuousReader = {
-    new ContinuousRateStreamReader(options)
+    new RateStreamContinuousReader(options)
   }
 
   override def shortName(): String = "rate"

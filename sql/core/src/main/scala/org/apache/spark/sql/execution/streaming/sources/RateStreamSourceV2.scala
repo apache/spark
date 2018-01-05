@@ -45,13 +45,13 @@ class RateSourceProviderV2 extends DataSourceV2 with MicroBatchReadSupport with 
       schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceV2Options): MicroBatchReader = {
-    new MicroBatchRateStreamReader(options)
+    new RateStreamMicroBatchReader(options)
   }
 
   override def shortName(): String = "ratev2"
 }
 
-class MicroBatchRateStreamReader(options: DataSourceV2Options)
+class RateStreamMicroBatchReader(options: DataSourceV2Options)
   extends MicroBatchReader {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
