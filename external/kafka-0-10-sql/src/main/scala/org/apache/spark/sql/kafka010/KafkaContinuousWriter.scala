@@ -29,6 +29,19 @@ import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{BinaryType, StringType, StructType}
 
+/**
+ * Dummy commit message. The DataSourceV2 framework requires a commit message implementation but we
+ * don't need to really send one.
+ */
+case object KafkaWriterCommitMessage extends WriterCommitMessage
+
+/**
+ * A [[ContinuousWriter]] for Kafka writing. Responsible for generating the writer factory.
+ * @param topic The topic this writer is responsible for. If None, topic will be inferred from
+ *              a `topic` field in the incoming data.
+ * @param producerParams Parameters for Kafka producers in each task.
+ * @param schema The schema of the input data.
+ */
 class KafkaContinuousWriter(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
   extends ContinuousWriter with SupportsWriteInternalRow {
@@ -40,6 +53,14 @@ class KafkaContinuousWriter(
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
 }
 
+/**
+ * A [[DataWriterFactory]] for Kafka writing. Will be serialized and sent to executors to generate
+ * the per-task data writers.
+ * @param topic The topic that should be written to. If None, topic will be inferred from
+ *              a `topic` field in the incoming data.
+ * @param producerParams Parameters for Kafka producers in each task.
+ * @param schema The schema of the input data.
+ */
 case class KafkaContinuousWriterFactory(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
   extends DataWriterFactory[InternalRow] {
@@ -49,8 +70,15 @@ case class KafkaContinuousWriterFactory(
   }
 }
 
-case object KafkaWriterCommitMessage extends WriterCommitMessage
-
+/**
+ * A [[DataWriter]] for Kafka writing. One data writer will be created in each partition to
+ * process incoming rows.
+ *
+ * @param targetTopic The topic that this data writer is targeting. If None, topic will be inferred
+ *                    from a `topic` field in the incoming data.
+ * @param producerParams Parameters to use for the Kafka producer.
+ * @param inputSchema The attributes in the input data.
+ */
 class KafkaContinuousDataWriter(
     targetTopic: Option[String], producerParams: Map[String, String], inputSchema: Seq[Attribute])
   extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
