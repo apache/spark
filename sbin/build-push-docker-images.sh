@@ -60,13 +60,13 @@ function image_ref {
 }
 
 function build {
-  local base_image="$(image_ref spark-base 0)"
-  docker build --build-arg "spark_jars=$SPARK_JARS" \
+  docker build \
+    --build-arg "spark_jars=$SPARK_JARS" \
     --build-arg "img_path=$IMG_PATH" \
-    -t "$base_image" \
+    -t spark-base \
     -f "$IMG_PATH/spark-base/Dockerfile" .
   for image in "${!path[@]}"; do
-    docker build --build-arg "base_image=$base_image" -t "$(image_ref $image)" -f ${path[$image]} .
+    docker build -t "$(image_ref $image)" -f ${path[$image]} .
   done
 }
 

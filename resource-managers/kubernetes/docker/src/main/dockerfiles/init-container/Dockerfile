@@ -15,8 +15,7 @@
 # limitations under the License.
 #
 
-ARG base_image
-FROM ${base_image}
+FROM spark-base
 
 # If this docker file is being used in the context of building your images from a Spark distribution, the docker build
 # command should be invoked from the top level directory of the Spark distribution. E.g.:
