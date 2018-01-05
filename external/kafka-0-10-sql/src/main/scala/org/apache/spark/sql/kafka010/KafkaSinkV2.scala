@@ -97,6 +97,7 @@ class KafkaDataWriter(
     if (producer != null) {
       producer.flush()
       checkForErrors()
+      CachedKafkaProducer.close(new java.util.HashMap[String, Object](producerParams.asJava))
     }
   }
 

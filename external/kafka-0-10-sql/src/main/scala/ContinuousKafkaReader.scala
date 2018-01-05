@@ -184,7 +184,7 @@ class ContinuousKafkaDataReader(
   private val sharedRow = new UnsafeRow(7)
   private val bufferHolder = new BufferHolder(sharedRow)
   private val rowWriter = new UnsafeRowWriter(bufferHolder, 7)
-  
+
   private var nextKafkaOffset = startOffset
   private var currentRecord: ConsumerRecord[Array[Byte], Array[Byte]] = _
 
