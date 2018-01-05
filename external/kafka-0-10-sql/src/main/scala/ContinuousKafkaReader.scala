@@ -148,28 +148,35 @@ class ContinuousKafkaReader(
  * full reader on executors.
  *
  * @param topicPartition The (topic, partition) pair this task is responsible for.
- * @param start The offset to start reading from within the partition.
+ * @param startOffset The offset to start reading from within the partition.
  * @param kafkaParams Kafka consumer params to use.
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
  */
 case class ContinuousKafkaReadTask(
     topicPartition: TopicPartition,
-    start: Long,
+    startOffset: Long,
     kafkaParams: java.util.Map[String, Object],
-    failOnDataLoss: Boolean)
-  extends ReadTask[UnsafeRow] {
+    failOnDataLoss: Boolean) extends ReadTask[UnsafeRow] {
   override def createDataReader(): ContinuousKafkaDataReader = {
-    new ContinuousKafkaDataReader(topicPartition, start, kafkaParams, failOnDataLoss)
+    new ContinuousKafkaDataReader(topicPartition, startOffset, kafkaParams, failOnDataLoss)
   }
 }
 
+/**
+ * A per-task data reader for continuous Kafka processing.
+ *
+ * @param topicPartition The (topic, partition) pair this data reader is responsible for.
+ * @param startOffset The offset to start reading from within the partition.
+ * @param kafkaParams Kafka consumer params to use.
+ * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
+ *                       are skipped.
+ */
 class ContinuousKafkaDataReader(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: java.util.Map[String, Object],
-    failOnDataLoss: Boolean)
-  extends ContinuousDataReader[UnsafeRow] {
+    failOnDataLoss: Boolean) extends ContinuousDataReader[UnsafeRow] {
   private val topic = topicPartition.topic
   private val kafkaPartition = topicPartition.partition
   private val consumer = CachedKafkaConsumer.createUncached(topic, kafkaPartition, kafkaParams)
