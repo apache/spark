@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.util.Utils
 
 class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
@@ -60,6 +61,22 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
+  }
+
+  test("SPARK-22972: hive orc source") {
+    spark.sql(
+      s"""CREATE TABLE normal_orc_as_source_hive
+         |USING org.apache.spark.sql.hive.orc
+         |OPTIONS (
+         |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
+         |)
+       """.
+        stripMargin)
+    spark.sql(
+      "desc formatted normal_orc_as_source_hive").show()
+    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_as_source_hive"), Row(10))
+    assert(HiveSerDe.sourceToSerDe("org.apache.spark.sql.hive.orc")
+      .equals(HiveSerDe.sourceToSerDe("orc")))
   }
 
   test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
