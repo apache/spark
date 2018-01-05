@@ -853,4 +853,29 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     cast("2", LongType).genCode(ctx)
     assert(ctx.inlinedMutableStates.length == 0)
   }
+
+  test("SPARK-22825 Cast array to string") {
+    val ret1 = cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType)
+    checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
+    val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
+    checkEvaluation(ret2, "[ab, cde, f]")
+    val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
+    checkEvaluation(ret3, "[ab,, c]")
+    val ret4 = cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
+    checkEvaluation(ret4, "[ab, cde, f]")
+    val ret5 = cast(
+      Literal.create(Array("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf)),
+      StringType)
+    checkEvaluation(ret5, "[2014-12-03, 2014-12-04, 2014-12-06]")
+    val ret6 = cast(
+      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00").map(Timestamp.valueOf)),
+      StringType)
+    checkEvaluation(ret6, "[2014-12-03 13:01:00, 2014-12-04 15:05:00]")
+    val ret7 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
+    checkEvaluation(ret7, "[[1, 2, 3], [4, 5]]")
+    val ret8 = cast(
+      Literal.create(Array(Array(Array("a"), Array("b", "c")), Array(Array("d")))),
+      StringType)
+    checkEvaluation(ret8, "[[[a], [b, c]], [[d]]]")
+  }
 }
