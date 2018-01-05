@@ -48,8 +48,9 @@ import org.apache.spark.unsafe.types.UTF8String
  *                      are not Kafka consumer params.
  * @param metadataPath Path to a directory this reader can use for writing metadata.
  * @param initialOffsets The Kafka offsets to start reading data at.
- * @param failOnDataLoss Flag indicating whether read task generation should fail if some offsets
- *                       after the specified initial offsets can't be found.
+ * @param failOnDataLoss Flag indicating whether reading should fail in data loss
+ *                       scenarios, where some offsets after the specified initial ones can't be
+ *                       properly read.
  */
 class ContinuousKafkaReader(
     offsetReader: KafkaOffsetReader,
@@ -62,11 +63,6 @@ class ContinuousKafkaReader(
 
   private lazy val session = SparkSession.getActiveSession.get
   private lazy val sc = session.sparkContext
-
-  private lazy val pollTimeoutMs = sourceOptions.getOrElse(
-    "kafkaConsumer.pollTimeoutMs",
-    sc.conf.getTimeAsMs("spark.network.timeout", "120s").toString
-  ).toLong
 
   // Initialized when creating read tasks. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
@@ -97,19 +93,19 @@ class ContinuousKafkaReader(
   override def createUnsafeRowReadTasks(): java.util.List[ReadTask[UnsafeRow]] = {
     import scala.collection.JavaConverters._
 
-    val oldStartOffsets = KafkaSourceOffset.getPartitionOffsets(offset)
+    val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(offset)
 
     val newPartitions =
-      offsetReader.fetchLatestOffsets().keySet.diff(oldStartOffsets.keySet)
+      offsetReader.fetchLatestOffsets().keySet.diff(oldStartPartitionOffsets.keySet)
     val newPartitionOffsets = offsetReader.fetchEarliestOffsets(newPartitions.toSeq)
-    val startOffsets = oldStartOffsets ++ newPartitionOffsets
+    val startOffsets = oldStartPartitionOffsets ++ newPartitionOffsets
 
     knownPartitions = startOffsets.keySet
 
     startOffsets.toSeq.map {
       case (topicPartition, start) =>
         ContinuousKafkaReadTask(
-          topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
+          topicPartition, start, kafkaParams, failOnDataLoss)
           .asInstanceOf[ReadTask[UnsafeRow]]
     }.asJava
   }
@@ -147,15 +143,24 @@ class ContinuousKafkaReader(
   }
 }
 
+/**
+ * A read task for continuous Kafka processing. This will be serialized and transformed into a
+ * full reader on executors.
+ *
+ * @param topicPartition The (topic, partition) pair this task is responsible for.
+ * @param start The offset to start reading from within the partition.
+ * @param kafkaParams Kafka consumer params to use.
+ * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
+ *                       are skipped.
+ */
 case class ContinuousKafkaReadTask(
     topicPartition: TopicPartition,
     start: Long,
     kafkaParams: java.util.Map[String, Object],
-    pollTimeoutMs: Long,
     failOnDataLoss: Boolean)
   extends ReadTask[UnsafeRow] {
   override def createDataReader(): ContinuousKafkaDataReader = {
-    new ContinuousKafkaDataReader(topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
+    new ContinuousKafkaDataReader(topicPartition, start, kafkaParams, failOnDataLoss)
   }
 }
 
@@ -163,7 +168,6 @@ class ContinuousKafkaDataReader(
     topicPartition: TopicPartition,
     start: Long,
     kafkaParams: java.util.Map[String, Object],
-    pollTimeoutMs: Long,
     failOnDataLoss: Boolean)
   extends ContinuousDataReader[UnsafeRow] {
   private val topic = topicPartition.topic
