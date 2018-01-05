@@ -621,8 +621,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private def writeArrayToStringBuilder(
       et: DataType,
-      arTerm: String,
-      bufferTerm: String,
+      array: String,
+      buffer: String,
       ctx: CodegenContext): String = {
     val elementToStringCode = castToStringCode(et, ctx)
     val funcName = ctx.freshName("elementToString")
@@ -637,20 +637,20 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
     val loopIndex = ctx.freshName("loopIndex")
     s"""
-       |$bufferTerm.append("[");
-       |if ($arTerm.numElements() > 0) {
-       |  if (!$arTerm.isNullAt(0)) {
-       |    $bufferTerm.append($elementToStringFunc(${ctx.getValue(arTerm, et, "0")}));
+       |$buffer.append("[");
+       |if ($array.numElements() > 0) {
+       |  if (!$array.isNullAt(0)) {
+       |    $buffer.append($elementToStringFunc(${ctx.getValue(array, et, "0")}));
        |  }
-       |  for (int $loopIndex = 1; $loopIndex < $arTerm.numElements(); $loopIndex++) {
-       |    $bufferTerm.append(",");
-       |    if (!$arTerm.isNullAt($loopIndex)) {
-       |      $bufferTerm.append(" ");
-       |      $bufferTerm.append($elementToStringFunc(${ctx.getValue(arTerm, et, loopIndex)}));
+       |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
+       |    $buffer.append(",");
+       |    if (!$array.isNullAt($loopIndex)) {
+       |      $buffer.append(" ");
+       |      $buffer.append($elementToStringFunc(${ctx.getValue(array, et, loopIndex)}));
        |    }
        |  }
        |}
-       |$bufferTerm.append("]");
+       |$buffer.append("]");
      """.stripMargin
   }
 
@@ -667,13 +667,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
-          val bufferTerm = ctx.freshName("bufferTerm")
+          val buffer = ctx.freshName("buffer")
           val bufferClass = classOf[UTF8StringBuilder].getName
-          val writeArrayElemCode = writeArrayToStringBuilder(et, c, bufferTerm, ctx)
+          val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
           s"""
-             |$bufferClass $bufferTerm = new $bufferClass();
+             |$bufferClass $buffer = new $bufferClass();
              |$writeArrayElemCode;
-             |$evPrim = $bufferTerm.build();
+             |$evPrim = $buffer.build();
            """.stripMargin
         }
       case _ =>
