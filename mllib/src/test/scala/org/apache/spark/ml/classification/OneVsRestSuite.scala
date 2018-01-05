@@ -194,6 +194,17 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
   }
 
+  test("SPARK-22971: OneVsRestModel should use temp RawPredictionCol") {
+    val dataset2 = dataset.withColumn("rawPrediction", lit(0.0))
+    val logReg = new LogisticRegression()
+      .setMaxIter(1)
+    val ovr = new OneVsRest()
+      .setClassifier(logReg)
+    val output = ovr.fit(dataset2).transform(dataset2)
+    assert(output.schema.fieldNames.toSet ===
+      Set("label", "features", "prediction", "rawPrediction"))
+  }
+
   test("SPARK-21306: OneVsRest should support setWeightCol") {
     val dataset2 = dataset.withColumn("weight", lit(1))
     // classifier inherits hasWeightCol
