@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.{Locale, UUID}
+import java.util.{Locale, Optional, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -107,7 +107,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   override def createContinuousReader(
-      schema: java.util.Optional[StructType],
+      schema: Optional[StructType],
       metadataPath: String,
       options: DataSourceV2Options): KafkaContinuousReader = {
     val parameters = options.asMap().asScala.toMap
@@ -227,7 +227,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): java.util.Optional[ContinuousWriter] = {
+      options: DataSourceV2Options): Optional[ContinuousWriter] = {
     import scala.collection.JavaConverters._
 
     val spark = SparkSession.getActiveSession.get
@@ -238,7 +238,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     KafkaWriter.validateQuery(
       schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
 
-    java.util.Optional.of(new KafkaContinuousWriter(topic, producerParams, schema))
+    Optional.of(new KafkaContinuousWriter(topic, producerParams, schema))
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
