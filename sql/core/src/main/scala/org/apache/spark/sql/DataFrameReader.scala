@@ -191,6 +191,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           ds = ds.asInstanceOf[DataSourceV2],
           conf = sparkSession.sessionState.conf)).asJava)
 
+      // Streaming also uses the data source V2 API. So it may be that the data source implements
+      // v2, but has no v2 implementation for batch reads. In that case, we fall back to loading
+      // the dataframe as a v1 source.
       val reader = (ds, userSpecifiedSchema) match {
         case (ds: ReadSupportWithSchema, Some(schema)) =>
           ds.createReader(schema, options)

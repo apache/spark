@@ -255,6 +255,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             }
           }
 
+        // Streaming also uses the data source V2 API. So it may be that the data source implements
+        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
+        // as though it's a V1 source.
         case _ => saveToV1Source()
       }
     } else {
