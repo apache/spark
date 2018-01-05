@@ -228,6 +228,35 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         builder.append("]")
         builder.build()
       })
+    case MapType(kt, vt, _) =>
+      buildCast[MapData](_, map => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (map.numElements > 0) {
+          val keyToUTF8String = castToString(kt)
+          val valueToUTF8String = castToString(vt)
+          builder.append(keyToUTF8String(map.keyArray().get(0, kt)).asInstanceOf[UTF8String])
+          builder.append(" ->")
+          if (!map.valueArray().isNullAt(0)) {
+            builder.append(" ")
+            builder.append(valueToUTF8String(map.valueArray().get(0, vt)).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < map.numElements) {
+            builder.append(", ")
+            builder.append(keyToUTF8String(map.keyArray().get(i, kt)).asInstanceOf[UTF8String])
+            builder.append(" ->")
+            if (!map.valueArray().isNullAt(i)) {
+              builder.append(" ")
+              builder.append(valueToUTF8String(map.valueArray().get(i, vt))
+                .asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -654,6 +683,53 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
      """.stripMargin
   }
 
+  private def writeMapToStringBuilder(
+      kt: DataType,
+      vt: DataType,
+      map: String,
+      buffer: String,
+      ctx: CodegenContext): String = {
+
+    def dataToStringFunc(func: String, dataType: DataType) = {
+      val funcName = ctx.freshName(func)
+      val dataToStringCode = castToStringCode(dataType, ctx)
+      ctx.addNewFunction(funcName,
+        s"""
+           |private UTF8String $funcName(${ctx.javaType(dataType)} data) {
+           |  UTF8String dataStr = null;
+           |  ${dataToStringCode("data", "dataStr", null /* resultIsNull won't be used */)}
+           |  return dataStr;
+           |}
+         """.stripMargin)
+    }
+
+    val keyToStringFunc = dataToStringFunc("keyToString", kt)
+    val valueToStringFunc = dataToStringFunc("valueToString", vt)
+    val loopIndex = ctx.freshName("loopIndex")
+    s"""
+       |$buffer.append("[");
+       |if ($map.numElements() > 0) {
+       |  $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, "0")}));
+       |  $buffer.append(" ->");
+       |  if (!$map.valueArray().isNullAt(0)) {
+       |    $buffer.append(" ");
+       |    $buffer.append($valueToStringFunc(${ctx.getValue(s"$map.valueArray()", vt, "0")}));
+       |  }
+       |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
+       |    $buffer.append(", ");
+       |    $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, loopIndex)}));
+       |    $buffer.append(" ->");
+       |    if (!$map.valueArray().isNullAt($loopIndex)) {
+       |      $buffer.append(" ");
+       |      $buffer.append($valueToStringFunc(
+       |        ${ctx.getValue(s"$map.valueArray()", vt, loopIndex)}));
+       |    }
+       |  }
+       |}
+       |$buffer.append("]");
+     """.stripMargin
+  }
+
   private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case BinaryType =>
@@ -673,6 +749,17 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           s"""
              |$bufferClass $buffer = new $bufferClass();
              |$writeArrayElemCode;
+             |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case MapType(kt, vt, _) =>
+        (c, evPrim, evNull) => {
+          val buffer = ctx.freshName("buffer")
+          val bufferClass = classOf[UTF8StringBuilder].getName
+          val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
+          s"""
+             |$bufferClass $buffer = new $bufferClass();
+             |$writeMapElemCode;
              |$evPrim = $buffer.build();
            """.stripMargin
         }
