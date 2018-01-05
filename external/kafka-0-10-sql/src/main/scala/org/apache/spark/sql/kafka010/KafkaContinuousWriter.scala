@@ -49,7 +49,7 @@ case class KafkaContinuousWriterFactory(
   }
 }
 
-case class KafkaWriterCommitMessage() extends WriterCommitMessage {}
+case object KafkaWriterCommitMessage extends WriterCommitMessage
 
 class KafkaContinuousDataWriter(
     targetTopic: Option[String], producerParams: Map[String, String], inputSchema: Seq[Attribute])
