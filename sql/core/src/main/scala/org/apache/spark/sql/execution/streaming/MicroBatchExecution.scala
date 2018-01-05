@@ -446,10 +446,9 @@ class MicroBatchExecution(
           newAttributePlan.schema,
           outputMode,
           new DataSourceV2Options(extraOptions.asJava))
-        Option(writer.orElse(null)).map(WriteToDataSourceV2(_, newAttributePlan)).getOrElse {
-          LocalRelation(newAttributePlan.schema.toAttributes, isStreaming = true)
-        }
-      case _ => throw new IllegalArgumentException("unknown sink type")
+        assert(writer.isPresent, "microbatch writer must always be present")
+        WriteToDataSourceV2(writer.get, newAttributePlan)
+      case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 
     reportTimeTaken("queryPlanning") {
