@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 
-class ContinuousKafkaSuite extends KafkaSourceTest with SharedSQLContext {
+class KafkaContinuousSuite extends KafkaSourceTest with SharedSQLContext {
   import testImplicits._
 
   // We need more than the default local[2] to be able to schedule all partitions simultaneously.
@@ -142,7 +142,7 @@ class ContinuousKafkaSuite extends KafkaSourceTest with SharedSQLContext {
   }
 }
 
-class ContinuousKafkaStressSuite extends KafkaSourceTest with SharedSQLContext {
+class KafkaContinuousStressSuite extends KafkaSourceTest with SharedSQLContext {
   import testImplicits._
 
   // We need more than the default local[2] to be able to schedule all partitions simultaneously.
