@@ -386,6 +386,8 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(row[0], 5)
 
     def test_nondeterministic_udf(self):
+        # Test that the result of nondeterministic UDFs are evaluated only once in
+        # chained UDF evaluations
         from pyspark.sql.functions import udf
         import random
         udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
@@ -3975,19 +3977,21 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
     def test_nondeterministic_udf(self):
-        # Non-deterministic UDFs should be allowed in select and withColumn
-        from pyspark.sql.functions import pandas_udf, col
+        # Test that the result of nondeterministic UDFs are evaluated only once in
+        # chained UDF evaluations
+        from pandas.testing import assert_series_equal
+        from pyspark.sql.functions import udf, pandas_udf, col
 
+        @pandas_udf('double')
+        def plus_ten(v):
+            return v + 10
         random_udf = self.random_udf
-        df = self.spark.range(10)
 
-        result1 = df.select(random_udf(col('id')).alias('rand')).collect()
-        result2 = df.withColumn('rand', random_udf(col('id'))).collect()
+        df = self.spark.range(10).withColumn('rand', random_udf(col('id')))
+        result1 = df.withColumn('plus_ten(rand)', plus_ten(df['rand'])).toPandas()
 
-        for row in result1:
-            self.assertTrue(0.0 <= row.rand < 1.0)
-        for row in result2:
-            self.assertTrue(0.0 <= row.rand < 1.0)
+        self.assertEqual(random_udf.deterministic, False)
+        assert_series_equal(result1['plus_ten(rand)'], result1['rand'] + 10, check_names=False)
 
     def test_nondeterministic_udf_in_aggregate(self):
         from pyspark.sql.functions import pandas_udf, sum
