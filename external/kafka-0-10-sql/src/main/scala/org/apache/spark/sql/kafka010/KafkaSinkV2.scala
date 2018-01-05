@@ -70,6 +70,7 @@ class KafkaDataWriter(
   }
 
   def write(row: InternalRow): Unit = {
+    checkForErrors()
     val projectedRow = projection(row)
     val topic = projectedRow.getUTF8String(0)
     val key = projectedRow.getBinary(1)
@@ -90,6 +91,7 @@ class KafkaDataWriter(
     checkForErrors()
     KafkaWriterCommitMessage()
   }
+
   def abort(): Unit = {}
 
   def close(): Unit = {
