@@ -3626,7 +3626,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             "twoArgsPandasUDF", twoArgsPandasUDF, IntegerType())
         self.assertEqual(newPandasUDF.deterministic, True)
         self.assertEqual(newPandasUDF.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
-        [row] = self.spark.range(1).sql("SELECT twoArgsPandasUDF('test', 1)").collect()
+        [row] = self.spark.sql("SELECT twoArgsPandasUDF('test', 1)").collect()
         self.assertEqual(row[0], 5)
 
     def test_register_nondeterministic_vectorized_udf_basic(self):
@@ -3641,7 +3641,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
             "randomPandasUDF", randomPandasUDF, IntegerType())
         self.assertEqual(nondeterministicPandasUDF.deterministic, False)
         self.assertEqual(nondeterministicPandasUDF.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
-        [row] = self.spark.range(1).sql("SELECT randomPandasUDF(1)").collect()
+        [row] = self.spark.sql("SELECT randomPandasUDF(1)").collect()
         self.assertEqual(row[0], 7)
 
     def test_vectorized_udf_null_boolean(self):
