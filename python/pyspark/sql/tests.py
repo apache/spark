@@ -3581,7 +3581,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         ReusedSQLTestCase.tearDownClass()
 
     @property
-    def random_udf(self):
+    def nondeterministic_vectorized_udf(self):
         from pyspark.sql.functions import pandas_udf
 
         @pandas_udf('double')
@@ -3628,7 +3628,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         [row] = self.spark.range(1).sql("SELECT twoArgsPandasUDF('test', 1)").collect()
         self.assertEqual(row[0], 5)
 
-    def test_register_vectorized_nondeterministic_udf_basic(self):
+    def test_register_nondeterministic_vectorized_udf_basic(self):
         from pyspark.sql.functions import pandas_udf
         import random
         randomPandasUDF = pandas_udf(
@@ -4001,7 +4001,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         finally:
             self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
-    def test_nondeterministic_udf(self):
+    def test_nondeterministic_vectorized_udf(self):
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
         from pyspark.sql.functions import udf, pandas_udf, col
 
@@ -4016,7 +4016,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         self.assertEqual(random_udf.deterministic, False)
         self.assertTrue(result1['plus_ten(rand)'].equals(result1['rand'] + 10))
 
-    def test_nondeterministic_udf_in_aggregate(self):
+    def test_nondeterministic_vectorized_udf_in_aggregate(self):
         from pyspark.sql.functions import pandas_udf, sum
 
         df = self.spark.range(10)
