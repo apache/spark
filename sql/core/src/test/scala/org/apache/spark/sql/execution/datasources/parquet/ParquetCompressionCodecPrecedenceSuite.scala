@@ -78,11 +78,16 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSQLC
       compressionCodec: String,
       rootDir: File): Unit = {
     val options =
-      s"""OPTIONS('path'='${rootDir.toURI.toString.stripSuffix("/")}/$tableName',
-         |'parquet.compression'='$compressionCodec')""".stripMargin
+      s"""
+        |OPTIONS('path'='${rootDir.toURI.toString.stripSuffix("/")}/$tableName',
+        |'parquet.compression'='$compressionCodec')
+       """.stripMargin
     val partitionCreate = if (isPartitioned) "PARTITIONED BY (p)" else ""
-    sql(s"""CREATE TABLE $tableName USING Parquet $options $partitionCreate
-    |as select 1 as col1, 2 as p""".stripMargin)
+    sql(
+      s"""
+        |CREATE TABLE $tableName USING Parquet $options $partitionCreate
+        |AS SELECT 1 AS col1, 2 AS p
+       """.stripMargin)
   }
 
   private def checkCompressionCodec(compressionCodec: String, isPartitioned: Boolean): Unit = {
