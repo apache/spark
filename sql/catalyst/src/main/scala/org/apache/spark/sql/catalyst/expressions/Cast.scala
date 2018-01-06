@@ -233,22 +233,24 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         val builder = new UTF8StringBuilder
         builder.append("[")
         if (map.numElements > 0) {
+          val keyArray = map.keyArray()
+          val valueArray = map.valueArray()
           val keyToUTF8String = castToString(kt)
           val valueToUTF8String = castToString(vt)
-          builder.append(keyToUTF8String(map.keyArray().get(0, kt)).asInstanceOf[UTF8String])
+          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
           builder.append(" ->")
-          if (!map.valueArray().isNullAt(0)) {
+          if (!valueArray.isNullAt(0)) {
             builder.append(" ")
-            builder.append(valueToUTF8String(map.valueArray().get(0, vt)).asInstanceOf[UTF8String])
+            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
           }
           var i = 1
           while (i < map.numElements) {
             builder.append(", ")
-            builder.append(keyToUTF8String(map.keyArray().get(i, kt)).asInstanceOf[UTF8String])
+            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(" ->")
-            if (!map.valueArray().isNullAt(i)) {
+            if (!valueArray.isNullAt(i)) {
               builder.append(" ")
-              builder.append(valueToUTF8String(map.valueArray().get(i, vt))
+              builder.append(valueToUTF8String(valueArray.get(i, vt))
                 .asInstanceOf[UTF8String])
             }
             i += 1
