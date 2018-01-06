@@ -126,7 +126,7 @@ private[spark] class ExecutorPodFactory(
       .build()
     val executorExtraClasspathEnv = executorExtraClasspath.map { cp =>
       new EnvVarBuilder()
-        .withName(ENV_EXECUTOR_EXTRA_CLASSPATH)
+        .withName(ENV_CLASSPATH)
         .withValue(cp)
         .build()
     }
@@ -178,6 +178,7 @@ private[spark] class ExecutorPodFactory(
         .endResources()
       .addAllToEnv(executorEnv.asJava)
       .withPorts(requiredPorts.asJava)
+      .addToArgs("executor")
       .build()
 
     val executorPod = new PodBuilder()

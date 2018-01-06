@@ -15,21 +15,37 @@
 # limitations under the License.
 #
 
-FROM spark-base
+FROM openjdk:8-alpine
+
+ARG spark_jars=jars
+ARG img_path=kubernetes/dockerfiles
 
 # Before building the docker image, first build and make a Spark distribution following
 # the instructions in http://spark.apache.org/docs/latest/building-spark.html.
 # If this docker file is being used in the context of building your images from a Spark
 # distribution, the docker build command should be invoked from the top level directory
 # of the Spark distribution. E.g.:
-# docker build -t spark-executor:latest -f kubernetes/dockerfiles/executor/Dockerfile .
+# docker build -t spark:latest -f kubernetes/dockerfiles/spark/Dockerfile .
 
+RUN set -ex && \
+    apk upgrade --no-cache && \
+    apk add --no-cache bash tini libc6-compat && \
+    mkdir -p /opt/spark && \
+    mkdir -p /opt/spark/work-dir \
+    touch /opt/spark/RELEASE && \
+    rm /bin/sh && \
+    ln -sv /bin/bash /bin/sh && \
+    chgrp root /etc/passwd && chmod ug+rw /etc/passwd
+
+COPY ${spark_jars} /opt/spark/jars
+COPY bin /opt/spark/bin
+COPY sbin /opt/spark/sbin
+COPY conf /opt/spark/conf
+COPY ${img_path}/spark/entrypoint.sh /opt/
 COPY examples /opt/spark/examples
 
-CMD SPARK_CLASSPATH="${SPARK_HOME}/jars/*" && \
-    env | grep SPARK_JAVA_OPT_ | sed 's/[^=]*=\(.*\)/\1/g' > /tmp/java_opts.txt && \
-    readarray -t SPARK_EXECUTOR_JAVA_OPTS < /tmp/java_opts.txt && \
-    if ! [ -z ${SPARK_MOUNTED_CLASSPATH}+x} ]; then SPARK_CLASSPATH="$SPARK_MOUNTED_CLASSPATH:$SPARK_CLASSPATH"; fi && \
-    if ! [ -z ${SPARK_EXECUTOR_EXTRA_CLASSPATH+x} ]; then SPARK_CLASSPATH="$SPARK_EXECUTOR_EXTRA_CLASSPATH:$SPARK_CLASSPATH"; fi && \
-    if ! [ -z ${SPARK_MOUNTED_FILES_DIR+x} ]; then cp -R "$SPARK_MOUNTED_FILES_DIR/." .; fi && \
-    ${JAVA_HOME}/bin/java "${SPARK_EXECUTOR_JAVA_OPTS[@]}" -Xms$SPARK_EXECUTOR_MEMORY -Xmx$SPARK_EXECUTOR_MEMORY -cp "$SPARK_CLASSPATH" org.apache.spark.executor.CoarseGrainedExecutorBackend --driver-url $SPARK_DRIVER_URL --executor-id $SPARK_EXECUTOR_ID --cores $SPARK_EXECUTOR_CORES --app-id $SPARK_APPLICATION_ID --hostname $SPARK_EXECUTOR_POD_IP
+ENV SPARK_HOME /opt/spark
+
+WORKDIR /opt/spark/work-dir
+
+ENTRYPOINT [ "/opt/entrypoint.sh" ]

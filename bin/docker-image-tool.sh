@@ -24,28 +24,10 @@ function error {
   exit 1
 }
 
-# Detect whether this is a git clone or a Spark distribution and adjust paths
-# accordingly.
 if [ -z "${SPARK_HOME}" ]; then
   SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 . "${SPARK_HOME}/bin/load-spark-env.sh"
-
-if [ -f "$SPARK_HOME/RELEASE" ]; then
-  IMG_PATH="kubernetes/dockerfiles"
-  SPARK_JARS="jars"
-else
-  IMG_PATH="resource-managers/kubernetes/docker/src/main/dockerfiles"
-  SPARK_JARS="assembly/target/scala-$SPARK_SCALA_VERSION/jars"
-fi
-
-if [ ! -d "$IMG_PATH" ]; then
-  error "Cannot find docker images. This script must be run from a runnable distribution of Apache Spark."
-fi
-
-declare -A path=( [spark-driver]="$IMG_PATH/driver/Dockerfile" \
-                  [spark-executor]="$IMG_PATH/executor/Dockerfile" \
-                  [spark-init]="$IMG_PATH/init-container/Dockerfile" )
 
 function image_ref {
   local image="$1"
@@ -60,35 +42,53 @@ function image_ref {
 }
 
 function build {
-  docker build \
-    --build-arg "spark_jars=$SPARK_JARS" \
-    --build-arg "img_path=$IMG_PATH" \
-    -t spark-base \
-    -f "$IMG_PATH/spark-base/Dockerfile" .
-  for image in "${!path[@]}"; do
-    docker build -t "$(image_ref $image)" -f ${path[$image]} .
-  done
+  # Detect whether this is a git clone or a Spark distribution and adjust paths
+  # accordingly.
+  local BUILD_ARGS
+  local IMG_PATH
+
+  if [ ! -f "$SPARK_HOME/RELEASE" ]; then
+    IMG_PATH=resource-managers/kubernetes/docker/src/main/dockerfiles
+    BUILD_ARGS=(
+      --build-arg
+      img_path=$IMG_PATH
+      --build-arg
+      spark_jars=assembly/target/scala-$SPARK_SCALA_VERSION/jars
+    )
+  else
+    # Not passed as an argument to docker, but used to validate the Spark directory.
+    IMG_PATH="kubernetes/dockerfiles"
+  fi
+
+  local DOCKERFILE=${DOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
+
+  if [ ! -d "$IMG_PATH" ]; then
+    error "Cannot find docker images. This script must be run from a runnable distribution of Apache Spark."
+  fi
+
+  docker build "${BUILD_ARGS[@]}" \
+    -t $(image_ref spark) \
+    -f "$DOCKERFILE" .
 }
 
 function push {
-  for image in "${!path[@]}"; do
-    docker push "$(image_ref $image)"
-  done
+  docker push "$(image_ref spark)"
 }
 
 function usage {
   cat <<EOF
 Usage: $0 [options] [command]
-Builds or pushes the built-in Spark Docker images.
+Builds or pushes the built-in Spark Docker image.
 
 Commands:
-  build       Build images.
-  push        Push images to a registry. Requires a repository address to be provided, both
-              when building and when pushing the images.
+  build       Build image.
+  push        Push a pre-built image to a registry. Requires a repository address to be provided,
+              both when building and when pushing the image.
 
 Options:
+  -f file     Dockerfile to build. By default builds the Dockerfile shipped with Spark.
   -r repo     Repository address.
-  -t tag      Tag to apply to built images, or to identify images to be pushed.
+  -t tag      Tag to apply to the built image, or to identify the image to be pushed.
   -m          Use minikube's Docker daemon.
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
@@ -100,10 +100,10 @@ Check the following documentation for more information on using the minikube Doc
   https://kubernetes.io/docs/getting-started-guides/minikube/#reusing-the-docker-daemon
 
 Examples:
-  - Build images in minikube with tag "testing"
+  - Build image in minikube with tag "testing"
     $0 -m -t testing build
 
-  - Build and push images with tag "v2.3.0" to docker.io/myrepo
+  - Build and push image with tag "v2.3.0" to docker.io/myrepo
     $0 -r docker.io/myrepo -t v2.3.0 build
     $0 -r docker.io/myrepo -t v2.3.0 push
 EOF
@@ -116,10 +116,12 @@ fi
 
 REPO=
 TAG=
-while getopts mr:t: option
+DOCKERFILE=
+while getopts f:mr:t: option
 do
  case "${option}"
  in
+ f) DOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  m)
