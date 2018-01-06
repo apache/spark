@@ -171,12 +171,13 @@ class OrcFileFormat
         val requestedColIds = requestedColIdsOrEmptyFile.get
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
-        conf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
+        val taskConf = new Configuration(conf)
+        taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
           requestedColIds.filter(_ != -1).sorted.mkString(","))
 
         val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-        val taskAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+        val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
         if (enableVectorizedReader) {
           val batchReader = new OrcColumnarBatchReader
