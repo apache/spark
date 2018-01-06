@@ -131,7 +131,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
       requiredSchema: StructType,
       partitionValues: InternalRow): Unit = {
     batch = orcSchema.createRowBatch(DEFAULT_SIZE)
-    assert(!batch.selectedInUse, "No filters are allowed")
+    assert(!batch.selectedInUse, "`selectedInUse` should be initialized with `false`.")
 
     this.requiredSchema = requiredSchema
     this.requestedColIds = requestedColIds
@@ -171,7 +171,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
     }
 
     recordReader.nextBatch(batch)
-    assert(!batch.selectedInUse, "No filters are allowed")
+    assert(!batch.selectedInUse, "`selectdInUse` is not used and all rows are qualified.")
     val batchSize = batch.size
     if (batchSize == 0) {
       return false

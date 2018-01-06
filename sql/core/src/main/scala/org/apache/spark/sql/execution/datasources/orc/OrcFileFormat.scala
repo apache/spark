@@ -147,8 +147,7 @@ class OrcFileFormat
     }
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
-    val enableVectorizedReader = sparkSession.sessionState.conf.orcVectorizedReaderEnabled &&
-      supportBatch(sparkSession, resultSchema)
+    val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
 
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -183,7 +182,7 @@ class OrcFileFormat
           val batchReader = new OrcColumnarBatchReader
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.setRequiredSchema(
-            OrcUtils.getFixedTypeDescription(reader.getSchema, dataSchema),
+            reader.getSchema,
             requestedColIds,
             resultSchema,
             requiredSchema,

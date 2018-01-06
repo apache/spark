@@ -107,23 +107,4 @@ object OrcUtils extends Logging {
       }
     }
   }
-
-  /**
-   * Return a fixed ORC schema with data schema information, if needed.
-   * The schema inside old ORC files might consist of invalid column names like '_col0'.
-   */
-  def getFixedTypeDescription(
-      schema: TypeDescription,
-      dataSchema: StructType): TypeDescription = {
-    val fieldNames = schema.getFieldNames.asScala
-    if (fieldNames.length == dataSchema.length && fieldNames.forall(_.startsWith("_col"))) {
-      var schemaString = schema.toString
-      dataSchema.zipWithIndex.foreach { case (field: StructField, index: Int) =>
-        schemaString = schemaString.replace(s"_col$index:", s"${field.name}:")
-      }
-      TypeDescription.fromString(schemaString)
-    } else {
-      schema
-    }
-  }
 }
