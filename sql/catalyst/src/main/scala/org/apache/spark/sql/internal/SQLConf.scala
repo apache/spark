@@ -264,7 +264,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val DISK_TO_MEMORY_SIZE_FACTOR = buildConf(
-    "org.apache.spark.sql.execution.datasources.fileDataSizeFactor")
+    "spark.sql.sources.compressionFactor")
     .internal()
     .doc("The result of multiplying this factor with the size of data source files is propagated " +
       "to serve as the stats to choose the best execution plan. In the case where the " +
