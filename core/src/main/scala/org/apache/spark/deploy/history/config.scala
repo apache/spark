@@ -44,4 +44,9 @@ private[spark] object config {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10g")
 
+  val HISTORY_SERVER_UI_PORT = ConfigBuilder("spark.history.ui.port")
+    .doc("Web UI port to bind Spark History Server")
+    .intConf
+    .createWithDefault(18080)
+
 }
