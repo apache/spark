@@ -171,9 +171,7 @@ private[spark] class AppStatusStore(
     // If there are no missing quantiles, return the data. Otherwise, just compute everything
     // to make the code simpler.
     if (cachedQuantiles.size == quantiles.size) {
-      def toValues(fn: CachedQuantile => Double): IndexedSeq[Double] = {
-        cachedQuantiles.map(fn).toIndexedSeq
-      }
+      def toValues(fn: CachedQuantile => Double): IndexedSeq[Double] = cachedQuantiles.map(fn)
 
       val distributions = new v1.TaskMetricDistributions(
         quantiles = quantiles,
@@ -342,7 +340,7 @@ private[spark] class AppStatusStore(
    */
   private def shouldCacheQuantile(q: Double): Boolean = ((q * 100).toInt % 5) == 0
 
-  private def quantileToString(q: Double): String = (q * 100).toInt.toString
+  private def quantileToString(q: Double): String = math.round(q * 100).toString
 
   def taskList(stageId: Int, stageAttemptId: Int, maxTasks: Int): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
