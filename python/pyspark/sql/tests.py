@@ -4008,7 +4008,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         @pandas_udf('double')
         def plus_ten(v):
             return v + 10
-        random_udf = self.random_udf
+        random_udf = self.nondeterministic_vectorized_udf
 
         df = self.spark.range(10).withColumn('rand', random_udf(col('id')))
         result1 = df.withColumn('plus_ten(rand)', plus_ten(df['rand'])).toPandas()
@@ -4020,7 +4020,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf, sum
 
         df = self.spark.range(10)
-        random_udf = self.random_udf
+        random_udf = self.nondeterministic_vectorized_udf
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
