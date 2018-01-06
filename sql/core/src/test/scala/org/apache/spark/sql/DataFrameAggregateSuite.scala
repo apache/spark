@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.aggregate.Percentile
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -27,7 +29,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.DecimalData
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.types.DecimalType
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -456,7 +458,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("null moments") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
-
     checkAnswer(
       emptyTableData.agg(variance('a), var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
       Row(null, null, null, null, null))
@@ -665,5 +666,32 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       }
       assert(exchangePlans.length == 1)
     }
+  }
+
+  for ((wholeStage, useObjectHashAgg) <-
+    Seq((true, true), (true, false), (false, true), (false, false))) {
+    test("SPARK-22951: deduplicates on empty data frames should produce correct aggregate results" +
+      s" for codegen enabled: $wholeStage and object hash agg enabled $useObjectHashAgg") {
+      withSQLConf(
+        (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
+
+        // for HashAggregateExec
+        assert(Seq.empty[Int].toDF("a").count() == 0)
+        assert(Seq.empty[Int].toDF("a").agg(count("*")).count() == 1)
+        assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
+        assert(spark.emptyDataFrame.dropDuplicates().agg(count("*")).count() == 1)
+
+        // for ObjectHashAggregateExec
+        assert(Seq.empty[Int].toDF("a").agg(percentile(lit("1"), 0.5)).count() == 1)
+        assert(spark.emptyDataFrame.dropDuplicates().agg(percentile(lit("1"), 0.5)).count() == 1)
+      }
+    }
+  }
+
+  private def percentile(
+    column: Column, percentage: Double, isDistinct: Boolean = false): Column = {
+    val percentile = new Percentile(column.expr, Literal(percentage))
+    Column(percentile.toAggregateExpression(isDistinct))
   }
 }
