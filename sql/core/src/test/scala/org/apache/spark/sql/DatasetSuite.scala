@@ -958,12 +958,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ).toDS()
 
     val expected =
-      """+-------+
-        ||      f|
-        |+-------+
-        ||[foo,1]|
-        ||[bar,2]|
-        |+-------+
+      """+--------+
+        ||       f|
+        |+--------+
+        ||[foo, 1]|
+        ||[bar, 2]|
+        |+--------+
         |""".stripMargin
 
     checkShowString(ds, expected)

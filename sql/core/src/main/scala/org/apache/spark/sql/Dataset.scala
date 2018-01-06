@@ -237,7 +237,14 @@ class Dataset[T] private[sql](
   private[sql] def showString(
       _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
-    val takeResult = toDF().take(numRows + 1)
+    val castExprs = schema.map { f => f.dataType match {
+      // Since binary types in top-level schema fields have a specific format to print,
+      // so we do not cast them to strings here.
+      case BinaryType => f.name
+      case _ => s"CAST(${f.name} AS STRING)"
+
+    }}
+    val takeResult = toDF().selectExpr(castExprs: _*).take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
@@ -252,12 +259,6 @@ class Dataset[T] private[sql](
         val str = cell match {
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case array: Array[_] => array.mkString("[", ", ", "]")
-          case seq: Seq[_] => seq.mkString("[", ", ", "]")
-          case d: Date =>
-            DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
-          case ts: Timestamp =>
-            DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(ts), timeZone)
           case _ => cell.toString
         }
         if (truncate > 0 && str.length > truncate) {
