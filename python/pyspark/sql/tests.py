@@ -413,6 +413,7 @@ class SQLTests(ReusedSQLTestCase):
         pydoc.render_doc(udf(lambda: random.randint(6, 6), IntegerType()))
         pydoc.render_doc(random_udf)
         pydoc.render_doc(random_udf1)
+        pydoc.render_doc(udf(lambda x: x).asNondeterministic)
 
     def test_nondeterministic_udf_in_aggregate(self):
         from pyspark.sql.functions import udf, sum
