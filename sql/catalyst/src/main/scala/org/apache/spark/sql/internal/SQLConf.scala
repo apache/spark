@@ -325,11 +325,13 @@ object SQLConf {
     .createWithDefault(false)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
-    .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
-      "uncompressed, snappy, gzip, lzo.")
+    .doc("Sets the compression codec used when writing Parquet files. If either `compression` or" +
+      "`parquet.compression` is specified in the table-specific options/properties, the precedence" +
+      "would be `compression`, `parquet.compression`, `spark.sql.parquet.compression.codec`." +
+      "Acceptable values include: none, uncompressed, snappy, gzip, lzo.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
+    .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo"))
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
@@ -366,8 +368,10 @@ object SQLConf {
       .createWithDefault(true)
 
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
-    .doc("Sets the compression codec use when writing ORC files. Acceptable values include: " +
-      "none, uncompressed, snappy, zlib, lzo.")
+    .doc("Sets the compression codec used when writing ORC files. If either `compression` or" +
+      "`orc.compress` is specified in the table-specific options/properties, the precedence" +
+      "would be `compression`, `orc.compress`, `spark.sql.orc.compression.codec`." +
+      "Acceptable values include: none, uncompressed, snappy, zlib, lzo.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
