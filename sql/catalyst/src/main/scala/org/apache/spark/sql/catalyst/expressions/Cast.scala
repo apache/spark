@@ -259,6 +259,29 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         builder.append("]")
         builder.build()
       })
+    case StructType(fields) =>
+      buildCast[InternalRow](_, row => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (row.numFields > 0) {
+          val st = fields.map(_.dataType)
+          val toUTF8StringFuncs = st.map(castToString)
+          if (!row.isNullAt(0)) {
+            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < row.numFields) {
+            builder.append(",")
+            if (!row.isNullAt(i)) {
+              builder.append(" ")
+              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -732,6 +755,39 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
      """.stripMargin
   }
 
+  private def writeStructToStringBuilder(
+      st: Seq[DataType],
+      row: String,
+      buffer: String,
+      ctx: CodegenContext): String = {
+    val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
+      val fieldToStringCode = castToStringCode(ft, ctx)
+      val funcName = ctx.freshName("fieldToString")
+      ctx.addNewFunction(funcName,
+        s"""
+           |private UTF8String $funcName(${ctx.javaType(ft)} field) {
+           |  UTF8String fieldStr = null;
+           |  ${fieldToStringCode("field", "fieldStr", null /* resultIsNull won't be used */)}
+           |  return fieldStr;
+           |}
+         """.stripMargin)
+
+        s"""
+           |${if (i != 0) s"""$buffer.append(",");""" else ""}
+           |if (!$row.isNullAt($i)) {
+           |  ${if (i != 0) s"""$buffer.append(" ");""" else ""}
+           |  $buffer.append($funcName(${ctx.getValue(row, ft, s"$i")}));
+           |}
+         """.stripMargin
+    }
+
+    s"""
+       |$buffer.append("[");
+       |${structToStringCode.mkString("\n")}
+       |$buffer.append("]");
+     """.stripMargin
+  }
+
   private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case BinaryType =>
@@ -762,6 +818,17 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           s"""
              |$bufferClass $buffer = new $bufferClass();
              |$writeMapElemCode;
+             |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case StructType(fields) =>
+        (c, evPrim, evNull) => {
+          val buffer = ctx.freshName("buffer")
+          val bufferClass = classOf[UTF8StringBuilder].getName
+          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), c, buffer, ctx)
+          s"""
+             |$bufferClass $buffer = new $bufferClass();
+             |$writeStructCode;
              |$evPrim = $buffer.build();
            """.stripMargin
         }
