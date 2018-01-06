@@ -3591,6 +3591,32 @@ class VectorizedUDFTests(ReusedSQLTestCase):
                         bool_f(col('bool')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_register_vectorized_udf_basic(self):
+        from pyspark.sql.functions import pandas_udf
+        twoArgsPandasUDF = pandas_udf(lambda x, y: len(x) + y, StringType())
+        self.assertEqual(twoArgsPandasUDF.deterministic, True)
+        self.assertEqual(twoArgsPandasUDF.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        newPandasUDF = self.spark.catalog.registerFunction(
+            "twoArgsPandasUDF", twoArgsPandasUDF, IntegerType())
+        self.assertEqual(newPandasUDF.deterministic, True)
+        self.assertEqual(newPandasUDF.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        [row] = self.spark.range(1).sql("SELECT twoArgsPandasUDF('test', 1)").collect()
+        self.assertEqual(row[0], 5)
+
+    def test_register_vectorized_nondeterministic_udf_basic(self):
+        from pyspark.sql.functions import pandas_udf
+        import random
+        randomPandasUDF = pandas_udf(
+            lambda x: random.randint(6, 6) + x, StringType()).asNondeterministic()
+        self.assertEqual(randomPandasUDF.deterministic, False)
+        self.assertEqual(randomPandasUDF.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        nondeterministicPandasUDF = self.spark.catalog.registerFunction(
+            "randomPandasUDF", randomPandasUDF, IntegerType())
+        self.assertEqual(nondeterministicPandasUDF.deterministic, False)
+        self.assertEqual(nondeterministicPandasUDF.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        [row] = self.spark.range(1).sql("SELECT randomPandasUDF(1)").collect()
+        self.assertEqual(row[0], 7)
+
     def test_vectorized_udf_null_boolean(self):
         from pyspark.sql.functions import pandas_udf, col
         data = [(True,), (True,), (None,), (False,)]

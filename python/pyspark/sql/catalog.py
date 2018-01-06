@@ -235,7 +235,9 @@ class Catalog(object):
         be done.  For any other return type, the produced object must match the specified type.
 
         :param name: name of the UDF
-        :param f: a Python function, or a wrapped/native UserDefinedFunction
+        :param f: a Python function, or a wrapped/native UserDefinedFunction. The UDF can be either
+            row-at-a-time or vectorized.
+
         :param returnType: a :class:`pyspark.sql.types.DataType` object
         :return: a wrapped :class:`UserDefinedFunction`
 
@@ -265,12 +267,23 @@ class Catalog(object):
         [Row(random_udf()=u'82')]
         >>> spark.range(1).select(newRandom_udf()).collect()  # doctest: +SKIP
         [Row(random_udf()=u'62')]
+
+        >>> import random
+        >>> from pyspark.sql.types import IntegerType
+        >>> from pyspark.sql.functions import pandas_udf
+        >>> random_pandas_udf = pandas_udf(
+        ...     lambda x: random.randint(0, 100) + x, IntegerType())
+        ...     .asNondeterministic()  # doctest: +SKIP
+        >>> _ = spark.catalog.registerFunction(
+        ...     "random_pandas_udf", random_pandas_udf, IntegerType())  # doctest: +SKIP
+        >>> spark.sql("SELECT random_pandas_udf(2)").collect()  # doctest: +SKIP
+        [Row(random_pandas_udf(2)=84)]
         """
 
         # This is to check whether the input function is a wrapped/native UserDefinedFunction
         if hasattr(f, 'asNondeterministic'):
             udf = UserDefinedFunction(f.func, returnType=returnType, name=name,
-                                      evalType=PythonEvalType.SQL_BATCHED_UDF,
+                                      evalType=f.evalType,
                                       deterministic=f.deterministic)
         else:
             udf = UserDefinedFunction(f, returnType=returnType, name=name,
