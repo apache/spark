@@ -15,8 +15,7 @@
 # limitations under the License.
 #
 
-ARG base_image
-FROM ${base_image}
+FROM spark-base
 
 # Before building the docker image, first build and make a Spark distribution following
 # the instructions in http://spark.apache.org/docs/latest/building-spark.html.
