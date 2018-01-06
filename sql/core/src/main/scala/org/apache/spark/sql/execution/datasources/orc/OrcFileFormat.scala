@@ -184,8 +184,8 @@ class OrcFileFormat
           batchReader.setRequiredSchema(
             reader.getSchema,
             requestedColIds,
-            resultSchema,
             requiredSchema,
+            partitionSchema,
             file.partitionValues)
 
           val iter = new RecordReaderIterator(batchReader)

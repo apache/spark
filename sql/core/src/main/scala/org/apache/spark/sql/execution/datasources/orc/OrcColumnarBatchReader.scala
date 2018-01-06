@@ -127,12 +127,13 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
   def setRequiredSchema(
       orcSchema: TypeDescription,
       requestedColIds: Array[Int],
-      resultSchema: StructType,
       requiredSchema: StructType,
+      partitionSchema: StructType,
       partitionValues: InternalRow): Unit = {
     batch = orcSchema.createRowBatch(DEFAULT_SIZE)
     assert(!batch.selectedInUse, "`selectedInUse` should be initialized with `false`.")
 
+    val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
     this.requiredSchema = requiredSchema
     this.requestedColIds = requestedColIds
 
