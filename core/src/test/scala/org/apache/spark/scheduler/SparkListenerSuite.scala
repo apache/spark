@@ -82,7 +82,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Metrics are initially empty.
     assert(bus.metrics.numEventsPosted.getCount === 0)
     assert(numDroppedEvents(bus, SHARED_QUEUE) === 0)
-    assert(queueSize(bus, SHARED_QUEUE) === 0)
+    assert(bus.queuedEvents.size === 0)
     assert(eventProcessingTimeCount(bus) === 0)
 
     // Post five events:
@@ -91,7 +91,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Five messages should be marked as received and queued, but no messages should be posted to
     // listeners yet because the the listener bus hasn't been started.
     assert(bus.metrics.numEventsPosted.getCount === 5)
-    assert(queueSize(bus, SHARED_QUEUE) === 5)
+    assert(bus.queuedEvents.size === 5)
 
     // Add the counter to the bus after messages have been queued for later delivery.
     bus.addToSharedQueue(counter)
@@ -262,13 +262,13 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(numDroppedEvents(bus, APP_STATUS_QUEUE) === 1)
     assert(totalDroppedEvents(bus) === 0)
 
-    // wait for first time total count in LiveListenrBus
+    // wait for first time total count in LiveListenerBus
     Thread.sleep(2 * 61 * 1000)
 
     assert(totalDroppedEvents(bus) === 2)
 
     // Allow the the remaining events to be processed so we can stop the listener bus:
-    listenerWait.release(6)
+    listenerWait.release(4)
     bus.stop()
   }
 
