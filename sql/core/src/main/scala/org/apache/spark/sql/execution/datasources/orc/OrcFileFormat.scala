@@ -148,6 +148,7 @@ class OrcFileFormat
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
+    val enableVectorizedJavaReader = sparkSession.sessionState.conf.orcVectorizedJavaReaderEnabled
 
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -180,14 +181,27 @@ class OrcFileFormat
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
         if (enableVectorizedReader) {
-          val batchReader = new OrcColumnarBatchReader
-          batchReader.initialize(fileSplit, taskAttemptContext)
-          batchReader.setRequiredSchema(
-            reader.getSchema,
-            requestedColIds,
-            requiredSchema,
-            partitionSchema,
-            file.partitionValues)
+          val batchReader = if (enableVectorizedJavaReader) {
+            val vectorizedReader = new JavaOrcColumnarBatchReader
+            vectorizedReader.initialize(fileSplit, taskAttemptContext)
+            vectorizedReader.setRequiredSchema(
+              reader.getSchema,
+              requestedColIds,
+              requiredSchema,
+              partitionSchema,
+              file.partitionValues)
+            vectorizedReader
+          } else {
+            val vectorizedReader = new OrcColumnarBatchReader
+            vectorizedReader.initialize(fileSplit, taskAttemptContext)
+            vectorizedReader.setRequiredSchema(
+              reader.getSchema,
+              requestedColIds,
+              requiredSchema,
+              partitionSchema,
+              file.partitionValues)
+            vectorizedReader
+          }
 
           val iter = new RecordReaderIterator(batchReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
