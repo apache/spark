@@ -47,7 +47,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ChildFirstURLClassLoader, Utils}
 
 
 private[spark] object HiveUtils extends Logging {
@@ -312,6 +312,8 @@ private[spark] object HiveUtils extends Logging {
       // starting from the given classLoader.
       def allJars(classLoader: ClassLoader): Array[URL] = classLoader match {
         case null => Array.empty[URL]
+        case childFirst: ChildFirstURLClassLoader =>
+          childFirst.getURLs() ++ allJars(Utils.getSparkClassLoader)
         case urlClassLoader: URLClassLoader =>
           urlClassLoader.getURLs ++ allJars(urlClassLoader.getParent)
         case other => allJars(other.getParent)

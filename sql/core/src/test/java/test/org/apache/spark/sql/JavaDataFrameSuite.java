@@ -36,6 +36,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.expressions.UserDefinedFunction;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.util.sketch.BloomFilter;
@@ -454,5 +455,15 @@ public class JavaDataFrameSuite {
   public void testCircularReferenceBean() {
     CircularReference1Bean bean = new CircularReference1Bean();
     spark.createDataFrame(Arrays.asList(bean), CircularReference1Bean.class);
+  }
+
+  @Test
+  public void testUDF() {
+    UserDefinedFunction foo = udf((Integer i, String s) -> i.toString() + s, DataTypes.StringType);
+    Dataset<Row> df = spark.table("testData").select(foo.apply(col("key"), col("value")));
+    String[] result = df.collectAsList().stream().map(row -> row.getString(0)).toArray(String[]::new);
+    String[] expected = spark.table("testData").collectAsList().stream()
+      .map(row -> row.get(0).toString() + row.getString(1)).toArray(String[]::new);
+    Assert.assertArrayEquals(expected, result);
   }
 }

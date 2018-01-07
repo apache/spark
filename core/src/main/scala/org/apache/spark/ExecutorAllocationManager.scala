@@ -141,7 +141,11 @@ private[spark] class ExecutorAllocationManager(
   private val removeTimes = new mutable.HashMap[String, Long]
 
   // Polling loop interval (ms)
-  private val intervalMillis: Long = 100
+  private val intervalMillis: Long = if (Utils.isTesting) {
+      conf.getLong(TESTING_SCHEDULE_INTERVAL_KEY, 100)
+    } else {
+      100
+    }
 
   // Clock used to schedule when executors should be added and removed
   private var clock: Clock = new SystemClock()
@@ -856,4 +860,5 @@ private[spark] class ExecutorAllocationManager(
 
 private object ExecutorAllocationManager {
   val NOT_SET = Long.MaxValue
+  val TESTING_SCHEDULE_INTERVAL_KEY = "spark.testing.dynamicAllocation.scheduleInterval"
 }

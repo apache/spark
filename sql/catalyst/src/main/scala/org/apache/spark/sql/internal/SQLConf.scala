@@ -27,11 +27,13 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -70,7 +72,7 @@ object SQLConf {
    * Default config. Only used when there is no active SparkSession for the thread.
    * See [[get]] for more information.
    */
-  private val fallbackConf = new ThreadLocal[SQLConf] {
+  private lazy val fallbackConf = new ThreadLocal[SQLConf] {
     override def initialValue: SQLConf = new SQLConf
   }
 
@@ -323,11 +325,14 @@ object SQLConf {
     .createWithDefault(false)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
-    .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
-      "uncompressed, snappy, gzip, lzo.")
+    .doc("Sets the compression codec used when writing Parquet files. If either `compression` or " +
+      "`parquet.compression` is specified in the table-specific options/properties, the " +
+      "precedence would be `compression`, `parquet.compression`, " +
+      "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
+      "snappy, gzip, lzo.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
+    .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo"))
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
@@ -336,8 +341,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
-    .doc("Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.")
+    .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
+      "versions, when converting Parquet schema to Spark SQL schema and vice versa.")
     .booleanConf
     .createWithDefault(false)
 
@@ -364,8 +369,10 @@ object SQLConf {
       .createWithDefault(true)
 
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
-    .doc("Sets the compression codec use when writing ORC files. Acceptable values include: " +
-      "none, uncompressed, snappy, zlib, lzo.")
+    .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
+      "`orc.compress` is specified in the table-specific options/properties, the precedence " +
+      "would be `compression`, `orc.compress`, `spark.sql.orc.compression.codec`." +
+      "Acceptable values include: none, uncompressed, snappy, zlib, lzo.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
@@ -1044,6 +1051,52 @@ object SQLConf {
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
 
+  val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
+    .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
+      "an output as binary. Otherwise, it returns as a string. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
+    .doc("When this option is set to false and all inputs are binary, `elt` returns " +
+      "an output as binary. Otherwise, it returns as a string. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
+    buildConf("spark.sql.streaming.continuous.executorQueueSize")
+    .internal()
+    .doc("The size (measured in number of rows) of the queue used in continuous execution to" +
+      " buffer the results of a ContinuousDataReader.")
+    .intConf
+    .createWithDefault(1024)
+
+  val CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS =
+    buildConf("spark.sql.streaming.continuous.executorPollIntervalMs")
+      .internal()
+      .doc("The interval at which continuous execution readers will poll to check whether" +
+        " the epoch has advanced on the driver.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(100)
+
+  object PartitionOverwriteMode extends Enumeration {
+    val STATIC, DYNAMIC = Value
+  }
+
+  val PARTITION_OVERWRITE_MODE =
+    buildConf("spark.sql.sources.partitionOverwriteMode")
+      .doc("When INSERT OVERWRITE a partitioned data source table, we currently support 2 modes: " +
+        "static and dynamic. In static mode, Spark deletes all the partitions that match the " +
+        "partition specification(e.g. PARTITION(a=1,b)) in the INSERT statement, before " +
+        "overwriting. In dynamic mode, Spark doesn't delete partitions ahead, and only overwrite " +
+        "those partitions that have data written into it at runtime. By default we use static " +
+        "mode to keep the same behavior of Spark prior to 2.3. Note that this config doesn't " +
+        "affect Hive serde tables, as they are always overwritten with dynamic mode.")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(PartitionOverwriteMode.values.map(_.toString))
+      .createWithDefault(PartitionOverwriteMode.STATIC.toString)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1064,6 +1117,12 @@ object SQLConf {
  */
 class SQLConf extends Serializable with Logging {
   import SQLConf._
+
+  if (Utils.isTesting && SparkEnv.get != null) {
+    // assert that we're only accessing it on the driver.
+    assert(SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER,
+      "SQLConf should only be created and accessed on the driver.")
+  }
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
@@ -1356,6 +1415,18 @@ class SQLConf extends Serializable with Logging {
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
+
+  def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
+
+  def continuousStreamingExecutorPollIntervalMs: Long =
+    getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
+
+  def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
+
+  def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
+
+  def partitionOverwriteMode: PartitionOverwriteMode.Value =
+    PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
   /** ********************** SQLConf functionality methods ************ */
 

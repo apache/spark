@@ -78,7 +78,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val conf = new SparkConf()
     val counter = new BasicJobCounter
     val bus = new LiveListenerBus(conf)
-    bus.addToSharedQueue(counter)
 
     // Metrics are initially empty.
     assert(bus.metrics.numEventsPosted.getCount === 0)
@@ -93,6 +92,9 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // listeners yet because the the listener bus hasn't been started.
     assert(bus.metrics.numEventsPosted.getCount === 5)
     assert(queueSize(bus, SHARED_QUEUE) === 5)
+
+    // Add the counter to the bus after messages have been queued for later delivery.
+    bus.addToSharedQueue(counter)
     assert(counter.count === 0)
 
     // Starting listener bus should flush all buffered events
@@ -102,6 +104,9 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(counter.count === 5)
     assert(queueSize(bus, SHARED_QUEUE) === 0)
     assert(eventProcessingTimeCount(bus) === 5)
+
+    // After the bus is started, there should be no more queued events.
+    assert(bus.queuedEvents === null)
 
     // After listener bus has stopped, posting events should not increment counter
     bus.stop()

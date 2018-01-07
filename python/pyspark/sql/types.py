@@ -1617,7 +1617,7 @@ def to_arrow_type(dt):
     elif type(dt) == DoubleType:
         arrow_type = pa.float64()
     elif type(dt) == DecimalType:
-        arrow_type = pa.decimal(dt.precision, dt.scale)
+        arrow_type = pa.decimal128(dt.precision, dt.scale)
     elif type(dt) == StringType:
         arrow_type = pa.string()
     elif type(dt) == DateType:
@@ -1625,6 +1625,8 @@ def to_arrow_type(dt):
     elif type(dt) == TimestampType:
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
+    elif type(dt) == ArrayType:
+        arrow_type = pa.list_(to_arrow_type(dt.elementType))
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
@@ -1665,6 +1667,8 @@ def from_arrow_type(at):
         spark_type = DateType()
     elif types.is_timestamp(at):
         spark_type = TimestampType()
+    elif types.is_list(at):
+        spark_type = ArrayType(from_arrow_type(at.value_type))
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type
@@ -1678,13 +1682,6 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
-def _old_pandas_exception_message(e):
-    """ Create an error message for importing old Pandas.
-    """
-    msg = "note: Pandas (>=0.19.2) must be installed and available on calling Python process"
-    return "%s\n%s" % (_exception_message(e), msg)
-
-
 def _check_dataframe_localize_timestamps(pdf, timezone):
     """
     Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
@@ -1693,10 +1690,10 @@ def _check_dataframe_localize_timestamps(pdf, timezone):
     :param timezone: the timezone to convert. if None then use local timezone
     :return pandas.DataFrame where any timezone aware columns have been converted to tz-naive
     """
-    try:
-        from pandas.api.types import is_datetime64tz_dtype
-    except ImportError as e:
-        raise ImportError(_old_pandas_exception_message(e))
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
+    from pandas.api.types import is_datetime64tz_dtype
     tz = timezone or 'tzlocal()'
     for column, series in pdf.iteritems():
         # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
@@ -1714,10 +1711,10 @@ def _check_series_convert_timestamps_internal(s, timezone):
     :param timezone: the timezone to convert. if None then use local timezone
     :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
     """
-    try:
-        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
-    except ImportError as e:
-        raise ImportError(_old_pandas_exception_message(e))
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
+    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
         tz = timezone or 'tzlocal()'
@@ -1737,11 +1734,11 @@ def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
     :param to_timezone: the timezone to convert to. if None then use local timezone
     :return pandas.Series where if it is a timestamp, has been converted to tz-naive
     """
-    try:
-        import pandas as pd
-        from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
-    except ImportError as e:
-        raise ImportError(_old_pandas_exception_message(e))
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
+    import pandas as pd
+    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
     from_tz = from_timezone or 'tzlocal()'
     to_tz = to_timezone or 'tzlocal()'
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?

@@ -81,7 +81,7 @@ class FileStreamSinkSuite extends StreamTest {
       .start(outputDir)
 
     try {
-      // The output is partitoned by "value", so the value will appear in the file path.
+      // The output is partitioned by "value", so the value will appear in the file path.
       // This is to test if we handle spaces in the path correctly.
       inputData.addData("hello world")
       failAfter(streamingTimeout) {

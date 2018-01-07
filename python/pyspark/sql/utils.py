@@ -112,10 +112,21 @@ def toJArray(gateway, jtype, arr):
     return jarr
 
 
-def _require_minimum_pyarrow_version():
+def require_minimum_pandas_version():
+    """ Raise ImportError if minimum version of Pandas is not installed
+    """
+    from distutils.version import LooseVersion
+    import pandas
+    if LooseVersion(pandas.__version__) < LooseVersion('0.19.2'):
+        raise ImportError("Pandas >= 0.19.2 must be installed on calling Python process; "
+                          "however, your version was %s." % pandas.__version__)
+
+
+def require_minimum_pyarrow_version():
     """ Raise ImportError if minimum version of pyarrow is not installed
     """
     from distutils.version import LooseVersion
     import pyarrow
     if LooseVersion(pyarrow.__version__) < LooseVersion('0.8.0'):
-        raise ImportError("pyarrow >= 0.8.0 must be installed on calling Python process")
+        raise ImportError("pyarrow >= 0.8.0 must be installed on calling Python process; "
+                          "however, your version was %s." % pyarrow.__version__)
