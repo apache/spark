@@ -815,6 +815,54 @@ should start with, they can set `basePath` in the data source options. For examp
 when `path/to/table/gender=male` is the path of the data and
 users set `basePath` to `path/to/table/`, `gender` will be a partitioning column.
 
+### Schema Evolution
+
+Users can control schema evolution in several ways. For example, new file can have additional
+new column. All file-based data sources (`csv`, `json`, `orc`, and `parquet`) except `text`
+data source supports this. Note that `text` data source always has a fixed single string column
+schema.
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+val df1 = Seq("a", "b").toDF("col1")
+val df2 = df1.withColumn("col2", lit("x"))
+
+df1.write.save("/tmp/evolved_data/part=1")
+df2.write.save("/tmp/evolved_data/part=2")
+
+spark.read.schema("col1 string, col2 string").load("/tmp/evolved_data").show
++----+----+----+
+|col1|col2|part|
++----+----+----+
+|   a|   x|   2|
+|   b|   x|   2|
+|   a|null|   1|
+|   b|null|   1|
++----+----+----+
+</div>
+
+</div>
+
+The following schema evolutions are supported in `csv`, `json`, `orc`, and `parquet` file-based
+data sources.
+
+  1. Add a column
+  2. Hide a column
+  3. Change a column position
+  4. Change a column type (`byte` -> `short` -> `int` -> `long`, `float` -> `double`)
+
+Note that, (4) means only safe evolution from small types to larger types without data loss.
+
+  | File Format  | Support      | Note                                                   |
+  | ------------ | ------------ | ------------------------------------------------------ |
+  | CSV          | 1, 2, 4      |                                                        |
+  | JSON         | 1, 2, 3, 4   |                                                        |
+  | ORC          | 1, 2, 3, 4   | Native vectorized ORC reader has the widest coverage.  |
+  | PARQUET      | 1, 2, 3      |                                                        |
+
+
+
 ### Schema Merging
 
 Like ProtocolBuffer, Avro, and Thrift, Parquet also supports schema evolution. Users can start with
