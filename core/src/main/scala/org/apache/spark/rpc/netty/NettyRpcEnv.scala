@@ -332,15 +332,17 @@ private[netty] class NettyRpcEnv(
 
     val pipe = Pipe.open()
     val source = new FileDownloadChannel(pipe.source())
+    var exceptionThrown = true
     try {
       val client = downloadClient(parsedUri.getHost(), parsedUri.getPort())
       val callback = new FileDownloadCallback(pipe.sink(), source, client)
       client.stream(parsedUri.getPath(), callback)
-    } catch {
-      case e: Exception =>
+      exceptionThrown = false
+    } finally {
+      if (exceptionThrown) {
         pipe.sink().close()
         source.close()
-        throw e
+      }
     }
 
     source
@@ -376,18 +378,13 @@ private[netty] class NettyRpcEnv(
 
     def setError(e: Throwable): Unit = {
       error = e
-      source.close()
     }
 
     override def read(dst: ByteBuffer): Int = {
       Try(source.read(dst)) match {
+        case _ if error != null => throw error
         case Success(bytesRead) => bytesRead
-        case Failure(readErr) =>
-          if (error != null) {
-            throw error
-          } else {
-            throw readErr
-          }
+        case Failure(readErr) => throw readErr
       }
     }
 
