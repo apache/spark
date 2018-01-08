@@ -212,7 +212,6 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
 
       if (requestedColIds[i] >= 0) {
         ColumnVector fromColumn = batch.cols[requestedColIds[i]];
-        toColumn.reserve(batchSize);
 
         if (fromColumn.isRepeating) {
           putRepeatingValues(batchSize, field, fromColumn, toColumn);
@@ -314,8 +313,9 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
       toColumn.putDoubles(0, batchSize, ((DoubleColumnVector)fromColumn).vector, 0);
     } else if (type instanceof StringType || type instanceof BinaryType) {
       BytesColumnVector data = ((BytesColumnVector)fromColumn);
+      toColumn.putByteArray(0, data.vector[0]);
       for (int index = 0; index < batchSize; index++) {
-        toColumn.putByteArray(index, data.vector[index], data.start[index], data.length[index]);
+        toColumn.putArray(index, data.start[index], data.length[index]);
       }
     } else if (type instanceof DecimalType) {
       DecimalType decimalType = (DecimalType)type;
@@ -413,12 +413,12 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
       }
     } else if (type instanceof StringType || type instanceof BinaryType) {
       BytesColumnVector vector = (BytesColumnVector)fromColumn;
+      toColumn.putByteArray(0, vector.vector[0]);
       for (int index = 0; index < batchSize; index++) {
         if (fromColumn.isNull[index]) {
           toColumn.putNull(index);
         } else {
-          toColumn.putByteArray(
-            index, vector.vector[index], vector.start[index], vector.length[index]);
+          toColumn.putArray(index, vector.start[index], vector.length[index]);
         }
       }
     } else if (type instanceof DecimalType) {

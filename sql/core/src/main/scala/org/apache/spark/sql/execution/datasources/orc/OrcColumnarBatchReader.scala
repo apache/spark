@@ -26,9 +26,10 @@ import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.vectorized._
+import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, OffHeapColumnVector,
+  OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized._
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 
 /**
@@ -189,264 +190,289 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
     while (i < requiredFields.length) {
       val field = requiredFields(i)
       val toColumn = columnVectors(i)
-      toColumn.reserve(batchSize)
 
       if (requestedColIds(i) >= 0) {
         val fromColumn = batch.cols(requestedColIds(i))
 
         if (fromColumn.isRepeating) {
-          if (fromColumn.isNull(0)) {
-            toColumn.putNulls(0, batchSize)
-          } else {
-            field.dataType match {
-              case BooleanType =>
-                val data = fromColumn.asInstanceOf[LongColumnVector].vector(0) == 1
-                toColumn.putBooleans(0, batchSize, data)
-
-              case ByteType =>
-                val data = fromColumn.asInstanceOf[LongColumnVector].vector(0).toByte
-                toColumn.putBytes(0, batchSize, data)
-              case ShortType =>
-                val data = fromColumn.asInstanceOf[LongColumnVector].vector(0).toShort
-                toColumn.putShorts(0, batchSize, data)
-              case IntegerType | DateType =>
-                val data = fromColumn.asInstanceOf[LongColumnVector].vector(0).toInt
-                toColumn.putInts(0, batchSize, data)
-              case LongType =>
-                val data = fromColumn.asInstanceOf[LongColumnVector].vector(0)
-                toColumn.putLongs(0, batchSize, data)
-
-              case TimestampType =>
-                val data = fromColumn.asInstanceOf[TimestampColumnVector]
-                toColumn.putLongs(0, batchSize, fromTimestampColumnVector(data, 0))
-
-              case FloatType =>
-                val data = fromColumn.asInstanceOf[DoubleColumnVector].vector(0).toFloat
-                toColumn.putFloats(0, batchSize, data)
-              case DoubleType =>
-                val data = fromColumn.asInstanceOf[DoubleColumnVector].vector(0)
-                toColumn.putDoubles(0, batchSize, data)
-
-              case StringType | BinaryType =>
-                val data = fromColumn.asInstanceOf[BytesColumnVector]
-                var index = 0
-                while (index < batchSize) {
-                  toColumn.putByteArray(index, data.vector(0), data.start(0), data.length(0))
-                  index += 1
-                }
-
-              case DecimalType.Fixed(precision, scale) =>
-                val d = fromColumn.asInstanceOf[DecimalColumnVector].vector(0)
-                putDecimalWritables(toColumn, batchSize, precision, scale, d)
-
-              case dt =>
-                throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
-            }
-          }
+          putRepeatingValues(batchSize, field, fromColumn, toColumn)
         } else if (fromColumn.noNulls) {
-          field.dataType match {
-            case BooleanType =>
-              val data = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                toColumn.putBoolean(index, data(index) == 1)
-                index += 1
-              }
-
-            case ByteType =>
-              val data = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                toColumn.putByte(index, data(index).toByte)
-                index += 1
-              }
-            case ShortType =>
-              val data = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                toColumn.putShort(index, data(index).toShort)
-                index += 1
-              }
-            case IntegerType | DateType =>
-              val data = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                toColumn.putInt(index, data(index).toInt)
-                index += 1
-              }
-            case LongType =>
-              val data = fromColumn.asInstanceOf[LongColumnVector].vector
-              toColumn.putLongs(0, batchSize, data, 0)
-
-            case TimestampType =>
-              val data = fromColumn.asInstanceOf[TimestampColumnVector]
-              var index = 0
-              while (index < batchSize) {
-                toColumn.putLong(index, fromTimestampColumnVector(data, index))
-                index += 1
-              }
-
-            case FloatType =>
-              val data = fromColumn.asInstanceOf[DoubleColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                toColumn.putFloat(index, data(index).toFloat)
-                index += 1
-              }
-            case DoubleType =>
-              val data = fromColumn.asInstanceOf[DoubleColumnVector].vector
-              toColumn.putDoubles(0, batchSize, data, 0)
-
-            case StringType | BinaryType =>
-              val data = fromColumn.asInstanceOf[BytesColumnVector]
-              var index = 0
-              while (index < batchSize) {
-                toColumn.putByteArray(0, data.vector(index), data.start(index), data.length(index))
-                index += 1
-              }
-
-            case DecimalType.Fixed(precision, scale) =>
-              val data = fromColumn.asInstanceOf[DecimalColumnVector]
-              var index = 0
-              while (index < batchSize) {
-                putDecimalWritable(toColumn, index, precision, scale, data.vector(index))
-                index += 1
-              }
-
-            case dt =>
-              throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
-          }
+          putNonNullValues(batchSize, field, fromColumn, toColumn)
         } else {
-          field.dataType match {
-            case BooleanType =>
-              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  toColumn.putBoolean(index, vector(index) == 1)
-                }
-                index += 1
-              }
-
-            case ByteType =>
-              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  toColumn.putByte(index, vector(index).toByte)
-                }
-                index += 1
-              }
-
-            case ShortType =>
-              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  toColumn.putShort(index, vector(index).toShort)
-                }
-                index += 1
-              }
-
-            case IntegerType | DateType =>
-              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  toColumn.putInt(index, vector(index).toInt)
-                }
-                index += 1
-              }
-
-            case LongType =>
-              val vector = fromColumn.asInstanceOf[LongColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  toColumn.putLong(index, vector(index))
-                }
-                index += 1
-              }
-
-            case TimestampType =>
-              val vector = fromColumn.asInstanceOf[TimestampColumnVector]
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  toColumn.putLong(index, fromTimestampColumnVector(vector, index))
-                }
-                index += 1
-              }
-
-            case FloatType =>
-              val vector = fromColumn.asInstanceOf[DoubleColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  toColumn.putFloat(index, vector(index).toFloat)
-                }
-                index += 1
-              }
-
-            case DoubleType =>
-              val vector = fromColumn.asInstanceOf[DoubleColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  toColumn.putDouble(index, vector(index))
-                }
-                index += 1
-              }
-
-            case StringType | BinaryType =>
-              val vector = fromColumn.asInstanceOf[BytesColumnVector]
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  toColumn.putByteArray(
-                    index, vector.vector(index), vector.start(index), vector.length(index))
-                }
-                index += 1
-              }
-
-            case DecimalType.Fixed(precision, scale) =>
-              val vector = fromColumn.asInstanceOf[DecimalColumnVector].vector
-              var index = 0
-              while (index < batchSize) {
-                if (fromColumn.isNull(index)) {
-                  toColumn.putNull(index)
-                } else {
-                  putDecimalWritable(toColumn, index, precision, scale, vector(index))
-                }
-                index += 1
-              }
-
-            case dt =>
-              throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
-          }
+          putValues(batchSize, field, fromColumn, toColumn)
         }
       }
       i += 1
     }
     true
+  }
+
+  private def putRepeatingValues(
+      batchSize: Int,
+      field: StructField,
+      fromColumn: ColumnVector,
+      toColumn: WritableColumnVector) : Unit = {
+    if (fromColumn.isNull(0)) {
+      toColumn.putNulls(0, batchSize)
+    } else {
+      field.dataType match {
+        case BooleanType =>
+          val data = fromColumn.asInstanceOf[LongColumnVector].vector(0) == 1
+          toColumn.putBooleans(0, batchSize, data)
+
+        case ByteType =>
+          val data = fromColumn.asInstanceOf[LongColumnVector].vector(0).toByte
+          toColumn.putBytes(0, batchSize, data)
+        case ShortType =>
+          val data = fromColumn.asInstanceOf[LongColumnVector].vector(0).toShort
+          toColumn.putShorts(0, batchSize, data)
+        case IntegerType | DateType =>
+          val data = fromColumn.asInstanceOf[LongColumnVector].vector(0).toInt
+          toColumn.putInts(0, batchSize, data)
+        case LongType =>
+          val data = fromColumn.asInstanceOf[LongColumnVector].vector(0)
+          toColumn.putLongs(0, batchSize, data)
+
+        case TimestampType =>
+          val data = fromColumn.asInstanceOf[TimestampColumnVector]
+          toColumn.putLongs(0, batchSize, fromTimestampColumnVector(data, 0))
+
+        case FloatType =>
+          val data = fromColumn.asInstanceOf[DoubleColumnVector].vector(0).toFloat
+          toColumn.putFloats(0, batchSize, data)
+        case DoubleType =>
+          val data = fromColumn.asInstanceOf[DoubleColumnVector].vector(0)
+          toColumn.putDoubles(0, batchSize, data)
+
+        case StringType | BinaryType =>
+          val data = fromColumn.asInstanceOf[BytesColumnVector]
+          toColumn.putByteArray(0, data.vector(0))
+          var index = 0
+          while (index < batchSize) {
+            toColumn.putArray(index, data.start(index), data.length(index))
+            index += 1
+          }
+
+        case DecimalType.Fixed(precision, scale) =>
+          val d = fromColumn.asInstanceOf[DecimalColumnVector].vector(0)
+          putDecimalWritables(toColumn, batchSize, precision, scale, d)
+
+        case dt =>
+          throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
+      }
+    }
+  }
+
+  private def putNonNullValues(
+      batchSize: Int,
+      field: StructField,
+      fromColumn: ColumnVector,
+      toColumn: WritableColumnVector) : Unit = {
+    field.dataType match {
+      case BooleanType =>
+        val data = fromColumn.asInstanceOf[LongColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          toColumn.putBoolean(index, data(index) == 1)
+          index += 1
+        }
+
+      case ByteType =>
+        val data = fromColumn.asInstanceOf[LongColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          toColumn.putByte(index, data(index).toByte)
+          index += 1
+        }
+      case ShortType =>
+        val data = fromColumn.asInstanceOf[LongColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          toColumn.putShort(index, data(index).toShort)
+          index += 1
+        }
+      case IntegerType | DateType =>
+        val data = fromColumn.asInstanceOf[LongColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          toColumn.putInt(index, data(index).toInt)
+          index += 1
+        }
+      case LongType =>
+        val data = fromColumn.asInstanceOf[LongColumnVector].vector
+        toColumn.putLongs(0, batchSize, data, 0)
+
+      case TimestampType =>
+        val data = fromColumn.asInstanceOf[TimestampColumnVector]
+        var index = 0
+        while (index < batchSize) {
+          toColumn.putLong(index, fromTimestampColumnVector(data, index))
+          index += 1
+        }
+
+      case FloatType =>
+        val data = fromColumn.asInstanceOf[DoubleColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          toColumn.putFloat(index, data(index).toFloat)
+          index += 1
+        }
+      case DoubleType =>
+        val data = fromColumn.asInstanceOf[DoubleColumnVector].vector
+        toColumn.putDoubles(0, batchSize, data, 0)
+
+      case StringType | BinaryType =>
+        val data = fromColumn.asInstanceOf[BytesColumnVector]
+        var index = 0
+        toColumn.putByteArray(0, data.vector(0))
+        while (index < batchSize) {
+          toColumn.putArray(index, data.start(index), data.length(index))
+          index += 1
+        }
+
+      case DecimalType.Fixed(precision, scale) =>
+        val data = fromColumn.asInstanceOf[DecimalColumnVector]
+        var index = 0
+        while (index < batchSize) {
+          putDecimalWritable(toColumn, index, precision, scale, data.vector(index))
+          index += 1
+        }
+
+      case dt =>
+        throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
+    }
+  }
+
+  private def putValues(
+      batchSize: Int,
+      field: StructField,
+      fromColumn: ColumnVector,
+      toColumn: WritableColumnVector) : Unit = {
+    field.dataType match {
+      case BooleanType =>
+        val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            toColumn.putBoolean(index, vector(index) == 1)
+          }
+          index += 1
+        }
+
+      case ByteType =>
+        val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            toColumn.putByte(index, vector(index).toByte)
+          }
+          index += 1
+        }
+
+      case ShortType =>
+        val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            toColumn.putShort(index, vector(index).toShort)
+          }
+          index += 1
+        }
+
+      case IntegerType | DateType =>
+        val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            toColumn.putInt(index, vector(index).toInt)
+          }
+          index += 1
+        }
+
+      case LongType =>
+        val vector = fromColumn.asInstanceOf[LongColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            toColumn.putLong(index, vector(index))
+          }
+          index += 1
+        }
+
+      case TimestampType =>
+        val vector = fromColumn.asInstanceOf[TimestampColumnVector]
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            toColumn.putLong(index, fromTimestampColumnVector(vector, index))
+          }
+          index += 1
+        }
+
+      case FloatType =>
+        val vector = fromColumn.asInstanceOf[DoubleColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            toColumn.putFloat(index, vector(index).toFloat)
+          }
+          index += 1
+        }
+
+      case DoubleType =>
+        val vector = fromColumn.asInstanceOf[DoubleColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            toColumn.putDouble(index, vector(index))
+          }
+          index += 1
+        }
+
+      case StringType | BinaryType =>
+        val vector = fromColumn.asInstanceOf[BytesColumnVector]
+        toColumn.putByteArray(0, vector.vector(0))
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            toColumn.putArray(index, vector.start(index), vector.length(index))
+          }
+          index += 1
+        }
+
+      case DecimalType.Fixed(precision, scale) =>
+        val vector = fromColumn.asInstanceOf[DecimalColumnVector].vector
+        var index = 0
+        while (index < batchSize) {
+          if (fromColumn.isNull(index)) {
+            toColumn.putNull(index)
+          } else {
+            putDecimalWritable(toColumn, index, precision, scale, vector(index))
+          }
+          index += 1
+        }
+
+      case dt =>
+        throw new UnsupportedOperationException(s"Unsupported Data Type: $dt")
+    }
   }
 }
 
