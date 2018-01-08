@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 /**
  * Provides a logical query plan [[Analyzer]] and supporting classes for performing analysis.
  * Analysis consists of translating [[UnresolvedAttribute]]s and [[UnresolvedRelation]]s
- * into fully typed objects using information in a schema [[Catalog]].
+ * into fully typed objects using information in a schema [[com.sun.org.apache.xml.internal.resolver.Catalog]].
  */
 package object analysis {
 

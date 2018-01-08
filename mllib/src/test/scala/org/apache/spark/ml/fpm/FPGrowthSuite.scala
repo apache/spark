@@ -19,6 +19,7 @@ package org.apache.spark.ml.fpm
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -33,37 +34,43 @@ class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
     dataset = FPGrowthSuite.getFPGrowthData(spark)
   }
 
+  class DT[A](val a: DataType)(implicit val encoder: Encoder[(Int, Array[A], Array[A])])
+
   test("FPGrowth fit and transform with different data types") {
-    Array(IntegerType, StringType, ShortType, LongType, ByteType).foreach { dt =>
-      val data = dataset.withColumn("items", col("items").cast(ArrayType(dt)))
-      val model = new FPGrowth().setMinSupport(0.5).fit(data)
-      val generatedRules = model.setMinConfidence(0.5).associationRules
-      val expectedRules = Seq(
-        (Array("2"), Array("1"), 1.0),
-        (Array("1"), Array("2"), 0.75)
-      ).toDF("antecedent", "consequent", "confidence")
-        .withColumn("antecedent", col("antecedent").cast(ArrayType(dt)))
-        .withColumn("consequent", col("consequent").cast(ArrayType(dt)))
-      assert(expectedRules.sort("antecedent").rdd.collect().sameElements(
-        generatedRules.sort("antecedent").rdd.collect()))
+      Array(
+        new DT[Int](IntegerType),
+        new DT[String](StringType),
+        new DT[Short](ShortType),
+        new DT[Long](LongType)
+//        ,DT[Array[Byte]](ByteType)
+      ).foreach { dt => {
+        val data = dataset.withColumn("items", col("items").cast(ArrayType(dt.a)))
+        val model = new FPGrowth().setMinSupport(0.5).fit(data)
+        val generatedRules = model.setMinConfidence(0.5).associationRules
+        val expectedRules = Seq(
+          (Array("2"), Array("1"), 1.0),
+          (Array("1"), Array("2"), 0.75)
+        ).toDF("antecedent", "consequent", "confidence")
+          .withColumn("antecedent", col("antecedent").cast(ArrayType(dt.a)))
+          .withColumn("consequent", col("consequent").cast(ArrayType(dt.a)))
+        assert(expectedRules.sort("antecedent").rdd.collect().sameElements(
+          generatedRules.sort("antecedent").rdd.collect()))
 
-      val transformed = model.transform(data)
-      transformed.show()
-      val expectedTransformed = Seq(
-        (0, Array("1", "2"), Array.emptyIntArray),
-        (0, Array("1", "2"), Array.emptyIntArray),
-        (0, Array("1", "2"), Array.emptyIntArray),
-        (0, Array("1", "3"), Array(2))
-      ).toDF("id", "items", "expected")
-        .withColumn("items", col("items").cast(ArrayType(dt)))
-//      assert(expectedTransformed.collect().toSet.equals(
-//        transformed.collect().toSet))
-      testTransformer[(Int, Array[String], Array[String])](expectedTransformed, model,
-        "expected", "prediction") {
-        case Row(expected, prediction) => assert(expected === prediction,
-          s"Expected $expected but found $prediction")
+        val expectedTransformed = Seq(
+          (0, Array("1", "2"), Array.emptyIntArray),
+          (0, Array("1", "2"), Array.emptyIntArray),
+          (0, Array("1", "2"), Array.emptyIntArray),
+          (0, Array("1", "3"), Array(2))
+        ).toDF("id", "items", "expected")
+          .withColumn("items", col("items").cast(ArrayType(dt.a)))
+          .withColumn("expected", col("expected").cast(ArrayType(dt.a)))
+
+        testTransformer(expectedTransformed, model,
+          "expected", "prediction") {
+          case Row(expected, prediction) => assert(expected === prediction,
+            s"Expected $expected but found $prediction")
+        }(dt.encoder)
       }
-
     }
   }
 

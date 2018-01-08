@@ -26,9 +26,9 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasPredictionCol
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules,
-  FPGrowth => MLlibFPGrowth}
+import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules, FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
+import org.apache.spark.sql
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -258,19 +258,21 @@ class FPGrowthModel private[ml] (
     genericTransform(dataset)
   }
 
-  private def genericTransform(dataset: Dataset[_]): DataFrame = {
+  private def genericTransform(dataset: Dataset[_]): sql.DataFrame = {
     val rules: Array[(Seq[Any], Seq[Any])] = associationRules.select("antecedent", "consequent")
       .rdd.map(r => (r.getSeq(0), r.getSeq(1)))
       .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
     val brRules = dataset.sparkSession.sparkContext.broadcast(rules)
 
     val dt = dataset.schema($(itemsCol)).dataType
+
     // For each rule, examine the input items and summarize the consequents
     val predictUDF = udf((items: Seq[_]) => {
       if (items != null) {
         val itemset = items.toSet
-        brRules.value.filter(_._1.forall(itemset.contains))
-          .flatMap(_._2.filter(!itemset.contains(_))).distinct
+        val array = brRules.value.filter(_._1.forall(itemset.contains))
+          .flatMap(_._2.filter(!itemset.contains(_)))
+        array.distinct
       } else {
         Seq.empty
       }}, dt)
