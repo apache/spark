@@ -216,8 +216,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
 
-    assert(bucketizer1.isBucketizeMultipleColumns())
-
     bucketizer1.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
     BucketizerSuite.checkBucketResults(bucketizer1.transform(dataFrame),
       Seq("result1", "result2"),
@@ -232,8 +230,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("feature"))
       .setOutputCols(Array("result"))
       .setSplitsArray(Array(splits(0)))
-
-    assert(bucketizer2.isBucketizeMultipleColumns())
 
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
       intercept[SparkException] {
@@ -268,8 +264,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
 
-    assert(bucketizer.isBucketizeMultipleColumns())
-
     BucketizerSuite.checkBucketResults(bucketizer.transform(dataFrame),
       Seq("result1", "result2"),
       Seq("expected1", "expected2"))
@@ -294,8 +288,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("feature1", "feature2"))
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
-
-    assert(bucketizer.isBucketizeMultipleColumns())
 
     bucketizer.setHandleInvalid("keep")
     BucketizerSuite.checkBucketResults(bucketizer.transform(dataFrame),
@@ -335,7 +327,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("myInputCol"))
       .setOutputCols(Array("myOutputCol"))
       .setSplitsArray(Array(Array(0.1, 0.8, 0.9)))
-    assert(t.isBucketizeMultipleColumns())
     testDefaultReadWrite(t)
   }
 
@@ -347,8 +338,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("feature1", "feature2"))
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5)))
-
-    assert(bucket.isBucketizeMultipleColumns())
 
     val pl = new Pipeline()
       .setStages(Array(bucket))
