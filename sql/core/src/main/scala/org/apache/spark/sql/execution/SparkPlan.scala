@@ -94,7 +94,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies how data is partitioned across different nodes in the cluster. */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
 
-  /** Specifies any partition requirements on the input data for this operator. */
+  /**
+   * Specifies the data distribution requirements of all the children for this operator. By default
+   * it's [[UnspecifiedDistribution]] for each child, which means each child can have any
+   * distribution.
+   *
+   * If an operator overwrites this method, and specifies distribution requirements(excluding
+   * [[UnspecifiedDistribution]] and [[BroadcastDistribution]]) for more than one child, Spark
+   * guarantees that the outputs of these children will have same number of partitions, so that the
+   * operator can safely zip partitions of these children's result RDDs. Some operators can leverage
+   * this guarantee to satisfy some interesting requirement, e.g., non-broadcast joins can specify
+   * HashClusteredDistribution(a,b) for its left child, and specify HashClusteredDistribution(c,d)
+   * for its right child, then it's guaranteed that left and right child are co-partitioned by
+   * a,b/c,d, which means tuples of same value are in the partitions of same index, e.g.,
+   * (a=1,b=2) and (c=1,d=2) are both in the second partition of left and right child.
+   */
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
 
