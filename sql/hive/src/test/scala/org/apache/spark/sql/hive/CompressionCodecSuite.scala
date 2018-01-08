@@ -102,30 +102,35 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
     val partitionCreate = if (isPartitioned) "PARTITIONED BY (p string)" else ""
     sql(
       s"""
-         |CREATE TABLE $tableName(a int)
-         |$partitionCreate
-         |STORED AS $format
-         |LOCATION '${rootDir.toURI.toString.stripSuffix("/")}/$tableName'
-         |$tblProperties
-       """.stripMargin)
+        |CREATE TABLE $tableName(a int)
+        |$partitionCreate
+        |STORED AS $format
+        |LOCATION '${rootDir.toURI.toString.stripSuffix("/")}/$tableName'
+        |$tblProperties
+      """.stripMargin)
   }
 
   private def writeDataToTable(
       tableName: String,
       partition: Option[String]): Unit = {
-    val partitionInsert = partition.map(p => s"partition ($p)").mkString
+    val partitionInsert = partition.map(p => s"partition (p='$p')").mkString
     sql(
       s"""
-         |INSERT INTO TABLE $tableName
-         |$partitionInsert
-         |SELECT * FROM table_source
-       """.stripMargin)
+        |INSERT INTO TABLE $tableName
+        |$partitionInsert
+        |SELECT * FROM table_source
+      """.stripMargin)
   }
 
   private def getTableSize(path: String): Long = {
     val dir = new File(path)
     val files = dir.listFiles().filter(_.getName.startsWith("part-"))
     files.map(_.length()).sum
+  }
+
+  private def getTablePartitionPath(dir: File, tableName: String, partition: Option[String]) = {
+    val partitionPath = partition.map(p => s"p=$p").mkString
+    s"${dir.getPath.stripSuffix("/")}/$tableName/$partitionPath"
   }
 
   private def getUncompressedDataSizeByFormat(
@@ -137,9 +142,9 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
       withTempDir { tmpDir =>
         withTable(tableName) {
           createTable(tmpDir, tableName, isPartitioned, format, Option(codecName))
-          val partition = if (isPartitioned) Some("p='test'") else None
+          val partition = if (isPartitioned) Some("test") else None
           writeDataToTable(tableName, partition)
-          val path = s"${tmpDir.getPath.stripSuffix("/")}/$tableName/${partition.mkString}"
+          val path = getTablePartitionPath(tmpDir, tableName, partition)
           totalSize = getTableSize(path)
         }
       }
@@ -157,9 +162,9 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
     withTempDir { tmpDir =>
       withTable(tableName) {
         createTable(tmpDir, tableName, isPartitioned, format, compressionCodec)
-        val partition = if (isPartitioned) Some("p='test'") else None
+        val partition = if (isPartitioned) Some("test") else None
         writeDataToTable(tableName, partition)
-        val path = s"${tmpDir.getPath.stripSuffix("/")}/$tableName/${partition.mkString}"
+        val path = getTablePartitionPath(tmpDir, tableName, partition)
         val relCompressionCodecs = getTableCompressionCodec(path, format)
         assert(relCompressionCodecs.length == 1)
         val tableSize = getTableSize(path)
@@ -289,12 +294,12 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
           createTable(tmpDir, tableName, isPartitioned, format, None)
           withTable(tableName) {
             compressCodecs.foreach { compressionCodec =>
-              val partition = if (isPartitioned) Some(s"p='$compressionCodec'") else None
+              val partition = if (isPartitioned) Some(compressionCodec) else None
               withSQLConf(getConvertMetastoreConfName(format) -> convertMetastore.toString,
                 getSparkCompressionConfName(format) -> compressionCodec
               ) { writeDataToTable(tableName, partition) }
             }
-            val tablePath = s"${tmpDir.getPath.stripSuffix("/")}/$tableName"
+            val tablePath = getTablePartitionPath(tmpDir, tableName, None)
             val relCompressionCodecs =
               if (isPartitioned) compressCodecs.flatMap { codec =>
                 getTableCompressionCodec(s"$tablePath/p=$codec", format)
