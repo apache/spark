@@ -422,7 +422,7 @@ case class SortMergeJoinExec(
    */
   private def genScanner(ctx: CodegenContext): (String, String) = {
     // Create class member for next row from both sides.
-    // inline mutable state since not many join operations in a task
+    // Inline mutable state since not many join operations in a task
     val leftRow = ctx.addMutableState("InternalRow", "leftRow", forceInline = true)
     val rightRow = ctx.addMutableState("InternalRow", "rightRow", forceInline = true)
 
@@ -440,8 +440,9 @@ case class SortMergeJoinExec(
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
 
+    // Inline mutable state since not many join operations in a task
     val matches = ctx.addMutableState(clsName, "matches",
-      v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold);")
+      v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold);", forceInline = true)
     // Copy the left keys as class members so they could be used in next function call.
     val matchedKeyVars = copyKeys(ctx, leftKeyVars)
 
@@ -576,7 +577,7 @@ case class SortMergeJoinExec(
   override def needCopyResult: Boolean = true
 
   override def doProduce(ctx: CodegenContext): String = {
-    // inline mutable state since not many join operations in a task
+    // Inline mutable state since not many join operations in a task
     val leftInput = ctx.addMutableState("scala.collection.Iterator", "leftInput",
       v => s"$v = inputs[0];", forceInline = true)
     val rightInput = ctx.addMutableState("scala.collection.Iterator", "rightInput",

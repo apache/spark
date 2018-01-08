@@ -208,7 +208,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         actualQuery,
         mode,
         table,
-        Some(t.location))
+        Some(t.location),
+        actualQuery.output)
   }
 }
 

@@ -148,8 +148,8 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
-    <commons.httpclient.version>4.5.2</commons.httpclient.version>
-    <commons.httpcore.version>4.4.4</commons.httpcore.version>
+    <commons.httpclient.version>4.5.4</commons.httpclient.version>
+    <commons.httpcore.version>4.4.8</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -2295,6 +2295,9 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-assembly-plugin</artifactId>
           <version>3.1.0</version>
+          <configuration>
+            <tarLongFileMode>posix</tarLongFileMode>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>

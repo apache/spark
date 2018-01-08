@@ -100,6 +100,8 @@ private[spark] class Client(
   private var amKeytabFileName: String = null
 
   private val launcherBackend = new LauncherBackend() {
+    override protected def conf: SparkConf = sparkConf
+
     override def onStopRequest(): Unit = {
       if (isClusterMode && appId != null) {
         yarnClient.killApplication(appId)
