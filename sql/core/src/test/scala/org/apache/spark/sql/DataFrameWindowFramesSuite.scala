@@ -185,19 +185,19 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
     val e1 = intercept[AnalysisException](
       df.select(
         min("value").over(window.rangeBetween(Window.unboundedPreceding, 1))))
-    assert(e1.message.contains("The data type of the upper bound 'StringType " +
+    assert(e1.message.contains("The data type of the upper bound 'string' " +
       "does not match the expected data type"))
 
     val e2 = intercept[AnalysisException](
       df.select(
         min("value").over(window.rangeBetween(-1, Window.unboundedFollowing))))
-    assert(e2.message.contains("The data type of the lower bound 'StringType " +
+    assert(e2.message.contains("The data type of the lower bound 'string' " +
       "does not match the expected data type"))
 
     val e3 = intercept[AnalysisException](
       df.select(
         min("value").over(window.rangeBetween(-1, 1))))
-    assert(e3.message.contains("The data type of the lower bound 'StringType " +
+    assert(e3.message.contains("The data type of the lower bound 'string' " +
       "does not match the expected data type"))
   }
 
