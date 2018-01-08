@@ -212,7 +212,7 @@ class _ImageSchema(object):
 ImageSchema = _ImageSchema()
 
 
-# Monkey patch to disallow instantization of this class.
+# Monkey patch to disallow instantiation of this class.
 def _disallow_instance(_):
     raise RuntimeError("Creating instance of _ImageSchema class is disallowed.")
 _ImageSchema.__init__ = _disallow_instance

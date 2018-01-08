@@ -52,7 +52,7 @@ private[kafka010] case class KafkaSourceRDDPartition(
  * An RDD that reads data from Kafka based on offset ranges across multiple partitions.
  * Additionally, it allows preferred locations to be set for each topic + partition, so that
  * the [[KafkaSource]] can ensure the same executor always reads the same topic + partition
- * and cached KafkaConsuemrs (see [[CachedKafkaConsumer]] can be used read data efficiently.
+ * and cached KafkaConsumers (see [[CachedKafkaConsumer]] can be used read data efficiently.
  *
  * @param sc the [[SparkContext]]
  * @param executorKafkaParams Kafka configuration for creating KafkaConsumer on the executors

@@ -127,7 +127,7 @@ public class ExternalShuffleBlockResolverSuite {
       mapper.readValue(shuffleJson, ExecutorShuffleInfo.class);
     assertEquals(parsedShuffleInfo, shuffleInfo);
 
-    // Intentionally keep these hard-coded strings in here, to check backwards-compatability.
+    // Intentionally keep these hard-coded strings in here, to check backwards-compatibility.
     // its not legacy yet, but keeping this here in case anybody changes it
     String legacyAppIdJson = "{\"appId\":\"foo\", \"execId\":\"bar\"}";
     assertEquals(appId, mapper.readValue(legacyAppIdJson, AppExecId.class));

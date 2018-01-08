@@ -21,6 +21,8 @@ import java.io.File
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -440,6 +442,82 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       }.getMessage
 
       assert(e.contains("Only Data Sources providing FileFormat are supported"))
+    }
+  }
+
+  test("SPARK-20236: dynamic partition overwrite without catalog table") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTempPath { path =>
+        Seq((1, 1, 1)).toDF("i", "part1", "part2")
+          .write.partitionBy("part1", "part2").parquet(path.getAbsolutePath)
+        checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1, 1))
+
+        Seq((2, 1, 1)).toDF("i", "part1", "part2")
+          .write.partitionBy("part1", "part2").mode("overwrite").parquet(path.getAbsolutePath)
+        checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1))
+
+        Seq((2, 2, 2)).toDF("i", "part1", "part2")
+          .write.partitionBy("part1", "part2").mode("overwrite").parquet(path.getAbsolutePath)
+        checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-20236: dynamic partition overwrite") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("t") {
+        sql(
+          """
+            |create table t(i int, part1 int, part2 int) using parquet
+            |partitioned by (part1, part2)
+          """.stripMargin)
+
+        sql("insert into t partition(part1=1, part2=1) select 1")
+        checkAnswer(spark.table("t"), Row(1, 1, 1))
+
+        sql("insert overwrite table t partition(part1=1, part2=1) select 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1))
+
+        sql("insert overwrite table t partition(part1=2, part2) select 2, 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2=2) select 3")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
+        checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-20236: dynamic partition overwrite with customer partition path") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("t") {
+        sql(
+          """
+            |create table t(i int, part1 int, part2 int) using parquet
+            |partitioned by (part1, part2)
+          """.stripMargin)
+
+        val path1 = Utils.createTempDir()
+        sql(s"alter table t add partition(part1=1, part2=1) location '$path1'")
+        sql(s"insert into t partition(part1=1, part2=1) select 1")
+        checkAnswer(spark.table("t"), Row(1, 1, 1))
+
+        sql("insert overwrite table t partition(part1=1, part2=1) select 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1))
+
+        sql("insert overwrite table t partition(part1=2, part2) select 2, 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+
+        val path2 = Utils.createTempDir()
+        sql(s"alter table t add partition(part1=1, part2=2) location '$path2'")
+        sql("insert overwrite table t partition(part1=1, part2=2) select 3")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
+        checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+      }
     }
   }
 }

@@ -18,9 +18,9 @@
 package org.apache.spark.shuffle.sort;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.channels.FileChannel;
-import static java.nio.file.StandardOpenOption.*;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -75,6 +75,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
   private final int fileBufferSize;
+  private final boolean transferToEnabled;
   private final int numPartitions;
   private final BlockManager blockManager;
   private final Partitioner partitioner;
@@ -106,6 +107,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       SparkConf conf) {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+    this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
@@ -186,21 +188,17 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       return lengths;
     }
 
-    // This file needs to opened in append mode in order to work around a Linux kernel bug that
-    // affects transferTo; see SPARK-3948 for more details.
-    final FileChannel out = FileChannel.open(outputFile.toPath(), WRITE, APPEND, CREATE);
+    final FileOutputStream out = new FileOutputStream(outputFile, true);
     final long writeStartTime = System.nanoTime();
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
         final File file = partitionWriterSegments[i].file();
         if (file.exists()) {
-          final FileChannel in = FileChannel.open(file.toPath(), READ);
+          final FileInputStream in = new FileInputStream(file);
           boolean copyThrewException = true;
           try {
-            long size = in.size();
-            Utils.copyFileStreamNIO(in, out, 0, size);
-            lengths[i] = size;
+            lengths[i] = Utils.copyStream(in, out, false, transferToEnabled);
             copyThrewException = false;
           } finally {
             Closeables.close(in, copyThrewException);

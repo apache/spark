@@ -20,6 +20,7 @@ package org.apache.spark.deploy.history
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.network.util.ByteUnit
 
 private[spark] object config {
 
@@ -38,5 +39,14 @@ private[spark] object config {
       "not set, meaning all history information will be kept in memory.")
     .stringConf
     .createOptional
+
+  val MAX_LOCAL_DISK_USAGE = ConfigBuilder("spark.history.store.maxDiskUsage")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("10g")
+
+  val HISTORY_SERVER_UI_PORT = ConfigBuilder("spark.history.ui.port")
+    .doc("Web UI port to bind Spark History Server")
+    .intConf
+    .createWithDefault(18080)
 
 }
