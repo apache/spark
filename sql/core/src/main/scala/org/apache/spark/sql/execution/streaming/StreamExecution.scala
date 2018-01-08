@@ -142,7 +142,8 @@ abstract class StreamExecution(
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
-  override val runId: UUID = UUID.randomUUID
+  override def runId: UUID = currentRunId
+  protected var currentRunId = UUID.randomUUID
 
   /**
    * Pretty identified string of printing in logs. Format is
@@ -422,7 +423,8 @@ abstract class StreamExecution(
     assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
-      if (sources.length <= sourceIndex) {
+      if (sources == null) {
+        // sources might not be initialized yet
         false
       } else {
         val source = sources(sourceIndex)

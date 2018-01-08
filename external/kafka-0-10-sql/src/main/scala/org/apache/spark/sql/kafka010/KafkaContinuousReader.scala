@@ -88,11 +88,17 @@ class KafkaContinuousReader(
 
     val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(offset)
 
-    val newPartitions =
-      offsetReader.fetchLatestOffsets().keySet.diff(oldStartPartitionOffsets.keySet)
+    val currentPartitionSet = offsetReader.fetchEarliestOffsets().keySet
+    val newPartitions = currentPartitionSet.diff(oldStartPartitionOffsets.keySet)
     val newPartitionOffsets = offsetReader.fetchEarliestOffsets(newPartitions.toSeq)
-    val startOffsets = oldStartPartitionOffsets ++ newPartitionOffsets
 
+    val deletedPartitions = oldStartPartitionOffsets.keySet.diff(currentPartitionSet)
+    if (deletedPartitions.nonEmpty) {
+      reportDataLoss(s"Some partitions were deleted: $deletedPartitions")
+    }
+
+    val startOffsets = newPartitionOffsets ++
+      oldStartPartitionOffsets.filterKeys(!deletedPartitions.contains(_))
     knownPartitions = startOffsets.keySet
 
     startOffsets.toSeq.map {

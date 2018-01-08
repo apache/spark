@@ -81,6 +81,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     StateStore.stop() // stop the state store maintenance thread and unload store providers
   }
 
+  protected val defaultTrigger = Trigger.ProcessingTime(0)
+  protected val defaultUseV2Sink = false
+
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
 
@@ -190,7 +193,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
   /** Starts the stream, resuming if data has already been processed. It must not be running. */
   case class StartStream(
-      trigger: Trigger = Trigger.ProcessingTime(0),
+      trigger: Trigger = defaultTrigger,
       triggerClock: Clock = new SystemClock,
       additionalConfs: Map[String, String] = Map.empty,
       checkpointLocation: String = null)
@@ -277,7 +280,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   def testStream(
       _stream: Dataset[_],
       outputMode: OutputMode = OutputMode.Append,
-      useV2Sink: Boolean = false)(actions: StreamAction*): Unit = synchronized {
+      useV2Sink: Boolean = defaultUseV2Sink)(actions: StreamAction*): Unit = synchronized {
     import org.apache.spark.sql.streaming.util.StreamManualClock
 
     // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
@@ -468,7 +471,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             try {
               currentStream.awaitInitialization(streamingTimeout.toMillis)
               currentStream match {
-                case s: ContinuousExecution => s.awaitEpoch(0)
+                case s: ContinuousExecution => s.processAllAvailable()
                 case _ =>
               }
             } catch {
@@ -620,7 +623,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                   }
                 }.getOrElse {
                   throw new IllegalArgumentException(
-                    "Could find index of the source to which data was added")
+                    "Could not find index of the source to which data was added")
                 }
 
               // Store the expected offset of added data to wait for it later
