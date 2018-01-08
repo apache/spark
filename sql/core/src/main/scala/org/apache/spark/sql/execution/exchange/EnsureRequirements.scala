@@ -68,7 +68,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         // these children may not be partitioned in the same way.
         // Please see the comment in withCoordinator for more details.
         val supportsDistribution = requiredChildDistributions.forall { dist =>
-          dist.isInstanceOf[ClusteredDistribution] || dist.isInstanceOf[HashPartitionedDistribution]
+          dist.isInstanceOf[ClusteredDistribution] || dist.isInstanceOf[HashClusteredDistribution]
         }
         children.length > 1 && supportsDistribution
       }

@@ -92,14 +92,14 @@ case class ClusteredDistribution(
 }
 
 /**
- * Represents data where tuples have been partitioned according to the hash of the given
+ * Represents data where tuples have been clustered according to the hash of the given
  * `expressions`. The hash function is defined as `HashPartitioning.partitionIdExpression`, so only
  * [[HashPartitioning]] can satisfy this distribution.
  *
  * This is a strictly stronger guarantee than [[ClusteredDistribution]]. Given a tuple and the
  * number of partitions, this distribution strictly requires which partition the tuple should be in.
  */
-case class HashPartitionedDistribution(expressions: Seq[Expression]) extends Distribution {
+case class HashClusteredDistribution(expressions: Seq[Expression]) extends Distribution {
   require(
     expressions != Nil,
     "The expressions for hash of a HashPartitionedDistribution should not be Nil. " +
@@ -208,7 +208,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def satisfies(required: Distribution): Boolean = {
     super.satisfies(required) || {
       required match {
-        case h: HashPartitionedDistribution =>
+        case h: HashClusteredDistribution =>
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
