@@ -324,9 +324,8 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
       case StringType | BinaryType =>
         val data = fromColumn.asInstanceOf[BytesColumnVector]
         var index = 0
-        toColumn.putByteArray(0, data.vector(0))
         while (index < batchSize) {
-          toColumn.putArray(index, data.start(index), data.length(index))
+          toColumn.putByteArray(index, data.vector(index), data.start(index), data.length(index))
           index += 1
         }
 
@@ -447,13 +446,13 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
 
       case StringType | BinaryType =>
         val vector = fromColumn.asInstanceOf[BytesColumnVector]
-        toColumn.putByteArray(0, vector.vector(0))
         var index = 0
         while (index < batchSize) {
           if (fromColumn.isNull(index)) {
             toColumn.putNull(index)
           } else {
-            toColumn.putArray(index, vector.start(index), vector.length(index))
+            toColumn.putByteArray(
+              index, vector.vector(index), vector.start(index), vector.length(index))
           }
           index += 1
         }
