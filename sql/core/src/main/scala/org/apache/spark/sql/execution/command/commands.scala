@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -71,6 +71,42 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
   }
 
   override protected def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
+
+  override def output: Seq[Attribute] = cmd.output
+
+  override def nodeName: String = "Execute " + cmd.nodeName
+
+  override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
+
+  override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
+
+  override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  }
+}
+
+/**
+ * A physical operator that executes the run method of a `DataWritingCommand` and
+ * saves the result to prevent multiple executions.
+ *
+ * @param cmd the `DataWritingCommand` this operator will run.
+ * @param child the physical plan child ran by the `DataWritingCommand`.
+ */
+case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
+  extends SparkPlan {
+
+  override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
+
+  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val rows = cmd.run(sqlContext.sparkSession, child)
+
+    rows.map(converter(_).asInstanceOf[InternalRow])
+  }
+
+  override def children: Seq[SparkPlan] = child :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 

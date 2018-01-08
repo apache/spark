@@ -48,7 +48,7 @@ private[spark] class AppStatusListener(
 
   import config._
 
-  private val sparkVersion = SPARK_VERSION
+  private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
   private var coresPerTask: Int = 1
@@ -90,6 +90,11 @@ private[spark] class AppStatusListener(
     }
   }
 
+  override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+    case SparkListenerLogStart(version) => sparkVersion = version
+    case _ =>
+  }
+
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     assert(event.appId.isDefined, "Application without IDs are not supported.")
 
@@ -114,6 +119,17 @@ private[spark] class AppStatusListener(
 
     kvstore.write(new ApplicationInfoWrapper(appInfo))
     kvstore.write(appSummary)
+
+    // Update the driver block manager with logs from this event. The SparkContext initialization
+    // code registers the driver before this event is sent.
+    event.driverLogs.foreach { logs =>
+      val driver = liveExecutors.get(SparkContext.DRIVER_IDENTIFIER)
+        .orElse(liveExecutors.get(SparkContext.LEGACY_DRIVER_IDENTIFIER))
+      driver.foreach { d =>
+        d.executorLogs = logs.toMap
+        update(d, System.nanoTime())
+      }
+    }
   }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
@@ -518,7 +534,8 @@ private[spark] class AppStatusListener(
   }
 
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
-    val maybeStage = Option(liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptId)))
+    val maybeStage =
+      Option(liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptNumber)))
     maybeStage.foreach { stage =>
       val now = System.nanoTime()
       stage.info = event.stageInfo
@@ -774,7 +791,7 @@ private[spark] class AppStatusListener(
   }
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {
-    val stage = liveStages.computeIfAbsent((info.stageId, info.attemptId),
+    val stage = liveStages.computeIfAbsent((info.stageId, info.attemptNumber),
       new Function[(Int, Int), LiveStage]() {
         override def apply(key: (Int, Int)): LiveStage = new LiveStage()
       })
@@ -903,7 +920,7 @@ private[spark] class AppStatusListener(
   private def cleanupTasks(stage: LiveStage): Unit = {
     val countToDelete = calculateNumberToRemove(stage.savedTasks.get(), maxTasksPerStage).toInt
     if (countToDelete > 0) {
-      val stageKey = Array(stage.info.stageId, stage.info.attemptId)
+      val stageKey = Array(stage.info.stageId, stage.info.attemptNumber)
       val view = kvstore.view(classOf[TaskDataWrapper]).index("stage").first(stageKey)
         .last(stageKey)
 

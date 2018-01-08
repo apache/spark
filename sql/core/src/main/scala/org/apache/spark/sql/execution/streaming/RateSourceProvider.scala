@@ -33,7 +33,8 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousRateStreamR
 import org.apache.spark.sql.execution.streaming.sources.RateStreamV2Reader
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.{ContinuousReader, MicroBatchReader}
+import org.apache.spark.sql.sources.v2.streaming.ContinuousReadSupport
+import org.apache.spark.sql.sources.v2.streaming.reader.ContinuousReader
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ManualClock, SystemClock}
 
@@ -52,7 +53,7 @@ import org.apache.spark.util.{ManualClock, SystemClock}
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateSourceProvider extends StreamSourceProvider with DataSourceRegister
-  with DataSourceV2 with MicroBatchReadSupport with ContinuousReadSupport{
+  with DataSourceV2 with ContinuousReadSupport {
 
   override def sourceSchema(
       sqlContext: SQLContext,
@@ -105,13 +106,6 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister
       numPartitions,
       params.get("useManualClock").map(_.toBoolean).getOrElse(false) // Only for testing
     )
-  }
-
-  override def createMicroBatchReader(
-      schema: Optional[StructType],
-      checkpointLocation: String,
-      options: DataSourceV2Options): MicroBatchReader = {
-    new RateStreamV2Reader(options)
   }
 
   override def createContinuousReader(

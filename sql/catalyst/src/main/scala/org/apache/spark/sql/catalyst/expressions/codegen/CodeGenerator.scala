@@ -190,7 +190,7 @@ class CodegenContext {
 
     /**
      * Returns the reference of next available slot in current compacted array. The size of each
-     * compacted array is controlled by the config `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
+     * compacted array is controlled by the constant `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
      * Once reaching the threshold, new compacted array is created.
      */
     def getNextSlot(): String = {
@@ -206,6 +206,14 @@ class CodegenContext {
     }
 
   }
+
+  /**
+   * A map containing the mutable states which have been defined so far using
+   * `addImmutableStateIfNotExists`. Each entry contains the name of the mutable state as key and
+   * its Java type and init code as value.
+   */
+  private val immutableStates: mutable.Map[String, (String, String)] =
+    mutable.Map.empty[String, (String, String)]
 
   /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
@@ -266,6 +274,38 @@ class CodegenContext {
   }
 
   /**
+   * Add an immutable state as a field to the generated class only if it does not exist yet a field
+   * with that name. This helps reducing the number of the generated class' fields, since the same
+   * variable can be reused by many functions.
+   *
+   * Even though the added variables are not declared as final, they should never be reassigned in
+   * the generated code to prevent errors and unexpected behaviors.
+   *
+   * Internally, this method calls `addMutableState`.
+   *
+   * @param javaType Java type of the field.
+   * @param variableName Name of the field.
+   * @param initFunc Function includes statement(s) to put into the init() method to initialize
+   *                 this field. The argument is the name of the mutable state variable.
+   */
+  def addImmutableStateIfNotExists(
+      javaType: String,
+      variableName: String,
+      initFunc: String => String = _ => ""): Unit = {
+    val existingImmutableState = immutableStates.get(variableName)
+    if (existingImmutableState.isEmpty) {
+      addMutableState(javaType, variableName, initFunc, useFreshName = false, forceInline = true)
+      immutableStates(variableName) = (javaType, initFunc(variableName))
+    } else {
+      val (prevJavaType, prevInitCode) = existingImmutableState.get
+      assert(prevJavaType == javaType, s"$variableName has already been defined with type " +
+        s"$prevJavaType and now it is tried to define again with type $javaType.")
+      assert(prevInitCode == initFunc(variableName), s"$variableName has already been defined " +
+        s"with different initialization statements.")
+    }
+  }
+
+  /**
    * Add buffer variable which stores data coming from an [[InternalRow]]. This methods guarantees
    * that the variable is safely stored, which is important for (potentially) byte array backed
    * data types like: UTF8String, ArrayData, MapData & InternalRow.
@@ -312,7 +352,7 @@ class CodegenContext {
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    val initCodes = mutableStateInitCode.distinct
+    val initCodes = mutableStateInitCode.distinct.map(_ + "\n")
 
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.

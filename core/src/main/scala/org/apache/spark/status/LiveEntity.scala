@@ -462,14 +462,14 @@ private class LiveStage extends LiveEntity {
 
   def executorSummary(executorId: String): LiveExecutorStageSummary = {
     executorSummaries.getOrElseUpdate(executorId,
-      new LiveExecutorStageSummary(info.stageId, info.attemptId, executorId))
+      new LiveExecutorStageSummary(info.stageId, info.attemptNumber, executorId))
   }
 
   def toApi(): v1.StageData = {
     new v1.StageData(
       status,
       info.stageId,
-      info.attemptId,
+      info.attemptNumber,
 
       info.numTasks,
       activeTasks,
