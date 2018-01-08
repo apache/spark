@@ -64,7 +64,7 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
   // Record reader from ORC row batch.
   private org.apache.orc.RecordReader recordReader;
 
-  private StructType requiredSchema;
+  private StructField[] requiredFields;
 
   // The result columnar batch for vectorized execution by whole-stage codegen.
   private ColumnarBatch columnarBatch;
@@ -147,19 +147,20 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
   public void initBatch(
       TypeDescription orcSchema,
       int[] requestedColIds,
-      StructType requiredSchema,
+      StructField[] requiredFields,
       StructType partitionSchema,
       InternalRow partitionValues) {
     batch = orcSchema.createRowBatch(DEFAULT_SIZE);
     assert(!batch.selectedInUse); // `selectedInUse` should be initialized with `false`.
 
-    StructType resultSchema = new StructType(requiredSchema.fields());
+    this.requiredFields = requiredFields;
+    this.requestedColIds = requestedColIds;
+    assert(requiredFields.length == requestedColIds.length);
+
+    StructType resultSchema = new StructType(requiredFields);
     for (StructField f : partitionSchema.fields()) {
       resultSchema = resultSchema.add(f);
     }
-    this.requiredSchema = requiredSchema;
-    this.requestedColIds = requestedColIds;
-    assert(requiredSchema.length() == requestedColIds.length);
 
     int capacity = DEFAULT_SIZE;
     if (MEMORY_MODE == MemoryMode.OFF_HEAP) {
@@ -170,7 +171,7 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
     columnarBatch = new ColumnarBatch(resultSchema, columnVectors, capacity);
 
     if (partitionValues.numFields() > 0) {
-      int partitionIdx = requiredSchema.fields().length;
+      int partitionIdx = requiredFields.length;
       for (int i = 0; i < partitionValues.numFields(); i++) {
         ColumnVectorUtils.populate(columnVectors[i + partitionIdx], partitionValues, i);
         columnVectors[i + partitionIdx].setIsConstant();
@@ -178,7 +179,7 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
     }
 
     // Initialize the missing columns once.
-    for (int i = 0; i < requiredSchema.length(); i++) {
+    for (int i = 0; i < requiredFields.length; i++) {
       if (requestedColIds[i] == -1) {
         columnVectors[i].putNulls(0, columnarBatch.capacity());
         columnVectors[i].setIsConstant();
@@ -205,8 +206,8 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
       vector.reset();
     }
     columnarBatch.setNumRows(batchSize);
-    for (int i = 0; i < requiredSchema.length(); i++) {
-      StructField field = requiredSchema.fields()[i];
+    for (int i = 0; i < requiredFields.length; i++) {
+      StructField field = requiredFields[i];
       WritableColumnVector toColumn = columnVectors[i];
 
       if (requestedColIds[i] >= 0) {
@@ -214,204 +215,230 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
         toColumn.reserve(batchSize);
 
         if (fromColumn.isRepeating) {
-          if (fromColumn.isNull[0]) {
-            toColumn.putNulls(0, batchSize);
-          } else {
-            DataType type = field.dataType();
-            if (type instanceof BooleanType) {
-              toColumn.putBooleans(0, batchSize, ((LongColumnVector)fromColumn).vector[0] == 1);
-            } else if (type instanceof ByteType) {
-              toColumn.putBytes(0, batchSize, (byte)((LongColumnVector)fromColumn).vector[0]);
-            } else if (type instanceof ShortType) {
-              toColumn.putShorts(0, batchSize, (short)((LongColumnVector)fromColumn).vector[0]);
-            } else if (type instanceof IntegerType || type instanceof DateType) {
-              toColumn.putInts(0, batchSize, (int)((LongColumnVector)fromColumn).vector[0]);
-            } else if (type instanceof LongType) {
-              toColumn.putLongs(0, batchSize, ((LongColumnVector)fromColumn).vector[0]);
-            } else if (type instanceof TimestampType) {
-              toColumn.putLongs(0, batchSize, fromTimestampColumnVector((TimestampColumnVector)fromColumn, 0));
-            } else if (type instanceof FloatType) {
-              toColumn.putFloats(0, batchSize, (float)((DoubleColumnVector)fromColumn).vector[0]);
-            } else if (type instanceof DoubleType) {
-              toColumn.putDoubles(0, batchSize, ((DoubleColumnVector)fromColumn).vector[0]);
-            } else if (type instanceof StringType || type instanceof BinaryType) {
-              BytesColumnVector data = (BytesColumnVector)fromColumn;
-              for (int index = 0; index < batchSize; index++) {
-                toColumn.putByteArray(index, data.vector[0], data.start[0], data.length[0]);
-              }
-            } else if (type instanceof DecimalType) {
-              DecimalType decimalType = (DecimalType)type;
-              putDecimalWritables(
-                toColumn,
-                batchSize,
-                decimalType.precision(),
-                decimalType.scale(),
-                ((DecimalColumnVector)fromColumn).vector[0]);
-            } else {
-              throw new UnsupportedOperationException("Unsupported Data Type: " + type);
-            }
-          }
+          putRepeatingValues(batchSize, field, fromColumn, toColumn);
         } else if (fromColumn.noNulls) {
-          DataType type = field.dataType();
-          if (type instanceof BooleanType) {
-            long[] data = ((LongColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              toColumn.putBoolean(index, data[index] == 1);
-            }
-          } else if (type instanceof ByteType) {
-            long[] data = ((LongColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              toColumn.putByte(index, (byte)data[index]);
-            }
-          } else if (type instanceof ShortType) {
-            long[] data = ((LongColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              toColumn.putShort(index, (short)data[index]);
-            }
-          } else if (type instanceof IntegerType || type instanceof DateType) {
-            long[] data = ((LongColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              toColumn.putInt(index, (int)data[index]);
-            }
-          } else if (type instanceof LongType) {
-            toColumn.putLongs(0, batchSize, ((LongColumnVector)fromColumn).vector, 0);
-          } else if (type instanceof TimestampType) {
-            TimestampColumnVector data = ((TimestampColumnVector)fromColumn);
-            for (int index = 0; index < batchSize; index++) {
-              toColumn.putLong(index, fromTimestampColumnVector(data, index));
-            }
-          } else if (type instanceof FloatType) {
-            double[] data = ((DoubleColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              toColumn.putFloat(index, (float)data[index]);
-            }
-          } else if (type instanceof DoubleType) {
-            toColumn.putDoubles(0, batchSize, ((DoubleColumnVector)fromColumn).vector, 0);
-          } else if (type instanceof StringType || type instanceof BinaryType) {
-            BytesColumnVector data = ((BytesColumnVector)fromColumn);
-            for (int index = 0; index < batchSize; index++) {
-              toColumn.putByteArray(index, data.vector[index], data.start[index], data.length[index]);
-            }
-          } else if (type instanceof DecimalType) {
-            DecimalType decimalType = (DecimalType)type;
-            DecimalColumnVector data = ((DecimalColumnVector)fromColumn);
-            for (int index = 0; index < batchSize; index++) {
-              putDecimalWritable(
-                toColumn,
-                index,
-                decimalType.precision(),
-                decimalType.scale(),
-                data.vector[index]);
-            }
-          } else {
-            throw new UnsupportedOperationException("Unsupported Data Type: " + type);
-          }
+          putNonNullValues(batchSize, field, fromColumn, toColumn);
         } else {
-          DataType type = field.dataType();
-          if (type instanceof BooleanType) {
-            long[] vector = ((LongColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                toColumn.putBoolean(index, vector[index] == 1);
-              }
-            }
-          } else if (type instanceof ByteType) {
-            long[] vector = ((LongColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                toColumn.putByte(index, (byte)vector[index]);
-              }
-            }
-          } else if (type instanceof ShortType) {
-            long[] vector = ((LongColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                toColumn.putShort(index, (short)vector[index]);
-              }
-            }
-          } else if (type instanceof IntegerType || type instanceof DateType) {
-            long[] vector = ((LongColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                toColumn.putInt(index, (int)vector[index]);
-              }
-            }
-          } else if (type instanceof LongType) {
-            long[] vector = ((LongColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                toColumn.putLong(index, vector[index]);
-              }
-            }
-          } else if (type instanceof TimestampType) {
-            TimestampColumnVector vector = ((TimestampColumnVector)fromColumn);
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                toColumn.putLong(index, fromTimestampColumnVector(vector, index));
-              }
-            }
-          } else if (type instanceof FloatType) {
-            double[] vector = ((DoubleColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                toColumn.putFloat(index, (float)vector[index]);
-              }
-            }
-          } else if (type instanceof DoubleType) {
-            double[] vector = ((DoubleColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                toColumn.putDouble(index, vector[index]);
-              }
-            }
-          } else if (type instanceof StringType || type instanceof BinaryType) {
-            BytesColumnVector vector = (BytesColumnVector)fromColumn;
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                toColumn.putByteArray(
-                  index, vector.vector[index], vector.start[index], vector.length[index]);
-              }
-            }
-          } else if (type instanceof DecimalType) {
-            DecimalType decimalType = (DecimalType)type;
-            HiveDecimalWritable[] vector = ((DecimalColumnVector)fromColumn).vector;
-            for (int index = 0; index < batchSize; index++) {
-              if (fromColumn.isNull[index]) {
-                toColumn.putNull(index);
-              } else {
-                putDecimalWritable(
-                  toColumn,
-                  index,
-                  decimalType.precision(),
-                  decimalType.scale(),
-                  vector[index]);
-              }
-            }
-          } else {
-            throw new UnsupportedOperationException("Unsupported Data Type: " + type);
-          }
+          putValues(batchSize, field, fromColumn, toColumn);
         }
       }
     }
     return true;
+  }
+
+  private void putRepeatingValues(
+      int batchSize,
+      StructField field,
+      ColumnVector fromColumn,
+      WritableColumnVector toColumn) {
+    if (fromColumn.isNull[0]) {
+      toColumn.putNulls(0, batchSize);
+    } else {
+      DataType type = field.dataType();
+      if (type instanceof BooleanType) {
+        toColumn.putBooleans(0, batchSize, ((LongColumnVector)fromColumn).vector[0] == 1);
+      } else if (type instanceof ByteType) {
+        toColumn.putBytes(0, batchSize, (byte)((LongColumnVector)fromColumn).vector[0]);
+      } else if (type instanceof ShortType) {
+        toColumn.putShorts(0, batchSize, (short)((LongColumnVector)fromColumn).vector[0]);
+      } else if (type instanceof IntegerType || type instanceof DateType) {
+        toColumn.putInts(0, batchSize, (int)((LongColumnVector)fromColumn).vector[0]);
+      } else if (type instanceof LongType) {
+        toColumn.putLongs(0, batchSize, ((LongColumnVector)fromColumn).vector[0]);
+      } else if (type instanceof TimestampType) {
+        toColumn.putLongs(0, batchSize,
+          fromTimestampColumnVector((TimestampColumnVector)fromColumn, 0));
+      } else if (type instanceof FloatType) {
+        toColumn.putFloats(0, batchSize, (float)((DoubleColumnVector)fromColumn).vector[0]);
+      } else if (type instanceof DoubleType) {
+        toColumn.putDoubles(0, batchSize, ((DoubleColumnVector)fromColumn).vector[0]);
+      } else if (type instanceof StringType || type instanceof BinaryType) {
+        BytesColumnVector data = (BytesColumnVector)fromColumn;
+        toColumn.putByteArray(0, data.vector[0]);
+        for (int index = 0; index < batchSize; index++) {
+          toColumn.putArray(index, data.start[0], data.length[0]);
+        }
+      } else if (type instanceof DecimalType) {
+        DecimalType decimalType = (DecimalType)type;
+        putDecimalWritables(
+          toColumn,
+          batchSize,
+          decimalType.precision(),
+          decimalType.scale(),
+          ((DecimalColumnVector)fromColumn).vector[0]);
+      } else {
+        throw new UnsupportedOperationException("Unsupported Data Type: " + type);
+      }
+    }
+  }
+
+  private void putNonNullValues(
+      int batchSize,
+      StructField field,
+      ColumnVector fromColumn,
+      WritableColumnVector toColumn) {
+    DataType type = field.dataType();
+    if (type instanceof BooleanType) {
+      long[] data = ((LongColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        toColumn.putBoolean(index, data[index] == 1);
+      }
+    } else if (type instanceof ByteType) {
+      long[] data = ((LongColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        toColumn.putByte(index, (byte)data[index]);
+      }
+    } else if (type instanceof ShortType) {
+      long[] data = ((LongColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        toColumn.putShort(index, (short)data[index]);
+      }
+    } else if (type instanceof IntegerType || type instanceof DateType) {
+      long[] data = ((LongColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        toColumn.putInt(index, (int)data[index]);
+      }
+    } else if (type instanceof LongType) {
+      toColumn.putLongs(0, batchSize, ((LongColumnVector)fromColumn).vector, 0);
+    } else if (type instanceof TimestampType) {
+      TimestampColumnVector data = ((TimestampColumnVector)fromColumn);
+      for (int index = 0; index < batchSize; index++) {
+        toColumn.putLong(index, fromTimestampColumnVector(data, index));
+      }
+    } else if (type instanceof FloatType) {
+      double[] data = ((DoubleColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        toColumn.putFloat(index, (float)data[index]);
+      }
+    } else if (type instanceof DoubleType) {
+      toColumn.putDoubles(0, batchSize, ((DoubleColumnVector)fromColumn).vector, 0);
+    } else if (type instanceof StringType || type instanceof BinaryType) {
+      BytesColumnVector data = ((BytesColumnVector)fromColumn);
+      for (int index = 0; index < batchSize; index++) {
+        toColumn.putByteArray(index, data.vector[index], data.start[index], data.length[index]);
+      }
+    } else if (type instanceof DecimalType) {
+      DecimalType decimalType = (DecimalType)type;
+      DecimalColumnVector data = ((DecimalColumnVector)fromColumn);
+      for (int index = 0; index < batchSize; index++) {
+        putDecimalWritable(
+          toColumn,
+          index,
+          decimalType.precision(),
+          decimalType.scale(),
+          data.vector[index]);
+      }
+    } else {
+      throw new UnsupportedOperationException("Unsupported Data Type: " + type);
+    }
+  }
+
+  private void putValues(
+      int batchSize,
+      StructField field,
+      ColumnVector fromColumn,
+      WritableColumnVector toColumn) {
+    DataType type = field.dataType();
+    if (type instanceof BooleanType) {
+      long[] vector = ((LongColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          toColumn.putBoolean(index, vector[index] == 1);
+        }
+      }
+    } else if (type instanceof ByteType) {
+      long[] vector = ((LongColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          toColumn.putByte(index, (byte)vector[index]);
+        }
+      }
+    } else if (type instanceof ShortType) {
+      long[] vector = ((LongColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          toColumn.putShort(index, (short)vector[index]);
+        }
+      }
+    } else if (type instanceof IntegerType || type instanceof DateType) {
+      long[] vector = ((LongColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          toColumn.putInt(index, (int)vector[index]);
+        }
+      }
+    } else if (type instanceof LongType) {
+      long[] vector = ((LongColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          toColumn.putLong(index, vector[index]);
+        }
+      }
+    } else if (type instanceof TimestampType) {
+      TimestampColumnVector vector = ((TimestampColumnVector)fromColumn);
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          toColumn.putLong(index, fromTimestampColumnVector(vector, index));
+        }
+      }
+    } else if (type instanceof FloatType) {
+      double[] vector = ((DoubleColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          toColumn.putFloat(index, (float)vector[index]);
+        }
+      }
+    } else if (type instanceof DoubleType) {
+      double[] vector = ((DoubleColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          toColumn.putDouble(index, vector[index]);
+        }
+      }
+    } else if (type instanceof StringType || type instanceof BinaryType) {
+      BytesColumnVector vector = (BytesColumnVector)fromColumn;
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          toColumn.putByteArray(
+            index, vector.vector[index], vector.start[index], vector.length[index]);
+        }
+      }
+    } else if (type instanceof DecimalType) {
+      DecimalType decimalType = (DecimalType)type;
+      HiveDecimalWritable[] vector = ((DecimalColumnVector)fromColumn).vector;
+      for (int index = 0; index < batchSize; index++) {
+        if (fromColumn.isNull[index]) {
+          toColumn.putNull(index);
+        } else {
+          putDecimalWritable(
+            toColumn,
+            index,
+            decimalType.precision(),
+            decimalType.scale(),
+            vector[index]);
+        }
+      }
+    } else {
+      throw new UnsupportedOperationException("Unsupported Data Type: " + type);
+    }
   }
 
   /**
@@ -465,7 +492,7 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
       HiveDecimalWritable decimalWritable) {
     HiveDecimal decimal = decimalWritable.getHiveDecimal();
     Decimal value =
-            Decimal.apply(decimal.bigDecimalValue(), decimal.precision(), decimal.scale());
+      Decimal.apply(decimal.bigDecimalValue(), decimal.precision(), decimal.scale());
     value.changePrecision(precision, scale);
 
     if (precision <= Decimal.MAX_INT_DIGITS()) {
@@ -474,8 +501,9 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
       toColumn.putLongs(0, size, value.toUnscaledLong());
     } else {
       byte[] bytes = value.toJavaBigDecimal().unscaledValue().toByteArray();
+      toColumn.putByteArray(0, bytes);
       for (int index = 0; index < size; index++) {
-        toColumn.putByteArray(index, bytes, 0, bytes.length);
+        toColumn.putArray(index, 0, bytes.length);
       }
     }
   }

@@ -61,7 +61,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
   /**
    * Required Schema.
    */
-  private var requiredSchema: StructType = _
+  private var requiredFields: Array[StructField] = _
 
   /**
    * ColumnarBatch for vectorized execution by whole-stage codegen.
@@ -128,15 +128,17 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
       useOffHeap: Boolean,
       orcSchema: TypeDescription,
       requestedColIds: Array[Int],
-      requiredSchema: StructType,
+      requiredFields: Array[StructField],
       partitionSchema: StructType,
       partitionValues: InternalRow): Unit = {
     batch = orcSchema.createRowBatch(DEFAULT_SIZE)
     assert(!batch.selectedInUse, "`selectedInUse` should be initialized with `false`.")
 
-    val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
-    this.requiredSchema = requiredSchema
+    this.requiredFields = requiredFields
     this.requestedColIds = requestedColIds
+    assert(requiredFields.length == requestedColIds.length)
+
+    val resultSchema = StructType(requiredFields ++ partitionSchema.fields)
 
     val capacity = DEFAULT_SIZE
     val memoryMode = if (useOffHeap) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
@@ -148,7 +150,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
     columnarBatch = new ColumnarBatch(resultSchema, columnVectors.toArray, capacity)
 
     if (partitionValues.numFields > 0) {
-      val partitionIdx = requiredSchema.fields.length
+      val partitionIdx = requiredFields.length
       for (i <- 0 until partitionValues.numFields) {
         ColumnVectorUtils.populate(columnVectors(i + partitionIdx), partitionValues, i)
         columnVectors(i + partitionIdx).setIsConstant()
@@ -156,7 +158,7 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
     }
 
     // Initialize the missing columns once.
-    for (i <- 0 until requiredSchema.length) {
+    for (i <- 0 until requiredFields.length) {
       if (requestedColIds(i) < 0) {
         columnVectors(i).putNulls(0, columnarBatch.capacity)
         columnVectors(i).setIsConstant()
@@ -184,8 +186,8 @@ private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBat
     columnarBatch.setNumRows(batchSize)
 
     var i = 0
-    while (i < requiredSchema.length) {
-      val field = requiredSchema(i)
+    while (i < requiredFields.length) {
+      val field = requiredFields(i)
       val toColumn = columnVectors(i)
       toColumn.reserve(batchSize)
 

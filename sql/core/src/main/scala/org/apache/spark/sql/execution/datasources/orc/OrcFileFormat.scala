@@ -191,7 +191,7 @@ class OrcFileFormat
             vectorizedReader.initBatch(
               reader.getSchema,
               requestedColIds,
-              requiredSchema,
+              requiredSchema.fields,
               partitionSchema,
               file.partitionValues)
             vectorizedReader
@@ -202,7 +202,7 @@ class OrcFileFormat
               enableOffHeapColumnVector && taskContext.isDefined,
               reader.getSchema,
               requestedColIds,
-              requiredSchema,
+              requiredSchema.fields,
               partitionSchema,
               file.partitionValues)
             vectorizedReader
