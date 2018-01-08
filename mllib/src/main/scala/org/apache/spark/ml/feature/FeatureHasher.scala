@@ -21,7 +21,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
@@ -40,9 +40,9 @@ import org.apache.spark.util.collection.OpenHashMap
  * The [[FeatureHasher]] transformer operates on multiple columns. Each column may contain either
  * numeric or categorical features. Behavior and handling of column data types is as follows:
  *  -Numeric columns: For numeric features, the hash value of the column name is used to map the
- *                    feature value to its index in the feature vector. Numeric features are never
- *                    treated as categorical, even when they are integers. You must explicitly
- *                    convert numeric columns containing categorical features to strings first.
+ *                    feature value to its index in the feature vector. By default, numeric features
+ *                    are not treated as categorical (even when they are integers). To treat them
+ *                    as categorical, specify the relevant columns in `categoricalCols`.
  *  -String columns: For categorical features, the hash value of the string "column_name=value"
  *                   is used to map to the vector index, with an indicator value of `1.0`.
  *                   Thus, categorical features are "one-hot" encoded
@@ -87,6 +87,17 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
   def this() = this(Identifiable.randomUID("featureHasher"))
 
   /**
+   * Numeric columns to treat as categorical features. By default only string and boolean
+   * columns are treated as categorical, so this param can be used to explicitly specify the
+   * numerical columns to treat as categorical. Note, the relevant columns must also be set in
+   * `inputCols`.
+   * @group param
+   */
+  @Since("2.3.0")
+  val categoricalCols = new StringArrayParam(this, "categoricalCols",
+    "numeric columns to treat as categorical")
+
+  /**
    * Number of features. Should be greater than 0.
    * (default = 2^18^)
    * @group param
@@ -117,15 +128,28 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
   @Since("2.3.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group getParam */
+  @Since("2.3.0")
+  def getCategoricalCols: Array[String] = $(categoricalCols)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setCategoricalCols(value: Array[String]): this.type = set(categoricalCols, value)
+
   @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val hashFunc: Any => Int = OldHashingTF.murmur3Hash
     val n = $(numFeatures)
     val localInputCols = $(inputCols)
+    val catCols = if (isSet(categoricalCols)) {
+      $(categoricalCols).toSet
+    } else {
+      Set[String]()
+    }
 
     val outputSchema = transformSchema(dataset.schema)
     val realFields = outputSchema.fields.filter { f =>
-      f.dataType.isInstanceOf[NumericType]
+      f.dataType.isInstanceOf[NumericType] && !catCols.contains(f.name)
     }.map(_.name).toSet
 
     def getDouble(x: Any): Double = {
@@ -149,8 +173,8 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
             val hash = hashFunc(colName)
             (hash, value)
           } else {
-            // string and boolean values are treated as categorical, with an indicator value of 1.0
-            // and vector index based on hash of "column_name=value"
+            // string, boolean and numeric values that are in catCols are treated as categorical,
+            // with an indicator value of 1.0 and vector index based on hash of "column_name=value"
             val value = row.get(fieldIndex).toString
             val fieldName = s"$colName=$value"
             val hash = hashFunc(fieldName)

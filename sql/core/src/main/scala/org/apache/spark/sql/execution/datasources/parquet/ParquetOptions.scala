@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.util.Locale
 
+import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -42,8 +43,15 @@ class ParquetOptions(
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
    */
   val compressionCodecClassName: String = {
-    val codecName = parameters.getOrElse("compression",
-      sqlConf.parquetCompressionCodec).toLowerCase(Locale.ROOT)
+    // `compression`, `parquet.compression`(i.e., ParquetOutputFormat.COMPRESSION), and
+    // `spark.sql.parquet.compression.codec`
+    // are in order of precedence from highest to lowest.
+    val parquetCompressionConf = parameters.get(ParquetOutputFormat.COMPRESSION)
+    val codecName = parameters
+      .get("compression")
+      .orElse(parquetCompressionConf)
+      .getOrElse(sqlConf.parquetCompressionCodec)
+      .toLowerCase(Locale.ROOT)
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
       val availableCodecs =
         shortParquetCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))

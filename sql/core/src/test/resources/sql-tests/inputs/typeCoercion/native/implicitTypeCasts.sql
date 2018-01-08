@@ -32,7 +32,7 @@ SELECT 1.1 - '2.2' FROM t;
 SELECT 1.1 * '2.2' FROM t;
 SELECT 4.4 / '2.2' FROM t;
 
--- concatentation
+-- concatenation
 SELECT '$' || cast(1 as smallint) || '$' FROM t;
 SELECT '$' || 1 || '$' FROM t;
 SELECT '$' || cast(1 as bigint) || '$' FROM t;

@@ -114,7 +114,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
         (i, converter(Row(i)))
       }
       val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0)
-      val taskContext = new TaskContextImpl(0, 0, 0, 0, taskMemoryManager, new Properties, null)
+      val taskContext = new TaskContextImpl(0, 0, 0, 0, 0, taskMemoryManager, new Properties, null)
 
       val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
         taskContext,
