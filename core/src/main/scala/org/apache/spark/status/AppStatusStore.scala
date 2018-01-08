@@ -338,7 +338,7 @@ private[spark] class AppStatusStore(
    * Whether to cache information about a specific metric quantile. We cache quantiles at every 0.05
    * step, which covers the default values used both in the API and in the stages page.
    */
-  private def shouldCacheQuantile(q: Double): Boolean = ((q * 100).toInt % 5) == 0
+  private def shouldCacheQuantile(q: Double): Boolean = (math.round(q * 100) % 5) == 0
 
   private def quantileToString(q: Double): String = math.round(q * 100).toString
 
