@@ -147,6 +147,8 @@ class OrcFileFormat
     }
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
+    val sqlConf = sparkSession.sessionState.conf
+    val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
     val enableVectorizedJavaReader = sparkSession.sessionState.conf.orcVectorizedJavaReaderEnabled
 
@@ -180,11 +182,13 @@ class OrcFileFormat
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
+        val taskContext = Option(TaskContext.get())
         if (enableVectorizedReader) {
           val batchReader = if (enableVectorizedJavaReader) {
-            val vectorizedReader = new JavaOrcColumnarBatchReader
+            val vectorizedReader = new JavaOrcColumnarBatchReader(
+              enableOffHeapColumnVector && taskContext.isDefined)
             vectorizedReader.initialize(fileSplit, taskAttemptContext)
-            vectorizedReader.setRequiredSchema(
+            vectorizedReader.initBatch(
               reader.getSchema,
               requestedColIds,
               requiredSchema,
@@ -194,7 +198,8 @@ class OrcFileFormat
           } else {
             val vectorizedReader = new OrcColumnarBatchReader
             vectorizedReader.initialize(fileSplit, taskAttemptContext)
-            vectorizedReader.setRequiredSchema(
+            vectorizedReader.initBatch(
+              enableOffHeapColumnVector && taskContext.isDefined,
               reader.getSchema,
               requestedColIds,
               requiredSchema,
