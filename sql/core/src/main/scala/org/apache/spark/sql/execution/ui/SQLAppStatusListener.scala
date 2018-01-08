@@ -99,7 +99,7 @@ class SQLAppStatusListener(
     // Reset the metrics tracking object for the new attempt.
     Option(stageMetrics.get(event.stageInfo.stageId)).foreach { metrics =>
       metrics.taskMetrics.clear()
-      metrics.attemptId = event.stageInfo.attemptId
+      metrics.attemptId = event.stageInfo.attemptNumber
     }
   }
 
