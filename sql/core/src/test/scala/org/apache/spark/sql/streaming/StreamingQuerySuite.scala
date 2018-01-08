@@ -424,6 +424,24 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("SPARK-22975: MetricsReporter defaults when there was no progress reported") {
+    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+      testStream(MemoryStream[Int].toDF())(
+        AssertOnQuery { q =>
+          q.streamMetrics.metricRegistry.getGauges.get("latency").getValue.asInstanceOf[Long] == 0L
+        },
+        AssertOnQuery { q =>
+          q.streamMetrics.metricRegistry.getGauges.get("inputRate-total").getValue
+            .asInstanceOf[Double] == 0.0
+        },
+        AssertOnQuery { q =>
+          q.streamMetrics.metricRegistry.getGauges.get("processingRate-total").getValue
+            .asInstanceOf[Double] == 0.0
+        }
+      )
+    }
+  }
+
   test("input row calculation with mixed batch and streaming sources") {
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
