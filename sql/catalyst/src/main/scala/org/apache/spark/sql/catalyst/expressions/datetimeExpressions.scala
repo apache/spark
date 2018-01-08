@@ -23,6 +23,8 @@ import java.util.{Calendar, TimeZone}
 
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -1008,7 +1010,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     if (right.foldable) {
-      val tz = right.eval()
+      val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
         ev.copy(code = s"""
            |boolean ${ev.isNull} = true;
@@ -1017,8 +1019,9 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
       } else {
         val tzClass = classOf[TimeZone].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getTimeZone("$tz");""")
+          v => s"""$v = $dtu.getTimeZone("$escapedTz");""")
         val utcTerm = "tzUTC"
         ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
           v => s"""$v = $dtu.getTimeZone("UTC");""")
@@ -1185,7 +1188,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     if (right.foldable) {
-      val tz = right.eval()
+      val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
         ev.copy(code = s"""
            |boolean ${ev.isNull} = true;
@@ -1194,8 +1197,9 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
       } else {
         val tzClass = classOf[TimeZone].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getTimeZone("$tz");""")
+          v => s"""$v = $dtu.getTimeZone("$escapedTz");""")
         val utcTerm = "tzUTC"
         ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
           v => s"""$v = $dtu.getTimeZone("UTC");""")
