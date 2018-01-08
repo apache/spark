@@ -175,7 +175,7 @@ class SQLAppStatusListener(
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
     // This can happen if the UI is requesting this data, and the onExecutionEnd handler is
-    // running at the same time. The metrics calculcated for the UI can be innacurate in that
+    // running at the same time. The metrics calculated for the UI can be innacurate in that
     // case, since the onExecutionEnd handler will clean up tracked stage metrics.
     if (exec.metricsValues != null) {
       exec.metricsValues

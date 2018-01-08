@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, Ro
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousDataReader, PartitionOffset}
 import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.util.{SystemClock, ThreadUtils}
 
