@@ -23,8 +23,6 @@ import org.apache.spark.internal.Logging
 
 /**
  * Thread audit for test suites.
- *
- * Thread audit happens normally in [[SparkFunSuite]] automatically when a new test suite created.
  */
 trait ThreadAudit extends Logging {
 

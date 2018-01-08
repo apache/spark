@@ -31,23 +31,21 @@ import org.apache.spark.util.AccumulatorContext
  * Thread audit happens normally here automatically when a new test suite created.
  * The only prerequisite for that is that the test class must extend [[SparkFunSuite]].
  *
- * There are some test suites which are doing initialization before [[SparkFunSuite#beforeAll]]
- * executed. This case auditing can be moved into another place in the call sequence.
- *
- * To do the audit in a custom place/way the following can be done:
+ * It is possible to override the default thread audit behavior by setting enableAutoThreadAudit
+ * to false and manually calling the audit methods, if desired. For example:
  *
  * class MyTestSuite extends SparkFunSuite {
  *
- *   override val doThreadAuditInSparkFunSuite = false
+ *   override val enableAutoThreadAudit = false
  *
  *   protected override def beforeAll(): Unit = {
- *     doThreadPreAudit
- *     super.beforeAll
+ *     doThreadPreAudit()
+ *     super.beforeAll()
  *   }
  *
  *   protected override def afterAll(): Unit = {
- *     super.afterAll
- *     doThreadPostAudit
+ *     super.afterAll()
+ *     doThreadPostAudit()
  *   }
  * }
  */
