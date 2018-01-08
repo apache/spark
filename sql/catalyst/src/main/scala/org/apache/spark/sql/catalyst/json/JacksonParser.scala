@@ -373,10 +373,9 @@ object JacksonParser {
         }
       }
     }
-    var currentChar: Char = input.read().toChar
+    private var currentChar: Char = input.read().toChar
     private var previousToken: Option[Char] = None
     private var nextRecord = readNext
-
 
     override def hasNext: Boolean = nextRecord.isDefined
 
@@ -393,7 +392,6 @@ object JacksonParser {
       if (!currentChar.isWhitespace) {
         previousToken = Some(currentChar)
       }
-
       currentChar = input.read().toChar
     }
 
@@ -406,13 +404,11 @@ object JacksonParser {
 
       val sb = new StringBuilder()
       sb.append(currentChar)
-      while (!currentChar.isJsonObjectFinished(endToken)
-          && input.available() > 0) {
+      while (!currentChar.isJsonObjectFinished(endToken) && input.available() > 0) {
         moveToNextChar()
         currentChar match {
           case '{' | '[' =>
-            if (previousToken.isDefined
-                && previousToken.forall(_.isJsonObjectFinished(None))) {
+            if (previousToken.isDefined && previousToken.forall(_.isJsonObjectFinished(None))) {
               return Some(sb.toString)
             }
             readJsonObject.foreach(sb.append)
@@ -424,8 +420,7 @@ object JacksonParser {
     }
 
     private def readNext: Option[String] = {
-      while (input.available() > 0
-          && currentChar.isWhitespace) {
+      while (input.available() > 0 && currentChar.isWhitespace) {
         moveToNextChar()
       }
       if (input.available() <= 0) {

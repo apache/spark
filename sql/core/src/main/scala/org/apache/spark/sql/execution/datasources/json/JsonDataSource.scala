@@ -147,12 +147,12 @@ object MultiLineJsonDataSource extends JsonDataSource {
   private def createBaseRdd(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus]): RDD[String] = {
-    sparkSession.sparkContext
-      .wholeTextFiles(inputPaths.map(_.getPath).mkString(","))
-      .flatMap(fileContent => {
-        val is = new ByteArrayInputStream(fileContent._2.getBytes)
-        JacksonParser.splitDocuments(is)
-      })
+    val inputPathsString = inputPaths.map(_.getPath).mkString(",")
+    val wholeFilesRDD = sparkSession.sparkContext.wholeTextFiles(inputPathsString)
+    wholeFilesRDD.flatMap { fileContent =>
+      val is = new ByteArrayInputStream(fileContent._2.getBytes)
+      JacksonParser.splitDocuments(is)
+    }
   }
 
   private def createParser(jsonFactory: JsonFactory, record: PortableDataStream): JsonParser = {
