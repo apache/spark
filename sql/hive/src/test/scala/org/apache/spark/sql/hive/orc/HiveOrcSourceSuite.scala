@@ -67,6 +67,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
   test("SPARK-22972: hive orc source") {
     val tableName = "normal_orc_as_source_hive"
     withTable(tableName) {
+
       sql(
         s"""CREATE TABLE $tableName
            |USING org.apache.spark.sql.hive.orc
@@ -74,6 +75,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
            |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
            |)
        """.stripMargin)
+
       val tableMetadata = spark.sessionState.catalog.getTableMetadata(
         TableIdentifier(tableName))
       assert(tableMetadata.storage.inputFormat ==
