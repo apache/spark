@@ -141,7 +141,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
   test("approximate quantile") {
     val n = 1000
-    val df = Seq.tabulate(n)(i => (i, 2.0 * i)).toDF("singles", "doubles")
+    val df = Seq.tabulate(n + 1)(i => (i, 2.0 * i)).toDF("singles", "doubles")
 
     val q1 = 0.5
     val q2 = 0.8
@@ -230,11 +230,9 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
     val resNaN1 = dfNaN.stat.approxQuantile("input1", Array(q1, q2), epsilon)
     assert(resNaN1.count(_.isNaN) === 0)
-    assert(resNaN1.count(_ == null) === 0)
 
     val resNaN2 = dfNaN.stat.approxQuantile("input2", Array(q1, q2), epsilon)
     assert(resNaN2.count(_.isNaN) === 0)
-    assert(resNaN2.count(_ == null) === 0)
 
     val resNaN3 = dfNaN.stat.approxQuantile("input3", Array(q1, q2), epsilon)
     assert(resNaN3.isEmpty)
@@ -242,7 +240,6 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val resNaNAll = dfNaN.stat.approxQuantile(Array("input1", "input2", "input3"),
       Array(q1, q2), epsilon)
     assert(resNaNAll.flatten.count(_.isNaN) === 0)
-    assert(resNaNAll.flatten.count(_ == null) === 0)
 
     assert(resNaN1(0) === resNaNAll(0)(0))
     assert(resNaN1(1) === resNaNAll(0)(1))
@@ -261,6 +258,14 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       .stat.approxQuantile(Array("input1", "input2"), Array(q1, q2), epsilon)
     assert(res2(0).isEmpty)
     assert(res2(1).isEmpty)
+  }
+
+  // SPARK-22957: check for 32bit overflow when computing rank.
+  // ignored - takes 4 minutes to run.
+  ignore("approx quantile 4: test for Int overflow") {
+    val res = spark.range(3000000000L).stat.approxQuantile("id", Array(0.8, 0.9), 0.05)
+    assert(res(0) > 2200000000.0)
+    assert(res(1) > 2200000000.0)
   }
 
   test("crosstab") {

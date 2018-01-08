@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.{Alias, Not}
 import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -31,6 +32,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val batches =
       Batch("Replace Operators", FixedPoint(100),
         ReplaceDistinctWithAggregate,
+        ReplaceExceptWithFilter,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
         ReplaceDeduplicateWithAggregate) :: Nil
@@ -46,6 +48,108 @@ class ReplaceOperatorSuite extends PlanTest {
     val correctAnswer =
       Aggregate(table1.output, table1.output,
         Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Except with Filter while both the nodes are of type Filter") {
+    val attributeA = 'a.int
+    val attributeB = 'b.int
+
+    val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
+    val table2 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
+    val table3 = Filter(attributeB < 1, Filter(attributeA >= 2, table1))
+
+    val query = Except(table2, table3)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+          (attributeA >= 2 && attributeB < 1)),
+          Filter(attributeB === 2, Filter(attributeA === 1, table1)))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Except with Filter while only right node is of type Filter") {
+    val attributeA = 'a.int
+    val attributeB = 'b.int
+
+    val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
+    val table2 = Filter(attributeB < 1, Filter(attributeA >= 2, table1))
+
+    val query = Except(table1, table2)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+          (attributeA >= 2 && attributeB < 1)), table1)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Except with Filter while both the nodes are of type Project") {
+    val attributeA = 'a.int
+    val attributeB = 'b.int
+
+    val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
+    val table2 = Project(Seq(attributeA, attributeB), table1)
+    val table3 = Project(Seq(attributeA, attributeB),
+      Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
+
+    val query = Except(table2, table3)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+          (attributeA >= 2 && attributeB < 1)),
+          Project(Seq(attributeA, attributeB), table1))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Except with Filter while only right node is of type Project") {
+    val attributeA = 'a.int
+    val attributeB = 'b.int
+
+    val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
+    val table2 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
+    val table3 = Project(Seq(attributeA, attributeB),
+      Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
+
+    val query = Except(table2, table3)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+          Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+            (attributeA >= 2 && attributeB < 1)),
+            Filter(attributeB === 2, Filter(attributeA === 1, table1)))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Except with Filter while left node is Project and right node is Filter") {
+    val attributeA = 'a.int
+    val attributeB = 'b.int
+
+    val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
+    val table2 = Project(Seq(attributeA, attributeB),
+      Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
+    val table3 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
+
+    val query = Except(table2, table3)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+          (attributeA === 1 && attributeB === 2)),
+          Project(Seq(attributeA, attributeB),
+            Filter(attributeB < 1, Filter(attributeA >= 2, table1))))).analyze
 
     comparePlans(optimized, correctAnswer)
   }

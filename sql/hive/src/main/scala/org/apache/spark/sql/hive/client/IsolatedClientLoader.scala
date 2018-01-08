@@ -248,7 +248,7 @@ private[hive] class IsolatedClientLoader(
   }
 
   /** The isolated client interface to Hive. */
-  private[hive] def createClient(): HiveClient = {
+  private[hive] def createClient(): HiveClient = synchronized {
     if (!isolationOn) {
       return new HiveClientImpl(version, sparkConf, hadoopConf, config, baseClassLoader, this)
     }

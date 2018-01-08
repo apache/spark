@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>14</version>
+    <version>18</version>
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
@@ -98,21 +98,21 @@
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>assembly</module>
-    <module>external/flume</module>
-    <module>external/flume-sink</module>
-    <module>external/flume-assembly</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
+    <!-- See additional modules enabled by profiles below -->
   </modules>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>1.8</java.version>
+    <maven.compiler.source>${java.version}</maven.compiler.source>
+    <maven.compiler.target>${java.version}</maven.compiler.target>
     <maven.version>3.3.9</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.16</slf4j.version>
@@ -130,7 +130,7 @@
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.8.2</parquet.version>
-    <orc.version>1.4.0</orc.version>
+    <orc.version>1.4.1</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.3.20.v20170531</jetty.version>
@@ -138,18 +138,18 @@
     <chill.version>0.8.4</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
-    <codahale.metrics.version>3.1.2</codahale.metrics.version>
+    <codahale.metrics.version>3.1.5</codahale.metrics.version>
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-    <jets3t.version>0.9.3</jets3t.version>
+    <jets3t.version>0.9.4</jets3t.version>
     <aws.kinesis.client.version>1.7.3</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.76</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
-    <commons.httpclient.version>4.5.2</commons.httpclient.version>
-    <commons.httpcore.version>4.4.4</commons.httpcore.version>
+    <commons.httpclient.version>4.5.4</commons.httpclient.version>
+    <commons.httpcore.version>4.4.8</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -170,7 +170,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.5</commons-lang3.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
-    <janino.version>3.0.0</janino.version>
+    <janino.version>3.0.8</janino.version>
     <jersey.version>2.22.2</jersey.version>
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -179,10 +179,13 @@
     <antlr4.version>4.7</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
-    <paranamer.version>2.6</paranamer.version>
+    <!--
+    Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
+    -->
+    <paranamer.version>2.8</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
-    <arrow.version>0.4.0</arrow.version>
+    <arrow.version>0.8.0</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -225,7 +228,7 @@
       <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <url>https://repo1.maven.org/maven2</url>
+      <url>https://repo.maven.apache.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -237,7 +240,7 @@
   <pluginRepositories>
     <pluginRepository>
       <id>central</id>
-      <url>https://repo1.maven.org/maven2</url>
+      <url>https://repo.maven.apache.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -537,6 +540,11 @@
         <version>1.4.0</version>
       </dependency>
       <dependency>
+        <groupId>com.github.luben</groupId>
+        <artifactId>zstd-jni</artifactId>
+        <version>1.3.2-2</version>
+      </dependency>
+      <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
         <version>2.7.0</version>
@@ -572,7 +580,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.47.Final</version>
+        <version>4.1.17.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -636,11 +644,6 @@
             <artifactId>guava</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>com.fasterxml.jackson.module</groupId>
-        <artifactId>jackson-module-paranamer</artifactId>
-        <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
@@ -733,6 +736,12 @@
         <groupId>org.scala-lang</groupId>
         <artifactId>scalap</artifactId>
         <version>${scala.version}</version>
+      </dependency>
+      <!-- SPARK-16770 affecting Scala 2.11.x -->
+      <dependency>
+        <groupId>jline</groupId>
+        <artifactId>jline</artifactId>
+        <version>2.12.1</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
@@ -977,6 +986,12 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk15on</artifactId>
+        <!-- brought in by jets3t; see SPARK-22634 -->
+        <version>1.58</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-api</artifactId>
         <version>${yarn.version}</version>
@@ -1186,6 +1201,10 @@
           <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1716,6 +1735,10 @@
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>io.airlift</groupId>
+            <artifactId>slice</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1921,11 +1944,6 @@
         <version>${antlr4.version}</version>
       </dependency>
       <dependency>
-        <groupId>jline</groupId>
-        <artifactId>jline</artifactId>
-        <version>2.12.1</version>
-      </dependency>
-      <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-crypto</artifactId>
         <version>${commons-crypto.version}</version>
@@ -1956,6 +1974,14 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
+            <artifactId>netty-buffer</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
             <artifactId>netty-handler</artifactId>
           </exclusion>
         </exclusions>
@@ -1969,7 +1995,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>1.4.1</version>
+          <version>3.0.0-M1</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -2012,6 +2038,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
+          <!-- 3.3.1 won't work with zinc; fails to find javac from java.home -->
           <version>3.2.2</version>
           <executions>
             <execution>
@@ -2061,7 +2088,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.6.1</version>
+          <version>3.7.0</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -2078,7 +2105,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>2.19.1</version>
+          <version>2.20.1</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2088,7 +2115,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-Xmx3g -Xss4096k -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2137,7 +2164,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx3g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
             <stderr/>
             <environmentVariables>
               <!--
@@ -2222,7 +2249,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>2.10.4</version>
+          <version>3.0.0-M1</version>
           <configuration>
             <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
             <tags>
@@ -2262,17 +2289,20 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
-          <version>1.5.0</version>
+          <version>1.6.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-assembly-plugin</artifactId>
-          <version>3.0.0</version>
+          <version>3.1.0</version>
+          <configuration>
+            <tarLongFileMode>posix</tarLongFileMode>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.0.0</version>
+          <version>3.1.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2287,7 +2317,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.0.0</version>
+          <version>3.0.2</version>
           <executions>
             <execution>
               <id>default-cli</id>
@@ -2487,10 +2517,8 @@
         <artifactId>maven-checkstyle-plugin</artifactId>
         <version>2.17</version>
         <configuration>
-          <verbose>false</verbose>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
-          <failOnWarning>false</failOnWarning>
           <sourceDirectories>${basedir}/src/main/java,${basedir}/src/main/scala</sourceDirectories>
           <testSourceDirectory>${basedir}/src/test/java</testSourceDirectory>
           <configLocation>dev/checkstyle.xml</configLocation>
@@ -2498,6 +2526,13 @@
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
           <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
         </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>8.2</version>
+          </dependency>
+        </dependencies>
         <executions>
           <execution>
             <goals>
@@ -2579,6 +2614,15 @@
       </dependencies>
     </profile>
 
+    <profile>
+      <id>flume</id>
+      <modules>
+        <module>external/flume</module>
+        <module>external/flume-sink</module>
+        <module>external/flume-assembly</module>
+      </modules>
+    </profile>
+
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
     <profile>
       <id>spark-ganglia-lgpl</id>
@@ -2638,6 +2682,13 @@
     </profile>
 
     <profile>
+      <id>kubernetes</id>
+      <modules>
+        <module>resource-managers/kubernetes/core</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
@@ -2677,7 +2728,7 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.3</scala.version>
+        <scala.version>2.12.4</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>

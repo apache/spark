@@ -29,6 +29,7 @@ import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.JvmSource
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
 
 class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
@@ -158,6 +159,30 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(attemptIdsWithFailedTask.toSet === Set(0, 1))
   }
 
+  test("TaskContext.stageAttemptNumber getter") {
+    sc = new SparkContext("local[1,2]", "test")
+
+    // Check stageAttemptNumbers are 0 for initial stage
+    val stageAttemptNumbers = sc.parallelize(Seq(1, 2), 2).mapPartitions { _ =>
+      Seq(TaskContext.get().stageAttemptNumber()).iterator
+    }.collect()
+    assert(stageAttemptNumbers.toSet === Set(0))
+
+    // Check stageAttemptNumbers that are resubmitted when tasks have FetchFailedException
+    val stageAttemptNumbersWithFailedStage =
+      sc.parallelize(Seq(1, 2, 3, 4), 4).repartition(1).mapPartitions { _ =>
+      val stageAttemptNumber = TaskContext.get().stageAttemptNumber()
+      if (stageAttemptNumber < 2) {
+        // Throw FetchFailedException to explicitly trigger stage resubmission. A normal exception
+        // will only trigger task resubmission in the same stage.
+        throw new FetchFailedException(null, 0, 0, 0, "Fake")
+      }
+      Seq(stageAttemptNumber).iterator
+    }.collect()
+
+    assert(stageAttemptNumbersWithFailedStage.toSet === Set(2))
+  }
+
   test("accumulators are updated on exception failures") {
     // This means use 1 core and 4 max task failures
     sc = new SparkContext("local[1,4]", "test")
@@ -190,7 +215,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // accumulator updates from it.
     val taskMetrics = TaskMetrics.empty
     val task = new Task[Int](0, 0, 0) {
-      context = new TaskContextImpl(0, 0, 0L, 0,
+      context = new TaskContextImpl(0, 0, 0, 0L, 0,
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,
         SparkEnv.get.metricsSystem,
@@ -213,7 +238,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // accumulator updates from it.
     val taskMetrics = TaskMetrics.registered
     val task = new Task[Int](0, 0, 0) {
-      context = new TaskContextImpl(0, 0, 0L, 0,
+      context = new TaskContextImpl(0, 0, 0, 0L, 0,
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,
         SparkEnv.get.metricsSystem,

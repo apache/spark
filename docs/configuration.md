@@ -158,10 +158,30 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.memoryOverhead</code></td>
+  <td>driverMemory * 0.10, with minimum of 384 </td>
+  <td>
+    The amount of off-heap memory (in megabytes) to be allocated per driver in cluster mode. This is
+    memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
+    This tends to grow with the container size (typically 6-10%). This option is currently supported
+    on YARN and Kubernetes.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
     Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.memoryOverhead</code></td>
+  <td>executorMemory * 0.10, with minimum of 384 </td>
+  <td>
+    The amount of off-heap memory (in megabytes) to be allocated per executor. This is memory that
+    accounts for things like VM overheads, interned strings, other native overheads, etc. This tends
+    to grow with the executor size (typically 6-10%). This option is currently supported on YARN and
+    Kubernetes.
   </td>
 </tr>
 <tr>
@@ -547,13 +567,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
+  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
   <td>Long.MaxValue</td>
   <td>
-    The blocks of a shuffle request will be fetched to disk when size of the request is above
-    this threshold. This is to avoid a giant request takes too much memory. We can enable this
-    config by setting a specific value(e.g. 200m). Note that this config can be enabled only when
-    the shuffle shuffle service is newer than Spark-2.2 or the shuffle service is disabled.
+    The remote block will be fetched to disk when size of the block is above this threshold.
+    This is to avoid a giant request takes too much memory. We can enable this config by setting
+    a specific value(e.g. 200m). Note this configuration will affect both shuffle fetch 
+    and block manager remote block fetch. For users who enabled external shuffle service,
+    this feature can only be worked when external shuffle service is newer than Spark 2.2.
   </td>
 </tr>
 <tr>
@@ -714,6 +735,14 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.eventLog.logBlockUpdates.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to log events for every block update, if <code>spark.eventLog.enabled</code> is true.
+    *Warning*: This will increase the size of the event log considerably.
+  </td>
+</tr>
+<tr>
   <td><code>spark.eventLog.compress</code></td>
   <td>false</td>
   <td>
@@ -737,6 +766,20 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to log Spark events, useful for reconstructing the Web UI after the application has
     finished.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.overwrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to overwrite any existing files.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.buffer.kb</code></td>
+  <td>100k</td>
+  <td>
+    Buffer size in KB to use when writing to output streams.
   </td>
 </tr>
 <tr>
@@ -866,7 +909,8 @@ Apart from these, the following properties are also available, and may be useful
     e.g.
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
-    and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>,
+    and <code>org.apache.spark.io.ZstdCompressionCodec</code>.
   </td>
 </tr>
 <tr>
@@ -883,6 +927,23 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Block size used in Snappy compression, in the case when Snappy compression codec
     is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.level</code></td>
+  <td>1</td>
+  <td>
+    Compression level for Zstd compression codec. Increasing the compression level will result in better
+    compression at the expense of more CPU and memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.bufferSize</code></td>
+  <td>32k</td>
+  <td>
+    Buffer size used in Zstd compression, in the case when Zstd compression codec
+    is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
+    might increase the compression cost because of excessive JNI call overhead.
   </td>
 </tr>
 <tr>
@@ -1015,7 +1076,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.5</td>
   <td>
     Amount of storage memory immune to eviction, expressed as a fraction of the size of the
-    region set aside by <code>s​park.memory.fraction</code>. The higher this is, the less
+    region set aside by <code>spark.memory.fraction</code>. The higher this is, the less
     working memory may be available to execution and tasks may spill to disk more often.
     Leaving this at the default value is recommended. For more detail, see
     <a href="tuning.html#memory-management-overview">this description</a>.
@@ -1041,7 +1102,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.useLegacyMode</code></td>
   <td>false</td>
   <td>
-    ​Whether to enable the legacy memory management mode used in Spark 1.5 and before.
+    Whether to enable the legacy memory management mode used in Spark 1.5 and before.
     The legacy mode rigidly partitions the heap space into fixed-size regions,
     potentially leading to excessive spilling if the application was not tuned.
     The following deprecated memory fraction configurations are not read unless this is enabled:
@@ -1091,6 +1152,46 @@ Apart from these, the following properties are also available, and may be useful
     to get the replication level of the block to the initial number.
   </td>
 </tr>
+<tr>
+  <td><code>spark.cleaner.periodicGC.interval</code></td>
+  <td>30min</td>
+  <td>
+    Controls how often to trigger a garbage collection.<br><br>
+    This context cleaner triggers cleanups only when weak references are garbage collected.
+    In long-running applications with large driver JVMs, where there is little memory pressure
+    on the driver, this may happen very occasionally or not at all. Not cleaning at all may
+    lead to executors running out of disk space after a while.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking</code></td>
+  <td>true</td>
+  <td>
+    Enables or disables context cleaning.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking.blocking</code></td>
+  <td>true</td>
+  <td>
+    Controls whether the cleaning thread should block on cleanup tasks (other than shuffle, which is controlled by
+    <code>spark.cleaner.referenceTracking.blocking.shuffle</code> Spark property).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking.blocking.shuffle</code></td>
+  <td>false</td>
+  <td>
+    Controls whether the cleaning thread should block on shuffle cleanup tasks.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.referenceTracking.cleanCheckpoints</code></td>
+  <td>false</td>
+  <td>
+    Controls whether to clean checkpoint files if the reference is out of scope.
+  </td>
+</tr>
 </table>
 
 ### Execution Behavior
@@ -1115,11 +1216,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The number of cores to use on each executor.
 
-    In standalone and Mesos coarse-grained modes, setting this
-    parameter allows an application to run multiple executors on the
-    same worker, provided that there are enough cores on that
-    worker. Otherwise, only one executor per application will run on
-    each worker.
+    In standalone and Mesos coarse-grained modes, for more detail, see
+    <a href="spark-standalone.html#Executors Scheduling">this description</a>.
   </td>
 </tr>
 <tr>
@@ -1400,10 +1498,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
-  <td>0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
+  <td>0.8 for KUBERNETES mode; 0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode, CPU cores in standalone mode and Mesos coarsed-grained
+    (resources are executors in yarn mode and Kubernetes mode, CPU cores in standalone mode and Mesos coarsed-grained
      mode ['spark.cores.max' value is total expected resources for Mesos coarse-grained mode] )
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
@@ -2277,6 +2375,8 @@ can be found on the pages for each mode:
 #### [YARN](running-on-yarn.html#configuration)
 
 #### [Mesos](running-on-mesos.html#configuration)
+
+#### [Kubernetes](running-on-kubernetes.html#configuration)
 
 #### [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
 

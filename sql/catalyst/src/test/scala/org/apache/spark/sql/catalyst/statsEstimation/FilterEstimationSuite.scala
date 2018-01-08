@@ -22,7 +22,7 @@ import java.sql.Date
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, Join, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
  */
 class FilterEstimationSuite extends StatsEstimationTestBase {
 
-  // Suppose our test table has 10 rows and 6 columns.
+  // Suppose our test table has 10 rows and 10 columns.
   // column cint has values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
   // Hence, distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
   val attrInt = AttributeReference("cint", IntegerType)()
@@ -91,6 +91,26 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val colStatInt4 = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
     nullCount = 0, avgLen = 4, maxLen = 4)
 
+  // column cintHgm has values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 with histogram.
+  // Note that cintHgm has an even distribution with histogram information built.
+  // Hence, distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
+  val attrIntHgm = AttributeReference("cintHgm", IntegerType)()
+  val hgmInt = Histogram(2.0, Array(HistogramBin(1.0, 2.0, 2),
+    HistogramBin(2.0, 4.0, 2), HistogramBin(4.0, 6.0, 2),
+    HistogramBin(6.0, 8.0, 2), HistogramBin(8.0, 10.0, 2)))
+  val colStatIntHgm = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+    nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))
+
+  // column cintSkewHgm has values: 1, 4, 4, 5, 5, 5, 5, 6, 6, 10 with histogram.
+  // Note that cintSkewHgm has a skewed distribution with histogram information built.
+  // distinctCount:5, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
+  val attrIntSkewHgm = AttributeReference("cintSkewHgm", IntegerType)()
+  val hgmIntSkew = Histogram(2.0, Array(HistogramBin(1.0, 4.0, 2),
+    HistogramBin(4.0, 5.0, 2), HistogramBin(5.0, 5.0, 1),
+    HistogramBin(5.0, 6.0, 2), HistogramBin(6.0, 10.0, 2)))
+  val colStatIntSkewHgm = ColumnStat(distinctCount = 5, min = Some(1), max = Some(10),
+    nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmIntSkew))
+
   val attributeMap = AttributeMap(Seq(
     attrInt -> colStatInt,
     attrBool -> colStatBool,
@@ -100,7 +120,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     attrString -> colStatString,
     attrInt2 -> colStatInt2,
     attrInt3 -> colStatInt3,
-    attrInt4 -> colStatInt4
+    attrInt4 -> colStatInt4,
+    attrIntHgm -> colStatIntHgm,
+    attrIntSkewHgm -> colStatIntSkewHgm
   ))
 
   test("true") {
@@ -359,7 +381,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   test("cbool > false") {
     validateEstimatedStats(
       Filter(GreaterThan(attrBool, Literal(false)), childStatsTestPlan(Seq(attrBool), 10L)),
-      Seq(attrBool -> ColumnStat(distinctCount = 1, min = Some(true), max = Some(true),
+      Seq(attrBool -> ColumnStat(distinctCount = 1, min = Some(false), max = Some(true),
         nullCount = 0, avgLen = 1, maxLen = 1)),
       expectedRowCount = 5)
   }
@@ -576,6 +598,193 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
           nullCount = 0, avgLen = 4, maxLen = 4),
         attrString -> colStatString.copy(distinctCount = 5)),
       expectedRowCount = 5)
+  }
+
+  // The following test cases have histogram information collected for the test column with
+  // an even distribution
+  test("Not(cintHgm < 3 AND null)") {
+    val condition = Not(And(LessThan(attrIntHgm, Literal(3)), Literal(null, IntegerType)))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Seq(attrIntHgm -> colStatIntHgm.copy(distinctCount = 7)),
+      expectedRowCount = 7)
+  }
+
+  test("cintHgm = 5") {
+    validateEstimatedStats(
+      Filter(EqualTo(attrIntHgm, Literal(5)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 1, min = Some(5), max = Some(5),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
+      expectedRowCount = 1)
+  }
+
+  test("cintHgm = 0") {
+    // This is an out-of-range case since 0 is outside the range [min, max]
+    validateEstimatedStats(
+      Filter(EqualTo(attrIntHgm, Literal(0)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("cintHgm < 3") {
+    validateEstimatedStats(
+      Filter(LessThan(attrIntHgm, Literal(3)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
+      expectedRowCount = 3)
+  }
+
+  test("cintHgm < 0") {
+    // This is a corner case since literal 0 is smaller than min.
+    validateEstimatedStats(
+      Filter(LessThan(attrIntHgm, Literal(0)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("cintHgm <= 3") {
+    validateEstimatedStats(
+      Filter(LessThanOrEqual(attrIntHgm, Literal(3)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
+      expectedRowCount = 3)
+  }
+
+  test("cintHgm > 6") {
+    validateEstimatedStats(
+      Filter(GreaterThan(attrIntHgm, Literal(6)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
+      expectedRowCount = 4)
+  }
+
+  test("cintHgm > 10") {
+    // This is a corner case since max value is 10.
+    validateEstimatedStats(
+      Filter(GreaterThan(attrIntHgm, Literal(10)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("cintHgm >= 6") {
+    validateEstimatedStats(
+      Filter(GreaterThanOrEqual(attrIntHgm, Literal(6)), childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 5, min = Some(6), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
+      expectedRowCount = 5)
+  }
+
+  test("cintHgm > 3 AND cintHgm <= 6") {
+    val condition = And(GreaterThan(attrIntHgm,
+      Literal(3)), LessThanOrEqual(attrIntHgm, Literal(6)))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Seq(attrIntHgm -> ColumnStat(distinctCount = 4, min = Some(3), max = Some(6),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))),
+      expectedRowCount = 4)
+  }
+
+  test("cintHgm = 3 OR cintHgm = 6") {
+    val condition = Or(EqualTo(attrIntHgm, Literal(3)), EqualTo(attrIntHgm, Literal(6)))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrIntHgm), 10L)),
+      Seq(attrIntHgm -> colStatIntHgm.copy(distinctCount = 3)),
+      expectedRowCount = 3)
+  }
+
+  // The following test cases have histogram information collected for the test column with
+  // a skewed distribution.
+  test("Not(cintSkewHgm < 3 AND null)") {
+    val condition = Not(And(LessThan(attrIntSkewHgm, Literal(3)), Literal(null, IntegerType)))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Seq(attrIntSkewHgm -> colStatIntSkewHgm.copy(distinctCount = 5)),
+      expectedRowCount = 9)
+  }
+
+  test("cintSkewHgm = 5") {
+    validateEstimatedStats(
+      Filter(EqualTo(attrIntSkewHgm, Literal(5)), childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Seq(attrIntSkewHgm -> ColumnStat(distinctCount = 1, min = Some(5), max = Some(5),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmIntSkew))),
+      expectedRowCount = 4)
+  }
+
+  test("cintSkewHgm = 0") {
+    // This is an out-of-range case since 0 is outside the range [min, max]
+    validateEstimatedStats(
+      Filter(EqualTo(attrIntSkewHgm, Literal(0)), childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("cintSkewHgm < 3") {
+    validateEstimatedStats(
+      Filter(LessThan(attrIntSkewHgm, Literal(3)), childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Seq(attrIntSkewHgm -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(3),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmIntSkew))),
+      expectedRowCount = 2)
+  }
+
+  test("cintSkewHgm < 0") {
+    // This is a corner case since literal 0 is smaller than min.
+    validateEstimatedStats(
+      Filter(LessThan(attrIntSkewHgm, Literal(0)), childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("cintSkewHgm <= 3") {
+    validateEstimatedStats(
+      Filter(LessThanOrEqual(attrIntSkewHgm, Literal(3)),
+        childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Seq(attrIntSkewHgm -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(3),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmIntSkew))),
+      expectedRowCount = 2)
+  }
+
+  test("cintSkewHgm > 6") {
+    validateEstimatedStats(
+      Filter(GreaterThan(attrIntSkewHgm, Literal(6)), childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Seq(attrIntSkewHgm -> ColumnStat(distinctCount = 1, min = Some(6), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmIntSkew))),
+      expectedRowCount = 2)
+  }
+
+  test("cintSkewHgm > 10") {
+    // This is a corner case since max value is 10.
+    validateEstimatedStats(
+      Filter(GreaterThan(attrIntSkewHgm, Literal(10)),
+        childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("cintSkewHgm >= 6") {
+    validateEstimatedStats(
+      Filter(GreaterThanOrEqual(attrIntSkewHgm, Literal(6)),
+        childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Seq(attrIntSkewHgm -> ColumnStat(distinctCount = 2, min = Some(6), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmIntSkew))),
+      expectedRowCount = 3)
+  }
+
+  test("cintSkewHgm > 3 AND cintSkewHgm <= 6") {
+    val condition = And(GreaterThan(attrIntSkewHgm,
+      Literal(3)), LessThanOrEqual(attrIntSkewHgm, Literal(6)))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Seq(attrIntSkewHgm -> ColumnStat(distinctCount = 4, min = Some(3), max = Some(6),
+        nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmIntSkew))),
+      expectedRowCount = 8)
+  }
+
+  test("cintSkewHgm = 3 OR cintSkewHgm = 6") {
+    val condition = Or(EqualTo(attrIntSkewHgm, Literal(3)), EqualTo(attrIntSkewHgm, Literal(6)))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrIntSkewHgm), 10L)),
+      Seq(attrIntSkewHgm -> colStatIntSkewHgm.copy(distinctCount = 2)),
+      expectedRowCount = 3)
   }
 
   private def childStatsTestPlan(outList: Seq[Attribute], tableRowCount: BigInt): StatsTestPlan = {

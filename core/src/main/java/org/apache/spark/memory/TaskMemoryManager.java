@@ -192,7 +192,7 @@ public class TaskMemoryManager {
             throw new RuntimeException(e.getMessage());
           } catch (IOException e) {
             logger.error("error while calling spill() on " + c, e);
-            throw new OutOfMemoryError("error while calling spill() on " + c + " : "
+            throw new SparkOutOfMemoryError("error while calling spill() on " + c + " : "
               + e.getMessage());
           }
         }
@@ -213,7 +213,7 @@ public class TaskMemoryManager {
           throw new RuntimeException(e.getMessage());
         } catch (IOException e) {
           logger.error("error while calling spill() on " + consumer, e);
-          throw new OutOfMemoryError("error while calling spill() on " + consumer + " : "
+          throw new SparkOutOfMemoryError("error while calling spill() on " + consumer + " : "
             + e.getMessage());
         }
       }
@@ -270,13 +270,14 @@ public class TaskMemoryManager {
    *
    * Returns `null` if there was not enough memory to allocate the page. May return a page that
    * contains fewer bytes than requested, so callers should verify the size of returned pages.
+   *
+   * @throws TooLargePageException
    */
   public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
     assert(consumer != null);
     assert(consumer.getMode() == tungstenMemoryMode);
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
-      throw new IllegalArgumentException(
-        "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
+      throw new TooLargePageException(size);
     }
 
     long acquired = acquireExecutionMemory(size, consumer);

@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
 import java.nio.ByteBuffer
@@ -37,7 +38,7 @@ import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.control.{ControlThrowable, NonFatal}
 import scala.util.matching.Regex
 
@@ -49,6 +50,7 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
@@ -58,6 +60,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
@@ -826,7 +829,18 @@ private[spark] object Utils extends Logging {
   }
 
   private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
-    getConfiguredLocalDirs(conf).flatMap { root =>
+    val configuredLocalDirs = getConfiguredLocalDirs(conf)
+    val uris = configuredLocalDirs.filter { root =>
+      // Here, we guess if the given value is a URI at its best - check if scheme is set.
+      Try(new URI(root).getScheme != null).getOrElse(false)
+    }
+    if (uris.nonEmpty) {
+      logWarning(
+        "The configured local directories are not expected to be URIs; however, got suspicious " +
+        s"values [${uris.mkString(", ")}]. Please check your configured local directories.")
+    }
+
+    configuredLocalDirs.flatMap { root =>
       try {
         val rootDir = new File(root)
         if (rootDir.exists || rootDir.mkdirs()) {
@@ -2404,8 +2418,8 @@ private[spark] object Utils extends Logging {
    */
   def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
     val sparkValue = conf.get(key, default)
-    if (SparkHadoopUtil.get.isYarnMode) {
-      SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
+    if (conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn") {
+      new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(conf)).get(key, sparkValue)
     } else {
       sparkValue
     }
@@ -2637,14 +2651,28 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
+   * its value is replaced with a dummy text.
+   */
+  def redact(regex: Option[Regex], kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    regex match {
+      case None => kvs
+      case Some(r) => redact(r, kvs)
+    }
+  }
+
+  /**
    * Redact the sensitive information in the given string.
    */
-  def redact(conf: SparkConf, text: String): String = {
-    if (text == null || text.isEmpty || conf == null || !conf.contains(STRING_REDACTION_PATTERN)) {
-      text
-    } else {
-      val regex = conf.get(STRING_REDACTION_PATTERN).get
-      regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+  def redact(regex: Option[Regex], text: String): String = {
+    regex match {
+      case None => text
+      case Some(r) =>
+        if (text == null || text.isEmpty) {
+          text
+        } else {
+          r.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+        }
     }
   }
 
@@ -2684,6 +2712,99 @@ private[spark] object Utils extends Logging {
     redact(redactionPattern, kvs.toArray)
   }
 
+  def stringToSeq(str: String): Seq[String] = {
+    str.split(",").map(_.trim()).filter(_.nonEmpty)
+  }
+
+  /**
+   * Create instances of extension classes.
+   *
+   * The classes in the given list must:
+   * - Be sub-classes of the given base class.
+   * - Provide either a no-arg constructor, or a 1-arg constructor that takes a SparkConf.
+   *
+   * The constructors are allowed to throw "UnsupportedOperationException" if the extension does not
+   * want to be registered; this allows the implementations to check the Spark configuration (or
+   * other state) and decide they do not need to be added. A log message is printed in that case.
+   * Other exceptions are bubbled up.
+   */
+  def loadExtensions[T](extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
+    classes.flatMap { name =>
+      try {
+        val klass = classForName(name)
+        require(extClass.isAssignableFrom(klass),
+          s"$name is not a subclass of ${extClass.getName()}.")
+
+        val ext = Try(klass.getConstructor(classOf[SparkConf])) match {
+          case Success(ctor) =>
+            ctor.newInstance(conf)
+
+          case Failure(_) =>
+            klass.getConstructor().newInstance()
+        }
+
+        Some(ext.asInstanceOf[T])
+      } catch {
+        case _: NoSuchMethodException =>
+          throw new SparkException(
+            s"$name did not have a zero-argument constructor or a" +
+              " single-argument constructor that accepts SparkConf. Note: if the class is" +
+              " defined inside of another Scala class, then its constructors may accept an" +
+              " implicit parameter that references the enclosing class; in this case, you must" +
+              " define the class as a top-level class in order to prevent this extra" +
+              " parameter from breaking Spark's ability to find a valid constructor.")
+
+        case e: InvocationTargetException =>
+          e.getCause() match {
+            case uoe: UnsupportedOperationException =>
+              logDebug(s"Extension $name not being initialized.", uoe)
+              logInfo(s"Extension $name not being initialized.")
+              None
+
+            case null => throw e
+
+            case cause => throw cause
+          }
+      }
+    }
+  }
+
+  /**
+   * Check the validity of the given Kubernetes master URL and return the resolved URL. Prefix
+   * "k8s://" is appended to the resolved URL as the prefix is used by KubernetesClusterManager
+   * in canCreate to determine if the KubernetesClusterManager should be used.
+   */
+  def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
+    require(rawMasterURL.startsWith("k8s://"),
+      "Kubernetes master URL must start with k8s://.")
+    val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
+
+    // To handle master URLs, e.g., k8s://host:port.
+    if (!masterWithoutK8sPrefix.contains("://")) {
+      val resolvedURL = s"https://$masterWithoutK8sPrefix"
+      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+        s"URL is $resolvedURL.")
+      return s"k8s://$resolvedURL"
+    }
+
+    val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
+    val resolvedURL = masterScheme.toLowerCase match {
+      case "https" =>
+        masterWithoutK8sPrefix
+      case "http" =>
+        logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
+        masterWithoutK8sPrefix
+      case null =>
+        val resolvedURL = s"https://$masterWithoutK8sPrefix"
+        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+          s"URL is $resolvedURL.")
+        resolvedURL
+      case _ =>
+        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
+    }
+
+    s"k8s://$resolvedURL"
+  }
 }
 
 private[util] object CallerContext extends Logging {

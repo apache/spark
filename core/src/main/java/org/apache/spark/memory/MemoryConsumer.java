@@ -83,19 +83,19 @@ public abstract class MemoryConsumer {
   public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
 
   /**
-   * Allocates a LongArray of `size`.
+   * Allocates a LongArray of `size`. Note that this method may throw `OutOfMemoryError` if Spark
+   * doesn't have enough memory for this allocation, or throw `TooLargePageException` if this
+   * `LongArray` is too large to fit in a single page. The caller side should take care of these
+   * two exceptions, or make sure the `size` is small enough that won't trigger exceptions.
+   *
+   * @throws SparkOutOfMemoryError
+   * @throws TooLargePageException
    */
   public LongArray allocateArray(long size) {
     long required = size * 8L;
     MemoryBlock page = taskMemoryManager.allocatePage(required, this);
     if (page == null || page.size() < required) {
-      long got = 0;
-      if (page != null) {
-        got = page.size();
-        taskMemoryManager.freePage(page, this);
-      }
-      taskMemoryManager.showMemoryUsage();
-      throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
+      throwOom(page, required);
     }
     used += required;
     return new LongArray(page);
@@ -116,13 +116,7 @@ public abstract class MemoryConsumer {
   protected MemoryBlock allocatePage(long required) {
     MemoryBlock page = taskMemoryManager.allocatePage(Math.max(pageSize, required), this);
     if (page == null || page.size() < required) {
-      long got = 0;
-      if (page != null) {
-        got = page.size();
-        taskMemoryManager.freePage(page, this);
-      }
-      taskMemoryManager.showMemoryUsage();
-      throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
+      throwOom(page, required);
     }
     used += page.size();
     return page;
@@ -151,5 +145,16 @@ public abstract class MemoryConsumer {
   public void freeMemory(long size) {
     taskMemoryManager.releaseExecutionMemory(size, this);
     used -= size;
+  }
+
+  private void throwOom(final MemoryBlock page, final long required) {
+    long got = 0;
+    if (page != null) {
+      got = page.size();
+      taskMemoryManager.freePage(page, this);
+    }
+    taskMemoryManager.showMemoryUsage();
+    throw new SparkOutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " +
+      got);
   }
 }

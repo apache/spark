@@ -117,6 +117,21 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
     }
   }
 
+  test("SPARK-22431: table with nested type col with special char") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
+      checkAnswer(spark.table("t"), Nil)
+    }
+  }
+
+  test("SPARK-22431: view with nested type") {
+    withView("t", "v") {
+      spark.sql("CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      checkAnswer(spark.table("t"), Row(Row("a", 1)) :: Nil)
+      spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
+      checkAnswer(spark.table("t"), Row(Row("a", 1)) :: Nil)
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -795,7 +810,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     checkAnswer(spark.table("teachers"), df)
   }
 
-  test("rename temporary table - destination table with database name") {
+  test("rename temporary view - destination table with database name") {
     withTempView("tab1") {
       sql(
         """
@@ -812,7 +827,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("ALTER TABLE tab1 RENAME TO default.tab2")
       }
       assert(e.getMessage.contains(
-        "RENAME TEMPORARY TABLE from '`tab1`' to '`default`.`tab2`': " +
+        "RENAME TEMPORARY VIEW from '`tab1`' to '`default`.`tab2`': " +
           "cannot specify database name 'default' in the destination table"))
 
       val catalog = spark.sessionState.catalog
@@ -820,19 +835,20 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("rename temporary table") {
+  test("rename temporary view") {
     withTempView("tab1", "tab2") {
       spark.range(10).createOrReplaceTempView("tab1")
       sql("ALTER TABLE tab1 RENAME TO tab2")
       checkAnswer(spark.table("tab2"), spark.range(10).toDF())
-      intercept[NoSuchTableException] { spark.table("tab1") }
+      val e = intercept[AnalysisException](spark.table("tab1")).getMessage
+      assert(e.contains("Table or view not found"))
       sql("ALTER VIEW tab2 RENAME TO tab1")
       checkAnswer(spark.table("tab1"), spark.range(10).toDF())
-      intercept[NoSuchTableException] { spark.table("tab2") }
+      intercept[AnalysisException] { spark.table("tab2") }
     }
   }
 
-  test("rename temporary table - destination table already exists") {
+  test("rename temporary view - destination table already exists") {
     withTempView("tab1", "tab2") {
       sql(
         """
@@ -860,7 +876,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("ALTER TABLE tab1 RENAME TO tab2")
       }
       assert(e.getMessage.contains(
-        "RENAME TEMPORARY TABLE from '`tab1`' to '`tab2`': destination table already exists"))
+        "RENAME TEMPORARY VIEW from '`tab1`' to '`tab2`': destination table already exists"))
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
@@ -1955,8 +1971,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING parquet
-             |PARTITIONED BY(a, b)
              |LOCATION "${dir.toURI}"
+             |PARTITIONED BY(a, b)
            """.stripMargin)
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
@@ -2202,56 +2218,64 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  protected def testAddColumn(provider: String): Unit = {
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 int) USING $provider")
+      sql("INSERT INTO t1 VALUES (1)")
+      sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
+      checkAnswer(
+        spark.table("t1"),
+        Seq(Row(1, null))
+      )
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c2 is null"),
+        Seq(Row(1, null))
+      )
+
+      sql("INSERT INTO t1 VALUES (3, 2)")
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c2 = 2"),
+        Seq(Row(3, 2))
+      )
+    }
+  }
+
+  protected def testAddColumnPartitioned(provider: String): Unit = {
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
+      sql("INSERT INTO t1 PARTITION(c2 = 2) VALUES (1)")
+      sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
+      checkAnswer(
+        spark.table("t1"),
+        Seq(Row(1, null, 2))
+      )
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c3 is null"),
+        Seq(Row(1, null, 2))
+      )
+      sql("INSERT INTO t1 PARTITION(c2 =1) VALUES (2, 3)")
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c3 = 3"),
+        Seq(Row(2, 3, 1))
+      )
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c2 = 1"),
+        Seq(Row(2, 3, 1))
+      )
+    }
+  }
+
   val supportedNativeFileFormatsForAlterTableAddColumns = Seq("parquet", "json", "csv")
 
   supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
     test(s"alter datasource table add columns - $provider") {
-      withTable("t1") {
-        sql(s"CREATE TABLE t1 (c1 int) USING $provider")
-        sql("INSERT INTO t1 VALUES (1)")
-        sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
-        checkAnswer(
-          spark.table("t1"),
-          Seq(Row(1, null))
-        )
-        checkAnswer(
-          sql("SELECT * FROM t1 WHERE c2 is null"),
-          Seq(Row(1, null))
-        )
-
-        sql("INSERT INTO t1 VALUES (3, 2)")
-        checkAnswer(
-          sql("SELECT * FROM t1 WHERE c2 = 2"),
-          Seq(Row(3, 2))
-        )
-      }
+      testAddColumn(provider)
     }
   }
 
   supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
     test(s"alter datasource table add columns - partitioned - $provider") {
-      withTable("t1") {
-        sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
-        sql("INSERT INTO t1 PARTITION(c2 = 2) VALUES (1)")
-        sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
-        checkAnswer(
-          spark.table("t1"),
-          Seq(Row(1, null, 2))
-        )
-        checkAnswer(
-          sql("SELECT * FROM t1 WHERE c3 is null"),
-          Seq(Row(1, null, 2))
-        )
-        sql("INSERT INTO t1 PARTITION(c2 =1) VALUES (2, 3)")
-        checkAnswer(
-          sql("SELECT * FROM t1 WHERE c3 = 3"),
-          Seq(Row(2, 3, 1))
-        )
-        checkAnswer(
-          sql("SELECT * FROM t1 WHERE c2 = 1"),
-          Seq(Row(2, 3, 1))
-        )
-      }
+      testAddColumnPartitioned(provider)
     }
   }
 

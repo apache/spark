@@ -2416,6 +2416,18 @@ class LogisticRegressionSuite
       blorSummary.recallByThreshold.collect() === sameBlorSummary.recallByThreshold.collect())
     assert(
       blorSummary.precisionByThreshold.collect() === sameBlorSummary.precisionByThreshold.collect())
+    assert(blorSummary.labels === sameBlorSummary.labels)
+    assert(blorSummary.truePositiveRateByLabel === sameBlorSummary.truePositiveRateByLabel)
+    assert(blorSummary.falsePositiveRateByLabel === sameBlorSummary.falsePositiveRateByLabel)
+    assert(blorSummary.precisionByLabel === sameBlorSummary.precisionByLabel)
+    assert(blorSummary.recallByLabel === sameBlorSummary.recallByLabel)
+    assert(blorSummary.fMeasureByLabel === sameBlorSummary.fMeasureByLabel)
+    assert(blorSummary.accuracy === sameBlorSummary.accuracy)
+    assert(blorSummary.weightedTruePositiveRate === sameBlorSummary.weightedTruePositiveRate)
+    assert(blorSummary.weightedFalsePositiveRate === sameBlorSummary.weightedFalsePositiveRate)
+    assert(blorSummary.weightedRecall === sameBlorSummary.weightedRecall)
+    assert(blorSummary.weightedPrecision === sameBlorSummary.weightedPrecision)
+    assert(blorSummary.weightedFMeasure === sameBlorSummary.weightedFMeasure)
 
     lr.setFamily("multinomial")
     val mlorModel = lr.fit(smallMultinomialDataset)
@@ -2755,6 +2767,17 @@ class LogisticRegressionSuite
     val lr = new LogisticRegression()
     testEstimatorAndModelReadWrite(lr, smallBinaryDataset, LogisticRegressionSuite.allParamSettings,
       LogisticRegressionSuite.allParamSettings, checkModelData)
+
+    // test lr with bounds on coefficients, need to set elasticNetParam to 0.
+    val numFeatures = smallBinaryDataset.select("features").head().getAs[Vector](0).size
+    val lowerBounds = new DenseMatrix(1, numFeatures, (1 to numFeatures).map(_ / 1000.0).toArray)
+    val upperBounds = new DenseMatrix(1, numFeatures, (1 to numFeatures).map(_ * 1000.0).toArray)
+    val paramSettings = Map("lowerBoundsOnCoefficients" -> lowerBounds,
+      "upperBoundsOnCoefficients" -> upperBounds,
+      "elasticNetParam" -> 0.0
+    )
+    testEstimatorAndModelReadWrite(lr, smallBinaryDataset, paramSettings,
+      paramSettings, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {

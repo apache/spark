@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -139,7 +139,7 @@ object PartitioningUtils {
           "root directory of the table. If there are multiple root directories, " +
           "please load them separately and then union them.")
 
-      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues)
+      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues, timeZone)
 
       // Creates the StructType which represents the partition columns.
       val fields = {
@@ -309,16 +309,12 @@ object PartitioningUtils {
   }
 
   /**
-   * Resolves possible type conflicts between partitions by up-casting "lower" types.  The up-
-   * casting order is:
-   * {{{
-   *   NullType ->
-   *   IntegerType -> LongType ->
-   *   DoubleType -> StringType
-   * }}}
+   * Resolves possible type conflicts between partitions by up-casting "lower" types using
+   * [[findWiderTypeForPartitionColumn]].
    */
   def resolvePartitions(
-      pathsWithPartitionValues: Seq[(Path, PartitionValues)]): Seq[PartitionValues] = {
+      pathsWithPartitionValues: Seq[(Path, PartitionValues)],
+      timeZone: TimeZone): Seq[PartitionValues] = {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
@@ -333,7 +329,7 @@ object PartitioningUtils {
       val values = pathsWithPartitionValues.map(_._2)
       val columnCount = values.head.columnNames.size
       val resolvedValues = (0 until columnCount).map { i =>
-        resolveTypeConflicts(values.map(_.literals(i)))
+        resolveTypeConflicts(values.map(_.literals(i)), timeZone)
       }
 
       // Fills resolved literals back to each partition
@@ -371,11 +367,31 @@ object PartitioningUtils {
       suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
   }
 
+  // scalastyle:off line.size.limit
   /**
-   * Converts a string to a [[Literal]] with automatic type inference.  Currently only supports
-   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType]], [[DateType]]
+   * Converts a string to a [[Literal]] with automatic type inference. Currently only supports
+   * [[NullType]], [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType]], [[DateType]]
    * [[TimestampType]], and [[StringType]].
+   *
+   * When resolving conflicts, it follows the table below:
+   *
+   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+
+   * | InputA \ InputB    | NullType          | IntegerType       | LongType          | DecimalType(38,0)* | DoubleType | DateType      | TimestampType | StringType |
+   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+
+   * | NullType           | NullType          | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | DateType      | TimestampType | StringType |
+   * | IntegerType        | IntegerType       | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | StringType    | StringType    | StringType |
+   * | LongType           | LongType          | LongType          | LongType          | DecimalType(38,0)  | StringType | StringType    | StringType    | StringType |
+   * | DecimalType(38,0)* | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0)  | StringType | StringType    | StringType    | StringType |
+   * | DoubleType         | DoubleType        | DoubleType        | StringType        | StringType         | DoubleType | StringType    | StringType    | StringType |
+   * | DateType           | DateType          | StringType        | StringType        | StringType         | StringType | DateType      | TimestampType | StringType |
+   * | TimestampType      | TimestampType     | StringType        | StringType        | StringType         | StringType | TimestampType | TimestampType | StringType |
+   * | StringType         | StringType        | StringType        | StringType        | StringType         | StringType | StringType    | StringType    | StringType |
+   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+
+   * Note that, for DecimalType(38,0)*, the table above intentionally does not cover all other
+   * combinations of scales and precisions because currently we only infer decimal type like
+   * `BigInteger`/`BigInt`. For example, 1.1 is inferred as double type.
    */
+  // scalastyle:on line.size.limit
   private[datasources] def inferPartitionColumnValue(
       raw: String,
       typeInference: Boolean,
@@ -426,9 +442,6 @@ object PartitioningUtils {
     }
   }
 
-  private val upCastingOrder: Seq[DataType] =
-    Seq(NullType, IntegerType, LongType, FloatType, DoubleType, StringType)
-
   def validatePartitionColumn(
       schema: StructType,
       partitionColumns: Seq[String],
@@ -467,18 +480,26 @@ object PartitioningUtils {
   }
 
   /**
-   * Given a collection of [[Literal]]s, resolves possible type conflicts by up-casting "lower"
-   * types.
+   * Given a collection of [[Literal]]s, resolves possible type conflicts by
+   * [[findWiderTypeForPartitionColumn]].
    */
-  private def resolveTypeConflicts(literals: Seq[Literal]): Seq[Literal] = {
-    val desiredType = {
-      val topType = literals.map(_.dataType).maxBy(upCastingOrder.indexOf(_))
-      // Falls back to string if all values of this column are null or empty string
-      if (topType == NullType) StringType else topType
-    }
+  private def resolveTypeConflicts(literals: Seq[Literal], timeZone: TimeZone): Seq[Literal] = {
+    val litTypes = literals.map(_.dataType)
+    val desiredType = litTypes.reduce(findWiderTypeForPartitionColumn)
 
     literals.map { case l @ Literal(_, dataType) =>
-      Literal.create(Cast(l, desiredType).eval(), desiredType)
+      Literal.create(Cast(l, desiredType, Some(timeZone.getID)).eval(), desiredType)
     }
+  }
+
+  /**
+   * Type widening rule for partition column types. It is similar to
+   * [[TypeCoercion.findWiderTypeForTwo]] but the main difference is that here we disallow
+   * precision loss when widening double/long and decimal, and fall back to string.
+   */
+  private val findWiderTypeForPartitionColumn: (DataType, DataType) => DataType = {
+    case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) => StringType
+    case (DoubleType, LongType) | (LongType, DoubleType) => StringType
+    case (t1, t2) => TypeCoercion.findWiderTypeForTwo(t1, t2).getOrElse(StringType)
   }
 }

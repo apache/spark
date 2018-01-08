@@ -741,7 +741,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = new StructType,
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
         provider = Some("json"),
         storage = CatalogStorageFormat(
           locationUri = None,
@@ -992,7 +992,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     spark.sql("""use default""")
     spark.sql("""drop database if exists testdb8156 CASCADE""")
   }
-
 
   test("skip hive metadata on table creation") {
     withTempDir { tempPath =>
@@ -1267,7 +1266,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = new StructType,
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
         provider = Some("json"),
         storage = CatalogStorageFormat.empty,
         properties = Map(
@@ -1341,6 +1340,18 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           sql(s"INSERT OVERWRITE TABLE $tableName SELECT 1")
           checkAnswer(spark.table(tableName), Row(1))
         }
+      }
+    }
+  }
+
+  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
+    test(s"SPARK-22146: read files containing special characters using $format") {
+      val nameWithSpecialChars = s"sp&cial%chars"
+      withTempDir { dir =>
+        val tmpFile = s"$dir/$nameWithSpecialChars"
+        spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
+        val fileContent = spark.read.format(format).load(tmpFile)
+        checkAnswer(fileContent, Seq(Row("a"), Row("b")))
       }
     }
   }

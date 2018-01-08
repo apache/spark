@@ -155,7 +155,7 @@ checkType <- function(type) {
   } else {
     # Check complex types
     firstChar <- substr(type, 1, 1)
-    switch (firstChar,
+    switch(firstChar,
             a = {
               # Array type
               m <- regexec("^array<(.+)>$", type)

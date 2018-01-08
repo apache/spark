@@ -28,7 +28,7 @@ import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
@@ -74,6 +74,80 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two")),
       AddData(inputData, 4),
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two"), Row(4, 4, "four")))
+  }
+
+  test("StreamingRelation.computeStats") {
+    withTempDir { dir =>
+      val df = spark.readStream.format("csv").schema(StructType(Seq())).load(dir.getCanonicalPath)
+      val streamingRelation = df.logicalPlan collect {
+        case s: StreamingRelation => s
+      }
+      assert(streamingRelation.nonEmpty, "cannot find StreamingRelation")
+      assert(
+        streamingRelation.head.computeStats.sizeInBytes ==
+          spark.sessionState.conf.defaultSizeInBytes)
+    }
+  }
+
+  test("StreamingRelationV2.computeStats") {
+    val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
+      case s: StreamingRelationV2 => s
+    }
+    assert(streamingRelation.nonEmpty, "cannot find StreamingExecutionRelation")
+    assert(
+      streamingRelation.head.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
+  }
+
+  test("StreamingExecutionRelation.computeStats") {
+    val streamingExecutionRelation = MemoryStream[Int].toDF.logicalPlan collect {
+      case s: StreamingExecutionRelation => s
+    }
+    assert(streamingExecutionRelation.nonEmpty, "cannot find StreamingExecutionRelation")
+    assert(streamingExecutionRelation.head.computeStats.sizeInBytes
+      == spark.sessionState.conf.defaultSizeInBytes)
+  }
+
+  test("explain join with a normal source") {
+    // This test triggers CostBasedJoinReorder to call `computeStats`
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
+      val smallTable = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+      val smallTable2 = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+      val smallTable3 = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+
+      // Join the input stream with a table.
+      val df = spark.readStream.format("rate").load()
+      val joined = df.join(smallTable, smallTable("number") === $"value")
+        .join(smallTable2, smallTable2("number") === $"value")
+        .join(smallTable3, smallTable3("number") === $"value")
+
+      val outputStream = new java.io.ByteArrayOutputStream()
+      Console.withOut(outputStream) {
+        joined.explain(true)
+      }
+      assert(outputStream.toString.contains("StreamingRelation"))
+    }
+  }
+
+  test("explain join with MemoryStream") {
+    // This test triggers CostBasedJoinReorder to call `computeStats`
+    // Because MemoryStream doesn't use DataSource code path, we need a separate test.
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
+      val smallTable = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+      val smallTable2 = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+      val smallTable3 = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+
+      // Join the input stream with a table.
+      val df = MemoryStream[Int].toDF
+      val joined = df.join(smallTable, smallTable("number") === $"value")
+        .join(smallTable2, smallTable2("number") === $"value")
+        .join(smallTable3, smallTable3("number") === $"value")
+
+      val outputStream = new java.io.ByteArrayOutputStream()
+      Console.withOut(outputStream) {
+        joined.explain(true)
+      }
+      assert(outputStream.toString.contains("StreamingRelation"))
+    }
   }
 
   test("SPARK-20432: union one stream with itself") {
@@ -214,7 +288,7 @@ class StreamSuite extends StreamTest {
 
     // Check the latest batchid in the commit log
     def CheckCommitLogLatestBatchId(expectedId: Int): AssertOnQuery =
-      AssertOnQuery(_.batchCommitLog.getLatest().get._1 == expectedId,
+      AssertOnQuery(_.commitLog.getLatest().get._1 == expectedId,
         s"commitLog's latest should be $expectedId")
 
     // Ensure that there has not been an incremental execution after restart
@@ -337,7 +411,9 @@ class StreamSuite extends StreamTest {
 
         override def stop(): Unit = {}
       }
-      val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
+      val df = Dataset[Int](
+        sqlContext.sparkSession,
+        StreamingExecutionRelation(source, sqlContext.sparkSession))
       testStream(df)(
         // `ExpectFailure(isFatalError = true)` verifies two things:
         // - Fatal errors can be propagated to `StreamingQuery.exception` and
@@ -352,6 +428,37 @@ class StreamSuite extends StreamTest {
     assert(OutputMode.Append === InternalOutputModes.Append)
     assert(OutputMode.Complete === InternalOutputModes.Complete)
     assert(OutputMode.Update === InternalOutputModes.Update)
+  }
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.redaction.string.regex", "file:/[\\w_]+")
+
+  test("explain - redaction") {
+    val replacement = "*********"
+
+    val inputData = MemoryStream[String]
+    val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
+    // Test StreamingQuery.display
+    val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
+      .start()
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
+    try {
+      inputData.addData("abc")
+      q.processAllAvailable()
+
+      val explainWithoutExtended = q.explainInternal(false)
+      assert(explainWithoutExtended.contains(replacement))
+      assert(explainWithoutExtended.contains("StateStoreRestore"))
+      assert(!explainWithoutExtended.contains("file:/"))
+
+      val explainWithExtended = q.explainInternal(true)
+      assert(explainWithExtended.contains(replacement))
+      assert(explainWithExtended.contains("StateStoreRestore"))
+      assert(!explainWithoutExtended.contains("file:/"))
+    } finally {
+      q.stop()
+    }
   }
 
   test("explain") {

@@ -181,7 +181,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        s"cannot cast ${child.dataType} to $dataType")
+        s"cannot cast ${child.dataType.simpleString} to ${dataType.simpleString}")
     }
   }
 
@@ -206,6 +206,59 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
+    case ArrayType(et, _) =>
+      buildCast[ArrayData](_, array => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (array.numElements > 0) {
+          val toUTF8String = castToString(et)
+          if (!array.isNullAt(0)) {
+            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < array.numElements) {
+            builder.append(",")
+            if (!array.isNullAt(i)) {
+              builder.append(" ")
+              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
+    case MapType(kt, vt, _) =>
+      buildCast[MapData](_, map => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (map.numElements > 0) {
+          val keyArray = map.keyArray()
+          val valueArray = map.valueArray()
+          val keyToUTF8String = castToString(kt)
+          val valueToUTF8String = castToString(vt)
+          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
+          builder.append(" ->")
+          if (!valueArray.isNullAt(0)) {
+            builder.append(" ")
+            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < map.numElements) {
+            builder.append(", ")
+            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
+            builder.append(" ->")
+            if (!valueArray.isNullAt(i)) {
+              builder.append(" ")
+              builder.append(valueToUTF8String(valueArray.get(i, vt))
+                .asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -387,10 +440,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   /**
    * Create new `Decimal` with precision and scale given in `decimalType` (if any),
    * returning null if it overflows or creating a new `value` and returning it if successful.
-   *
    */
   private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =
-    value.toPrecision(decimalType.precision, decimalType.scale).orNull
+    value.toPrecision(decimalType.precision, decimalType.scale)
 
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
@@ -549,8 +601,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
-  // three function arguments are: child.primitive, result.primitive and result.isNull
-  // it returns the code snippets to be put in null safe evaluation region
+  // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
+  // in parameter list, because the returned code will be put in null safe evaluation region.
   private[this] type CastFunction = (String, String, String) => String
 
   private[this] def nullSafeCastFunction(
@@ -585,17 +637,99 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       throw new SparkException(s"Cannot cast $from to $to.")
   }
 
-  // Since we need to cast child expressions recursively inside ComplexTypes, such as Map's
+  // Since we need to cast input expressions recursively inside ComplexTypes, such as Map's
   // Key and Value, Struct's field, we need to name out all the variable names involved in a cast.
-  private[this] def castCode(ctx: CodegenContext, childPrim: String, childNull: String,
-    resultPrim: String, resultNull: String, resultType: DataType, cast: CastFunction): String = {
+  private[this] def castCode(ctx: CodegenContext, input: String, inputIsNull: String,
+    result: String, resultIsNull: String, resultType: DataType, cast: CastFunction): String = {
     s"""
-      boolean $resultNull = $childNull;
-      ${ctx.javaType(resultType)} $resultPrim = ${ctx.defaultValue(resultType)};
-      if (!$childNull) {
-        ${cast(childPrim, resultPrim, resultNull)}
+      boolean $resultIsNull = $inputIsNull;
+      ${ctx.javaType(resultType)} $result = ${ctx.defaultValue(resultType)};
+      if (!$inputIsNull) {
+        ${cast(input, result, resultIsNull)}
       }
     """
+  }
+
+  private def writeArrayToStringBuilder(
+      et: DataType,
+      array: String,
+      buffer: String,
+      ctx: CodegenContext): String = {
+    val elementToStringCode = castToStringCode(et, ctx)
+    val funcName = ctx.freshName("elementToString")
+    val elementToStringFunc = ctx.addNewFunction(funcName,
+      s"""
+         |private UTF8String $funcName(${ctx.javaType(et)} element) {
+         |  UTF8String elementStr = null;
+         |  ${elementToStringCode("element", "elementStr", null /* resultIsNull won't be used */)}
+         |  return elementStr;
+         |}
+       """.stripMargin)
+
+    val loopIndex = ctx.freshName("loopIndex")
+    s"""
+       |$buffer.append("[");
+       |if ($array.numElements() > 0) {
+       |  if (!$array.isNullAt(0)) {
+       |    $buffer.append($elementToStringFunc(${ctx.getValue(array, et, "0")}));
+       |  }
+       |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
+       |    $buffer.append(",");
+       |    if (!$array.isNullAt($loopIndex)) {
+       |      $buffer.append(" ");
+       |      $buffer.append($elementToStringFunc(${ctx.getValue(array, et, loopIndex)}));
+       |    }
+       |  }
+       |}
+       |$buffer.append("]");
+     """.stripMargin
+  }
+
+  private def writeMapToStringBuilder(
+      kt: DataType,
+      vt: DataType,
+      map: String,
+      buffer: String,
+      ctx: CodegenContext): String = {
+
+    def dataToStringFunc(func: String, dataType: DataType) = {
+      val funcName = ctx.freshName(func)
+      val dataToStringCode = castToStringCode(dataType, ctx)
+      ctx.addNewFunction(funcName,
+        s"""
+           |private UTF8String $funcName(${ctx.javaType(dataType)} data) {
+           |  UTF8String dataStr = null;
+           |  ${dataToStringCode("data", "dataStr", null /* resultIsNull won't be used */)}
+           |  return dataStr;
+           |}
+         """.stripMargin)
+    }
+
+    val keyToStringFunc = dataToStringFunc("keyToString", kt)
+    val valueToStringFunc = dataToStringFunc("valueToString", vt)
+    val loopIndex = ctx.freshName("loopIndex")
+    s"""
+       |$buffer.append("[");
+       |if ($map.numElements() > 0) {
+       |  $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, "0")}));
+       |  $buffer.append(" ->");
+       |  if (!$map.valueArray().isNullAt(0)) {
+       |    $buffer.append(" ");
+       |    $buffer.append($valueToStringFunc(${ctx.getValue(s"$map.valueArray()", vt, "0")}));
+       |  }
+       |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
+       |    $buffer.append(", ");
+       |    $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, loopIndex)}));
+       |    $buffer.append(" ->");
+       |    if (!$map.valueArray().isNullAt($loopIndex)) {
+       |      $buffer.append(" ");
+       |      $buffer.append($valueToStringFunc(
+       |        ${ctx.getValue(s"$map.valueArray()", vt, loopIndex)}));
+       |    }
+       |  }
+       |}
+       |$buffer.append("]");
+     """.stripMargin
   }
 
   private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
@@ -606,9 +740,31 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c));"""
       case TimestampType =>
-        val tz = ctx.addReferenceMinorObj(timeZone)
+        val tz = ctx.addReferenceObj("timeZone", timeZone)
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
+      case ArrayType(et, _) =>
+        (c, evPrim, evNull) => {
+          val buffer = ctx.freshName("buffer")
+          val bufferClass = classOf[UTF8StringBuilder].getName
+          val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
+          s"""
+             |$bufferClass $buffer = new $bufferClass();
+             |$writeArrayElemCode;
+             |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case MapType(kt, vt, _) =>
+        (c, evPrim, evNull) => {
+          val buffer = ctx.freshName("buffer")
+          val bufferClass = classOf[UTF8StringBuilder].getName
+          val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
+          s"""
+             |$bufferClass $buffer = new $bufferClass();
+             |$writeMapElemCode;
+             |$evPrim = $buffer.build();
+           """.stripMargin
+        }
       case _ =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -634,7 +790,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
        """
     case TimestampType =>
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
       (c, evPrim, evNull) =>
         s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L, $tz);"
     case _ =>
@@ -714,7 +870,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
       val longOpt = ctx.freshName("longOpt")
       (c, evPrim, evNull) =>
         s"""
@@ -731,7 +887,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case _: IntegralType =>
       (c, evPrim, evNull) => s"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
       (c, evPrim, evNull) =>
         s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c, $tz) * 1000;"
     case DecimalType() =>
@@ -800,16 +956,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
-        s"$wrapper = new UTF8String.IntWrapper();")
+      val wrapper = ctx.freshName("intWrapper")
       (c, evPrim, evNull) =>
         s"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
           if ($c.toByte($wrapper)) {
             $evPrim = (byte) $wrapper.value;
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
       (c, evPrim, evNull) => s"$evPrim = $c ? (byte) 1 : (byte) 0;"
@@ -827,16 +983,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
-        s"$wrapper = new UTF8String.IntWrapper();")
+      val wrapper = ctx.freshName("intWrapper")
       (c, evPrim, evNull) =>
         s"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
           if ($c.toShort($wrapper)) {
             $evPrim = (short) $wrapper.value;
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
       (c, evPrim, evNull) => s"$evPrim = $c ? (short) 1 : (short) 0;"
@@ -852,16 +1008,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
-        s"$wrapper = new UTF8String.IntWrapper();")
+      val wrapper = ctx.freshName("intWrapper")
       (c, evPrim, evNull) =>
         s"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
           if ($c.toInt($wrapper)) {
             $evPrim = $wrapper.value;
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
       (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
@@ -877,17 +1033,17 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.LongWrapper", wrapper,
-        s"$wrapper = new UTF8String.LongWrapper();")
+      val wrapper = ctx.freshName("longWrapper")
 
       (c, evPrim, evNull) =>
         s"""
+          UTF8String.LongWrapper $wrapper = new UTF8String.LongWrapper();
           if ($c.toLong($wrapper)) {
             $evPrim = $wrapper.value;
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
       (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0L;"
@@ -1015,8 +1171,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case (fromField, toField) => nullSafeCastFunction(fromField.dataType, toField.dataType, ctx)
     }
     val rowClass = classOf[GenericInternalRow].getName
-    val result = ctx.freshName("result")
-    val tmpRow = ctx.freshName("tmpRow")
+    val tmpResult = ctx.freshName("tmpResult")
+    val tmpInput = ctx.freshName("tmpInput")
 
     val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) =>
       val fromFieldPrim = ctx.freshName("ffp")
@@ -1025,29 +1181,33 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val toFieldNull = ctx.freshName("tfn")
       val fromType = ctx.javaType(from.fields(i).dataType)
       s"""
-        boolean $fromFieldNull = $tmpRow.isNullAt($i);
+        boolean $fromFieldNull = $tmpInput.isNullAt($i);
         if ($fromFieldNull) {
-          $result.setNullAt($i);
+          $tmpResult.setNullAt($i);
         } else {
           $fromType $fromFieldPrim =
-            ${ctx.getValue(tmpRow, from.fields(i).dataType, i.toString)};
+            ${ctx.getValue(tmpInput, from.fields(i).dataType, i.toString)};
           ${castCode(ctx, fromFieldPrim,
             fromFieldNull, toFieldPrim, toFieldNull, to.fields(i).dataType, cast)}
           if ($toFieldNull) {
-            $result.setNullAt($i);
+            $tmpResult.setNullAt($i);
           } else {
-            ${ctx.setColumn(result, to.fields(i).dataType, i, toFieldPrim)};
+            ${ctx.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)};
           }
         }
        """
-    }.mkString("\n")
+    }
+    val fieldsEvalCodes = ctx.splitExpressions(
+      expressions = fieldsEvalCode,
+      funcName = "castStruct",
+      arguments = ("InternalRow", tmpInput) :: (rowClass, tmpResult) :: Nil)
 
-    (c, evPrim, evNull) =>
+    (input, result, resultIsNull) =>
       s"""
-        final $rowClass $result = new $rowClass(${fieldsCasts.length});
-        final InternalRow $tmpRow = $c;
-        $fieldsEvalCode
-        $evPrim = $result;
+        final $rowClass $tmpResult = new $rowClass(${fieldsCasts.length});
+        final InternalRow $tmpInput = $input;
+        $fieldsEvalCodes
+        $result = $tmpResult;
       """
   }
 

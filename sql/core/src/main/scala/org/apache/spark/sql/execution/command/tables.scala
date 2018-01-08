@@ -34,11 +34,13 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.Histogram
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
@@ -186,10 +188,10 @@ case class AlterTableRenameCommand(
 */
 case class AlterTableAddColumnsCommand(
     table: TableIdentifier,
-    columns: Seq[StructField]) extends RunnableCommand {
+    colsToAdd: Seq[StructField]) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val catalogTable = verifyAlterTableAddColumn(catalog, table)
+    val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
 
     try {
       sparkSession.catalog.uncacheTable(table.quotedString)
@@ -199,17 +201,13 @@ case class AlterTableAddColumnsCommand(
     }
     catalog.refreshTable(table)
 
-    // make sure any partition columns are at the end of the fields
-    val reorderedSchema = catalogTable.dataSchema ++ columns ++ catalogTable.partitionSchema
-    val newSchema = catalogTable.schema.copy(fields = reorderedSchema.toArray)
-
     SchemaUtils.checkColumnNameDuplication(
-      reorderedSchema.map(_.name), "in the table definition of " + table.identifier,
+      (colsToAdd ++ catalogTable.schema).map(_.name),
+      "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
-    DDLUtils.checkDataSchemaFieldNames(catalogTable.copy(schema = newSchema))
+    DDLUtils.checkDataColNames(catalogTable, colsToAdd.map(_.name))
 
-    catalog.alterTableSchema(table, newSchema)
-
+    catalog.alterTableDataSchema(table, StructType(catalogTable.dataSchema ++ colsToAdd))
     Seq.empty[Row]
   }
 
@@ -219,6 +217,7 @@ case class AlterTableAddColumnsCommand(
    * For datasource table, it currently only supports parquet, json, csv.
    */
   private def verifyAlterTableAddColumn(
+      conf: SQLConf,
       catalog: SessionCatalog,
       table: TableIdentifier): CatalogTable = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
@@ -232,14 +231,13 @@ case class AlterTableAddColumnsCommand(
     }
 
     if (DDLUtils.isDatasourceTable(catalogTable)) {
-      DataSource.lookupDataSource(catalogTable.provider.get).newInstance() match {
+      DataSource.lookupDataSource(catalogTable.provider.get, conf).newInstance() match {
         // For datasource table, this command can only support the following File format.
         // TextFileFormat only default to one column "value"
-        // OrcFileFormat can not handle difference between user-specified schema and
-        // inferred schema yet. TODO, once this issue is resolved , we can add Orc back.
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
         case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat =>
+        case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
         case s =>
           throw new AnalysisException(
             s"""
@@ -344,7 +342,7 @@ case class LoadDataCommand(
         uri
       } else {
         val uri = new URI(path)
-        if (uri.getScheme() != null && uri.getAuthority() != null) {
+        val hdfsUri = if (uri.getScheme() != null && uri.getAuthority() != null) {
           uri
         } else {
           // Follow Hive's behavior:
@@ -384,6 +382,13 @@ case class LoadDataCommand(
           }
           new URI(scheme, authority, absolutePath, uri.getQuery(), uri.getFragment())
         }
+        val hadoopConf = sparkSession.sessionState.newHadoopConf()
+        val srcPath = new Path(hdfsUri)
+        val fs = srcPath.getFileSystem(hadoopConf)
+        if (!fs.exists(srcPath)) {
+          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
+        }
+        hdfsUri
       }
 
     if (partition.nonEmpty) {
@@ -632,8 +637,7 @@ case class DescribeTableCommand(
 }
 
 /**
- * A command to list the info for a column, including name, data type, column stats and comment.
- * This function creates a [[DescribeColumnCommand]] logical plan.
+ * A command to list the info for a column, including name, data type, comment and column stats.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -695,8 +699,24 @@ case class DescribeColumnCommand(
       buffer += Row("distinct_count", cs.map(_.distinctCount.toString).getOrElse("NULL"))
       buffer += Row("avg_col_len", cs.map(_.avgLen.toString).getOrElse("NULL"))
       buffer += Row("max_col_len", cs.map(_.maxLen.toString).getOrElse("NULL"))
+      val histDesc = for {
+        c <- cs
+        hist <- c.histogram
+      } yield histogramDescription(hist)
+      buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
     }
     buffer
+  }
+
+  private def histogramDescription(histogram: Histogram): Seq[Row] = {
+    val header = Row("histogram",
+      s"height: ${histogram.height}, num_of_bins: ${histogram.bins.length}")
+    val bins = histogram.bins.zipWithIndex.map {
+      case (bin, index) =>
+        Row(s"bin_$index",
+          s"lower_bound: ${bin.lo}, upper_bound: ${bin.hi}, distinct_count: ${bin.ndv}")
+    }
+    header +: bins
   }
 }
 
@@ -809,8 +829,7 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
 }
 
 /**
- * A command to list the column names for a table. This function creates a
- * [[ShowColumnsCommand]] logical plan.
+ * A command to list the column names for a table.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -848,8 +867,6 @@ case class ShowColumnsCommand(
  *
  * 1. If the command is called for a non partitioned table.
  * 2. If the partition spec refers to the columns that are not defined as partitioning columns.
- *
- * This function creates a [[ShowPartitionsCommand]] logical plan
  *
  * The syntax of using this command in SQL is:
  * {{{

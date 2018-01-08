@@ -1334,6 +1334,10 @@ public class JavaDatasetSuite implements Serializable {
       return "BeanWithEnum(" + enumField  + ", " + regularField + ")";
     }
 
+    public int hashCode() {
+      return Objects.hashCode(enumField, regularField);
+    }
+
     public boolean equals(Object other) {
       if (other instanceof BeanWithEnum) {
         BeanWithEnum beanWithEnum = (BeanWithEnum) other;

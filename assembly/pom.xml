@@ -149,6 +149,16 @@
       </dependencies>
     </profile>
     <profile>
+      <id>kubernetes</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-kubernetes_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
       <id>hive</id>
       <dependencies>
         <dependency>
@@ -187,7 +197,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
-            <version>3.0.0</version>
+            <version>3.1.0</version>
             <executions>
               <execution>
                 <id>dist</id>

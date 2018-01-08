@@ -283,13 +283,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         } else {
           currentPage = null;
           if (reader != null) {
-            // remove the spill file from disk
-            File file = spillWriters.removeFirst().getFile();
-            if (file != null && file.exists()) {
-              if (!file.delete()) {
-                logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
-              }
-            }
+            handleFailedDelete();
           }
           try {
             Closeables.close(reader, /* swallowIOException = */ false);
@@ -307,13 +301,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     public boolean hasNext() {
       if (numRecords == 0) {
         if (reader != null) {
-          // remove the spill file from disk
-          File file = spillWriters.removeFirst().getFile();
-          if (file != null && file.exists()) {
-            if (!file.delete()) {
-              logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
-            }
-          }
+          handleFailedDelete();
         }
       }
       return numRecords > 0;
@@ -359,6 +347,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
           return 0L;
         }
 
+        updatePeakMemoryUsed();
+
         // TODO: use existing ShuffleWriteMetrics
         ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
 
@@ -403,6 +393,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
     public void remove() {
       throw new UnsupportedOperationException();
     }
+
+    private void handleFailedDelete() {
+      // remove the spill file from disk
+      File file = spillWriters.removeFirst().getFile();
+      if (file != null && file.exists() && !file.delete()) {
+        logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+      }
+    }
   }
 
   /**
@@ -428,6 +426,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
   public MapIterator destructiveIterator() {
+    updatePeakMemoryUsed();
     return new MapIterator(numValues, loc, true);
   }
 
@@ -883,6 +882,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Reset this map to initialized state.
    */
   public void reset() {
+    updatePeakMemoryUsed();
     numKeys = 0;
     numValues = 0;
     freeArray(longArray);
