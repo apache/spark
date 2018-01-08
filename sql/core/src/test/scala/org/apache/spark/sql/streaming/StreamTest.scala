@@ -105,7 +105,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
      * the active query, and then return the source object the data was added, as well as the
      * offset of added data.
      */
-    def addData(query: Option[StreamExecution]): (Source, Offset)
+    def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset)
   }
 
   /** A trait that can be extended when testing a source. */
