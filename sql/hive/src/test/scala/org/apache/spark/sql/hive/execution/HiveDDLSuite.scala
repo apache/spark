@@ -2150,4 +2150,17 @@ class HiveDDLSuite
       assert(e.message.contains("LOAD DATA input path does not exist"))
     }
   }
+
+  test("SPARK-22252: FileFormatWriter should respect the input query schema in HIVE") {
+    withTable("t1", "t2", "t3", "t4") {
+      spark.range(1).select('id as 'col1, 'id as 'col2).write.saveAsTable("t1")
+      spark.sql("select COL1, COL2 from t1").write.format("hive").saveAsTable("t2")
+      checkAnswer(spark.table("t2"), Row(0, 0))
+
+      // Test picking part of the columns when writing.
+      spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
+      spark.sql("select COL1, COL2 from t3").write.format("hive").saveAsTable("t4")
+      checkAnswer(spark.table("t4"), Row(0, 0))
+    }
+  }
 }

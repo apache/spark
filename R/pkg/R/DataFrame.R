@@ -2297,6 +2297,7 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' @param ... additional sorting fields
 #' @param decreasing a logical argument indicating sorting order for columns when
 #'                   a character vector is specified for col
+#' @param withinPartitions a logical argument indicating whether to sort only within each partition
 #' @return A SparkDataFrame where all elements are sorted.
 #' @family SparkDataFrame functions
 #' @aliases arrange,SparkDataFrame,Column-method
@@ -2312,16 +2313,21 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' arrange(df, asc(df$col1), desc(abs(df$col2)))
 #' arrange(df, "col1", decreasing = TRUE)
 #' arrange(df, "col1", "col2", decreasing = c(TRUE, FALSE))
+#' arrange(df, "col1", "col2", withinPartitions = TRUE)
 #' }
 #' @note arrange(SparkDataFrame, Column) since 1.4.0
 setMethod("arrange",
           signature(x = "SparkDataFrame", col = "Column"),
-          function(x, col, ...) {
+          function(x, col, ..., withinPartitions = FALSE) {
               jcols <- lapply(list(col, ...), function(c) {
                 c@jc
               })
 
-            sdf <- callJMethod(x@sdf, "sort", jcols)
+            if (withinPartitions) {
+              sdf <- callJMethod(x@sdf, "sortWithinPartitions", jcols)
+            } else {
+              sdf <- callJMethod(x@sdf, "sort", jcols)
+            }
             dataFrame(sdf)
           })
 
@@ -2332,7 +2338,7 @@ setMethod("arrange",
 #' @note arrange(SparkDataFrame, character) since 1.4.0
 setMethod("arrange",
           signature(x = "SparkDataFrame", col = "character"),
-          function(x, col, ..., decreasing = FALSE) {
+          function(x, col, ..., decreasing = FALSE, withinPartitions = FALSE) {
 
             # all sorting columns
             by <- list(col, ...)
@@ -2356,7 +2362,7 @@ setMethod("arrange",
               }
             })
 
-            do.call("arrange", c(x, jcols))
+            do.call("arrange", c(x, jcols, withinPartitions = withinPartitions))
           })
 
 #' @rdname arrange
@@ -3779,6 +3785,33 @@ setMethod("checkpoint",
           signature(x = "SparkDataFrame"),
           function(x, eager = TRUE) {
             df <- callJMethod(x@sdf, "checkpoint", as.logical(eager))
+            dataFrame(df)
+          })
+
+#' localCheckpoint
+#'
+#' Returns a locally checkpointed version of this SparkDataFrame. Checkpointing can be used to
+#' truncate the logical plan, which is especially useful in iterative algorithms where the plan
+#' may grow exponentially. Local checkpoints are stored in the executors using the caching
+#' subsystem and therefore they are not reliable.
+#'
+#' @param x A SparkDataFrame
+#' @param eager whether to locally checkpoint this SparkDataFrame immediately
+#' @return a new locally checkpointed SparkDataFrame
+#' @family SparkDataFrame functions
+#' @aliases localCheckpoint,SparkDataFrame-method
+#' @rdname localCheckpoint
+#' @name localCheckpoint
+#' @export
+#' @examples
+#'\dontrun{
+#' df <- localCheckpoint(df)
+#' }
+#' @note localCheckpoint since 2.3.0
+setMethod("localCheckpoint",
+          signature(x = "SparkDataFrame"),
+          function(x, eager = TRUE) {
+            df <- callJMethod(x@sdf, "localCheckpoint", as.logical(eager))
             dataFrame(df)
           })
 

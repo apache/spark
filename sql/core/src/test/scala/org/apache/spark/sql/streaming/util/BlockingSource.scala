@@ -20,9 +20,8 @@ package org.apache.spark.sql.streaming.util
 import java.util.concurrent.CountDownLatch
 
 import org.apache.spark.sql.{SQLContext, _}
-import org.apache.spark.sql.execution.streaming.{LongOffset, Sink, Source}
+import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, Sink, Source}
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
-import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 

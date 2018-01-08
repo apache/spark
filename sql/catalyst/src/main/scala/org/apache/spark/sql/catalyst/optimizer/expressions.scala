@@ -21,6 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -614,7 +615,6 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 object RemoveDispensableExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case UnaryPositive(child) => child
-    case PromotePrecision(child) => child
   }
 }
 
@@ -646,6 +646,12 @@ object CombineConcats extends Rule[LogicalPlan] {
       stack.pop() match {
         case Concat(children) =>
           stack.pushAll(children.reverse)
+        // If `spark.sql.function.concatBinaryAsString` is false, nested `Concat` exprs possibly
+        // have `Concat`s with binary output. Since `TypeCoercion` casts them into strings,
+        // we need to handle the case to combine all nested `Concat`s.
+        case c @ Cast(Concat(children), StringType, _) =>
+          val newChildren = children.map { e => c.copy(child = e) }
+          stack.pushAll(newChildren.reverse)
         case child =>
           flattened += child
       }
@@ -653,8 +659,14 @@ object CombineConcats extends Rule[LogicalPlan] {
     Concat(flattened)
   }
 
+  private def hasNestedConcats(concat: Concat): Boolean = concat.children.exists {
+    case c: Concat => true
+    case c @ Cast(Concat(children), StringType, _) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
-    case concat: Concat if concat.children.exists(_.isInstanceOf[Concat]) =>
+    case concat: Concat if hasNestedConcats(concat) =>
       flattenConcats(concat)
   }
 }

@@ -103,6 +103,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   test("scheduler events") {
     val listener = new AppStatusListener(store, conf, true)
 
+    listener.onOtherEvent(SparkListenerLogStart("TestSparkVersion"))
+
     // Start the application.
     time += 1
     listener.onApplicationStart(SparkListenerApplicationStart(
@@ -125,6 +127,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(attempt.endTime.getTime() === -1L)
       assert(attempt.sparkUser === "user")
       assert(!attempt.completed)
+      assert(attempt.appSparkVersion === "TestSparkVersion")
     }
 
     // Start a couple of executors.
@@ -936,6 +939,24 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(store.count(classOf[TaskDataWrapper]) === 2)
     intercept[NoSuchElementException] {
       store.read(classOf[TaskDataWrapper], tasks.head.id)
+    }
+  }
+
+  test("driver logs") {
+    val listener = new AppStatusListener(store, conf, true)
+
+    val driver = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "localhost", 42)
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(time, driver, 42L))
+    listener.onApplicationStart(SparkListenerApplicationStart(
+      "name",
+      Some("id"),
+      time,
+      "user",
+      Some("attempt"),
+      Some(Map("stdout" -> "file.txt"))))
+
+    check[ExecutorSummaryWrapper](SparkContext.DRIVER_IDENTIFIER) { d =>
+      assert(d.info.executorLogs("stdout") === "file.txt")
     }
   }
 

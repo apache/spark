@@ -418,6 +418,10 @@ pyspark_streaming = Module(
     source_file_regexes=[
         "python/pyspark/streaming"
     ],
+    environ={
+        "ENABLE_FLUME_TESTS": "1",
+        "ENABLE_KAFKA_0_8_TESTS": "1"
+    },
     python_test_goals=[
         "pyspark.streaming.util",
         "pyspark.streaming.tests",

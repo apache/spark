@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.sources.v2.reader.Offset
+import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupport
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.{Clock, Utils}
 
@@ -42,6 +42,8 @@ class MicroBatchExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
+  @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
+
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
     case OneTimeTrigger => OneTimeExecutor()
@@ -54,12 +56,24 @@ class MicroBatchExecution(
         s"but the current thread was ${Thread.currentThread}")
     var nextSourceId = 0L
     val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
+    val v2ToExecutionRelationMap = MutableMap[StreamingRelationV2, StreamingExecutionRelation]()
     val _logicalPlan = analyzedPlan.transform {
       case streamingRelation@StreamingRelation(dataSource, _, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           val source = dataSource.createSource(metadataPath)
+          nextSourceId += 1
+          // We still need to use the previous `output` instead of `source.schema` as attributes in
+          // "df.logicalPlan" has already used attributes of the previous `output`.
+          StreamingExecutionRelation(source, output)(sparkSession)
+        })
+      case s @ StreamingRelationV2(v2DataSource, _, _, output, v1DataSource)
+          if !v2DataSource.isInstanceOf[MicroBatchReadSupport] =>
+        v2ToExecutionRelationMap.getOrElseUpdate(s, {
+          // Materialize source to avoid creating it in every batch
+          val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+          val source = v1DataSource.createSource(metadataPath)
           nextSourceId += 1
           // We still need to use the previous `output` instead of `source.schema` as attributes in
           // "df.logicalPlan" has already used attributes of the previous `output`.
@@ -171,12 +185,14 @@ class MicroBatchExecution(
                * Make a call to getBatch using the offsets from previous batch.
                * because certain sources (e.g., KafkaSource) assume on restart the last
                * batch will be executed before getOffset is called again. */
-              availableOffsets.foreach { ao: (Source, Offset) =>
-                val (source, end) = ao
-                if (committedOffsets.get(source).map(_ != end).getOrElse(true)) {
-                  val start = committedOffsets.get(source)
-                  source.getBatch(start, end)
-                }
+              availableOffsets.foreach {
+                case (source: Source, end: Offset) =>
+                  if (committedOffsets.get(source).map(_ != end).getOrElse(true)) {
+                    val start = committedOffsets.get(source)
+                    source.getBatch(start, end)
+                  }
+                case nonV1Tuple =>
+                  throw new IllegalStateException(s"Unexpected V2 source in $nonV1Tuple")
               }
               currentBatchId = latestCommittedBatchId + 1
               committedOffsets ++= availableOffsets
@@ -220,11 +236,12 @@ class MicroBatchExecution(
     val hasNewData = {
       awaitProgressLock.lock()
       try {
-        val latestOffsets: Map[Source, Option[Offset]] = uniqueSources.map { s =>
-          updateStatusMessage(s"Getting offsets from $s")
-          reportTimeTaken("getOffset") {
-            (s, s.getOffset)
-          }
+        val latestOffsets: Map[Source, Option[Offset]] = uniqueSources.map {
+          case s: Source =>
+            updateStatusMessage(s"Getting offsets from $s")
+            reportTimeTaken("getOffset") {
+              (s, s.getOffset)
+            }
         }.toMap
         availableOffsets ++= latestOffsets.filter { case (s, o) => o.nonEmpty }.mapValues(_.get)
 
@@ -299,7 +316,7 @@ class MicroBatchExecution(
           val prevBatchOff = offsetLog.get(currentBatchId - 1)
           if (prevBatchOff.isDefined) {
             prevBatchOff.get.toStreamProgress(sources).foreach {
-              case (src, off) => src.commit(off)
+              case (src: Source, off) => src.commit(off)
             }
           } else {
             throw new IllegalStateException(s"batch $currentBatchId doesn't exist")
@@ -332,7 +349,7 @@ class MicroBatchExecution(
     // Request unprocessed data from all sources.
     newData = reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
-        case (source, available)
+        case (source: Source, available)
           if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
           val current = committedOffsets.get(source)
           val batch = source.getBatch(current, available)

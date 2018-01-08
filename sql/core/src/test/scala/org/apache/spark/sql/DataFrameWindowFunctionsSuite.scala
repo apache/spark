@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -275,9 +276,46 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
   }
 
+  test("Window spill with less than the inMemoryThreshold") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "2",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2") {
+      assertNotSpilled(sparkContext, "select") {
+        df.select($"key", sum("value").over(window)).collect()
+      }
+    }
+  }
+
+  test("Window spill with more than the inMemoryThreshold but less than the spillThreshold") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2") {
+      assertNotSpilled(sparkContext, "select") {
+        df.select($"key", sum("value").over(window)).collect()
+      }
+    }
+  }
+
+  test("Window spill with more than the inMemoryThreshold and spillThreshold") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      assertSpilled(sparkContext, "select") {
+        df.select($"key", sum("value").over(window)).collect()
+      }
+    }
+  }
+
   test("SPARK-21258: complex object in combination with spilling") {
     // Make sure we trigger the spilling path.
-    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "17") {
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "17") {
       val sampleSchema = new StructType().
         add("f0", StringType).
         add("f1", LongType).
@@ -315,7 +353,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
 
       import testImplicits._
 
-      spark.read.schema(sampleSchema).json(input.toDS()).select(c0, c1).foreach { _ => () }
+      assertSpilled(sparkContext, "select") {
+        spark.read.schema(sampleSchema).json(input.toDS()).select(c0, c1).foreach { _ => () }
+      }
     }
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
+import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
@@ -88,29 +89,29 @@ object EstimationUtils {
   }
 
   /**
-   * For simplicity we use Decimal to unify operations for data types whose min/max values can be
+   * For simplicity we use Double to unify operations for data types whose min/max values can be
    * represented as numbers, e.g. Boolean can be represented as 0 (false) or 1 (true).
    * The two methods below are the contract of conversion.
    */
-  def toDecimal(value: Any, dataType: DataType): Decimal = {
+  def toDouble(value: Any, dataType: DataType): Double = {
     dataType match {
-      case _: NumericType | DateType | TimestampType => Decimal(value.toString)
-      case BooleanType => if (value.asInstanceOf[Boolean]) Decimal(1) else Decimal(0)
+      case _: NumericType | DateType | TimestampType => value.toString.toDouble
+      case BooleanType => if (value.asInstanceOf[Boolean]) 1 else 0
     }
   }
 
-  def fromDecimal(dec: Decimal, dataType: DataType): Any = {
+  def fromDouble(double: Double, dataType: DataType): Any = {
     dataType match {
-      case BooleanType => dec.toLong == 1
-      case DateType => dec.toInt
-      case TimestampType => dec.toLong
-      case ByteType => dec.toByte
-      case ShortType => dec.toShort
-      case IntegerType => dec.toInt
-      case LongType => dec.toLong
-      case FloatType => dec.toFloat
-      case DoubleType => dec.toDouble
-      case _: DecimalType => dec
+      case BooleanType => double.toInt == 1
+      case DateType => double.toInt
+      case TimestampType => double.toLong
+      case ByteType => double.toByte
+      case ShortType => double.toShort
+      case IntegerType => double.toInt
+      case LongType => double.toLong
+      case FloatType => double.toFloat
+      case DoubleType => double
+      case _: DecimalType => Decimal(double)
     }
   }
 
@@ -212,4 +213,172 @@ object EstimationUtils {
     }
   }
 
+  /**
+   * Returns overlapped ranges between two histograms, in the given value range
+   * [lowerBound, upperBound].
+   */
+  def getOverlappedRanges(
+    leftHistogram: Histogram,
+    rightHistogram: Histogram,
+    lowerBound: Double,
+    upperBound: Double): Seq[OverlappedRange] = {
+    val overlappedRanges = new ArrayBuffer[OverlappedRange]()
+    // Only bins whose range intersect [lowerBound, upperBound] have join possibility.
+    val leftBins = leftHistogram.bins
+      .filter(b => b.lo <= upperBound && b.hi >= lowerBound)
+    val rightBins = rightHistogram.bins
+      .filter(b => b.lo <= upperBound && b.hi >= lowerBound)
+
+    leftBins.foreach { lb =>
+      rightBins.foreach { rb =>
+        val (left, leftHeight) = trimBin(lb, leftHistogram.height, lowerBound, upperBound)
+        val (right, rightHeight) = trimBin(rb, rightHistogram.height, lowerBound, upperBound)
+        // Only collect overlapped ranges.
+        if (left.lo <= right.hi && left.hi >= right.lo) {
+          // Collect overlapped ranges.
+          val range = if (right.lo >= left.lo && right.hi >= left.hi) {
+            // Case1: the left bin is "smaller" than the right bin
+            //      left.lo            right.lo     left.hi          right.hi
+            // --------+------------------+------------+----------------+------->
+            if (left.hi == right.lo) {
+              // The overlapped range has only one value.
+              OverlappedRange(
+                lo = right.lo,
+                hi = right.lo,
+                leftNdv = 1,
+                rightNdv = 1,
+                leftNumRows = leftHeight / left.ndv,
+                rightNumRows = rightHeight / right.ndv
+              )
+            } else {
+              val leftRatio = (left.hi - right.lo) / (left.hi - left.lo)
+              val rightRatio = (left.hi - right.lo) / (right.hi - right.lo)
+              OverlappedRange(
+                lo = right.lo,
+                hi = left.hi,
+                leftNdv = left.ndv * leftRatio,
+                rightNdv = right.ndv * rightRatio,
+                leftNumRows = leftHeight * leftRatio,
+                rightNumRows = rightHeight * rightRatio
+              )
+            }
+          } else if (right.lo <= left.lo && right.hi <= left.hi) {
+            // Case2: the left bin is "larger" than the right bin
+            //      right.lo           left.lo      right.hi         left.hi
+            // --------+------------------+------------+----------------+------->
+            if (right.hi == left.lo) {
+              // The overlapped range has only one value.
+              OverlappedRange(
+                lo = right.hi,
+                hi = right.hi,
+                leftNdv = 1,
+                rightNdv = 1,
+                leftNumRows = leftHeight / left.ndv,
+                rightNumRows = rightHeight / right.ndv
+              )
+            } else {
+              val leftRatio = (right.hi - left.lo) / (left.hi - left.lo)
+              val rightRatio = (right.hi - left.lo) / (right.hi - right.lo)
+              OverlappedRange(
+                lo = left.lo,
+                hi = right.hi,
+                leftNdv = left.ndv * leftRatio,
+                rightNdv = right.ndv * rightRatio,
+                leftNumRows = leftHeight * leftRatio,
+                rightNumRows = rightHeight * rightRatio
+              )
+            }
+          } else if (right.lo >= left.lo && right.hi <= left.hi) {
+            // Case3: the left bin contains the right bin
+            //      left.lo            right.lo     right.hi         left.hi
+            // --------+------------------+------------+----------------+------->
+            val leftRatio = (right.hi - right.lo) / (left.hi - left.lo)
+            OverlappedRange(
+              lo = right.lo,
+              hi = right.hi,
+              leftNdv = left.ndv * leftRatio,
+              rightNdv = right.ndv,
+              leftNumRows = leftHeight * leftRatio,
+              rightNumRows = rightHeight
+            )
+          } else {
+            assert(right.lo <= left.lo && right.hi >= left.hi)
+            // Case4: the right bin contains the left bin
+            //      right.lo           left.lo      left.hi          right.hi
+            // --------+------------------+------------+----------------+------->
+            val rightRatio = (left.hi - left.lo) / (right.hi - right.lo)
+            OverlappedRange(
+              lo = left.lo,
+              hi = left.hi,
+              leftNdv = left.ndv,
+              rightNdv = right.ndv * rightRatio,
+              leftNumRows = leftHeight,
+              rightNumRows = rightHeight * rightRatio
+            )
+          }
+          overlappedRanges += range
+        }
+      }
+    }
+    overlappedRanges
+  }
+
+  /**
+   * Given an original bin and a value range [lowerBound, upperBound], returns the trimmed part
+   * of the bin in that range and its number of rows.
+   * @param bin the input histogram bin.
+   * @param height the number of rows of the given histogram bin inside an equi-height histogram.
+   * @param lowerBound lower bound of the given range.
+   * @param upperBound upper bound of the given range.
+   * @return trimmed part of the given bin and its number of rows.
+   */
+  def trimBin(bin: HistogramBin, height: Double, lowerBound: Double, upperBound: Double)
+  : (HistogramBin, Double) = {
+    val (lo, hi) = if (bin.lo <= lowerBound && bin.hi >= upperBound) {
+      //       bin.lo          lowerBound     upperBound      bin.hi
+      // --------+------------------+------------+-------------+------->
+      (lowerBound, upperBound)
+    } else if (bin.lo <= lowerBound && bin.hi >= lowerBound) {
+      //       bin.lo          lowerBound      bin.hi      upperBound
+      // --------+------------------+------------+-------------+------->
+      (lowerBound, bin.hi)
+    } else if (bin.lo <= upperBound && bin.hi >= upperBound) {
+      //    lowerBound            bin.lo     upperBound       bin.hi
+      // --------+------------------+------------+-------------+------->
+      (bin.lo, upperBound)
+    } else {
+      //    lowerBound            bin.lo        bin.hi     upperBound
+      // --------+------------------+------------+-------------+------->
+      assert(bin.lo >= lowerBound && bin.hi <= upperBound)
+      (bin.lo, bin.hi)
+    }
+
+    if (hi == lo) {
+      // Note that bin.hi == bin.lo also falls into this branch.
+      (HistogramBin(lo, hi, 1), height / bin.ndv)
+    } else {
+      assert(bin.hi != bin.lo)
+      val ratio = (hi - lo) / (bin.hi - bin.lo)
+      (HistogramBin(lo, hi, math.ceil(bin.ndv * ratio).toLong), height * ratio)
+    }
+  }
+
+  /**
+   * A join between two equi-height histograms may produce multiple overlapped ranges.
+   * Each overlapped range is produced by a part of one bin in the left histogram and a part of
+   * one bin in the right histogram.
+   * @param lo lower bound of this overlapped range.
+   * @param hi higher bound of this overlapped range.
+   * @param leftNdv ndv in the left part.
+   * @param rightNdv ndv in the right part.
+   * @param leftNumRows number of rows in the left part.
+   * @param rightNumRows number of rows in the right part.
+   */
+  case class OverlappedRange(
+    lo: Double,
+    hi: Double,
+    leftNdv: Double,
+    rightNdv: Double,
+    leftNumRows: Double,
+    rightNumRows: Double)
 }
