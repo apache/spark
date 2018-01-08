@@ -47,7 +47,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * To support vectorization in WholeStageCodeGen, this reader returns ColumnarBatch.
  * After creating, `initialize` and `initBatch` should be called sequentially.
  */
-public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
+public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   // ORC File Reader
   private Reader reader;
@@ -82,7 +82,7 @@ public class JavaOrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch
    */
   private final MemoryMode MEMORY_MODE;
 
-  public JavaOrcColumnarBatchReader(boolean useOffHeap) {
+  public OrcColumnarBatchReader(boolean useOffHeap) {
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
   }
 

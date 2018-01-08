@@ -150,7 +150,6 @@ class OrcFileFormat
     val sqlConf = sparkSession.sessionState.conf
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
-    val enableVectorizedJavaReader = sparkSession.sessionState.conf.orcVectorizedJavaReaderEnabled
 
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -184,29 +183,15 @@ class OrcFileFormat
 
         val taskContext = Option(TaskContext.get())
         if (enableVectorizedReader) {
-          val batchReader = if (enableVectorizedJavaReader) {
-            val vectorizedReader = new JavaOrcColumnarBatchReader(
-              enableOffHeapColumnVector && taskContext.isDefined)
-            vectorizedReader.initialize(fileSplit, taskAttemptContext)
-            vectorizedReader.initBatch(
-              reader.getSchema,
-              requestedColIds,
-              requiredSchema.fields,
-              partitionSchema,
-              file.partitionValues)
-            vectorizedReader
-          } else {
-            val vectorizedReader = new OrcColumnarBatchReader
-            vectorizedReader.initialize(fileSplit, taskAttemptContext)
-            vectorizedReader.initBatch(
-              enableOffHeapColumnVector && taskContext.isDefined,
-              reader.getSchema,
-              requestedColIds,
-              requiredSchema.fields,
-              partitionSchema,
-              file.partitionValues)
-            vectorizedReader
-          }
+          val batchReader =
+            new OrcColumnarBatchReader(enableOffHeapColumnVector && taskContext.isDefined)
+          batchReader.initialize(fileSplit, taskAttemptContext)
+          batchReader.initBatch(
+            reader.getSchema,
+            requestedColIds,
+            requiredSchema.fields,
+            partitionSchema,
+            file.partitionValues)
 
           val iter = new RecordReaderIterator(batchReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
