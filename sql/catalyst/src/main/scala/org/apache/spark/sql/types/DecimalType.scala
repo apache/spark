@@ -152,20 +152,18 @@ object DecimalType extends AbstractDataType {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
   }
 
-  // scalastyle:off line.size.limit
   /**
-   * Decimal implementation is based on Hive's one, which is itself inspired to SQLServer's one.
-   * In particular, when a result precision is greater than {@link #MAX_PRECISION}, the
-   * corresponding scale is reduced to prevent the integral part of a result from being truncated.
+   * Scale adjustment implementation is based on Hive's one, which is itself inspired to
+   * SQLServer's one. In particular, when a result precision is greater than
+   * {@link #MAX_PRECISION}, the corresponding scale is reduced to prevent the integral part of a
+   * result from being truncated.
    *
-   * For further reference, please see
-   * https://blogs.msdn.microsoft.com/sqlprogrammability/2006/03/29/multiplication-and-division-with-numerics/.
+   * This method is used only when `spark.sql.decimalOperations.allowTruncat` is set to true.
    *
    * @param precision
    * @param scale
    * @return
    */
-  // scalastyle:on line.size.limit
   private[sql] def adjustPrecisionScale(precision: Int, scale: Int): DecimalType = {
     // Assumptions:
     // precision >= scale

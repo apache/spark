@@ -1035,6 +1035,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val DECIMAL_OPERATIONS_ALLOW_TRUNCAT =
+    buildConf("spark.sql.decimalOperations.allowTruncat")
+      .internal()
+      .doc("When true, establishing the result type of an arithmetic operation happens " +
+        "according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the decimal " +
+        "part of the result if an exact representation is not possible. Otherwise, NULL is" +
+        "returned in those cases, as previously (default).")
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1345,6 +1355,8 @@ class SQLConf extends Serializable with Logging {
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
+
+  def decimalOperationsAllowTruncat: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_TRUNCAT)
 
   /** ********************** SQLConf functionality methods ************ */
 
