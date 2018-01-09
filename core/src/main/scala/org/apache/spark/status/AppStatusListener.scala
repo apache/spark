@@ -419,7 +419,7 @@ private[spark] class AppStatusListener(
 
     val now = System.nanoTime()
 
-    val (updatedTask, metricsDelta) = liveTasks.remove(event.taskInfo.taskId).map { task =>
+    val metricsDelta = liveTasks.remove(event.taskInfo.taskId).map { task =>
       task.info = event.taskInfo
 
       val errorMessage = event.reason match {
@@ -437,10 +437,9 @@ private[spark] class AppStatusListener(
       }
       task.errorMessage = errorMessage
       val delta = task.updateMetrics(event.taskMetrics)
-      (task.updateAndGet(kvstore, now), delta)
-    }.getOrElse {
-      (null, null)
-    }
+      task.updateAndGet(kvstore, now)
+      delta
+    }.orNull
 
     val (completedDelta, failedDelta, killedDelta) = event.reason match {
       case Success =>
@@ -455,7 +454,7 @@ private[spark] class AppStatusListener(
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
       if (metricsDelta != null) {
-        stage.metrics.add(metricsDelta)
+        stage.metrics = stage.metrics.add(metricsDelta)
       }
       stage.activeTasks -= 1
       stage.completedTasks += completedDelta
@@ -491,7 +490,7 @@ private[spark] class AppStatusListener(
       esummary.failedTasks += failedDelta
       esummary.killedTasks += killedDelta
       if (metricsDelta != null) {
-        esummary.metrics.add(metricsDelta)
+        esummary.metrics = esummary.metrics.add(metricsDelta)
       }
       maybeUpdate(esummary, now)
 
@@ -609,11 +608,11 @@ private[spark] class AppStatusListener(
         maybeUpdate(task, now)
 
         Option(liveStages.get((sid, sAttempt))).foreach { stage =>
-          stage.metrics.add(delta)
+          stage.metrics = stage.metrics.add(delta)
           maybeUpdate(stage, now)
 
           val esummary = stage.executorSummary(event.execId)
-          esummary.metrics.add(delta)
+          esummary.metrics = esummary.metrics.add(delta)
           maybeUpdate(esummary, now)
         }
       }

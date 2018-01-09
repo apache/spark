@@ -227,24 +227,28 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       }
     }
 
-    // Send executor metrics update. Only update one metric to avoid a lot of boilerplate code.
-    s1Tasks.foreach { task =>
-      val accum = new AccumulableInfo(1L, Some(InternalAccumulator.MEMORY_BYTES_SPILLED),
-        Some(1L), None, true, false, None)
-      listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
-        task.executorId,
-        Seq((task.taskId, stages.head.stageId, stages.head.attemptNumber, Seq(accum)))))
-    }
+    // Send two executor metrics update. Only update one metric to avoid a lot of boilerplate code.
+    // The tasks are distributed among the two executors, so the executor-level metrics should
+    // hold half of the cummulative value of the metric being updated.
+    Seq(1L, 2L).foreach { value =>
+      s1Tasks.foreach { task =>
+        val accum = new AccumulableInfo(1L, Some(InternalAccumulator.MEMORY_BYTES_SPILLED),
+          Some(value), None, true, false, None)
+        listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
+          task.executorId,
+          Seq((task.taskId, stages.head.stageId, stages.head.attemptNumber, Seq(accum)))))
+      }
 
-    check[StageDataWrapper](key(stages.head)) { stage =>
-      assert(stage.info.memoryBytesSpilled === s1Tasks.size)
-    }
+      check[StageDataWrapper](key(stages.head)) { stage =>
+        assert(stage.info.memoryBytesSpilled === s1Tasks.size * value)
+      }
 
-    val execs = store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
-      .first(key(stages.head)).last(key(stages.head)).asScala.toSeq
-    assert(execs.size > 0)
-    execs.foreach { exec =>
-      assert(exec.info.memoryBytesSpilled === s1Tasks.size / 2)
+      val execs = store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+        .first(key(stages.head)).last(key(stages.head)).asScala.toSeq
+      assert(execs.size > 0)
+      execs.foreach { exec =>
+        assert(exec.info.memoryBytesSpilled === s1Tasks.size * value / 2)
+      }
     }
 
     // Fail one of the tasks, re-start it.
