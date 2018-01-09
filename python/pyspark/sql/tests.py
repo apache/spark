@@ -3538,7 +3538,8 @@ class ArrowTests(ReusedSQLTestCase):
         pdf = pd.DataFrame(np.random.rand(4, 2))
         df, df_arrow = self._createDataFrame_toggle(pdf)
         pdf_col_names = [str(c) for c in pdf.columns]
-        self.assertSequenceEqual(pdf_col_names, df.columns, df_arrow.columns)
+        self.assertEqual(pdf_col_names, df.columns)
+        self.assertEqual(pdf_col_names, df_arrow.columns)
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
