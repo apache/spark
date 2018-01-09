@@ -109,7 +109,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuite with KafkaContinuousTe
     }
   }
 
-  test("subscribing topic by pattern with topic deletions") {
+  /* test("subscribing topic by pattern with topic deletions") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-seems"
     val topic2 = topicPrefix + "-bad"
@@ -151,7 +151,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuite with KafkaContinuousTe
       AddKafkaData(Set(topic2), 4, 5, 6),
       CheckAnswer(2, 3, 4, 5, 6, 7)
     )
-  }
+  } */
 }
 
 class KafkaContinuousSourceStressSuite
