@@ -82,13 +82,18 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   // Writable column vectors of the result columnar batch.
   private WritableColumnVector[] columnVectors;
 
-  /**
-   * The memory mode of the columnarBatch
-   */
+  // The wrapped ORC column vectors. It should be null if `copyToSpark` is true.
+  private org.apache.spark.sql.vectorized.ColumnVector[] orcVectorWrappers;
+
+  // The memory mode of the columnarBatch
   private final MemoryMode MEMORY_MODE;
 
-  public OrcColumnarBatchReader(boolean useOffHeap) {
+  // Whether or not to copy the ORC columnar batch to Spark columnar batch.
+  private final boolean copyToSpark;
+
+  public OrcColumnarBatchReader(boolean useOffHeap, boolean copyToSpark) {
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
+    this.copyToSpark = copyToSpark;
   }
 
 
@@ -167,27 +172,60 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     }
 
     int capacity = DEFAULT_SIZE;
-    if (MEMORY_MODE == MemoryMode.OFF_HEAP) {
-      columnVectors = OffHeapColumnVector.allocateColumns(capacity, resultSchema);
+
+    if (copyToSpark) {
+      if (MEMORY_MODE == MemoryMode.OFF_HEAP) {
+        columnVectors = OffHeapColumnVector.allocateColumns(capacity, resultSchema);
+      } else {
+        columnVectors = OnHeapColumnVector.allocateColumns(capacity, resultSchema);
+      }
+
+      // Initialize the missing columns once.
+      for (int i = 0; i < requiredFields.length; i++) {
+        if (requestedColIds[i] == -1) {
+          columnVectors[i].putNulls(0, capacity);
+          columnVectors[i].setIsConstant();
+        }
+      }
+
+      if (partitionValues.numFields() > 0) {
+        int partitionIdx = requiredFields.length;
+        for (int i = 0; i < partitionValues.numFields(); i++) {
+          ColumnVectorUtils.populate(columnVectors[i + partitionIdx], partitionValues, i);
+          columnVectors[i + partitionIdx].setIsConstant();
+        }
+      }
+
+      columnarBatch = new ColumnarBatch(resultSchema, columnVectors, capacity);
     } else {
-      columnVectors = OnHeapColumnVector.allocateColumns(capacity, resultSchema);
-    }
-    columnarBatch = new ColumnarBatch(resultSchema, columnVectors, capacity);
+      // Just wrap the ORC column vector instead of copying it to Spark column vector.
+      orcVectorWrappers = new org.apache.spark.sql.vectorized.ColumnVector[resultSchema.length()];
 
-    if (partitionValues.numFields() > 0) {
-      int partitionIdx = requiredFields.length;
-      for (int i = 0; i < partitionValues.numFields(); i++) {
-        ColumnVectorUtils.populate(columnVectors[i + partitionIdx], partitionValues, i);
-        columnVectors[i + partitionIdx].setIsConstant();
+      for (int i = 0; i < requiredFields.length; i++) {
+        DataType dt = requiredFields[i].dataType();
+        // Initialize the missing columns once.
+        if (requestedColIds[i] == -1) {
+          OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
+          missingCol.putNulls(0, capacity);
+          missingCol.setIsConstant();
+          orcVectorWrappers[i] = missingCol;
+        } else {
+          orcVectorWrappers[i] = new OrcColumnVector(dt, batch.cols[i]);
+        }
       }
-    }
 
-    // Initialize the missing columns once.
-    for (int i = 0; i < requiredFields.length; i++) {
-      if (requestedColIds[i] == -1) {
-        columnVectors[i].putNulls(0, columnarBatch.capacity());
-        columnVectors[i].setIsConstant();
+      if (partitionValues.numFields() > 0) {
+        int partitionIdx = requiredFields.length;
+        for (int i = 0; i < partitionValues.numFields(); i++) {
+          DataType dt = partitionSchema.fields()[i].dataType();
+          OnHeapColumnVector partitionCol = new OnHeapColumnVector(capacity, dt);
+          ColumnVectorUtils.populate(partitionCol, partitionValues, i);
+          partitionCol.setIsConstant();
+          orcVectorWrappers[partitionIdx + i] = partitionCol;
+        }
       }
+
+      columnarBatch = new ColumnarBatch(resultSchema, orcVectorWrappers, capacity);
     }
   }
 
@@ -196,17 +234,26 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
    * by copying from ORC VectorizedRowBatch columns to Spark ColumnarBatch columns.
    */
   private boolean nextBatch() throws IOException {
-    for (WritableColumnVector vector : columnVectors) {
-      vector.reset();
-    }
-    columnarBatch.setNumRows(0);
-
     recordReader.nextBatch(batch);
     int batchSize = batch.size;
     if (batchSize == 0) {
       return false;
     }
     columnarBatch.setNumRows(batchSize);
+
+    if (!copyToSpark) {
+      for (int i = 0; i < requiredFields.length; i++) {
+        if (requestedColIds[i] != -1) {
+          ((OrcColumnVector) orcVectorWrappers[i]).setBatchSize(batchSize);
+        }
+      }
+      return true;
+    }
+
+    for (WritableColumnVector vector : columnVectors) {
+      vector.reset();
+    }
+
     for (int i = 0; i < requiredFields.length; i++) {
       StructField field = requiredFields[i];
       WritableColumnVector toColumn = columnVectors[i];
