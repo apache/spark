@@ -471,7 +471,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             try {
               currentStream.awaitInitialization(streamingTimeout.toMillis)
               currentStream match {
-                case s: ContinuousExecution => s.processAllAvailable()
+                case s: ContinuousExecution => eventually("IncrementalExecution was not created") {
+                    s.lastExecution.executedPlan // will fail if lastExecution is null
+                  }
                 case _ =>
               }
             } catch {

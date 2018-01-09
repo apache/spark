@@ -33,7 +33,7 @@ import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 
 trait KafkaContinuousTest extends KafkaSourceTest {
-  override val defaultTrigger = Trigger.Continuous(100)
+  override val defaultTrigger = Trigger.Continuous(1000)
   override val defaultUseV2Sink = true
 
   // We need more than the default local[2] to be able to schedule all partitions simultaneously.

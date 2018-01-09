@@ -72,7 +72,10 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
     // Because KafkaSource's initialPartitionOffsets is set lazily, we need to make sure
     // its "getOffset" is called before pushing any data. Otherwise, because of the race contion,
     // we don't know which data should be fetched when `startingOffsets` is latest.
-    q.processAllAvailable()
+    q match {
+      case c: ContinuousExecution => c.awaitEpoch(0)
+      case m: MicroBatchExecution => m.processAllAvailable()
+    }
     true
   }
 
