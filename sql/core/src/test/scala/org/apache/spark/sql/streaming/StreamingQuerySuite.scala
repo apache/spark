@@ -427,6 +427,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   test("SPARK-22975: MetricsReporter defaults when there was no progress reported") {
     withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
       testStream(MemoryStream[Int].toDF())(
+        StartStream(Trigger.ProcessingTime(1000 * 60 * 60)),
         AssertOnQuery { q =>
           q.streamMetrics.metricRegistry.getGauges.get("latency").getValue.asInstanceOf[Long] == 0L
         },
@@ -437,7 +438,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         AssertOnQuery { q =>
           q.streamMetrics.metricRegistry.getGauges.get("processingRate-total").getValue
             .asInstanceOf[Double] == 0.0
-        }
+        },
+        StopStream
       )
     }
   }
