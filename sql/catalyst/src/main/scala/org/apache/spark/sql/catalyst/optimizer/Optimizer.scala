@@ -452,7 +452,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Prunes the unused columns from child of Aggregate/Expand/Generate
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = prunedChild(child, a.references))
-    case f @ FlatMapGroupsInPandas(_, _, _, child) if (child.outputSet -- f.references).nonEmpty =>
+    case f @ FlatMapGroupsInPandas(_, _, _, _, child)
+      if (child.outputSet -- f.references).nonEmpty =>
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))

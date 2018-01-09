@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expre
  */
 case class FlatMapGroupsInPandas(
     groupingAttributes: Seq[Attribute],
+    additionalGroupingAttributes: Seq[Attribute],
     functionExpr: Expression,
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {

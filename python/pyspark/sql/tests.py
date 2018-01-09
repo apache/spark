@@ -3995,40 +3995,46 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_complex_groupby(self):
+        import pandas as pd
         from pyspark.sql.functions import pandas_udf, col, PandasUDFType
         df = self.data
+        pdf = df.toPandas()
 
         @pandas_udf(
-            'id long, v int, norm double',
+            'v int, v2 double',
             PandasUDFType.GROUP_MAP
         )
-        def normalize(pdf):
+        def foo(pdf):
             v = pdf.v
-            return pdf.assign(norm=(v - v.mean()) / v.std())
+            return pd.DataFrame({'v': v + 1, 'v2': v - v.mean()})[:]
 
-        result = df.groupby(col('id') % 2 == 0).apply(normalize).sort('id', 'v').toPandas()
-        pdf = df.toPandas()
-        expected = pdf.groupby(pdf['id'] % 2 == 0).apply(normalize.func)
-        expected = expected.sort_values(['id', 'v']).reset_index(drop=True)
-        expected = expected.assign(norm=expected.norm.astype('float64'))
-        self.assertFramesEqual(expected, result)
+        # Use expression in groupby. The grouping expression should be prepended to the result.
+        result1 = df.groupby(col('id') % 2 == 0).apply(foo).sort('((id % 2) = 0)', 'v').toPandas()
+        expected1 = pdf.groupby(pdf['id'] % 2 == 0).apply(foo.func)
+        expected1.index.names =  ['((id % 2) = 0)', None]
+        expected1 = expected1.reset_index(level=0).sort_values(['((id % 2) = 0)', 'v']).reset_index(drop=True)
 
-    def test_groupkey(self):
-        import pandas as pd
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-        df = self.data
-        pdf = df.toPandas()
+        # Grouping column is not returned by the udf. The grouping column should be prepended.
+        result2 = df.groupby('id').apply(foo).sort('id', 'v').toPandas()
+        expected2 = pdf.groupby('id').apply(foo.func).reset_index(level=0) \
+            .sort_values(['id', 'v'])
 
-        @pandas_udf('v double, v_norm double', PandasUDFType.GROUP_MAP)
-        def normalize(pdf):
-            v = pdf['v']
-            return pd.DataFrame({'v': v, 'v_norm': v - v.mean()})
+        # Only one of the grouping column is returned by the udf. In this case, the grouping column
+        # that is not returned by the udf should be prepended.
+        result3 = df.groupby('id', 'v').apply(foo).sort('id', 'v').toPandas()
+        expected3 = pdf.groupby(['id', 'v']).apply(foo.func).reset_index(level=0) \
+            .reset_index(drop=True).sort_values(['id', 'v'])
 
-        result = df.groupby('id').apply(normalize).toPandas()
-        expected = pdf.groupby('id').apply(normalize.func)
+        # Mix expression and column
+        result4 = df.groupby(col('id') % 2 == 0, 'v').apply(foo).sort('((id % 2) = 0)', 'v').toPandas()
+        expected4 = pdf.groupby([pdf['id'] % 2 == 0, 'v']).apply(foo.func)
+        expected4.index.names = ['((id % 2) = 0)', 'v', None]
+        expected4 = expected4.reset_index(level=0).sort_values(['((id % 2) = 0)', 'v']).reset_index(drop=True)
 
-        print(result)
-        print(expected)
+        self.assertFramesEqual(expected1, result1)
+        self.assertFramesEqual(expected2, result2)
+        self.assertFramesEqual(expected3, result3)
+        self.assertFramesEqual(expected4, result4)
 
     def test_empty_groupby(self):
         from pyspark.sql.functions import pandas_udf, col, PandasUDFType
