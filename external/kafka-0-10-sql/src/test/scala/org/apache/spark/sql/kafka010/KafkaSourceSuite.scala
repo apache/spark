@@ -159,6 +159,23 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 class KafkaMicroBatchSourceSuite extends KafkaSourceSuiteBase {
 
   import testImplicits._
+  
+  test("(de)serialization of initial offsets") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+
+    testStream(reader.load)(
+      makeSureGetOffsetCalled,
+      StopStream,
+      StartStream(),
+      StopStream)
+  }
 
   test("maxOffsetsPerTrigger") {
     val topic = newTopic()
@@ -423,23 +440,6 @@ class KafkaMicroBatchSourceSuite extends KafkaSourceSuiteBase {
 class KafkaSourceSuiteBase extends KafkaSourceTest {
 
   import testImplicits._
-
-  test("(de)serialization of initial offsets") {
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 5)
-
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("subscribe", topic)
-
-    testStream(reader.load)(
-      makeSureGetOffsetCalled,
-      StopStream,
-      StartStream(),
-      StopStream)
-  }
 
   test("cannot stop Kafka stream") {
     val topic = newTopic()
