@@ -823,7 +823,8 @@ private[hive] class HiveClientImpl(
   }
 
   def reset(): Unit = withHiveState {
-    client.getAllTables("default").asScala.foreach { t =>
+    try {
+      client.getAllTables("default").asScala.foreach { t =>
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
         client.getIndexes("default", t, 255).asScala.foreach { index =>
@@ -837,6 +838,9 @@ private[hive] class HiveClientImpl(
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }
+    } finally {
+      runSqlHive("USE default")
+    }
   }
 }
 
