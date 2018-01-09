@@ -762,28 +762,30 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       ctx: CodegenContext): String = {
     val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
       val fieldToStringCode = castToStringCode(ft, ctx)
-      val funcName = ctx.freshName("fieldToString")
-      ctx.addNewFunction(funcName,
-        s"""
-           |private UTF8String $funcName(${ctx.javaType(ft)} field) {
-           |  UTF8String fieldStr = null;
-           |  ${fieldToStringCode("field", "fieldStr", null /* resultIsNull won't be used */)}
-           |  return fieldStr;
-           |}
-         """.stripMargin)
-
-        s"""
-           |${if (i != 0) s"""$buffer.append(",");""" else ""}
-           |if (!$row.isNullAt($i)) {
-           |  ${if (i != 0) s"""$buffer.append(" ");""" else ""}
-           |  $buffer.append($funcName(${ctx.getValue(row, ft, s"$i")}));
-           |}
-         """.stripMargin
+      val field = ctx.freshName("field")
+      val fieldStr = ctx.freshName("fieldStr")
+      s"""
+         |${if (i != 0) s"""$buffer.append(",");""" else ""}
+         |if (!$row.isNullAt($i)) {
+         |  ${if (i != 0) s"""$buffer.append(" ");""" else ""}
+         |
+         |  // Append $i field into the string buffer
+         |  ${ctx.javaType(ft)} $field = ${ctx.getValue(row, ft, s"$i")};
+         |  UTF8String $fieldStr = null;
+         |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
+         |  $buffer.append($fieldStr);
+         |}
+       """.stripMargin
     }
+
+    val writeStructCode = ctx.splitExpressions(
+      expressions = structToStringCode,
+      funcName = "fieldToString",
+      arguments = ("InternalRow", row) :: (classOf[UTF8StringBuilder].getName, buffer) :: Nil)
 
     s"""
        |$buffer.append("[");
-       |${structToStringCode.mkString("\n")}
+       |$writeStructCode
        |$buffer.append("]");
      """.stripMargin
   }
@@ -823,12 +825,14 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
       case StructType(fields) =>
         (c, evPrim, evNull) => {
+          val row = ctx.freshName("row")
           val buffer = ctx.freshName("buffer")
           val bufferClass = classOf[UTF8StringBuilder].getName
-          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), c, buffer, ctx)
+          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
           s"""
+             |InternalRow $row = $c;
              |$bufferClass $buffer = new $bufferClass();
-             |$writeStructCode;
+             |$writeStructCode
              |$evPrim = $buffer.build();
            """.stripMargin
         }
