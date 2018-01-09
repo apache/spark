@@ -252,6 +252,5 @@ class DataSourceWithHiveMetastoreCatalogSuite
         }
       }
     }
-
   }
 }
