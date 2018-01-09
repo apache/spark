@@ -51,7 +51,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
    *
    * - generate codes for argument.
    * - use ctx.splitExpressions() to not exceed 64kb JVM limit while preparing arguments.
-   * - avoid some of nullabilty checking which are not needed because the expression is not
+   * - avoid some of nullability checking which are not needed because the expression is not
    *   nullable.
    * - when needNullCheck == true, short circuit if we found one of arguments is null because
    *   preparing rest of arguments can be skipped in the case.
@@ -62,15 +62,13 @@ trait InvokeLike extends Expression with NonSQLExpression {
   def prepareArguments(ctx: CodegenContext): (String, String, String) = {
 
     val resultIsNull = if (needNullCheck) {
-      val resultIsNull = ctx.freshName("resultIsNull")
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, resultIsNull)
+      val resultIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "resultIsNull")
       resultIsNull
     } else {
       "false"
     }
     val argValues = arguments.map { e =>
-      val argValue = ctx.freshName("argValue")
-      ctx.addMutableState(ctx.javaType(e.dataType), argValue)
+      val argValue = ctx.addMutableState(ctx.javaType(e.dataType), "argValue")
       argValue
     }
 
@@ -195,7 +193,8 @@ case class StaticInvoke(
  * @param targetObject An expression that will return the object to call the method on.
  * @param functionName The name of the method to call.
  * @param dataType The expected return type of the function.
- * @param arguments An optional list of expressions, whos evaluation will be passed to the function.
+ * @param arguments An optional list of expressions, whose evaluation will be passed to the
+  *                 function.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function.
  * @param returnNullable When false, indicating the invoked method will always return
@@ -548,7 +547,7 @@ case class MapObjects private(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = ctx.javaType(loopVarDataType)
-    ctx.addMutableState(elementJavaType, loopValue)
+    ctx.addMutableState(elementJavaType, loopValue, forceInline = true, useFreshName = false)
     val genInputData = inputData.genCode(ctx)
     val genFunction = lambdaFunction.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -644,7 +643,7 @@ case class MapObjects private(
     }
 
     val loopNullCheck = if (loopIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, loopIsNull)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, loopIsNull, forceInline = true, useFreshName = false)
       inputDataType match {
         case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
         case _ => s"$loopIsNull = $loopValue == null;"
@@ -808,10 +807,11 @@ case class CatalystToExternalMap private(
 
     val mapType = inputDataType(inputData.dataType).asInstanceOf[MapType]
     val keyElementJavaType = ctx.javaType(mapType.keyType)
-    ctx.addMutableState(keyElementJavaType, keyLoopValue)
+    ctx.addMutableState(keyElementJavaType, keyLoopValue, forceInline = true, useFreshName = false)
     val genKeyFunction = keyLambdaFunction.genCode(ctx)
     val valueElementJavaType = ctx.javaType(mapType.valueType)
-    ctx.addMutableState(valueElementJavaType, valueLoopValue)
+    ctx.addMutableState(valueElementJavaType, valueLoopValue, forceInline = true,
+      useFreshName = false)
     val genValueFunction = valueLambdaFunction.genCode(ctx)
     val genInputData = inputData.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -844,7 +844,8 @@ case class CatalystToExternalMap private(
     val genValueFunctionValue = genFunctionValue(valueLambdaFunction, genValueFunction)
 
     val valueLoopNullCheck = if (valueLoopIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueLoopIsNull)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueLoopIsNull, forceInline = true,
+        useFreshName = false)
       s"$valueLoopIsNull = $valueArray.isNullAt($loopIndex);"
     } else {
       ""
@@ -994,8 +995,8 @@ case class ExternalMapToCatalyst private(
 
     val keyElementJavaType = ctx.javaType(keyType)
     val valueElementJavaType = ctx.javaType(valueType)
-    ctx.addMutableState(keyElementJavaType, key)
-    ctx.addMutableState(valueElementJavaType, value)
+    ctx.addMutableState(keyElementJavaType, key, forceInline = true, useFreshName = false)
+    ctx.addMutableState(valueElementJavaType, value, forceInline = true, useFreshName = false)
 
     val (defineEntries, defineKeyValue) = child.dataType match {
       case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
@@ -1031,14 +1032,14 @@ case class ExternalMapToCatalyst private(
     }
 
     val keyNullCheck = if (keyIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, keyIsNull)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, keyIsNull, forceInline = true, useFreshName = false)
       s"$keyIsNull = $key == null;"
     } else {
       ""
     }
 
     val valueNullCheck = if (valueIsNull != "false") {
-      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueIsNull)
+      ctx.addMutableState(ctx.JAVA_BOOLEAN, valueIsNull, forceInline = true, useFreshName = false)
       s"$valueIsNull = $value == null;"
     } else {
       ""
@@ -1106,27 +1107,31 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values)
 
     val childrenCodes = children.zipWithIndex.map { case (e, i) =>
       val eval = e.genCode(ctx)
-      eval.code + s"""
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }
-         """
+      s"""
+         |${eval.code}
+         |if (${eval.isNull}) {
+         |  $values[$i] = null;
+         |} else {
+         |  $values[$i] = ${eval.value};
+         |}
+       """.stripMargin
     }
 
-    val childrenCode = ctx.splitExpressionsWithCurrentInputs(childrenCodes)
+    val childrenCode = ctx.splitExpressionsWithCurrentInputs(
+      expressions = childrenCodes,
+      funcName = "createExternalRow",
+      extraArguments = "Object[]" -> values :: Nil)
     val schemaField = ctx.addReferenceObj("schema", schema)
 
-    val code = s"""
-      $values = new Object[${children.size}];
-      $childrenCode
-      final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
-      """
+    val code =
+      s"""
+         |Object[] $values = new Object[${children.size}];
+         |$childrenCode
+         |final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
+       """.stripMargin
     ev.copy(code = code, isNull = "false")
   }
 }
@@ -1144,25 +1149,28 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
-    val serializer = ctx.freshName("serializer")
-    val (serializerClass, serializerInstanceClass) = {
+    val (serializer, serializerClass, serializerInstanceClass) = {
       if (kryo) {
-        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+        ("kryoSerializer",
+          classOf[KryoSerializer].getName,
+          classOf[KryoSerializerInstance].getName)
       } else {
-        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+        ("javaSerializer",
+          classOf[JavaSerializer].getName,
+          classOf[JavaSerializerInstance].getName)
       }
     }
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializerInit = s"""
-      if ($env == null) {
-        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-       } else {
-         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-       }
-     """
-    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, v =>
+      s"""
+         |if ($env == null) {
+         |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+         |} else {
+         |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+         |}
+       """.stripMargin)
 
     // Code to serialize.
     val input = child.genCode(ctx)
@@ -1190,25 +1198,28 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
-    val serializer = ctx.freshName("serializer")
-    val (serializerClass, serializerInstanceClass) = {
+    val (serializer, serializerClass, serializerInstanceClass) = {
       if (kryo) {
-        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+        ("kryoSerializer",
+          classOf[KryoSerializer].getName,
+          classOf[KryoSerializerInstance].getName)
       } else {
-        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+        ("javaSerializer",
+          classOf[JavaSerializer].getName,
+          classOf[JavaSerializerInstance].getName)
       }
     }
     // try conf from env, otherwise create a new one
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    val serializerInit = s"""
-      if ($env == null) {
-        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-       } else {
-         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-       }
-     """
-    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, v =>
+      s"""
+         |if ($env == null) {
+         |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+         |} else {
+         |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+         |}
+       """.stripMargin)
 
     // Code to deserialize.
     val input = child.genCode(ctx)
@@ -1244,25 +1255,28 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
 
     val javaBeanInstance = ctx.freshName("javaBean")
     val beanInstanceJavaType = ctx.javaType(beanInstance.dataType)
-    ctx.addMutableState(beanInstanceJavaType, javaBeanInstance)
 
     val initialize = setters.map {
       case (setterMethod, fieldValue) =>
         val fieldGen = fieldValue.genCode(ctx)
         s"""
-           ${fieldGen.code}
-           ${javaBeanInstance}.$setterMethod(${fieldGen.value});
-         """
+           |${fieldGen.code}
+           |$javaBeanInstance.$setterMethod(${fieldGen.value});
+         """.stripMargin
     }
-    val initializeCode = ctx.splitExpressionsWithCurrentInputs(initialize.toSeq)
+    val initializeCode = ctx.splitExpressionsWithCurrentInputs(
+      expressions = initialize.toSeq,
+      funcName = "initializeJavaBean",
+      extraArguments = beanInstanceJavaType -> javaBeanInstance :: Nil)
 
-    val code = s"""
-      ${instanceGen.code}
-      ${javaBeanInstance} = ${instanceGen.value};
-      if (!${instanceGen.isNull}) {
-        $initializeCode
-      }
-     """
+    val code =
+      s"""
+         |${instanceGen.code}
+         |$beanInstanceJavaType $javaBeanInstance = ${instanceGen.value};
+         |if (!${instanceGen.isNull}) {
+         |  $initializeCode
+         |}
+       """.stripMargin
     ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
   }
 }
@@ -1303,7 +1317,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
 
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the value is null.
-    val errMsgField = ctx.addReferenceMinorObj(errMsg)
+    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
 
     val code = s"""
       ${childGen.code}
@@ -1340,7 +1354,7 @@ case class GetExternalRowField(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the field is null.
-    val errMsgField = ctx.addReferenceMinorObj(errMsg)
+    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val row = child.genCode(ctx)
     val code = s"""
       ${row.code}
@@ -1380,7 +1394,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the type doesn't match.
-    val errMsgField = ctx.addReferenceMinorObj(errMsg)
+    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
 

@@ -300,7 +300,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       Locale.setDefault(originalLocale)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
-      logInfo(RuleExecutor.dumpTimeSpent())
+      logWarning(RuleExecutor.dumpTimeSpent())
     } finally {
       super.afterAll()
     }

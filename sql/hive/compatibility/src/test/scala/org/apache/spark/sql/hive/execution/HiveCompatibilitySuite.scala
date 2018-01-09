@@ -76,7 +76,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
-      logInfo(RuleExecutor.dumpTimeSpent())
+      logWarning(RuleExecutor.dumpTimeSpent())
     } finally {
       super.afterAll()
     }

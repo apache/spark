@@ -107,7 +107,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public void putNull(int rowId) {
     nulls[rowId] = (byte)1;
     ++numNulls;
-    anyNullsSet = true;
   }
 
   @Override
@@ -115,13 +114,12 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)1;
     }
-    anyNullsSet = true;
     numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (!anyNullsSet) return;
+    if (numNulls == 0) return;
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
     }
@@ -558,7 +556,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
         if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, capacity);
         doubleData = newData;
       }
-    } else if (resultStruct != null) {
+    } else if (childColumns != null) {
       // Nothing to store.
     } else {
       throw new RuntimeException("Unhandled " + type);

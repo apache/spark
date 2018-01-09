@@ -195,7 +195,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           }
         case _ =>
           TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-            s"${value.dataType} != ${mismatchOpt.get.dataType}")
+            s"${value.dataType.simpleString} != ${mismatchOpt.get.dataType.simpleString}")
       }
     } else {
       TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
@@ -237,8 +237,14 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val javaDataType = ctx.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.value)
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
+    // inTmpResult has 3 possible values:
+    // -1 means no matches found and there is at least one value in the list evaluated to null
+    val HAS_NULL = -1
+    // 0 means no matches found and all values in the list are not null
+    val NOT_MATCHED = 0
+    // 1 means one value in the list is matched
+    val MATCHED = 1
+    val tmpResult = ctx.freshName("inTmpResult")
     val valueArg = ctx.freshName("valueArg")
     // All the blocks are meant to be inside a do { ... } while (false); loop.
     // The evaluation of variables can be stopped when we find a matching value.
@@ -246,10 +252,9 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
       s"""
          |${x.code}
          |if (${x.isNull}) {
-         |  ${ev.isNull} = true;
+         |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
          |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
-         |  ${ev.isNull} = false;
-         |  ${ev.value} = true;
+         |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
          |  continue;
          |}
        """.stripMargin)
@@ -257,17 +262,19 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = listCode,
       funcName = "valueIn",
-      extraArguments = (javaDataType, valueArg) :: Nil,
+      extraArguments = (javaDataType, valueArg) :: (ctx.JAVA_BYTE, tmpResult) :: Nil,
+      returnType = ctx.JAVA_BYTE,
       makeSplitFunction = body =>
         s"""
            |do {
            |  $body
            |} while (false);
+           |return $tmpResult;
          """.stripMargin,
       foldFunctions = _.map { funcCall =>
         s"""
-           |$funcCall;
-           |if (${ev.value}) {
+           |$tmpResult = $funcCall;
+           |if ($tmpResult == $MATCHED) {
            |  continue;
            |}
          """.stripMargin
@@ -276,14 +283,16 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     ev.copy(code =
       s"""
          |${valueGen.code}
-         |${ev.value} = false;
-         |${ev.isNull} = ${valueGen.isNull};
-         |if (!${ev.isNull}) {
+         |byte $tmpResult = $HAS_NULL;
+         |if (!${valueGen.isNull}) {
+         |  $tmpResult = $NOT_MATCHED;
          |  $javaDataType $valueArg = ${valueGen.value};
          |  do {
          |    $codes
          |  } while (false);
          |}
+         |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
+         |final boolean ${ev.value} = ($tmpResult == $MATCHED);
        """.stripMargin)
   }
 
@@ -319,7 +328,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     }
   }
 
-  @transient private[this] lazy val set = child.dataType match {
+  @transient lazy val set: Set[Any] = child.dataType match {
     case _: AtomicType => hset
     case _: NullType => hset
     case _ =>
@@ -327,20 +336,11 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ hset
   }
 
-  def getSet(): Set[Any] = set
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val setName = classOf[Set[Any]].getName
-    val InSetName = classOf[InSet].getName
+    val setTerm = ctx.addReferenceObj("set", set)
     val childGen = child.genCode(ctx)
-    ctx.references += this
-    val setTerm = ctx.freshName("set")
-    val setNull = if (hasNull) {
-      s"""
-         |if (!${ev.value}) {
-         |  ${ev.isNull} = true;
-         |}
-       """.stripMargin
+    val setIsNull = if (hasNull) {
+      s"${ev.isNull} = !${ev.value};"
     } else {
       ""
     }
@@ -350,9 +350,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
          |${ctx.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
          |${ctx.JAVA_BOOLEAN} ${ev.value} = false;
          |if (!${ev.isNull}) {
-         |  $setName $setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();
          |  ${ev.value} = $setTerm.contains(${childGen.value});
-         |  $setNull
+         |  $setIsNull
          |}
        """.stripMargin)
   }

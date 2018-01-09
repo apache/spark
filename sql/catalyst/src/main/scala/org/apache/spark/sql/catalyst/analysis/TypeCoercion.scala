@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -45,13 +46,15 @@ import org.apache.spark.sql.types._
  */
 object TypeCoercion {
 
-  val typeCoercionRules =
+  def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
     InConversion ::
       WidenSetOperationTypes ::
       PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
       FunctionArgumentConversion ::
+      ConcatCoercion(conf) ::
+      EltCoercion(conf) ::
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
@@ -324,9 +327,11 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ BinaryArithmetic(left @ StringType(), right) =>
+      case a @ BinaryArithmetic(left @ StringType(), right)
+        if right.dataType != CalendarIntervalType =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
-      case a @ BinaryArithmetic(left, right @ StringType()) =>
+      case a @ BinaryArithmetic(left, right @ StringType())
+        if left.dataType != CalendarIntervalType =>
         a.makeCopy(Array(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
@@ -655,6 +660,56 @@ object TypeCoercion {
             Literal.create(null, s.findDataType(index))
           case (e, _) => e
         })
+    }
+  }
+
+  /**
+   * Coerces the types of [[Concat]] children to expected ones.
+   *
+   * If `spark.sql.function.concatBinaryAsString` is false and all children types are binary,
+   * the expected types are binary. Otherwise, the expected ones are strings.
+   */
+  case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
+
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transform { case p =>
+      p transformExpressionsUp {
+        // Skip nodes if unresolved or empty children
+        case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
+        case c @ Concat(children) if conf.concatBinaryAsString ||
+            !children.map(_.dataType).forall(_ == BinaryType) =>
+          val newChildren = c.children.map { e =>
+            ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+          }
+          c.copy(children = newChildren)
+      }
+    }
+  }
+
+  /**
+   * Coerces the types of [[Elt]] children to expected ones.
+   *
+   * If `spark.sql.function.eltOutputAsString` is false and all children types are binary,
+   * the expected types are binary. Otherwise, the expected ones are strings.
+   */
+  case class EltCoercion(conf: SQLConf) extends TypeCoercionRule {
+
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transform { case p =>
+      p transformExpressionsUp {
+        // Skip nodes if unresolved or not enough children
+        case c @ Elt(children) if !c.childrenResolved || children.size < 2 => c
+        case c @ Elt(children) =>
+          val index = children.head
+          val newIndex = ImplicitTypeCasts.implicitCast(index, IntegerType).getOrElse(index)
+          val newInputs = if (conf.eltOutputAsString ||
+              !children.tail.map(_.dataType).forall(_ == BinaryType)) {
+            children.tail.map { e =>
+              ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+            }
+          } else {
+            children.tail
+          }
+          c.copy(children = newIndex +: newInputs)
+      }
     }
   }
 

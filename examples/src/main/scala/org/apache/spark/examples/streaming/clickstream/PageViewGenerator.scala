@@ -90,13 +90,13 @@ object PageViewGenerator {
     val viewsPerSecond = args(1).toFloat
     val sleepDelayMs = (1000.0 / viewsPerSecond).toInt
     val listener = new ServerSocket(port)
-    println("Listening on port: " + port)
+    println(s"Listening on port: $port")
 
     while (true) {
       val socket = listener.accept()
       new Thread() {
         override def run(): Unit = {
-          println("Got client connected from: " + socket.getInetAddress)
+          println(s"Got client connected from: ${socket.getInetAddress}")
           val out = new PrintWriter(socket.getOutputStream(), true)
 
           while (true) {

@@ -143,7 +143,12 @@ case class AnalyzeColumnCommand(
       val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation))
         .executedPlan.executeTake(1).head
       attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
-        attributePercentiles += attr -> percentilesRow.getArray(i)
+        val percentiles = percentilesRow.getArray(i)
+        // When there is no non-null value, `percentiles` is null. In such case, there is no
+        // need to generate histogram.
+        if (percentiles != null) {
+          attributePercentiles += attr -> percentiles
+        }
       }
     }
     AttributeMap(attributePercentiles.toSeq)
