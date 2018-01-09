@@ -160,7 +160,7 @@ final class OneVsRestModel private[ml] (
     val origCols = dataset.schema.map(f => col(f.name))
 
     // add an accumulator column to store predictions of all the models
-    val accColName = "mbc$acc" + UUID.randomUUID().toString
+    val accColName = "acc_" + UUID.randomUUID().toString
     val initUDF = udf { () => Map[Int, Double]() }
     val newDataset = dataset.withColumn(accColName, initUDF())
 
@@ -171,7 +171,7 @@ final class OneVsRestModel private[ml] (
     }
 
     // temporary column to store intermediate raw prediction
-    val tmpRawPredictionColName = "mbc$tmpraw" + UUID.randomUUID().toString
+    val tmpRawPredictionColName = "rawPrediction_" + UUID.randomUUID().toString
 
     // update the accumulator column with the result of prediction of models
     val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
@@ -179,7 +179,7 @@ final class OneVsRestModel private[ml] (
         val columns = origCols ++ List(col(tmpRawPredictionColName), col(accColName))
 
         // add temporary column to store intermediate scores and update
-        val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
+        val tmpColName = "update_" + UUID.randomUUID().toString
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
           predictions + ((index, prediction(1)))
         }
