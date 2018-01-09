@@ -4011,8 +4011,9 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         # Use expression in groupby. The grouping expression should be prepended to the result.
         result1 = df.groupby(col('id') % 2 == 0).apply(foo).sort('((id % 2) = 0)', 'v').toPandas()
         expected1 = pdf.groupby(pdf['id'] % 2 == 0).apply(foo.func)
-        expected1.index.names =  ['((id % 2) = 0)', None]
-        expected1 = expected1.reset_index(level=0).sort_values(['((id % 2) = 0)', 'v']).reset_index(drop=True)
+        expected1.index.names = ['((id % 2) = 0)', None]
+        expected1 = expected1.reset_index(level=0).sort_values(['((id % 2) = 0)', 'v'])\
+            .reset_index(drop=True)
 
         # Grouping column is not returned by the udf. The grouping column should be prepended.
         result2 = df.groupby('id').apply(foo).sort('id', 'v').toPandas()
@@ -4026,10 +4027,12 @@ class GroupbyApplyTests(ReusedSQLTestCase):
             .reset_index(drop=True).sort_values(['id', 'v'])
 
         # Mix expression and column
-        result4 = df.groupby(col('id') % 2 == 0, 'v').apply(foo).sort('((id % 2) = 0)', 'v').toPandas()
+        result4 = df.groupby(col('id') % 2 == 0, 'v').apply(foo).sort('((id % 2) = 0)', 'v')\
+            .toPandas()
         expected4 = pdf.groupby([pdf['id'] % 2 == 0, 'v']).apply(foo.func)
         expected4.index.names = ['((id % 2) = 0)', 'v', None]
-        expected4 = expected4.reset_index(level=0).sort_values(['((id % 2) = 0)', 'v']).reset_index(drop=True)
+        expected4 = expected4.reset_index(level=0).sort_values(['((id % 2) = 0)', 'v'])\
+            .reset_index(drop=True)
 
         self.assertFramesEqual(expected1, result1)
         self.assertFramesEqual(expected2, result2)
