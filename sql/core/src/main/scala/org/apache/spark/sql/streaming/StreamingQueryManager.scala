@@ -29,10 +29,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.streaming.ContinuousWriteSupport
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousWriteSupport, MicroBatchWriteSupport}
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -240,19 +240,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           "is not supported in streaming DataFrames/Datasets and will be disabled.")
     }
 
-    sink match {
-      case v1Sink: Sink =>
-        new StreamingQueryWrapper(new MicroBatchExecution(
-          sparkSession,
-          userSpecifiedName.orNull,
-          checkpointLocation,
-          analyzedPlan,
-          v1Sink,
-          trigger,
-          triggerClock,
-          outputMode,
-          deleteCheckpointOnStop))
-      case v2Sink: ContinuousWriteSupport =>
+    (sink, trigger) match {
+      case (v2Sink: ContinuousWriteSupport, trigger: ContinuousTrigger) =>
         UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
         new StreamingQueryWrapper(new ContinuousExecution(
           sparkSession,
@@ -265,6 +254,21 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           outputMode,
           extraOptions,
           deleteCheckpointOnStop))
+      case (_: MicroBatchWriteSupport, _) | (_: Sink, _) =>
+        new StreamingQueryWrapper(new MicroBatchExecution(
+          sparkSession,
+          userSpecifiedName.orNull,
+          checkpointLocation,
+          analyzedPlan,
+          sink,
+          trigger,
+          triggerClock,
+          outputMode,
+          extraOptions,
+          deleteCheckpointOnStop))
+      case (_: ContinuousWriteSupport, t) if !t.isInstanceOf[ContinuousTrigger] =>
+        throw new AnalysisException(
+          "Sink only supports continuous writes, but a continuous trigger was not specified.")
     }
   }
 

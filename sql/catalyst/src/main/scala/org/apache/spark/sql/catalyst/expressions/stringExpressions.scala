@@ -271,33 +271,45 @@ case class ConcatWs(children: Seq[Expression])
   }
 }
 
+/**
+ * An expression that returns the `n`-th input in given inputs.
+ * If all inputs are binary, `elt` returns an output as binary. Otherwise, it returns as string.
+ * If any input is null, `elt` returns null.
+ */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(n, str1, str2, ...) - Returns the `n`-th string, e.g., returns `str2` when `n` is 2.",
+  usage = "_FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.",
   examples = """
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
   """)
 // scalastyle:on line.size.limit
-case class Elt(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes {
+case class Elt(children: Seq[Expression]) extends Expression {
 
   private lazy val indexExpr = children.head
-  private lazy val stringExprs = children.tail.toArray
+  private lazy val inputExprs = children.tail.toArray
 
   /** This expression is always nullable because it returns null if index is out of range. */
   override def nullable: Boolean = true
 
-  override def dataType: DataType = StringType
-
-  override def inputTypes: Seq[DataType] = IntegerType +: Seq.fill(children.size - 1)(StringType)
+  override def dataType: DataType = inputExprs.map(_.dataType).headOption.getOrElse(StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
       TypeCheckResult.TypeCheckFailure("elt function requires at least two arguments")
     } else {
-      super[ImplicitCastInputTypes].checkInputDataTypes()
+      val (indexType, inputTypes) = (indexExpr.dataType, inputExprs.map(_.dataType))
+      if (indexType != IntegerType) {
+        return TypeCheckResult.TypeCheckFailure(s"first input to function $prettyName should " +
+          s"have IntegerType, but it's $indexType")
+      }
+      if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
+        return TypeCheckResult.TypeCheckFailure(
+          s"input to function $prettyName should have StringType or BinaryType, but it's " +
+            inputTypes.map(_.simpleString).mkString("[", ", ", "]"))
+      }
+      TypeUtils.checkForSameTypeInputExpr(inputTypes, s"function $prettyName")
     }
   }
 
@@ -307,27 +319,27 @@ case class Elt(children: Seq[Expression])
       null
     } else {
       val index = indexObj.asInstanceOf[Int]
-      if (index <= 0 || index > stringExprs.length) {
+      if (index <= 0 || index > inputExprs.length) {
         null
       } else {
-        stringExprs(index - 1).eval(input)
+        inputExprs(index - 1).eval(input)
       }
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = indexExpr.genCode(ctx)
-    val strings = stringExprs.map(_.genCode(ctx))
+    val inputs = inputExprs.map(_.genCode(ctx))
     val indexVal = ctx.freshName("index")
     val indexMatched = ctx.freshName("eltIndexMatched")
 
-    val stringVal = ctx.addMutableState(ctx.javaType(dataType), "stringVal")
+    val inputVal = ctx.addMutableState(ctx.javaType(dataType), "inputVal")
 
-    val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
+    val assignInputValue = inputs.zipWithIndex.map { case (eval, index) =>
       s"""
          |if ($indexVal == ${index + 1}) {
          |  ${eval.code}
-         |  $stringVal = ${eval.isNull} ? null : ${eval.value};
+         |  $inputVal = ${eval.isNull} ? null : ${eval.value};
          |  $indexMatched = true;
          |  continue;
          |}
@@ -335,7 +347,7 @@ case class Elt(children: Seq[Expression])
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = assignStringValue,
+      expressions = assignInputValue,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
       returnType = ctx.JAVA_BOOLEAN,
@@ -361,11 +373,11 @@ case class Elt(children: Seq[Expression])
          |${index.code}
          |final int $indexVal = ${index.value};
          |${ctx.JAVA_BOOLEAN} $indexMatched = false;
-         |$stringVal = null;
+         |$inputVal = null;
          |do {
          |  $codes
          |} while (false);
-         |final UTF8String ${ev.value} = $stringVal;
+         |final ${ctx.javaType(dataType)} ${ev.value} = $inputVal;
          |final boolean ${ev.isNull} = ${ev.value} == null;
        """.stripMargin)
   }

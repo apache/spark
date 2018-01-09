@@ -169,8 +169,8 @@ class UserDefinedFunction(object):
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
         wrapper.deterministic = self.deterministic
-        wrapper.asNondeterministic = lambda: self.asNondeterministic()._wrapped()
-
+        wrapper.asNondeterministic = functools.wraps(
+            self.asNondeterministic)(lambda: self.asNondeterministic()._wrapped())
         return wrapper
 
     def asNondeterministic(self):

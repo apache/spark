@@ -164,7 +164,7 @@ abstract class StreamExecution(
   var lastExecution: IncrementalExecution = _
 
   /** Holds the most recent input data for each source. */
-  protected var newData: Map[BaseStreamingSource, DataFrame] = _
+  protected var newData: Map[BaseStreamingSource, LogicalPlan] = _
 
   @volatile
   protected var streamDeathCause: StreamingQueryException = null
