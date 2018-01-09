@@ -472,7 +472,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   private void putNonNullDecimals(int count, DecimalColumnVector fromColumn, WritableColumnVector toColumn, DecimalType type) {
     DecimalColumnVector data = fromColumn;
-    if (type.precision() > Decimal.MAX_LONG_DIGITS()) {
+    if (type.precision() > Decimal.MAX_INT_DIGITS()) {
       WritableColumnVector arrayData = toColumn.getChildColumn(0);
       arrayData.reserve(count * 16);
     }
@@ -590,10 +590,6 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   private void putDecimals(int count, DecimalColumnVector fromColumn, WritableColumnVector toColumn, DecimalType type) {
     HiveDecimalWritable[] vector = fromColumn.vector;
-    if (type.precision() > Decimal.MAX_LONG_DIGITS()) {
-      WritableColumnVector arrayData = toColumn.getChildColumn(0);
-      arrayData.reserve(count * 16);
-    }
     for (int index = 0; index < count; index++) {
       if (fromColumn.isNull[index]) {
         toColumn.putNull(index);
