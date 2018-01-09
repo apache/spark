@@ -37,10 +37,10 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
   attachPage(new PoolPage(this))
 
   def isFairScheduler: Boolean = {
-    store.environmentInfo().sparkProperties.toMap
-      .get("spark.scheduler.mode")
-      .map { mode => mode == SchedulingMode.FAIR }
-      .getOrElse(false)
+    store
+      .environmentInfo()
+      .sparkProperties
+      .contains(("spark.scheduler.mode", SchedulingMode.FAIR.toString))
   }
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
