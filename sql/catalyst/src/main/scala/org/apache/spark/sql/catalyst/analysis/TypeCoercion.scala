@@ -67,8 +67,8 @@ object TypeCoercion {
         HivePromoteStrings
     } else {
       commonTypeCoercionRules :+
-        InConversion :+
-        PromoteStrings
+        NativeInConversion :+
+        NativePromoteStrings
     }
   }
 
@@ -348,7 +348,7 @@ object TypeCoercion {
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
-  object PromoteStrings extends TypeCoercionRule {
+  object NativePromoteStrings extends TypeCoercionRule {
 
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
@@ -451,7 +451,7 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  object InConversion extends TypeCoercionRule {
+  object NativeInConversion extends TypeCoercionRule {
 
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
