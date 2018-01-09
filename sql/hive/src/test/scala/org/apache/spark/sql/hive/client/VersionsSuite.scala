@@ -58,7 +58,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
    */
   protected def withTempDir(f: File => Unit): Unit = {
     val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
+    f(dir)
   }
 
   /**
