@@ -52,8 +52,8 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     if (testUtils != null) {
       testUtils.teardown()
       testUtils = null
-      super.afterAll()
     }
+    super.afterAll()
   }
 
   test("streaming - write to kafka with topic field") {
@@ -252,23 +252,31 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       .load()
     var writer: StreamingQuery = null
     var ex: Exception = null
-    ex = intercept[StreamingQueryException] {
-      writer = createKafkaWriter(
-        input.toDF(),
-        withOptions = Map("kafka.key.serializer" -> "foo"))()
-      writer.processAllAvailable()
+    try {
+      ex = intercept[StreamingQueryException] {
+        writer = createKafkaWriter(
+          input.toDF(),
+          withOptions = Map("kafka.key.serializer" -> "foo"))()
+        writer.processAllAvailable()
+      }
+      assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
+        "kafka option 'key.serializer' is not supported"))
+    } finally {
+      writer.stop()
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "kafka option 'key.serializer' is not supported"))
 
-    ex = intercept[StreamingQueryException] {
-      writer = createKafkaWriter(
-        input.toDF(),
-        withOptions = Map("kafka.value.serializer" -> "foo"))()
-      writer.processAllAvailable()
+    try {
+      ex = intercept[StreamingQueryException] {
+        writer = createKafkaWriter(
+          input.toDF(),
+          withOptions = Map("kafka.value.serializer" -> "foo"))()
+        writer.processAllAvailable()
+      }
+      assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
+        "kafka option 'value.serializer' is not supported"))
+    } finally {
+      writer.stop()
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "kafka option 'value.serializer' is not supported"))
   }
 
   test("generic - write big data with small producer buffer") {
