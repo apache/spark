@@ -59,7 +59,8 @@ object TypeCoercion {
         StackCoercion ::
         Division ::
         ImplicitTypeCasts ::
-        DateTimeOperations :: Nil
+        DateTimeOperations ::
+        WindowFrameCoercion :: Nil
 
     if (conf.isHiveTypeCoercionMode) {
       commonTypeCoercionRules :+
