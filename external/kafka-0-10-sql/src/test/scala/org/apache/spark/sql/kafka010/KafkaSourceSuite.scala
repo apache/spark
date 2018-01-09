@@ -52,9 +52,11 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
   override val streamingTimeout = 30.seconds
 
+  protected val brokerProps = Map[String, Object]()
+
   override def beforeAll(): Unit = {
     super.beforeAll()
-    testUtils = new KafkaTestUtils
+    testUtils = new KafkaTestUtils(brokerProps)
     testUtils.setup()
   }
 

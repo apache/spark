@@ -70,8 +70,14 @@ trait KafkaContinuousTest extends KafkaSourceTest {
 
 class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest {
 
+}
+
+class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
   import testImplicits._
-  /* test("subscribing topic by pattern with topic deletions") {
+
+  override val brokerProps = Map("auto.create.topics.enable" -> "false")
+
+  test("subscribing topic by pattern with topic deletions") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-seems"
     val topic2 = topicPrefix + "-bad"
@@ -113,7 +119,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
       AddKafkaData(Set(topic2), 4, 5, 6),
       CheckAnswer(2, 3, 4, 5, 6, 7)
     )
-  } */
+  }
 }
 
 class KafkaContinuousSourceStressForDontFailOnDataLossSuite
