@@ -1854,13 +1854,12 @@ class ImageReaderTest(SparkSessionTestCase):
             self.assertEqual(x, ImageSchema.ocvTypeByMode(x.mode))
 
     def test_conversions(self):
-        ary_src = [[[1e7*random.random() for z in range(4)] for y in range(10)] for x in range(10)]
+        s = np.random.RandomState(seed=987)
+        ary_src = s.rand(4, 10, 10)
         for ocvType in ImageSchema.ocvTypes:
             if ocvType.name == 'Undefined':
                 continue
-            x = [[ary_src[i][j][0:ocvType.nChannels]
-                  for j in range(len(ary_src[0]))] for i in range(len(ary_src))]
-            npary0 = np.array(x).astype(ocvType.nptype)
+            npary0 = ary_src[..., 0:ocvType.nChannels].astype(ocvType.nptype)
             img = ImageSchema.toImage(npary0)
             self.assertEqual(ocvType, ImageSchema.ocvTypeByMode(img.mode))
             npary1 = ImageSchema.toNDArray(img)
@@ -1878,7 +1877,7 @@ class ImageReaderTest(SparkSessionTestCase):
 
         expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
         self.assertEqual(ImageSchema.imageFields, expected)
-        self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
+        self.assertEqual(ImageSchema.undefinedImageType.name, "Undefined")
 
         with QuietTest(self.sc):
             self.assertRaisesRegexp(

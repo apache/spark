@@ -36,7 +36,7 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
     val height = 1
     val nChannels = 3
     val data = Array[Byte](0, 0, 0)
-    val mode: Int = OpenCvType.get("CV_8UC3").mode
+    val mode: Int = ImageSchema.ocvTypeByName("CV_8UC3").mode
 
     // Internal Row corresponds to image StructType
     val rows = Seq(Row(Row(origin, height, width, nChannels, mode, data)),
@@ -83,7 +83,7 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
         val bytes20 = getData(row).slice(0, 20)
 
         val (expectedMode, expectedBytes) = firstBytes20(filename)
-        assert(OpenCvType.get(expectedMode).mode === mode,
+        assert(ImageSchema.ocvTypeByName(expectedMode).mode === mode,
           "mode of the image is not read correctly")
         assert(Arrays.equals(expectedBytes, bytes20), "incorrect numeric value for flattened image")
       }

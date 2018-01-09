@@ -44,21 +44,21 @@ object ImageSchema {
    * @param nChannels number of color channels
    */
   case class OpenCvType(mode: Int, dataType: String, nChannels: Int) {
-    def name: String = "CV_" + dataType + "C" + nChannels
-    override def toString: String = "OpenCvType(mode = " + mode + ", name = " + name + ")"
+    def name: String = if (mode == -1) { "Undefined" } else { s"CV_$dataType" + s"C$nChannels" }
+    override def toString: String = s"OpenCvType(mode = $mode, name = $name)"
   }
 
-  object OpenCvType {
-    def get(name: String): OpenCvType = {
-      ocvTypes.find(x => x.name == name).getOrElse(
-        throw new IllegalArgumentException("Unknown open cv type " + name))
-    }
-    def get(mode: Int): OpenCvType = {
-      ocvTypes.find(x => x.mode == mode).getOrElse(
-        throw new IllegalArgumentException("Unknown open cv mode " + mode))
-    }
-    val undefinedType = OpenCvType(-1, "N/A", -1)
+  def ocvTypeByName(name: String): OpenCvType = {
+    ocvTypes.find(x => x.name == name).getOrElse(
+      throw new IllegalArgumentException("Unknown open cv type " + name))
   }
+
+  def ocvTypeByMode(mode: Int): OpenCvType = {
+    ocvTypes.find(x => x.mode == mode).getOrElse(
+      throw new IllegalArgumentException("Unknown open cv mode " + mode))
+  }
+
+  val undefinedImageType = OpenCvType(-1, "N/A", -1)
 
   /**
    * A Mapping of Type to Numbers in OpenCV
@@ -78,9 +78,12 @@ object ImageSchema {
            dt <- Array("8U", "8S", "16U", "16S", "32S", "32F", "64F"))
         yield (dt, nc)
     val ordinals = for (i <- 0 to 3; j <- 0 to 6) yield ( i * 8 + j)
-    OpenCvType.undefinedType +: (ordinals zip types).map(x => OpenCvType(x._1, x._2._1, x._2._2))
+    undefinedImageType +: (ordinals zip types).map(x => OpenCvType(x._1, x._2._1, x._2._2))
   }
 
+  /**
+   *  (Java Specific) list of OpenCv types
+   */
   val javaOcvTypes = ocvTypes.asJava
 
   /**
@@ -152,7 +155,7 @@ object ImageSchema {
    * @return Row with the default values
    */
   private[spark] def invalidImageRow(origin: String): Row =
-    Row(Row(origin, -1, -1, -1, OpenCvType.undefinedType.mode, Array.ofDim[Byte](0)))
+    Row(Row(origin, -1, -1, -1, undefinedImageType.mode, Array.ofDim[Byte](0)))
 
   /**
    * Convert the compressed image (jpeg, png, etc.) into OpenCV
@@ -175,11 +178,11 @@ object ImageSchema {
       val height = img.getHeight
       val width = img.getWidth
       val (nChannels, mode: Int) = if (isGray) {
-        (1, OpenCvType.get("CV_8UC1").mode)
+        (1, ocvTypeByName("CV_8UC1").mode)
       } else if (hasAlpha) {
-        (4, OpenCvType.get("CV_8UC4").mode)
+        (4, ocvTypeByName("CV_8UC4").mode)
       } else {
-        (3, OpenCvType.get("CV_8UC3").mode)
+        (3, ocvTypeByName("CV_8UC3").mode)
       }
 
       val imageSize = height * width * nChannels

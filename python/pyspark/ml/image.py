@@ -104,13 +104,16 @@ class _ImageSchema(object):
         if name not in self._ocvTypesByName:
             raise ValueError(
                 "Can not find matching OpenCvFormat for type = '%s'; supported formats are = %s" %
-                (name, str(
-                    self._ocvTypesByName.keys())))
+                (name, str(self._ocvTypesByName.keys())))
         return self._ocvTypesByName[name]
 
     def ocvTypeByMode(self, mode):
         if self._ocvTypesByMode is None:
             self._ocvTypesByMode = {x.mode: x for x in self.ocvTypes}
+        if mode not in self._ocvTypesByMode:
+            raise ValueError(
+                "Invalid mode '%d'; supported modes are = %s" %
+                (name, str(self._ocvTypesByMode.keys())))
         return self._ocvTypesByMode[mode]
 
     @property
@@ -135,11 +138,8 @@ class _ImageSchema(object):
 
         .. versionadded:: 2.3.0
         """
-
         if self._undefinedImageType is None:
-            ctx = SparkContext.getOrCreate()
-            self._undefinedImageType = \
-                ctx._jvm.org.apache.spark.ml.image.ImageSchema.undefinedImageType()
+            self._undefinedImageType = self.ocvTypeByName("Undefined")
         return self._undefinedImageType
 
     def toNDArray(self, image):
@@ -243,9 +243,8 @@ class _ImageSchema(object):
         .. versionadded:: 2.3.0
         """
 
-        ctx = SparkContext.getOrCreate()
-        spark = SparkSession(ctx)
-        image_schema = ctx._jvm.org.apache.spark.ml.image.ImageSchema
+        spark = SparkSession.builder.getOrCreate()
+        image_schema = spark._jvm.org.apache.spark.ml.image.ImageSchema
         jsession = spark._jsparkSession
         jresult = image_schema.readImages(path, jsession, recursive, numPartitions,
                                           dropImageFailures, float(sampleRatio), seed)
