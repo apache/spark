@@ -146,6 +146,11 @@ class DataSourceWithHiveMetastoreCatalogSuite
     'id cast StringType as 'd2
   ).coalesce(1)
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sparkSession.metadataHive.reset()
+  }
+
   Seq(
     "parquet" -> ((
       "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
