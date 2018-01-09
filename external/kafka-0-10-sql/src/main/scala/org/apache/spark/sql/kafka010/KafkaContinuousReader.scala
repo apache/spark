@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.{util => ju}
+
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 
@@ -47,7 +49,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class KafkaContinuousReader(
     offsetReader: KafkaOffsetReader,
-    kafkaParams: java.util.Map[String, Object],
+    kafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
     initialOffsets: KafkaOffsetRangeLimit,
@@ -65,7 +67,7 @@ class KafkaContinuousReader(
   override def readSchema: StructType = KafkaOffsetReader.kafkaSchema
 
   private var offset: Offset = _
-  override def setOffset(start: java.util.Optional[Offset]): Unit = {
+  override def setOffset(start: ju.Optional[Offset]): Unit = {
     offset = start.orElse {
       val offsets = initialOffsets match {
         case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
@@ -83,7 +85,7 @@ class KafkaContinuousReader(
     KafkaSourceOffset(JsonUtils.partitionOffsets(json))
   }
 
-  override def createUnsafeRowReadTasks(): java.util.List[ReadTask[UnsafeRow]] = {
+  override def createUnsafeRowReadTasks(): ju.List[ReadTask[UnsafeRow]] = {
     import scala.collection.JavaConverters._
 
     val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(offset)
@@ -155,7 +157,7 @@ class KafkaContinuousReader(
 case class KafkaContinuousReadTask(
     topicPartition: TopicPartition,
     startOffset: Long,
-    kafkaParams: java.util.Map[String, Object],
+    kafkaParams: ju.Map[String, Object],
     failOnDataLoss: Boolean) extends ReadTask[UnsafeRow] {
   override def createDataReader(): KafkaContinuousDataReader = {
     new KafkaContinuousDataReader(topicPartition, startOffset, kafkaParams, failOnDataLoss)
@@ -174,7 +176,7 @@ case class KafkaContinuousReadTask(
 class KafkaContinuousDataReader(
     topicPartition: TopicPartition,
     startOffset: Long,
-    kafkaParams: java.util.Map[String, Object],
+    kafkaParams: ju.Map[String, Object],
     failOnDataLoss: Boolean) extends ContinuousDataReader[UnsafeRow] {
   private val topic = topicPartition.topic
   private val kafkaPartition = topicPartition.partition
