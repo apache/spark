@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Options for the Parquet data source.
  */
-private[parquet] class ParquetOptions(
+class ParquetOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
   extends Serializable {
@@ -76,7 +76,7 @@ object ParquetOptions {
   val MERGE_SCHEMA = "mergeSchema"
 
   // The parquet compression short names
-  private val shortParquetCompressionCodecNames = Map(
+  val shortParquetCompressionCodecNames = Map(
     "none" -> CompressionCodecName.UNCOMPRESSED,
     "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
     "snappy" -> CompressionCodecName.SNAPPY,
