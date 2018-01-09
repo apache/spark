@@ -492,8 +492,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     } else {
       byte[] bytes = value.toJavaBigDecimal().unscaledValue().toByteArray();
       WritableColumnVector arrayData = toColumn.getChildColumn(0);
-      arrayData.putBytes(index * 4, bytes.length, bytes, 0);
-      toColumn.putArray(index, index * 4, bytes.length);
+      arrayData.putBytes(index * 16, bytes.length, bytes, 0);
+      toColumn.putArray(index, index * 16, bytes.length);
     }
   }
 
