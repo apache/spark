@@ -20,30 +20,32 @@ package org.apache.spark.sql.execution.command
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
+import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.SerializableConfiguration
 
-
 /**
- * A special `RunnableCommand` which writes data out and updates metrics.
+ * A special `Command` which writes data out and updates metrics.
  */
-trait DataWritingCommand extends RunnableCommand {
-
+trait DataWritingCommand extends Command {
   /**
    * The input query plan that produces the data to be written.
+   * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns
+   *            to [[FileFormatWriter]].
    */
   def query: LogicalPlan
 
-  // We make the input `query` an inner child instead of a child in order to hide it from the
-  // optimizer. This is because optimizer may not preserve the output schema names' case, and we
-  // have to keep the original analyzed plan here so that we can pass the corrected schema to the
-  // writer. The schema of analyzed plan is what user expects(or specifies), so we should respect
-  // it when writing.
-  override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
+  override final def children: Seq[LogicalPlan] = query :: Nil
 
-  override lazy val metrics: Map[String, SQLMetric] = {
+  // Output columns of the analyzed input query plan
+  def outputColumns: Seq[Attribute]
+
+  lazy val metrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
     Map(
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
@@ -57,4 +59,6 @@ trait DataWritingCommand extends RunnableCommand {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
   }
+
+  def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]
 }

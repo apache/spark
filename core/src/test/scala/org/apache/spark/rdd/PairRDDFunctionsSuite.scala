@@ -310,6 +310,28 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(joined.size > 0)
   }
 
+  // See SPARK-22465
+  test("cogroup between multiple RDD " +
+    "with an order of magnitude difference in number of partitions") {
+    val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 1000)
+    val rdd2 = sc
+      .parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+      .partitionBy(new HashPartitioner(10))
+    val joined = rdd1.cogroup(rdd2)
+    assert(joined.getNumPartitions == rdd1.getNumPartitions)
+  }
+
+  // See SPARK-22465
+  test("cogroup between multiple RDD" +
+    " with number of partitions similar in order of magnitude") {
+    val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 20)
+    val rdd2 = sc
+      .parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+      .partitionBy(new HashPartitioner(10))
+    val joined = rdd1.cogroup(rdd2)
+    assert(joined.getNumPartitions == rdd2.getNumPartitions)
+  }
+
   test("rightOuterJoin") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))

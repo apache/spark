@@ -29,8 +29,11 @@ case class PythonUDF(
     func: PythonFunction,
     dataType: DataType,
     children: Seq[Expression],
-    evalType: Int)
+    evalType: Int,
+    udfDeterministic: Boolean)
   extends Expression with Unevaluable with NonSQLExpression with UserDefinedExpression {
+
+  override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def toString: String = s"$name(${children.mkString(", ")})"
 

@@ -61,7 +61,7 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
 
 /**
  * Keep track of the existing stages when the job was submitted, and those that were
- * completed during the job's execution. This allows a more accurate acounting of how
+ * completed during the job's execution. This allows a more accurate accounting of how
  * many tasks were skipped for the job.
  */
 private[spark] class JobDataWrapper(
@@ -111,6 +111,9 @@ private[spark] class TaskDataWrapper(
   def startTime: Array[AnyRef] = {
     Array(stageId: JInteger, stageAttemptId: JInteger, info.launchTime.getTime(): JLong)
   }
+
+  @JsonIgnore @KVIndex("active")
+  def active: Boolean = info.duration.isEmpty
 
 }
 
@@ -187,3 +190,16 @@ private[spark] class RDDOperationGraphWrapper(
 private[spark] class PoolData(
     @KVIndexParam val name: String,
     val stageIds: Set[Int])
+
+/**
+ * A class with information about an app, to be used by the UI. There's only one instance of
+ * this summary per application, so its ID in the store is the class name.
+ */
+private[spark] class AppSummary(
+    val numCompletedJobs: Int,
+    val numCompletedStages: Int) {
+
+  @KVIndex
+  def id: String = classOf[AppSummary].getName()
+
+}

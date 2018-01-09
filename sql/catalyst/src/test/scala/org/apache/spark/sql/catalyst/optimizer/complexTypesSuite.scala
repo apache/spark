@@ -168,7 +168,7 @@ class ComplexTypesSuite extends PlanTest{
   test("SPARK-22570: CreateArray should not create a lot of global variables") {
     val ctx = new CodegenContext
     CreateArray(Seq(Literal(1))).genCode(ctx)
-    assert(ctx.mutableStates.length == 0)
+    assert(ctx.inlinedMutableStates.length == 0)
   }
 
   test("simplify map ops") {

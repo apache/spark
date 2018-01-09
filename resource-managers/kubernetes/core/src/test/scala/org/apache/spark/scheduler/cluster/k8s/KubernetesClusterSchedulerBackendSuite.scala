@@ -46,7 +46,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private val NAMESPACE = "test-namespace"
   private val SPARK_DRIVER_HOST = "localhost"
   private val SPARK_DRIVER_PORT = 7077
-  private val POD_ALLOCATION_INTERVAL = 60L
+  private val POD_ALLOCATION_INTERVAL = "1m"
   private val DRIVER_URL = RpcEndpointAddress(
     SPARK_DRIVER_HOST, SPARK_DRIVER_PORT, CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
   private val FIRST_EXECUTOR_POD = new PodBuilder()
@@ -144,7 +144,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       .set(KUBERNETES_NAMESPACE, NAMESPACE)
       .set("spark.driver.host", SPARK_DRIVER_HOST)
       .set("spark.driver.port", SPARK_DRIVER_PORT.toString)
-      .set(KUBERNETES_ALLOCATION_BATCH_DELAY, POD_ALLOCATION_INTERVAL)
+      .set(KUBERNETES_ALLOCATION_BATCH_DELAY.key, POD_ALLOCATION_INTERVAL)
     executorPodsWatcherArgument = ArgumentCaptor.forClass(classOf[Watcher[Pod]])
     allocatorRunnable = ArgumentCaptor.forClass(classOf[Runnable])
     requestExecutorRunnable = ArgumentCaptor.forClass(classOf[Runnable])
@@ -162,8 +162,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(allocatorExecutor.scheduleWithFixedDelay(
       allocatorRunnable.capture(),
       mockitoEq(0L),
-      mockitoEq(POD_ALLOCATION_INTERVAL),
-      mockitoEq(TimeUnit.SECONDS))).thenReturn(null)
+      mockitoEq(TimeUnit.MINUTES.toMillis(1)),
+      mockitoEq(TimeUnit.MILLISECONDS))).thenReturn(null)
     // Creating Futures in Scala backed by a Java executor service resolves to running
     // ExecutorService#execute (as opposed to submit)
     doNothing().when(requestExecutorsService).execute(requestExecutorRunnable.capture())
@@ -282,7 +282,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     // No more deletion attempts of the executors.
     // This is graceful termination and should not be detected as a failure.
     verify(podOperations, times(1)).delete(resolvedPod)
-    verify(driverEndpointRef, times(1)).ask[Boolean](
+    verify(driverEndpointRef, times(1)).send(
       RemoveExecutor("1", ExecutorExited(
         0,
         exitCausedByApp = false,
@@ -318,7 +318,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     requestExecutorRunnable.getValue.run()
     allocatorRunnable.getAllValues.asScala.last.run()
     verify(podOperations, never()).delete(firstResolvedPod)
-    verify(driverEndpointRef).ask[Boolean](
+    verify(driverEndpointRef).send(
       RemoveExecutor("1", ExecutorExited(
         1,
         exitCausedByApp = true,
@@ -356,7 +356,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     val recreatedResolvedPod = expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
     allocatorRunnable.getValue.run()
     verify(podOperations).delete(firstResolvedPod)
-    verify(driverEndpointRef).ask[Boolean](
+    verify(driverEndpointRef).send(
       RemoveExecutor("1", SlaveLost("Executor lost for unknown reasons.")))
   }
 

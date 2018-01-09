@@ -21,35 +21,35 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.k8s.{InitContainerBootstrap, KubernetesUtils, MountSecretsBootstrap, PodWithDetachedInitContainer}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
 import org.apache.spark.util.Utils
 
 /**
- * A factory class for configuring and creating executor pods.
+ * A factory class for bootstrapping and creating executor pods with the given bootstrapping
+ * components.
+ *
+ * @param sparkConf Spark configuration
+ * @param mountSecretsBootstrap an optional component for mounting user-specified secrets onto
+ *                              user-specified paths into the executor container
+ * @param initContainerBootstrap an optional component for bootstrapping the executor init-container
+ *                               if one is needed, i.e., when there are remote dependencies to
+ *                               localize
+ * @param initContainerMountSecretsBootstrap an optional component for mounting user-specified
+ *                                           secrets onto user-specified paths into the executor
+ *                                           init-container
  */
-private[spark] trait ExecutorPodFactory {
+private[spark] class ExecutorPodFactory(
+    sparkConf: SparkConf,
+    mountSecretsBootstrap: Option[MountSecretsBootstrap],
+    initContainerBootstrap: Option[InitContainerBootstrap],
+    initContainerMountSecretsBootstrap: Option[MountSecretsBootstrap]) {
 
-  /**
-   * Configure and construct an executor pod with the given parameters.
-   */
-  def createExecutorPod(
-      executorId: String,
-      applicationId: String,
-      driverUrl: String,
-      executorEnvs: Seq[(String, String)],
-      driverPod: Pod,
-      nodeToLocalTaskCount: Map[String, Int]): Pod
-}
+  private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
-private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
-  extends ExecutorPodFactory {
-
-  private val executorExtraClasspath =
-    sparkConf.get(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
-
-  private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
+  private val executorLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
     sparkConf,
     KUBERNETES_EXECUTOR_LABEL_PREFIX)
   require(
@@ -64,30 +64,29 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
     s"Custom executor labels cannot contain $SPARK_ROLE_LABEL as it is reserved for Spark.")
 
   private val executorAnnotations =
-    ConfigurationUtils.parsePrefixedKeyValuePairs(
+    KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
   private val nodeSelector =
-    ConfigurationUtils.parsePrefixedKeyValuePairs(
+    KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_NODE_SELECTOR_PREFIX)
 
-  private val executorDockerImage = sparkConf
-    .get(EXECUTOR_DOCKER_IMAGE)
-    .getOrElse(throw new SparkException("Must specify the executor Docker image"))
-  private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
+  private val executorContainerImage = sparkConf
+    .get(EXECUTOR_CONTAINER_IMAGE)
+    .getOrElse(throw new SparkException("Must specify the executor container image"))
+  private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
   private val blockManagerPort = sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
   private val executorPodNamePrefix = sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
 
-  private val executorMemoryMiB = sparkConf.get(org.apache.spark.internal.config.EXECUTOR_MEMORY)
+  private val executorMemoryMiB = sparkConf.get(EXECUTOR_MEMORY)
   private val executorMemoryString = sparkConf.get(
-    org.apache.spark.internal.config.EXECUTOR_MEMORY.key,
-    org.apache.spark.internal.config.EXECUTOR_MEMORY.defaultValueString)
+    EXECUTOR_MEMORY.key, EXECUTOR_MEMORY.defaultValueString)
 
   private val memoryOverheadMiB = sparkConf
-    .get(KUBERNETES_EXECUTOR_MEMORY_OVERHEAD)
+    .get(EXECUTOR_MEMORY_OVERHEAD)
     .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
@@ -95,7 +94,10 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
   private val executorCores = sparkConf.getDouble("spark.executor.cores", 1)
   private val executorLimitCores = sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
-  override def createExecutorPod(
+  /**
+   * Configure and construct an executor pod with the given parameters.
+   */
+  def createExecutorPod(
       executorId: String,
       applicationId: String,
       driverUrl: String,
@@ -129,7 +131,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
         .build()
     }
     val executorExtraJavaOptionsEnv = sparkConf
-      .get(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS)
+      .get(EXECUTOR_JAVA_OPTIONS)
       .map { opts =>
         val delimitedOpts = Utils.splitCommandString(opts)
         delimitedOpts.zipWithIndex.map {
@@ -167,8 +169,8 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
 
     val executorContainer = new ContainerBuilder()
       .withName("executor")
-      .withImage(executorDockerImage)
-      .withImagePullPolicy(dockerImagePullPolicy)
+      .withImage(executorContainerImage)
+      .withImagePullPolicy(imagePullPolicy)
       .withNewResources()
         .addToRequests("memory", executorMemoryQuantity)
         .addToLimits("memory", executorMemoryLimitQuantity)
@@ -199,7 +201,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
         .endSpec()
       .build()
 
-    val containerWithExecutorLimitCores = executorLimitCores.map { limitCores =>
+    val containerWithLimitCores = executorLimitCores.map { limitCores =>
       val executorCpuLimitQuantity = new QuantityBuilder(false)
         .withAmount(limitCores)
         .build()
@@ -210,9 +212,35 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
         .build()
     }.getOrElse(executorContainer)
 
-    new PodBuilder(executorPod)
+    val (maybeSecretsMountedPod, maybeSecretsMountedContainer) =
+      mountSecretsBootstrap.map { bootstrap =>
+        (bootstrap.addSecretVolumes(executorPod), bootstrap.mountSecrets(containerWithLimitCores))
+      }.getOrElse((executorPod, containerWithLimitCores))
+
+    val (bootstrappedPod, bootstrappedContainer) =
+      initContainerBootstrap.map { bootstrap =>
+        val podWithInitContainer = bootstrap.bootstrapInitContainer(
+          PodWithDetachedInitContainer(
+            maybeSecretsMountedPod,
+            new ContainerBuilder().build(),
+            maybeSecretsMountedContainer))
+
+        val (pod, mayBeSecretsMountedInitContainer) =
+          initContainerMountSecretsBootstrap.map { bootstrap =>
+            // Mount the secret volumes given that the volumes have already been added to the
+            // executor pod when mounting the secrets into the main executor container.
+            (podWithInitContainer.pod, bootstrap.mountSecrets(podWithInitContainer.initContainer))
+          }.getOrElse((podWithInitContainer.pod, podWithInitContainer.initContainer))
+
+        val bootstrappedPod = KubernetesUtils.appendInitContainer(
+          pod, mayBeSecretsMountedInitContainer)
+
+        (bootstrappedPod, podWithInitContainer.mainContainer)
+      }.getOrElse((maybeSecretsMountedPod, maybeSecretsMountedContainer))
+
+    new PodBuilder(bootstrappedPod)
       .editSpec()
-        .addToContainers(containerWithExecutorLimitCores)
+        .addToContainers(bootstrappedContainer)
         .endSpec()
       .build()
   }
