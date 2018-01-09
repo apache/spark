@@ -24,6 +24,7 @@ import test.org.apache.spark.sql.sources.v2._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.sources.v2.reader._
@@ -91,6 +92,34 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
         assert(df.schema == schema)
         assert(df.collect().isEmpty)
+      }
+    }
+  }
+
+  test("partitioning reporting") {
+    import org.apache.spark.sql.functions.{count, sum}
+    Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
+
+        val groupByColA = df.groupBy('a).agg(sum('b))
+        checkAnswer(groupByColA, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
+        assert(groupByColA.queryExecution.executedPlan.collectFirst {
+          case e: ShuffleExchangeExec => e
+        }.isEmpty)
+
+        val groupByColAB = df.groupBy('a, 'b).agg(count("*"))
+        checkAnswer(groupByColAB, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
+        assert(groupByColAB.queryExecution.executedPlan.collectFirst {
+          case e: ShuffleExchangeExec => e
+        }.isEmpty)
+
+        val groupByColB = df.groupBy('b).agg(sum('a))
+        checkAnswer(groupByColB, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
+        assert(groupByColB.queryExecution.executedPlan.collectFirst {
+          case e: ShuffleExchangeExec => e
+        }.isDefined)
       }
     }
   }
@@ -364,4 +393,48 @@ class BatchReadTask(start: Int, end: Int)
   }
 
   override def close(): Unit = batch.close()
+}
+
+class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
+
+  class Reader extends DataSourceV2Reader with SupportsReportPartitioning {
+    override def readSchema(): StructType = new StructType().add("a", "int").add("b", "int")
+
+    override def createReadTasks(): JList[ReadTask[Row]] = {
+      // Note that we don't have same value of column `a` across partitions.
+      java.util.Arrays.asList(
+        new SpecificReadTask(Array(1, 1, 3), Array(4, 4, 6)),
+        new SpecificReadTask(Array(2, 4, 4), Array(6, 2, 2)))
+    }
+
+    override def outputPartitioning(): Partitioning = new MyPartitioning
+  }
+
+  class MyPartitioning extends Partitioning {
+    override def numPartitions(): Int = 2
+
+    override def satisfy(d: Distribution): Boolean = d match {
+      case c: ClusteredDistribution => c.clusteredColumns.contains("a")
+      case _ => false
+    }
+  }
+
+  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+}
+
+class SpecificReadTask(i: Array[Int], j: Array[Int]) extends ReadTask[Row] with DataReader[Row] {
+  assert(i.length == j.length)
+
+  private var current = -1
+
+  override def createDataReader(): DataReader[Row] = this
+
+  override def next(): Boolean = {
+    current += 1
+    current < i.length
+  }
+
+  override def get(): Row = Row(i(current), j(current))
+
+  override def close(): Unit = {}
 }
