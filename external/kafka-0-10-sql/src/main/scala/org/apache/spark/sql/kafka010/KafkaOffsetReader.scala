@@ -157,7 +157,7 @@ private[kafka010] class KafkaOffsetReader(
             s"startingOffsets for $tp was $off but consumer reset to ${fetched(tp)}")
         }
       case _ =>
-      // no real way to check that beginning or end is reasonable
+        // no real way to check that beginning or end is reasonable
     }
     KafkaSourceOffset(fetched)
   }
