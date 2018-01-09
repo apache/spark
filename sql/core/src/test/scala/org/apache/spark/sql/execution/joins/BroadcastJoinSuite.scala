@@ -318,7 +318,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       case b: BroadcastNestedLoopJoinExec =>
         assert(b.getClass.getSimpleName === joinMethod)
         assert(b.buildSide === buildSide)
-      case b: BroadcastNestedLoopJoinExec =>
+      case b: BroadcastHashJoinExec =>
         assert(b.getClass.getSimpleName === joinMethod)
         assert(b.buildSide === buildSide)
       case w: WholeStageCodegenExec =>
