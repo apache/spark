@@ -261,10 +261,6 @@ private[kafka010] case class CachedKafkaConsumer private(
     }
   }
 
-  def wakeup(): Unit = {
-    consumer.wakeup()
-  }
-
   /** Create a new consumer and reset cached states */
   private def resetConsumer(): Unit = {
     consumer.close()
