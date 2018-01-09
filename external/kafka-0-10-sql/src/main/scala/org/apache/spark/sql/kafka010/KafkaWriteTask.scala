@@ -58,7 +58,7 @@ private[kafka010] class KafkaWriteTask(
   }
 }
 
-private[kafka010] class KafkaRowWriter(
+private[kafka010] abstract class KafkaRowWriter(
     inputSchema: Seq[Attribute], topic: Option[String]) {
 
   // used to synchronize with Kafka callbacks
