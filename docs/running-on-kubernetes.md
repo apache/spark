@@ -53,19 +53,17 @@ in a future release.
 
 Kubernetes requires users to supply images that can be deployed into containers within pods. The images are built to
 be run in a container runtime environment that Kubernetes supports. Docker is a container runtime environment that is
-frequently used with Kubernetes. With Spark 2.3, there are Dockerfiles provided in the runnable distribution that can be customized
-and built for your usage.
+frequently used with Kubernetes. Spark (starting with version 2.3) ships with a Dockerfile that can be used for this
+purpose, or customized to match an individual application's needs. It can be found in the `kubernetes/dockerfiles/`
+directory.
 
-You may build these docker images from sources. Spark ships with a `bin/docker-image-tool.sh` script
-that can be used to build and publish the Spark Docker image to use with the Kubernetes backend.
+Spark also ships with a `bin/docker-image-tool.sh` script that can be used to build and publish the Docker images to
+use with the Kubernetes backend.
 
 Example usage is:
 
     ./bin/docker-image-tool.sh -r <repo> -t my-tag build
     ./bin/docker-image-tool.sh -r <repo> -t my-tag push
-
-Docker files are under the `kubernetes/dockerfiles/` directory and can be customized further before
-building using the supplied script, or manually.
 
 ## Cluster Mode
 

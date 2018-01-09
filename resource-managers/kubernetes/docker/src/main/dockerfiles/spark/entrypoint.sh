@@ -82,7 +82,7 @@ case "$SPARK_K8S_CMD" in
 
   init)
     CMD=(
-      "/opt/spark/bin/spark-class"
+      "$SPARK_HOME/bin/spark-class"
       "org.apache.spark.deploy.k8s.SparkPodInitContainer"
       "$@"
     )

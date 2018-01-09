@@ -33,7 +33,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.container.image")
       .doc("Container image to use for Spark containers. Individual container types " +
         "(e.g. driver or executor) can also be configured to use different images if desired, " +
-        "by setting the container-specific image name.")
+        "by setting the container type-specific image name.")
       .stringConf
       .createOptional
 

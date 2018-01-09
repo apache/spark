@@ -43,6 +43,7 @@ COPY sbin /opt/spark/sbin
 COPY conf /opt/spark/conf
 COPY ${img_path}/spark/entrypoint.sh /opt/
 COPY examples /opt/spark/examples
+COPY data /opt/spark/data
 
 ENV SPARK_HOME /opt/spark
 
