@@ -159,7 +159,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 class KafkaMicroBatchSourceSuite extends KafkaSourceSuiteBase {
 
   import testImplicits._
-  
+
   test("(de)serialization of initial offsets") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 5)
