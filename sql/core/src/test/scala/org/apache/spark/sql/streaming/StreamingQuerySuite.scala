@@ -426,21 +426,26 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
   test("SPARK-22975: MetricsReporter defaults when there was no progress reported") {
     withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
-      testStream(MemoryStream[Int].toDF())(
-        StartStream(Trigger.ProcessingTime(1000 * 60 * 60)),
-        AssertOnQuery { q =>
-          q.streamMetrics.metricRegistry.getGauges.get("latency").getValue.asInstanceOf[Long] == 0L
-        },
-        AssertOnQuery { q =>
-          q.streamMetrics.metricRegistry.getGauges.get("inputRate-total").getValue
-            .asInstanceOf[Double] == 0.0
-        },
-        AssertOnQuery { q =>
-          q.streamMetrics.metricRegistry.getGauges.get("processingRate-total").getValue
-            .asInstanceOf[Double] == 0.0
-        },
-        StopStream
-      )
+      BlockingSource.latch = new CountDownLatch(1)
+      withTempDir { tempDir =>
+        val sq = spark.readStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .load()
+          .writeStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .option("checkpointLocation", tempDir.toString)
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+        val gauges = sq.streamMetrics.metricRegistry.getGauges
+
+        assert(gauges.get("latency").getValue.asInstanceOf[Long] == 0)
+        assert(gauges.get("processingRate-total").getValue.asInstanceOf[Double] == 0.0)
+        assert(gauges.get("inputRate-total").getValue.asInstanceOf[Double] == 0.0)
+        BlockingSource.latch.countDown()
+        sq.stop()
+      }
+
     }
   }
 
