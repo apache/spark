@@ -300,7 +300,13 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val shouldShowCompletedJobs = completedJobs.nonEmpty
     val shouldShowFailedJobs = failedJobs.nonEmpty
 
-    val completedJobNumStr = s"${completedJobs.size}"
+    val appSummary = store.appSummary()
+    val completedJobNumStr = if (completedJobs.size == appSummary.numCompletedJobs) {
+      s"${completedJobs.size}"
+    } else {
+      s"${appSummary.numCompletedJobs}, only showing ${completedJobs.size}"
+    }
+
     val schedulingMode = store.environmentInfo().sparkProperties.toMap
       .get("spark.scheduler.mode")
       .map { mode => SchedulingMode.withName(mode).toString }

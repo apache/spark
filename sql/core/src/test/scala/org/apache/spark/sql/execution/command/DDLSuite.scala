@@ -1971,8 +1971,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING parquet
-             |PARTITIONED BY(a, b)
              |LOCATION "${dir.toURI}"
+             |PARTITIONED BY(a, b)
            """.stripMargin)
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)

@@ -325,11 +325,12 @@ class SparkSession(object):
 
         return DataFrame(jdf, self._wrapped)
 
-    def _inferSchemaFromList(self, data):
+    def _inferSchemaFromList(self, data, names=None):
         """
         Infer schema from list of Row or tuple.
 
         :param data: list of Row or tuple
+        :param names: list of column names
         :return: :class:`pyspark.sql.types.StructType`
         """
         if not data:
@@ -338,12 +339,12 @@ class SparkSession(object):
         if type(first) is dict:
             warnings.warn("inferring schema from dict is deprecated,"
                           "please use pyspark.sql.Row instead")
-        schema = reduce(_merge_type, map(_infer_schema, data))
+        schema = reduce(_merge_type, (_infer_schema(row, names) for row in data))
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
         return schema
 
-    def _inferSchema(self, rdd, samplingRatio=None):
+    def _inferSchema(self, rdd, samplingRatio=None, names=None):
         """
         Infer schema from an RDD of Row or tuple.
 
@@ -360,10 +361,10 @@ class SparkSession(object):
                           "Use pyspark.sql.Row instead")
 
         if samplingRatio is None:
-            schema = _infer_schema(first)
+            schema = _infer_schema(first, names=names)
             if _has_nulltype(schema):
                 for row in rdd.take(100)[1:]:
-                    schema = _merge_type(schema, _infer_schema(row))
+                    schema = _merge_type(schema, _infer_schema(row, names=names))
                     if not _has_nulltype(schema):
                         break
                 else:
@@ -372,7 +373,7 @@ class SparkSession(object):
         else:
             if samplingRatio < 0.99:
                 rdd = rdd.sample(False, float(samplingRatio))
-            schema = rdd.map(_infer_schema).reduce(_merge_type)
+            schema = rdd.map(lambda row: _infer_schema(row, names)).reduce(_merge_type)
         return schema
 
     def _createFromRDD(self, rdd, schema, samplingRatio):
@@ -380,7 +381,7 @@ class SparkSession(object):
         Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
         """
         if schema is None or isinstance(schema, (list, tuple)):
-            struct = self._inferSchema(rdd, samplingRatio)
+            struct = self._inferSchema(rdd, samplingRatio, names=schema)
             converter = _create_converter(struct)
             rdd = rdd.map(converter)
             if isinstance(schema, (list, tuple)):
@@ -406,7 +407,7 @@ class SparkSession(object):
             data = list(data)
 
         if schema is None or isinstance(schema, (list, tuple)):
-            struct = self._inferSchemaFromList(data)
+            struct = self._inferSchemaFromList(data, names=schema)
             converter = _create_converter(struct)
             data = map(converter, data)
             if isinstance(schema, (list, tuple)):
@@ -493,12 +494,14 @@ class SparkSession(object):
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
         from pyspark.serializers import ArrowSerializer, _create_batch
-        from pyspark.sql.types import from_arrow_schema, to_arrow_type, \
-            _old_pandas_exception_message, TimestampType
-        try:
-            from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
-        except ImportError as e:
-            raise ImportError(_old_pandas_exception_message(e))
+        from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
+        from pyspark.sql.utils import require_minimum_pandas_version, \
+            require_minimum_pyarrow_version
+
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+
+        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):

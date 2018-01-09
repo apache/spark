@@ -20,7 +20,6 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
-import org.apache.spark.network.util.ByteUnit
 
 private[spark] object Config extends Logging {
 
@@ -30,21 +29,20 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("default")
 
-  val DRIVER_DOCKER_IMAGE =
-    ConfigBuilder("spark.kubernetes.driver.docker.image")
-      .doc("Docker image to use for the driver. Specify this using the standard Docker tag format.")
+  val DRIVER_CONTAINER_IMAGE =
+    ConfigBuilder("spark.kubernetes.driver.container.image")
+      .doc("Container image to use for the driver.")
       .stringConf
       .createOptional
 
-  val EXECUTOR_DOCKER_IMAGE =
-    ConfigBuilder("spark.kubernetes.executor.docker.image")
-      .doc("Docker image to use for the executors. Specify this using the standard Docker tag " +
-        "format.")
+  val EXECUTOR_CONTAINER_IMAGE =
+    ConfigBuilder("spark.kubernetes.executor.container.image")
+      .doc("Container image to use for the executors.")
       .stringConf
       .createOptional
 
-  val DOCKER_IMAGE_PULL_POLICY =
-    ConfigBuilder("spark.kubernetes.docker.image.pullPolicy")
+  val CONTAINER_IMAGE_PULL_POLICY =
+    ConfigBuilder("spark.kubernetes.container.image.pullPolicy")
       .doc("Kubernetes image pull policy. Valid values are Always, Never, and IfNotPresent.")
       .stringConf
       .checkValues(Set("Always", "Never", "IfNotPresent"))
@@ -103,10 +101,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_ALLOCATION_BATCH_DELAY =
     ConfigBuilder("spark.kubernetes.allocation.batch.delay")
-      .doc("Number of seconds to wait between each round of executor allocation.")
-      .longConf
-      .checkValue(value => value > 0, "Allocation batch delay should be a positive integer")
-      .createWithDefault(1)
+      .doc("Time to wait between each round of executor allocation.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
+      .createWithDefaultString("1s")
 
   val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
     ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")
@@ -133,19 +131,71 @@ private[spark] object Config extends Logging {
 
   val JARS_DOWNLOAD_LOCATION =
     ConfigBuilder("spark.kubernetes.mountDependencies.jarsDownloadDir")
-      .doc("Location to download jars to in the driver and executors. When using" +
-        " spark-submit, this directory must be empty and will be mounted as an empty directory" +
-        " volume on the driver and executor pod.")
+      .doc("Location to download jars to in the driver and executors. When using " +
+        "spark-submit, this directory must be empty and will be mounted as an empty directory " +
+        "volume on the driver and executor pod.")
       .stringConf
       .createWithDefault("/var/spark-data/spark-jars")
 
   val FILES_DOWNLOAD_LOCATION =
     ConfigBuilder("spark.kubernetes.mountDependencies.filesDownloadDir")
-      .doc("Location to download files to in the driver and executors. When using" +
-        " spark-submit, this directory must be empty and will be mounted as an empty directory" +
-        " volume on the driver and executor pods.")
+      .doc("Location to download files to in the driver and executors. When using " +
+        "spark-submit, this directory must be empty and will be mounted as an empty directory " +
+        "volume on the driver and executor pods.")
       .stringConf
       .createWithDefault("/var/spark-data/spark-files")
+
+  val INIT_CONTAINER_IMAGE =
+    ConfigBuilder("spark.kubernetes.initContainer.image")
+      .doc("Image for the driver and executor's init-container for downloading dependencies.")
+      .stringConf
+      .createOptional
+
+  val INIT_CONTAINER_MOUNT_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.mountDependencies.timeout")
+      .doc("Timeout before aborting the attempt to download and unpack dependencies from remote " +
+        "locations into the driver and executor pods.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(300)
+
+  val INIT_CONTAINER_MAX_THREAD_POOL_SIZE =
+    ConfigBuilder("spark.kubernetes.mountDependencies.maxSimultaneousDownloads")
+      .doc("Maximum number of remote dependencies to download simultaneously in a driver or " +
+        "executor pod.")
+      .intConf
+      .createWithDefault(5)
+
+  val INIT_CONTAINER_REMOTE_JARS =
+    ConfigBuilder("spark.kubernetes.initContainer.remoteJars")
+      .doc("Comma-separated list of jar URIs to download in the init-container. This is " +
+        "calculated from spark.jars.")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val INIT_CONTAINER_REMOTE_FILES =
+    ConfigBuilder("spark.kubernetes.initContainer.remoteFiles")
+      .doc("Comma-separated list of file URIs to download in the init-container. This is " +
+        "calculated from spark.files.")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val INIT_CONTAINER_CONFIG_MAP_NAME =
+    ConfigBuilder("spark.kubernetes.initContainer.configMapName")
+      .doc("Name of the config map to use in the init-container that retrieves submitted files " +
+        "for the executor.")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val INIT_CONTAINER_CONFIG_MAP_KEY_CONF =
+    ConfigBuilder("spark.kubernetes.initContainer.configMapKey")
+      .doc("Key for the entry in the init container config map for submitted files that " +
+        "corresponds to the properties for this init-container.")
+      .internal()
+      .stringConf
+      .createOptional
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
@@ -154,9 +204,11 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
+  val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
 
   val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
   val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
+  val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
 
   val KUBERNETES_DRIVER_ENV_KEY = "spark.kubernetes.driverEnv."
 }

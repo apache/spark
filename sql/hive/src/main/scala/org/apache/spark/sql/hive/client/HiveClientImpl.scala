@@ -186,7 +186,7 @@ private[hive] class HiveClientImpl(
   /** Returns the configuration for the current session. */
   def conf: HiveConf = state.getConf
 
-  private val userName = state.getAuthenticator.getUserName
+  private val userName = conf.getUser
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
@@ -823,7 +823,8 @@ private[hive] class HiveClientImpl(
   }
 
   def reset(): Unit = withHiveState {
-    client.getAllTables("default").asScala.foreach { t =>
+    try {
+      client.getAllTables("default").asScala.foreach { t =>
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
         client.getIndexes("default", t, 255).asScala.foreach { index =>
@@ -837,6 +838,9 @@ private[hive] class HiveClientImpl(
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }
+    } finally {
+      runSqlHive("USE default")
+    }
   }
 }
 

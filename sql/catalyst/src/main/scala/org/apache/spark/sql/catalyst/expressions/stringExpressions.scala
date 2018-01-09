@@ -24,11 +24,10 @@ import java.util.regex.Pattern
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -38,7 +37,8 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 
 /**
- * An expression that concatenates multiple input strings into a single string.
+ * An expression that concatenates multiple inputs into a single output.
+ * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
  * If any input is null, concat returns null.
  */
 @ExpressionDescription(
@@ -48,17 +48,37 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
       > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
   """)
-case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
+case class Concat(children: Seq[Expression]) extends Expression {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
-  override def dataType: DataType = StringType
+  private lazy val isBinaryMode: Boolean = dataType == BinaryType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      val childTypes = children.map(_.dataType)
+      if (childTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
+        return TypeCheckResult.TypeCheckFailure(
+          s"input to function $prettyName should have StringType or BinaryType, but it's " +
+            childTypes.map(_.simpleString).mkString("[", ", ", "]"))
+      }
+      TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
+    }
+  }
+
+  override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def eval(input: InternalRow): Any = {
-    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-    UTF8String.concat(inputs : _*)
+    if (isBinaryMode) {
+      val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
+      ByteArray.concat(inputs: _*)
+    } else {
+      val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+      UTF8String.concat(inputs : _*)
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -73,17 +93,27 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
         }
       """
     }
+
+    val (concatenator, initCode) = if (isBinaryMode) {
+      (classOf[ByteArray].getName, s"byte[][] $args = new byte[${evals.length}][];")
+    } else {
+      ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
+    }
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = inputs,
       funcName = "valueConcat",
-      extraArguments = ("UTF8String[]", args) :: Nil)
+      extraArguments = (s"${ctx.javaType(dataType)}[]", args) :: Nil)
     ev.copy(s"""
-      UTF8String[] $args = new UTF8String[${evals.length}];
+      $initCode
       $codes
-      UTF8String ${ev.value} = UTF8String.concat($args);
+      ${ctx.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
+
+  override def toString: String = s"concat(${children.mkString(", ")})"
+
+  override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
 }
 
 
@@ -241,33 +271,45 @@ case class ConcatWs(children: Seq[Expression])
   }
 }
 
+/**
+ * An expression that returns the `n`-th input in given inputs.
+ * If all inputs are binary, `elt` returns an output as binary. Otherwise, it returns as string.
+ * If any input is null, `elt` returns null.
+ */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(n, str1, str2, ...) - Returns the `n`-th string, e.g., returns `str2` when `n` is 2.",
+  usage = "_FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.",
   examples = """
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
   """)
 // scalastyle:on line.size.limit
-case class Elt(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes {
+case class Elt(children: Seq[Expression]) extends Expression {
 
   private lazy val indexExpr = children.head
-  private lazy val stringExprs = children.tail.toArray
+  private lazy val inputExprs = children.tail.toArray
 
   /** This expression is always nullable because it returns null if index is out of range. */
   override def nullable: Boolean = true
 
-  override def dataType: DataType = StringType
-
-  override def inputTypes: Seq[DataType] = IntegerType +: Seq.fill(children.size - 1)(StringType)
+  override def dataType: DataType = inputExprs.map(_.dataType).headOption.getOrElse(StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
       TypeCheckResult.TypeCheckFailure("elt function requires at least two arguments")
     } else {
-      super[ImplicitCastInputTypes].checkInputDataTypes()
+      val (indexType, inputTypes) = (indexExpr.dataType, inputExprs.map(_.dataType))
+      if (indexType != IntegerType) {
+        return TypeCheckResult.TypeCheckFailure(s"first input to function $prettyName should " +
+          s"have IntegerType, but it's $indexType")
+      }
+      if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
+        return TypeCheckResult.TypeCheckFailure(
+          s"input to function $prettyName should have StringType or BinaryType, but it's " +
+            inputTypes.map(_.simpleString).mkString("[", ", ", "]"))
+      }
+      TypeUtils.checkForSameTypeInputExpr(inputTypes, s"function $prettyName")
     }
   }
 
@@ -277,28 +319,27 @@ case class Elt(children: Seq[Expression])
       null
     } else {
       val index = indexObj.asInstanceOf[Int]
-      if (index <= 0 || index > stringExprs.length) {
+      if (index <= 0 || index > inputExprs.length) {
         null
       } else {
-        stringExprs(index - 1).eval(input)
+        inputExprs(index - 1).eval(input)
       }
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = indexExpr.genCode(ctx)
-    val strings = stringExprs.map(_.genCode(ctx))
+    val inputs = inputExprs.map(_.genCode(ctx))
     val indexVal = ctx.freshName("index")
     val indexMatched = ctx.freshName("eltIndexMatched")
 
-    val stringVal = ctx.freshName("stringVal")
-    ctx.addMutableState(ctx.javaType(dataType), stringVal)
+    val inputVal = ctx.addMutableState(ctx.javaType(dataType), "inputVal")
 
-    val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
+    val assignInputValue = inputs.zipWithIndex.map { case (eval, index) =>
       s"""
          |if ($indexVal == ${index + 1}) {
          |  ${eval.code}
-         |  $stringVal = ${eval.isNull} ? null : ${eval.value};
+         |  $inputVal = ${eval.isNull} ? null : ${eval.value};
          |  $indexMatched = true;
          |  continue;
          |}
@@ -306,7 +347,7 @@ case class Elt(children: Seq[Expression])
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = assignStringValue,
+      expressions = assignInputValue,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
       returnType = ctx.JAVA_BOOLEAN,
@@ -332,11 +373,11 @@ case class Elt(children: Seq[Expression])
          |${index.code}
          |final int $indexVal = ${index.value};
          |${ctx.JAVA_BOOLEAN} $indexMatched = false;
-         |$stringVal = null;
+         |$inputVal = null;
          |do {
          |  $codes
          |} while (false);
-         |final UTF8String ${ev.value} = $stringVal;
+         |final ${ctx.javaType(dataType)} ${ev.value} = $inputVal;
          |final boolean ${ev.isNull} = ${ev.value} == null;
        """.stripMargin)
   }
@@ -532,14 +573,11 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val termLastMatching = ctx.freshName("lastMatching")
-    val termLastReplace = ctx.freshName("lastReplace")
-    val termDict = ctx.freshName("dict")
     val classNameDict = classOf[JMap[Character, Character]].getCanonicalName
 
-    ctx.addMutableState("UTF8String", termLastMatching, s"$termLastMatching = null;")
-    ctx.addMutableState("UTF8String", termLastReplace, s"$termLastReplace = null;")
-    ctx.addMutableState(classNameDict, termDict, s"$termDict = null;")
+    val termLastMatching = ctx.addMutableState("UTF8String", "lastMatching")
+    val termLastReplace = ctx.addMutableState("UTF8String", "lastReplace")
+    val termDict = ctx.addMutableState(classNameDict, "dict")
 
     nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
       val check = if (matchingExpr.foldable && replaceExpr.foldable) {
@@ -2065,15 +2103,12 @@ case class FormatNumber(x: Expression, d: Expression)
       // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
       // as a decimal separator.
       val usLocale = "US"
-      val lastDValue = ctx.freshName("lastDValue")
-      val pattern = ctx.freshName("pattern")
-      val numberFormat = ctx.freshName("numberFormat")
       val i = ctx.freshName("i")
       val dFormat = ctx.freshName("dFormat")
-      ctx.addMutableState(ctx.JAVA_INT, lastDValue, s"$lastDValue = -100;")
-      ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
-      ctx.addMutableState(df, numberFormat,
-      s"""$numberFormat = new $df("", new $dfs($l.$usLocale));""")
+      val lastDValue = ctx.addMutableState(ctx.JAVA_INT, "lastDValue", v => s"$v = -100;")
+      val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
+      val numberFormat = ctx.addMutableState(df, "numberFormat",
+        v => s"""$v = new $df("", new $dfs($l.$usLocale));""")
 
       s"""
         if ($d >= 0) {
