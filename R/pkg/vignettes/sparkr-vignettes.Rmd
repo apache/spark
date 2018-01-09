@@ -1042,7 +1042,7 @@ unlink(modelPath)
 
 ## Structured Streaming
 
-SparkR supports the Structured Streaming API (experimental).
+SparkR supports the Structured Streaming API.
 
 You can check the Structured Streaming Programming Guide for [an introduction](https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#programming-model) to its programming model and basic concepts.
 
