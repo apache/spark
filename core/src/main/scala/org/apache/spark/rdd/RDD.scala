@@ -985,7 +985,7 @@ abstract class RDD[T: ClassTag](
   def subtract(
       other: RDD[T],
       p: Partitioner)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
-    if (partitioner.contains(p)) {
+    if (partitioner == Some(p)) {
       // Our partitioner knows how to handle T (which, since we have a partitioner, is
       // really (K, V)) so make a new Partitioner that will de-tuple our fake tuples
       val p2 = new Partitioner() {
@@ -1333,12 +1333,12 @@ abstract class RDD[T: ClassTag](
     } else {
       val buf = new ArrayBuffer[T]
       val totalParts = this.partitions.length
-      val left = num - buf.size
       var partsScanned = 0
       while (buf.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
         var numPartsToTry = 1L
+        val left = num - buf.size
         if (partsScanned > 0) {
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate
