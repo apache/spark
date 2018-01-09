@@ -39,6 +39,13 @@ private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
  */
 private[sql] case object IncrementAndGetEpoch extends EpochCoordinatorMessage
 
+/**
+ * Synchronously stop the epoch coordinator. The RpcEndpoint stop() will clear out the message queue
+ * before terminating the endpoint, but we must be sure no more messages will be processed before we
+ * can restart the query. The framework unfortunately provides no handle to wait for the queue.
+ */
+private[sql] case object StopEpochCoordinator extends EpochCoordinatorMessage
+
 // Init messages
 /**
  * Set the reader and writer partition counts. Tasks may not be started until the coordinator
@@ -116,6 +123,8 @@ private[continuous] class EpochCoordinator(
     override val rpcEnv: RpcEnv)
   extends ThreadSafeRpcEndpoint with Logging {
 
+  private var stopped: Boolean = false
+
   private var numReaderPartitions: Int = _
   private var numWriterPartitions: Int = _
 
@@ -153,6 +162,7 @@ private[continuous] class EpochCoordinator(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
+    case _ if stopped => throw new IllegalStateException(s"Coordinator $this stopped")
     case CommitPartitionEpoch(partitionId, epoch, message) =>
       logDebug(s"Got commit from partition $partitionId at epoch $epoch: $message")
       if (!partitionCommits.isDefinedAt((epoch, partitionId))) {
@@ -172,6 +182,7 @@ private[continuous] class EpochCoordinator(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case _ if stopped => throw new IllegalStateException(s"Coordinator $this stopped")
     case GetCurrentEpoch =>
       val result = currentDriverEpoch
       logDebug(s"Epoch $result")
@@ -187,6 +198,10 @@ private[continuous] class EpochCoordinator(
 
     case SetWriterPartitions(numPartitions) =>
       numWriterPartitions = numPartitions
+      context.reply(())
+
+    case StopEpochCoordinator =>
+      stopped = true
       context.reply(())
   }
 }
