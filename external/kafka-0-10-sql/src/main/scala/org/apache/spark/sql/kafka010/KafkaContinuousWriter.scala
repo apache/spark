@@ -18,12 +18,14 @@
 package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.clients.producer.{Callback, ProducerRecord, RecordMetadata}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{kafkaParamsForProducer, TOPIC_OPTION_KEY}
+import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
 import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.streaming.OutputMode
@@ -45,6 +47,8 @@ case object KafkaWriterCommitMessage extends WriterCommitMessage
 class KafkaContinuousWriter(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
   extends ContinuousWriter with SupportsWriteInternalRow {
+
+  validateQuery(schema.toAttributes, producerParams.toMap[String, Object].asJava, topic)
 
   override def createInternalRowWriterFactory(): KafkaContinuousWriterFactory =
     KafkaContinuousWriterFactory(topic, producerParams, schema)
