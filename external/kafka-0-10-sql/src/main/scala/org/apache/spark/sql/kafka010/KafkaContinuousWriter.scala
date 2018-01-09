@@ -95,6 +95,8 @@ class KafkaContinuousDataWriter(
   def commit(): WriterCommitMessage = {
     // Send is asynchronous, but we can't commit until all rows are actually in Kafka.
     // This requires flushing and then checking that no callbacks produced errors.
+    // We also check for errors before to fail as soon as possible - the check is cheap.
+    checkForErrors()
     producer.flush()
     checkForErrors()
     KafkaWriterCommitMessage
