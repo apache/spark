@@ -788,7 +788,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
       StopStream,
       AddKafkaData(Set(topic), 4, 5, 6), // Add data when stream is stopped
       StartStream(),
-      Execute { q => q.awaitOffset(0, KafkaSourceOffset(testUtils.getLatestOffsets(Set(topic)))) },
       CheckAnswer(2, 3, 4, 5, 6, 7), // Should get the added data
       AddKafkaData(Set(topic), 7, 8),
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
@@ -832,7 +831,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
       StopStream,
       AddKafkaData(Set(topic), 7, 8),
       StartStream(),
-      Execute { q => q.awaitOffset(0, KafkaSourceOffset(testUtils.getLatestOffsets(Set(topic)))) },
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
       AssertOnQuery("Add partitions") { query: StreamExecution =>
         if (addPartitions) setTopicPartitions(topic, 10, query)
