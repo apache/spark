@@ -43,6 +43,8 @@ trait KafkaContinuousTest extends KafkaSourceTest {
       "continuous-stream-test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
 
+  // In addition to setting the partitions in Kafka, we have to wait until the query has
+  // reconfigured to the new count so the test framework can hook in properly.
   override protected def setTopicPartitions(
       topic: String, newCount: Int, query: StreamExecution) = {
     testUtils.addPartitions(topic, newCount)
