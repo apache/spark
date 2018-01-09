@@ -332,18 +332,14 @@ private[netty] class NettyRpcEnv(
 
     val pipe = Pipe.open()
     val source = new FileDownloadChannel(pipe.source())
-    var exceptionThrown = true
-    try {
+    Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
       val client = downloadClient(parsedUri.getHost(), parsedUri.getPort())
       val callback = new FileDownloadCallback(pipe.sink(), source, client)
       client.stream(parsedUri.getPath(), callback)
-      exceptionThrown = false
-    } finally {
-      if (exceptionThrown) {
-        pipe.sink().close()
-        source.close()
-      }
-    }
+    })(catchBlock = {
+      pipe.sink().close()
+      source.close()
+    })
 
     source
   }
