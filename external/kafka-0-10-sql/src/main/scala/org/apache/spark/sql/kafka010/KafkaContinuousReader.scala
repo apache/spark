@@ -205,7 +205,7 @@ class KafkaContinuousDataReader(
     bufferHolder.reset()
 
     if (currentRecord.key == null) {
-      rowWriter.isNullAt(0)
+      rowWriter.setNullAt(0)
     } else {
       rowWriter.write(0, currentRecord.key)
     }

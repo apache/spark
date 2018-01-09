@@ -68,11 +68,11 @@ trait KafkaContinuousTest extends KafkaSourceTest {
   }
 }
 
-class KafkaContinuousSourceSuite extends KafkaSourceSuite with KafkaContinuousTest {
+class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest {
 
   import testImplicits._
 
-  test("kafka sink") {
+  /* test("kafka sink") {
     withTempDir { dir =>
       val topic = newTopic()
       testUtils.createTopic(topic)
@@ -107,7 +107,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuite with KafkaContinuousTe
       query.stop()
       query.awaitTermination()
     }
-  }
+  } */
 
   /* test("subscribing topic by pattern with topic deletions") {
     val topicPrefix = newTopic()
