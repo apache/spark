@@ -50,6 +50,15 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  */
 public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
+  /**
+   * The default size of batch. We use this value for both ORC and Spark consistently
+   * because they have different default values like the following.
+   *
+   * - ORC's VectorizedRowBatch.DEFAULT_SIZE = 1024
+   * - Spark's ColumnarBatch.DEFAULT_BATCH_SIZE = 4 * 1024
+   */
+  public static final int DEFAULT_SIZE = 4 * 1024;
+
   // ORC File Reader
   private Reader reader;
 
@@ -72,11 +81,6 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   // Writable column vectors of the result columnar batch.
   private WritableColumnVector[] columnVectors;
-
-  // The number of rows read and considered to be returned.
-  private long rowsReturned = 0L;
-
-  private long totalRowCount = 0L;
 
   /**
    * The memory mode of the columnarBatch
@@ -138,7 +142,6 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     Reader.Options options =
       OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart(), fileSplit.getLength());
     recordReader = reader.rows(options);
-    totalRowCount = reader.getNumberOfRows();
   }
 
   /**
@@ -193,18 +196,15 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
    * by copying from ORC VectorizedRowBatch columns to Spark ColumnarBatch columns.
    */
   private boolean nextBatch() throws IOException {
-    if (rowsReturned >= totalRowCount) {
-      return false;
+    for (WritableColumnVector vector : columnVectors) {
+      vector.reset();
     }
+    columnarBatch.setNumRows(0);
 
     recordReader.nextBatch(batch);
     int batchSize = batch.size;
     if (batchSize == 0) {
       return false;
-    }
-    rowsReturned += batchSize;
-    for (WritableColumnVector vector : columnVectors) {
-      vector.reset();
     }
     columnarBatch.setNumRows(batchSize);
     for (int i = 0; i < requiredFields.length; i++) {
@@ -327,7 +327,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     } else if (type instanceof DecimalType) {
       DecimalType decimalType = (DecimalType)type;
       DecimalColumnVector data = ((DecimalColumnVector)fromColumn);
-      if (decimalType.precision() > Decimal.MAX_INT_DIGITS()) {
+      if (decimalType.precision() > Decimal.MAX_LONG_DIGITS()) {
         WritableColumnVector arrayData = toColumn.getChildColumn(0);
         arrayData.reserve(batchSize * 16);
       }
@@ -438,6 +438,10 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     } else if (type instanceof DecimalType) {
       DecimalType decimalType = (DecimalType)type;
       HiveDecimalWritable[] vector = ((DecimalColumnVector)fromColumn).vector;
+      if (decimalType.precision() > Decimal.MAX_LONG_DIGITS()) {
+        WritableColumnVector arrayData = toColumn.getChildColumn(0);
+        arrayData.reserve(batchSize * 16);
+      }
       for (int index = 0; index < batchSize; index++) {
         if (fromColumn.isNull[index]) {
           toColumn.putNull(index);
@@ -454,15 +458,6 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       throw new UnsupportedOperationException("Unsupported Data Type: " + type);
     }
   }
-
-  /**
-   * The default size of batch. We use this value for both ORC and Spark consistently
-   * because they have different default values like the following.
-   *
-   * - ORC's VectorizedRowBatch.DEFAULT_SIZE = 1024
-   * - Spark's ColumnarBatch.DEFAULT_BATCH_SIZE = 4 * 1024
-   */
-  public static final int DEFAULT_SIZE = 4 * 1024;
 
   /**
    * Returns the number of micros since epoch from an element of TimestampColumnVector.
