@@ -115,7 +115,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   @Override
   public float getProgress() throws IOException, InterruptedException {
-    return (float) rowsReturned / totalRowCount;
+    return recordReader.getProgress();
   }
 
   @Override
