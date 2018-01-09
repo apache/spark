@@ -1644,7 +1644,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
 
 @inherit_doc
 class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHandleInvalid,
-                    JavaMLReadable, JavaMLWritable):
+                             JavaMLReadable, JavaMLWritable):
     """
     A one-hot encoder that maps a column of category indices to a column of binary vectors, with
     at most a single one-value per row that indicates the input category index.
@@ -1662,11 +1662,11 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
     vector.
 
     Note: When encoding multi-column by using `inputCols` and `outputCols` params, input/output
-    cols come in pairs, specified by the order in the arrays, and each pair is treated independently.
+    cols come in pairs, specified by the order in the arrays, and each pair is treated
+    independently.
 
     See `StringIndexer` for converting categorical values into category indices
 
-    .. versionadded:: 2.3.0
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
     >>> ohe = OneHotEncoderEstimator(inputCols=["input"], outputCols=["output"])
@@ -1683,6 +1683,8 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
     >>> loadedModel = OneHotEncoderModel.load(modelPath)
     >>> loadedModel.categorySizes == model.categorySizes
     True
+
+    .. versionadded:: 2.3.0
     """
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data during " +
@@ -1693,7 +1695,7 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
                           typeConverter=TypeConverters.toString)
 
     dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category",
-              typeConverter=TypeConverters.toBoolean)
+                     typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
@@ -1730,7 +1732,6 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
         Gets the value of dropLast or its default value.
         """
         return self.getOrDefault(self.dropLast)
-
 
     def _create_model(self, java_model):
         return OneHotEncoderModel(java_model)
