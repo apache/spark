@@ -110,44 +110,44 @@ object OrcReadBenchmark {
         }
 
         /*
-        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.1
+        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.2
         Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
 
         SQL Single TINYINT Column Scan:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1180 / 1230         13.3          75.0       1.0X
-        Native ORC Vectorized                          159 /  169         98.8          10.1       7.4X
-        Hive built-in ORC                             1395 / 1396         11.3          88.7       0.8X
+        Native ORC MR                                 1202 / 1265         13.1          76.4       1.0X
+        Native ORC Vectorized                          162 /  172         97.1          10.3       7.4X
+        Hive built-in ORC                             1410 / 1428         11.2          89.6       0.9X
 
         SQL Single SMALLINT Column Scan:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1216 / 1267         12.9          77.3       1.0X
-        Native ORC Vectorized                          163 /  172         96.4          10.4       7.5X
-        Hive built-in ORC                             1649 / 1672          9.5         104.8       0.7X
+        Native ORC MR                                 1266 / 1286         12.4          80.5       1.0X
+        Native ORC Vectorized                          165 /  174         95.2          10.5       7.7X
+        Hive built-in ORC                             1701 / 1704          9.2         108.2       0.7X
 
         SQL Single INT Column Scan:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1331 / 1332         11.8          84.6       1.0X
-        Native ORC Vectorized                          233 /  245         67.6          14.8       5.7X
-        Hive built-in ORC                             1832 / 1839          8.6         116.5       0.7X
+        Native ORC MR                                 1307 / 1307         12.0          83.1       1.0X
+        Native ORC Vectorized                          232 /  248         67.9          14.7       5.6X
+        Hive built-in ORC                             1793 / 1793          8.8         114.0       0.7X
 
         SQL Single BIGINT Column Scan:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1382 / 1389         11.4          87.8       1.0X
-        Native ORC Vectorized                          291 /  299         54.1          18.5       4.8X
-        Hive built-in ORC                             1926 / 1936          8.2         122.5       0.7X
+        Native ORC MR                                 1360 / 1372         11.6          86.5       1.0X
+        Native ORC Vectorized                          293 /  303         53.8          18.6       4.7X
+        Hive built-in ORC                             1913 / 1933          8.2         121.6       0.7X
 
         SQL Single FLOAT Column Scan:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1399 / 1478         11.2          88.9       1.0X
-        Native ORC Vectorized                          324 /  329         48.6          20.6       4.3X
-        Hive built-in ORC                             1938 / 1945          8.1         123.2       0.7X
+        Native ORC MR                                 1389 / 1488         11.3          88.3       1.0X
+        Native ORC Vectorized                          340 /  346         46.2          21.6       4.1X
+        Hive built-in ORC                             1976 / 1997          8.0         125.6       0.7X
 
         SQL Single DOUBLE Column Scan:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1441 / 1470         10.9          91.6       1.0X
-        Native ORC Vectorized                          406 /  408         38.8          25.8       3.6X
-        Hive built-in ORC                             2031 / 2039          7.7         129.1       0.7X
+        Native ORC MR                                 1461 / 1465         10.8          92.9       1.0X
+        Native ORC Vectorized                          395 /  406         39.8          25.1       3.7X
+        Hive built-in ORC                             2127 / 2146          7.4         135.2       0.7X
         */
         sqlBenchmark.run()
       }
@@ -181,14 +181,14 @@ object OrcReadBenchmark {
         }
 
         /*
-        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.1
+        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.2
         Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
 
         Int and String Scan:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 2716 / 2738          3.9         259.0       1.0X
-        Native ORC Vectorized                         1325 / 1325          7.9         126.4       2.0X
-        Hive built-in ORC                             3607 / 3645          2.9         344.0       0.8X
+        Native ORC MR                                 2843 / 2935          3.7         271.1       1.0X
+        Native ORC Vectorized                         1349 / 1359          7.8         128.6       2.1X
+        Hive built-in ORC                             3862 / 3881          2.7         368.3       0.7X
         */
         benchmark.run()
       }
@@ -248,20 +248,20 @@ object OrcReadBenchmark {
         }
 
         /*
-        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.1
+        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.2
         Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
 
         Partitioned Table:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Read data column - Native ORC MR               1544 / 1547         10.2          98.1       1.0X
-        Read data column - Native ORC Vectorized        298 /  306         52.7          19.0       5.2X
-        Read data column - Hive built-in ORC           2089 / 2097          7.5         132.8       0.7X
-        Read partition column - Native ORC MR          1050 / 1051         15.0          66.8       1.5X
-        Read partition column - Native ORC Vectorized    54 /   57        290.0           3.4      28.5X
-        Read partition column - Hive built-in ORC      1271 / 1280         12.4          80.8       1.2X
-        Read both columns - Native ORC MR              1572 / 1605         10.0         100.0       1.0X
-        Read both columns - Native ORC Vectorized       332 /  338         47.4          21.1       4.6X
-        Read both columns - Hive built-in ORC          2108 / 2123          7.5         134.0       0.7X
+        Read data column - Native ORC MR               1545 / 1568         10.2          98.2       1.0X
+        Read data column - Native ORC Vectorized        300 /  304         52.4          19.1       5.1X
+        Read data column - Hive built-in ORC           2097 / 2117          7.5         133.3       0.7X
+        Read partition column - Native ORC MR          1023 / 1026         15.4          65.1       1.5X
+        Read partition column - Native ORC Vectorized    54 /   56        292.3           3.4      28.7X
+        Read partition column - Hive built-in ORC      1285 / 1289         12.2          81.7       1.2X
+        Read both columns - Native ORC MR              1564 / 1565         10.1          99.4       1.0X
+        Read both columns - Native ORC Vectorized       336 /  340         46.8          21.4       4.6X
+        Read both columns - Hive built-in ORC          2100 / 2123          7.5         133.5       0.7X
         */
         benchmark.run()
       }
@@ -292,14 +292,14 @@ object OrcReadBenchmark {
         }
 
         /*
-        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.1
+        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.2
         Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
 
         Repeated String:                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1297 / 1327          8.1         123.7       1.0X
-        Native ORC Vectorized                          317 /  327         33.1          30.2       4.1X
-        Hive built-in ORC                             1970 / 1973          5.3         187.9       0.7X
+        Native ORC MR                                 1338 / 1340          7.8         127.6       1.0X
+        Native ORC Vectorized                          342 /  350         30.6          32.6       3.9X
+        Hive built-in ORC                             2036 / 2117          5.2         194.2       0.7X
         */
         benchmark.run()
       }
@@ -337,26 +337,26 @@ object OrcReadBenchmark {
         }
 
         /*
-        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.1
+        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.2
         Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
 
         String with Nulls Scan (0.0%):           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 2531 / 2542          4.1         241.4       1.0X
-        Native ORC Vectorized                          947 /  952         11.1          90.3       2.7X
-        Hive built-in ORC                             4012 / 4034          2.6         382.6       0.6X
+        Native ORC MR                                 2510 / 2527          4.2         239.3       1.0X
+        Native ORC Vectorized                         1012 / 1012         10.4          96.5       2.5X
+        Hive built-in ORC                             3967 / 3984          2.6         378.3       0.6X
 
         String with Nulls Scan (0.5%):           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 2388 / 2407          4.4         227.8       1.0X
-        Native ORC Vectorized                         1235 / 1236          8.5         117.8       1.9X
-        Hive built-in ORC                             2951 / 2958          3.6         281.4       0.8X
+        Native ORC MR                                 2374 / 2388          4.4         226.4       1.0X
+        Native ORC Vectorized                         1269 / 1275          8.3         121.0       1.9X
+        Hive built-in ORC                             2994 / 2998          3.5         285.5       0.8X
 
         String with Nulls Scan (0.95%):          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1325 / 1346          7.9         126.4       1.0X
-        Native ORC Vectorized                          460 /  468         22.8          43.9       2.9X
-        Hive built-in ORC                             1600 / 1607          6.6         152.6       0.8X
+        Native ORC MR                                 1285 / 1312          8.2         122.6       1.0X
+        Native ORC Vectorized                          500 /  508         21.0          47.7       2.6X
+        Hive built-in ORC                             1630 / 1638          6.4         155.5       0.8X
         */
         benchmark.run()
       }
@@ -391,26 +391,26 @@ object OrcReadBenchmark {
         }
 
         /*
-        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.1
+        Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.2
         Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
 
         SQL Single Column Scan from 100 columns: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1107 / 1118          0.9        1056.1       1.0X
-        Native ORC Vectorized                           94 /  100         11.1          89.8      11.8X
-        Hive built-in ORC                              382 /  390          2.7         364.0       2.9X
+        Native ORC MR                                 1107 / 1111          0.9        1055.4       1.0X
+        Native ORC Vectorized                           93 /  102         11.3          88.8      11.9X
+        Hive built-in ORC                              377 /  389          2.8         359.6       2.9X
 
         SQL Single Column Scan from 200 columns: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 2278 / 2287          0.5        2172.0       1.0X
-        Native ORC Vectorized                          158 /  165          6.6         150.6      14.4X
-        Hive built-in ORC                              585 /  590          1.8         557.7       3.9X
+        Native ORC MR                                 2258 / 2270          0.5        2153.8       1.0X
+        Native ORC Vectorized                          160 /  168          6.6         152.6      14.1X
+        Hive built-in ORC                              591 /  597          1.8         563.7       3.8X
 
         SQL Single Column Scan from 300 columns: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 3386 / 3394          0.3        3229.1       1.0X
-        Native ORC Vectorized                          271 /  281          3.9         258.2      12.5X
-        Hive built-in ORC                              843 /  852          1.2         803.6       4.0X
+        Native ORC MR                                 3364 / 3391          0.3        3208.3       1.0X
+        Native ORC Vectorized                          273 /  284          3.8         260.1      12.3X
+        Hive built-in ORC                              831 /  842          1.3         792.8       4.0X
         */
         sqlBenchmark.run()
       }
