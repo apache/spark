@@ -164,10 +164,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: createDatabase with null description") {
-      val dbWithNullDesc =
-        CatalogDatabase("dbWithNullDesc", description = null, new URI("loc"), Map())
-      client.createDatabase(dbWithNullDesc, ignoreIfExists = true)
-      assert(client.getDatabase("dbWithNullDesc").description == "")
+      withTempDir { tmpDir =>
+        val dbWithNullDesc =
+          CatalogDatabase("dbWithNullDesc", description = null, tmpDir.toURI, Map())
+        client.createDatabase(dbWithNullDesc, ignoreIfExists = true)
+        assert(client.getDatabase("dbWithNullDesc").description == "")
+      }
     }
 
     test(s"$version: setCurrentDatabase") {
