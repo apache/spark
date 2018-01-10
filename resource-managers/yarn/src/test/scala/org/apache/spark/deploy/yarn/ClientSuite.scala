@@ -365,8 +365,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     ("hdfs URI match test", "hdfs:/path1", "hdfs:/path1")
   )
 
-  matching.foreach {
-    t =>
+  matching.foreach { t =>
       test(t._1) {
         assert(Client.compareUri(new URI(t._2), new URI(t._3)),
           s"No match between ${t._2} and ${t._3}")
@@ -384,8 +383,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     ("hdfs URI unmatch test2", "hdfs://namenode1:8020/path1", "hdfs://namenode1:8080/path2")
   )
 
-  unmatching.foreach {
-    t =>
+  unmatching.foreach { t =>
       test(t._1) {
         assert(!Client.compareUri(new URI(t._2), new URI(t._3)),
           s"match between ${t._2} and ${t._3}")
