@@ -648,7 +648,9 @@ class SparkSession(object):
 
             # If no schema supplied by user then get the names of columns only
             if schema is None:
-                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in data.columns]
+                schema = [str(x) if not isinstance(x, basestring) else
+                          (x.encode('utf-8') if not isinstance(x, str) else x)
+                          for x in data.columns]
 
             if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
                     and len(data) > 0:
