@@ -122,7 +122,10 @@ private[storage] class BlockInfoManager extends Logging {
    * by [[removeBlock()]].
    */
   @GuardedBy("this")
-  private[this] val infos = new mutable.HashMap[BlockId, BlockInfo]
+  private[storage] val infos = new mutable.HashMap[BlockId, BlockInfo]
+  private[storage] val broadcaseInfosIndex = new mutable.HashMap[Long, List[BlockId]]
+  private[storage] val rddInfosIndex = new mutable.HashMap[Long, List[BlockId]]
+  private[storage] val shuffleInfosIndex = new mutable.HashMap[Long, List[BlockId]]
 
   /**
    * Tracks the set of blocks that each task has locked for writing.
@@ -324,6 +327,18 @@ private[storage] class BlockInfoManager extends Logging {
       case None =>
         // Block does not yet exist or is removed, so we are free to acquire the write lock
         infos(blockId) = newBlockInfo
+        blockId match {
+          case RDDBlockId(rddId, splitIndex) =>
+            val t = rddInfosIndex.getOrElse(rddId, Nil)
+            rddInfosIndex.put(rddId, blockId :: t)
+          case BroadcastBlockId(broadcastId, field) =>
+            val t = broadcaseInfosIndex.getOrElse(broadcastId, Nil)
+            broadcaseInfosIndex.put(broadcastId, blockId :: t)
+          case ShuffleBlockId(shuffleId, mapId, reduceId) =>
+            val t = shuffleInfosIndex.getOrElse(shuffleId, Nil)
+            shuffleInfosIndex.put(shuffleId, blockId :: t)
+        }
+
         lockForWriting(blockId)
         true
     }
@@ -412,6 +427,15 @@ private[storage] class BlockInfoManager extends Logging {
           throw new IllegalStateException(
             s"Task $currentTaskAttemptId called remove() on block $blockId without a write lock")
         } else {
+          blockId match {
+            case RDDBlockId(rddId, splitIndex) =>
+              rddInfosIndex.remove(rddId)
+            case BroadcastBlockId(broadcastId, field) =>
+              broadcaseInfosIndex.remove(broadcastId)
+            case ShuffleBlockId(shuffleId, mapId, reduceId) =>
+              shuffleInfosIndex.remove(shuffleId)
+          }
+
           infos.remove(blockId)
           blockInfo.readerCount = 0
           blockInfo.writerTask = BlockInfo.NO_WRITER

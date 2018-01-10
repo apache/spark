@@ -1345,7 +1345,12 @@ private[spark] class BlockManager(
   def removeRdd(rddId: Int): Int = {
     // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
     logInfo(s"Removing RDD $rddId")
-    val blocksToRemove = blockInfoManager.entries.flatMap(_._1.asRDDId).filter(_.rddId == rddId)
+
+//    val blocksToRemove = blockInfoManager.entries.flatMap(_._1.asRDDId).filter(_.rddId == rddId)
+//    blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
+//    blocksToRemove.size
+
+    val blocksToRemove = blockInfoManager.rddInfosIndex.getOrElse(rddId, Nil)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
   }
@@ -1355,9 +1360,15 @@ private[spark] class BlockManager(
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
     logDebug(s"Removing broadcast $broadcastId")
-    val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
-      case bid @ BroadcastBlockId(`broadcastId`, _) => bid
-    }
+
+
+//    val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
+//      case bid @ BroadcastBlockId(`broadcastId`, _) => bid
+//    }
+//    blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster) }
+//    blocksToRemove.size
+
+    val blocksToRemove = blockInfoManager.broadcaseInfosIndex.getOrElse(broadcastId, Nil)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster) }
     blocksToRemove.size
   }
