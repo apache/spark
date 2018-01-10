@@ -1421,7 +1421,7 @@ private object Client extends Logging {
   /**
    * Return whether two URI represent file system are the same
    */
-  def compareUri(srcUri: URI, dstUri: URI): Boolean = {
+  private[spark] def compareUri(srcUri: URI, dstUri: URI): Boolean = {
 
     if (srcUri.getScheme() == null || srcUri.getScheme() != dstUri.getScheme()) {
       return false
