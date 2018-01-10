@@ -45,13 +45,27 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
   }
 
+  // WARN: Both configurations, 'spark.python.daemon.module' and 'spark.python.worker.module' are
+  // for very advanced users and they are experimental. This should be considered
+  // as expert-only option, and shouldn't be used before knowing what it means exactly.
+
   // This configuration indicates the module to run the daemon to execute its Python workers.
-  val daemonModule = SparkEnv.get.conf.get("spark.python.daemon.module", "pyspark.daemon")
+  val daemonModule = SparkEnv.get.conf.getOption("spark.python.daemon.module").map { value =>
+    logInfo(
+      s"Python daemon module in PySpark is set to [$value] in 'spark.python.daemon.module', " +
+      "using this to start the daemon up. Note that this configuration only has an effect when " +
+      "'spark.python.use.daemon' is enabled and the platform is not Windows.'")
+    value
+  }.getOrElse("pyspark.daemon")
 
   // This configuration indicates the module to run each Python worker.
-  // Note that this configuration only has an effect when 'spark.python.use.daemon' is enabled
-  // and the platform is not Windows.
-  val workerModule = SparkEnv.get.conf.get("spark.python.worker.module", "pyspark.worker")
+  val workerModule = SparkEnv.get.conf.getOption("spark.python.worker.module").map { value =>
+    logInfo(
+      s"Python worker module in PySpark is set to [$value] in 'spark.python.worker.module', " +
+      "using this to start the worker up. Note that this configuration only has an effect when " +
+      "'spark.python.use.daemon' is disabled or the platform is Windows.'")
+    value
+  }.getOrElse("pyspark.worker")
 
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
