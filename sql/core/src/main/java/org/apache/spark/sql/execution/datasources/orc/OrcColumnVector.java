@@ -23,6 +23,7 @@ import org.apache.orc.storage.ql.exec.vector.*;
 
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.TimestampType;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -36,11 +37,19 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   private DoubleColumnVector doubleData;
   private BytesColumnVector bytesData;
   private DecimalColumnVector decimalData;
+  private TimestampColumnVector timestampData;
+  final private boolean isTimestamp;
 
   private int batchSize;
 
-  public OrcColumnVector(DataType type, ColumnVector vector) {
+  OrcColumnVector(DataType type, ColumnVector vector) {
     super(type);
+
+    if (type instanceof TimestampType) {
+      isTimestamp = true;
+    } else {
+      isTimestamp = false;
+    }
 
     baseData = vector;
     if (vector instanceof LongColumnVector) {
@@ -51,6 +60,8 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
       bytesData = (BytesColumnVector) vector;
     } else if (vector instanceof DecimalColumnVector) {
       decimalData = (DecimalColumnVector) vector;
+    } else if (vector instanceof TimestampColumnVector) {
+      timestampData = (TimestampColumnVector) vector;
     } else {
       throw new UnsupportedOperationException();
     }
@@ -152,7 +163,12 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
 
   @Override
   public long getLong(int rowId) {
-    return longData.vector[getRowIndex(rowId)];
+    int index = getRowIndex(rowId);
+    if (isTimestamp) {
+      return timestampData.time[index] * 1000 + timestampData.nanos[index] / 1000;
+    } else {
+      return longData.vector[index];
+    }
   }
 
   @Override

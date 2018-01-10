@@ -51,13 +51,13 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   /**
-   * The default size of batch. We use this value for both ORC and Spark consistently
-   * because they have different default values like the following.
+   * The default size of batch. We use this value for ORC reader to make it consistent with Spark's
+   * columnar batch, because their default batch sizes are different like the following:
    *
    * - ORC's VectorizedRowBatch.DEFAULT_SIZE = 1024
    * - Spark's ColumnarBatch.DEFAULT_BATCH_SIZE = 4 * 1024
    */
-  public static final int DEFAULT_SIZE = 4 * 1024;
+  private static final int DEFAULT_SIZE = 4 * 1024;
 
   // ORC File Reader
   private Reader reader;
@@ -203,14 +203,15 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
       for (int i = 0; i < requiredFields.length; i++) {
         DataType dt = requiredFields[i].dataType();
+        int colId = requestedColIds[i];
         // Initialize the missing columns once.
-        if (requestedColIds[i] == -1) {
+        if (colId == -1) {
           OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
           missingCol.putNulls(0, capacity);
           missingCol.setIsConstant();
           orcVectorWrappers[i] = missingCol;
         } else {
-          orcVectorWrappers[i] = new OrcColumnVector(dt, batch.cols[i]);
+          orcVectorWrappers[i] = new OrcColumnVector(dt, batch.cols[colId]);
         }
       }
 
