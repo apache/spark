@@ -1221,12 +1221,13 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
           Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
         }
       }
-      // SPARK-22951: the implementation of aggregate operator treats the cases with and without
-      // grouping keys differently, when there are not input rows. For the aggregation after
-      // `dropDuplicates()` on an empty data frame, a grouping key is added here to make sure the
-      // aggregate operator can work correctly (returning an empty iterator).
-      val newKeys = if (keys.isEmpty) Literal(1) :: Nil else keys
-      Aggregate(newKeys, aggCols, child)
+      // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping
+      // aggregations by checking the number of grouping keys. The key difference here is that a
+      // global aggregation always returns at least one row even if there are no input rows. Here
+      // we append a literal when the grouping key list is empty so that the result aggregate
+      // operator is properly treated as a grouping aggregation.
+      val nonemptyKeys = if (keys.isEmpty) Literal(1) :: Nil else keys
+      Aggregate(nonemptyKeys, aggCols, child)
   }
 }
 

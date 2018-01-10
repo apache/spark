@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.expressions.aggregate.Percentile
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -669,13 +669,20 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   Seq(true, false).foreach { codegen =>
-    test("SPARK-22951: dropDuplicates on empty data frames should produce correct aggregate" +
-      s" results when codegen enabled: $codegen") {
+    test("SPARK-22951: dropDuplicates on empty dataFrames should produce correct aggregate " +
+      s"results when codegen is enabled: $codegen") {
       withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, codegen.toString)) {
-        assert(Seq.empty[Int].toDF("a").count() == 0)
-        assert(Seq.empty[Int].toDF("a").agg(count("*")).count() == 1)
+        // explicit global aggregations
+        val emptyAgg = Map.empty[String, String]
+        checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
+        checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
+
+        // global aggregation is converted to grouping aggregation:
         assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
-        assert(spark.emptyDataFrame.dropDuplicates().agg(count("*")).count() == 1)
       }
     }
   }

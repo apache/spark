@@ -202,13 +202,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val input = LocalRelation()
     val query = Deduplicate(Seq.empty, input) // dropDuplicates()
     val optimized = Optimize.execute(query.analyze)
-
-    val correctAnswer =
-      Aggregate(
-        Seq(Literal(1)),
-        input.output,
-        input)
-
+    val correctAnswer = Aggregate(Seq(Literal(1)), input.output, input)
     comparePlans(optimized, correctAnswer)
   }
 
