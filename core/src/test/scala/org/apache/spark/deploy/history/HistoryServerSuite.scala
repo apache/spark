@@ -486,7 +486,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       json match {
         case JNothing => Seq()
         case apps: JArray =>
-          apps.filter(app => {
+          apps.children.filter(app => {
             (app \ "attempts") match {
               case attempts: JArray =>
                 val state = (attempts.children.head \ "completed").asInstanceOf[JBool]
