@@ -23,6 +23,7 @@ import java.io.ObjectInputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -197,9 +198,8 @@ public class LauncherServerSuite extends BaseSuite {
    * server-side close immediately.
    */
   private void waitForError(TestClient client, String secret) throws Exception {
-    boolean helloSent = false;
-    int maxTries = 10;
-    for (int i = 0; i < maxTries; i++) {
+    eventually(Duration.ofSeconds(1), Duration.ofMillis(10), () -> {
+      boolean helloSent = false;
       try {
         if (!helloSent) {
           client.send(new Hello(secret, "1.4.0"));
@@ -210,15 +210,8 @@ public class LauncherServerSuite extends BaseSuite {
         fail("Expected error but message went through.");
       } catch (IllegalStateException | IOException e) {
         // Expected.
-        break;
-      } catch (AssertionError e) {
-        if (i < maxTries - 1) {
-          Thread.sleep(100);
-        } else {
-          throw new AssertionError("Test failed after " + maxTries + " attempts.", e);
-        }
       }
-    }
+    });
   }
 
   private static class TestClient extends LauncherConnection {

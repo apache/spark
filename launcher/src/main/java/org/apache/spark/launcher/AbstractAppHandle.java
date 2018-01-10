@@ -71,15 +71,16 @@ abstract class AbstractAppHandle implements SparkAppHandle {
   @Override
   public synchronized void disconnect() {
     if (!disposed) {
-      disposed = true;
+      markDisposed();
       if (connection != null) {
         try {
           connection.close();
         } catch (IOException ioe) {
           // no-op.
         }
+      } else {
+        server.unregister(this);
       }
-      server.unregister(this);
     }
   }
 
@@ -91,9 +92,14 @@ abstract class AbstractAppHandle implements SparkAppHandle {
     return connection;
   }
 
-  boolean isDisposed() {
+  synchronized boolean isDisposed() {
     return disposed;
   }
+
+  synchronized void markDisposed() {
+    this.disposed = true;
+  }
+
 
   void setState(State s) {
     setState(s, false);

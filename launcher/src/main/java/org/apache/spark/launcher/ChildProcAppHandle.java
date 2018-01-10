@@ -48,14 +48,16 @@ class ChildProcAppHandle extends AbstractAppHandle {
 
   @Override
   public synchronized void kill() {
-    disconnect();
-    if (childProc != null) {
-      if (childProc.isAlive()) {
-        childProc.destroyForcibly();
+    if (!isDisposed()) {
+      setState(State.KILLED);
+      disconnect();
+      if (childProc != null) {
+        if (childProc.isAlive()) {
+          childProc.destroyForcibly();
+        }
+        childProc = null;
       }
-      childProc = null;
     }
-    setState(State.KILLED);
   }
 
   void setChildProc(Process childProc, String loggerName, InputStream logStream) {

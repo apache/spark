@@ -95,15 +95,15 @@ abstract class LauncherConnection implements Closeable, Runnable {
   }
 
   @Override
-  public void close() throws IOException {
+  public synchronized void close() throws IOException {
     if (!closed) {
-      synchronized (this) {
-        if (!closed) {
-          closed = true;
-          socket.close();
-        }
-      }
+      closed = true;
+      socket.close();
     }
+  }
+
+  synchronized boolean isOpen() {
+    return !closed;
   }
 
 }
