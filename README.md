@@ -1,3 +1,17 @@
+# KySpark
+
+KySpark is a customized spark for better KAP use. 
+
+Naming convension of different branch is kyspark-{SPARK_VERSION}.x, e.g. kyspark-2.1.1.x
+
+Naming convension of different releases, if necessary, is kyspark-{SPARK_VERSION}-r{RELEASE_NUMBER}, e.g. kyspark-2.1.1-r1
+
+You can run:
+    
+    ./dev/make-distribution.sh --name kyspark --tgz -Phadoop-2.6 -Phive -Phive-thriftserver -Pyarn
+
+to build a new spark binary package
+
 # Apache Spark
 
 Spark is a fast and general cluster computing system for Big Data. It provides
