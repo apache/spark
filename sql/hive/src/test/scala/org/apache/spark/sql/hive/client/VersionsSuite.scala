@@ -58,7 +58,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
    */
   protected def withTempDir(f: File => Unit): Unit = {
     val dir = Utils.createTempDir().getCanonicalFile
-    f(dir)
+    try f(dir) finally Utils.deleteRecursively(dir)
   }
 
   /**
@@ -842,6 +842,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: SPARK-17920: Insert into/overwrite avro table") {
+      assume(!(Utils.isWindows && version == "0.12"))
       withTempDir { dir =>
         val avroSchema =
           """
