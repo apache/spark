@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -150,6 +151,7 @@ class OrcFileFormat
     val sqlConf = sparkSession.sessionState.conf
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
+    val copyToSpark = sparkSession.sessionState.conf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK)
 
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -183,8 +185,8 @@ class OrcFileFormat
 
         val taskContext = Option(TaskContext.get())
         if (enableVectorizedReader) {
-          val batchReader =
-            new OrcColumnarBatchReader(enableOffHeapColumnVector && taskContext.isDefined)
+          val batchReader = new OrcColumnarBatchReader(
+            enableOffHeapColumnVector && taskContext.isDefined, copyToSpark)
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
             reader.getSchema,
