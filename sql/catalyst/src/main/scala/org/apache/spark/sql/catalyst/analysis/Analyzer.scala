@@ -2546,4 +2546,6 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
       }
     }
   }
+
+  val dumb = 1
 }
