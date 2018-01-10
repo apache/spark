@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -70,6 +70,24 @@ case class InsertIntoHiveTable(
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
     outputColumns: Seq[Attribute]) extends SaveAsHiveFile {
+
+  /**
+   * For partitioned tables, `requiredOrdering` is over partition columns of table
+   */
+  override def requiredOrdering: Seq[Seq[SortOrder]] = {
+    if (table.partitionColumnNames.nonEmpty) {
+      val partitionAttributes = table.partitionColumnNames.map { name =>
+        query.resolve(name :: Nil, SparkSession.getActiveSession.get.sessionState.analyzer.resolver)
+          .getOrElse {
+            throw new AnalysisException(
+              s"Unable to resolve $name given [${query.output.map(_.name).mkString(", ")}]")
+          }.asInstanceOf[Attribute]
+      }
+      Seq(partitionAttributes.map(SortOrder(_, Ascending)))
+    } else {
+      Seq.fill(children.size)(Nil)
+    }
+  }
 
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
