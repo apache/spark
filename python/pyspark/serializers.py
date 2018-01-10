@@ -184,24 +184,28 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
-class ArrowSerializer(FramedSerializer):
+class ArrowSerializer(Serializer):
     """
-    Serializes bytes as Arrow data with the Arrow file format.
+    Serializes Arrow record batches as a stream.
     """
 
-    def dumps(self, batch):
+    def dump_stream(self, iterator, stream):
         import pyarrow as pa
-        import io
-        sink = io.BytesIO()
-        writer = pa.RecordBatchFileWriter(sink, batch.schema)
-        writer.write_batch(batch)
-        writer.close()
-        return sink.getvalue()
+        writer = None
+        try:
+            for batch in iterator:
+                if writer is None:
+                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                writer.write_batch(batch)
+        finally:
+            if writer is not None:
+                writer.close()
 
-    def loads(self, obj):
+    def load_stream(self, stream):
         import pyarrow as pa
-        reader = pa.RecordBatchFileReader(pa.BufferReader(obj))
-        return reader.read_all()
+        reader = pa.open_stream(stream)
+        for batch in reader:
+            yield batch
 
     def __repr__(self):
         return "ArrowSerializer"
