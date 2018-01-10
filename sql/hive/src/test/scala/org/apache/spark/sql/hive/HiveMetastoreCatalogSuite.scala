@@ -149,6 +149,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
     sparkSession.metadataHive.reset()
+    sparkSession.sessionState.catalog.reset()
   }
 
   Seq(
