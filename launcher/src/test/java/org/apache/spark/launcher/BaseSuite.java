@@ -71,7 +71,7 @@ class BaseSuite {
    * Call a closure that performs a check every "period" until it succeeds, or the timeout
    * elapses.
    */
-  protected void eventually(Duration timeout, Duration period, Runnable check) {
+  protected void eventually(Duration timeout, Duration period, Runnable check) throws Exception {
     assertTrue("Timeout needs to be larger than period.", timeout.compareTo(period) > 0);
     long deadline = System.nanoTime() + timeout.toNanos();
     int count = 0;
@@ -85,6 +85,7 @@ class BaseSuite {
           String msg = String.format("Failed check after %d tries: %s.", count, t.getMessage());
           throw new IllegalStateException(msg, t);
         }
+        Thread.sleep(period.toMillis());
       }
     }
   }
