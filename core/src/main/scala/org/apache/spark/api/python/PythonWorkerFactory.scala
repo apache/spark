@@ -54,7 +54,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     logInfo(
       s"Python daemon module in PySpark is set to [$value] in 'spark.python.daemon.module', " +
       "using this to start the daemon up. Note that this configuration only has an effect when " +
-      "'spark.python.use.daemon' is enabled and the platform is not Windows.'")
+      "'spark.python.use.daemon' is enabled and the platform is not Windows.")
     value
   }.getOrElse("pyspark.daemon")
 
@@ -63,7 +63,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     logInfo(
       s"Python worker module in PySpark is set to [$value] in 'spark.python.worker.module', " +
       "using this to start the worker up. Note that this configuration only has an effect when " +
-      "'spark.python.use.daemon' is disabled or the platform is Windows.'")
+      "'spark.python.use.daemon' is disabled or the platform is Windows.")
     value
   }.getOrElse("pyspark.worker")
 
