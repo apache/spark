@@ -1255,7 +1255,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.select($"*").showString(1, vertical = true) === expectedAnswer)
   }
 
-  test("SPARK-XXXXX Cast rows to strings in showString") {
+  test("SPARK-23023 Cast rows to strings in showString") {
     val df1 = Seq(Seq(1, 2, 3, 4)).toDF("a")
     assert(df1.showString(10) ===
       s"""+------------+
