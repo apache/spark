@@ -1518,21 +1518,40 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("decimal precision with multiply/division") {
-    checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
-    checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
-    checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
-    checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
-      Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
-    checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
-      Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_TRUNCAT.key -> "false") {
+      checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
+      checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
+      checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
+      checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
+        Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
+      checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
+        Row(null))
 
-    checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
-    checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
-    checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
-    checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.4333333333333333333", new MathContext(38))))
-    checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.4333333333333333333", new MathContext(38))))
+      checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
+      checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
+      checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
+      checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
+        Row(BigDecimal("3.433333333333333333333333333", new MathContext(38))))
+      checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
+        Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
+    }
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_TRUNCAT.key -> "true") {
+      checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
+      checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
+      checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
+      checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
+        Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
+      checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
+        Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
+
+      checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
+      checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
+      checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
+      checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
+        Row(BigDecimal("3.4333333333333333333", new MathContext(38))))
+      checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
+        Row(BigDecimal("3.4333333333333333333", new MathContext(38))))
+    }
   }
 
   test("SPARK-10215 Div of Decimal returns null") {
