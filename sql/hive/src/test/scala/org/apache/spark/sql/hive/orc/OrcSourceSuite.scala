@@ -22,9 +22,12 @@ import java.io.File
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -197,7 +200,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
   }
 }
 
-class OrcSourceSuite extends OrcSuite {
+class OrcSourceSuite extends OrcSuite with SQLTestUtils{
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -248,6 +251,33 @@ class OrcSourceSuite extends OrcSuite {
           StringContains("b", "prefix")
         ))
       )).get.toString
+    }
+  }
+
+  test("SPARK-22972: hive orc source") {
+    val tableName = "normal_orc_as_source_hive"
+    withTable(tableName) {
+      spark.sql(
+        s"""
+          |CREATE TABLE $tableName
+          |USING org.apache.spark.sql.hive.orc
+          |OPTIONS (
+          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
+          |)
+        """.stripMargin)
+
+      val tableMetadata = spark.sessionState.catalog.getTableMetadata(
+        TableIdentifier(tableName))
+      assert(tableMetadata.storage.inputFormat ==
+        Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
+      assert(tableMetadata.storage.outputFormat ==
+        Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
+      assert(tableMetadata.storage.serde ==
+        Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+      assert(HiveSerDe.sourceToSerDe("org.apache.spark.sql.hive.orc")
+        .equals(HiveSerDe.sourceToSerDe("orc")))
+      assert(HiveSerDe.sourceToSerDe("org.apache.spark.sql.orc")
+        .equals(HiveSerDe.sourceToSerDe("orc")))
     }
   }
 }
