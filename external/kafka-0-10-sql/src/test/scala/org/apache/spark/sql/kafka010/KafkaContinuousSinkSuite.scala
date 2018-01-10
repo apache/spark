@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{BinaryType, DataType}
 import org.apache.spark.util.Utils
@@ -97,6 +98,131 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     } finally {
       writer.stop()
     }
+  }
+
+  test("streaming - write w/o topic field, with topic option") {
+    val inputTopic = newTopic()
+    testUtils.createTopic(inputTopic, partitions = 1)
+
+    val input = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", inputTopic)
+      .option("startingOffsets", "earliest")
+      .load()
+
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF(),
+      withTopic = Some(topic),
+      withOutputMode = Some(OutputMode.Append()))()
+
+    val reader = createKafkaReader(topic)
+      .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
+      .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
+      .as[(Int, Int)]
+      .map(_._2)
+
+    try {
+      testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
+      testUtils.sendMessages(inputTopic, Array("6", "7", "8", "9", "10"))
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    } finally {
+      writer.stop()
+    }
+  }
+
+  test("streaming - topic field and topic option") {
+    /* The purpose of this test is to ensure that the topic option
+     * overrides the topic field. We begin by writing some data that
+     * includes a topic field and value (e.g., 'foo') along with a topic
+     * option. Then when we read from the topic specified in the option
+     * we should see the data i.e., the data was written to the topic
+     * option, and not to the topic in the data e.g., foo
+     */
+    val inputTopic = newTopic()
+    testUtils.createTopic(inputTopic, partitions = 1)
+
+    val input = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", inputTopic)
+      .option("startingOffsets", "earliest")
+      .load()
+
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF(),
+      withTopic = Some(topic),
+      withOutputMode = Some(OutputMode.Append()))(
+      withSelectExpr = "'foo' as topic", "CAST(value as STRING) value")
+
+    val reader = createKafkaReader(topic)
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .selectExpr("CAST(key AS INT)", "CAST(value AS INT)")
+      .as[(Int, Int)]
+      .map(_._2)
+
+    try {
+      testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
+      testUtils.sendMessages(inputTopic, Array("6", "7", "8", "9", "10"))
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    } finally {
+      writer.stop()
+    }
+  }
+
+  test("null topic attribute") {
+    val inputTopic = newTopic()
+    testUtils.createTopic(inputTopic, partitions = 1)
+
+    val input = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", inputTopic)
+      .option("startingOffsets", "earliest")
+      .load()
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    /* No topic field or topic option */
+    var writer: StreamingQuery = null
+    var ex: Exception = null
+    try {
+      ex = intercept[StreamingQueryException] {
+        writer = createKafkaWriter(input.toDF())(
+          withSelectExpr = "CAST(null as STRING) as topic", "value"
+        )
+        testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+        writer.processAllAvailable()
+      }
+    } finally {
+      writer.stop()
+    }
+    assert(ex.getCause.getCause.getMessage
+      .toLowerCase(Locale.ROOT)
+      .contains("null topic present in the data."))
   }
 
   test("streaming - write data with bad schema") {
