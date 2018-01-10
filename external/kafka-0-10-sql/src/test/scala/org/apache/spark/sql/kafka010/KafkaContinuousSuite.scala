@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 
+// Trait to configure StreamTest for kafka continuous execution tests.
 trait KafkaContinuousTest extends KafkaSourceTest {
   override val defaultTrigger = Trigger.Continuous(1000)
   override val defaultUseV2Sink = true
@@ -70,9 +71,8 @@ trait KafkaContinuousTest extends KafkaSourceTest {
   }
 }
 
-class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest {
-
-}
+// Run tests in KafkaSourceSuiteBase in continuous execution mode.
+class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest
 
 class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
   import testImplicits._

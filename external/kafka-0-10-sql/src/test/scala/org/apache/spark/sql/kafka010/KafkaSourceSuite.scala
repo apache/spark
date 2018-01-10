@@ -70,7 +70,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
   protected def makeSureGetOffsetCalled = AssertOnQuery { q =>
     // Because KafkaSource's initialPartitionOffsets is set lazily, we need to make sure
-    // its "getOffset" is called before pushing any data. Otherwise, because of the race contOOion,
+    // its "getOffset" is called before pushing any data. Otherwise, because of the race condition,
     // we don't know which data should be fetched when `startingOffsets` is latest.
     q match {
       case c: ContinuousExecution => c.awaitEpoch(0)
