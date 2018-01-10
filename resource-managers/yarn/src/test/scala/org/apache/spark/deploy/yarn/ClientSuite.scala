@@ -358,11 +358,11 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   private val matching = Seq(
-    ("files", "file:///file1", "file:///file2"),
-    ("files", "file:///c:file1", "file://c:file2"),
-    ("files", "file://host/file1", "file://host/file2"),
-    ("wasb", "wasb://bucket1@user", "wasb://bucket1@user/"),
-    ("hdfs", "hdfs:/path1", "hdfs:/path1")
+    ("files URI match test1", "file:///file1", "file:///file2"),
+    ("files URI match test2", "file:///c:file1", "file://c:file2"),
+    ("files URI match test3", "file://host/file1", "file://host/file2"),
+    ("wasb URI match test", "wasb://bucket1@user", "wasb://bucket1@user/"),
+    ("hdfs URI match test", "hdfs:/path1", "hdfs:/path1")
   )
 
   matching.foreach {
@@ -374,14 +374,14 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   private val unmatching = Seq(
-    ("files", "file:///file1", "file://host/file2"),
-    ("files", "file://host/file1", "file:///file2"),
-    ("files", "file://host/file1", "file://host2/file2"),
-    ("wasb", "wasb://bucket1@user", "wasb://bucket2@user/"),
-    ("wasb", "wasb://bucket1@user", "wasb://bucket1@user2/"),
-    ("s3", "s3a://user@pass:bucket1/", "s3a://user2@pass2:bucket1/"),
-    ("hdfs", "hdfs://namenode1/path1", "hdfs://namenode1:8080/path2"),
-    ("hdfs", "hdfs://namenode1:8020/path1", "hdfs://namenode1:8080/path2")
+    ("files URI unmatch test1", "file:///file1", "file://host/file2"),
+    ("files URI unmatch test2", "file://host/file1", "file:///file2"),
+    ("files URI unmatch test3", "file://host/file1", "file://host2/file2"),
+    ("wasb URI unmatch test1", "wasb://bucket1@user", "wasb://bucket2@user/"),
+    ("wasb URI unmatch test2", "wasb://bucket1@user", "wasb://bucket1@user2/"),
+    ("s3 URI unmatch test", "s3a://user@pass:bucket1/", "s3a://user2@pass2:bucket1/"),
+    ("hdfs URI unmatch test1", "hdfs://namenode1/path1", "hdfs://namenode1:8080/path2"),
+    ("hdfs URI unmatch test2", "hdfs://namenode1:8020/path1", "hdfs://namenode1:8080/path2")
   )
 
   unmatching.foreach {
