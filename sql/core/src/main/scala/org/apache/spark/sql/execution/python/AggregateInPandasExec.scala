@@ -85,6 +85,8 @@ case class AggregateInPandasExec(
 
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
 
+    // Filter child output attributes down to only those that are UDF inputs.
+    // Also eliminate duplicate UDF inputs.
     val allInputs = new ArrayBuffer[Expression]
     val dataTypes = new ArrayBuffer[DataType]
     val argOffsets = inputs.map { input =>
@@ -99,14 +101,13 @@ case class AggregateInPandasExec(
       }.toArray
     }.toArray
 
-    val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
+    // Schema of input rows to the python runner
+    val aggInputSchema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
       StructField(s"_$i", dt)
     })
 
-    val input = groupingExpressions.map(_.toAttribute) ++ udfExpressions.map(_.resultAttribute)
-
     inputRDD.mapPartitionsInternal { iter =>
-      val proj = UnsafeProjection.create(allInputs, child.output)
+      val prunedProj = UnsafeProjection.create(allInputs, child.output)
 
       val grouped = if (groupingExpressions.isEmpty) {
         // Use an empty unsafe row as a place holder for the grouping key
@@ -114,7 +115,7 @@ case class AggregateInPandasExec(
       } else {
         GroupedIterator(iter, groupingExpressions, child.output)
       }.map { case (key, rows) =>
-        (key, rows.map(proj))
+        (key, rows.map(prunedProj))
       }
 
       val context = TaskContext.get()
@@ -135,16 +136,18 @@ case class AggregateInPandasExec(
 
       val columnarBatchIter = new ArrowPythonRunner(
         pyFuncs, bufferSize, reuseWorker,
-        PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF, argOffsets, schema,
+        PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF, argOffsets, aggInputSchema,
         sessionLocalTimeZone, pandasRespectSessionTimeZone)
         .compute(projectedRowIter, context.partitionId(), context)
 
+      val joinedAttributes =
+        groupingExpressions.map(_.toAttribute) ++ udfExpressions.map(_.resultAttribute)
       val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(resultExpressions, input)
+      val resultProj = UnsafeProjection.create(resultExpressions, joinedAttributes)
 
-      columnarBatchIter.map(_.rowIterator.next()).map { outputRow =>
+      columnarBatchIter.map(_.rowIterator.next()).map { aggOutputRow =>
         val leftRow = queue.remove()
-        val joinedRow = joined(leftRow, outputRow)
+        val joinedRow = joined(leftRow, aggOutputRow)
         resultProj(joinedRow)
       }
     }

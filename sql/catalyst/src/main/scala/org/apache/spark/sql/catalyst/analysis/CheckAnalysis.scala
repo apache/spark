@@ -154,8 +154,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression) = {
-              expr.isInstanceOf[AggregateExpression] ||
-                PythonUDF.isGroupAggPandasUDF(expr)
+              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupAggPandasUDF(expr)
             }
 
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {

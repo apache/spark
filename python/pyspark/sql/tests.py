@@ -4722,7 +4722,7 @@ class GroupbyAggTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
-                    Exception,
+                    IllegalArgumentException,
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
 

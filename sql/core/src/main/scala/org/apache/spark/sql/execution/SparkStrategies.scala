@@ -291,8 +291,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         require(
           !aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF),
-          "Streaming aggregation doesn't support group aggregate pandas UDF"
-        )
+          "Streaming aggregation doesn't support group aggregate pandas UDF")
 
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
