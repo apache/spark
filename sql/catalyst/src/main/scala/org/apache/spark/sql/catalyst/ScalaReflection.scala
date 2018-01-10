@@ -63,6 +63,7 @@ object ScalaReflection extends ScalaReflection {
 
   private def dataTypeFor(tpe: `Type`): DataType = cleanUpReflectionObjects {
     tpe.dealias match {
+      case t if t <:< definitions.NullTpe => NullType
       case t if t <:< definitions.IntTpe => IntegerType
       case t if t <:< definitions.LongTpe => LongType
       case t if t <:< definitions.DoubleTpe => DoubleType

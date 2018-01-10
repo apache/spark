@@ -1441,6 +1441,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       assert(e.getCause.isInstanceOf[NullPointerException])
     }
   }
+
+  test("SPARK-23025: Add support for null type in scala reflection") {
+    val data = Seq(("a", null))
+    checkDataset(
+      data.toDS(),
+      data: _*)
+  }
 }
 
 case class SingleData(id: Int)
