@@ -437,7 +437,7 @@ private[spark] class AppStatusListener(
       }
       task.errorMessage = errorMessage
       val delta = task.updateMetrics(event.taskMetrics)
-      task.updateAndGet(kvstore, now)
+      maybeUpdate(task, now)
       delta
     }.orNull
 
@@ -454,7 +454,7 @@ private[spark] class AppStatusListener(
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
       if (metricsDelta != null) {
-        stage.metrics = stage.metrics.add(metricsDelta)
+        stage.metrics = LiveEntityHelpers.addMetrics(stage.metrics, metricsDelta)
       }
       stage.activeTasks -= 1
       stage.completedTasks += completedDelta
@@ -490,7 +490,7 @@ private[spark] class AppStatusListener(
       esummary.failedTasks += failedDelta
       esummary.killedTasks += killedDelta
       if (metricsDelta != null) {
-        esummary.metrics = esummary.metrics.add(metricsDelta)
+        esummary.metrics = LiveEntityHelpers.addMetrics(esummary.metrics, metricsDelta)
       }
       maybeUpdate(esummary, now)
 
@@ -608,11 +608,11 @@ private[spark] class AppStatusListener(
         maybeUpdate(task, now)
 
         Option(liveStages.get((sid, sAttempt))).foreach { stage =>
-          stage.metrics = stage.metrics.add(delta)
+          stage.metrics = LiveEntityHelpers.addMetrics(stage.metrics, delta)
           maybeUpdate(stage, now)
 
           val esummary = stage.executorSummary(event.execId)
-          esummary.metrics = esummary.metrics.add(delta)
+          esummary.metrics = LiveEntityHelpers.addMetrics(esummary.metrics, delta)
           maybeUpdate(esummary, now)
         }
       }
@@ -818,7 +818,7 @@ private[spark] class AppStatusListener(
 
   /** Update a live entity only if it hasn't been updated in the last configured period. */
   private def maybeUpdate(entity: LiveEntity, now: Long): Unit = {
-    if (liveUpdatePeriodNs >= 0 && now - entity.lastWriteTime > liveUpdatePeriodNs) {
+    if (live && liveUpdatePeriodNs >= 0 && now - entity.lastWriteTime > liveUpdatePeriodNs) {
       update(entity, now)
     }
   }

@@ -123,7 +123,7 @@ private class LiveTask(
 
   // The task metrics use a special value when no metrics have been reported. The special value is
   // checked when calculating indexed values when writing to the store (see [[TaskDataWrapper]]).
-  private var metrics: MetricsTracker = new MetricsTracker(default = -1L)
+  private var metrics: v1.TaskMetrics = createMetrics(default = -1L)
 
   var errorMessage: Option[String] = None
 
@@ -131,10 +131,10 @@ private class LiveTask(
    * Update the metrics for the task and return the difference between the previous and new
    * values.
    */
-  def updateMetrics(metrics: TaskMetrics): MetricsTracker = {
+  def updateMetrics(metrics: TaskMetrics): v1.TaskMetrics = {
     if (metrics != null) {
       val old = this.metrics
-      val newMetrics = new MetricsTracker(
+      val newMetrics = createMetrics(
         metrics.executorDeserializeTime,
         metrics.executorDeserializeCpuTime,
         metrics.executorRunTime,
@@ -165,7 +165,7 @@ private class LiveTask(
       // Only calculate the delta if the old metrics contain valid information, otherwise
       // the new metrics are the delta.
       if (old.executorDeserializeTime >= 0L) {
-        newMetrics.subtract(old)
+        subtractMetrics(newMetrics, old)
       } else {
         newMetrics
       }
@@ -174,7 +174,7 @@ private class LiveTask(
     }
   }
 
-  private def buildUpdate(): TaskDataWrapper = {
+  override protected def doUpdate(): Any = {
     val duration = if (info.finished) {
       info.duration
     } else {
@@ -206,34 +206,23 @@ private class LiveTask(
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
       metrics.peakExecutionMemory,
-      metrics.inputBytesRead,
-      metrics.inputRecordsRead,
-      metrics.outputBytesWritten,
-      metrics.outputRecordsWritten,
-      metrics.shuffleRemoteBlocksFetched,
-      metrics.shuffleLocalBlocksFetched,
-      metrics.shuffleFetchWaitTime,
-      metrics.shuffleRemoteBytesRead,
-      metrics.shuffleRemoteBytesReadToDisk,
-      metrics.shuffleLocalBytesRead,
-      metrics.shuffleRecordsRead,
-      metrics.shuffleBytesWritten,
-      metrics.shuffleWriteTime,
-      metrics.shuffleRecordsWritten,
+      metrics.inputMetrics.bytesRead,
+      metrics.inputMetrics.recordsRead,
+      metrics.outputMetrics.bytesWritten,
+      metrics.outputMetrics.recordsWritten,
+      metrics.shuffleReadMetrics.remoteBlocksFetched,
+      metrics.shuffleReadMetrics.localBlocksFetched,
+      metrics.shuffleReadMetrics.fetchWaitTime,
+      metrics.shuffleReadMetrics.remoteBytesRead,
+      metrics.shuffleReadMetrics.remoteBytesReadToDisk,
+      metrics.shuffleReadMetrics.localBytesRead,
+      metrics.shuffleReadMetrics.recordsRead,
+      metrics.shuffleWriteMetrics.bytesWritten,
+      metrics.shuffleWriteMetrics.writeTime,
+      metrics.shuffleWriteMetrics.recordsWritten,
 
       stageId,
       stageAttemptId)
-  }
-
-  override protected def doUpdate(): Any = {
-    buildUpdate()
-  }
-
-  def updateAndGet(kvstore: KVStore, now: Long): TaskDataWrapper = {
-    val info = buildUpdate()
-    kvstore.write(info)
-    lastWriteTime = now
-    info
   }
 
 }
@@ -316,83 +305,19 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
 
 }
 
-private class MetricsTracker(
-    val executorDeserializeTime: Long,
-    val executorDeserializeCpuTime: Long,
-    val executorRunTime: Long,
-    val executorCpuTime: Long,
-    val resultSize: Long,
-    val jvmGcTime: Long,
-    val resultSerializationTime: Long,
-    val memoryBytesSpilled: Long,
-    val diskBytesSpilled: Long,
-    val peakExecutionMemory: Long,
-    val inputBytesRead: Long,
-    val inputRecordsRead: Long,
-    val outputBytesWritten: Long,
-    val outputRecordsWritten: Long,
-    val shuffleRemoteBlocksFetched: Long,
-    val shuffleLocalBlocksFetched: Long,
-    val shuffleFetchWaitTime: Long,
-    val shuffleRemoteBytesRead: Long,
-    val shuffleRemoteBytesReadToDisk: Long,
-    val shuffleLocalBytesRead: Long,
-    val shuffleRecordsRead: Long,
-    val shuffleBytesWritten: Long,
-    val shuffleWriteTime: Long,
-    val shuffleRecordsWritten: Long) {
-
-  def this(default: Long) = {
-    this(default, default, default, default, default, default, default, default,
-      default, default, default, default, default, default, default, default,
-      default, default, default, default, default, default, default, default)
-  }
-
-  def add(metrics: MetricsTracker): MetricsTracker = delta(metrics, 1)
-
-  def subtract(metrics: MetricsTracker): MetricsTracker = delta(metrics, -1)
-
-  private def delta(metrics: MetricsTracker, mult: Int): MetricsTracker = {
-    new MetricsTracker(
-      executorDeserializeTime + metrics.executorDeserializeTime * mult,
-      executorDeserializeCpuTime + metrics.executorDeserializeCpuTime * mult,
-      executorRunTime + metrics.executorRunTime * mult,
-      executorCpuTime + metrics.executorCpuTime * mult,
-      resultSize + metrics.resultSize * mult,
-      jvmGcTime + metrics.jvmGcTime * mult,
-      resultSerializationTime + metrics.resultSerializationTime * mult,
-      memoryBytesSpilled + metrics.memoryBytesSpilled * mult,
-      diskBytesSpilled + metrics.diskBytesSpilled * mult,
-      peakExecutionMemory + metrics.peakExecutionMemory * mult,
-      inputBytesRead + metrics.inputBytesRead * mult,
-      inputRecordsRead + metrics.inputRecordsRead * mult,
-      outputBytesWritten + metrics.outputBytesWritten * mult,
-      outputRecordsWritten + metrics.outputRecordsWritten * mult,
-      shuffleRemoteBlocksFetched + metrics.shuffleRemoteBlocksFetched * mult,
-      shuffleLocalBlocksFetched + metrics.shuffleLocalBlocksFetched * mult,
-      shuffleFetchWaitTime + metrics.shuffleFetchWaitTime * mult,
-      shuffleRemoteBytesRead + metrics.shuffleRemoteBytesRead * mult,
-      shuffleRemoteBytesReadToDisk + metrics.shuffleRemoteBytesReadToDisk * mult,
-      shuffleLocalBytesRead + metrics.shuffleLocalBytesRead * mult,
-      shuffleRecordsRead + metrics.shuffleRecordsRead * mult,
-      shuffleBytesWritten + metrics.shuffleBytesWritten * mult,
-      shuffleWriteTime + metrics.shuffleWriteTime * mult,
-      shuffleRecordsWritten + metrics.shuffleRecordsWritten * mult)
-  }
-
-}
-
 private class LiveExecutorStageSummary(
     stageId: Int,
     attemptId: Int,
     executorId: String) extends LiveEntity {
+
+  import LiveEntityHelpers._
 
   var taskTime = 0L
   var succeededTasks = 0
   var failedTasks = 0
   var killedTasks = 0
 
-  var metrics = new MetricsTracker(default = 0L)
+  var metrics = createMetrics(default = 0L)
 
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(
@@ -400,14 +325,14 @@ private class LiveExecutorStageSummary(
       failedTasks,
       succeededTasks,
       killedTasks,
-      metrics.inputBytesRead,
-      metrics.inputRecordsRead,
-      metrics.outputBytesWritten,
-      metrics.outputRecordsWritten,
-      metrics.shuffleRemoteBytesRead + metrics.shuffleLocalBytesRead,
-      metrics.shuffleRecordsRead,
-      metrics.shuffleBytesWritten,
-      metrics.shuffleRecordsWritten,
+      metrics.inputMetrics.bytesRead,
+      metrics.inputMetrics.recordsRead,
+      metrics.outputMetrics.bytesWritten,
+      metrics.outputMetrics.recordsWritten,
+      metrics.shuffleReadMetrics.remoteBytesRead + metrics.shuffleReadMetrics.localBytesRead,
+      metrics.shuffleReadMetrics.recordsRead,
+      metrics.shuffleWriteMetrics.bytesWritten,
+      metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
@@ -440,7 +365,7 @@ private class LiveStage extends LiveEntity {
 
   var localitySummary: Map[String, Long] = Map()
 
-  var metrics = new MetricsTracker(default = 0L)
+  var metrics = createMetrics(default = 0L)
 
   val executorSummaries = new HashMap[String, LiveExecutorStageSummary]()
 
@@ -473,14 +398,14 @@ private class LiveStage extends LiveEntity {
       info.completionTime.map(new Date(_)),
       info.failureReason,
 
-      metrics.inputBytesRead,
-      metrics.inputRecordsRead,
-      metrics.outputBytesWritten,
-      metrics.outputRecordsWritten,
-      metrics.shuffleLocalBytesRead + metrics.shuffleRemoteBytesRead,
-      metrics.shuffleRecordsRead,
-      metrics.shuffleBytesWritten,
-      metrics.shuffleRecordsWritten,
+      metrics.inputMetrics.bytesRead,
+      metrics.inputMetrics.recordsRead,
+      metrics.outputMetrics.bytesWritten,
+      metrics.outputMetrics.recordsWritten,
+      metrics.shuffleReadMetrics.localBytesRead + metrics.shuffleReadMetrics.remoteBytesRead,
+      metrics.shuffleReadMetrics.recordsRead,
+      metrics.shuffleWriteMetrics.bytesWritten,
+      metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
 
@@ -665,6 +590,107 @@ private object LiveEntityHelpers {
   /** String interning to reduce the memory usage. */
   def weakIntern(s: String): String = {
     stringInterner.intern(s)
+  }
+
+  // scalastyle:off argcount
+  def createMetrics(
+      executorDeserializeTime: Long,
+      executorDeserializeCpuTime: Long,
+      executorRunTime: Long,
+      executorCpuTime: Long,
+      resultSize: Long,
+      jvmGcTime: Long,
+      resultSerializationTime: Long,
+      memoryBytesSpilled: Long,
+      diskBytesSpilled: Long,
+      peakExecutionMemory: Long,
+      inputBytesRead: Long,
+      inputRecordsRead: Long,
+      outputBytesWritten: Long,
+      outputRecordsWritten: Long,
+      shuffleRemoteBlocksFetched: Long,
+      shuffleLocalBlocksFetched: Long,
+      shuffleFetchWaitTime: Long,
+      shuffleRemoteBytesRead: Long,
+      shuffleRemoteBytesReadToDisk: Long,
+      shuffleLocalBytesRead: Long,
+      shuffleRecordsRead: Long,
+      shuffleBytesWritten: Long,
+      shuffleWriteTime: Long,
+      shuffleRecordsWritten: Long): v1.TaskMetrics = {
+    new v1.TaskMetrics(
+      executorDeserializeTime,
+      executorDeserializeCpuTime,
+      executorRunTime,
+      executorCpuTime,
+      resultSize,
+      jvmGcTime,
+      resultSerializationTime,
+      memoryBytesSpilled,
+      diskBytesSpilled,
+      peakExecutionMemory,
+      new v1.InputMetrics(
+        inputBytesRead,
+        inputRecordsRead),
+      new v1.OutputMetrics(
+        outputBytesWritten,
+        outputRecordsWritten),
+      new v1.ShuffleReadMetrics(
+        shuffleRemoteBlocksFetched,
+        shuffleLocalBlocksFetched,
+        shuffleFetchWaitTime,
+        shuffleRemoteBytesRead,
+        shuffleRemoteBytesReadToDisk,
+        shuffleLocalBytesRead,
+        shuffleRecordsRead),
+      new v1.ShuffleWriteMetrics(
+        shuffleBytesWritten,
+        shuffleWriteTime,
+        shuffleRecordsWritten))
+  }
+  // scalastyle:on argcount
+
+  def createMetrics(default: Long): v1.TaskMetrics = {
+    createMetrics(default, default, default, default, default, default, default, default,
+      default, default, default, default, default, default, default, default,
+      default, default, default, default, default, default, default, default)
+  }
+
+  /** Add m2 values to m1. */
+  def addMetrics(m1: v1.TaskMetrics, m2: v1.TaskMetrics): v1.TaskMetrics = addMetrics(m1, m2, 1)
+
+  /** Subtract m2 values from m1. */
+  def subtractMetrics(m1: v1.TaskMetrics, m2: v1.TaskMetrics): v1.TaskMetrics = {
+    addMetrics(m1, m2, -1)
+  }
+
+  private def addMetrics(m1: v1.TaskMetrics, m2: v1.TaskMetrics, mult: Int): v1.TaskMetrics = {
+    createMetrics(
+      m1.executorDeserializeTime + m2.executorDeserializeTime * mult,
+      m1.executorDeserializeCpuTime + m2.executorDeserializeCpuTime * mult,
+      m1.executorRunTime + m2.executorRunTime * mult,
+      m1.executorCpuTime + m2.executorCpuTime * mult,
+      m1.resultSize + m2.resultSize * mult,
+      m1.jvmGcTime + m2.jvmGcTime * mult,
+      m1.resultSerializationTime + m2.resultSerializationTime * mult,
+      m1.memoryBytesSpilled + m2.memoryBytesSpilled * mult,
+      m1.diskBytesSpilled + m2.diskBytesSpilled * mult,
+      m1.peakExecutionMemory + m2.peakExecutionMemory * mult,
+      m1.inputMetrics.bytesRead + m2.inputMetrics.bytesRead * mult,
+      m1.inputMetrics.recordsRead + m2.inputMetrics.recordsRead * mult,
+      m1.outputMetrics.bytesWritten + m2.outputMetrics.bytesWritten * mult,
+      m1.outputMetrics.recordsWritten + m2.outputMetrics.recordsWritten * mult,
+      m1.shuffleReadMetrics.remoteBlocksFetched + m2.shuffleReadMetrics.remoteBlocksFetched * mult,
+      m1.shuffleReadMetrics.localBlocksFetched + m2.shuffleReadMetrics.localBlocksFetched * mult,
+      m1.shuffleReadMetrics.fetchWaitTime + m2.shuffleReadMetrics.fetchWaitTime * mult,
+      m1.shuffleReadMetrics.remoteBytesRead + m2.shuffleReadMetrics.remoteBytesRead * mult,
+      m1.shuffleReadMetrics.remoteBytesReadToDisk +
+        m2.shuffleReadMetrics.remoteBytesReadToDisk * mult,
+      m1.shuffleReadMetrics.localBytesRead + m2.shuffleReadMetrics.localBytesRead * mult,
+      m1.shuffleReadMetrics.recordsRead + m2.shuffleReadMetrics.recordsRead * mult,
+      m1.shuffleWriteMetrics.bytesWritten + m2.shuffleWriteMetrics.bytesWritten * mult,
+      m1.shuffleWriteMetrics.writeTime + m2.shuffleWriteMetrics.writeTime * mult,
+      m1.shuffleWriteMetrics.recordsWritten + m2.shuffleWriteMetrics.recordsWritten * mult)
   }
 
 }
