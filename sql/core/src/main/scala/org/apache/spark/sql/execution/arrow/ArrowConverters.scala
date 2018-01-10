@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
-import org.apache.arrow.vector.ipc.{ArrowFileReader, ArrowFileWriter}
+import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
 
@@ -101,7 +101,7 @@ private[sql] object ArrowConverters {
 
       override def next(): ArrowPayload = {
         val out = new ByteArrayOutputStream()
-        val writer = new ArrowFileWriter(root, null, Channels.newChannel(out))
+        val writer = new ArrowStreamWriter(root, null, Channels.newChannel(out))
 
         Utils.tryWithSafeFinally {
           var rowCount = 0
@@ -133,7 +133,7 @@ private[sql] object ArrowConverters {
       ArrowUtils.rootAllocator.newChildAllocator("fromPayloadIterator", 0, Long.MaxValue)
 
     new ArrowRowIterator {
-      private var reader: ArrowFileReader = null
+      private var reader: ArrowStreamReader = null
       private var schemaRead = StructType(Seq.empty)
       private var rowIter = if (payloadIter.hasNext) nextBatch() else Iterator.empty
 
@@ -166,7 +166,7 @@ private[sql] object ArrowConverters {
 
       private def nextBatch(): Iterator[InternalRow] = {
         val in = new ByteArrayReadableSeekableByteChannel(payloadIter.next().asPythonSerializable)
-        reader = new ArrowFileReader(in, allocator)
+        reader = new ArrowStreamReader(in, allocator)
         reader.loadNextBatch()  // throws IOException
         val root = reader.getVectorSchemaRoot  // throws IOException
         schemaRead = ArrowUtils.fromArrowSchema(root.getSchema)
@@ -189,7 +189,7 @@ private[sql] object ArrowConverters {
       batchBytes: Array[Byte],
       allocator: BufferAllocator): ArrowRecordBatch = {
     val in = new ByteArrayReadableSeekableByteChannel(batchBytes)
-    val reader = new ArrowFileReader(in, allocator)
+    val reader = new ArrowStreamReader(in, allocator)
 
     // Read a batch from a byte stream, ensure the reader is closed
     Utils.tryWithSafeFinally {
