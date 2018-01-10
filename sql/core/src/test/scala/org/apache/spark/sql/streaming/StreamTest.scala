@@ -473,6 +473,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             // after starting the query.
             try {
               currentStream.awaitInitialization(streamingTimeout.toMillis)
+              currentStream match {
+                case s: ContinuousExecution => eventually("IncrementalExecution was not created") {
+                  s.lastExecution.executedPlan // will fail if lastExecution is null
+                }
+                case _ =>
+              }
             } catch {
               case _: StreamingQueryException =>
                 // Ignore the exception. `StopStream` or `ExpectFailure` will catch it as well.
