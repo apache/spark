@@ -401,6 +401,10 @@ class Dataset[T] private[sql](
    * If the schema of the Dataset does not match the desired `U` type, you can use `select`
    * along with `alias` or `as` to rearrange or rename as required.
    *
+   * Note that `as[]` only changes the view of the data that is passed into typed operations,
+   * such as `map()`, and does not eagerly project away any columns that are not present in
+   * the specified class.
+   *
    * @group basic
    * @since 1.6.0
    */
@@ -2091,7 +2095,7 @@ class Dataset[T] private[sql](
     val generator = UserDefinedGenerator(elementSchema, rowFunction, input.map(_.expr))
 
     withPlan {
-      Generate(generator, join = true, outer = false,
+      Generate(generator, unrequiredChildIndex = Nil, outer = false,
         qualifier = None, generatorOutput = Nil, planWithBarrier)
     }
   }
@@ -2132,7 +2136,7 @@ class Dataset[T] private[sql](
     val generator = UserDefinedGenerator(elementSchema, rowFunction, apply(inputColumn).expr :: Nil)
 
     withPlan {
-      Generate(generator, join = true, outer = false,
+      Generate(generator, unrequiredChildIndex = Nil, outer = false,
         qualifier = None, generatorOutput = Nil, planWithBarrier)
     }
   }

@@ -32,21 +32,22 @@ import org.apache.spark.util.Clock
  * ports should correspond to the ports that the executor will reach the pod at for RPC.
  */
 private[spark] class DriverServiceBootstrapStep(
-    kubernetesResourceNamePrefix: String,
+    resourceNamePrefix: String,
     driverLabels: Map[String, String],
-    submissionSparkConf: SparkConf,
+    sparkConf: SparkConf,
     clock: Clock) extends DriverConfigurationStep with Logging {
+
   import DriverServiceBootstrapStep._
 
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
-    require(submissionSparkConf.getOption(DRIVER_BIND_ADDRESS_KEY).isEmpty,
+    require(sparkConf.getOption(DRIVER_BIND_ADDRESS_KEY).isEmpty,
       s"$DRIVER_BIND_ADDRESS_KEY is not supported in Kubernetes mode, as the driver's bind " +
       "address is managed and set to the driver pod's IP address.")
-    require(submissionSparkConf.getOption(DRIVER_HOST_KEY).isEmpty,
+    require(sparkConf.getOption(DRIVER_HOST_KEY).isEmpty,
       s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
       "managed via a Kubernetes service.")
 
-    val preferredServiceName = s"$kubernetesResourceNamePrefix$DRIVER_SVC_POSTFIX"
+    val preferredServiceName = s"$resourceNamePrefix$DRIVER_SVC_POSTFIX"
     val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
       preferredServiceName
     } else {
@@ -58,8 +59,8 @@ private[spark] class DriverServiceBootstrapStep(
       shorterServiceName
     }
 
-    val driverPort = submissionSparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT)
-    val driverBlockManagerPort = submissionSparkConf.getInt(
+    val driverPort = sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT)
+    val driverBlockManagerPort = sparkConf.getInt(
         org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
     val driverService = new ServiceBuilder()
       .withNewMetadata()
@@ -81,8 +82,8 @@ private[spark] class DriverServiceBootstrapStep(
         .endSpec()
       .build()
 
-    val namespace = submissionSparkConf.get(KUBERNETES_NAMESPACE)
-    val driverHostname = s"${driverService.getMetadata.getName}.$namespace.svc.cluster.local"
+    val namespace = sparkConf.get(KUBERNETES_NAMESPACE)
+    val driverHostname = s"${driverService.getMetadata.getName}.$namespace.svc"
     val resolvedSparkConf = driverSpec.driverSparkConf.clone()
       .set(DRIVER_HOST_KEY, driverHostname)
       .set("spark.driver.port", driverPort.toString)

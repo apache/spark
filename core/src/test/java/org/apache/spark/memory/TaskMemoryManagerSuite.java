@@ -21,6 +21,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TaskMemoryManagerSuite {
@@ -66,6 +67,34 @@ public class TaskMemoryManagerSuite {
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
     Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));
     Assert.assertEquals(64, manager.getOffsetInPage(encodedAddress));
+  }
+
+  @Test
+  public void freeingPageSetsPageNumberToSpecialConstant() {
+    final TaskMemoryManager manager = new TaskMemoryManager(
+      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+    final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
+    final MemoryBlock dataPage = manager.allocatePage(256, c);
+    c.freePage(dataPage);
+    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, dataPage.pageNumber);
+  }
+
+  @Test(expected = AssertionError.class)
+  public void freeingPageDirectlyInAllocatorTriggersAssertionError() {
+    final TaskMemoryManager manager = new TaskMemoryManager(
+      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+    final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
+    final MemoryBlock dataPage = manager.allocatePage(256, c);
+    MemoryAllocator.HEAP.free(dataPage);
+  }
+
+  @Test(expected = AssertionError.class)
+  public void callingFreePageOnDirectlyAllocatedPageTriggersAssertionError() {
+    final TaskMemoryManager manager = new TaskMemoryManager(
+      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+    final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
+    final MemoryBlock dataPage = MemoryAllocator.HEAP.allocate(256);
+    manager.freePage(dataPage, c);
   }
 
   @Test

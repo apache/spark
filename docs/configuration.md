@@ -2376,6 +2376,8 @@ can be found on the pages for each mode:
 
 #### [Mesos](running-on-mesos.html#configuration)
 
+#### [Kubernetes](running-on-kubernetes.html#configuration)
+
 #### [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
 
 # Environment Variables

@@ -47,8 +47,7 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * terminate().
  *
  * @param generator the generator expression
- * @param join  when true, each output row is implicitly joined with the input tuple that produced
- *              it.
+ * @param requiredChildOutput required attributes from child's output
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
  * @param generatorOutput the qualified output attributes of the generator of this node, which
@@ -57,19 +56,13 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  */
 case class GenerateExec(
     generator: Generator,
-    join: Boolean,
+    requiredChildOutput: Seq[Attribute],
     outer: Boolean,
     generatorOutput: Seq[Attribute],
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  override def output: Seq[Attribute] = {
-    if (join) {
-      child.output ++ generatorOutput
-    } else {
-      generatorOutput
-    }
-  }
+  override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -85,11 +78,19 @@ case class GenerateExec(
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
-      val rows = if (join) {
+      val rows = if (requiredChildOutput.nonEmpty) {
+
+        val pruneChildForResult: InternalRow => InternalRow =
+          if (child.outputSet == AttributeSet(requiredChildOutput)) {
+            identity
+          } else {
+            UnsafeProjection.create(requiredChildOutput, child.output)
+          }
+
         val joinedRow = new JoinedRow
         iter.flatMap { row =>
-          // we should always set the left (child output)
-          joinedRow.withLeft(row)
+          // we should always set the left (required child output)
+          joinedRow.withLeft(pruneChildForResult(row))
           val outputRows = boundGenerator.eval(row)
           if (outer && outputRows.isEmpty) {
             joinedRow.withRight(generatorNullRow) :: Nil
@@ -136,7 +137,7 @@ case class GenerateExec(
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     // Add input rows to the values when we are joining
-    val values = if (join) {
+    val values = if (requiredChildOutput.nonEmpty) {
       input
     } else {
       Seq.empty

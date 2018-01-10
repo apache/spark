@@ -620,7 +620,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
                 |) ab
                 |JOIN table2 c
                 |ON ab.i = c.i
-                |""".stripMargin),
+              """.stripMargin),
           sql("""
                 |SELECT a.i, a.j, a.k, c.i, c.j, c.k
                 |FROM bucketed_table a
@@ -628,7 +628,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
                 |ON a.i = b.i
                 |JOIN table2 c
                 |ON a.i = c.i
-                |""".stripMargin))
+              """.stripMargin))
       }
     }
   }

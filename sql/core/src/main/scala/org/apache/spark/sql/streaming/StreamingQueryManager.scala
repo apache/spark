@@ -29,8 +29,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousWriteSupport, MicroBatchWriteSupport}
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -188,7 +190,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
-      sink: Sink,
+      extraOptions: Map[String, String],
+      sink: BaseStreamingSink,
       outputMode: OutputMode,
       useTempCheckpointLocation: Boolean,
       recoverFromCheckpointLocation: Boolean,
@@ -237,16 +240,36 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           "is not supported in streaming DataFrames/Datasets and will be disabled.")
     }
 
-    new StreamingQueryWrapper(new MicroBatchExecution(
-      sparkSession,
-      userSpecifiedName.orNull,
-      checkpointLocation,
-      analyzedPlan,
-      sink,
-      trigger,
-      triggerClock,
-      outputMode,
-      deleteCheckpointOnStop))
+    (sink, trigger) match {
+      case (v2Sink: ContinuousWriteSupport, trigger: ContinuousTrigger) =>
+        UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
+        new StreamingQueryWrapper(new ContinuousExecution(
+          sparkSession,
+          userSpecifiedName.orNull,
+          checkpointLocation,
+          analyzedPlan,
+          v2Sink,
+          trigger,
+          triggerClock,
+          outputMode,
+          extraOptions,
+          deleteCheckpointOnStop))
+      case (_: MicroBatchWriteSupport, _) | (_: Sink, _) =>
+        new StreamingQueryWrapper(new MicroBatchExecution(
+          sparkSession,
+          userSpecifiedName.orNull,
+          checkpointLocation,
+          analyzedPlan,
+          sink,
+          trigger,
+          triggerClock,
+          outputMode,
+          extraOptions,
+          deleteCheckpointOnStop))
+      case (_: ContinuousWriteSupport, t) if !t.isInstanceOf[ContinuousTrigger] =>
+        throw new AnalysisException(
+          "Sink only supports continuous writes, but a continuous trigger was not specified.")
+    }
   }
 
   /**
@@ -269,7 +292,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
-      sink: Sink,
+      extraOptions: Map[String, String],
+      sink: BaseStreamingSink,
       outputMode: OutputMode,
       useTempCheckpointLocation: Boolean = false,
       recoverFromCheckpointLocation: Boolean = true,
@@ -279,6 +303,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       userSpecifiedName,
       userSpecifiedCheckpointLocation,
       df,
+      extraOptions,
       sink,
       outputMode,
       useTempCheckpointLocation,

@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.orc.{OrcFile, TypeDescription}
+import org.apache.orc.{OrcFile, Reader, TypeDescription}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -80,11 +80,8 @@ object OrcUtils extends Logging {
       isCaseSensitive: Boolean,
       dataSchema: StructType,
       requiredSchema: StructType,
-      file: Path,
+      reader: Reader,
       conf: Configuration): Option[Array[Int]] = {
-    val fs = file.getFileSystem(conf)
-    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val reader = OrcFile.createReader(file, readerOptions)
     val orcFieldNames = reader.getSchema.getFieldNames.asScala
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
