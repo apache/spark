@@ -128,15 +128,25 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4> Workers ({workers.length}) </h4>
-            {workerTable}
+            <h4 class="collapse-aggregated-workers collapse-table"
+                onClick="collapseTable('collapse-aggregated-workers','aggregated-workers')">
+              Workers ({workers.length})
+            </h4>
+            <div class="aggregated-workers collapsible-table">
+              {workerTable}
+            </div>
           </div>
         </div>
 
         <div class="row-fluid">
           <div class="span12">
-            <h4 id="running-app"> Running Applications ({activeApps.length}) </h4>
-            {activeAppsTable}
+            <h4 id="running-app" class="collapse-aggregated-activeApps collapse-table"
+                onClick="collapseTable('collapse-aggregated-activeApps','aggregated-activeApps')">
+              Running Applications ({activeApps.length})
+            </h4>
+            <div class="aggregated-activeApps collapsible-table">
+              {activeAppsTable}
+            </div>
           </div>
         </div>
 
@@ -144,8 +154,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           {if (hasDrivers) {
              <div class="row-fluid">
                <div class="span12">
-                 <h4> Running Drivers ({activeDrivers.length}) </h4>
-                 {activeDriversTable}
+                 <h4 class="collapse-aggregated-activeDrivers collapse-table"
+                     onClick="collapseTable('collapse-aggregated-activeDrivers',
+                     'aggregated-activeDrivers')">
+                   Running Drivers ({activeDrivers.length}) </h4>
+                 <div class="aggregated-activeDrivers collapsible-table">
+                   {activeDriversTable}
+                 </div>
                </div>
              </div>
            }
@@ -154,8 +169,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4 id="completed-app"> Completed Applications ({completedApps.length}) </h4>
-            {completedAppsTable}
+            <h4 id="completed-app" class="collapse-aggregated-completedApps collapse-table"
+                onClick="collapseTable('collapse-aggregated-completedApps',
+                'aggregated-completedApps')">
+              Completed Applications ({completedApps.length})
+            </h4>
+            <div class="aggregated-completedApps collapsible-table">
+              {completedAppsTable}
+            </div>
           </div>
         </div>
 
@@ -164,8 +185,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
             if (hasDrivers) {
               <div class="row-fluid">
                 <div class="span12">
-                  <h4> Completed Drivers ({completedDrivers.length}) </h4>
-                  {completedDriversTable}
+                  <h4 class="collapse-aggregated-completedDrivers collapse-table"
+                      onClick="collapseTable('collapse-aggregated-completedDrivers',
+                      'aggregated-completedDrivers')">
+                    Completed Drivers ({completedDrivers.length})
+                  </h4>
+                  <div class="aggregated-completedDrivers collapsible-table">
+                    {completedDriversTable}
+                  </div>
                 </div>
               </div>
             }

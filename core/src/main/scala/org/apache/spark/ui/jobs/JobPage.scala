@@ -340,24 +340,57 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       jobId, store.operationGraphForJob(jobId))
 
     if (shouldShowActiveStages) {
-      content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
-        activeStagesTable.toNodeSeq
+      content ++=
+        <h4 id="active" class="collapse-aggregated-activeStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
+          Active Stages ({activeStages.size})
+        </h4> ++
+        <div class="aggregated-activeStages collapsible-table">
+          {activeStagesTable.toNodeSeq}
+        </div>
     }
     if (shouldShowPendingStages) {
-      content ++= <h4 id="pending">Pending Stages ({pendingOrSkippedStages.size})</h4> ++
-        pendingOrSkippedStagesTable.toNodeSeq
+      content ++=
+        <h4 id="pending" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
+            'aggregated-pendingOrSkippedStages')">
+          Pending Stages ({pendingOrSkippedStages.size})
+        </h4> ++
+        <div class="aggregated-pendingOrSkippedStages collapsible-table">
+          {pendingOrSkippedStagesTable.toNodeSeq}
+        </div>
     }
     if (shouldShowCompletedStages) {
-      content ++= <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
-        completedStagesTable.toNodeSeq
+      content ++=
+        <h4 id="completed" class="collapse-aggregated-completedStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-completedStages',
+            'aggregated-completedStages')">
+          Completed Stages ({completedStages.size})
+        </h4> ++
+        <div class="aggregated-completedStages collapsible-table">
+          {completedStagesTable.toNodeSeq}
+        </div>
     }
     if (shouldShowSkippedStages) {
-      content ++= <h4 id="skipped">Skipped Stages ({pendingOrSkippedStages.size})</h4> ++
-        pendingOrSkippedStagesTable.toNodeSeq
+      content ++=
+        <h4 id="skipped" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
+            'aggregated-pendingOrSkippedStages')">
+          Skipped Stages ({pendingOrSkippedStages.size})
+        </h4> ++
+        <div class="aggregated-pendingOrSkippedStages collapsible-table">
+          {pendingOrSkippedStagesTable.toNodeSeq}
+        </div>
     }
     if (shouldShowFailedStages) {
-      content ++= <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
-        failedStagesTable.toNodeSeq
+      content ++=
+        <h4 id ="failed" class="collapse-aggregated-failedStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-failedStages','aggregated-failedStages')">
+          Failed Stages ({failedStages.size})
+        </h4> ++
+        <div class="aggregated-failedStages collapsible-table">
+          {failedStagesTable.toNodeSeq}
+        </div>
     }
     UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent, showVisualization = true)
   }

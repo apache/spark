@@ -365,16 +365,34 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       store.executorList(false), startTime)
 
     if (shouldShowActiveJobs) {
-      content ++= <h4 id="active">Active Jobs ({activeJobs.size})</h4> ++
-        activeJobsTable
+      content ++=
+        <h4 id="active" class="collapse-aggregated-activeJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-activeJobs','aggregated-activeJobs')">
+          Active Jobs ({activeJobs.size})
+        </h4> ++
+        <div class="aggregated-activeJobs collapsible-table">
+          {activeJobsTable}
+        </div>
     }
     if (shouldShowCompletedJobs) {
-      content ++= <h4 id="completed">Completed Jobs ({completedJobNumStr})</h4> ++
-        completedJobsTable
+      content ++=
+        <h4 id="completed" class="collapse-aggregated-completedJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-completedJobs','aggregated-completedJobs')">
+          Completed Jobs ({completedJobNumStr})
+        </h4> ++
+        <div class="aggregated-completedJobs collapsible-table">
+          {completedJobsTable}
+        </div>
     }
     if (shouldShowFailedJobs) {
-      content ++= <h4 id ="failed">Failed Jobs ({failedJobs.size})</h4> ++
-        failedJobsTable
+      content ++=
+        <h4 id ="failed" class="collapse-aggregated-failedJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-failedJobs','aggregated-failedJobs')">
+          Failed Jobs ({failedJobs.size})
+        </h4> ++
+      <div class="aggregated-failedJobs collapsible-table">
+        {failedJobsTable}
+      </div>
     }
 
     val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +

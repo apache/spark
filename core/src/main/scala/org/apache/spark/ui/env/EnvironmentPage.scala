@@ -48,10 +48,38 @@ private[ui] class EnvironmentPage(
       classPathHeaders, classPathRow, appEnv.classpathEntries, fixedWidth = true)
     val content =
       <span>
-        <h4>Runtime Information</h4> {runtimeInformationTable}
-        <h4>Spark Properties</h4> {sparkPropertiesTable}
-        <h4>System Properties</h4> {systemPropertiesTable}
-        <h4>Classpath Entries</h4> {classpathEntriesTable}
+        <h4 class="collapse-aggregated-runtimeInformation collapse-table"
+            onClick="collapseTable('collapse-aggregated-runtimeInformation',
+            'aggregated-runtimeInformation')">
+          Runtime Information
+        </h4>
+        <div class="aggregated-runtimeInformation collapsible-table">
+          {runtimeInformationTable}
+        </div>
+        <h4 class="collapse-aggregated-sparkProperties collapse-table"
+            onClick="collapseTable('collapse-aggregated-sparkProperties',
+            'aggregated-sparkProperties')">
+          Spark Properties
+        </h4>
+        <div class="aggregated-sparkProperties collapsible-table">
+          {sparkPropertiesTable}
+        </div>
+        <h4 class="collapse-aggregated-systemProperties collapse-table"
+            onClick="collapseTable('collapse-aggregated-systemProperties',
+            'aggregated-systemProperties')">
+          System Properties
+        </h4>
+        <div class="aggregated-systemProperties collapsible-table">
+          {systemPropertiesTable}
+        </div>
+        <h4 class="collapse-aggregated-classpathEntries collapse-table"
+            onClick="collapseTable('collapse-aggregated-classpathEntries',
+            'aggregated-classpathEntries')">
+          Classpath Entries
+        </h4>
+        <div class="aggregated-classpathEntries collapsible-table">
+          {classpathEntriesTable}
+        </div>
       </span>
 
     UIUtils.headerSparkPage("Environment", content, parent)

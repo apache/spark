@@ -100,12 +100,23 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
       <div class="row-fluid"> <!-- Executors -->
         <div class="span12">
-          <h4> Executor Summary ({allExecutors.length}) </h4>
-          {executorsTable}
+          <h4 class="collapse-aggregated-executors collapse-table"
+              onClick="collapseTable('collapse-aggregated-executors','aggregated-executors')">
+            Executor Summary ({allExecutors.length})
+          </h4>
+          <div class="aggregated-executors collapsible-table">
+            {executorsTable}
+          </div>
           {
             if (removedExecutors.nonEmpty) {
-              <h4> Removed Executors ({removedExecutors.length}) </h4> ++
-              removedExecutorsTable
+              <h4 class="collapse-aggregated-removedExecutors collapse-table"
+                  onClick="collapseTable('collapse-aggregated-removedExecutors',
+                  'aggregated-removedExecutors')">
+                Removed Executors ({removedExecutors.length})
+              </h4> ++
+              <div class="aggregated-removedExecutors collapsible-table">
+                {removedExecutorsTable}
+              </div>
             }
           }
         </div>

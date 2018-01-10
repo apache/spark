@@ -556,8 +556,13 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
       aggMetrics ++
       maybeAccumulableTable ++
-      <h4 id="tasks-section">Tasks ({totalTasksNumStr})</h4> ++
-        taskTableHTML ++ jsForScrollingDownToTaskTable
+      <h4 id="tasks-section" class="collapse-aggregated-tasks collapse-table"
+          onClick="collapseTable('collapse-aggregated-tasks','aggregated-tasks')">
+        Tasks ({totalTasksNumStr})
+      </h4> ++
+      <div class="aggregated-tasks collapsible-table">
+        {taskTableHTML ++ jsForScrollingDownToTaskTable}
+      </div>
     UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
   }
 
