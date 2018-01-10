@@ -71,14 +71,19 @@ case class InsertIntoHiveTable(
     ifPartitionNotExists: Boolean,
     outputColumns: Seq[Attribute]) extends SaveAsHiveFile {
 
+
   /**
-   * For partitioned tables, `requiredOrdering` is over partition columns of table
+   * For partitioned tables, `requiredOrdering` is over static partition columns of table
    */
   override def requiredOrdering: Seq[Seq[SortOrder]] = {
     if (table.partitionColumnNames.nonEmpty) {
-      val partitionAttributes = table.partitionColumnNames.map { name =>
-        query.resolve(name :: Nil, SparkSession.getActiveSession.get.sessionState.analyzer.resolver)
-          .getOrElse {
+      val numDynamicPartitions = partition.values.count(_.isEmpty)
+      val partitionAttributes = table.partitionColumnNames.takeRight(numDynamicPartitions).map {
+        name =>
+          query.resolve(
+            name :: Nil,
+            SparkSession.getActiveSession.get.sessionState.analyzer.resolver
+          ).getOrElse {
             throw new AnalysisException(
               s"Unable to resolve $name given [${query.output.map(_.name).mkString(", ")}]")
           }.asInstanceOf[Attribute]
