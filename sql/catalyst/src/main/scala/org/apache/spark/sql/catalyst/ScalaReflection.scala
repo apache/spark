@@ -712,6 +712,9 @@ object ScalaReflection extends ScalaReflection {
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = cleanUpReflectionObjects {
     tpe.dealias match {
+      // this must be the first case, since all objects in scala are instances of Null, therefore
+      // Null type would wrongly match the first of them, which is Option as of now
+      case t if t <:< definitions.NullTpe => Schema(NullType, nullable = true)
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         Schema(udt, nullable = true)
