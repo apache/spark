@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -133,6 +134,10 @@ public class SparkLauncherSuite extends BaseSuite {
         p.put(e.getKey(), e.getValue());
       }
       System.setProperties(p);
+      // Here DAGScheduler is stopped, while SparkContext.clearActiveContext may not be called yet.
+      // Wait for a reasonable amount of time to avoid creating two active SparkContext in JVM.
+      // See SPARK-23019 and SparkContext.stop() for details.
+      TimeUnit.MILLISECONDS.sleep(500);
     }
   }
 
