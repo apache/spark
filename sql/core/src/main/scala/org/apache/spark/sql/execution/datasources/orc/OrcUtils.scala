@@ -50,23 +50,35 @@ object OrcUtils extends Logging {
     paths
   }
 
-  def readSchema(file: Path, conf: Configuration): Option[TypeDescription] = {
+  def readSchema(file: Path, conf: Configuration, ignoreCorruptFiles: Boolean)
+      : Option[TypeDescription] = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val reader = OrcFile.createReader(file, readerOptions)
-    val schema = reader.getSchema
-    if (schema.getFieldNames.size == 0) {
-      None
-    } else {
-      Some(schema)
+    try {
+      val reader = OrcFile.createReader(file, readerOptions)
+      val schema = reader.getSchema
+      if (schema.getFieldNames.size == 0) {
+        None
+      } else {
+        Some(schema)
+      }
+    } catch {
+      case e: org.apache.orc.FileFormatException =>
+        if (true) {
+          logWarning(s"Skipped the footer in the corrupted file: $file", e)
+          None
+        } else {
+          throw new java.io.IOException(s"Could not read footer for file: $file", e)
+        }
     }
   }
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus])
       : Option[StructType] = {
+    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConf()
     // TODO: We need to support merge schema. Please see SPARK-11412.
-    files.map(_.getPath).flatMap(readSchema(_, conf)).headOption.map { schema =>
+    files.map(_.getPath).flatMap(readSchema(_, conf, ignoreCorruptFiles)).headOption.map { schema =>
       logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
       CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType]
     }
