@@ -201,7 +201,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       StopStream)
   }
 
-  test("kill task") {
+  test("task failure triggers a ContinuousExecution restart") {
     val df = spark.readStream
       .format("rate")
       .option("numPartitions", "5")
