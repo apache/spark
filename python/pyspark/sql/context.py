@@ -214,7 +214,8 @@ class SQLContext(object):
 
         :param name: name of the UDF
         :param f: a wrapped/native UserDefinedFunction. The UDF can be either row-at-a-time or
-                  scalar vectorized. Grouped vectorized UDFs are not supported.
+                  scalar vectorized. For example, the object returned by udf or pandas_udf.
+                  Grouped vectorized UDFs are not supported.
         :return: a wrapped :class:`UserDefinedFunction`
 
         >>> from pyspark.sql.types import IntegerType
@@ -240,7 +241,8 @@ class SQLContext(object):
         ...     return x + 1
         ...
         >>> _ = sqlContext.udf.registerUDF("add_one", add_one)  # doctest: +SKIP
-        >>> sqlContext.sql("SELECT add_one(id) FROM range(10)").collect()  # doctest: +SKIP
+        >>> sqlContext.sql("SELECT add_one(id) FROM range(3)").collect()  # doctest: +SKIP
+        [Row(add_one(id)=1), Row(add_one(id)=2), Row(add_one(id)=3)]
         """
         return self.sparkSession.catalog.registerUDF(name, f)
 

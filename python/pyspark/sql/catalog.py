@@ -274,7 +274,8 @@ class Catalog(object):
 
         :param name: name of the UDF
         :param f: a wrapped/native UserDefinedFunction. The UDF can be either row-at-a-time or
-                  scalar vectorized. Grouped vectorized UDFs are not supported.
+                  scalar vectorized. For example, the object returned by udf or pandas_udf.
+                  Grouped vectorized UDFs are not supported.
         :return: a wrapped :class:`UserDefinedFunction`
 
         >>> from pyspark.sql.types import IntegerType
@@ -300,7 +301,8 @@ class Catalog(object):
         ...     return x + 1
         ...
         >>> _ = spark.udf.registerUDF("add_one", add_one)  # doctest: +SKIP
-        >>> spark.sql("SELECT add_one(id) FROM range(10)").collect()  # doctest: +SKIP
+        >>> spark.sql("SELECT add_one(id) FROM range(3)").collect()  # doctest: +SKIP
+        [Row(add_one(id)=1), Row(add_one(id)=2), Row(add_one(id)=3)]
         """
 
         # This is to check whether the input function is a wrapped/native UserDefinedFunction
@@ -313,7 +315,9 @@ class Catalog(object):
                                       evalType=f.evalType,
                                       deterministic=f.deterministic)
         else:
-            raise TypeError("Please use registerFunction for registering a Python function "
+            raise TypeError("Invalid UDF: f must be either row-at-a-time or scalar vectorized UDF. "
+                            "For example, the object returned by udf or pandas_udf. Please use "
+                            "registerFunction for registering a Python function "
                             "(including lambda function). The expected function of registerUDF "
                             "is a UDF")
         self._jsparkSession.udf().registerPython(name, udf._judf)

@@ -4124,11 +4124,11 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         df = self.spark.range(10).select(
             col('id').cast('int').alias('a'),
             col('id').cast('int').alias('b'))
-        originalAdd = pandas_udf(lambda x, y: x + y, IntegerType())
-        self.assertEqual(originalAdd.deterministic, True)
-        self.assertEqual(originalAdd.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
-        newAdd = self.spark.catalog.registerUDF("add1", originalAdd)
-        res1 = df.select(newAdd(col('a'), col('b')))
+        original_add = pandas_udf(lambda x, y: x + y, IntegerType())
+        self.assertEqual(original_add.deterministic, True)
+        self.assertEqual(original_add.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        new_add = self.spark.catalog.registerUDF("add1", original_add)
+        res1 = df.select(new_add(col('a'), col('b')))
         res2 = self.spark.sql(
             "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t")
         expected = df.select(expr('a + b'))
@@ -4170,7 +4170,7 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         expected = df.toPandas().groupby('id').apply(foo_udf.func).reset_index(drop=True)
         self.assertFramesEqual(expected, result)
 
-    def test_registerGroupMapUDF(self):
+    def test_register_group_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         foo_udf = pandas_udf(
