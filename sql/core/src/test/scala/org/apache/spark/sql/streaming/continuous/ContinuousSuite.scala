@@ -217,24 +217,28 @@ class ContinuousSuite extends ContinuousSuiteBase {
       }
     }
     spark.sparkContext.addSparkListener(listener)
-
-    testStream(df, useV2Sink = true)(
-      StartStream(Trigger.Continuous(100)),
-      Execute(waitForRateSourceTriggers(_, 2)),
-      Execute { query =>
-        // Wait until a task is started, then kill its first attempt.
-        eventually(timeout(streamingTimeout)) { assert(taskId != -1) }
-        spark.sparkContext.killTaskAttempt(taskId)
-        eventually(timeout(streamingTimeout)) {
-          assert(query.exception.isDefined)
-        }
-        assert(
-          query.exception.get.getCause != null &&
-          query.exception.get.getCause.getCause != null &&
-          query.exception.get.getCause.getCause.getCause.isInstanceOf[ContinuousTaskRetryException])
-      })
-
-    spark.sparkContext.removeSparkListener(listener)
+    try {
+      testStream(df, useV2Sink = true)(
+        StartStream(Trigger.Continuous(100)),
+        Execute(waitForRateSourceTriggers(_, 2)),
+        Execute { query =>
+          // Wait until a task is started, then kill its first attempt.
+          eventually(timeout(streamingTimeout)) {
+            assert(taskId != -1)
+          }
+          spark.sparkContext.killTaskAttempt(taskId)
+          eventually(timeout(streamingTimeout)) {
+            assert(query.exception.isDefined)
+          }
+          assert(
+            query.exception.get.getCause != null &&
+              query.exception.get.getCause.getCause != null &&
+              query.exception.get.getCause.getCause.getCause
+                .isInstanceOf[ContinuousTaskRetryException])
+        })
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
   }
 
   test("query without test harness") {
