@@ -15,5 +15,9 @@
 # limitations under the License.
 #
 
+# Note that this 'sitecustomize' module is a built-in feature in Python.
+# If this module is defined, it's executed when the Python session begins.
+# `coverage.process_startup()` seeks if COVERAGE_PROCESS_START environment
+# variable is set or not. If set, it starts to run the coverage.
 import coverage
 coverage.process_startup()
