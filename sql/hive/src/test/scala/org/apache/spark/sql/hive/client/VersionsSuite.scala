@@ -164,6 +164,15 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.createDatabase(tempDB, ignoreIfExists = true)
     }
 
+    test(s"$version: createDatabase with null description") {
+      withTempDir { tmpDir =>
+        val dbWithNullDesc =
+          CatalogDatabase("dbWithNullDesc", description = null, tmpDir.toURI, Map())
+        client.createDatabase(dbWithNullDesc, ignoreIfExists = true)
+        assert(client.getDatabase("dbWithNullDesc").description == "")
+      }
+    }
+
     test(s"$version: setCurrentDatabase") {
       client.setCurrentDatabase("default")
     }

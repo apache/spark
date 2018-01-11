@@ -348,7 +348,7 @@ private[hive] class HiveClientImpl(
     Option(client.getDatabase(dbName)).map { d =>
       CatalogDatabase(
         name = d.getName,
-        description = d.getDescription,
+        description = Option(d.getDescription).getOrElse(""),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
