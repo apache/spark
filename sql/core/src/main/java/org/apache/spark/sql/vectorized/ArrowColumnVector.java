@@ -247,8 +247,8 @@ public final class ArrowColumnVector extends ColumnVector {
 
       childColumns = new ArrowColumnVector[1];
       childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
-    } else if (vector instanceof MapVector) {
-      MapVector mapVector = (MapVector) vector;
+    } else if (vector instanceof NullableMapVector) {
+      NullableMapVector mapVector = (NullableMapVector) vector;
       accessor = new StructAccessor(mapVector);
 
       childColumns = new ArrowColumnVector[mapVector.size()];
@@ -555,7 +555,7 @@ public final class ArrowColumnVector extends ColumnVector {
 
   private static class StructAccessor extends ArrowVectorAccessor {
 
-    StructAccessor(MapVector vector) {
+    StructAccessor(NullableMapVector vector) {
       super(vector);
     }
   }
