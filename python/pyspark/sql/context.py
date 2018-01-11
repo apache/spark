@@ -210,9 +210,9 @@ class SQLContext(object):
     @since(2.3)
     def registerUDF(self, name, f):
         """Registers a :class:`UserDefinedFunction`. The registered UDF can be used in SQL
-        statement.
+        statements.
 
-        :param name: name of the UDF
+        :param name: name of the UDF in SQL statements
         :param f: a wrapped/native UserDefinedFunction. The UDF can be either row-at-a-time or
                   scalar vectorized. For example, the object returned by udf or pandas_udf.
                   Grouped vectorized UDFs are not supported.
@@ -233,7 +233,7 @@ class SQLContext(object):
         >>> sqlContext.sql("SELECT random_udf()").collect()  # doctest: +SKIP
         [Row(random_udf()=82)]
         >>> sqlContext.range(1).select(newRandom_udf()).collect()  # doctest: +SKIP
-        [Row(random_udf()=62)]
+        [Row(<lambda>()=26)]
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> @pandas_udf("integer", PandasUDFType.SCALAR)  # doctest: +SKIP
