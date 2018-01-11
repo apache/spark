@@ -155,7 +155,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
 
   test("One broadcast value instance per executor") {
     val conf = new SparkConf()
-      .setMaster("local[10]")
+      .setMaster("local[4]")
       .setAppName("test")
 
     sc = new SparkContext(conf)
@@ -171,7 +171,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
 
   test("One broadcast value instance per executor when memory is constrained") {
     val conf = new SparkConf()
-      .setMaster("local[10]")
+      .setMaster("local[4]")
       .setAppName("test")
       .set("spark.memory.useLegacyMode", "true")
       .set("spark.storage.memoryFraction", "0.0")
