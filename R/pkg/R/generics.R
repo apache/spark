@@ -799,6 +799,12 @@ setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn
 setGeneric("withColumnRenamed",
            function(x, existingCol, newCol) { standardGeneric("withColumnRenamed") })
 
+#' @rdname withWatermark
+#' @export
+setGeneric("withWatermark", function(x, eventTime, delayThreshold) {
+  standardGeneric("withWatermark")
+})
+
 #' @rdname write.df
 #' @export
 setGeneric("write.df", function(df, path = NULL, ...) { standardGeneric("write.df") })

@@ -20,13 +20,13 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 
 /**
  * Helper trait for abstracting scan functionality using
- * [[org.apache.spark.sql.execution.vectorized.ColumnarBatch]]es.
+ * [[ColumnarBatch]]es.
  */
 private[sql] trait ColumnarBatchScan extends CodegenSupport {
 

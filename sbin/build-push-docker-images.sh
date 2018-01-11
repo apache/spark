@@ -19,29 +19,94 @@
 # This script builds and pushes docker images when run from a release of Spark
 # with Kubernetes support.
 
-declare -A path=( [spark-driver]=kubernetes/dockerfiles/driver/Dockerfile \
-                  [spark-executor]=kubernetes/dockerfiles/executor/Dockerfile \
-                  [spark-init]=kubernetes/dockerfiles/init-container/Dockerfile )
+function error {
+  echo "$@" 1>&2
+  exit 1
+}
+
+# Detect whether this is a git clone or a Spark distribution and adjust paths
+# accordingly.
+if [ -z "${SPARK_HOME}" ]; then
+  SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
+. "${SPARK_HOME}/bin/load-spark-env.sh"
+
+if [ -f "$SPARK_HOME/RELEASE" ]; then
+  IMG_PATH="kubernetes/dockerfiles"
+  SPARK_JARS="jars"
+else
+  IMG_PATH="resource-managers/kubernetes/docker/src/main/dockerfiles"
+  SPARK_JARS="assembly/target/scala-$SPARK_SCALA_VERSION/jars"
+fi
+
+if [ ! -d "$IMG_PATH" ]; then
+  error "Cannot find docker images. This script must be run from a runnable distribution of Apache Spark."
+fi
+
+declare -A path=( [spark-driver]="$IMG_PATH/driver/Dockerfile" \
+                  [spark-executor]="$IMG_PATH/executor/Dockerfile" \
+                  [spark-init]="$IMG_PATH/init-container/Dockerfile" )
+
+function image_ref {
+  local image="$1"
+  local add_repo="${2:-1}"
+  if [ $add_repo = 1 ] && [ -n "$REPO" ]; then
+    image="$REPO/$image"
+  fi
+  if [ -n "$TAG" ]; then
+    image="$image:$TAG"
+  fi
+  echo "$image"
+}
 
 function build {
-  docker build -t spark-base -f kubernetes/dockerfiles/spark-base/Dockerfile .
+  docker build \
+    --build-arg "spark_jars=$SPARK_JARS" \
+    --build-arg "img_path=$IMG_PATH" \
+    -t spark-base \
+    -f "$IMG_PATH/spark-base/Dockerfile" .
   for image in "${!path[@]}"; do
-    docker build -t ${REPO}/$image:${TAG} -f ${path[$image]} .
+    docker build -t "$(image_ref $image)" -f ${path[$image]} .
   done
 }
 
-
 function push {
   for image in "${!path[@]}"; do
-    docker push ${REPO}/$image:${TAG}
+    docker push "$(image_ref $image)"
   done
 }
 
 function usage {
-  echo "This script must be run from a runnable distribution of Apache Spark."
-  echo "Usage: ./sbin/build-push-docker-images.sh -r <repo> -t <tag> build"
-  echo "       ./sbin/build-push-docker-images.sh -r <repo> -t <tag> push"
-  echo "for example: ./sbin/build-push-docker-images.sh -r docker.io/myrepo -t v2.3.0 push"
+  cat <<EOF
+Usage: $0 [options] [command]
+Builds or pushes the built-in Spark Docker images.
+
+Commands:
+  build       Build images.
+  push        Push images to a registry. Requires a repository address to be provided, both
+              when building and when pushing the images.
+
+Options:
+  -r repo     Repository address.
+  -t tag      Tag to apply to built images, or to identify images to be pushed.
+  -m          Use minikube's Docker daemon.
+
+Using minikube when building images will do so directly into minikube's Docker daemon.
+There is no need to push the images into minikube in that case, they'll be automatically
+available when running applications inside the minikube cluster.
+
+Check the following documentation for more information on using the minikube Docker daemon:
+
+  https://kubernetes.io/docs/getting-started-guides/minikube/#reusing-the-docker-daemon
+
+Examples:
+  - Build images in minikube with tag "testing"
+    $0 -m -t testing build
+
+  - Build and push images with tag "v2.3.0" to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v2.3.0 build
+    $0 -r docker.io/myrepo -t v2.3.0 push
+EOF
 }
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
@@ -49,21 +114,36 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   exit 0
 fi
 
-while getopts r:t: option
+REPO=
+TAG=
+while getopts mr:t: option
 do
  case "${option}"
  in
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
+ m)
+   if ! which minikube 1>/dev/null; then
+     error "Cannot find minikube."
+   fi
+   eval $(minikube docker-env)
+   ;;
  esac
 done
 
-if [ -z "$REPO" ] || [ -z "$TAG" ]; then
+case "${@: -1}" in
+  build)
+    build
+    ;;
+  push)
+    if [ -z "$REPO" ]; then
+      usage
+      exit 1
+    fi
+    push
+    ;;
+  *)
     usage
-else
-  case "${@: -1}" in
-    build) build;;
-    push) push;;
-    *) usage;;
-  esac
-fi
+    exit 1
+    ;;
+esac

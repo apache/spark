@@ -51,6 +51,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Concat(strs.map(Literal.create(_, StringType))), strs.mkString, EmptyRow)
   }
 
+  test("SPARK-22771 Check Concat.checkInputDataTypes results") {
+    assert(Concat(Seq.empty[Expression]).checkInputDataTypes().isSuccess)
+    assert(Concat(Literal.create("a") :: Literal.create("b") :: Nil)
+      .checkInputDataTypes().isSuccess)
+    assert(Concat(Literal.create("a".getBytes) :: Literal.create("b".getBytes) :: Nil)
+      .checkInputDataTypes().isSuccess)
+    assert(Concat(Literal.create(1) :: Literal.create(2) :: Nil)
+      .checkInputDataTypes().isFailure)
+    assert(Concat(Literal.create("a") :: Literal.create("b".getBytes) :: Nil)
+      .checkInputDataTypes().isFailure)
+  }
+
   test("concat_ws") {
     def testConcatWs(expected: String, sep: String, inputs: Any*): Unit = {
       val inputExprs = inputs.map {

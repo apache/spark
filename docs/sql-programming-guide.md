@@ -915,6 +915,14 @@ spark.catalog.refreshTable("my_table")
 
 </div>
 
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+refreshTable("my_table")
+{% endhighlight %}
+
+</div>
+
 <div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
@@ -953,8 +961,10 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td><code>spark.sql.parquet.compression.codec</code></td>
   <td>snappy</td>
   <td>
-    Sets the compression codec use when writing Parquet files. Acceptable values include:
-    uncompressed, snappy, gzip, lzo.
+    Sets the compression codec used when writing Parquet files. If either `compression` or
+    `parquet.compression` is specified in the table-specific options/properties, the precedence would be
+    `compression`, `parquet.compression`, `spark.sql.parquet.compression.codec`. Acceptable values include:
+    none, uncompressed, snappy, gzip, lzo.
   </td>
 </tr>
 <tr>
@@ -1496,10 +1506,10 @@ that these options will be deprecated in future release as more optimizations ar
 ## Broadcast Hint for SQL Queries
 
 The `BROADCAST` hint guides Spark to broadcast each specified table when joining them with another table or view.
-When Spark deciding the join methods, the broadcast hash join (i.e., BHJ) is preferred, 
+When Spark deciding the join methods, the broadcast hash join (i.e., BHJ) is preferred,
 even if the statistics is above the configuration `spark.sql.autoBroadcastJoinThreshold`.
 When both sides of a join are specified, Spark broadcasts the one having the lower statistics.
-Note Spark does not guarantee BHJ is always chosen, since not all cases (e.g. full outer join) 
+Note Spark does not guarantee BHJ is always chosen, since not all cases (e.g. full outer join)
 support BHJ. When the broadcast nested loop join is selected, we still respect the hint.
 
 <div class="codetabs">
@@ -1778,10 +1788,12 @@ options.
     Note that, for <b>DecimalType(38,0)*</b>, the table above intentionally does not cover all other combinations of scales and precisions because currently we only infer decimal type like `BigInteger`/`BigInt`. For example, 1.1 is inferred as double type.
   - In PySpark, now we need Pandas 0.19.2 or upper if you want to use Pandas related functionalities, such as `toPandas`, `createDataFrame` from Pandas DataFrame, etc.
   - In PySpark, the behavior of timestamp values for Pandas related functionalities was changed to respect session timezone. If you want to use the old behavior, you need to set a configuration `spark.sql.execution.pandas.respectSessionTimeZone` to `False`. See [SPARK-22395](https://issues.apache.org/jira/browse/SPARK-22395) for details.
- 
+
  - Since Spark 2.3, when either broadcast hash join or broadcast nested loop join is applicable, we prefer to broadcasting the table that is explicitly specified in a broadcast hint. For details, see the section [Broadcast Hint](#broadcast-hint-for-sql-queries) and [SPARK-22489](https://issues.apache.org/jira/browse/SPARK-22489).
 
  - Since Spark 2.3, when all inputs are binary, `functions.concat()` returns an output as binary. Otherwise, it returns as a string. Until Spark 2.3, it always returns as a string despite of input types. To keep the old behavior, set `spark.sql.function.concatBinaryAsString` to `true`.
+
+ - Since Spark 2.3, when all inputs are binary, SQL `elt()` returns an output as binary. Otherwise, it returns as a string. Until Spark 2.3, it always returns as a string despite of input types. To keep the old behavior, set `spark.sql.function.eltOutputAsString` to `true`.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 
@@ -2163,7 +2175,7 @@ Not all the APIs of the Hive UDF/UDTF/UDAF are supported by Spark SQL. Below are
   Spark SQL currently does not support the reuse of aggregation.
 * `getWindowingEvaluator` (`GenericUDAFEvaluator`) is a function to optimize aggregation by evaluating
   an aggregate over a fixed window.
-  
+
 ### Incompatible Hive UDF
 
 Below are the scenarios in which Hive and Spark generate different results:

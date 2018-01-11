@@ -21,4 +21,4 @@ FROM spark-base
 # command should be invoked from the top level directory of the Spark distribution. E.g.:
 # docker build -t spark-init:latest -f kubernetes/dockerfiles/init-container/Dockerfile .
 
-ENTRYPOINT [ "/opt/entrypoint.sh", "/opt/spark/bin/spark-class", "org.apache.spark.deploy.rest.k8s.SparkPodInitContainer" ]
+ENTRYPOINT [ "/opt/entrypoint.sh", "/opt/spark/bin/spark-class", "org.apache.spark.deploy.k8s.SparkPodInitContainer" ]
