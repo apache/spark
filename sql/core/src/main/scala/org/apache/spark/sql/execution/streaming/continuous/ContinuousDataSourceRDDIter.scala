@@ -52,6 +52,7 @@ class ContinuousDataSourceRDD(
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
+    // If attempt number isn't 0, this is a task retry, which we don't support.
     if (context.attemptNumber() != 0) {
       throw new ContinuousTaskRetryException()
     }
