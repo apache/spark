@@ -811,7 +811,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: read avro file containing decimal") {
       val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
-      val location = new File(url.getFile)
+      val location = new File(url.getFile).toURI.toString
 
       val tableName = "tab1"
       val avroSchema =
@@ -851,6 +851,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: SPARK-17920: Insert into/overwrite avro table") {
+      // skipped because it's failed in the condition on Windows
+      assume(!(Utils.isWindows && version == "0.12"))
       withTempDir { dir =>
         val avroSchema =
           """
@@ -875,10 +877,10 @@ class VersionsSuite extends SparkFunSuite with Logging {
         val writer = new PrintWriter(schemaFile)
         writer.write(avroSchema)
         writer.close()
-        val schemaPath = schemaFile.getCanonicalPath
+        val schemaPath = schemaFile.toURI.toString
 
         val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
-        val srcLocation = new File(url.getFile).getCanonicalPath
+        val srcLocation = new File(url.getFile).toURI.toString
         val destTableName = "tab1"
         val srcTableName = "tab2"
 
