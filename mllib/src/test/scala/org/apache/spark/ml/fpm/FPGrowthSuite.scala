@@ -35,7 +35,7 @@ class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("FPGrowth fit and transform with different data types") {
-      class DataTypeWithEncoder[A](val a: DataType)
+      class DataTypeWithEncoder[A](val dataType: DataType)
                                   (implicit val encoder: Encoder[(Int, Array[A], Array[A])])
 
       Array(
@@ -48,15 +48,15 @@ class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
         // cannot resolve 'CAST(`items` AS BINARY)' due to data type mismatch:
         // cannot cast array<tinyint> to binary;
       ).foreach { dt => {
-        val data = dataset.withColumn("items", col("items").cast(ArrayType(dt.a)))
+        val data = dataset.withColumn("items", col("items").cast(ArrayType(dt.dataType)))
         val model = new FPGrowth().setMinSupport(0.5).fit(data)
         val generatedRules = model.setMinConfidence(0.5).associationRules
         val expectedRules = Seq(
           (Array("2"), Array("1"), 1.0),
           (Array("1"), Array("2"), 0.75)
         ).toDF("antecedent", "consequent", "confidence")
-          .withColumn("antecedent", col("antecedent").cast(ArrayType(dt.a)))
-          .withColumn("consequent", col("consequent").cast(ArrayType(dt.a)))
+          .withColumn("antecedent", col("antecedent").cast(ArrayType(dt.dataType)))
+          .withColumn("consequent", col("consequent").cast(ArrayType(dt.dataType)))
         assert(expectedRules.sort("antecedent").rdd.collect().sameElements(
           generatedRules.sort("antecedent").rdd.collect()))
 
@@ -66,8 +66,8 @@ class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
           (0, Array("1", "2"), Array.emptyIntArray),
           (0, Array("1", "3"), Array(2))
         ).toDF("id", "items", "expected")
-          .withColumn("items", col("items").cast(ArrayType(dt.a)))
-          .withColumn("expected", col("expected").cast(ArrayType(dt.a)))
+          .withColumn("items", col("items").cast(ArrayType(dt.dataType)))
+          .withColumn("expected", col("expected").cast(ArrayType(dt.dataType)))
 
         testTransformer(expectedTransformed, model,
           "expected", "prediction") {
