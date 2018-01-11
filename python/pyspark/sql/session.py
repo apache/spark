@@ -459,21 +459,23 @@ class SparkSession(object):
                     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
                     if isinstance(field.dataType, TimestampType):
                         s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
-                        if not copied and s is not pdf[field.name]:
-                            # Copy once if the series is modified to prevent the original Pandas
-                            # DataFrame from being updated
-                            pdf = pdf.copy()
-                            copied = True
-                        pdf[field.name] = s
+                        if s is not pdf[field.name]:
+                            if not copied:
+                                # Copy once if the series is modified to prevent the original
+                                # Pandas DataFrame from being updated
+                                pdf = pdf.copy()
+                                copied = True
+                            pdf[field.name] = s
             else:
                 for column, series in pdf.iteritems():
-                    s = _check_series_convert_timestamps_tz_local(pdf[column], timezone)
-                    if not copied and s is not pdf[column]:
-                        # Copy once if the series is modified to prevent the original Pandas
-                        # DataFrame from being updated
-                        pdf = pdf.copy()
-                        copied = True
-                    pdf[column] = s
+                    s = _check_series_convert_timestamps_tz_local(series, timezone)
+                    if s is not series:
+                        if not copied:
+                            # Copy once if the series is modified to prevent the original
+                            # Pandas DataFrame from being updated
+                            pdf = pdf.copy()
+                            copied = True
+                        pdf[column] = s
 
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.to_records(index=False)
@@ -646,7 +648,9 @@ class SparkSession(object):
 
             # If no schema supplied by user then get the names of columns only
             if schema is None:
-                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in data.columns]
+                schema = [str(x) if not isinstance(x, basestring) else
+                          (x.encode('utf-8') if not isinstance(x, str) else x)
+                          for x in data.columns]
 
             if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
                     and len(data) > 0:

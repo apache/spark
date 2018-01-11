@@ -77,6 +77,7 @@ private[spark] class InitContainerBootstrap(
         .withMountPath(INIT_CONTAINER_PROPERTIES_FILE_DIR)
         .endVolumeMount()
       .addToVolumeMounts(sharedVolumeMounts: _*)
+      .addToArgs("init")
       .addToArgs(INIT_CONTAINER_PROPERTIES_FILE_PATH)
       .build()
 

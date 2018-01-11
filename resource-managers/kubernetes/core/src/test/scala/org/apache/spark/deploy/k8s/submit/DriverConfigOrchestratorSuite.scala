@@ -34,8 +34,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
   private val SECRET_MOUNT_PATH = "/etc/secrets/driver"
 
   test("Base submission steps with a main app resource.") {
-    val sparkConf = new SparkConf(false)
-      .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
+    val sparkConf = new SparkConf(false).set(CONTAINER_IMAGE, DRIVER_IMAGE)
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigOrchestrator(
       APP_ID,
@@ -55,8 +54,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
   }
 
   test("Base submission steps without a main app resource.") {
-    val sparkConf = new SparkConf(false)
-      .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
+    val sparkConf = new SparkConf(false).set(CONTAINER_IMAGE, DRIVER_IMAGE)
     val orchestrator = new DriverConfigOrchestrator(
       APP_ID,
       LAUNCH_TIME,
@@ -75,8 +73,8 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
 
   test("Submission steps with an init-container.") {
     val sparkConf = new SparkConf(false)
-      .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
-      .set(INIT_CONTAINER_IMAGE, IC_IMAGE)
+      .set(CONTAINER_IMAGE, DRIVER_IMAGE)
+      .set(INIT_CONTAINER_IMAGE.key, IC_IMAGE)
       .set("spark.jars", "hdfs://localhost:9000/var/apps/jars/jar1.jar")
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigOrchestrator(
@@ -98,7 +96,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
 
   test("Submission steps with driver secrets to mount") {
     val sparkConf = new SparkConf(false)
-      .set(DRIVER_CONTAINER_IMAGE, DRIVER_IMAGE)
+      .set(CONTAINER_IMAGE, DRIVER_IMAGE)
       .set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$SECRET_FOO", SECRET_MOUNT_PATH)
       .set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$SECRET_BAR", SECRET_MOUNT_PATH)
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")

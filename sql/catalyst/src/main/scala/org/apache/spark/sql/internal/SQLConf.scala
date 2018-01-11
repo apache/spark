@@ -386,6 +386,18 @@ object SQLConf {
     .checkValues(Set("hive", "native"))
     .createWithDefault("native")
 
+  val ORC_VECTORIZED_READER_ENABLED = buildConf("spark.sql.orc.enableVectorizedReader")
+    .doc("Enables vectorized orc decoding.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val ORC_COPY_BATCH_TO_SPARK = buildConf("spark.sql.orc.copyBatchToSpark")
+    .doc("Whether or not to copy the ORC columnar batch to Spark columnar batch in the " +
+      "vectorized ORC reader.")
+    .internal()
+    .booleanConf
+    .createWithDefault(false)
+
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
@@ -1182,6 +1194,8 @@ class SQLConf extends Serializable with Logging {
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
   def orcCompressionCodec: String = getConf(ORC_COMPRESSION)
+
+  def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
