@@ -62,6 +62,8 @@ case class HiveTableScanExec(
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 
+  override def nodeName: String = s"${super.nodeName}-${relation.tableMeta.qualifiedName}"
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
