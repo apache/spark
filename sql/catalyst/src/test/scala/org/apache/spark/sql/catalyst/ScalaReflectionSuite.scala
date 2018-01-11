@@ -357,7 +357,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(!deserializerFor[String].isInstanceOf[AssertNotNull])
   }
 
-  test("SPARK-23025: schemaFor shuold support Null type") {
+  test("SPARK-23025: schemaFor should support Null type") {
     val schema = schemaFor[(Int, Null)]
     assert(schema === Schema(
       StructType(Seq(
