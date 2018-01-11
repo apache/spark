@@ -1849,14 +1849,14 @@ def explode_outer(col):
     +---+----------+----+-----+
 
     >>> df.select("id", "a_map", explode_outer("an_array")).show()
-    +---+-------------+----+
-    | id|        a_map| col|
-    +---+-------------+----+
-    |  1|Map(x -> 1.0)| foo|
-    |  1|Map(x -> 1.0)| bar|
-    |  2|        Map()|null|
-    |  3|         null|null|
-    +---+-------------+----+
+    +---+----------+----+
+    | id|     a_map| col|
+    +---+----------+----+
+    |  1|[x -> 1.0]| foo|
+    |  1|[x -> 1.0]| bar|
+    |  2|        []|null|
+    |  3|      null|null|
+    +---+----------+----+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.explode_outer(_to_java_column(col))
@@ -1881,14 +1881,14 @@ def posexplode_outer(col):
     |  3|      null|null|null| null|
     +---+----------+----+----+-----+
     >>> df.select("id", "a_map", posexplode_outer("an_array")).show()
-    +---+-------------+----+----+
-    | id|        a_map| pos| col|
-    +---+-------------+----+----+
-    |  1|Map(x -> 1.0)|   0| foo|
-    |  1|Map(x -> 1.0)|   1| bar|
-    |  2|        Map()|null|null|
-    |  3|         null|null|null|
-    +---+-------------+----+----+
+    +---+----------+----+----+
+    | id|     a_map| pos| col|
+    +---+----------+----+----+
+    |  1|[x -> 1.0]|   0| foo|
+    |  1|[x -> 1.0]|   1| bar|
+    |  2|        []|null|null|
+    |  3|      null|null|null|
+    +---+----------+----+----+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.posexplode_outer(_to_java_column(col))

@@ -237,19 +237,18 @@ class Dataset[T] private[sql](
   private[sql] def showString(
       _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
-    val castExprs = schema.map { f => f.dataType match {
+    val newDf = toDF()
+    val castExprs = newDf.schema.map { f => f.dataType match {
       // Since binary types in top-level schema fields have a specific format to print,
       // so we do not cast them to strings here.
-      case BinaryType => f.name
-      case _ => s"CAST(${f.name} AS STRING)"
+      case BinaryType => s"${f.name}"
+      case udt: UserDefinedType[_] => s"${f.name}"
+      case _ => s"CAST(`${f.name}` AS STRING)"
 
     }}
-    val takeResult = toDF().selectExpr(castExprs: _*).take(numRows + 1)
+    val takeResult = newDf.selectExpr(castExprs: _*).take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
-
-    lazy val timeZone =
-      DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
