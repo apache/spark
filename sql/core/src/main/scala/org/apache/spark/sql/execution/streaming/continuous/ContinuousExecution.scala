@@ -89,15 +89,7 @@ class ContinuousExecution(
     }
 
     do {
-      try {
-        runContinuous(sparkSessionForStream)
-      } catch {
-        // Capture task retries (transformed to an exception by ContinuousDataSourceRDDIter) and
-        // convert them to global retries by letting the while loop spin.
-        case s: SparkException
-            if s.getCause != null && s.getCause.getCause != null &&
-                s.getCause.getCause.isInstanceOf[ContinuousTaskRetryException] => ()
-      }
+      runContinuous(sparkSessionForStream)
     } while (state.updateAndGet(stateUpdate) == ACTIVE)
   }
 
