@@ -1250,7 +1250,7 @@ class SQLConf extends Serializable with Logging {
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
-  def compressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
+  def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
 
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 

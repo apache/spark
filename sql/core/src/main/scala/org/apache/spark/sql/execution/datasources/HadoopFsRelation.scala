@@ -83,8 +83,8 @@ case class HadoopFsRelation(
   }
 
   override def sizeInBytes: Long = {
-    val sizeFactor = sqlContext.conf.compressionFactor
-    (location.sizeInBytes * sizeFactor).toLong
+    val compressionFactor = sqlContext.conf.fileCompressionFactor
+    (location.sizeInBytes * compressionFactor).toLong
   }
 
 
