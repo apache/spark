@@ -251,6 +251,27 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(exec.info.memoryBytesSpilled === s1Tasks.size / 2)
     }
 
+    // Blacklisting for stage
+    execIds.foreach { execId =>
+      time += 1
+      listener.onExecutorBlacklistedForStage(SparkListenerExecutorBlacklistedForStage(
+        time = time,
+        executorId = execId,
+        taskFailures = 2,
+        stageId = stages.head.stageId,
+        stageAttemptId = stages.head.attemptId))
+    }
+
+    val executorStageSummaryWrappers =
+      store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+        .first(key(stages.head))
+        .last(key(stages.head)).asScala.toSeq
+
+    assert(executorStageSummaryWrappers.size > 0)
+    executorStageSummaryWrappers.foreach { exec =>
+      assert(exec.info.isBlacklistedForStage === true)
+    }
+
     // Fail one of the tasks, re-start it.
     time += 1
     s1Tasks.head.markFinished(TaskState.FAILED, time)
