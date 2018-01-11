@@ -98,7 +98,10 @@ object MimaExcludes {
 
     // [SPARK-21087] CrossValidator, TrainValidationSplit expose sub models after fitting: Scala
     ProblemFilters.exclude[FinalClassProblem]("org.apache.spark.ml.tuning.CrossValidatorModel$CrossValidatorModelWriter"),
-    ProblemFilters.exclude[FinalClassProblem]("org.apache.spark.ml.tuning.TrainValidationSplitModel$TrainValidationSplitModelWriter")
+    ProblemFilters.exclude[FinalClassProblem]("org.apache.spark.ml.tuning.TrainValidationSplitModel$TrainValidationSplitModelWriter"),
+
+    // [SPARK-23042] Use OneHotEncoderModel to encode labels in MultilayerPerceptronClassifier
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.classification.LabelConverter")
   )
 
   // Exclude rules for 2.2.x
