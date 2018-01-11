@@ -560,7 +560,9 @@ def main():
         test_environ.update(m.environ)
     setup_test_environ(test_environ)
 
-    test_modules = determine_modules_to_test(changed_modules)
+    # test_modules = determine_modules_to_test(changed_modules)
+    # Force-run all tests
+    test_modules = [modules.root]
 
     # license checks
     run_apache_rat_checks()
