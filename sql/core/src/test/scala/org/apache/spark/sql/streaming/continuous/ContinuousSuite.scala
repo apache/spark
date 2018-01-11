@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming.continuous
 
+import java.util.UUID
+
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskStart}
 import org.apache.spark.sql._
@@ -216,15 +218,22 @@ class ContinuousSuite extends ContinuousSuiteBase {
     }
     spark.sparkContext.addSparkListener(listener)
 
+
+    var originalRunId: UUID = null
     testStream(df, useV2Sink = true)(
       StartStream(Trigger.Continuous(100)),
       Execute(waitForRateSourceTriggers(_, 2)),
-      Execute { _ =>
+      Execute { query =>
+        // Wait until a task is started, then kill its first attempt.
         eventually(timeout(streamingTimeout)) { assert(taskId != -1) }
+        originalRunId = query.runId
         spark.sparkContext.killTaskAttempt(taskId)
       },
       Execute(waitForRateSourceTriggers(_, 4)),
       IncrementEpoch(),
+      // Rather than just restarting the task we killed, there should have been a
+      // ContinuousExecution restart changing the run ID.
+      AssertOnQuery(_.runId != originalRunId),
       CheckAnswerRowsContains(scala.Range(0, 20).map(Row(_))))
 
     spark.sparkContext.removeSparkListener(listener)
