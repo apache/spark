@@ -225,7 +225,7 @@ class LauncherServer implements Closeable {
     ServerConnection conn = null;
     synchronized (clients) {
       for (ServerConnection c : clients) {
-        if (conn.handle == handle) {
+        if (c.handle == handle) {
           conn = c;
           break;
         }
@@ -365,28 +365,21 @@ class LauncherServer implements Closeable {
 
     @Override
     public void close() throws IOException {
+      if (!isOpen()) {
+        return;
+      }
+
       synchronized (clients) {
         clients.remove(this);
       }
 
       synchronized (this) {
-        if (isOpen()) {
-          super.close();
-
-          if (handle != null) {
-            handle.markDisposed();
-            if (!handle.getState().isFinal()) {
-              LOG.log(Level.WARNING, "Lost connection to spark application.");
-              handle.setState(SparkAppHandle.State.LOST);
-            }
-
-            // This will not cause a deadlock since the connection has been removed from the client
-            // list at this point.
-            unregister(handle);
-          }
-        }
-
+        super.close();
         notifyAll();
+      }
+
+      if (handle != null) {
+        handle.dispose();
       }
     }
 

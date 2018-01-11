@@ -33,7 +33,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
   private List<Listener> listeners;
   private State state;
   private String appId;
-  private boolean disposed;
+  private volatile boolean disposed;
 
   protected AbstractAppHandle(LauncherServer server) {
     this.server = server;
@@ -70,17 +70,15 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   @Override
   public synchronized void disconnect() {
-    if (!disposed) {
-      markDisposed();
+    if (!isDisposed()) {
       if (connection != null) {
         try {
           connection.close();
         } catch (IOException ioe) {
           // no-op.
         }
-      } else {
-        server.unregister(this);
       }
+      dispose();
     }
   }
 
@@ -92,14 +90,24 @@ abstract class AbstractAppHandle implements SparkAppHandle {
     return connection;
   }
 
-  synchronized boolean isDisposed() {
+  boolean isDisposed() {
     return disposed;
   }
 
-  synchronized void markDisposed() {
-    this.disposed = true;
+  /**
+   * Mark the handle as disposed, and set it as LOST in case the current state is not final.
+   */
+  synchronized void dispose() {
+    if (!isDisposed()) {
+      // Unregister first to make sure that the connection with the app has been really
+      // terminated.
+      server.unregister(this);
+      if (!getState().isFinal()) {
+        setState(State.LOST);
+      }
+      this.disposed = true;
+    }
   }
-
 
   void setState(State s) {
     setState(s, false);

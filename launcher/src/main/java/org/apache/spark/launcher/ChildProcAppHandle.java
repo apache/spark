@@ -96,8 +96,6 @@ class ChildProcAppHandle extends AbstractAppHandle {
         return;
       }
 
-      disconnect();
-
       int ec;
       try {
         ec = proc.exitValue();
@@ -120,6 +118,8 @@ class ChildProcAppHandle extends AbstractAppHandle {
       if (newState != null) {
         setState(newState, true);
       }
+
+      disconnect();
     }
   }
 

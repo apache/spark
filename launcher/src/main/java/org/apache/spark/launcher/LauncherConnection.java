@@ -102,7 +102,7 @@ abstract class LauncherConnection implements Closeable, Runnable {
     }
   }
 
-  synchronized boolean isOpen() {
+  boolean isOpen() {
     return !closed;
   }
 
