@@ -34,15 +34,19 @@ class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
     dataset = FPGrowthSuite.getFPGrowthData(spark)
   }
 
-  class DT[A](val a: DataType)(implicit val encoder: Encoder[(Int, Array[A], Array[A])])
-
   test("FPGrowth fit and transform with different data types") {
+      class DataTypeWithEncoder[A](val a: DataType)
+                                  (implicit val encoder: Encoder[(Int, Array[A], Array[A])])
+
       Array(
-        new DT[Int](IntegerType),
-        new DT[String](StringType),
-        new DT[Short](ShortType),
-        new DT[Long](LongType)
-//        ,DT[Array[Byte]](ByteType)
+        new DataTypeWithEncoder[Int](IntegerType),
+        new DataTypeWithEncoder[String](StringType),
+        new DataTypeWithEncoder[Short](ShortType),
+        new DataTypeWithEncoder[Long](LongType)
+        // , new DataTypeWithEncoder[Byte](ByteType)
+        // TODO: using ByteType produces error, as Array[Byte] is handled as Binary
+        // cannot resolve 'CAST(`items` AS BINARY)' due to data type mismatch:
+        // cannot cast array<tinyint> to binary;
       ).foreach { dt => {
         val data = dataset.withColumn("items", col("items").cast(ArrayType(dt.a)))
         val model = new FPGrowth().setMinSupport(0.5).fit(data)
@@ -68,7 +72,7 @@ class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
         testTransformer(expectedTransformed, model,
           "expected", "prediction") {
           case Row(expected, prediction) => assert(expected === prediction,
-            s"Expected $expected but found $prediction")
+            s"Expected $expected but found $prediction for data type $dt")
         }(dt.encoder)
       }
     }
@@ -95,23 +99,34 @@ class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
       (3, null.asInstanceOf[Array[String]])
     ).toDF("id", "items")
     val model = new FPGrowth().setMinSupport(0.7).fit(dataset)
-    val prediction = model.transform(df)
-    assert(prediction.select("prediction").where("id=3").first().getSeq[String](0).isEmpty)
+    testTransformerByGlobalCheckFunc[(Int, Array[String])](df, model, "id", "prediction") {
+      rows => {
+        val predictionForId3 = rows.filter(_.getAs[Int]("id") == 3)
+          .map(_.getAs[Seq[String]]("prediction"))
+        assert(Seq(Seq.empty) === predictionForId3,
+          s"Expected empty prediction for id 3, got $predictionForId3")
+      }
+    }
   }
 
   test("FPGrowth prediction should not contain duplicates") {
     // This should generate rule 1 -> 3, 2 -> 3
-    val dataset = spark.createDataFrame(Seq(
+    val dataset = Seq(
       Array("1", "3"),
       Array("2", "3")
-    ).map(Tuple1(_))).toDF("items")
+    ).toDF("items")
     val model = new FPGrowth().fit(dataset)
 
-    val prediction = model.transform(
-      spark.createDataFrame(Seq(Tuple1(Array("1", "2")))).toDF("items")
-    ).first().getAs[Seq[String]]("prediction")
+    val df = Seq(Array("1", "2")).toDF("items")
 
-    assert(prediction === Seq("3"))
+    testTransformerByGlobalCheckFunc[(Array[String])](df, model, "prediction") {
+      rows => {
+        assert(1 === rows.size, s"Expected exactly 1 prediction, got $rows")
+        val predictions = rows.map(_.getAs[Seq[String]]("prediction"))
+        val expected = Seq(Seq("3"))
+        assert(expected === predictions, s"Expected $expected, got $predictions")
+      }
+    }
   }
 
   test("FPGrowthModel setMinConfidence should affect rules generation and transform") {
