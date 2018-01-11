@@ -842,6 +842,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: SPARK-17920: Insert into/overwrite avro table") {
+      // skipped because it's failed in the condition on Windows
       assume(!(Utils.isWindows && version == "0.12"))
       withTempDir { dir =>
         val avroSchema =
