@@ -22,7 +22,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.TempViewAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.StringUtils
 
@@ -58,7 +58,7 @@ class GlobalTempViewManager(val database: String) {
       viewDefinition: LogicalPlan,
       overrideIfExists: Boolean): Unit = synchronized {
     if (!overrideIfExists && viewDefinitions.contains(name)) {
-      throw new TempTableAlreadyExistsException(name)
+      throw new TempViewAlreadyExistsException(name)
     }
     viewDefinitions.put(name, viewDefinition)
   }

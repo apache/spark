@@ -279,7 +279,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("create temp table") {
+  test("create temp view") {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
       val tempTable2 = Range(1, 20, 2, 10)
@@ -288,11 +288,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(catalog.getTempView("tbl1") == Option(tempTable1))
       assert(catalog.getTempView("tbl2") == Option(tempTable2))
       assert(catalog.getTempView("tbl3").isEmpty)
-      // Temporary table already exists
-      intercept[TempTableAlreadyExistsException] {
+      // Temporary view already exists
+      intercept[TempViewAlreadyExistsException] {
         catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
       }
-      // Temporary table already exists but we override it
+      // Temporary view already exists but we override it
       catalog.createTempView("tbl1", tempTable2, overrideIfExists = true)
       assert(catalog.getTempView("tbl1") == Option(tempTable2))
     }
