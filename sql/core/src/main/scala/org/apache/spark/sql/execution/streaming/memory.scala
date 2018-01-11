@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.sources.v2.streaming.reader.MicroBatchReader
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -51,9 +52,10 @@ object MemoryStream {
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends Source with Logging {
+    extends MicroBatchReader with Logging {
   protected val encoder = encoderFor[A]
-  protected val logicalPlan = StreamingExecutionRelation(this, sqlContext.sparkSession)
+  private val attributes = encoder.schema.toAttributes
+  protected val logicalPlan = StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
   protected val output = logicalPlan.output
 
   /**

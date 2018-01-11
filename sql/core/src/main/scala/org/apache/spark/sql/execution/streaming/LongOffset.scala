@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.sources.v2.streaming.reader.{Offset => OffsetV2}
+
 /**
  * A simple offset for sources that produce a single linear stream of data.
  */
-case class LongOffset(offset: Long) extends Offset {
+case class LongOffset(offset: Long) extends OffsetV2 {
 
   override val json = offset.toString
 
