@@ -201,7 +201,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     val stages = jobData.stageIds.map { stageId =>
       // This could be empty if the listener hasn't received information about the
       // stage or if the stage information has been garbage collected
-      store.stageData(stageId).lastOption.getOrElse {
+      store.asOption(store.lastStageAttempt(stageId)).getOrElse {
         new v1.StageData(
           v1.StageStatus.PENDING,
           stageId,
