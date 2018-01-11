@@ -269,13 +269,9 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 201)),
       IncrementEpoch(),
-      Execute { query =>
-        val data = query.sink.asInstanceOf[MemorySinkV2].allData
-        val vals = data.map(_.getLong(0)).toSet
-        assert(scala.Range(0, 25000).forall { i =>
-          vals.contains(i)
-        })
-      })
+      StopStream,
+      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_)))
+    )
   }
 
   test("automatic epoch advancement") {
@@ -291,6 +287,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 201)),
       IncrementEpoch(),
+      StopStream,
       CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
   }
 
@@ -322,6 +319,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       StopStream,
       StartStream(Trigger.Continuous(2012)),
       AwaitEpoch(50),
+      StopStream,
       CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
   }
 }
