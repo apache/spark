@@ -30,6 +30,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -198,12 +199,12 @@ public class LauncherServerSuite extends BaseSuite {
    * server-side close immediately.
    */
   private void waitForError(TestClient client, String secret) throws Exception {
+    final AtomicBoolean helloSent = new AtomicBoolean();
     eventually(Duration.ofSeconds(1), Duration.ofMillis(10), () -> {
-      boolean helloSent = false;
       try {
-        if (!helloSent) {
+        if (!helloSent.get()) {
           client.send(new Hello(secret, "1.4.0"));
-          helloSent = true;
+          helloSent.set(true);
         } else {
           client.send(new SetAppId("appId"));
         }
