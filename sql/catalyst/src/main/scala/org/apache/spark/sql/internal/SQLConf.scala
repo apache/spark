@@ -263,13 +263,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val DISK_TO_MEMORY_SIZE_FACTOR = buildConf(
-    "spark.sql.sources.compressionFactor")
+  val FILE_COMRESSION_FACTOR = buildConf("spark.sql.sources.fileCompressionFactor")
     .internal()
-    .doc("The result of multiplying this factor with the size of data source files is propagated " +
-      "to serve as the stats to choose the best execution plan. In the case where the " +
-      "in-disk and in-memory size of data is significantly different, users can adjust this " +
-      "factor for a better choice of the execution plan. The default value is 1.0.")
+    .doc("When estimating the output data size of a table scan, multiply the file size with this " +
+      "factor as the estimated data size, in case the data is compressed in the file and lead to" +
+      " a heavily underestimated result.")
     .doubleConf
     .checkValue(_ > 0, "the value of fileDataSizeFactor must be larger than 0")
     .createWithDefault(1.0)
@@ -1252,7 +1250,7 @@ class SQLConf extends Serializable with Logging {
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
-  def diskToMemorySizeFactor: Double = getConf(DISK_TO_MEMORY_SIZE_FACTOR)
+  def compressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
 
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
