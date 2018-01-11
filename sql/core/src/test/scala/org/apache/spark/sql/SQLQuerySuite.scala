@@ -2150,7 +2150,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("data source table created in InMemoryCatalog should be able to read/write") {
     withTable("tbl") {
-      sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
+      val provider = spark.sessionState.conf.defaultDataSourceName
+      sql(s"CREATE TABLE tbl(i INT, j STRING) USING $provider")
       checkAnswer(sql("SELECT i, j FROM tbl"), Nil)
 
       Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
@@ -2476,7 +2477,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTempDir { dir =>
       val parquetDir = new File(dir, "parquet").getCanonicalPath
       spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(parquetDir)
-      spark.read.parquet(parquetDir)
+      spark.read.load(parquetDir)
     }
   }
 
