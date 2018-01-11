@@ -42,6 +42,14 @@ case class DataSourceV2ScanExec(
 
   override def producedAttributes: AttributeSet = AttributeSet(fullOutput)
 
+  private lazy val readTasks: java.util.List[ReadTask[UnsafeRow]] = reader match {
+    case r: SupportsScanUnsafeRow => r.createUnsafeRowReadTasks()
+    case _ =>
+      reader.createReadTasks().asScala.map {
+        new RowToUnsafeRowReadTask(_, reader.readSchema()): ReadTask[UnsafeRow]
+      }.asJava
+  }
+
   private lazy val inputRDD: RDD[InternalRow] = reader match {
     case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
       assert(!reader.isInstanceOf[ContinuousReader],
@@ -49,14 +57,6 @@ case class DataSourceV2ScanExec(
       new DataSourceRDD(sparkContext, r.createBatchReadTasks()).asInstanceOf[RDD[InternalRow]]
 
     case _ =>
-      val readTasks: java.util.List[ReadTask[UnsafeRow]] = reader match {
-        case r: SupportsScanUnsafeRow => r.createUnsafeRowReadTasks()
-        case _ =>
-          reader.createReadTasks().asScala.map {
-            new RowToUnsafeRowReadTask(_, reader.readSchema()): ReadTask[UnsafeRow]
-          }.asJava
-      }
-
       reader match {
         case _: ContinuousReader =>
           EpochCoordinatorRef.get(

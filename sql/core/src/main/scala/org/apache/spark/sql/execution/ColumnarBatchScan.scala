@@ -155,7 +155,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     ctx.currentVars = null
     // Always provide `outputVars`, so that the framework can help us build unsafe row if the input
     // row is not unsafe row, i.e. `needsUnsafeRowConversion` is true.
-    val outputVars = output.zipWithIndex.map{ case (a, i) =>
+    val outputVars = output.zipWithIndex.map { case (a, i) =>
       BoundReference(i, a.dataType, a.nullable).genCode(ctx)
     }
     val inputRow = if (needsUnsafeRowConversion) null else row

@@ -32,7 +32,7 @@ public interface SupportsScanColumnarBatch extends DataSourceV2Reader {
   @Override
   default List<ReadTask<Row>> createReadTasks() {
     throw new IllegalStateException(
-      "createReadTasks should not be called with SupportsScanColumnarBatch.");
+      "createReadTasks not supported by default within SupportsScanColumnarBatch.");
   }
 
   /**
