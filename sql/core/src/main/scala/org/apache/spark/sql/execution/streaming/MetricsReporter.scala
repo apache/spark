@@ -35,14 +35,13 @@ class MetricsReporter(
 
   // Metric names should not have . in them, so that all the metrics of a query are identified
   // together in Ganglia as a single metric group
-  registerGauge("inputRate-total", (lastProgress) => lastProgress.inputRowsPerSecond, 0.0)
-  registerGauge("processingRate-total", (lastProgress) => lastProgress.processedRowsPerSecond, 0.0)
-  registerGauge("latency",
-    (lastProgress) => lastProgress.durationMs.get("triggerExecution").longValue(), 0L)
+  registerGauge("inputRate-total", _.inputRowsPerSecond, 0.0)
+  registerGauge("processingRate-total", _.processedRowsPerSecond, 0.0)
+  registerGauge("latency", _.durationMs.get("triggerExecution").longValue(), 0L)
 
   private def registerGauge[T](
       name: String,
-      f: (StreamingQueryProgress) => T,
+      f: StreamingQueryProgress => T,
       default: T): Unit = {
     synchronized {
       metricRegistry.register(name, new Gauge[T] {
