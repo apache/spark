@@ -55,8 +55,14 @@ notifications:
 # 5. Run maven build before running lints.
 install:
   - export MAVEN_SKIP_RC=1
+<<<<<<< HEAD
   - build/mvn ${PHASE} ${PROFILES} ${MODULES} ${ARGS}
 # 6. Run lints.
+=======
+  - build/mvn -T 4 -q -DskipTests -Pkubernetes -Pmesos -Pyarn -Pkinesis-asl -Phive -Phive-thriftserver install
+
+# 6. Run lint-java.
+>>>>>>> master
 script:
   - dev/lint-java
   - dev/lint-scala

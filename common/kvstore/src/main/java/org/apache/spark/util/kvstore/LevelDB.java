@@ -83,6 +83,7 @@ public class LevelDB implements KVStore {
     if (versionData != null) {
       long version = serializer.deserializeLong(versionData);
       if (version != STORE_VERSION) {
+        close();
         throw new UnsupportedStoreVersionException();
       }
     } else {

@@ -92,6 +92,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private[this] var stopCalled: Boolean = false
 
   private val launcherBackend = new LauncherBackend() {
+    override protected def conf: SparkConf = sc.conf
+
     override protected def onStopRequest(): Unit = {
       stopSchedulerBackend()
       setState(SparkAppHandle.State.KILLED)
@@ -400,13 +402,20 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       val offerMem = getResource(offer.getResourcesList, "mem")
       val offerCpus = getResource(offer.getResourcesList, "cpus")
       val offerPorts = getRangeResource(offer.getResourcesList, "ports")
+      val offerReservationInfo = offer
+        .getResourcesList
+        .asScala
+        .find { r => r.getReservation != null }
       val id = offer.getId.getValue
 
       if (tasks.contains(offer.getId)) { // accept
         val offerTasks = tasks(offer.getId)
 
         logDebug(s"Accepting offer: $id with attributes: $offerAttributes " +
-          s"mem: $offerMem cpu: $offerCpus ports: $offerPorts." +
+          offerReservationInfo.map(resInfo =>
+            s"reservation info: ${resInfo.getReservation.toString}").getOrElse("") +
+          s"mem: $offerMem cpu: $offerCpus ports: $offerPorts " +
+          s"resources: ${offer.getResourcesList.asScala.mkString(",")}." +
           s"  Launching ${offerTasks.size} Mesos tasks.")
 
         for (task <- offerTasks) {
@@ -416,7 +425,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           val ports = getRangeResource(task.getResourcesList, "ports").mkString(",")
 
           logDebug(s"Launching Mesos task: ${taskId.getValue} with mem: $mem cpu: $cpus" +
-            s" ports: $ports")
+            s" ports: $ports" + s" on slave with slave id: ${task.getSlaveId.getValue} ")
         }
 
         driver.launchTasks(
@@ -431,7 +440,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       } else {
         declineOffer(
           driver,
-          offer)
+          offer,
+          Some("Offer was declined due to unmet task launch constraints."))
       }
     }
   }
@@ -513,6 +523,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             totalGpusAcquired += taskGPUs
             gpusByTaskId(taskId) = taskGPUs
           }
+        } else {
+          logDebug(s"Cannot launch a task for offer with id: $offerId on slave " +
+            s"with id: $slaveId. Requirements were not met for this offer.")
         }
       }
     }

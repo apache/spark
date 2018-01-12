@@ -85,7 +85,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
         end = index.start(parent, params.last);
       }
       if (it.hasNext()) {
-        // When descending, the caller may have set up the start of iteration at a non-existant
+        // When descending, the caller may have set up the start of iteration at a non-existent
         // entry that is guaranteed to be after the desired entry. For example, if you have a
         // compound key (a, b) where b is a, integer, you may seek to the end of the elements that
         // have the same "a" value by specifying Integer.MAX_VALUE for "b", and that value may not

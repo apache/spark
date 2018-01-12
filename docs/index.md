@@ -81,6 +81,7 @@ options for deployment:
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
+* [Kubernetes](running-on-kubernetes.html)
 
 # Where to Go from Here
 

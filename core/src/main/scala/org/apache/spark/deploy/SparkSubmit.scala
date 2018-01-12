@@ -77,7 +77,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val MESOS = 4
   private val LOCAL = 8
   private val KUBERNETES = 16
+<<<<<<< HEAD
   private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | KUBERNETES | LOCAL
+=======
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | KUBERNETES
+>>>>>>> master
 
   // Deploy modes
   private val CLIENT = 1
@@ -92,6 +96,14 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val R_PACKAGE_ARCHIVE = "rpkg.zip"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
+
+  // Following constants are visible for testing.
+  private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =
+    "org.apache.spark.deploy.yarn.YarnClusterApplication"
+  private[deploy] val REST_CLUSTER_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
+  private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
+  private[deploy] val KUBERNETES_CLUSTER_SUBMIT_CLASS =
+    "org.apache.spark.deploy.k8s.submit.KubernetesClientApplication"
 
   // scalastyle:off println
   private[spark] def printVersionAndExit(): Unit = {
@@ -283,10 +295,20 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }
 
       // Make sure YARN is included in our build if we're trying to use it
-      if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
+      if (!Utils.classIsLoadable(YARN_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
         printErrorAndExit(
           "Could not load YARN classes. " +
           "This copy of Spark may not have been compiled with YARN support.")
+      }
+    }
+
+    if (clusterManager == KUBERNETES) {
+      args.master = Utils.checkAndGetK8sMasterUrl(args.master)
+      // Make sure KUBERNETES is included in our build if we're trying to use it
+      if (!Utils.classIsLoadable(KUBERNETES_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
+        printErrorAndExit(
+          "Could not load KUBERNETES classes. " +
+            "This copy of Spark may not have been compiled with KUBERNETES support.")
       }
     }
 
@@ -302,6 +324,12 @@ object SparkSubmit extends CommandLineUtils with Logging {
       case (STANDALONE, CLUSTER) if args.isR =>
         printErrorAndExit("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
+      case (KUBERNETES, _) if args.isPython =>
+        printErrorAndExit("Python applications are currently not supported for Kubernetes.")
+      case (KUBERNETES, _) if args.isR =>
+        printErrorAndExit("R applications are currently not supported for Kubernetes.")
+      case (KUBERNETES, CLIENT) =>
+        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
@@ -323,6 +351,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
     val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
     val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
+    val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
@@ -370,10 +399,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
     args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
 
-    // This security manager will not need an auth secret, but set a dummy value in case
-    // spark.authenticate is enabled, otherwise an exception is thrown.
-    lazy val downloadConf = sparkConf.clone().set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
-    lazy val secMgr = new SecurityManager(downloadConf)
+    lazy val secMgr = new SecurityManager(sparkConf)
 
     // In client mode, download remote files.
     var localPrimaryResource: String = null
@@ -381,13 +407,13 @@ object SparkSubmit extends CommandLineUtils with Logging {
     var localPyFiles: String = null
     if (deployMode == CLIENT) {
       localPrimaryResource = Option(args.primaryResource).map {
-        downloadFile(_, targetDir, downloadConf, hadoopConf, secMgr)
+        downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
       localJars = Option(args.jars).map {
-        downloadFileList(_, targetDir, downloadConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
       localPyFiles = Option(args.pyFiles).map {
-        downloadFileList(_, targetDir, downloadConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
     }
 
@@ -398,8 +424,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // For yarn client mode, since we already download them with above code, so we only need to
     // figure out the local path and replace the remote one.
     if (clusterManager == YARN) {
-      sparkConf.setIfMissing(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
-      val secMgr = new SecurityManager(sparkConf)
       val forceDownloadSchemes = sparkConf.get(FORCE_DOWNLOAD_SCHEMES)
 
       def shouldDownload(scheme: String): Boolean = {
@@ -416,7 +440,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
             if (file.exists()) {
               file.toURI.toString
             } else {
-              downloadFile(resource, targetDir, downloadConf, hadoopConf, secMgr)
+              downloadFile(resource, targetDir, sparkConf, hadoopConf, secMgr)
             }
           case _ => uri.toString
         }
@@ -562,24 +586,33 @@ object SparkSubmit extends CommandLineUtils with Logging {
       OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.principal"),
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.keytab"),
 
+<<<<<<< HEAD
       OptionAssigner(args.kubernetesNamespace, KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.kubernetes.namespace"),
 
         // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
+=======
+      // Other options
+      OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
+>>>>>>> master
         confKey = "spark.executor.cores"),
-      OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
+      OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.executor.memory"),
-      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
+      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.files"),
       OptionAssigner(args.jars, LOCAL, CLIENT, confKey = "spark.jars"),
       OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.jars"),
+<<<<<<< HEAD
       OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN, CLUSTER,
+=======
+      OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
+>>>>>>> master
         confKey = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN, CLUSTER,
+      OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
         confKey = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         confKey = "spark.driver.supervise"),
@@ -646,11 +679,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
     // All Spark parameters are expected to be passed to the client through system properties.
     if (args.isStandaloneCluster) {
       if (args.useRest) {
-        childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
+        childMainClass = REST_CLUSTER_SUBMIT_CLASS
         childArgs += (args.primaryResource, args.mainClass)
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
-        childMainClass = "org.apache.spark.deploy.Client"
+        childMainClass = STANDALONE_CLUSTER_SUBMIT_CLASS
         if (args.supervise) { childArgs += "--supervise" }
         Option(args.driverMemory).foreach { m => childArgs += ("--memory", m) }
         Option(args.driverCores).foreach { c => childArgs += ("--cores", c) }
@@ -675,7 +708,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
-      childMainClass = "org.apache.spark.deploy.yarn.Client"
+      childMainClass = YARN_CLUSTER_SUBMIT_CLASS
       if (args.isPython) {
         childArgs += ("--primary-py-file", args.primaryResource)
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
@@ -696,7 +729,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     if (isMesosCluster) {
       assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
-      childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
+      childMainClass = REST_CLUSTER_SUBMIT_CLASS
       if (args.isPython) {
         // Second argument is main class
         childArgs += (args.primaryResource, "")
@@ -715,6 +748,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     }
 
     if (isKubernetesCluster) {
+<<<<<<< HEAD
       childMainClass = "org.apache.spark.deploy.k8s.submit.Client"
       if (args.isPython) {
         childArgs ++= Array("--primary-py-file", args.primaryResource)
@@ -729,6 +763,17 @@ object SparkSubmit extends CommandLineUtils with Logging {
       args.childArgs.foreach { arg =>
         childArgs += "--arg"
         childArgs += arg
+=======
+      childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
+      if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
+        childArgs ++= Array("--primary-java-resource", args.primaryResource)
+      }
+      childArgs ++= Array("--main-class", args.mainClass)
+      if (args.childArgs != null) {
+        args.childArgs.foreach { arg =>
+          childArgs += ("--arg", arg)
+        }
+>>>>>>> master
       }
     }
 
@@ -1266,7 +1311,7 @@ private[spark] object SparkSubmitUtils {
         // retrieve all resolved dependencies
         ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
           packagesDirectory.getAbsolutePath + File.separator +
-            "[organization]_[artifact]-[revision].[ext]",
+            "[organization]_[artifact]-[revision](-[classifier]).[ext]",
           retrieveOptions.setConfs(Array(ivyConfName)))
         resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
       } finally {

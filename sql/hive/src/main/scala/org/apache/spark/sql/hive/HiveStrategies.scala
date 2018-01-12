@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 
@@ -88,7 +87,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
     }
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) =>
       // Finds the database name if the name does not exist.
       val dbName = t.identifier.database.getOrElse(session.catalog.currentDatabase)
@@ -115,7 +114,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 }
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case relation: HiveTableRelation
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       val table = relation.tableMeta
@@ -146,10 +145,11 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
  * `PreprocessTableInsertion`.
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case InsertIntoTable(r: HiveTableRelation, partSpec, query, overwrite, ifPartitionNotExists)
         if DDLUtils.isHiveTable(r.tableMeta) =>
-      InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite, ifPartitionNotExists)
+      InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
+        ifPartitionNotExists, query.output)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc)
@@ -164,7 +164,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
 
-      InsertIntoHiveDirCommand(isLocal, storage, child, overwrite)
+      InsertIntoHiveDirCommand(isLocal, storage, child, overwrite, child.output)
   }
 }
 
@@ -195,8 +195,19 @@ case class RelationConversions(
         .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
     } else {
       val options = relation.tableMeta.storage.properties
-      sessionCatalog.metastoreCatalog
-        .convertToLogicalRelation(relation, options, classOf[OrcFileFormat], "orc")
+      if (conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
+        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
+          relation,
+          options,
+          classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat],
+          "orc")
+      } else {
+        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
+          relation,
+          options,
+          classOf[org.apache.spark.sql.hive.orc.OrcFileFormat],
+          "orc")
+      }
     }
   }
 

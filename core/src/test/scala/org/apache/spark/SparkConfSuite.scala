@@ -329,6 +329,16 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.validateSettings()
   }
 
+  test("spark.network.timeout should bigger than spark.executor.heartbeatInterval") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+
+    conf.set("spark.network.timeout", "5s")
+    intercept[IllegalArgumentException] {
+      conf.validateSettings()
+    }
+  }
+
 }
 
 class Class1 {}

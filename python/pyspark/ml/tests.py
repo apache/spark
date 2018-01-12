@@ -44,6 +44,7 @@ import array as pyarray
 import numpy as np
 from numpy import abs, all, arange, array, array_equal, inf, ones, tile, zeros
 import inspect
+import py4j
 
 from pyspark import keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer, UnaryTransformer
@@ -67,11 +68,11 @@ from pyspark.ml.tuning import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
-from pyspark.sql import DataFrame, Row, SparkSession
+from pyspark.sql import DataFrame, Row, SparkSession, HiveContext
 from pyspark.sql.functions import rand
 from pyspark.sql.types import DoubleType, IntegerType
 from pyspark.storagelevel import *
-from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
+from pyspark.tests import QuietTest, ReusedPySparkTestCase as PySparkTestCase
 
 ser = PickleSerializer()
 
@@ -1725,6 +1726,27 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         self.assertTrue(np.isclose(model.intercept, -1.561613, atol=1E-4))
 
 
+class LinearRegressionTest(SparkSessionTestCase):
+
+    def test_linear_regression_with_huber_loss(self):
+
+        data_path = "data/mllib/sample_linear_regression_data.txt"
+        df = self.spark.read.format("libsvm").load(data_path)
+
+        lir = LinearRegression(loss="huber", epsilon=2.0)
+        model = lir.fit(df)
+
+        expectedCoefficients = [0.136, 0.7648, -0.7761, 2.4236, 0.537,
+                                1.2612, -0.333, -0.5694, -0.6311, 0.6053]
+        expectedIntercept = 0.1607
+        expectedScale = 9.758
+
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), expectedCoefficients, atol=1E-3))
+        self.assertTrue(np.isclose(model.intercept, expectedIntercept, atol=1E-3))
+        self.assertTrue(np.isclose(model.scale, expectedScale, atol=1E-3))
+
+
 class LogisticRegressionTest(SparkSessionTestCase):
 
     def test_binomial_logistic_regression_with_bound(self):
@@ -1835,6 +1857,56 @@ class ImageReaderTest(SparkSessionTestCase):
         expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
         self.assertEqual(ImageSchema.imageFields, expected)
         self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                TypeError,
+                "image argument should be pyspark.sql.types.Row; however",
+                lambda: ImageSchema.toNDArray("a"))
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                ValueError,
+                "image argument should have attributes specified in",
+                lambda: ImageSchema.toNDArray(Row(a=1)))
+
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(
+                TypeError,
+                "array argument should be numpy.ndarray; however, it got",
+                lambda: ImageSchema.toImage("a"))
+
+
+class ImageReaderTest2(PySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super(ImageReaderTest2, cls).setUpClass()
+        # Note that here we enable Hive's support.
+        cls.spark = None
+        try:
+            cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        except py4j.protocol.Py4JError:
+            cls.tearDownClass()
+            raise unittest.SkipTest("Hive is not available")
+        except TypeError:
+            cls.tearDownClass()
+            raise unittest.SkipTest("Hive is not available")
+        cls.spark = HiveContext._createForTesting(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        super(ImageReaderTest2, cls).tearDownClass()
+        if cls.spark is not None:
+            cls.spark.sparkSession.stop()
+            cls.spark = None
+
+    def test_read_images_multiple_times(self):
+        # This test case is to check if `ImageSchema.readImages` tries to
+        # initiate Hive client multiple times. See SPARK-22651.
+        data_path = 'data/mllib/images/kittens'
+        ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
+        ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
 
 
 class ALSTest(SparkSessionTestCase):
@@ -2306,6 +2378,21 @@ class UnaryTransformerTests(SparkSessionTestCase):
 
         for res in results:
             self.assertEqual(res.input + shiftVal, res.output)
+
+
+class EstimatorTest(unittest.TestCase):
+
+    def testDefaultFitMultiple(self):
+        N = 4
+        data = MockDataset()
+        estimator = MockEstimator()
+        params = [{estimator.fake: i} for i in range(N)]
+        modelIter = estimator.fitMultiple(data, params)
+        indexList = []
+        for index, model in modelIter:
+            self.assertEqual(model.getFake(), index)
+            indexList.append(index)
+        self.assertEqual(sorted(indexList), list(range(N)))
 
 
 if __name__ == "__main__":

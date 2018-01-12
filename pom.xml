@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.3.0-SNAPSHOT</version>
+  <version>2.4.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -149,7 +149,7 @@
     <spark-influx-sink.version>0.3.12</spark-influx-sink.version>
     <avro.version>1.8.1</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-    <jets3t.version>0.9.3</jets3t.version>
+    <jets3t.version>0.9.4</jets3t.version>
     <aws.kinesis.client.version>1.7.3</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.76</aws.java.sdk.version>
@@ -158,8 +158,13 @@
     <commons-beanutils.version>1.9.3</commons-beanutils.version>
     <commons-logging.version>1.2</commons-logging.version>
     <!--  org.apache.httpcomponents/httpclient-->
+<<<<<<< HEAD
     <commons.httpclient.version>4.5.3</commons.httpclient.version>
     <commons.httpcore.version>4.4.6</commons.httpcore.version>
+=======
+    <commons.httpclient.version>4.5.4</commons.httpclient.version>
+    <commons.httpcore.version>4.4.8</commons.httpcore.version>
+>>>>>>> master
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -182,11 +187,17 @@
     <commons-compress.version>1.8.1</commons-compress.version>
     <commons-pool.version>1.6</commons-pool.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
+<<<<<<< HEAD
     <javax-activation.version>1.1.1</javax-activation.version>
     <objenesis.version>2.5.1</objenesis.version>
     <janino.version>3.0.0</janino.version>
     <jersey.version>2.25.1</jersey.version>
     <joda.version>2.9.9</joda.version>
+=======
+    <janino.version>3.0.8</janino.version>
+    <jersey.version>2.22.2</jersey.version>
+    <joda.version>2.9.3</joda.version>
+>>>>>>> master
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.1</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
@@ -200,7 +211,7 @@
     <paranamer.version>2.8</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
-    <arrow.version>0.4.0</arrow.version>
+    <arrow.version>0.8.0</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -709,7 +720,11 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
+<<<<<<< HEAD
         <version>4.0.50.Final</version>
+=======
+        <version>4.1.17.Final</version>
+>>>>>>> master
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -1195,6 +1210,12 @@
             <artifactId>commons-logging</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk15on</artifactId>
+        <!-- brought in by jets3t; see SPARK-22634 -->
+        <version>1.58</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -2242,6 +2263,14 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
+            <artifactId>netty-buffer</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
             <artifactId>netty-handler</artifactId>
           </exclusion>
         </exclusions>
@@ -2555,6 +2584,9 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-assembly-plugin</artifactId>
           <version>3.1.0</version>
+          <configuration>
+            <tarLongFileMode>posix</tarLongFileMode>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -3016,6 +3048,7 @@
     </profile>
 
     <profile>
+<<<<<<< HEAD
       <id>kubernetes-integration-tests</id>
       <modules>
         <module>resource-managers/kubernetes/docker-minimal-bundle</module>
@@ -3026,6 +3059,8 @@
     </profile>
 
     <profile>
+=======
+>>>>>>> master
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>

@@ -41,6 +41,10 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
+  private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.memoryOverhead")
+    .bytesConf(ByteUnit.MiB)
+    .createOptional
+
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
       .booleanConf
@@ -79,6 +83,10 @@ package object config {
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
+
+  private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
+    .bytesConf(ByteUnit.MiB)
+    .createOptional
 
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
@@ -232,6 +240,7 @@ package object config {
     .stringConf
     .createOptional
 
+<<<<<<< HEAD
   private[spark] val CONDA_BOOTSTRAP_PACKAGES = ConfigBuilder("spark.conda.bootstrapPackages")
     .doc("The packages that will be added to the conda environment. "
       + "Only relevant when main class is CondaRunner.")
@@ -268,6 +277,8 @@ package object config {
     .intConf
     .createWithDefault(100000)
 
+=======
+>>>>>>> master
   // To limit how many applications are shown in the History Server summary ui
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)

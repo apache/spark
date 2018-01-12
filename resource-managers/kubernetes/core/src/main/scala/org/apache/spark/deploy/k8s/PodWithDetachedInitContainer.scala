@@ -18,6 +18,16 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{Container, Pod}
 
+<<<<<<< HEAD
+=======
+/**
+ * Represents a pod with a detached init-container (not yet added to the pod).
+ *
+ * @param pod the pod
+ * @param initContainer the init-container in the pod
+ * @param mainContainer the main container in the pod
+ */
+>>>>>>> master
 private[spark] case class PodWithDetachedInitContainer(
     pod: Pod,
     initContainer: Container,

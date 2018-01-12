@@ -20,12 +20,20 @@ import java.io.File
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
+<<<<<<< HEAD
 import io.fabric8.kubernetes.client.{Config, ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
+=======
+import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
+>>>>>>> master
 import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import okhttp3.Dispatcher
 
 import org.apache.spark.SparkConf
+<<<<<<< HEAD
 import org.apache.spark.deploy.k8s.config._
+=======
+import org.apache.spark.deploy.k8s.Config._
+>>>>>>> master
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -40,12 +48,18 @@ private[spark] object SparkKubernetesClientFactory {
       namespace: Option[String],
       kubernetesAuthConfPrefix: String,
       sparkConf: SparkConf,
+<<<<<<< HEAD
       maybeServiceAccountToken: Option[File],
       maybeServiceAccountCaCert: Option[File]): KubernetesClient = {
+=======
+      defaultServiceAccountToken: Option[File],
+      defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
+>>>>>>> master
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
     val oauthTokenFile = sparkConf.getOption(oauthTokenFileConf)
       .map(new File(_))
+<<<<<<< HEAD
       .orElse(maybeServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
     OptionRequirements.requireNandDefined(
@@ -81,6 +95,43 @@ private[spark] object SparkKubernetesClientFactory {
         }.withOption(namespace) {
           (ns, configBuilder) => configBuilder.withNamespace(ns)
         }.build()
+=======
+      .orElse(defaultServiceAccountToken)
+    val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
+    KubernetesUtils.requireNandDefined(
+      oauthTokenFile,
+      oauthTokenValue,
+      s"Cannot specify OAuth token through both a file $oauthTokenFileConf and a " +
+        s"value $oauthTokenConf.")
+
+    val caCertFile = sparkConf
+      .getOption(s"$kubernetesAuthConfPrefix.$CA_CERT_FILE_CONF_SUFFIX")
+      .orElse(defaultServiceAccountCaCert.map(_.getAbsolutePath))
+    val clientKeyFile = sparkConf
+      .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
+    val clientCertFile = sparkConf
+      .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
+    val dispatcher = new Dispatcher(
+      ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
+    val config = new ConfigBuilder()
+      .withApiVersion("v1")
+      .withMasterUrl(master)
+      .withWebsocketPingInterval(0)
+      .withOption(oauthTokenValue) {
+        (token, configBuilder) => configBuilder.withOauthToken(token)
+      }.withOption(oauthTokenFile) {
+        (file, configBuilder) =>
+            configBuilder.withOauthToken(Files.toString(file, Charsets.UTF_8))
+      }.withOption(caCertFile) {
+        (file, configBuilder) => configBuilder.withCaCertFile(file)
+      }.withOption(clientKeyFile) {
+        (file, configBuilder) => configBuilder.withClientKeyFile(file)
+      }.withOption(clientCertFile) {
+        (file, configBuilder) => configBuilder.withClientCertFile(file)
+      }.withOption(namespace) {
+        (ns, configBuilder) => configBuilder.withNamespace(ns)
+      }.build()
+>>>>>>> master
     val baseHttpClient = HttpClientUtils.createHttpClient(config)
     val httpClientWithCustomDispatcher = baseHttpClient.newBuilder()
       .dispatcher(dispatcher)
@@ -88,6 +139,7 @@ private[spark] object SparkKubernetesClientFactory {
     new DefaultKubernetesClient(httpClientWithCustomDispatcher, config)
   }
 
+<<<<<<< HEAD
   private implicit class OptionConfigurableConfigBuilder(configBuilder: ConfigBuilder) {
 
     def withOption[T]
@@ -99,5 +151,17 @@ private[spark] object SparkKubernetesClientFactory {
     }
 
     def build(): Config = configBuilder.build()
+=======
+  private implicit class OptionConfigurableConfigBuilder(val configBuilder: ConfigBuilder)
+    extends AnyVal {
+
+    def withOption[T]
+        (option: Option[T])
+        (configurator: ((T, ConfigBuilder) => ConfigBuilder)): ConfigBuilder = {
+      option.map { opt =>
+        configurator(opt, configBuilder)
+      }.getOrElse(configBuilder)
+    }
+>>>>>>> master
   }
 }
