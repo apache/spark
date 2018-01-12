@@ -747,6 +747,23 @@ class RDD(object):
         """
         return self.map(lambda x: (f(x), x)).groupByKey(numPartitions, partitionFunc)
 
+
+    def apply(self, func):
+    	"""
+    	Apply a function to the current RDD.
+		
+		>>> def foo(rdd):
+		...     return rdd.map(lambda x: x.split('|')).filter(lambda x: x[0] == 'ERROR')
+		>>> rdd = sc.parallelize(['ERROR|10', 'ERROR|12', 'WARNING|10', 'INFO|2'])
+		>>> result = rdd.apply(foo)
+		>>> result.collect()
+		[('ERROR', '10'), ('ERROR', '12')]
+
+    	:param func: function to be applied to the current RDD
+    	"""
+    	return func(self)
+
+
     @ignore_unicode_prefix
     def pipe(self, command, env=None, checkCode=False):
         """
