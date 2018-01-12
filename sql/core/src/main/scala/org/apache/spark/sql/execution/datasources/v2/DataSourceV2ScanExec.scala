@@ -56,17 +56,15 @@ case class DataSourceV2ScanExec(
         "continuous stream reader does not support columnar read yet.")
       new DataSourceRDD(sparkContext, r.createBatchReadTasks()).asInstanceOf[RDD[InternalRow]]
 
+    case _: ContinuousReader =>
+      EpochCoordinatorRef.get(
+        sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
+        .askSync[Unit](SetReaderPartitions(readTasks.size()))
+      new ContinuousDataSourceRDD(sparkContext, sqlContext, readTasks)
+        .asInstanceOf[RDD[InternalRow]]
+
     case _ =>
-      reader match {
-        case _: ContinuousReader =>
-          EpochCoordinatorRef.get(
-            sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
-            .askSync[Unit](SetReaderPartitions(readTasks.size()))
-          new ContinuousDataSourceRDD(sparkContext, sqlContext, readTasks)
-            .asInstanceOf[RDD[InternalRow]]
-        case _ =>
-          new DataSourceRDD(sparkContext, readTasks).asInstanceOf[RDD[InternalRow]]
-      }
+      new DataSourceRDD(sparkContext, readTasks).asInstanceOf[RDD[InternalRow]]
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)

@@ -101,7 +101,7 @@ case class InMemoryTableScanExec(
     } else {
       val numOutputRows = longMetric("numOutputRows")
 
-      if (enableAccumulators) {
+      if (enableAccumulatorsForTest) {
         readPartitions.setValue(0)
         readBatches.setValue(0)
       }
@@ -119,7 +119,7 @@ case class InMemoryTableScanExec(
 
         // update SQL metrics
         val withMetrics = cachedBatchIterator.map { batch =>
-          if (enableAccumulators) {
+          if (enableAccumulatorsForTest) {
             readBatches.add(1)
           }
           numOutputRows += batch.numRows
@@ -132,7 +132,7 @@ case class InMemoryTableScanExec(
         }.toArray
         val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
         columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
-        if (enableAccumulators && columnarIterator.hasNext) {
+        if (enableAccumulatorsForTest && columnarIterator.hasNext) {
           readPartitions.add(1)
         }
         columnarIterator
@@ -229,7 +229,7 @@ case class InMemoryTableScanExec(
     }
   }
 
-  lazy val enableAccumulators: Boolean =
+  lazy val enableAccumulatorsForTest: Boolean =
     sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
 
   // Accumulators used for testing purposes
