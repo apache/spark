@@ -140,8 +140,8 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
       assert(spark.catalog.listTables(globalTempDB).collect().toSeq.map(_.name) == Seq("v1", "v2"))
     } finally {
-      spark.catalog.dropTempView("v1")
-      spark.catalog.dropGlobalTempView("v2")
+      spark.catalog.dropGlobalTempView("v1")
+      spark.catalog.dropTempView("v2")
     }
   }
 

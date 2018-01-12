@@ -53,15 +53,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("create a temp view on a permanent view") {
-    withView("jtv1", "temp_jtv1") {
-      sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
-      sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jtv1 WHERE id < 6")
-      checkAnswer(sql("select count(*) FROM temp_jtv1"), Row(2))
+    withView("jtv1") {
+      withTempView("temp_jtv1") {
+        sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
+        sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jtv1 WHERE id < 6")
+        checkAnswer(sql("select count(*) FROM temp_jtv1"), Row(2))
+      }
     }
   }
 
   test("create a temp view on a temp view") {
-    withView("temp_jtv1", "temp_jtv2") {
+    withTempView("temp_jtv1", "temp_jtv2") {
       sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE TEMPORARY VIEW temp_jtv2 AS SELECT * FROM temp_jtv1 WHERE id < 6")
       checkAnswer(sql("select count(*) FROM temp_jtv2"), Row(2))
@@ -218,10 +220,12 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TEMPORARY VIEW IF NOT EXISTS myabcdview AS SELECT * FROM jt")
+    withTempView("myabcdview") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE TEMPORARY VIEW IF NOT EXISTS myabcdview AS SELECT * FROM jt")
+      }
+      assert(e.message.contains("It is not allowed to define a TEMPORARY view with IF NOT EXISTS"))
     }
-    assert(e.message.contains("It is not allowed to define a TEMPORARY view with IF NOT EXISTS"))
   }
 
   test("error handling: fail if the temp view sql itself is invalid") {
@@ -270,7 +274,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("correctly parse CREATE TEMPORARY VIEW statement") {
-    withView("testView") {
+    withTempView("testView") {
       sql(
         """CREATE TEMPORARY VIEW
           |testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
@@ -282,7 +286,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("should NOT allow CREATE TEMPORARY VIEW when TEMPORARY VIEW with same name exists") {
-    withView("testView") {
+    withTempView("testView") {
       sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
 
       val e = intercept[AnalysisException] {
@@ -295,15 +299,19 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("should allow CREATE TEMPORARY VIEW when a permanent VIEW with same name exists") {
     withView("testView", "default.testView") {
-      sql("CREATE VIEW testView AS SELECT id FROM jt")
-      sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
+      withTempView("testView") {
+        sql("CREATE VIEW testView AS SELECT id FROM jt")
+        sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
+      }
     }
   }
 
   test("should allow CREATE permanent VIEW when a TEMPORARY VIEW with same name exists") {
     withView("testView", "default.testView") {
-      sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
-      sql("CREATE VIEW testView AS SELECT id FROM jt")
+      withTempView("testView") {
+        sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
+        sql("CREATE VIEW testView AS SELECT id FROM jt")
+      }
     }
   }
 
