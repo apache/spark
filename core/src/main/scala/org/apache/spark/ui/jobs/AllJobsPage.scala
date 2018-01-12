@@ -429,20 +429,36 @@ private[ui] class JobDataSource(
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
     val submissionTime = jobData.submissionTime
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-    val jobDescription = UIUtils.makeDescription(jobData.description.getOrElse(""),
-      basePath, plainText = false)
 
+    val lastStage = {
+      val stageAttempts = jobData.stageIds.map(store.stageData(_)).flatten
+      if (!stageAttempts.isEmpty) {
+        val lastId = stageAttempts.map(_.stageId).max
+        stageAttempts.find(_.stageId == lastId)
+      } else {
+        None
+      }}
+    val jobDescription = jobData.description.getOrElse {
+      lastStage.get.description.getOrElse(jobData.name)}
     val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
+    val lastStageName = lastStage.map(_.name).getOrElse(jobData.name)
+    val lastStageDescription = lastStage.flatMap(_.description)
+      .getOrElse(
+        jobData.description
+          .getOrElse(jobData.name))
+
+    val formattedJobDescription =
+      UIUtils.makeDescription(jobDescription, basePath, plainText = false)
 
     new JobTableRowData(
       jobData,
-      jobData.name,
-      jobData.description.getOrElse(jobData.name),
+      lastStageName,
+      lastStageDescription,
       duration.getOrElse(-1),
       formattedDuration,
       submissionTime.map(_.getTime()).getOrElse(-1L),
       formattedSubmissionTime,
-      jobDescription,
+      formattedJobDescription,
       detailUrl
     )
   }
