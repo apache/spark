@@ -2095,11 +2095,10 @@ class DataFrame(object):
                         _check_dataframe_localize_timestamps
                     import pyarrow
 
-                    tables = self._collectAsArrow()
-                    if tables:
-                        table = pyarrow.concat_tables(tables)
+                    batch_iter = self._collectAsArrow()
+                    if batch_iter:
+                        table = pyarrow.Table.from_batches(batch_iter)
                         pdf = table.to_pandas()
-                        pdf = _check_dataframe_convert_date(pdf, self.schema)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)

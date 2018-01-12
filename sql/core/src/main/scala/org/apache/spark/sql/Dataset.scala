@@ -24,9 +24,7 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
@@ -40,7 +38,7 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
@@ -48,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
+import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload, ArrowPayloadStreamWriter}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -3240,9 +3238,55 @@ class Dataset[T] private[sql](
    */
   private[sql] def collectAsArrowToPython(): Array[Any] = {
     withAction("collectAsArrowToPython", queryExecution) { plan =>
-      val iter: Iterator[Array[Byte]] =
-        toArrowPayload(plan).collect().iterator.map(_.asPythonSerializable)
-      PythonRDD.serveIterator(iter, "serve-Arrow")
+      //val iter = toArrowPayload.collect().iterator.map(_.asPythonSerializable)
+
+      PythonRDD.serveToStream("serve-Arrow") { out =>
+        val payloadWriter = new ArrowPayloadStreamWriter(schema, out)
+
+        /*
+        val payloadRDD = toArrowPayload
+        val results = new Array[Array[ArrowPayload]](payloadRDD.partitions.size)
+        sparkSession.sparkContext.runJob[ArrowPayload, Array[ArrowPayload]](
+          payloadRDD,
+          (ctx: TaskContext, it: Iterator[ArrowPayload]) => it.toArray,
+          0 until payloadRDD.partitions.length,
+          (index, res) => results(index) = res)
+        val payloads = Array.concat(results: _*)
+        */
+
+        val payloadRDD = toArrowPayload(plan)
+
+        val results = new Array[Array[ArrowPayload]](payloadRDD.partitions.size - 1)
+        var lastIndex = -1
+
+        def handlePartitionPayloads(index: Int, payloads: Array[ArrowPayload]): Unit = {
+          if (index - 1 == lastIndex) {
+            payloadWriter.writePayloads(payloads.iterator)
+            lastIndex += 1
+            while (lastIndex < results.length && results(lastIndex) != null) {
+              payloadWriter.writePayloads(results(lastIndex).iterator)
+              lastIndex += 1
+            }
+          } else {
+            results(index - 1) = payloads
+          }
+        }
+
+        sparkSession.sparkContext.runJob(
+          payloadRDD,
+          (ctx: TaskContext, it: Iterator[ArrowPayload]) => it.toArray,
+          0 until payloadRDD.partitions.length,
+          handlePartitionPayloads)
+          //(_: Int, payloads: Array[ArrowPayload]) => payloadWriter.writePayloads(payloads.iterator))
+
+        //ArrowConverters.writePayloadsToStream(out, schema, toArrowPayload.collect().iterator)
+
+        /*val payloadWriter = new ArrowPayloadStreamWriter(schema, out)
+        toArrowPayload.foreachPartition { payloadIter =>
+          payloadWriter.writePayloads(payloadIter)
+        }
+        payloadWriter.close()*/
+      }
     }
   }
 

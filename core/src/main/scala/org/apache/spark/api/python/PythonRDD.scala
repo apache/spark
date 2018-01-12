@@ -398,6 +398,13 @@ private[spark] object PythonRDD extends Logging {
    *         data collected from this job, and the secret for authentication.
    */
   def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
+    serveToStream(threadName) { out =>
+      writeIteratorToStream(items, out)
+    }
+  }
+
+  // TODO: scaladoc
+  def serveToStream(threadName: String)(dataWriteBlock: DataOutputStream => Unit): Array[Any] = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 15 seconds
     serverSocket.setSoTimeout(15000)
@@ -411,7 +418,7 @@ private[spark] object PythonRDD extends Logging {
 
           val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
           Utils.tryWithSafeFinally {
-            writeIteratorToStream(items, out)
+            dataWriteBlock(out)
           } {
             out.close()
             sock.close()
