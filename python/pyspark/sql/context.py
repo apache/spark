@@ -216,7 +216,7 @@ class SQLContext(object):
         :param f: a wrapped/native UserDefinedFunction. The UDF can be either row-at-a-time or
                   scalar vectorized. For example, the object returned by udf or pandas_udf.
                   Grouped vectorized UDFs are not supported.
-        :return: a wrapped :class:`UserDefinedFunction`
+        :return: a wrapped/native :class:`UserDefinedFunction`
 
         >>> from pyspark.sql.types import IntegerType
         >>> from pyspark.sql.functions import udf
