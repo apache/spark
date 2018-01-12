@@ -103,6 +103,8 @@ case class ExternalRDDScanExec[T](
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
+  override val nodeName: String = s"Scan ExternalRDD ${output.map(_.name).mkString("[", ",", "]")}"
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val outputDataType = outputObjAttr.dataType
@@ -116,7 +118,7 @@ case class ExternalRDDScanExec[T](
   }
 
   override def simpleString: String = {
-    s"Scan $nodeName${output.mkString("[", ",", "]")}"
+    s"Scan ${super.nodeName}${output.mkString("[", ",", "]")}"
   }
 }
 
@@ -169,9 +171,11 @@ case class LogicalRDD(
 case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    override val nodeName: String,
+    name: String,
     override val outputPartitioning: Partitioning = UnknownPartitioning(0),
     override val outputOrdering: Seq[SortOrder] = Nil) extends LeafExecNode {
+
+  override val nodeName: String = s"Scan RDD $name ${output.map(_.name).mkString("[", ",", "]")}"
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
