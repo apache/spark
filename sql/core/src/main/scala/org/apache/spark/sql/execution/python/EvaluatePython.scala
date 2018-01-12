@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
+import java.util.Calendar
 
 import scala.collection.JavaConverters._
 
@@ -144,6 +145,7 @@ object EvaluatePython {
     }
 
     case StringType => (obj: Any) => nullSafeConvert(obj) {
+      case _: Calendar => null
       case _ => UTF8String.fromString(obj.toString)
     }
 
