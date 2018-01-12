@@ -20,9 +20,24 @@ package org.apache.spark.sql.test
 trait SharedSQLContext extends SQLTestUtils with SharedSparkSession {
 
   /**
-   * Auto thread audit is turned off here intentionally and done manually.
+   * Suites extending [[SharedSQLContext]] are sharing resources (eg. SparkSession) in their tests.
+   * Such resources are initialized by the suite before thread audit takes thread snapshot and
+   * cleaned up after the audit checks for possible leaks.
    *
-   * Without doing so thread audit will miss the [[SharedSparkSession]] related threads.
+   * 1. Init resources
+   * 2. ThreadAudit pre step
+   * 3. Test code
+   * 4. ThreadAudit post step
+   * 5. Destroy resources
+   *
+   * By turning auto thread audit off and doing it manually audit steps can be executed at the
+   * proper place.
+   *
+   * 1. ThreadAudit pre step
+   * 2. Init resources
+   * 3. Test code
+   * 4. Destroy resources
+   * 5. ThreadAudit post step
    */
   override protected val enableAutoThreadAudit = false
 
