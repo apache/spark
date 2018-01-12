@@ -430,7 +430,7 @@ private[ui] class JobDataSource(
     val submissionTime = jobData.submissionTime
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
 
-    val lastStage = {
+    val lastStageAttempt = {
       val stageAttempts = jobData.stageIds.flatMap(store.stageData(_))
       if (stageAttempts.nonEmpty) {
         val lastAttempt = stageAttempts.maxBy(_.stageId)
@@ -441,12 +441,12 @@ private[ui] class JobDataSource(
     }
 
     val jobDescription = jobData.description
-      .getOrElse(lastStage.flatMap(_.description)
+      .getOrElse(lastStageAttempt.flatMap(_.description)
         .getOrElse(jobData.name))
 
-    val lastStageName = lastStage.map(_.name).getOrElse(jobData.name)
+    val lastStageName = lastStageAttempt.map(_.name).getOrElse(jobData.name)
 
-    val lastStageDescription = lastStage.flatMap(_.description)
+    val lastStageDescription = lastStageAttempt.flatMap(_.description)
       .getOrElse(jobData.description
           .getOrElse(jobData.name))
 
