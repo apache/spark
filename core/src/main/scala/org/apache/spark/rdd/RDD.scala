@@ -1710,7 +1710,7 @@ abstract class RDD[T: ClassTag](
   }
 
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
-  @transient private var doCheckpointCalled = false
+  @transient private[spark] var doCheckpointCalled = false
 
   /**
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD

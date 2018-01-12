@@ -17,20 +17,22 @@
 
 package org.apache.spark.scheduler
 
+import java.io.File
+import java.nio.ByteBuffer
 import java.util.Properties
+import java.util.concurrent.{CountDownLatch, Semaphore}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
-
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
-import org.apache.spark.rdd.RDD
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.rdd.{CheckpointState, RDD, RDDCheckpointData}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
@@ -94,6 +96,22 @@ class MyRDD(
   }
 
   override def toString: String = "DAGSchedulerSuiteRDD " + id
+}
+
+/** Wrapped rdd partition. */
+class WrappedPartition(val partition: Partition) extends Partition {
+  def index: Int = partition.index
+}
+
+/** Wrapped rdd with WrappedPartition. */
+class WrappedRDD(parent: RDD[Int]) extends RDD[Int](parent) {
+  protected def getPartitions: Array[Partition] = {
+    parent.partitions.map(p => new WrappedPartition(p))
+  }
+
+  def compute(split: Partition, context: TaskContext): Iterator[Int] = {
+    parent.compute(split.asInstanceOf[WrappedPartition].partition, context)
+  }
 }
 
 class DAGSchedulerSuiteDummyException extends Exception
@@ -2397,6 +2415,93 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       sc.listenerBus.waitUntilEmpty(1000)
       assert(foundCount.get() === tasks)
     }
+  }
+
+  /**
+   * In this test, we simply simulate the scene in concurrent jobs using the same
+   * rdd which is marked to do checkpoint:
+   * Job one has already finished the spark job, and start the process of doCheckpoint;
+   * Job two is submitted, and submitMissingTasks is called.
+   * In submitMissingTasks, if taskSerialization is called before doCheckpoint is done,
+   * while part calculates from stage.rdd.partitions is called after doCheckpoint is done,
+   * we may get a ClassCastException when execute the task because of some rdd will do
+   * Partition cast.
+   *
+   * With this test case, just want to indicate that we should do taskSerialization and
+   * part calculate in submitMissingTasks with the same rdd checkpoint status.
+   */
+  test("task part misType with checkpoint rdd in concurrent execution scenes") {
+    // set checkpointDir.
+    val tempDir = Utils.createTempDir()
+    val checkpointDir = File.createTempFile("temp", "", tempDir)
+    checkpointDir.delete()
+    sc.setCheckpointDir(checkpointDir.toString)
+
+    val latch = new CountDownLatch(2)
+    val semaphore1 = new Semaphore(0)
+    val semaphore2 = new Semaphore(0)
+
+    val rdd = new WrappedRDD(sc.makeRDD(1 to 100, 4))
+    rdd.checkpoint()
+
+    val checkpointRunnable = new Runnable {
+      override def run() = {
+        // Simply simulate what RDD.doCheckpoint() do here.
+        rdd.doCheckpointCalled = true
+        val checkpointData = rdd.checkpointData.get
+        RDDCheckpointData.synchronized {
+          if (checkpointData.cpState == CheckpointState.Initialized) {
+            checkpointData.cpState = CheckpointState.CheckpointingInProgress
+          }
+        }
+
+        val newRDD = checkpointData.doCheckpoint()
+
+        // Release semaphore1 after job triggered in checkpoint finished.
+        semaphore1.release()
+        semaphore2.acquire()
+        // Update our state and truncate the RDD lineage.
+        RDDCheckpointData.synchronized {
+          checkpointData.cpRDD = Some(newRDD)
+          checkpointData.cpState = CheckpointState.Checkpointed
+          rdd.markCheckpointed()
+        }
+        semaphore1.release()
+
+        latch.countDown()
+      }
+    }
+
+    val submitMissingTasksRunnable = new Runnable {
+      override def run() = {
+        // Simply simulate the process of submitMissingTasks.
+        val ser = SparkEnv.get.closureSerializer.newInstance()
+        semaphore1.acquire()
+        // Simulate task serialization while submitMissingTasks.
+        // Task serialized with rdd checkpoint not finished.
+        val cleanedFunc = sc.clean(Utils.getIteratorSize _)
+        val func = (ctx: TaskContext, it: Iterator[Int]) => cleanedFunc(it)
+        val taskBinaryBytes = JavaUtils.bufferToArray(
+          ser.serialize((rdd, func): AnyRef))
+        semaphore2.release()
+        semaphore1.acquire()
+        // Part calculated with rdd checkpoint already finished.
+        val (taskRdd, taskFunc) = ser.deserialize[(RDD[Int], (TaskContext, Iterator[Int]) => Unit)](
+          ByteBuffer.wrap(taskBinaryBytes), Thread.currentThread.getContextClassLoader)
+        val part = rdd.partitions(0)
+        intercept[ClassCastException] {
+          // Triggered when runTask in executor.
+          taskRdd.iterator(part, null)
+        }
+
+        latch.countDown()
+      }
+    }
+
+    new Thread(checkpointRunnable).start()
+    new Thread(submitMissingTasksRunnable).start()
+    latch.await()
+    Utils.deleteRecursively(tempDir)
   }
 
   /**
