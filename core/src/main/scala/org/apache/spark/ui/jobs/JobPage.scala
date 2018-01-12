@@ -343,7 +343,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       content ++=
         <h4 id="active" class="collapse-aggregated-activeStages collapse-table"
             onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
-          Active Stages ({activeStages.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Active Stages ({activeStages.size})</a>
         </h4> ++
         <div class="aggregated-activeStages collapsible-table">
           {activeStagesTable.toNodeSeq}
@@ -354,7 +355,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         <h4 id="pending" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
             'aggregated-pendingOrSkippedStages')">
-          Pending Stages ({pendingOrSkippedStages.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Pending Stages ({pendingOrSkippedStages.size})</a>
         </h4> ++
         <div class="aggregated-pendingOrSkippedStages collapsible-table">
           {pendingOrSkippedStagesTable.toNodeSeq}
@@ -365,7 +367,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         <h4 id="completed" class="collapse-aggregated-completedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-completedStages',
             'aggregated-completedStages')">
-          Completed Stages ({completedStages.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Completed Stages ({completedStages.size})</a>
         </h4> ++
         <div class="aggregated-completedStages collapsible-table">
           {completedStagesTable.toNodeSeq}
@@ -376,7 +379,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         <h4 id="skipped" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
             'aggregated-pendingOrSkippedStages')">
-          Skipped Stages ({pendingOrSkippedStages.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Skipped Stages ({pendingOrSkippedStages.size})</a>
         </h4> ++
         <div class="aggregated-pendingOrSkippedStages collapsible-table">
           {pendingOrSkippedStagesTable.toNodeSeq}
@@ -386,7 +390,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       content ++=
         <h4 id ="failed" class="collapse-aggregated-failedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-failedStages','aggregated-failedStages')">
-          Failed Stages ({failedStages.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Failed Stages ({failedStages.size})</a>
         </h4> ++
         <div class="aggregated-failedStages collapsible-table">
           {failedStagesTable.toNodeSeq}

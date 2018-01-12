@@ -43,7 +43,8 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
       <div>
         <h4 class="collapse-aggregated-rdds collapse-table"
             onClick="collapseTable('collapse-aggregated-rdds','aggregated-rdds')">
-          RDDs
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>RDDs</a>
         </h4>
         <div class="aggregated-rdds collapsible-table">
           {UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))}

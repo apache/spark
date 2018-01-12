@@ -118,7 +118,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         if (sc.isDefined && isFairScheduler) {
           <h4 class="collapse-aggregated-poolTable collapse-table"
               onClick="collapseTable('collapse-aggregated-poolTable','aggregated-poolTable')">
-            Fair Scheduler Pools ({pools.size})
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Fair Scheduler Pools ({pools.size})</a>
           </h4> ++
           <div class="aggregated-poolTable collapsible-table">
             {poolTable.toNodeSeq}
@@ -131,7 +132,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       content ++=
         <h4 id="active" class="collapse-aggregated-activeStages collapse-table"
             onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
-          Active Stages ({activeStages.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Active Stages ({activeStages.size})</a>
         </h4> ++
         <div class="aggregated-activeStages collapsible-table">
           {activeStagesTable.toNodeSeq}
@@ -141,7 +143,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       content ++=
         <h4 id="pending" class="collapse-aggregated-pendingStages collapse-table"
             onClick="collapseTable('collapse-aggregated-pendingStages','aggregated-pendingStages')">
-          Pending Stages ({pendingStages.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Pending Stages ({pendingStages.size})</a>
         </h4> ++
         <div class="aggregated-pendingStages collapsible-table">
           {pendingStagesTable.toNodeSeq}
@@ -152,7 +155,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         <h4 id="completed" class="collapse-aggregated-completedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-completedStages',
             'aggregated-completedStages')">
-          Completed Stages ({completedStageNumStr})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Completed Stages ({completedStageNumStr})</a>
         </h4> ++
         <div class="aggregated-completedStages collapsible-table">
           {completedStagesTable.toNodeSeq}
@@ -163,7 +167,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         <h4 id ="failed" class="collapse-aggregated-failedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-failedStages',
             'aggregated-failedStages')">
-          Failed Stages ({numFailedStages})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Failed Stages ({numFailedStages})</a>
         </h4> ++
         <div class="aggregated-failedStages collapsible-table">
           {failedStagesTable.toNodeSeq}

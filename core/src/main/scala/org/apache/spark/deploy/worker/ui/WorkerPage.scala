@@ -80,7 +80,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
           <h4 class="collapse-aggregated-runningExecutors collapse-table"
               onClick="collapseTable('collapse-aggregated-runningExecutors',
               'aggregated-runningExecutors')">
-            Running Executors ({runningExecutors.size})
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Running Executors ({runningExecutors.size})</a>
           </h4>
           <div class="aggregated-runningExecutors collapsible-table">
             {runningExecutorTable}
@@ -90,7 +91,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
               <h4 class="collapse-aggregated-runningDrivers collapse-table"
                   onClick="collapseTable('collapse-aggregated-runningDrivers',
                   'aggregated-runningDrivers')">
-                Running Drivers ({runningDrivers.size})
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Running Drivers ({runningDrivers.size})</a>
               </h4> ++
               <div class="aggregated-runningDrivers collapsible-table">
                 {runningDriverTable}
@@ -102,7 +104,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
               <h4 class="collapse-aggregated-finishedExecutors collapse-table"
                   onClick="collapseTable('collapse-aggregated-finishedExecutors',
                   'aggregated-finishedExecutors')">
-                Finished Executors ({finishedExecutors.size})
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Finished Executors ({finishedExecutors.size})</a>
               </h4> ++
               <div class="aggregated-finishedExecutors collapsible-table">
                 {finishedExecutorTable}
@@ -114,7 +117,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
               <h4 class="collapse-aggregated-finishedDrivers collapse-table"
                   onClick="collapseTable('collapse-aggregated-finishedDrivers',
                   'aggregated-finishedDrivers')">
-                Finished Drivers ({finishedDrivers.size})
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Finished Drivers ({finishedDrivers.size})</a>
               </h4> ++
               <div class="aggregated-finishedDrivers collapsible-table">
                 {finishedDriverTable}

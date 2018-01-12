@@ -51,7 +51,8 @@ private[ui] class EnvironmentPage(
         <h4 class="collapse-aggregated-runtimeInformation collapse-table"
             onClick="collapseTable('collapse-aggregated-runtimeInformation',
             'aggregated-runtimeInformation')">
-          Runtime Information
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Runtime Information</a>
         </h4>
         <div class="aggregated-runtimeInformation collapsible-table">
           {runtimeInformationTable}
@@ -59,7 +60,8 @@ private[ui] class EnvironmentPage(
         <h4 class="collapse-aggregated-sparkProperties collapse-table"
             onClick="collapseTable('collapse-aggregated-sparkProperties',
             'aggregated-sparkProperties')">
-          Spark Properties
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Spark Properties</a>
         </h4>
         <div class="aggregated-sparkProperties collapsible-table">
           {sparkPropertiesTable}
@@ -67,7 +69,8 @@ private[ui] class EnvironmentPage(
         <h4 class="collapse-aggregated-systemProperties collapse-table"
             onClick="collapseTable('collapse-aggregated-systemProperties',
             'aggregated-systemProperties')">
-          System Properties
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>System Properties</a>
         </h4>
         <div class="aggregated-systemProperties collapsible-table">
           {systemPropertiesTable}
@@ -75,7 +78,8 @@ private[ui] class EnvironmentPage(
         <h4 class="collapse-aggregated-classpathEntries collapse-table"
             onClick="collapseTable('collapse-aggregated-classpathEntries',
             'aggregated-classpathEntries')">
-          Classpath Entries
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Classpath Entries</a>
         </h4>
         <div class="aggregated-classpathEntries collapsible-table">
           {classpathEntriesTable}

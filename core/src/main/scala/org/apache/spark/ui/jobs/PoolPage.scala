@@ -54,7 +54,8 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
       content ++=
         <h4 class="collapse-aggregated-activeStages collapse-table"
             onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
-          Active Stages ({activeStages.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Active Stages ({activeStages.size})</a>
         </h4> ++
         <div class="aggregated-activeStages collapsible-table">
           {activeStagesTable.toNodeSeq}

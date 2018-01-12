@@ -368,7 +368,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       content ++=
         <h4 id="active" class="collapse-aggregated-activeJobs collapse-table"
             onClick="collapseTable('collapse-aggregated-activeJobs','aggregated-activeJobs')">
-          Active Jobs ({activeJobs.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Active Jobs ({activeJobs.size})</a>
         </h4> ++
         <div class="aggregated-activeJobs collapsible-table">
           {activeJobsTable}
@@ -378,7 +379,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       content ++=
         <h4 id="completed" class="collapse-aggregated-completedJobs collapse-table"
             onClick="collapseTable('collapse-aggregated-completedJobs','aggregated-completedJobs')">
-          Completed Jobs ({completedJobNumStr})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Completed Jobs ({completedJobNumStr})</a>
         </h4> ++
         <div class="aggregated-completedJobs collapsible-table">
           {completedJobsTable}
@@ -388,7 +390,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       content ++=
         <h4 id ="failed" class="collapse-aggregated-failedJobs collapse-table"
             onClick="collapseTable('collapse-aggregated-failedJobs','aggregated-failedJobs')">
-          Failed Jobs ({failedJobs.size})
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Failed Jobs ({failedJobs.size})</a>
         </h4> ++
       <div class="aggregated-failedJobs collapsible-table">
         {failedJobsTable}
