@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util
+import java.util.Optional
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
@@ -32,7 +34,8 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.sources.v2.streaming.reader.MicroBatchReader
+import org.apache.spark.sql.sources.v2.reader.ReadTask
+import org.apache.spark.sql.sources.v2.streaming.reader.{Offset => OffsetV2, MicroBatchReader}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -68,14 +71,15 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   @GuardedBy("this")
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
+  private var startOffset = new LongOffset(-1)
+  private var endOffset = new LongOffset(-1)
+
   /**
    * Last offset that was discarded, or -1 if no commits have occurred. Note that the value
    * -1 is used in calculations below and isn't just an arbitrary constant.
    */
   @GuardedBy("this")
   protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
-
-  def schema: StructType = encoder.schema
 
   def toDS(): Dataset[A] = {
     Dataset(sqlContext.sparkSession, logicalPlan)
@@ -91,7 +95,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def addData(data: TraversableOnce[A]): Offset = {
     val encoded = data.toVector.map(d => encoder.toRow(d).copy())
-    val plan = new LocalRelation(schema.toAttributes, encoded, isStreaming = true)
+    val plan = new LocalRelation(attributes, encoded, isStreaming = true)
     val ds = Dataset[A](sqlContext.sparkSession, plan)
     logDebug(s"Adding ds: $ds")
     this.synchronized {
@@ -103,12 +107,24 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
-  override def getOffset: Option[Offset] = synchronized {
-    if (currentOffset.offset == -1) {
-      None
-    } else {
-      Some(currentOffset)
+  override def setOffsetRange(start: Optional[OffsetV2], end: Optional[OffsetV2]): Unit = {
+    if (start.isPresent) {
+      startOffset = start.get().asInstanceOf[LongOffset]
     }
+    endOffset = end.orElse(currentOffset).asInstanceOf[LongOffset]
+  }
+
+  override def readSchema(): StructType = encoder.schema
+
+  override def deserializeOffset(json: String): OffsetV2 = LongOffset(json.toLong)
+
+  override def getStartOffset: OffsetV2 = if (startOffset.offset == -1) null else startOffset
+
+  override def getEndOffset: OffsetV2 = if (endOffset.offset == -1) null else endOffset
+
+  override def createReadTasks(): util.List[ReadTask[Row]] = {
+
+    ???
   }
 
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
@@ -149,7 +165,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  override def commit(end: Offset): Unit = synchronized {
+  override def commit(end: OffsetV2): Unit = synchronized {
     def check(newOffset: LongOffset): Unit = {
       val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 

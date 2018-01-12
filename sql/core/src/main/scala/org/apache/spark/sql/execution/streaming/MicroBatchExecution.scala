@@ -275,7 +275,7 @@ class MicroBatchExecution(
               toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
               Optional.empty())
 
-              (s, Some(s.getEndOffset))
+              (s, Option(s.getEndOffset))
             }
         }.toMap
         availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)
