@@ -34,6 +34,10 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 2.4.x
+  lazy val v24excludes = v23excludes ++ Seq(
+  )
+
   // Exclude rules for 2.3.x
   lazy val v23excludes = v22excludes ++ Seq(
     // [SPARK-22897] Expose stageAttemptId in TaskContext
@@ -1082,6 +1086,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("2.4") => v24excludes
     case v if v.startsWith("2.3") => v23excludes
     case v if v.startsWith("2.2") => v22excludes
     case v if v.startsWith("2.1") => v21excludes
