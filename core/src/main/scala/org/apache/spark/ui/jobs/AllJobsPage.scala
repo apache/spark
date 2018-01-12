@@ -432,16 +432,17 @@ private[ui] class JobDataSource(
 
     val lastStage = {
       val stageAttempts = jobData.stageIds.flatMap(store.stageData(_))
-      if (!stageAttempts.isEmpty) {
-        val lastId = stageAttempts.map(_.stageId).max
-        stageAttempts.find(_.stageId == lastId)
+      if (stageAttempts.nonEmpty) {
+        val lastAttempt = stageAttempts.maxBy(_.stageId)
+        Some(lastAttempt)
       } else {
         None
-      }}
+      }
+    }
 
     val jobDescription = jobData.description
-      .getOrElse(lastStage.flatMap(_.description).
-          getOrElse(jobData.name))
+      .getOrElse(lastStage.flatMap(_.description)
+        .getOrElse(jobData.name))
 
     val lastStageName = lastStage.map(_.name).getOrElse(jobData.name)
 
