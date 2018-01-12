@@ -433,8 +433,7 @@ private[ui] class JobDataSource(
     val lastStageAttempt = {
       val stageAttempts = jobData.stageIds.flatMap(store.stageData(_))
       if (stageAttempts.nonEmpty) {
-        val lastAttempt = stageAttempts.maxBy(_.stageId)
-        Some(lastAttempt)
+        Some(stageAttempts.maxBy(_.stageId))
       } else {
         None
       }
