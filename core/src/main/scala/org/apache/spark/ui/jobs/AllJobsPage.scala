@@ -431,7 +431,7 @@ private[ui] class JobDataSource(
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
 
     val lastStage = {
-      val stageAttempts = jobData.stageIds.map(store.stageData(_)).flatten
+      val stageAttempts = jobData.stageIds.flatMap(store.stageData(_))
       if (!stageAttempts.isEmpty) {
         val lastId = stageAttempts.map(_.stageId).max
         stageAttempts.find(_.stageId == lastId)
@@ -439,7 +439,7 @@ private[ui] class JobDataSource(
         None
       }}
     val jobDescription = jobData.description.getOrElse {
-      lastStage.get.description.getOrElse(jobData.name)}
+      lastStage.flatMap(_.description).getOrElse(jobData.name)}
     val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
     val lastStageName = lastStage.map(_.name).getOrElse(jobData.name)
     val lastStageDescription = lastStage.flatMap(_.description)
