@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.sources.{MemoryPlanV2, MemorySinkV2}
-import org.apache.spark.sql.sources.v2.streaming.ContinuousWriteSupport
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousWriteSupport, MicroBatchWriteSupport}
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -280,14 +280,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         useTempCheckpointLocation = true,
         trigger = trigger)
     } else {
-      val sink = trigger match {
-        case _: ContinuousTrigger =>
-          val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
-          ds.newInstance() match {
-            case w: ContinuousWriteSupport => w
-            case _ => throw new AnalysisException(
-              s"Data source $source does not support continuous writing")
-          }
+      val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
+      val sink = (ds.newInstance(), trigger) match {
+        case (w: ContinuousWriteSupport, _: ContinuousTrigger) => w
+        case (_, _: ContinuousTrigger) => throw new AnalysisException(
+            s"Data source $source does not support continuous writing")
+        case (w: MicroBatchWriteSupport, _) => w
         case _ =>
           val ds = DataSource(
             df.sparkSession,
