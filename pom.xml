@@ -132,7 +132,7 @@
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.9.1-palantir3</parquet.version>
     <feign.version>8.18.0</feign.version>
-    <okhttp3.version>3.9.0</okhttp3.version>
+    <okhttp3.version>3.9.1</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.13.0</okio.version>
     <retrofit.version>2.3.0</retrofit.version>
@@ -158,13 +158,8 @@
     <commons-beanutils.version>1.9.3</commons-beanutils.version>
     <commons-logging.version>1.2</commons-logging.version>
     <!--  org.apache.httpcomponents/httpclient-->
-<<<<<<< HEAD
-    <commons.httpclient.version>4.5.3</commons.httpclient.version>
-    <commons.httpcore.version>4.4.6</commons.httpcore.version>
-=======
     <commons.httpclient.version>4.5.4</commons.httpclient.version>
     <commons.httpcore.version>4.4.8</commons.httpcore.version>
->>>>>>> master
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -187,17 +182,11 @@
     <commons-compress.version>1.8.1</commons-compress.version>
     <commons-pool.version>1.6</commons-pool.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
-<<<<<<< HEAD
     <javax-activation.version>1.1.1</javax-activation.version>
     <objenesis.version>2.5.1</objenesis.version>
-    <janino.version>3.0.0</janino.version>
+    <janino.version>3.0.8</janino.version>
     <jersey.version>2.25.1</jersey.version>
     <joda.version>2.9.9</joda.version>
-=======
-    <janino.version>3.0.8</janino.version>
-    <jersey.version>2.22.2</jersey.version>
-    <joda.version>2.9.3</joda.version>
->>>>>>> master
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.1</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
@@ -720,11 +709,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-<<<<<<< HEAD
-        <version>4.0.50.Final</version>
-=======
         <version>4.1.17.Final</version>
->>>>>>> master
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -3048,7 +3033,6 @@
     </profile>
 
     <profile>
-<<<<<<< HEAD
       <id>kubernetes-integration-tests</id>
       <modules>
         <module>resource-managers/kubernetes/docker-minimal-bundle</module>
@@ -3059,8 +3043,6 @@
     </profile>
 
     <profile>
-=======
->>>>>>> master
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>

@@ -240,7 +240,6 @@ package object config {
     .stringConf
     .createOptional
 
-<<<<<<< HEAD
   private[spark] val CONDA_BOOTSTRAP_PACKAGES = ConfigBuilder("spark.conda.bootstrapPackages")
     .doc("The packages that will be added to the conda environment. "
       + "Only relevant when main class is CondaRunner.")
@@ -272,13 +271,6 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
-  // To limit memory usage, we only track information for a fixed number of tasks
-  private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
-    .intConf
-    .createWithDefault(100000)
-
-=======
->>>>>>> master
   // To limit how many applications are shown in the History Server summary ui
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)

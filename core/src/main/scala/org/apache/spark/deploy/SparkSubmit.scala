@@ -18,13 +18,13 @@
 package org.apache.spark.deploy
 
 import java.io._
-import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
+import java.lang.reflect.{InvocationTargetException, UndeclaredThrowableException}
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 
 import scala.annotation.tailrec
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.{Properties, Try}
 
 import org.apache.commons.lang3.StringUtils
@@ -77,11 +77,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val MESOS = 4
   private val LOCAL = 8
   private val KUBERNETES = 16
-<<<<<<< HEAD
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | KUBERNETES | LOCAL
-=======
   private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | KUBERNETES
->>>>>>> master
 
   // Deploy modes
   private val CLIENT = 1
@@ -351,7 +347,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
     val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
     val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
-    val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
@@ -586,16 +581,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
       OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.principal"),
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.keytab"),
 
-<<<<<<< HEAD
       OptionAssigner(args.kubernetesNamespace, KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.kubernetes.namespace"),
 
-        // Other options
-      OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
-=======
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
->>>>>>> master
         confKey = "spark.executor.cores"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.executor.memory"),
@@ -606,11 +596,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
       OptionAssigner(args.jars, LOCAL, CLIENT, confKey = "spark.jars"),
       OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.jars"),
-<<<<<<< HEAD
-      OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN, CLUSTER,
-=======
       OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
->>>>>>> master
         confKey = "spark.driver.memory"),
       OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
         confKey = "spark.driver.cores"),
@@ -748,8 +734,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     }
 
     if (isKubernetesCluster) {
-<<<<<<< HEAD
-      childMainClass = "org.apache.spark.deploy.k8s.submit.Client"
+      childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
       if (args.isPython) {
         childArgs ++= Array("--primary-py-file", args.primaryResource)
         childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
@@ -757,23 +742,14 @@ object SparkSubmit extends CommandLineUtils with Logging {
           childArgs ++= Array("--other-py-files", args.pyFiles)
         }
       } else {
-        childArgs ++= Array("--primary-java-resource", args.primaryResource)
+        if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
+          childArgs ++= Array("--primary-java-resource", args.primaryResource)
+        }
         childArgs ++= Array("--main-class", args.mainClass)
       }
       args.childArgs.foreach { arg =>
         childArgs += "--arg"
         childArgs += arg
-=======
-      childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
-      if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
-        childArgs ++= Array("--primary-java-resource", args.primaryResource)
-      }
-      childArgs ++= Array("--main-class", args.mainClass)
-      if (args.childArgs != null) {
-        args.childArgs.foreach { arg =>
-          childArgs += ("--arg", arg)
-        }
->>>>>>> master
       }
     }
 

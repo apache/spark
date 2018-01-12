@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
-<<<<<<< HEAD
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.createRLEIterator;
-=======
-import java.io.IOException;
-import java.util.TimeZone;
->>>>>>> master
 
 import java.io.IOException;
+import java.util.TimeZone;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;

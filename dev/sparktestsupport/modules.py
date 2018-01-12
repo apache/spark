@@ -539,16 +539,11 @@ mesos = Module(
 kubernetes = Module(
     name="kubernetes",
     dependencies=[],
-<<<<<<< HEAD
     source_file_regexes=["resource-managers/kubernetes/core"],
-=======
-    source_file_regexes=["resource-managers/kubernetes"],
->>>>>>> master
     build_profile_flags=["-Pkubernetes"],
     sbt_test_goals=["kubernetes/test"]
 )
 
-<<<<<<< HEAD
 cloud = Module(
     name="hadoop-cloud",
     dependencies=[],
@@ -557,8 +552,6 @@ cloud = Module(
     sbt_test_goals=["hadoop-cloud/test"]
 )
 
-=======
->>>>>>> master
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
 root = Module(
