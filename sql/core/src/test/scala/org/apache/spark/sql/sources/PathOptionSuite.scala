@@ -133,6 +133,19 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23057: path option always represent the value of table location with partition") {
+    withTable("src") {
+      sql(
+        s"""
+           |CREATE TABLE src(i INT, j INT)
+           |USING ${classOf[TestOptionsSource].getCanonicalName}
+           |PARTITIONED BY (i)
+           |OPTIONS (PATH '/tmp/path')""".stripMargin)
+      sql("ALTER TABLE src SET LOCATION '/tmp/path2'")
+      assert(getPathOption("src").map(makeQualifiedPath) == Some(makeQualifiedPath("/tmp/path2")))
+    }
+  }
+
   private def getPathOption(tableName: String): Option[String] = {
     spark.table(tableName).queryExecution.analyzed.collect {
       case LogicalRelation(r: TestOptionsRelation, _, _, _) => r.pathOption

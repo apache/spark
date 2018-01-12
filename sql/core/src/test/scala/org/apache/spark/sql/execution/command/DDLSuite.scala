@@ -2002,6 +2002,65 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-23057: SET LOCATION for managed table with partition") {
+    withTable("tbl_partition") {
+      withTempDir { dir =>
+        sql("CREATE TABLE tbl_partition(col1 INT, col2 INT) USING parquet PARTITIONED BY (col1)")
+        sql("INSERT INTO tbl_partition PARTITION(col1=1) SELECT 11")
+        sql("INSERT INTO tbl_partition PARTITION(col1=2) SELECT 22")
+        checkAnswer(spark.table("tbl_partition"), Seq(Row(11, 1), Row(22, 2)))
+        val defaultTablePath = spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tbl_partition")).storage.locationUri.get
+        try {
+          // before set location of partition col1 =1 and 2
+          checkPath(defaultTablePath.toString, Map("col1" -> "1"), "tbl_partition")
+          checkPath(defaultTablePath.toString, Map("col1" -> "2"), "tbl_partition")
+          val path = dir.getCanonicalPath
+
+          // set location of partition col1 =1
+          sql(s"ALTER TABLE tbl_partition PARTITION (col1='1') SET LOCATION '$path'")
+          checkPath(dir.getCanonicalPath, Map("col1" -> "1"), "tbl_partition")
+          checkPath(defaultTablePath.toString, Map("col1" -> "2"), "tbl_partition")
+
+          // set location of partition col1 =2
+          sql(s"ALTER TABLE tbl_partition PARTITION (col1='2') SET LOCATION '$path'")
+          checkPath(dir.getCanonicalPath, Map("col1" -> "1"), "tbl_partition")
+          checkPath(dir.getCanonicalPath, Map("col1" -> "2"), "tbl_partition")
+
+          spark.catalog.refreshTable("tbl_partition")
+          // SET LOCATION won't move data from previous table path to new table path.
+          assert(spark.table("tbl_partition").count() == 0)
+          // the previous table path should be still there.
+          assert(new File(defaultTablePath).exists())
+
+          sql("INSERT INTO tbl_partition PARTITION(col1=2) SELECT 33")
+          // newly inserted data will go to the new table path.
+          assert(dir.listFiles().nonEmpty)
+
+          sql("DROP TABLE tbl_partition")
+          // the new table path will be removed after DROP TABLE.
+          assert(!dir.exists())
+        } finally {
+          Utils.deleteRecursively(new File(defaultTablePath))
+        }
+      }
+    }
+  }
+
+  def checkPath(path: String, partSpec: Map[String, String], table: String): Unit = {
+    val catalog = spark.sessionState.catalog
+    val spec = Some(partSpec)
+    val tableIdent = TableIdentifier(table)
+    val storageFormat = spec
+      .map { s => catalog.getPartition(tableIdent, s).storage }
+      .getOrElse {
+        catalog.getTableMetadata(tableIdent).storage
+      }
+    if (isUsingHiveMetastore) {
+      assert(storageFormat.properties.get("path").get.toString === path)
+    }
+  }
+
   test("insert data to a data source table which has a non-existing location should succeed") {
     withTable("t") {
       withTempDir { dir =>
