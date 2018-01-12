@@ -2184,10 +2184,10 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |         8|      JOHN DOE|          22|
        +----------+--------------+------------+
 
-       .. note:: The length of `pandas.Series` within a scalar UDF is not of the whole input column
-           but of the batch internally used, and it is called for each batch. Therefore,
-           this can be used, for example, to ensure the length of each returned `pandas.Series`
-           but should not be used as the length of the whole input.
+       .. note:: The length of `pandas.Series` within a scalar UDF is not that of the whole input
+           column, but is the length of an internal batch used for each call to the function.
+           Therefore, this can be used, for example, to ensure the length of each returned
+           `pandas.Series`, and can not be used as the column length.
 
     2. GROUP_MAP
 
