@@ -208,7 +208,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     TorrentBroadcast.synchronized {
       val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
 
-      Option(broadcastCache.get(broadcastId)).map(_.asInstanceOf[T]).getOrElse({
+      Option(broadcastCache.get(broadcastId)).map(_.asInstanceOf[T]).getOrElse {
         setConf(SparkEnv.get.conf)
         val blockManager = SparkEnv.get.blockManager
         blockManager.getLocalValues(broadcastId) match {
@@ -250,7 +250,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
               blocks.foreach(_.dispose())
             }
         }
-      })
+      }
     }
   }
 
