@@ -652,7 +652,7 @@ We use Titanic data set to show how to use `spark.mlp` in classification.
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
 # fit a Multilayer Perceptron Classification Model
-model <- spark.mlp(training, Survived ~ Age + Sex, blockSize = 128, layers = c(2, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c( 0, 0, 0, 5, 5, 5, 9, 9, 9))
+model <- spark.mlp(training, Survived ~ Age + Sex, blockSize = 128, layers = c(2, 2), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c( 0, 0, 5, 5, 9, 9))
 ```
 
 To avoid lengthy display, we only present partial results of the model summary. You can check the full result from your sparkR shell.
