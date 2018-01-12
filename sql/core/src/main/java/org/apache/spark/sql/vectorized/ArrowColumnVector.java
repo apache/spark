@@ -554,7 +554,7 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   /**
-   * This is a place holder class. Any "get" method will throw UnsupportedOperationException.
+   * Any call to "get" method will throw UnsupportedOperationException.
    *
    * Access struct values in a ArrowColumnVector doesn't use this accessor. Instead, it uses getStruct() method defined
    * in the parent class. Any call to "get" method in this class is a bug in the code.
