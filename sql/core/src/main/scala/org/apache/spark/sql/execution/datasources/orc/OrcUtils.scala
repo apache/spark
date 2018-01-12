@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.orc.{OrcFile, Reader, TypeDescription}
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
@@ -64,11 +65,11 @@ object OrcUtils extends Logging {
       }
     } catch {
       case e: org.apache.orc.FileFormatException =>
-        if (true) {
+        if (ignoreCorruptFiles) {
           logWarning(s"Skipped the footer in the corrupted file: $file", e)
           None
         } else {
-          throw new java.io.IOException(s"Could not read footer for file: $file", e)
+          throw new SparkException(s"Could not read footer for file: $file", e)
         }
     }
   }

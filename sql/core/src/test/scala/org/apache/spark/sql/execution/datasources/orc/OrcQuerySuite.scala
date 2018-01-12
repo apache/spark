@@ -621,9 +621,7 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
           new Path(basePath, "first").toString,
           new Path(basePath, "second").toString,
           new Path(basePath, "third").toString)
-        checkAnswer(
-          df,
-          Seq(Row(0), Row(1)))
+        checkAnswer(df, Seq(Row(0), Row(1)))
       }
     }
 
@@ -635,7 +633,7 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
       val exception = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }
-      assert(exception.getMessage().contains("Malformed ORC file"))
+      assert(exception.getMessage.contains("Could not read footer for file"))
     }
   }
 }
