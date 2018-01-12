@@ -23,6 +23,8 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
+import scala.concurrent
+import scala.concurrent.duration
 import scala.xml._
 
 import org.apache.commons.lang3.StringEscapeUtils
@@ -438,17 +440,21 @@ private[ui] class JobDataSource(
       } else {
         None
       }}
-    val jobDescription = jobData.description.getOrElse {
-      lastStage.flatMap(_.description).getOrElse(jobData.name)}
-    val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
+
+    val jobDescription = jobData.description
+      .getOrElse(lastStage.flatMap(_.description).
+          getOrElse(jobData.name))
+
     val lastStageName = lastStage.map(_.name).getOrElse(jobData.name)
+
     val lastStageDescription = lastStage.flatMap(_.description)
-      .getOrElse(
-        jobData.description
+      .getOrElse(jobData.description
           .getOrElse(jobData.name))
 
     val formattedJobDescription =
       UIUtils.makeDescription(jobDescription, basePath, plainText = false)
+
+    val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
 
     new JobTableRowData(
       jobData,
