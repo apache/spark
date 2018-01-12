@@ -67,7 +67,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       val status = job.status
       val jobDescription = store.lastStageAttempt(job.stageIds.max).description
       val displayJobDescription = jobDescription
-          .map(UIUtils.makeDescription(_, "", plainText = true).text)
+        .map(UIUtils.makeDescription(_, "", plainText = true).text)
         .getOrElse("")
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
