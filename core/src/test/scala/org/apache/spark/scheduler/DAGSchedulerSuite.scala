@@ -20,15 +20,18 @@ package org.apache.spark.scheduler
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.Properties
-import java.util.concurrent.{CountDownLatch, Semaphore}
+import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
+
+import org.mockito.Mockito._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
+
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.network.util.JavaUtils
@@ -103,7 +106,11 @@ class WrappedPartition(val partition: Partition) extends Partition {
   def index: Int = partition.index
 }
 
-/** Wrapped rdd with WrappedPartition. */
+/**
+ * An RDD with a particular defined Partition which is WrappedPartition.
+ * The compute method will cast the split to WrappedPartition. The cast operation will be
+ * used in this test suite.
+ */
 class WrappedRDD(parent: RDD[Int]) extends RDD[Int](parent) {
   protected def getPartitions: Array[Partition] = {
     parent.partitions.map(p => new WrappedPartition(p))
@@ -2430,14 +2437,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    * With this test case, just want to indicate that we should do taskSerialization and
    * part calculate in submitMissingTasks with the same rdd checkpoint status.
    */
-  test("task part misType with checkpoint rdd in concurrent execution scenes") {
+  test("SPARK-23053: avoid ClassCastException in concurrent execution with checkpoint") {
     // set checkpointDir.
     val tempDir = Utils.createTempDir()
     val checkpointDir = File.createTempFile("temp", "", tempDir)
     checkpointDir.delete()
     sc.setCheckpointDir(checkpointDir.toString)
 
-    val latch = new CountDownLatch(2)
+    // Semaphores to control the process sequence for the two threads below.
     val semaphore1 = new Semaphore(0)
     val semaphore2 = new Semaphore(0)
 
@@ -2457,9 +2464,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
         val newRDD = checkpointData.doCheckpoint()
 
-        // Release semaphore1 after job triggered in checkpoint finished.
+        // Release semaphore1 after job triggered in checkpoint finished, so that taskBinary
+        // serialization can start.
         semaphore1.release()
+        // Wait until taskBinary serialization finished in submitMissingTasksThread.
         semaphore2.acquire()
+
         // Update our state and truncate the RDD lineage.
         RDDCheckpointData.synchronized {
           checkpointData.cpRDD = Some(newRDD)
@@ -2467,40 +2477,59 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
           rdd.markCheckpointed()
         }
         semaphore1.release()
-
-        latch.countDown()
       }
     }
 
     val submitMissingTasksRunnable = new Runnable {
       override def run() = {
         // Simply simulate the process of submitMissingTasks.
-        val ser = SparkEnv.get.closureSerializer.newInstance()
+        // Wait until doCheckpoint job running finished, but checkpoint status not changed.
         semaphore1.acquire()
-        // Simulate task serialization while submitMissingTasks.
+
+        val ser = SparkEnv.get.closureSerializer.newInstance()
+
+        // Simply simulate task serialization while submitMissingTasks.
         // Task serialized with rdd checkpoint not finished.
         val cleanedFunc = sc.clean(Utils.getIteratorSize _)
         val func = (ctx: TaskContext, it: Iterator[Int]) => cleanedFunc(it)
         val taskBinaryBytes = JavaUtils.bufferToArray(
           ser.serialize((rdd, func): AnyRef))
+        // Because partition calculate is in a synchronized block, so in the fixed code
+        // partition is calculated here.
+        val correctPart = rdd.partitions(0)
+
+        // Release semaphore2 so changing checkpoint status to Checkpointed will be done in
+        // checkpointThread.
         semaphore2.release()
+        // Wait until checkpoint status changed to Checkpointed in checkpointThread.
         semaphore1.acquire()
+
         // Part calculated with rdd checkpoint already finished.
+        val errPart = rdd.partitions(0)
+
+        // TaskBinary will be deserialized when run task in executor.
         val (taskRdd, taskFunc) = ser.deserialize[(RDD[Int], (TaskContext, Iterator[Int]) => Unit)](
           ByteBuffer.wrap(taskBinaryBytes), Thread.currentThread.getContextClassLoader)
-        val part = rdd.partitions(0)
+
+        val taskContext = mock(classOf[TaskContext])
+        doNothing().when(taskContext).killTaskIfInterrupted()
+
+        // ClassCastException is expected with errPart.
         intercept[ClassCastException] {
           // Triggered when runTask in executor.
-          taskRdd.iterator(part, null)
+          taskRdd.iterator(errPart, taskContext)
         }
 
-        latch.countDown()
+        // Execute successfully with correctPart.
+        taskRdd.iterator(correctPart, taskContext)
       }
     }
 
     new Thread(checkpointRunnable).start()
-    new Thread(submitMissingTasksRunnable).start()
-    latch.await()
+    val submitMissingTasksThread = new Thread(submitMissingTasksRunnable)
+    submitMissingTasksThread.start()
+    submitMissingTasksThread.join()
+
     Utils.deleteRecursively(tempDir)
   }
 
