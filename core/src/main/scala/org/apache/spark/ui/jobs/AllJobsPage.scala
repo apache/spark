@@ -23,8 +23,6 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-import scala.concurrent
-import scala.concurrent.duration
 import scala.xml._
 
 import org.apache.commons.lang3.StringEscapeUtils
