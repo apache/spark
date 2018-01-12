@@ -1710,7 +1710,7 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
         self.setParams(**kwargs)
 
     @keyword_only
-    @since("1.4.0")
+    @since("2.3.0")
     def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
         """
         setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
