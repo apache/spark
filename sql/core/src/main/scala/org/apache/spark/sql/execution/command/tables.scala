@@ -1023,7 +1023,12 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
       val serdeProps = metadata.storage.properties.map {
         case (key, value) =>
-          s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+          val escapedValue = if (value.length == 1 && (value.head < 32 || value.head > 126)) {
+            s"\\${"%03d".format(value.head.toOctalString.toInt)}"
+          } else {
+            escapeSingleQuotedString(value)
+          }
+          s"'${escapeSingleQuotedString(key)}' = '$escapedValue'"
       }
 
       builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (\n  ", ",\n  ", "\n)\n")
