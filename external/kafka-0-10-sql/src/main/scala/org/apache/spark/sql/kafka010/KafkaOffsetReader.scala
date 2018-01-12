@@ -117,14 +117,10 @@ private[kafka010] class KafkaOffsetReader(
    * Resolves the specific offsets based on Kafka seek positions.
    * This method resolves offset value -1 to the latest and -2 to the
    * earliest Kafka seek position.
-   *
-   * @param partitionOffsets the specific offsets to resolve
-   * @param reportDataLoss callback to either report or log data loss depending on setting
    */
   def fetchSpecificOffsets(
-      partitionOffsets: Map[TopicPartition, Long],
-      reportDataLoss: String => Unit): KafkaSourceOffset = {
-    val fetched = runUninterruptibly {
+      partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
+    runUninterruptibly {
       withRetriesWithoutInterrupt {
         // Poll to get the latest assigned partitions
         consumer.poll(0)
@@ -148,19 +144,6 @@ private[kafka010] class KafkaOffsetReader(
         }
       }
     }
-
-    partitionOffsets.foreach {
-      case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
-        off != KafkaOffsetRangeLimit.EARLIEST =>
-        if (fetched(tp) != off) {
-          reportDataLoss(
-            s"startingOffsets for $tp was $off but consumer reset to ${fetched(tp)}")
-        }
-      case _ =>
-        // no real way to check that beginning or end is reasonable
-    }
-    KafkaSourceOffset(fetched)
-  }
 
   /**
    * Fetch the earliest offsets for the topic partitions that are indicated

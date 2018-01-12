@@ -81,11 +81,9 @@ case class WriteToDataSourceV2Exec(writer: DataSourceV2Writer, query: SparkPlan)
         (index, message: WriterCommitMessage) => messages(index) = message
       )
 
-      if (!writer.isInstanceOf[ContinuousWriter]) {
-        logInfo(s"Data source writer $writer is committing.")
-        writer.commit(messages)
-        logInfo(s"Data source writer $writer committed.")
-      }
+      logInfo(s"Data source writer $writer is committing.")
+      writer.commit(messages)
+      logInfo(s"Data source writer $writer committed.")
     } catch {
       case _: InterruptedException if writer.isInstanceOf[ContinuousWriter] =>
         // Interruption is how continuous queries are ended, so accept and ignore the exception.
