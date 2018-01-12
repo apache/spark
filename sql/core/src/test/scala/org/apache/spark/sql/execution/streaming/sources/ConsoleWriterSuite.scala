@@ -36,6 +36,8 @@ class ConsoleWriterSuite extends StreamTest {
         query.processAllAvailable()
         input.addData(4, 5, 6)
         query.processAllAvailable()
+        input.addData()
+        query.processAllAvailable()
       } finally {
         query.stop()
       }
@@ -62,6 +64,14 @@ class ConsoleWriterSuite extends StreamTest {
         ||    4|
         ||    5|
         ||    6|
+        |+-----+
+        |
+        |-------------------------------------------
+        |Batch: 2
+        |-------------------------------------------
+        |+-----+
+        ||value|
+        |+-----+
         |+-----+
         |
         |""".stripMargin)

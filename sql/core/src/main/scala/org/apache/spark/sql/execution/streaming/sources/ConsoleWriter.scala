@@ -38,7 +38,7 @@ class ConsoleWriter(batchId: Long, schema: StructType, options: Map[String, Stri
   override def commit(messages: Array[WriterCommitMessage]): Unit = synchronized {
     val batch = messages.collect {
       case PackedRowCommitMessage(rows) => rows
-    }.reduce(_ ++ _)
+    }.fold(Array())(_ ++ _)
 
     // scalastyle:off println
     println("-------------------------------------------")
