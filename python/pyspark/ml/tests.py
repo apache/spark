@@ -1863,6 +1863,7 @@ class ImageReaderTest(SparkSessionTestCase):
             img = ImageSchema.toImage(npary0)
             self.assertEqual(ocvType, ImageSchema.ocvTypeByMode(img.mode))
             npary1 = ImageSchema.toNDArray(img)
+            self.assertEqual(ocvType.nptype, npary1.dtype)
             np.testing.assert_array_equal(npary0, npary1)
 
     def test_read_images(self):
