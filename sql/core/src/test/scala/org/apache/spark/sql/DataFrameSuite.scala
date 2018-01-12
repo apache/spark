@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2227,5 +2228,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.range(1).select(expr1, expr2.otherwise(0))
     checkAnswer(df, Row(0, 10) :: Nil)
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+  }
+
+  test("SPARK-23021 AnalysisBarrier should not cut off explain output for parsed logical plans") {
+    val df = Seq((1, 1)).toDF("a", "b").groupBy("a").count().limit(1)
+    val explain = ExplainCommand(df.queryExecution.logical, extended = true)
+    val explainString =
+      spark.sessionState
+        .executePlan(explain)
+        .executedPlan
+        .executeCollect()
+        .map(_.getString(0))
+        .mkString("\n")
+        .replaceAll("""#\d+""", "#0")
+    assert(explainString.contains(
+      s"""== Parsed Logical Plan ==
+         |GlobalLimit 1
+         |+- LocalLimit 1
+         |   +- AnalysisBarrier
+         |         +- Aggregate [a#0], [a#0, count(1) AS count#0L]
+         |            +- Project [_1#0 AS a#0, _2#0 AS b#0]
+         |               +- LocalRelation [_1#0, _2#0]
+         |""".stripMargin))
   }
 }
