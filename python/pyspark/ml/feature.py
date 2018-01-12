@@ -1578,6 +1578,9 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     .. note:: This is different from scikit-learn's OneHotEncoder,
         which keeps all categories. The output vectors are sparse.
 
+    .. note:: Deprecated in 2.3.0. :py:class:`OneHotEncoderEstimator` will be renamed to
+        :py:class:`OneHotEncoder` and this :py:class:`OneHotEncoder` will be removed in 3.0.0.
+
     .. seealso::
 
        :py:class:`StringIndexer` for converting categorical values into
