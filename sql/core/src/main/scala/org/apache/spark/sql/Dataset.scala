@@ -242,7 +242,6 @@ class Dataset[T] private[sql](
       // Since binary types in top-level schema fields have a specific format to print,
       // so we do not cast them to strings here.
       case BinaryType => s"`${f.name}`"
-      case _: UserDefinedType[_] => s"`${f.name}`"
       case _ => s"CAST(`${f.name}` AS STRING)"
     }}
     val takeResult = newDf.selectExpr(castExprs: _*).take(numRows + 1)
