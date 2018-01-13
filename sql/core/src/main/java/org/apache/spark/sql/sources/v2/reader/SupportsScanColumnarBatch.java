@@ -41,8 +41,9 @@ public interface SupportsScanColumnarBatch extends DataSourceV2Reader {
   List<ReadTask<ColumnarBatch>> createBatchReadTasks();
 
   /**
-   * A safety door for columnar batch reader. It's possible that the implementation can only support
-   * some certain columns with certain types. Users can overwrite this method and
+   * Returns true if the concrete data source reader can read data in batch according to the scan
+   * properties like required columns, pushes filters, etc. It's possible that the implementation
+   * can only support some certain columns with certain types. Users can overwrite this method and
    * {@link #createReadTasks()} to fallback to normal read path under some conditions.
    */
   default boolean enableBatchRead() {
