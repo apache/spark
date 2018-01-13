@@ -775,7 +775,9 @@ for more details on the API.
 </div>
 </div>
 
-## OneHotEncoder
+## OneHotEncoder (Deprecated since 2.3.0)
+
+`OneHotEncoder` will be deprecated in 2.3.0 and removed in 3.0.0. Please use [OneHotEncoderEstimator](ml-features.html#onehotencoderestimator) instead.
 
 [One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features.
 
@@ -804,6 +806,36 @@ Refer to the [OneHotEncoder Python docs](api/python/pyspark.ml.html#pyspark.ml.f
 for more details on the API.
 
 {% include_example python/ml/onehot_encoder_example.py %}
+</div>
+</div>
+
+## OneHotEncoderEstimator
+
+[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features.
+
+**Examples**
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [OneHotEncoderEstimator Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoderEstimator) for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/OneHotEncoderEstimatorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [OneHotEncoderEstimator Java docs](api/java/org/apache/spark/ml/feature/OneHotEncoderEstimator.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaOneHotEncoderEstimatorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [OneHotEncoderEstimator Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoderEstimator) for more details on the API.
+
+{% include_example python/ml/onehot_encoder_estimator_example.py %}
 </div>
 </div>
 
