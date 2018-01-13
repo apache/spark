@@ -146,16 +146,6 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)
 
-    val distinctNumPartitionsExpected =
-      requiredChildDistributions.flatMap(_.requiredNumPartitions).distinct
-
-    val numPreShufflePartitions =
-      if (distinctNumPartitionsExpected.isEmpty || distinctNumPartitionsExpected.size > 1) {
-        defaultNumPreShufflePartitions
-      } else {
-        distinctNumPartitionsExpected.head
-      }
-
     // Ensure that the operator's children satisfy their output distribution requirements.
     children = children.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
@@ -164,7 +154,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         BroadcastExchangeExec(mode, child)
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
-          .getOrElse(numPreShufflePartitions)
+          .getOrElse(defaultNumPreShufflePartitions)
         ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child)
     }
 
@@ -303,12 +293,22 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   /**
-   * TODO(tejasp) update the doc as per new edits
+   * Based on the type of join and the properties of the child nodes, adjust following:
+   *
+   * [A] Join keys
+   * -----------------------------
    * When the physical operators are created for JOIN, the ordering of join keys is based on order
    * in which the join keys appear in the user query. That might not match with the output
    * partitioning of the join node's children (thus leading to extra sort / shuffle being
-   * introduced). This rule will change the ordering of the join keys to match with the
+   * introduced). This method will change the ordering of the join keys to match with the
    * partitioning of the join nodes' children.
+   *
+   * [B] Hashing function class and required partitions for children
+   * --------------------------------------------------------------------
+   * In case when children of the join node are already shuffled using the same hash function and
+   * have the same number of partitions, then let the join node use the same values (and not the
+   * default number of shuffle partitions and hashing function). This saves shuffling of the join
+   * nodes' children.
    */
   private def adjustJoinRequirements(plan: SparkPlan): SparkPlan = {
     plan.transformUp {
