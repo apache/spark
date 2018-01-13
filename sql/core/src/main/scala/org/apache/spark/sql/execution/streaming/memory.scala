@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util
+import java.{util => ju}
 import java.util.Optional
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
@@ -33,9 +33,8 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.sources.v2.reader.ReadTask
-import org.apache.spark.sql.sources.v2.streaming.reader.{Offset => OffsetV2, MicroBatchReader}
+import org.apache.spark.sql.sources.v2.reader.{DataReader, ReadTask}
+import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -122,16 +121,10 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def getEndOffset: OffsetV2 = if (endOffset.offset == -1) null else endOffset
 
-  override def createReadTasks(): util.List[ReadTask[Row]] = {
-
-    ???
-  }
-
-  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+  override def createReadTasks(): ju.List[ReadTask[Row]] = {
     // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
-    val startOrdinal =
-      start.flatMap(LongOffset.convert).getOrElse(LongOffset(-1)).offset.toInt + 1
-    val endOrdinal = LongOffset.convert(end).getOrElse(LongOffset(-1)).offset.toInt + 1
+    val startOrdinal = startOffset.offset.toInt + 1
+    val endOrdinal = endOffset.offset.toInt + 1
 
     // Internal buffer only holds the batches after lastCommittedOffset.
     val newBlocks = synchronized {
@@ -140,14 +133,14 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       batches.slice(sliceStart, sliceEnd)
     }
 
+    require(newBlocks.nonEmpty, "No data selected!")
+
     logDebug(generateDebugString(newBlocks, startOrdinal, endOrdinal))
 
-    newBlocks
-      .map(_.toDF())
-      .reduceOption(_ union _)
-      .getOrElse {
-        sys.error("No data selected!")
-      }
+    newBlocks.map { ds =>
+      val items = ds.toDF().collect()
+      new MemoryStreamReadTask(items).asInstanceOf[ReadTask[Row]]
+    }.asJava
   }
 
   private def generateDebugString(
@@ -191,6 +184,24 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     currentOffset = new LongOffset(-1)
     lastOffsetCommitted = new LongOffset(-1)
   }
+}
+
+class MemoryStreamReadTask(records: Array[Row]) extends ReadTask[Row] {
+  override def createDataReader(): DataReader[Row] = new MemoryStreamDataReader(records)
+}
+
+class MemoryStreamDataReader(records: Array[Row]) extends DataReader[Row] {
+  private var currentIndex = -1
+
+  override def next(): Boolean = {
+    // Return true as long as the new index is in the array.
+    currentIndex += 1
+    currentIndex < records.length
+  }
+
+  override def get(): Row = records(currentIndex)
+
+  override def close(): Unit = {}
 }
 
 /**

@@ -152,7 +152,7 @@ case class RateStreamBatchTask(vals: Seq[(Long, Long)]) extends ReadTask[Row] {
 }
 
 class RateStreamBatchReader(vals: Seq[(Long, Long)]) extends DataReader[Row] {
-  var currentIndex = -1
+  private var currentIndex = -1
 
   override def next(): Boolean = {
     // Return true as long as the new index is in the seq.
