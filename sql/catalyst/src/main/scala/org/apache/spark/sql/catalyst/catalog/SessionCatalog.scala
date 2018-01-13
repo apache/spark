@@ -457,7 +457,7 @@ class SessionCatalog(
       overrideIfExists: Boolean): Unit = synchronized {
     val table = formatTableName(name)
     if (tempViews.contains(table) && !overrideIfExists) {
-      throw new TempViewAlreadyExistsException(name)
+      throw new TempTableAlreadyExistsException(name)
     }
     tempViews.put(table, tableDefinition)
   }

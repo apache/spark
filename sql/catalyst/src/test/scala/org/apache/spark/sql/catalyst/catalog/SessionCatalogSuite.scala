@@ -289,7 +289,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(catalog.getTempView("tbl2") == Option(tempTable2))
       assert(catalog.getTempView("tbl3").isEmpty)
       // Temporary view already exists
-      intercept[TempViewAlreadyExistsException] {
+      intercept[TempTableAlreadyExistsException] {
         catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
       }
       // Temporary view already exists but we override it
