@@ -174,18 +174,20 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(1.2)
-    def registerFunction(self, name, f, returnType=StringType()):
+    def registerFunction(self, name, f, returnType=None):
         """Registers a Python function (including lambda function) or a :class:`UserDefinedFunction`
-        as a UDF. The registered UDF can be used in SQL statement.
+        as a UDF. The registered UDF can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it default to a string and conversion will automatically
-        be done.  For any other return type, the produced object must match the specified type.
+        When f is a :class:`UserDefinedFunction`, returnType is the returnType of f by default. If
+        the return type is given, they must match. When f is a Python function, returnType defaults
+        to a string. The prodcued object must match the specified type.
 
-        :param name: name of the UDF
-        :param f: a Python function, or a wrapped/native UserDefinedFunction
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
-        :return: a wrapped :class:`UserDefinedFunction`
+        :param name: name of the UDF in SQL statements.
+        :param f: a Python function, or a wrapped/native UserDefinedFunction. The UDF can be either
+            row-at-a-time or vectorized.
+        :param returnType: the return type of the registered UDF.
+        :return: a wrapped/native :class:`UserDefinedFunction`
 
         >>> strlen = sqlContext.registerFunction("stringLengthString", lambda x: len(x))
         >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
@@ -204,15 +206,31 @@ class SQLContext(object):
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
 
+        >>> from pyspark.sql.types import IntegerType
+        >>> from pyspark.sql.functions import udf
+        >>> slen = udf(lambda s: len(s), IntegerType())
+        >>> _ = sqlContext.udf.register("slen", slen)
+        >>> sqlContext.sql("SELECT slen('test')").collect()
+        [Row(slen(test)=4)]
+
         >>> import random
         >>> from pyspark.sql.functions import udf
-        >>> from pyspark.sql.types import IntegerType, StringType
+        >>> from pyspark.sql.types import IntegerType
         >>> random_udf = udf(lambda: random.randint(0, 100), IntegerType()).asNondeterministic()
-        >>> newRandom_udf = sqlContext.registerFunction("random_udf", random_udf, StringType())
+        >>> newRandom_udf = sqlContext.udf.register("random_udf", random_udf)
         >>> sqlContext.sql("SELECT random_udf()").collect()  # doctest: +SKIP
-        [Row(random_udf()=u'82')]
+        [Row(random_udf()=82)]
         >>> sqlContext.range(1).select(newRandom_udf()).collect()  # doctest: +SKIP
-        [Row(random_udf()=u'62')]
+        [Row(<lambda>()=26)]
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> @pandas_udf("integer", PandasUDFType.SCALAR)  # doctest: +SKIP
+        ... def add_one(x):
+        ...     return x + 1
+        ...
+        >>> _ = sqlContext.udf.register("add_one", add_one)  # doctest: +SKIP
+        >>> sqlContext.sql("SELECT add_one(id) FROM range(3)").collect()  # doctest: +SKIP
+        [Row(add_one(id)=1), Row(add_one(id)=2), Row(add_one(id)=3)]
         """
         return self.sparkSession.catalog.registerFunction(name, f, returnType)
 
@@ -575,7 +593,7 @@ class UDFRegistration(object):
     def __init__(self, sqlContext):
         self.sqlContext = sqlContext
 
-    def register(self, name, f, returnType=StringType()):
+    def register(self, name, f, returnType=None):
         return self.sqlContext.registerFunction(name, f, returnType)
 
     def registerJavaFunction(self, name, javaClassName, returnType=None):
