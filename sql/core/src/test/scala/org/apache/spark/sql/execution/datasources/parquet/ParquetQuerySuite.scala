@@ -321,17 +321,26 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
           new Path(basePath, "second").toString,
           new Path(basePath, "third").toString)
         checkAnswer(df, Seq(Row(0), Row(1)))
+      }
+    }
 
-        val df2 = spark.read.schema("a long").parquet(
+    def testIgnoreCorruptFilesWithoutSchemaInfer(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.schema("a long").parquet(
           new Path(basePath, "first").toString,
           new Path(basePath, "second").toString,
           new Path(basePath, "third").toString)
-        checkAnswer(df2, Seq(Row(0), Row(1)))
+        checkAnswer(df, Seq(Row(0), Row(1)))
       }
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
       testIgnoreCorruptFiles()
+      testIgnoreCorruptFilesWithoutSchemaInfer()
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
@@ -339,6 +348,10 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         testIgnoreCorruptFiles()
       }
       assert(exception.getMessage().contains("is not a Parquet file"))
+      val exception2 = intercept[SparkException] {
+        testIgnoreCorruptFilesWithoutSchemaInfer()
+      }
+      assert(exception2.getMessage().contains("is not a Parquet file"))
     }
   }
 

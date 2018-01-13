@@ -622,24 +622,37 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
           new Path(basePath, "second").toString,
           new Path(basePath, "third").toString)
         checkAnswer(df, Seq(Row(0), Row(1)))
+      }
+    }
 
-        val df2 = spark.read.schema("a long").orc(
+    def testIgnoreCorruptFilesWithoutSchemaInfer(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.schema("a long").orc(
           new Path(basePath, "first").toString,
           new Path(basePath, "second").toString,
           new Path(basePath, "third").toString)
-        checkAnswer(df2, Seq(Row(0), Row(1)))
+        checkAnswer(df, Seq(Row(0), Row(1)))
       }
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
       testIgnoreCorruptFiles()
+      testIgnoreCorruptFilesWithoutSchemaInfer()
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-      val exception = intercept[SparkException] {
+      val m1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
-      }
-      assert(exception.getMessage.contains("Could not read footer for file"))
+      }.getMessage
+      assert(m1.contains("Could not read footer for file"))
+      val m2 = intercept[SparkException] {
+        testIgnoreCorruptFilesWithoutSchemaInfer()
+      }.getMessage
+      assert(m2.contains("Malformed ORC file"))
     }
   }
 }
