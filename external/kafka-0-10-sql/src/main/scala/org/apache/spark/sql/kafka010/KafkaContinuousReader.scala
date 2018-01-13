@@ -61,10 +61,7 @@ class KafkaContinuousReader(
   private lazy val session = SparkSession.getActiveSession.get
   private lazy val sc = session.sparkContext
 
-  private val pollTimeoutMs = sourceOptions.getOrElse(
-    "kafkaConsumer.pollTimeoutMs",
-    sc.conf.getTimeAsMs("spark.network.timeout", "120s").toString
-  ).toLong
+  private val pollTimeoutMs = sourceOptions.getOrElse("kafkaConsumer.pollTimeoutMs", "512").toLong
 
   // Initialized when creating read tasks. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
