@@ -18,10 +18,12 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.TimeoutException
 
-import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.consumer.{ConsumerRecord, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -192,11 +194,30 @@ class KafkaContinuousDataReader(
   override def next(): Boolean = {
     var r: ConsumerRecord[Array[Byte], Array[Byte]] = null
     while (r == null) {
-      r = consumer.get(
-        nextKafkaOffset,
-        untilOffset = Long.MaxValue,
-        pollTimeoutMs = Long.MaxValue,
-        failOnDataLoss)
+      if (TaskContext.get().isInterrupted() || TaskContext.get().isCompleted()) return false
+      // Our consumer.get is not interruptible, so we have to set a low poll timeout, leaving
+      // interrupt points to end the query rather than waiting for new data that might never come.
+      try {
+        r = consumer.get(
+          nextKafkaOffset,
+          untilOffset = Long.MaxValue,
+          pollTimeoutMs = 1000,
+          failOnDataLoss)
+      } catch {
+        // We didn't read within the timeout. We're supposed to block indefinitely for new data, so
+        // swallow and ignore this.
+        case _: TimeoutException =>
+        // This is a failOnDataLoss exception. Retry if nextKafkaOffset is within the data range,
+        // or if it's the endpoint of the data range (i.e. the "true" next offset).
+        case e: IllegalStateException =>
+          val range = consumer.getAvailableOffsetRange()
+          if (e.getCause.isInstanceOf[OffsetOutOfRangeException] &&
+              range.latest >= nextKafkaOffset && range.earliest <= nextKafkaOffset) {
+            // retry
+          } else {
+            throw e
+          }
+      }
     }
     nextKafkaOffset = r.offset + 1
     currentRecord = r

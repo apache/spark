@@ -176,6 +176,7 @@ class DataReaderThread(
   private[continuous] var failureReason: Throwable = _
 
   override def run(): Unit = {
+    TaskContext.setTaskContext(context)
     val baseReader = ContinuousDataSourceRDD.getBaseReader(reader)
     try {
       while (!context.isInterrupted && !context.isCompleted()) {
