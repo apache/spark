@@ -70,7 +70,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
     val ctx = newCodeGenContext()
     val numFields = columnTypes.size
     val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
-      val accessorName = ctx.freshName("accessor")
       val accessorCls = dt match {
         case NullType => classOf[NullColumnAccessor].getName
         case BooleanType => classOf[BooleanColumnAccessor].getName
@@ -89,7 +88,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case array: ArrayType => classOf[ArrayColumnAccessor].getName
         case t: MapType => classOf[MapColumnAccessor].getName
       }
-      ctx.addMutableState(accessorCls, accessorName, "")
+      val accessorName = ctx.addMutableState(accessorCls, "accessor")
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>

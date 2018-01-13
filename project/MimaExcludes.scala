@@ -34,10 +34,38 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 2.4.x
+  lazy val v24excludes = v23excludes ++ Seq(
+  )
+
   // Exclude rules for 2.3.x
   lazy val v23excludes = v22excludes ++ Seq(
+    // [SPARK-22897] Expose stageAttemptId in TaskContext
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.stageAttemptNumber"),
+
+    // SPARK-22789: Map-only continuous processing execution
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.startQuery$default$8"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.startQuery$default$6"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.startQuery$default$9"),
+
+    // SPARK-22372: Make cluster submission use SparkApplication.
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.getSecretKeyFromUserCredentials"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.isYarnMode"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.getCurrentUserCredentials"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.addSecretKeyToUserCredentials"),
+
     // SPARK-18085: Better History Server scalability for many / large applications
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ExecutorSummary.executorLogs"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.history.HistoryServer.getSparkUI"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ui.env.EnvironmentListener"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ui.exec.ExecutorsListener"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ui.storage.StorageListener"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageStatusListener"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorStageSummary.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.JobData.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkStatusTracker.this"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ui.jobs.JobProgressListener"),
+
     // [SPARK-20495][SQL] Add StorageLevel to cacheTable API
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.cacheTable"),
 
@@ -70,7 +98,11 @@ object MimaExcludes {
 
     // [SPARK-14280] Support Scala 2.12
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transformWith"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transform")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transform"),
+
+    // [SPARK-21087] CrossValidator, TrainValidationSplit expose sub models after fitting: Scala
+    ProblemFilters.exclude[FinalClassProblem]("org.apache.spark.ml.tuning.CrossValidatorModel$CrossValidatorModelWriter"),
+    ProblemFilters.exclude[FinalClassProblem]("org.apache.spark.ml.tuning.TrainValidationSplitModel$TrainValidationSplitModelWriter")
   )
 
   // Exclude rules for 2.2.x
@@ -236,17 +268,17 @@ object MimaExcludes {
   // Exclude rules for 2.0.x
   lazy val v20excludes = {
     Seq(
-      excludePackage("org.apache.spark.rpc"),
-      excludePackage("org.spark-project.jetty"),
-      excludePackage("org.spark_project.jetty"),
-      excludePackage("org.apache.spark.internal"),
-      excludePackage("org.apache.spark.unused"),
-      excludePackage("org.apache.spark.unsafe"),
-      excludePackage("org.apache.spark.memory"),
-      excludePackage("org.apache.spark.util.collection.unsafe"),
-      excludePackage("org.apache.spark.sql.catalyst"),
-      excludePackage("org.apache.spark.sql.execution"),
-      excludePackage("org.apache.spark.sql.internal"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
+      ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
+      ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.memory.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.util.collection.unsafe.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
       ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this"),
       ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
       ProblemFilters.exclude[MissingMethodProblem](
@@ -1045,10 +1077,16 @@ object MimaExcludes {
       // [SPARK-21680][ML][MLLIB]optimzie Vector coompress
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.toSparseWithSize"),
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.toSparseWithSize")
+    ) ++ Seq(
+      // [SPARK-3181][ML]Implement huber loss for LinearRegression.
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasLoss.org$apache$spark$ml$param$shared$HasLoss$_setter_$loss_="),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasLoss.getLoss"),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasLoss.loss")
     )
   }
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("2.4") => v24excludes
     case v if v.startsWith("2.3") => v23excludes
     case v if v.startsWith("2.2") => v22excludes
     case v if v.startsWith("2.1") => v21excludes

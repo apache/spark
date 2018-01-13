@@ -43,8 +43,8 @@ case class SparkPartitionID() extends LeafExpression with Nondeterministic {
   override protected def evalInternal(input: InternalRow): Int = partitionId
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val idTerm = ctx.freshName("partitionId")
-    ctx.addMutableState(ctx.JAVA_INT, idTerm, "")
+    val idTerm = "partitionId"
+    ctx.addImmutableStateIfNotExists(ctx.JAVA_INT, idTerm)
     ctx.addPartitionInitializationStatement(s"$idTerm = partitionIndex;")
     ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = $idTerm;", isNull = "false")
   }

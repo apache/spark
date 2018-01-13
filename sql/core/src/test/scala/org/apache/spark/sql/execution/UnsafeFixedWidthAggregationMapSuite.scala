@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -63,12 +64,13 @@ class UnsafeFixedWidthAggregationMapSuite
     }
 
     test(name) {
-      val conf = new SparkConf().set("spark.memory.offHeap.enabled", "false")
+      val conf = new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false")
       memoryManager = new TestMemoryManager(conf)
       taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
 
       TaskContext.setTaskContext(new TaskContextImpl(
         stageId = 0,
+        stageAttemptNumber = 0,
         partitionId = 0,
         taskAttemptId = Random.nextInt(10000),
         attemptNumber = 0,

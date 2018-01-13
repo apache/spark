@@ -28,7 +28,7 @@ object LocalPi {
       val y = random * 2 - 1
       if (x*x + y*y <= 1) count += 1
     }
-    println("Pi is roughly " + 4 * count / 100000.0)
+    println(s"Pi is roughly ${4 * count / 100000.0}")
   }
 }
 // scalastyle:on println

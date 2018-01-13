@@ -741,7 +741,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = new StructType,
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
         provider = Some("json"),
         storage = CatalogStorageFormat(
           locationUri = None,
@@ -1266,7 +1266,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = new StructType,
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
         provider = Some("json"),
         storage = CatalogStorageFormat.empty,
         properties = Map(
@@ -1350,7 +1350,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       withTempDir { dir =>
         val tmpFile = s"$dir/$nameWithSpecialChars"
         spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
-        spark.read.format(format).load(tmpFile)
+        val fileContent = spark.read.format(format).load(tmpFile)
+        checkAnswer(fileContent, Seq(Row("a"), Row("b")))
       }
     }
   }

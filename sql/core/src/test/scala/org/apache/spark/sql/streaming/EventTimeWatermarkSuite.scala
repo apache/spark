@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.{util => ju}
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Calendar, Date}
 
 import org.scalatest.{BeforeAndAfter, Matchers}
 
@@ -218,7 +218,11 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .agg(count("*") as 'count)
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    def monthsSinceEpoch(date: Date): Int = { date.getYear * 12 + date.getMonth }
+    def monthsSinceEpoch(date: Date): Int = {
+      val cal = Calendar.getInstance()
+      cal.setTime(date)
+      cal.get(Calendar.YEAR) * 12 + cal.get(Calendar.MONTH)
+    }
 
     testStream(aggWithWatermark)(
       AddData(input, currentTimeMs / 1000),
@@ -256,8 +260,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       CheckLastBatch((10, 5)),
       StopStream,
       AssertOnQuery { q => // purge commit and clear the sink
-        val commit = q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
-        q.batchCommitLog.purge(commit)
+        val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
+        q.commitLog.purge(commit)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
