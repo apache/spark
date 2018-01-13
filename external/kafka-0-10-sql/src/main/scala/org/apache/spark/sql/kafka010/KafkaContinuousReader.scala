@@ -209,10 +209,9 @@ class KafkaContinuousDataReader(
         case _: TimeoutException =>
         // This is a failOnDataLoss exception. Retry if nextKafkaOffset is within the data range,
         // or if it's the endpoint of the data range (i.e. the "true" next offset).
-        case e: IllegalStateException =>
+        case e: IllegalStateException  if e.getCause.isInstanceOf[OffsetOutOfRangeException] =>
           val range = consumer.getAvailableOffsetRange()
-          if (e.getCause.isInstanceOf[OffsetOutOfRangeException] &&
-              range.latest >= nextKafkaOffset && range.earliest <= nextKafkaOffset) {
+          if (range.latest >= nextKafkaOffset && range.earliest <= nextKafkaOffset) {
             // retry
           } else {
             throw e
