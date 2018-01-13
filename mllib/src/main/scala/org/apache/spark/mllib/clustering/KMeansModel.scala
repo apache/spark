@@ -173,6 +173,7 @@ object KMeansModel extends Loader[KMeansModel] {
       new KMeansModel(localCentroids.sortBy(_.id).map(_.point))
     }
   }
+
   object SaveLoadV2_0 {
 
     private val thisFormatVersion = "2.0"

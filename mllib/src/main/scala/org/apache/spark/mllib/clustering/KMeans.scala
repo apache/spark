@@ -613,7 +613,7 @@ class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable 
 private[spark] abstract class DistanceMeasure extends Serializable {
 
   /**
-   * Returns the index of the closest center to the given point, as well as the squared distance.
+   * @return the index of the closest center to the given point, as well as the squared distance.
    */
   def findClosest(
      centers: TraversableOnce[VectorWithNorm],
@@ -633,24 +633,26 @@ private[spark] abstract class DistanceMeasure extends Serializable {
   }
 
   /**
-   * Returns the K-means cost of a given point against the given cluster centers.
+   * @return the K-means cost of a given point against the given cluster centers.
    */
   def pointCost(
       centers: TraversableOnce[VectorWithNorm],
-      point: VectorWithNorm): Double =
+      point: VectorWithNorm): Double = {
     findClosest(centers, point)._2
+  }
 
   /**
-   * Returns whether a center converged or not, given the epsilon parameter.
+   * @return whether a center converged or not, given the epsilon parameter.
    */
   def isCenterConverged(
       oldCenter: VectorWithNorm,
       newCenter: VectorWithNorm,
-      epsilon: Double): Boolean =
+      epsilon: Double): Boolean = {
     distance(oldCenter, newCenter) <= epsilon
+  }
 
   /**
-   * Computes the cosine distance between two points.
+   * @return the cosine distance between two points.
    */
   def distance(
       v1: VectorWithNorm,
@@ -677,7 +679,7 @@ object DistanceMeasure {
 
 private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
   /**
-   * Returns the index of the closest center to the given point, as well as the squared distance.
+   * @return the index of the closest center to the given point, as well as the squared distance.
    */
   override def findClosest(
       centers: TraversableOnce[VectorWithNorm],
@@ -703,7 +705,7 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
   }
 
   /**
-   * Returns whether a center converged or not, given the epsilon parameter.
+   * @return whether a center converged or not, given the epsilon parameter.
    */
   override def isCenterConverged(
       oldCenter: VectorWithNorm,
@@ -713,18 +715,19 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
   }
 
   /**
-   * Computes the Euclidean distance between two points.
    * @param v1: first vector
    * @param v2: second vector
+   * @return the Euclidean distance between the two input vectors
    */
-  override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double =
+  override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
     Math.sqrt(EuclideanDistanceMeasure.fastSquaredDistance(v1, v2))
+  }
 }
 
 
 private[spark] object EuclideanDistanceMeasure {
   /**
-   * Returns the squared Euclidean distance between two vectors computed by
+   * @return the squared Euclidean distance between two vectors computed by
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
    */
   private[clustering] def fastSquaredDistance(
@@ -736,10 +739,11 @@ private[spark] object EuclideanDistanceMeasure {
 
 private[spark] class CosineDistanceMeasure extends DistanceMeasure {
   /**
-   * Computes the cosine distance between two points.
    * @param v1: first vector
    * @param v2: second vector
+   * @return the cosine distance between the two input vectors
    */
-  override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double =
+  override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
     1 - dot(v1.vector, v2.vector) / v1.norm / v2.norm
+  }
 }
