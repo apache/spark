@@ -238,13 +238,16 @@ class Dataset[T] private[sql](
       _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
     val newDf = toDF()
-    val castExprs = newDf.schema.map { f => f.dataType match {
+    val castCols = newDf.logicalPlan.output.map { col =>
       // Since binary types in top-level schema fields have a specific format to print,
       // so we do not cast them to strings here.
-      case BinaryType => s"`${f.name}`"
-      case _ => s"CAST(`${f.name}` AS STRING)"
-    }}
-    val takeResult = newDf.selectExpr(castExprs: _*).take(numRows + 1)
+      if (col.dataType == BinaryType) {
+        Column(col)
+      } else {
+        Column(col).cast(StringType)
+      }
+    }
+    val takeResult = newDf.select(castCols: _*).take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
