@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.arrow.vector.NullableIntVector
+import org.apache.arrow.vector.IntVector
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
@@ -33,6 +33,7 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -65,27 +66,22 @@ class ColumnarBatchSuite extends SparkFunSuite {
     column =>
       val reference = mutable.ArrayBuffer.empty[Boolean]
       var idx = 0
-      assert(!column.anyNullsSet())
       assert(column.numNulls() == 0)
 
       column.appendNotNull()
       reference += false
-      assert(!column.anyNullsSet())
       assert(column.numNulls() == 0)
 
       column.appendNotNulls(3)
       (1 to 3).foreach(_ => reference += false)
-      assert(!column.anyNullsSet())
       assert(column.numNulls() == 0)
 
       column.appendNull()
       reference += true
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 1)
 
       column.appendNulls(3)
       (1 to 3).foreach(_ => reference += true)
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 4)
 
       idx = column.elementsAppended
@@ -93,13 +89,11 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putNotNull(idx)
       reference += false
       idx += 1
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 4)
 
       column.putNull(idx)
       reference += true
       idx += 1
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 5)
 
       column.putNulls(idx, 3)
@@ -107,7 +101,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reference += true
       reference += true
       idx += 3
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 8)
 
       column.putNotNulls(idx, 4)
@@ -116,7 +109,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reference += false
       reference += false
       idx += 4
-      assert(column.anyNullsSet())
       assert(column.numNulls() == 8)
 
       reference.zipWithIndex.foreach { v =>
@@ -751,11 +743,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       c2.putDouble(1, 5.67)
 
       val s = column.getStruct(0)
-      assert(s.columns()(0).getInt(0) == 123)
-      assert(s.columns()(0).getInt(1) == 456)
-      assert(s.columns()(1).getDouble(0) == 3.45)
-      assert(s.columns()(1).getDouble(1) == 5.67)
-
       assert(s.getInt(0) == 123)
       assert(s.getDouble(1) == 3.45)
 
@@ -932,10 +919,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(it.hasNext == false)
 
       // Reset and add 3 rows
-      batch.reset()
-      assert(batch.numRows() == 0)
-      assert(batch.rowIterator().hasNext == false)
-
+      columns.foreach(_.reset())
       // Add rows [NULL, 2.2, 2, "abc"], [3, NULL, 3, ""], [4, 4.4, 4, "world]
       columns(0).putNull(0)
       columns(1).putDouble(0, 2.2)
@@ -1151,22 +1135,20 @@ class ColumnarBatchSuite extends SparkFunSuite {
   test("create columnar batch from Arrow column vectors") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("int", 0, Long.MaxValue)
     val vector1 = ArrowUtils.toArrowField("int1", IntegerType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableIntVector]
+      .createVector(allocator).asInstanceOf[IntVector]
     vector1.allocateNew()
-    val mutator1 = vector1.getMutator()
     val vector2 = ArrowUtils.toArrowField("int2", IntegerType, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableIntVector]
+      .createVector(allocator).asInstanceOf[IntVector]
     vector2.allocateNew()
-    val mutator2 = vector2.getMutator()
 
     (0 until 10).foreach { i =>
-      mutator1.setSafe(i, i)
-      mutator2.setSafe(i + 1, i)
+      vector1.setSafe(i, i)
+      vector2.setSafe(i + 1, i)
     }
-    mutator1.setNull(10)
-    mutator1.setValueCount(11)
-    mutator2.setNull(0)
-    mutator2.setValueCount(11)
+    vector1.setNull(10)
+    vector1.setValueCount(11)
+    vector2.setNull(0)
+    vector2.setValueCount(11)
 
     val columnVectors = Seq(new ArrowColumnVector(vector1), new ArrowColumnVector(vector2))
 

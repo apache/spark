@@ -42,6 +42,7 @@ import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
+import org.apache.spark.status.config._
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
@@ -525,14 +526,15 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     }
   }
 
-  ignore("stage & job retention") {
+  test("stage & job retention") {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
       .set("spark.ui.enabled", "true")
       .set("spark.ui.port", "0")
-      .set("spark.ui.retainedStages", "3")
-      .set("spark.ui.retainedJobs", "2")
+      .set(MAX_RETAINED_STAGES, 3)
+      .set(MAX_RETAINED_JOBS, 2)
+      .set(ASYNC_TRACKING_ENABLED, false)
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
 

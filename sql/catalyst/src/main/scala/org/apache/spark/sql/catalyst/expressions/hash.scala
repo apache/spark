@@ -279,21 +279,17 @@ abstract class HashExpression[E] extends Expression {
     }
 
     val hashResultType = ctx.javaType(dataType)
-    val codes = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-      childrenHash.mkString("\n")
-    } else {
-      ctx.splitExpressions(
-        expressions = childrenHash,
-        funcName = "computeHash",
-        arguments = Seq("InternalRow" -> ctx.INPUT_ROW, hashResultType -> ev.value),
-        returnType = hashResultType,
-        makeSplitFunction = body =>
-          s"""
-             |$body
-             |return ${ev.value};
-           """.stripMargin,
-        foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
-    }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = childrenHash,
+      funcName = "computeHash",
+      extraArguments = Seq(hashResultType -> ev.value),
+      returnType = hashResultType,
+      makeSplitFunction = body =>
+        s"""
+           |$body
+           |return ${ev.value};
+         """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
 
     ev.copy(code =
       s"""
@@ -652,22 +648,19 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
        """.stripMargin
     }
 
-    val codes = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-      childrenHash.mkString("\n")
-    } else {
-      ctx.splitExpressions(
-        expressions = childrenHash,
-        funcName = "computeHash",
-        arguments = Seq("InternalRow" -> ctx.INPUT_ROW, ctx.JAVA_INT -> ev.value),
-        returnType = ctx.JAVA_INT,
-        makeSplitFunction = body =>
-          s"""
-             |${ctx.JAVA_INT} $childHash = 0;
-             |$body
-             |return ${ev.value};
-           """.stripMargin,
-        foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
-    }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = childrenHash,
+      funcName = "computeHash",
+      extraArguments = Seq(ctx.JAVA_INT -> ev.value),
+      returnType = ctx.JAVA_INT,
+      makeSplitFunction = body =>
+        s"""
+           |${ctx.JAVA_INT} $childHash = 0;
+           |$body
+           |return ${ev.value};
+         """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
+
 
     ev.copy(code =
       s"""

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -118,7 +117,7 @@ class JoinOptimizationSuite extends PlanTest {
 
     queryAnswers foreach { queryAnswerPair =>
       val optimized = Optimize.execute(queryAnswerPair._1.analyze)
-      comparePlans(optimized, analysis.EliminateSubqueryAliases(queryAnswerPair._2.analyze))
+      comparePlans(optimized, queryAnswerPair._2.analyze)
     }
   }
 

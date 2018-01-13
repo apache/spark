@@ -165,11 +165,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
 
     if (notifyDriver && driver.nonEmpty) {
-      driver.get.ask[Boolean](
-        RemoveExecutor(executorId, new ExecutorLossReason(reason))
-      ).failed.foreach(e =>
-        logWarning(s"Unable to notify the driver due to " + e.getMessage, e)
-      )(ThreadUtils.sameThread)
+      driver.get.send(RemoveExecutor(executorId, new ExecutorLossReason(reason)))
     }
 
     System.exit(code)

@@ -72,8 +72,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
-    ctx.addMutableState(ctx.javaType(dataType), ev.value)
+    ev.isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -87,37 +86,36 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
          |}
        """.stripMargin
     }
-    val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-        evals.mkString("\n")
-      } else {
-        ctx.splitExpressions(evals, "coalesce",
-          ("InternalRow", ctx.INPUT_ROW) :: Nil,
-          makeSplitFunction = {
-            func =>
-              s"""
-                |do {
-                |  $func
-                |} while (false);
-              """.stripMargin
-          },
-          foldFunctions = { funcCalls =>
-            funcCalls.map { funcCall =>
-              s"""
-                 |$funcCall;
-                 |if (!${ev.isNull}) {
-                 |  continue;
-                 |}
-               """.stripMargin
-            }.mkString
-          })
-      }
+
+    val resultType = ctx.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "coalesce",
+      returnType = resultType,
+      makeSplitFunction = func =>
+        s"""
+           |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
+           |do {
+           |  $func
+           |} while (false);
+           |return ${ev.value};
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |${ev.value} = $funcCall;
+           |if (!${ev.isNull}) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
+
 
     ev.copy(code =
       s"""
          |${ev.isNull} = true;
-         |${ev.value} = ${ctx.defaultValue(dataType)};
+         |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
          |do {
-         |  $code
+         |  $codes
          |} while (false);
        """.stripMargin)
   }
@@ -415,39 +413,32 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       }
     }
 
-    val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-        evals.mkString("\n")
-      } else {
-        ctx.splitExpressions(
-          expressions = evals,
-          funcName = "atLeastNNonNulls",
-          arguments = ("InternalRow", ctx.INPUT_ROW) :: (ctx.JAVA_INT, nonnull) :: Nil,
-          returnType = ctx.JAVA_INT,
-          makeSplitFunction = { body =>
-            s"""
-               |do {
-               |  $body
-               |} while (false);
-               |return $nonnull;
-             """.stripMargin
-          },
-          foldFunctions = { funcCalls =>
-            funcCalls.map(funcCall =>
-              s"""
-                 |$nonnull = $funcCall;
-                 |if ($nonnull >= $n) {
-                 |  continue;
-                 |}
-               """.stripMargin).mkString("\n")
-          }
-        )
-      }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "atLeastNNonNulls",
+      extraArguments = (ctx.JAVA_INT, nonnull) :: Nil,
+      returnType = ctx.JAVA_INT,
+      makeSplitFunction = body =>
+        s"""
+           |do {
+           |  $body
+           |} while (false);
+           |return $nonnull;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$nonnull = $funcCall;
+           |if ($nonnull >= $n) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
 
     ev.copy(code =
       s"""
          |${ctx.JAVA_INT} $nonnull = 0;
          |do {
-         |  $code
+         |  $codes
          |} while (false);
          |${ctx.JAVA_BOOLEAN} ${ev.value} = $nonnull >= $n;
        """.stripMargin, isNull = "false")

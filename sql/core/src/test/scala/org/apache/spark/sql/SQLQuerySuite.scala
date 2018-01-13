@@ -1664,7 +1664,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
     }
-    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+    assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
@@ -2771,15 +2771,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         assert(df.schema.sameType(emptyDf.schema))
         checkAnswer(df, emptyDf)
       }
-    }
-  }
-
-  test("SPARK-21791 ORC should support column names with dot") {
-    val orc = classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
-    withTempDir { dir =>
-      val path = new File(dir, "orc").getCanonicalPath
-      Seq(Some(1), None).toDF("col.dots").write.format(orc).save(path)
-      assert(spark.read.format(orc).load(path).collect().length == 2)
     }
   }
 }

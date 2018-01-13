@@ -23,22 +23,33 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.vectorized.ColumnarArray;
+import org.apache.spark.sql.vectorized.ColumnarBatch;
+import org.apache.spark.sql.vectorized.ColumnarRow;
+import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * A mutable version of {@link ColumnarRow}, which is used in the vectorized hash map for hash
- * aggregate.
+ * aggregate, and {@link ColumnarBatch} to save object creation.
  *
  * Note that this class intentionally has a lot of duplicated code with {@link ColumnarRow}, to
  * avoid java polymorphism overhead by keeping {@link ColumnarRow} and this class final classes.
  */
 public final class MutableColumnarRow extends InternalRow {
   public int rowId;
-  private final WritableColumnVector[] columns;
+  private final ColumnVector[] columns;
+  private final WritableColumnVector[] writableColumns;
 
-  public MutableColumnarRow(WritableColumnVector[] columns) {
+  public MutableColumnarRow(ColumnVector[] columns) {
     this.columns = columns;
+    this.writableColumns = null;
+  }
+
+  public MutableColumnarRow(WritableColumnVector[] writableColumns) {
+    this.columns = writableColumns;
+    this.writableColumns = writableColumns;
   }
 
   @Override
@@ -225,54 +236,54 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public void setNullAt(int ordinal) {
-    columns[ordinal].putNull(rowId);
+    writableColumns[ordinal].putNull(rowId);
   }
 
   @Override
   public void setBoolean(int ordinal, boolean value) {
-    columns[ordinal].putNotNull(rowId);
-    columns[ordinal].putBoolean(rowId, value);
+    writableColumns[ordinal].putNotNull(rowId);
+    writableColumns[ordinal].putBoolean(rowId, value);
   }
 
   @Override
   public void setByte(int ordinal, byte value) {
-    columns[ordinal].putNotNull(rowId);
-    columns[ordinal].putByte(rowId, value);
+    writableColumns[ordinal].putNotNull(rowId);
+    writableColumns[ordinal].putByte(rowId, value);
   }
 
   @Override
   public void setShort(int ordinal, short value) {
-    columns[ordinal].putNotNull(rowId);
-    columns[ordinal].putShort(rowId, value);
+    writableColumns[ordinal].putNotNull(rowId);
+    writableColumns[ordinal].putShort(rowId, value);
   }
 
   @Override
   public void setInt(int ordinal, int value) {
-    columns[ordinal].putNotNull(rowId);
-    columns[ordinal].putInt(rowId, value);
+    writableColumns[ordinal].putNotNull(rowId);
+    writableColumns[ordinal].putInt(rowId, value);
   }
 
   @Override
   public void setLong(int ordinal, long value) {
-    columns[ordinal].putNotNull(rowId);
-    columns[ordinal].putLong(rowId, value);
+    writableColumns[ordinal].putNotNull(rowId);
+    writableColumns[ordinal].putLong(rowId, value);
   }
 
   @Override
   public void setFloat(int ordinal, float value) {
-    columns[ordinal].putNotNull(rowId);
-    columns[ordinal].putFloat(rowId, value);
+    writableColumns[ordinal].putNotNull(rowId);
+    writableColumns[ordinal].putFloat(rowId, value);
   }
 
   @Override
   public void setDouble(int ordinal, double value) {
-    columns[ordinal].putNotNull(rowId);
-    columns[ordinal].putDouble(rowId, value);
+    writableColumns[ordinal].putNotNull(rowId);
+    writableColumns[ordinal].putDouble(rowId, value);
   }
 
   @Override
   public void setDecimal(int ordinal, Decimal value, int precision) {
-    columns[ordinal].putNotNull(rowId);
-    columns[ordinal].putDecimal(rowId, value, precision);
+    writableColumns[ordinal].putNotNull(rowId);
+    writableColumns[ordinal].putDecimal(rowId, value, precision);
   }
 }

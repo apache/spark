@@ -40,12 +40,8 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] with PredicateHel
     // top-down, then we can simplify the logic here and only collect target operators.
     val filterPushed = plan transformUp {
       case FilterAndProject(fields, condition, r @ DataSourceV2Relation(_, reader)) =>
-        // Non-deterministic expressions are stateful and we must keep the input sequence unchanged
-        // to avoid changing the result. This means, we can't evaluate the filter conditions that
-        // are after the first non-deterministic condition ahead. Here we only try to push down
-        // deterministic conditions that are before the first non-deterministic condition.
-        val (candidates, containingNonDeterministic) =
-          splitConjunctivePredicates(condition).span(_.deterministic)
+        val (candidates, nonDeterministic) =
+          splitConjunctivePredicates(condition).partition(_.deterministic)
 
         val stayUpFilters: Seq[Expression] = reader match {
           case r: SupportsPushDownCatalystFilters =>
@@ -74,7 +70,7 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] with PredicateHel
           case _ => candidates
         }
 
-        val filterCondition = (stayUpFilters ++ containingNonDeterministic).reduceLeftOption(And)
+        val filterCondition = (stayUpFilters ++ nonDeterministic).reduceLeftOption(And)
         val withFilter = filterCondition.map(Filter(_, r)).getOrElse(r)
         if (withFilter.output == fields) {
           withFilter

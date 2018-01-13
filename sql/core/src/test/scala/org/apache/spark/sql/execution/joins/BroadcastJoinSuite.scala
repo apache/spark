@@ -225,17 +225,6 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("Shouldn't change broadcast join buildSide if user clearly specified") {
-    def assertJoinBuildSide(sqlStr: String, joinMethod: String, buildSide: BuildSide): Any = {
-      val executedPlan = sql(sqlStr).queryExecution.executedPlan
-      executedPlan match {
-        case b: BroadcastNestedLoopJoinExec =>
-          assert(b.getClass.getSimpleName === joinMethod)
-          assert(b.buildSide === buildSide)
-        case w: WholeStageCodegenExec =>
-          assert(w.children.head.getClass.getSimpleName === joinMethod)
-          assert(w.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === buildSide)
-      }
-    }
 
     withTempView("t1", "t2") {
       spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value").createTempView("t1")
@@ -245,9 +234,6 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       val t1Size = spark.table("t1").queryExecution.analyzed.children.head.stats.sizeInBytes
       val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
       assert(t1Size < t2Size)
-
-      val bh = BroadcastHashJoinExec.toString
-      val bl = BroadcastNestedLoopJoinExec.toString
 
       // INNER JOIN && t1Size < t2Size => BuildLeft
       assertJoinBuildSide(
@@ -266,8 +252,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         "SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildRight)
 
 
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
         // INNER JOIN && t1Size < t2Size => BuildLeft
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2", bl, BuildLeft)
         // FULL JOIN && t1Size < t2Size => BuildLeft
@@ -288,6 +273,64 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         // FULL OUTER && t1Size < t2Size => BuildLeft
         assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
       }
+    }
+  }
+
+  test("Shouldn't bias towards build right if user didn't specify") {
+
+    withTempView("t1", "t2") {
+      spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value").createTempView("t1")
+      spark.createDataFrame(Seq((1, "1"), (2, "12.3"), (2, "123"))).toDF("key", "value")
+        .createTempView("t2")
+
+      val t1Size = spark.table("t1").queryExecution.analyzed.children.head.stats.sizeInBytes
+      val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
+      assert(t1Size < t2Size)
+
+      assertJoinBuildSide("SELECT * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+      assertJoinBuildSide("SELECT * FROM t2 JOIN t1 ON t1.key = t2.key", bh, BuildRight)
+
+      assertJoinBuildSide("SELECT * FROM t1 LEFT JOIN t2 ON t1.key = t2.key", bh, BuildRight)
+      assertJoinBuildSide("SELECT * FROM t2 LEFT JOIN t1 ON t1.key = t2.key", bh, BuildRight)
+
+      assertJoinBuildSide("SELECT * FROM t1 RIGHT JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+      assertJoinBuildSide("SELECT * FROM t2 RIGHT JOIN t1 ON t1.key = t2.key", bh, BuildLeft)
+
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
+        assertJoinBuildSide("SELECT * FROM t2 FULL OUTER JOIN t1", bl, BuildRight)
+
+        assertJoinBuildSide("SELECT * FROM t1 LEFT JOIN t2", bl, BuildRight)
+        assertJoinBuildSide("SELECT * FROM t2 LEFT JOIN t1", bl, BuildRight)
+
+        assertJoinBuildSide("SELECT * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
+        assertJoinBuildSide("SELECT * FROM t2 RIGHT JOIN t1", bl, BuildLeft)
+      }
+    }
+  }
+
+  private val bh = BroadcastHashJoinExec.toString
+  private val bl = BroadcastNestedLoopJoinExec.toString
+
+  private def assertJoinBuildSide(sqlStr: String, joinMethod: String, buildSide: BuildSide): Any = {
+    val executedPlan = sql(sqlStr).queryExecution.executedPlan
+    executedPlan match {
+      case b: BroadcastNestedLoopJoinExec =>
+        assert(b.getClass.getSimpleName === joinMethod)
+        assert(b.buildSide === buildSide)
+      case b: BroadcastHashJoinExec =>
+        assert(b.getClass.getSimpleName === joinMethod)
+        assert(b.buildSide === buildSide)
+      case w: WholeStageCodegenExec =>
+        assert(w.children.head.getClass.getSimpleName === joinMethod)
+        if (w.children.head.isInstanceOf[BroadcastNestedLoopJoinExec]) {
+          assert(
+            w.children.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide === buildSide)
+        } else if (w.children.head.isInstanceOf[BroadcastHashJoinExec]) {
+          assert(w.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === buildSide)
+        } else {
+          fail()
+        }
     }
   }
 }
