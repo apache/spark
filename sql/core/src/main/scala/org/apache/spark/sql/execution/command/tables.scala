@@ -1024,7 +1024,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       val serdeProps = metadata.storage.properties.map {
         case (key, value) =>
           val escapedValue = if (value.length == 1 && (value.head < 32 || value.head > 126)) {
-            s"\\${"%03d".format(value.head.toOctalString.toInt)}"
+            "\\u%04X".format(value.head.toInt)
           } else {
             escapeSingleQuotedString(value)
           }

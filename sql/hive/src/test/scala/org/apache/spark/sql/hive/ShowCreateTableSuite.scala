@@ -20,7 +20,8 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
@@ -287,6 +288,36 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
       }
     }
   }
+
+  Seq("\177", "|").foreach { delim =>
+    test(s"SPARK-23058: Show non printable field delim as unicode: $delim") {
+      withTempDir { dir =>
+        withTable("t1") {
+          val fieldDelimKey = "field.delim"
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE t1(col1 bigint)
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+               |WITH SERDEPROPERTIES (
+               |  '$fieldDelimKey' = '$delim'
+               |)
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.mapred.SequenceFileInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat'
+               |LOCATION '${dir.toURI}'
+            """.stripMargin)
+
+          val showDDL = sql(s"SHOW CREATE TABLE t1").head().getString(0)
+          val desc = TestHive.sessionState.sqlParser.parsePlan(showDDL).collect {
+            case CreateTable(tableDesc, mode, _) => tableDesc
+          }.head
+
+          assert(desc.storage.properties(fieldDelimKey) === delim)
+          checkCreateTable("t1")
+        }
+      }
+    }
+ }
 
   private def createRawHiveTable(ddl: String): Unit = {
     hiveContext.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client.runSqlHive(ddl)
