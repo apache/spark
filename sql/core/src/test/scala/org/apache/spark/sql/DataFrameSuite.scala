@@ -2228,21 +2228,4 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df, Row(0, 10) :: Nil)
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
-
-  test("SPARK-23021 AnalysisBarrier should not cut off explain output for parsed logical plans") {
-    val df = Seq((1, 1)).toDF("a", "b").groupBy("a").count().limit(1)
-    val outputStream = new java.io.ByteArrayOutputStream()
-    Console.withOut(outputStream) {
-      df.explain(true)
-    }
-    assert(outputStream.toString.replaceAll("""#\d+""", "#0").contains(
-      s"""== Parsed Logical Plan ==
-         |GlobalLimit 1
-         |+- LocalLimit 1
-         |   +- AnalysisBarrier
-         |         +- Aggregate [a#0], [a#0, count(1) AS count#0L]
-         |            +- Project [_1#0 AS a#0, _2#0 AS b#0]
-         |               +- LocalRelation [_1#0, _2#0]
-         |""".stripMargin))
-  }
 }
