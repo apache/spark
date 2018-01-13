@@ -185,6 +185,7 @@ known_components = {
     "graphx": "GraphX",
     "input/output": CORE_COMPONENT,
     "java api": "Java API",
+    "kubernetes": "Kubernetes",
     "mesos": "Mesos",
     "ml": "MLlib",
     "mllib": "MLlib",
