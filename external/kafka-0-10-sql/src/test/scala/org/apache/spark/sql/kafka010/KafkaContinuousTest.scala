@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.kafka010
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
@@ -49,6 +52,30 @@ trait KafkaContinuousTest extends KafkaSourceTest {
         s"query never reconfigured to $newCount partitions")
     }
   }
+
+  // Continuous processing tasks end asynchronously, so test that they actually end.
+  private val tasksEndedListener = new SparkListener() {
+    val activeTaskIds = mutable.Set[Long]()
+
+    override def onTaskStart(start: SparkListenerTaskStart): Unit = {
+      activeTaskIds.add(start.taskInfo.taskId)
+    }
+
+    override def onTaskEnd(end: SparkListenerTaskEnd): Unit = {
+      activeTaskIds.remove(end.taskInfo.taskId)
+    }
+  }
+  override def beforeEach(): Unit = {
+    spark.sparkContext.addSparkListener(tasksEndedListener)
+  }
+
+  override def afterEach(): Unit = {
+    eventually(timeout(streamingTimeout)) {
+      assert(tasksEndedListener.activeTaskIds.isEmpty)
+    }
+    spark.sparkContext.removeSparkListener(tasksEndedListener)
+  }
+
 
   test("ensure continuous stream is being used") {
     val query = spark.readStream
