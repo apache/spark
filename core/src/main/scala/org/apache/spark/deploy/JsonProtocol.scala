@@ -185,7 +185,8 @@ private[deploy] object JsonProtocol {
     ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
     ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
     ("completeddrivers" -> obj.completedDrivers.toList.map(writeDriverInfo)) ~
-    ("status" -> obj.status.toString)
+    ("status" -> obj.status.toString) ~
+    ("startupTime" -> obj.startupTime)
   }
 
   /**
