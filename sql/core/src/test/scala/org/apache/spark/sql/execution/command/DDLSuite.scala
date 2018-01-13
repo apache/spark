@@ -1141,9 +1141,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         .map { s => catalog.getPartition(tableIdent, s).storage }
         .getOrElse { catalog.getTableMetadata(tableIdent).storage }
       // TODO(gatorsmile): fix the bug in alter table set location.
-      // if (isUsingHiveMetastore) {
-      //  assert(storageFormat.properties.get("path") === expected)
-      // }
+       if (isUsingHiveMetastore) {
+        assert(storageFormat.properties.get("path").get === expected.toString)
+       }
       assert(storageFormat.locationUri === Some(expected))
     }
     // set table location
@@ -1862,6 +1862,38 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql("DROP TABLE tbl")
           // the new table path will be removed after DROP TABLE.
           assert(!dir.exists())
+        } finally {
+          Utils.deleteRecursively(new File(defaultTablePath))
+        }
+      }
+    }
+  }
+
+  test("SPARK-23039: check path after SET LOCATION") {
+    withTable("tbl") {
+      withTempDir { dir =>
+        sql("CREATE TABLE tbl(i INT) USING parquet")
+        sql("INSERT INTO tbl SELECT 1")
+        checkAnswer(spark.table("tbl"), Row(1))
+        val defaultTablePath = spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
+        try {
+          val catalog = spark.sessionState.catalog
+          val tableIdent = TableIdentifier("tbl")
+          // before set location
+          if (isUsingHiveMetastore) {
+            assert(catalog.getTableMetadata(tableIdent).storage
+              .properties.get("path").get === defaultTablePath.toString)
+          }
+
+          sql(s"ALTER TABLE tbl SET LOCATION '${dir.getCanonicalPath}'")
+          spark.catalog.refreshTable("tbl")
+
+          // after set location
+          if (isUsingHiveMetastore) {
+            assert(catalog.getTableMetadata(tableIdent).storage
+              .properties.get("path").get === dir.getCanonicalPath)
+          }
         } finally {
           Utils.deleteRecursively(new File(defaultTablePath))
         }
