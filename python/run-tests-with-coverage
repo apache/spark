@@ -52,7 +52,7 @@ export COVERAGE_PROCESS_START="$FWDIR/.coveragerc"
 
 # If you'd like to run a specific unittest class, you could do such as
 # SPARK_TESTING=1 ../bin/pyspark pyspark.sql.tests VectorizedUDFTests
-./run-tests $@
+./run-tests "$@"
 
 # Don't run coverage for the coverage command itself
 unset COVERAGE_PROCESS_START
