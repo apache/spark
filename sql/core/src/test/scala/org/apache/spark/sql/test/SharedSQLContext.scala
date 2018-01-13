@@ -21,23 +21,11 @@ trait SharedSQLContext extends SQLTestUtils with SharedSparkSession {
 
   /**
    * Suites extending [[SharedSQLContext]] are sharing resources (eg. SparkSession) in their tests.
-   * Such resources are initialized by the suite before thread audit takes thread snapshot and
-   * cleaned up after the audit checks for possible leaks.
+   * That trait initializes the spark session in its [[beforeAll()]] implementation before the
+   * automatic thread snapshot is performed, so the audit code could fail to report threads leaked
+   * by that shared session.
    *
-   * 1. Init resources
-   * 2. ThreadAudit pre step
-   * 3. Test code
-   * 4. ThreadAudit post step
-   * 5. Destroy resources
-   *
-   * By turning auto thread audit off and doing it manually audit steps can be executed at the
-   * proper place.
-   *
-   * 1. ThreadAudit pre step
-   * 2. Init resources
-   * 3. Test code
-   * 4. Destroy resources
-   * 5. ThreadAudit post step
+   * The behavior is overridden here to take the snapshot before the spark session is initialized.
    */
   override protected val enableAutoThreadAudit = false
 

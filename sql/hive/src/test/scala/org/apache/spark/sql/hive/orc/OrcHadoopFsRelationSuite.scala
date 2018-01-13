@@ -30,6 +30,7 @@ import org.apache.spark.sql.types._
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
 
+  override protected val enableAutoThreadAudit = false
   override val dataSourceName: String = classOf[OrcFileFormat].getCanonicalName
 
   // ORC does not play well with NullType and UDT.
