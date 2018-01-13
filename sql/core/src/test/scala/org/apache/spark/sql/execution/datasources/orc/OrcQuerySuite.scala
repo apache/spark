@@ -532,6 +532,52 @@ abstract class OrcQueryTest extends OrcTest {
     val df = spark.read.orc(path1.getCanonicalPath, path2.getCanonicalPath)
     assert(df.count() == 20)
   }
+
+  test("Enabling/disabling ignoreCorruptFiles") {
+    def testIgnoreCorruptFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(df, Seq(Row(0), Row(1)))
+      }
+    }
+
+    def testIgnoreCorruptFilesWithoutSchemaInfer(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.schema("a long").orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(df, Seq(Row(0), Row(1)))
+      }
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      testIgnoreCorruptFiles()
+      testIgnoreCorruptFilesWithoutSchemaInfer()
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+      val m1 = intercept[SparkException] {
+        testIgnoreCorruptFiles()
+      }.getMessage
+      assert(m1.contains("Could not read footer for file"))
+      val m2 = intercept[SparkException] {
+        testIgnoreCorruptFilesWithoutSchemaInfer()
+      }.getMessage
+      assert(m2.contains("Malformed ORC file"))
+    }
+  }
 }
 
 class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
@@ -607,52 +653,6 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
         }
         assert(fileFormat == Some(classOf[OrcFileFormat]))
       }
-    }
-  }
-
-  test("Enabling/disabling ignoreCorruptFiles") {
-    def testIgnoreCorruptFiles(): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
-        spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
-        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
-        val df = spark.read.orc(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString)
-        checkAnswer(df, Seq(Row(0), Row(1)))
-      }
-    }
-
-    def testIgnoreCorruptFilesWithoutSchemaInfer(): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
-        spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
-        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
-        val df = spark.read.schema("a long").orc(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString)
-        checkAnswer(df, Seq(Row(0), Row(1)))
-      }
-    }
-
-    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-      testIgnoreCorruptFiles()
-      testIgnoreCorruptFilesWithoutSchemaInfer()
-    }
-
-    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-      val m1 = intercept[SparkException] {
-        testIgnoreCorruptFiles()
-      }.getMessage
-      assert(m1.contains("Could not read footer for file"))
-      val m2 = intercept[SparkException] {
-        testIgnoreCorruptFilesWithoutSchemaInfer()
-      }.getMessage
-      assert(m2.contains("Malformed ORC file"))
     }
   }
 }
