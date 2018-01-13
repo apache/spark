@@ -86,15 +86,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
 
     try {
       testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
+      eventually(timeout(streamingTimeout)) {
+        checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
       }
-      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
       testUtils.sendMessages(inputTopic, Array("6", "7", "8", "9", "10"))
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
+      eventually(timeout(streamingTimeout)) {
+        checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
       }
-      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     } finally {
       writer.stop()
     }
@@ -128,15 +126,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
 
     try {
       testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
+      eventually(timeout(streamingTimeout)) {
+        checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
       }
-      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
       testUtils.sendMessages(inputTopic, Array("6", "7", "8", "9", "10"))
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
+      eventually(timeout(streamingTimeout)) {
+        checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
       }
-      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     } finally {
       writer.stop()
     }
@@ -178,15 +174,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
 
     try {
       testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
+      eventually(timeout(streamingTimeout)) {
+        checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
       }
-      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
       testUtils.sendMessages(inputTopic, Array("6", "7", "8", "9", "10"))
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
+      eventually(timeout(streamingTimeout)) {
+        checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
       }
-      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     } finally {
       writer.stop()
     }
@@ -210,12 +204,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     var writer: StreamingQuery = null
     var ex: Exception = null
     try {
-      ex = intercept[StreamingQueryException] {
-        writer = createKafkaWriter(input.toDF())(
-          withSelectExpr = "CAST(null as STRING) as topic", "value"
-        )
-        testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-        writer.processAllAvailable()
+      writer = createKafkaWriter(input.toDF())(
+        withSelectExpr = "CAST(null as STRING) as topic", "value"
+      )
+      testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+        ex = writer.exception.get
       }
     } finally {
       writer.stop()
@@ -243,12 +238,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     var writer: StreamingQuery = null
     var ex: Exception = null
     try {
-      ex = intercept[StreamingQueryException] {
-        writer = createKafkaWriter(input.toDF())(
-          withSelectExpr = "value as key", "value"
-        )
-        testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-        writer.processAllAvailable()
+      writer = createKafkaWriter(input.toDF())(
+        withSelectExpr = "value as key", "value"
+      )
+      testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+        ex = writer.exception.get
       }
     } finally {
       writer.stop()
@@ -259,12 +255,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
 
     try {
       /* No value field */
-      ex = intercept[StreamingQueryException] {
-        writer = createKafkaWriter(input.toDF())(
-          withSelectExpr = s"'$topic' as topic", "value as key"
-        )
-        testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-        writer.processAllAvailable()
+      writer = createKafkaWriter(input.toDF())(
+        withSelectExpr = s"'$topic' as topic", "value as key"
+      )
+      testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+        ex = writer.exception.get
       }
     } finally {
       writer.stop()
@@ -292,12 +289,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     var ex: Exception = null
     try {
       /* topic field wrong type */
-      ex = intercept[StreamingQueryException] {
-        writer = createKafkaWriter(input.toDF())(
-          withSelectExpr = s"CAST('1' as INT) as topic", "value"
-        )
-        testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-        writer.processAllAvailable()
+      writer = createKafkaWriter(input.toDF())(
+        withSelectExpr = s"CAST('1' as INT) as topic", "value"
+      )
+      testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+        ex = writer.exception.get
       }
     } finally {
       writer.stop()
@@ -306,12 +304,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
 
     try {
       /* value field wrong type */
-      ex = intercept[StreamingQueryException] {
-        writer = createKafkaWriter(input.toDF())(
-          withSelectExpr = s"'$topic' as topic", "CAST(value as INT) as value"
-        )
-        testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-        writer.processAllAvailable()
+      writer = createKafkaWriter(input.toDF())(
+        withSelectExpr = s"'$topic' as topic", "CAST(value as INT) as value"
+      )
+      testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+        ex = writer.exception.get
       }
     } finally {
       writer.stop()
@@ -320,13 +319,14 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       "value attribute type must be a string or binarytype"))
 
     try {
-      ex = intercept[StreamingQueryException] {
-        /* key field wrong type */
-        writer = createKafkaWriter(input.toDF())(
-          withSelectExpr = s"'$topic' as topic", "CAST(value as INT) as key", "value"
-        )
-        testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-        writer.processAllAvailable()
+      /* key field wrong type */
+      writer = createKafkaWriter(input.toDF())(
+        withSelectExpr = s"'$topic' as topic", "CAST(value as INT) as key", "value"
+      )
+      testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+        ex = writer.exception.get
       }
     } finally {
       writer.stop()
@@ -379,11 +379,12 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     var writer: StreamingQuery = null
     var ex: Exception = null
     try {
-      ex = intercept[StreamingQueryException] {
-        writer = createKafkaWriter(
-          input.toDF(),
-          withOptions = Map("kafka.key.serializer" -> "foo"))()
-        writer.processAllAvailable()
+      writer = createKafkaWriter(
+        input.toDF(),
+        withOptions = Map("kafka.key.serializer" -> "foo"))()
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+        ex = writer.exception.get
       }
       assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
         "kafka option 'key.serializer' is not supported"))
@@ -392,11 +393,12 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     }
 
     try {
-      ex = intercept[StreamingQueryException] {
-        writer = createKafkaWriter(
-          input.toDF(),
-          withOptions = Map("kafka.value.serializer" -> "foo"))()
-        writer.processAllAvailable()
+      writer = createKafkaWriter(
+        input.toDF(),
+        withOptions = Map("kafka.value.serializer" -> "foo"))()
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+        ex = writer.exception.get
       }
       assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
         "kafka option 'value.serializer' is not supported"))

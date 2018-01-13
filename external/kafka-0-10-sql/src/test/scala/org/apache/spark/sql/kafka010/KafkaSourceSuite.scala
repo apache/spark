@@ -95,9 +95,10 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
       topicAction: (String, Option[Int]) => Unit = (_, _) => {}) extends AddData {
 
     override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
-      if (query.get.isActive) {
+      query match {
         // Make sure no Spark job is running when deleting a topic
-        query.get.processAllAvailable()
+        case Some(m: MicroBatchExecution) => m.processAllAvailable()
+        case _ =>
       }
 
       val existingTopics = testUtils.getAllTopicsAndPartitionSize().toMap
@@ -435,6 +436,49 @@ class KafkaMicroBatchSourceSuite extends KafkaSourceSuiteBase {
     assert(row.getAs[Int]("count") === 1, s"Unexpected results: $row")
     query.stop()
   }
+
+  test("delete a topic when a Spark job is running") {
+    KafkaSourceSuite.collectedData.clear()
+
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribe", topic)
+      // If a topic is deleted and we try to poll data starting from offset 0,
+      // the Kafka consumer will just block until timeout and return an empty result.
+      // So set the timeout to 1 second to make this test fast.
+      .option("kafkaConsumer.pollTimeoutMs", "1000")
+      .option("startingOffsets", "earliest")
+      .option("failOnDataLoss", "false")
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    KafkaSourceSuite.globalTestUtils = testUtils
+    // The following ForeachWriter will delete the topic before fetching data from Kafka
+    // in executors.
+    val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
+      override def open(partitionId: Long, version: Long): Boolean = {
+        KafkaSourceSuite.globalTestUtils.deleteTopic(topic)
+        true
+      }
+
+      override def process(value: Int): Unit = {
+        KafkaSourceSuite.collectedData.add(value)
+      }
+
+      override def close(errorOrNull: Throwable): Unit = {}
+    }).start()
+    query.processAllAvailable()
+    query.stop()
+    // `failOnDataLoss` is `false`, we should not fail the query
+    assert(query.exception.isEmpty)
+  }
 }
 
 class KafkaSourceSuiteBase extends KafkaSourceTest {
@@ -604,49 +648,6 @@ class KafkaSourceSuiteBase extends KafkaSourceTest {
     testUnsupportedConfig("kafka.auto.offset.reset", "latest")
   }
 
-  test("delete a topic when a Spark job is running") {
-    KafkaSourceSuite.collectedData.clear()
-
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 1)
-    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray)
-
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("subscribe", topic)
-      // If a topic is deleted and we try to poll data starting from offset 0,
-      // the Kafka consumer will just block until timeout and return an empty result.
-      // So set the timeout to 1 second to make this test fast.
-      .option("kafkaConsumer.pollTimeoutMs", "1000")
-      .option("startingOffsets", "earliest")
-      .option("failOnDataLoss", "false")
-    val kafka = reader.load()
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
-    KafkaSourceSuite.globalTestUtils = testUtils
-    // The following ForeachWriter will delete the topic before fetching data from Kafka
-    // in executors.
-    val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
-      override def open(partitionId: Long, version: Long): Boolean = {
-        KafkaSourceSuite.globalTestUtils.deleteTopic(topic)
-        true
-      }
-
-      override def process(value: Int): Unit = {
-        KafkaSourceSuite.collectedData.add(value)
-      }
-
-      override def close(errorOrNull: Throwable): Unit = {}
-    }).start()
-    query.processAllAvailable()
-    query.stop()
-    // `failOnDataLoss` is `false`, we should not fail the query
-    assert(query.exception.isEmpty)
-  }
-
   test("get offsets from case insensitive parameters") {
     for ((optionKey, optionValue, answer) <- Seq(
       (STARTING_OFFSETS_OPTION_KEY, "earLiEst", EarliestOffsetRangeLimit),
@@ -746,9 +747,11 @@ class KafkaSourceSuiteBase extends KafkaSourceTest {
       .queryName("kafkaColumnTypes")
       .trigger(defaultTrigger)
       .start()
-    query.processAllAvailable()
-    val rows = spark.table("kafkaColumnTypes").collect()
-    assert(rows.length === 1, s"Unexpected results: ${rows.toList}")
+    var rows: Array[Row] = Array()
+    eventually(timeout(streamingTimeout)) {
+      rows = spark.table("kafkaColumnTypes").collect()
+      assert(rows.length === 1, s"Unexpected results: ${rows.toList}")
+    }
     val row = rows(0)
     assert(row.getAs[Array[Byte]]("key") === null, s"Unexpected results: $row")
     assert(row.getAs[Array[Byte]]("value") === "1".getBytes(UTF_8), s"Unexpected results: $row")
