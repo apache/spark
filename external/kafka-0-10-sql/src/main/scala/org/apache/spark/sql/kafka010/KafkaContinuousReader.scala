@@ -207,6 +207,7 @@ class KafkaContinuousDataReader(
         // We didn't read within the timeout. We're supposed to block indefinitely for new data, so
         // swallow and ignore this.
         case _: TimeoutException =>
+          
         // This is a failOnDataLoss exception. Retry if nextKafkaOffset is within the data range,
         // or if it's the endpoint of the data range (i.e. the "true" next offset).
         case e: IllegalStateException  if e.getCause.isInstanceOf[OffsetOutOfRangeException] =>
