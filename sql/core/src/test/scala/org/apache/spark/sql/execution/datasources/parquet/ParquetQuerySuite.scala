@@ -320,9 +320,13 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
           new Path(basePath, "first").toString,
           new Path(basePath, "second").toString,
           new Path(basePath, "third").toString)
-        checkAnswer(
-          df,
-          Seq(Row(0), Row(1)))
+        checkAnswer(df, Seq(Row(0), Row(1)))
+
+        val df2 = spark.read.schema("a long").parquet(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(df2, Seq(Row(0), Row(1)))
       }
     }
 

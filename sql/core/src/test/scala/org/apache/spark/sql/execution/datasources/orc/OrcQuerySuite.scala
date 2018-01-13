@@ -622,6 +622,12 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
           new Path(basePath, "second").toString,
           new Path(basePath, "third").toString)
         checkAnswer(df, Seq(Row(0), Row(1)))
+
+        val df2 = spark.read.schema("a long").orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(df2, Seq(Row(0), Row(1)))
       }
     }
 
