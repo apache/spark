@@ -835,7 +835,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("rename temporary view - destination table with database name, with sql: CREATE TEMPORARY view") {
+  test("rename temporary view - destination table with database name,with:CREATE TEMPORARY view") {
     withTempView("view1") {
       sql(
         """
@@ -908,7 +908,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-    test("rename temporary view - destination table already exists, with sql: CREATE TEMPORARY view") {
+  test("rename temporary view - destination table already exists, with: CREATE TEMPORARY view") {
     withTempView("view1", "view2") {
       sql(
         """
@@ -939,7 +939,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         "RENAME TEMPORARY VIEW from '`view1`' to '`view2`': destination table already exists"))
 
       val catalog = spark.sessionState.catalog
-      assert(catalog.listTables("default") == Seq(TableIdentifier("view1"), TableIdentifier("view2")))
+      assert(catalog.listTables("default") ==
+        Seq(TableIdentifier("view1"), TableIdentifier("view2")))
     }
   }
 
