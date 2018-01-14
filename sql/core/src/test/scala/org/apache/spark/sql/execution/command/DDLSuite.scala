@@ -992,6 +992,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       Row("showdb1a") :: Nil)
 
     checkAnswer(
+      sql("SHOW DATABASES '*db1A'"),
+      Row("showdb1a") :: Nil)
+
+    checkAnswer(
       sql("SHOW DATABASES LIKE 'showdb1A'"),
       Row("showdb1a") :: Nil)
 
