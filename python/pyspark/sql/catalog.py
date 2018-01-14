@@ -22,7 +22,7 @@ from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.udf import UserDefinedFunction
-from pyspark.sql.types import IntegerType, StringType, StructType
+from pyspark.sql.types import DataType, IntegerType, StringType, StructType, _parse_datatype_string
 
 
 Database = namedtuple("Database", "name description locationUri")
@@ -291,23 +291,25 @@ class Catalog(object):
                                   PythonEvalType.SQL_PANDAS_SCALAR_UDF]:
                 raise ValueError(
                     "Invalid f: f must be either SQL_BATCHED_UDF or SQL_PANDAS_SCALAR_UDF")
+            if returnType is not None and not isinstance(returnType, DataType):
+                returnType = _parse_datatype_string(returnType)
             if returnType is not None and returnType != f.returnType:
                 raise ValueError(
                     "Invalid returnType: the provided returnType (%s) is inconsistent with "
                     "the returnType (%s) of the provided f. When the provided f is a UDF, "
                     "returnType is not needed." % (returnType, f.returnType))
-            registerUDF = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
-                                              evalType=f.evalType,
-                                              deterministic=f.deterministic)
-            returnUDF = f
+            register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
+                                               evalType=f.evalType,
+                                               deterministic=f.deterministic)
+            return_udf = f
         else:
             if returnType is None:
                 returnType = StringType()
-            registerUDF = UserDefinedFunction(f, returnType=returnType, name=name,
-                                              evalType=PythonEvalType.SQL_BATCHED_UDF)
-            returnUDF = registerUDF._wrapped()
-        self._jsparkSession.udf().registerPython(name, registerUDF._judf)
-        return returnUDF
+            register_udf = UserDefinedFunction(f, returnType=returnType, name=name,
+                                               evalType=PythonEvalType.SQL_BATCHED_UDF)
+            return_udf = register_udf._wrapped()
+        self._jsparkSession.udf().registerPython(name, register_udf._judf)
+        return return_udf
 
     @since(2.0)
     def isCached(self, tableName):

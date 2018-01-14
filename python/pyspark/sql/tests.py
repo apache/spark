@@ -379,13 +379,20 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(4, res[0])
 
     def test_udf3(self):
-        twoargs = self.spark.catalog.registerFunction(
+        two_args = self.spark.catalog.registerFunction(
             "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y))
-        self.assertEqual(twoargs.deterministic, True)
+        self.assertEqual(two_args.deterministic, True)
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
         self.assertEqual(row[0], u'5')
 
-    def test_udf_using_registerFunction_incompatibleTypes(self):
+    def test_udf_registration_return_type_match(self):
+        two_args = self.spark.catalog.registerFunction(
+            "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y, "integer"), "integer")
+        self.assertEqual(two_args.deterministic, True)
+        [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
+        self.assertEqual(row[0], 5)
+
+    def test_udf_registration_return_type_mismatch(self):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(ValueError, "Invalid returnType"):
                 self.spark.catalog.registerFunction(
@@ -3626,14 +3633,14 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf
         from pyspark.rdd import PythonEvalType
         import random
-        randomPandasUDF = pandas_udf(
+        random_pandas_udf = pandas_udf(
             lambda x: random.randint(6, 6) + x, IntegerType()).asNondeterministic()
-        self.assertEqual(randomPandasUDF.deterministic, False)
-        self.assertEqual(randomPandasUDF.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
-        nondeterministicPandasUDF = self.spark.catalog.registerFunction(
-            "randomPandasUDF", randomPandasUDF, IntegerType())
-        self.assertEqual(nondeterministicPandasUDF.deterministic, False)
-        self.assertEqual(nondeterministicPandasUDF.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(random_pandas_udf.deterministic, False)
+        self.assertEqual(random_pandas_udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        nondeterministic_pandas_udf = self.spark.catalog.registerFunction(
+            "randomPandasUDF", random_pandas_udf, IntegerType())
+        self.assertEqual(nondeterministic_pandas_udf.deterministic, False)
+        self.assertEqual(nondeterministic_pandas_udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
         [row] = self.spark.sql("SELECT randomPandasUDF(1)").collect()
         self.assertEqual(row[0], 7)
 
@@ -4078,13 +4085,7 @@ class GroupbyApplyTests(ReusedSQLTestCase):
     def test_register_group_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        foo_udf = pandas_udf(
-            lambda pdf: pdf.assign(v1=pdf.id * 1.0),
-            StructType(
-                [StructField('id', LongType()),
-                 StructField('v1', DoubleType())]),
-            PandasUDFType.GROUP_MAP
-        )
+        foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUP_MAP)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(ValueError, 'f must be either SQL_BATCHED_UDF or '
                                                      'SQL_PANDAS_SCALAR_UDF'):
