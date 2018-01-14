@@ -2773,4 +2773,22 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  Seq("orc", "parquet", "csv", "json").foreach { format =>
+    test(s"Write and read back unicode schema - $format") {
+      withTempPath { path =>
+        val dir = path.getCanonicalPath
+
+        // scalastyle:off nonascii
+        val df = Seq("a").toDF("한글")
+        // scalastyle:on nonascii
+
+        df.write.format(format).option("header", "true").save(dir)
+        val answerDf = spark.read.format(format).option("header", "true").load(dir)
+
+        assert(df.schema === answerDf.schema)
+        checkAnswer(df, answerDf)
+      }
+    }
+  }
 }
