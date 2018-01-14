@@ -821,7 +821,6 @@ setGeneric("broadcast", function(x) { standardGeneric("broadcast") })
 
 #' @rdname columnfunctions
 #' @export
-#' @name NULL
 setGeneric("asc", function(x) { standardGeneric("asc") })
 
 #' @rdname between
@@ -836,12 +835,10 @@ setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 #' @param x a Column object.
 #' @param ... additional argument(s).
 #' @export
-#' @name NULL
 setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 
 #' @rdname columnfunctions
 #' @export
-#' @name NULL
 setGeneric("desc", function(x) { standardGeneric("desc") })
 
 #' @rdname endsWith
@@ -850,37 +847,30 @@ setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })
 
 #' @rdname columnfunctions
 #' @export
-#' @name NULL
 setGeneric("getField", function(x, ...) { standardGeneric("getField") })
 
 #' @rdname columnfunctions
 #' @export
-#' @name NULL
 setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 
 #' @rdname columnfunctions
 #' @export
-#' @name NULL
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
 #' @rdname columnfunctions
 #' @export
-#' @name NULL
 setGeneric("isNull", function(x) { standardGeneric("isNull") })
 
 #' @rdname columnfunctions
 #' @export
-#' @name NULL
 setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
 
 #' @rdname columnfunctions
 #' @export
-#' @name NULL
 setGeneric("like", function(x, ...) { standardGeneric("like") })
 
 #' @rdname columnfunctions
 #' @export
-#' @name NULL
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
 #' @rdname startsWith
