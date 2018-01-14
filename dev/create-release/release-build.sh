@@ -290,6 +290,8 @@ if [[ "$1" == "docs" ]]; then
   cd docs
   # TODO: Make configurable to add this: PRODUCTION=1
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" jekyll build
+  ret=$?
+  if [[ $ret != 0 ]]; then exit $ret; fi
   cd ..
   cd ..
 
