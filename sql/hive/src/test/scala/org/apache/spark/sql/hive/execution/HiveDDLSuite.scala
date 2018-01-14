@@ -753,7 +753,7 @@ class HiveDDLSuite
 
   test("SPARK-23057: SET LOCATION should change the path of partition in table") {
     withTable("boxes") {
-      sql("CREATE TABLE boxes (height INT, length INT) PARTITIONED BY (width INT) LOCATION '/new'")
+      sql("CREATE TABLE boxes (height INT, length INT) PARTITIONED BY (width INT)")
       sql("INSERT OVERWRITE TABLE boxes PARTITION (width=4) SELECT 4, 4")
       val expected = "/path/to/part/ways"
       sql(s"ALTER TABLE boxes PARTITION (width=4) SET LOCATION '$expected'")
