@@ -33,26 +33,31 @@ def _wrap_function(sc, func, returnType):
 
 
 def _create_udf(f, returnType, evalType):
-    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
+
+    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF or \
+            evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         import inspect
+        from pyspark.sql.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
         argspec = inspect.getargspec(f)
-        if len(argspec.args) == 0 and argspec.varargs is None:
+
+        if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF and len(argspec.args) == 0 and \
+                argspec.varargs is None:
             raise ValueError(
                 "Invalid function: 0-arg pandas_udfs are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-    elif evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
-        import inspect
-        argspec = inspect.getargspec(f)
-        if len(argspec.args) != 1:
+        if evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF and len(argspec.args) != 1:
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUP_MAP "
                 "must take a single arg that is a pandas DataFrame."
             )
 
     # Set the name of the UserDefinedFunction object to be the name of function f
-    udf_obj = UserDefinedFunction(f, returnType=returnType, name=None, evalType=evalType)
+    udf_obj = UserDefinedFunction(
+        f, returnType=returnType, name=None, evalType=evalType, deterministic=True)
     return udf_obj._wrapped()
 
 
@@ -63,8 +68,10 @@ class UserDefinedFunction(object):
     .. versionadded:: 1.3
     """
     def __init__(self, func,
-                 returnType=StringType(), name=None,
-                 evalType=PythonEvalType.SQL_BATCHED_UDF):
+                 returnType=StringType(),
+                 name=None,
+                 evalType=PythonEvalType.SQL_BATCHED_UDF,
+                 deterministic=True):
         if not callable(func):
             raise TypeError(
                 "Invalid function: not a function or callable (__call__ is not defined): "
@@ -88,6 +95,7 @@ class UserDefinedFunction(object):
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
         self.evalType = evalType
+        self.deterministic = deterministic
 
     @property
     def returnType(self):
@@ -125,7 +133,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.evalType)
+            self._name, wrapped_func, jdt, self.evalType, self.deterministic)
         return judf
 
     def __call__(self, *cols):
@@ -133,6 +141,9 @@ class UserDefinedFunction(object):
         sc = SparkContext._active_spark_context
         return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
+    # This function is for improving the online help system in the interactive interpreter.
+    # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and
+    # argument annotation. (See: SPARK-19161)
     def _wrapped(self):
         """
         Wrap this udf with a function and attach docstring from func
@@ -157,5 +168,16 @@ class UserDefinedFunction(object):
         wrapper.func = self.func
         wrapper.returnType = self.returnType
         wrapper.evalType = self.evalType
-
+        wrapper.deterministic = self.deterministic
+        wrapper.asNondeterministic = functools.wraps(
+            self.asNondeterministic)(lambda: self.asNondeterministic()._wrapped())
         return wrapper
+
+    def asNondeterministic(self):
+        """
+        Updates UserDefinedFunction to nondeterministic.
+
+        .. versionadded:: 2.3
+        """
+        self.deterministic = False
+        return self

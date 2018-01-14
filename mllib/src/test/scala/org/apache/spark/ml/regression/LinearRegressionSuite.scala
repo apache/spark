@@ -23,7 +23,7 @@ import scala.util.Random
 
 import org.dmg.pmml.{OpType, PMML, RegressionModel => PMMLRegressionModel}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkException
 import org.apache.spark.ml.PipelineStage
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
@@ -31,7 +31,8 @@ import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.LinearDataGenerator
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
 class DummyLinearRegressionWriter extends MLWriterFormat {
@@ -375,8 +376,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       assert(model2.intercept ~== interceptR2 relTol 1E-3)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction")
-        .collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
           case Row(features: DenseVector, prediction1: Double) =>
             val prediction2 =
               features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -428,8 +429,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       assert(model2.intercept ~== interceptR2 absTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction")
-        .collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
           case Row(features: DenseVector, prediction1: Double) =>
             val prediction2 =
               features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -479,7 +480,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       assert(model2.intercept ~== interceptR2 relTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -530,7 +532,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       assert(model2.intercept ~== interceptR2 absTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -582,8 +585,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       assert(model2.intercept ~== interceptR2 relTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction")
-        .collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -636,8 +639,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       assert(model2.intercept ~== interceptR2 absTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction")
-        .collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +

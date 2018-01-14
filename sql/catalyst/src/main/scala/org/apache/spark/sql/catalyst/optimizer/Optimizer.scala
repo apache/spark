@@ -456,12 +456,15 @@ object ColumnPruning extends Rule[LogicalPlan] {
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
-    case g: Generate if !g.join && (g.child.outputSet -- g.references).nonEmpty =>
-      g.copy(child = prunedChild(g.child, g.references))
 
-    // Turn off `join` for Generate if no column from it's child is used
-    case p @ Project(_, g: Generate) if g.join && p.references.subsetOf(g.generatedSet) =>
-      p.copy(child = g.copy(join = false))
+    // prune unrequired references
+    case p @ Project(_, g: Generate) if p.references != g.outputSet =>
+      val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
+      val newChild = prunedChild(g.child, requiredAttrs)
+      val unrequired = g.generator.references -- p.references
+      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
+        .map(_._2)
+      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _) =>
@@ -792,7 +795,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
     case filter @ Filter(condition, aggregate: Aggregate)
-      if aggregate.aggregateExpressions.forall(_.deterministic) =>
+      if aggregate.aggregateExpressions.forall(_.deterministic)
+        && aggregate.groupingExpressions.nonEmpty =>
       // Find all the aliased expressions in the aggregate list that don't include any actual
       // AggregateExpression, and create a map from the alias to the expression
       val aliasMap = AttributeMap(aggregate.aggregateExpressions.collect {
@@ -802,15 +806,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (candidates, containingNonDeterministic) =
-        splitConjunctivePredicates(condition).span(_.deterministic)
+      val (candidates, nonDeterministic) =
+        splitConjunctivePredicates(condition).partition(_.deterministic)
 
       val (pushDown, rest) = candidates.partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
         cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
-      val stayUp = rest ++ containingNonDeterministic
+      val stayUp = rest ++ nonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -832,14 +836,14 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
 
-      val (candidates, containingNonDeterministic) =
-        splitConjunctivePredicates(condition).span(_.deterministic)
+      val (candidates, nonDeterministic) =
+        splitConjunctivePredicates(condition).partition(_.deterministic)
 
       val (pushDown, rest) = candidates.partition { cond =>
         cond.references.subsetOf(partitionAttrs)
       }
 
-      val stayUp = rest ++ containingNonDeterministic
+      val stayUp = rest ++ nonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -851,7 +855,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(_.deterministic)
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(_.deterministic)
 
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
@@ -875,13 +879,9 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     case filter @ Filter(condition, watermark: EventTimeWatermark) =>
-      // We can only push deterministic predicates which don't reference the watermark attribute.
-      // We could in theory span() only on determinism and pull out deterministic predicates
-      // on the watermark separately. But it seems unnecessary and a bit confusing to not simply
-      // use the prefix as we do for nondeterminism in other cases.
-
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(
-        p => p.deterministic && !p.references.contains(watermark.eventTime))
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { p =>
+        p.deterministic && !p.references.contains(watermark.eventTime)
+      }
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduceLeft(And)
@@ -922,14 +922,14 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // come from grandchild.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
-    val (candidates, containingNonDeterministic) =
-      splitConjunctivePredicates(filter.condition).span(_.deterministic)
+    val (candidates, nonDeterministic) =
+      splitConjunctivePredicates(filter.condition).partition(_.deterministic)
 
     val (pushDown, rest) = candidates.partition { cond =>
       cond.references.subsetOf(grandchild.outputSet)
     }
 
-    val stayUp = rest ++ containingNonDeterministic
+    val stayUp = rest ++ nonDeterministic
 
     if (pushDown.nonEmpty) {
       val newChild = insertFilter(pushDown.reduceLeft(And))
@@ -972,23 +972,19 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Splits join condition expressions or filter predicates (on a given join's output) into three
    * categories based on the attributes required to evaluate them. Note that we explicitly exclude
-   * on-deterministic (i.e., stateful) condition expressions in canEvaluateInLeft or
+   * non-deterministic (i.e., stateful) condition expressions in canEvaluateInLeft or
    * canEvaluateInRight to prevent pushing these predicates on either side of the join.
    *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    // Note: In order to ensure correctness, it's important to not change the relative ordering of
-    // any deterministic expression that follows a non-deterministic expression. To achieve this,
-    // we only consider pushing down those expressions that precede the first non-deterministic
-    // expression in the condition.
-    val (pushDownCandidates, containingNonDeterministic) = condition.span(_.deterministic)
+    val (pushDownCandidates, nonDeterministic) = condition.partition(_.deterministic)
     val (leftEvaluateCondition, rest) =
       pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ containingNonDeterministic)
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1226,7 +1222,13 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
           Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
         }
       }
-      Aggregate(keys, aggCols, child)
+      // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping
+      // aggregations by checking the number of grouping keys. The key difference here is that a
+      // global aggregation always returns at least one row even if there are no input rows. Here
+      // we append a literal when the grouping key list is empty so that the result aggregate
+      // operator is properly treated as a grouping aggregation.
+      val nonemptyKeys = if (keys.isEmpty) Literal(1) :: Nil else keys
+      Aggregate(nonemptyKeys, aggCols, child)
   }
 }
 

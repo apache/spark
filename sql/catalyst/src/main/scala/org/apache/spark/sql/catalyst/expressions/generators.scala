@@ -155,8 +155,8 @@ case class Stack(children: Seq[Expression]) extends Generator {
         val j = (i - 1) % numFields
         if (children(i).dataType != elementSchema.fields(j).dataType) {
           return TypeCheckResult.TypeCheckFailure(
-            s"Argument ${j + 1} (${elementSchema.fields(j).dataType}) != " +
-              s"Argument $i (${children(i).dataType})")
+            s"Argument ${j + 1} (${elementSchema.fields(j).dataType.simpleString}) != " +
+              s"Argument $i (${children(i).dataType.simpleString})")
         }
       }
       TypeCheckResult.TypeCheckSuccess
@@ -214,11 +214,11 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
     // Create the collection.
     val wrapperClass = classOf[mutable.WrappedArray[_]].getName
-    ctx.addMutableState(
-      s"$wrapperClass<InternalRow>",
-      ev.value,
-      v => s"$v = $wrapperClass$$.MODULE$$.make($rowData);", useFreshName = false)
-    ev.copy(code = code, isNull = "false")
+    ev.copy(code =
+      s"""
+         |$code
+         |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
+       """.stripMargin, isNull = "false")
   }
 }
 
@@ -249,7 +249,8 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(
-        s"input to function explode should be array or map type, not ${child.dataType}")
+        "input to function explode should be array or map type, " +
+          s"not ${child.dataType.simpleString}")
   }
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
@@ -378,7 +379,8 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName should be array of struct type, not ${child.dataType}")
+        s"input to function $prettyName should be array of struct type, " +
+          s"not ${child.dataType.simpleString}")
   }
 
   override def elementSchema: StructType = child.dataType match {

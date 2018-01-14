@@ -77,7 +77,7 @@ trait FileFormat {
   }
 
   /**
-   * Returns whether a file with `path` could be splitted or not.
+   * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(
       sparkSession: SparkSession,

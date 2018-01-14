@@ -195,7 +195,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           }
         case _ =>
           TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-            s"${value.dataType} != ${mismatchOpt.get.dataType}")
+            s"${value.dataType.simpleString} != ${mismatchOpt.get.dataType.simpleString}")
       }
     } else {
       TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
@@ -285,7 +285,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
          |${valueGen.code}
          |byte $tmpResult = $HAS_NULL;
          |if (!${valueGen.isNull}) {
-         |  $tmpResult = 0;
+         |  $tmpResult = $NOT_MATCHED;
          |  $javaDataType $valueArg = ${valueGen.value};
          |  do {
          |    $codes

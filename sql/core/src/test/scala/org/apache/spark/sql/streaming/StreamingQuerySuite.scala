@@ -33,11 +33,9 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ManualClock
-
 
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
 
@@ -423,6 +421,29 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         StopStream,
         AssertOnQuery { q => !isMetricsRegistered(q) }
       )
+    }
+  }
+
+  test("SPARK-22975: MetricsReporter defaults when there was no progress reported") {
+    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+      BlockingSource.latch = new CountDownLatch(1)
+      withTempDir { tempDir =>
+        val sq = spark.readStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .load()
+          .writeStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .option("checkpointLocation", tempDir.toString)
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+
+        val gauges = sq.streamMetrics.metricRegistry.getGauges
+        assert(gauges.get("latency").getValue.asInstanceOf[Long] == 0)
+        assert(gauges.get("processingRate-total").getValue.asInstanceOf[Double] == 0.0)
+        assert(gauges.get("inputRate-total").getValue.asInstanceOf[Double] == 0.0)
+        sq.stop()
+      }
     }
   }
 

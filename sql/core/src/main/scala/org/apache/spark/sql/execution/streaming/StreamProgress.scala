@@ -19,31 +19,32 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.collection.{immutable, GenTraversableOnce}
 
-import org.apache.spark.sql.sources.v2.reader.Offset
-
 /**
  * A helper class that looks like a Map[Source, Offset].
  */
 class StreamProgress(
-    val baseMap: immutable.Map[Source, Offset] = new immutable.HashMap[Source, Offset])
-  extends scala.collection.immutable.Map[Source, Offset] {
+    val baseMap: immutable.Map[BaseStreamingSource, Offset] =
+        new immutable.HashMap[BaseStreamingSource, Offset])
+  extends scala.collection.immutable.Map[BaseStreamingSource, Offset] {
 
-  def toOffsetSeq(source: Seq[Source], metadata: OffsetSeqMetadata): OffsetSeq = {
+  def toOffsetSeq(source: Seq[BaseStreamingSource], metadata: OffsetSeqMetadata): OffsetSeq = {
     OffsetSeq(source.map(get), Some(metadata))
   }
 
   override def toString: String =
     baseMap.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
 
-  override def +[B1 >: Offset](kv: (Source, B1)): Map[Source, B1] = baseMap + kv
+  override def +[B1 >: Offset](kv: (BaseStreamingSource, B1)): Map[BaseStreamingSource, B1] = {
+    baseMap + kv
+  }
 
-  override def get(key: Source): Option[Offset] = baseMap.get(key)
+  override def get(key: BaseStreamingSource): Option[Offset] = baseMap.get(key)
 
-  override def iterator: Iterator[(Source, Offset)] = baseMap.iterator
+  override def iterator: Iterator[(BaseStreamingSource, Offset)] = baseMap.iterator
 
-  override def -(key: Source): Map[Source, Offset] = baseMap - key
+  override def -(key: BaseStreamingSource): Map[BaseStreamingSource, Offset] = baseMap - key
 
-  def ++(updates: GenTraversableOnce[(Source, Offset)]): StreamProgress = {
+  def ++(updates: GenTraversableOnce[(BaseStreamingSource, Offset)]): StreamProgress = {
     new StreamProgress(baseMap ++ updates)
   }
 }

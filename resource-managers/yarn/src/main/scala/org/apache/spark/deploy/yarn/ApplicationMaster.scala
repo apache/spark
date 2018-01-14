@@ -427,11 +427,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       uiAddress: Option[String]) = {
     val appId = client.getAttemptId().getApplicationId().toString()
     val attemptId = client.getAttemptId().getAttemptId().toString()
-    val historyAddress =
-      _sparkConf.get(HISTORY_SERVER_ADDRESS)
-        .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
-        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
-        .getOrElse("")
+    val historyAddress = ApplicationMaster
+      .getHistoryServerAddress(_sparkConf, yarnConf, appId, attemptId)
 
     val driverUrl = RpcEndpointAddress(
       _sparkConf.get("spark.driver.host"),
@@ -834,6 +831,16 @@ object ApplicationMaster extends Logging {
     master.getAttemptId
   }
 
+  private[spark] def getHistoryServerAddress(
+      sparkConf: SparkConf,
+      yarnConf: YarnConfiguration,
+      appId: String,
+      attemptId: String): String = {
+    sparkConf.get(HISTORY_SERVER_ADDRESS)
+      .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
+      .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
+      .getOrElse("")
+  }
 }
 
 /**

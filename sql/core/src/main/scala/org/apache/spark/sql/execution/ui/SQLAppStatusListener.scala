@@ -30,15 +30,11 @@ import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
 import org.apache.spark.status.config._
-import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.kvstore.KVStore
 
-private[sql] class SQLAppStatusListener(
+class SQLAppStatusListener(
     conf: SparkConf,
     kvstore: ElementTrackingStore,
-    live: Boolean,
-    ui: Option[SparkUI] = None)
-  extends SparkListener with Logging {
+    live: Boolean) extends SparkListener with Logging {
 
   // How often to flush intermediate state of a live execution to the store. When replaying logs,
   // never flush (only do the very last write).
@@ -50,7 +46,10 @@ private[sql] class SQLAppStatusListener(
   private val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
   private val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
 
-  private var uiInitialized = false
+  // Returns true if this listener has no live data. Exposed for tests only.
+  private[sql] def noLiveData(): Boolean = {
+    liveExecutions.isEmpty && stageMetrics.isEmpty
+  }
 
   kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get(UI_RETAINED_EXECUTIONS)) { count =>
     cleanupExecutions(count)
@@ -88,7 +87,7 @@ private[sql] class SQLAppStatusListener(
     }
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
-    exec.stages = event.stageIds.toSet
+    exec.stages ++= event.stageIds.toSet
     update(exec)
   }
 
@@ -100,7 +99,7 @@ private[sql] class SQLAppStatusListener(
     // Reset the metrics tracking object for the new attempt.
     Option(stageMetrics.get(event.stageInfo.stageId)).foreach { metrics =>
       metrics.taskMetrics.clear()
-      metrics.attemptId = event.stageInfo.attemptId
+      metrics.attemptId = event.stageInfo.attemptNumber
     }
   }
 
@@ -176,7 +175,7 @@ private[sql] class SQLAppStatusListener(
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
     // This can happen if the UI is requesting this data, and the onExecutionEnd handler is
-    // running at the same time. The metrics calculcated for the UI can be innacurate in that
+    // running at the same time. The metrics calculated for the UI can be innacurate in that
     // case, since the onExecutionEnd handler will clean up tracked stage metrics.
     if (exec.metricsValues != null) {
       exec.metricsValues
@@ -230,14 +229,6 @@ private[sql] class SQLAppStatusListener(
   }
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
-    // Install the SQL tab in a live app if it hasn't been initialized yet.
-    if (!uiInitialized) {
-      ui.foreach { _ui =>
-        new SQLTab(new SQLAppStatusStore(kvstore, Some(this)), _ui)
-      }
-      uiInitialized = true
-    }
-
     val SparkListenerSQLExecutionStart(executionId, description, details,
       physicalPlanDescription, sparkPlanInfo, time) = event
 
@@ -389,7 +380,7 @@ private class LiveStageMetrics(
     val accumulatorIds: Array[Long],
     val taskMetrics: ConcurrentHashMap[Long, LiveTaskMetrics])
 
-private[sql] class LiveTaskMetrics(
+private class LiveTaskMetrics(
     val ids: Array[Long],
     val values: Array[Long],
     val succeeded: Boolean)

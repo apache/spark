@@ -39,7 +39,6 @@ import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreCon
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -78,10 +77,23 @@ class StreamSuite extends StreamTest {
   }
 
   test("StreamingRelation.computeStats") {
-    val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
-      case s: StreamingRelation => s
+    withTempDir { dir =>
+      val df = spark.readStream.format("csv").schema(StructType(Seq())).load(dir.getCanonicalPath)
+      val streamingRelation = df.logicalPlan collect {
+        case s: StreamingRelation => s
+      }
+      assert(streamingRelation.nonEmpty, "cannot find StreamingRelation")
+      assert(
+        streamingRelation.head.computeStats.sizeInBytes ==
+          spark.sessionState.conf.defaultSizeInBytes)
     }
-    assert(streamingRelation.nonEmpty, "cannot find StreamingRelation")
+  }
+
+  test("StreamingRelationV2.computeStats") {
+    val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
+      case s: StreamingRelationV2 => s
+    }
+    assert(streamingRelation.nonEmpty, "cannot find StreamingExecutionRelation")
     assert(
       streamingRelation.head.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }

@@ -29,10 +29,12 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousRateStreamReader
+import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReader
+import org.apache.spark.sql.execution.streaming.sources.RateStreamMicroBatchReader
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.{ContinuousReader, MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, MicroBatchReader}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ManualClock, SystemClock}
 
@@ -51,7 +53,7 @@ import org.apache.spark.util.{ManualClock, SystemClock}
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateSourceProvider extends StreamSourceProvider with DataSourceRegister
-  with DataSourceV2 with MicroBatchReadSupport with ContinuousReadSupport{
+  with DataSourceV2 with ContinuousReadSupport {
 
   override def sourceSchema(
       sqlContext: SQLContext,
@@ -106,18 +108,11 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister
     )
   }
 
-  override def createMicroBatchReader(
-      schema: Optional[StructType],
-      checkpointLocation: String,
-      options: DataSourceV2Options): MicroBatchReader = {
-    new RateStreamV2Reader(options)
-  }
-
   override def createContinuousReader(
       schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceV2Options): ContinuousReader = {
-    new ContinuousRateStreamReader(options)
+    new RateStreamContinuousReader(options)
   }
 
   override def shortName(): String = "rate"
