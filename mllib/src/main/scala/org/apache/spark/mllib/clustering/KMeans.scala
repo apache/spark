@@ -613,7 +613,7 @@ class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable 
 private[spark] abstract class DistanceMeasure extends Serializable {
 
   /**
-   * @return the index of the closest center to the given point, as well as the squared distance.
+   * @return the index of the closest center to the given point, as well as the cost.
    */
   def findClosest(
      centers: TraversableOnce[VectorWithNorm],
