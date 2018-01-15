@@ -293,7 +293,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
       }
 
-      assert(e.message.contains("Temporary table") && e.message.contains("already exists"))
+      assert(e.message.contains("Temporary view") && e.message.contains("already exists"))
     }
   }
 
