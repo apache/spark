@@ -136,7 +136,7 @@
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.13.0</okio.version>
     <retrofit.version>2.3.0</retrofit.version>
-    <bouncycastle.version>1.54</bouncycastle.version>
+    <bouncycastle.version>1.58</bouncycastle.version>
     <jetty.version>9.4.8.v20171121</jetty.version>
     <orc.version>1.4.1</orc.version>
     <orc.classifier>nohive</orc.classifier>
@@ -411,6 +411,7 @@
       <dependency>
         <groupId>org.bouncycastle</groupId>
         <artifactId>bcprov-jdk15on</artifactId>
+        <!-- brought in by jets3t; see SPARK-22634 -->
         <version>${bouncycastle.version}</version>
       </dependency>
       <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
@@ -1195,12 +1196,6 @@
             <artifactId>commons-logging</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.bouncycastle</groupId>
-        <artifactId>bcprov-jdk15on</artifactId>
-        <!-- brought in by jets3t; see SPARK-22634 -->
-        <version>1.58</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
