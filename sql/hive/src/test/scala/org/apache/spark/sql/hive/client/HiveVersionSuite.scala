@@ -36,7 +36,7 @@ private[client] abstract class HiveVersionSuite(version: String) extends SparkFu
       hadoopConf.set("hive.metastore.schema.verification", "false")
     }
     HiveClientBuilder
-      .buildClient(version, hadoopConf, HiveUtils.hiveClientConfigurations(hadoopConf))
+      .buildClient(version, hadoopConf, HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
   }
 
   override def suiteName: String = s"${super.suiteName}($version)"

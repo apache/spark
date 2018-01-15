@@ -36,6 +36,12 @@ opts_hooks$set(eval = function(options) {
   }
   options
 })
+r_tmp_dir <- tempdir()
+tmp_arg <- paste0("-Djava.io.tmpdir=", r_tmp_dir)
+sparkSessionConfig <- list(spark.driver.extraJavaOptions = tmp_arg,
+                           spark.executor.extraJavaOptions = tmp_arg)
+old_java_opt <- Sys.getenv("_JAVA_OPTIONS")
+Sys.setenv("_JAVA_OPTIONS" = paste("-XX:-UsePerfData", old_java_opt, sep = " "))
 ```
 
 ## Overview
@@ -57,7 +63,7 @@ We use default settings in which it runs in local mode. It auto downloads Spark 
 
 ```{r, include=FALSE}
 install.spark()
-sparkR.session(master = "local[1]")
+sparkR.session(master = "local[1]", sparkConfig = sparkSessionConfig, enableHiveSupport = FALSE)
 ```
 ```{r, eval=FALSE}
 sparkR.session()
@@ -385,8 +391,7 @@ We convert `mpg` to `kmpg` (kilometers per gallon). `carsSubDF` is a `SparkDataF
 
 ```{r}
 carsSubDF <- select(carsDF, "model", "mpg")
-schema <- structType(structField("model", "string"), structField("mpg", "double"),
-                     structField("kmpg", "double"))
+schema <- "model STRING, mpg DOUBLE, kmpg DOUBLE"
 out <- dapply(carsSubDF, function(x) { x <- cbind(x, x$mpg * 1.61) }, schema)
 head(collect(out))
 ```
@@ -1037,7 +1042,7 @@ unlink(modelPath)
 
 ## Structured Streaming
 
-SparkR supports the Structured Streaming API (experimental).
+SparkR supports the Structured Streaming API.
 
 You can check the Structured Streaming Programming Guide for [an introduction](https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#programming-model) to its programming model and basic concepts.
 
@@ -1176,4 +1181,8 @@ env | map
 
 ```{r, echo=FALSE}
 sparkR.session.stop()
+```
+
+```{r cleanup, include=FALSE}
+SparkR:::uninstallDownloadedSpark()
 ```

@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.HasInputCols
+import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 /**
  * Params for [[Imputer]] and [[ImputerModel]].
  */
-private[feature] trait ImputerParams extends Params with HasInputCols {
+private[feature] trait ImputerParams extends Params with HasInputCols with HasOutputCols {
 
   /**
    * The imputation strategy. Currently only "mean" and "median" are supported.
@@ -62,16 +62,6 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
 
   /** @group getParam */
   def getMissingValue: Double = $(missingValue)
-
-  /**
-   * Param for output column names.
-   * @group param
-   */
-  final val outputCols: StringArrayParam = new StringArrayParam(this, "outputCols",
-    "output column names")
-
-  /** @group getParam */
-  final def getOutputCols: Array[String] = $(outputCols)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -223,20 +213,18 @@ class ImputerModel private[ml] (
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    var outputDF = dataset
     val surrogates = surrogateDF.select($(inputCols).map(col): _*).head().toSeq
 
-    $(inputCols).zip($(outputCols)).zip(surrogates).foreach {
+    val newCols = $(inputCols).zip($(outputCols)).zip(surrogates).map {
       case ((inputCol, outputCol), surrogate) =>
         val inputType = dataset.schema(inputCol).dataType
         val ic = col(inputCol)
-        outputDF = outputDF.withColumn(outputCol,
-          when(ic.isNull, surrogate)
+        when(ic.isNull, surrogate)
           .when(ic === $(missingValue), surrogate)
           .otherwise(ic)
-          .cast(inputType))
+          .cast(inputType)
     }
-    outputDF.toDF()
+    dataset.withColumns($(outputCols), newCols).toDF()
   }
 
   override def transformSchema(schema: StructType): StructType = {

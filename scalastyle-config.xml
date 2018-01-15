@@ -86,14 +86,14 @@ This file is divided into 3 sections:
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.ObjectNamesChecker" enabled="true">
-    <parameters><parameter name="regex"><![CDATA[[A-Z][A-Za-z]*]]></parameter></parameters>
+    <parameters><parameter name="regex"><![CDATA[(config|[A-Z][A-Za-z]*)]]></parameter></parameters>
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.PackageObjectNamesChecker" enabled="true">
     <parameters><parameter name="regex"><![CDATA[^[a-z][A-Za-z]*$]]></parameter></parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
+  <check customId="argcount" level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
     <parameters><parameter name="maxParameters"><![CDATA[10]]></parameter></parameters>
   </check>
 

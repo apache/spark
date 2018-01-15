@@ -132,10 +132,12 @@ print.summary.decisionTree <- function(x) {
 #' Gradient Boosted Tree model, \code{predict} to make predictions on new data, and
 #' \code{write.ml}/\code{read.ml} to save/load fitted models.
 #' For more details, see
+# nolint start
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-regression}{
 #' GBT Regression} and
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-classifier}{
 #' GBT Classification}
+# nolint end
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
@@ -159,16 +161,19 @@ print.summary.decisionTree <- function(x) {
 #'                            >= 1.
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
-#'                      column of string type in classification model.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and
+#'                      label column of string type in classification model.
 #'                      Supported options: "skip" (filter out rows with invalid data),
-#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
-#'                                         bucket, at index numLabels). Default is "error".
+#'                                         "error" (throw an error), "keep" (put invalid data in
+#'                                         a special additional bucket, at index numLabels). Default
+#'                                         is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.gbt,SparkDataFrame,formula-method
 #' @return \code{spark.gbt} returns a fitted Gradient Boosted Tree model.
@@ -352,10 +357,12 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' model, \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
 #' save/load fitted models.
 #' For more details, see
+# nolint start
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-regression}{
 #' Random Forest Regression} and
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-classifier}{
 #' Random Forest Classification}
+# nolint end
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
@@ -377,16 +384,19 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' @param minInstancesPerNode Minimum number of instances each child must have after split.
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
-#'                      column of string type in classification model.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and
+#'                      label column of string type in classification model.
 #'                      Supported options: "skip" (filter out rows with invalid data),
-#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
-#'                                         bucket, at index numLabels). Default is "error".
+#'                                         "error" (throw an error), "keep" (put invalid data in
+#'                                         a special additional bucket, at index numLabels). Default
+#'                                         is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.randomForest,SparkDataFrame,formula-method
 #' @return \code{spark.randomForest} returns a fitted Random Forest model.
@@ -567,10 +577,12 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' model, \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
 #' save/load fitted models.
 #' For more details, see
+# nolint start
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-regression}{
 #' Decision Tree Regression} and
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-classifier}{
 #' Decision Tree Classification}
+# nolint end
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
@@ -587,16 +599,19 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' @param minInstancesPerNode Minimum number of instances each child must have after split.
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
-#'                      column of string type in classification model.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and
+#'                      label column of string type in classification model.
 #'                      Supported options: "skip" (filter out rows with invalid data),
-#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
-#'                                         bucket, at index numLabels). Default is "error".
+#'                                         "error" (throw an error), "keep" (put invalid data in
+#'                                         a special additional bucket, at index numLabels). Default
+#'                                         is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.decisionTree,SparkDataFrame,formula-method
 #' @return \code{spark.decisionTree} returns a fitted Decision Tree model.
@@ -671,7 +686,8 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list of components includes \code{formula} (formula),
 #'         \code{numFeatures} (number of features), \code{features} (list of features),
-#'         \code{featureImportances} (feature importances), and \code{maxDepth} (max depth of trees).
+#'         \code{featureImportances} (feature importances), and \code{maxDepth} (max depth of
+#'         trees).
 #' @rdname spark.decisionTree
 #' @aliases summary,DecisionTreeRegressionModel-method
 #' @export

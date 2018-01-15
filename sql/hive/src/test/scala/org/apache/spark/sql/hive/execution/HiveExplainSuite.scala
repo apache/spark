@@ -18,8 +18,10 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
@@ -29,21 +31,32 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   import testImplicits._
 
   test("show cost in explain command") {
+    val explainCostCommand = "EXPLAIN COST  SELECT * FROM src"
     // For readability, we only show optimized plan and physical plan in explain cost command
-    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "),
+    checkKeywordsExist(sql(explainCostCommand),
       "Optimized Logical Plan", "Physical Plan")
-    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "),
+    checkKeywordsNotExist(sql(explainCostCommand),
       "Parsed Logical Plan", "Analyzed Logical Plan")
 
-    // Only has sizeInBytes before ANALYZE command
-    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes")
-    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "), "rowCount")
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      // Only has sizeInBytes before ANALYZE command
+      checkKeywordsExist(sql(explainCostCommand), "sizeInBytes")
+      checkKeywordsNotExist(sql(explainCostCommand), "rowCount")
 
-    // Has both sizeInBytes and rowCount after ANALYZE command
-    sql("ANALYZE TABLE src COMPUTE STATISTICS")
-    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes", "rowCount")
+      // Has both sizeInBytes and rowCount after ANALYZE command
+      sql("ANALYZE TABLE src COMPUTE STATISTICS")
+      checkKeywordsExist(sql(explainCostCommand), "sizeInBytes", "rowCount")
+    }
 
-    // No cost information
+    spark.sessionState.catalog.refreshTable(TableIdentifier("src"))
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+      // Don't show rowCount if cbo is disabled
+      checkKeywordsExist(sql(explainCostCommand), "sizeInBytes")
+      checkKeywordsNotExist(sql(explainCostCommand), "rowCount")
+    }
+
+    // No statistics information if "cost" is not specified
     checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes", "rowCount")
   }
 
@@ -157,5 +170,22 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     intercept[ParseException] {
       sql("EXPLAIN EXTENDED CODEGEN SELECT 1")
     }
+  }
+
+  test("SPARK-23021 AnalysisBarrier should not cut off explain output for parsed logical plans") {
+    val df = Seq((1, 1)).toDF("a", "b").groupBy("a").count().limit(1)
+    val outputStream = new java.io.ByteArrayOutputStream()
+    Console.withOut(outputStream) {
+      df.explain(true)
+    }
+    assert(outputStream.toString.replaceAll("""#\d+""", "#0").contains(
+      s"""== Parsed Logical Plan ==
+         |GlobalLimit 1
+         |+- LocalLimit 1
+         |   +- AnalysisBarrier
+         |         +- Aggregate [a#0], [a#0, count(1) AS count#0L]
+         |            +- Project [_1#0 AS a#0, _2#0 AS b#0]
+         |               +- LocalRelation [_1#0, _2#0]
+         |""".stripMargin))
   }
 }

@@ -56,7 +56,9 @@ object FileFormatWriter extends Logging {
 
   /** Describes how output files should be placed in the filesystem. */
   case class OutputSpec(
-    outputPath: String, customPartitionLocations: Map[TablePartitionSpec, String])
+    outputPath: String,
+    customPartitionLocations: Map[TablePartitionSpec, String],
+    outputColumns: Seq[Attribute])
 
   /** A shared job description for all the write tasks. */
   private class WriteJobDescription(
@@ -117,9 +119,8 @@ object FileFormatWriter extends Logging {
     job.setOutputValueClass(classOf[InternalRow])
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
-    val allColumns = plan.output
     val partitionSet = AttributeSet(partitionColumns)
-    val dataColumns = allColumns.filterNot(partitionSet.contains)
+    val dataColumns = outputSpec.outputColumns.filterNot(partitionSet.contains)
 
     val bucketIdExpression = bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
@@ -142,7 +143,7 @@ object FileFormatWriter extends Logging {
       uuid = UUID.randomUUID().toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
-      allColumns = allColumns,
+      allColumns = outputSpec.outputColumns,
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,
       bucketIdExpression = bucketIdExpression,
@@ -178,8 +179,14 @@ object FileFormatWriter extends Logging {
       val rdd = if (orderingMatched) {
         plan.execute()
       } else {
+        // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
+        // the physical plan may have different attribute ids due to optimizer removing some
+        // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
+        val orderingExpr = requiredOrdering
+          .map(SortOrder(_, Ascending))
+          .map(BindReferences.bindReference(_, outputSpec.outputColumns))
         SortExec(
-          requiredOrdering.map(SortOrder(_, Ascending)),
+          orderingExpr,
           global = false,
           child = plan).execute()
       }

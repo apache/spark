@@ -461,6 +461,8 @@ name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can al
 names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames loaded from any data
 source type can be converted into other types using this syntax.
 
+To load a JSON file you can use:
+
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 {% include_example manual_load_options scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
@@ -476,6 +478,27 @@ source type can be converted into other types using this syntax.
 
 <div data-lang="r"  markdown="1">
 {% include_example manual_load_options r/RSparkSQLExample.R %}
+</div>
+</div>
+
+To load a CSV file you can use:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example manual_load_options_csv scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example manual_load_options_csv java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example manual_load_options_csv python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example manual_load_options_csv r/RSparkSQLExample.R %}
+
 </div>
 </div>
 
@@ -573,7 +596,7 @@ Note that partition information is not gathered by default when creating externa
 
 ### Bucketing, Sorting and Partitioning
 
-For file-based data source, it is also possible to bucket and sort or partition the output. 
+For file-based data source, it is also possible to bucket and sort or partition the output.
 Bucketing and sorting are applicable only to persistent tables:
 
 <div class="codetabs">
@@ -598,7 +621,7 @@ CREATE TABLE users_bucketed_by_name(
   name STRING,
   favorite_color STRING,
   favorite_numbers array<integer>
-) USING parquet 
+) USING parquet
 CLUSTERED BY(name) INTO 42 BUCKETS;
 
 {% endhighlight %}
@@ -629,7 +652,7 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 {% highlight sql %}
 
 CREATE TABLE users_by_favorite_color(
-  name STRING, 
+  name STRING,
   favorite_color STRING,
   favorite_numbers array<integer>
 ) USING csv PARTITIONED BY(favorite_color);
@@ -664,7 +687,7 @@ CREATE TABLE users_bucketed_and_partitioned(
   name STRING,
   favorite_color STRING,
   favorite_numbers array<integer>
-) USING parquet 
+) USING parquet
 PARTITIONED BY (favorite_color)
 CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 
@@ -675,7 +698,7 @@ CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 </div>
 
 `partitionBy` creates a directory structure as described in the [Partition Discovery](#partition-discovery) section.
-Thus, it has limited applicability to columns with high cardinality. In contrast 
+Thus, it has limited applicability to columns with high cardinality. In contrast
  `bucketBy` distributes
 data across a fixed number of buckets and can be used when a number of unique values is unbounded.
 
@@ -778,10 +801,11 @@ root
 {% endhighlight %}
 
 Notice that the data types of the partitioning columns are automatically inferred. Currently,
-numeric data types and string type are supported. Sometimes users may not want to automatically
-infer the data types of the partitioning columns. For these use cases, the automatic type inference
-can be configured by `spark.sql.sources.partitionColumnTypeInference.enabled`, which is default to
-`true`. When type inference is disabled, string type will be used for the partitioning columns.
+numeric data types, date, timestamp and string type are supported. Sometimes users may not want
+to automatically infer the data types of the partitioning columns. For these use cases, the
+automatic type inference can be configured by
+`spark.sql.sources.partitionColumnTypeInference.enabled`, which is default to `true`. When type
+inference is disabled, string type will be used for the partitioning columns.
 
 Starting from Spark 1.6.0, partition discovery only finds partitions under the given paths
 by default. For the above example, if users pass `path/to/table/gender=male` to either
@@ -891,6 +915,14 @@ spark.catalog.refreshTable("my_table")
 
 </div>
 
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+refreshTable("my_table")
+{% endhighlight %}
+
+</div>
+
 <div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
@@ -929,8 +961,10 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td><code>spark.sql.parquet.compression.codec</code></td>
   <td>snappy</td>
   <td>
-    Sets the compression codec use when writing Parquet files. Acceptable values include:
-    uncompressed, snappy, gzip, lzo.
+    Sets the compression codec used when writing Parquet files. If either `compression` or
+    `parquet.compression` is specified in the table-specific options/properties, the precedence would be
+    `compression`, `parquet.compression`, `spark.sql.parquet.compression.codec`. Acceptable values include:
+    none, uncompressed, snappy, gzip, lzo.
   </td>
 </tr>
 <tr>
@@ -1333,7 +1367,7 @@ the following case-insensitive options:
   <tr>
     <td><code>customSchema</code></td>
     <td>
-     The custom schema to use for reading data from JDBC connectors. For example, "id DECIMAL(38, 0), name STRING"). The column names should be identical to the corresponding column names of JDBC table. Users can specify the corresponding data types of Spark SQL instead of using the defaults. This option applies only to reading.
+     The custom schema to use for reading data from JDBC connectors. For example, <code>"id DECIMAL(38, 0), name STRING"</code>. You can also specify partial fields, and the others use the default type mapping. For example, <code>"id DECIMAL(38, 0)"</code>. The column names should be identical to the corresponding column names of JDBC table. Users can specify the corresponding data types of Spark SQL instead of using the defaults. This option applies only to reading.
     </td>
   </tr>
 </table>
@@ -1469,6 +1503,64 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
 </table>
 
+## Broadcast Hint for SQL Queries
+
+The `BROADCAST` hint guides Spark to broadcast each specified table when joining them with another table or view.
+When Spark deciding the join methods, the broadcast hash join (i.e., BHJ) is preferred,
+even if the statistics is above the configuration `spark.sql.autoBroadcastJoinThreshold`.
+When both sides of a join are specified, Spark broadcasts the one having the lower statistics.
+Note Spark does not guarantee BHJ is always chosen, since not all cases (e.g. full outer join)
+support BHJ. When the broadcast nested loop join is selected, we still respect the hint.
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+import org.apache.spark.sql.functions.broadcast
+broadcast(spark.table("src")).join(spark.table("records"), "key").show()
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+import static org.apache.spark.sql.functions.broadcast;
+broadcast(spark.table("src")).join(spark.table("records"), "key").show();
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+from pyspark.sql.functions import broadcast
+broadcast(spark.table("src")).join(spark.table("records"), "key").show()
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+src <- sql("SELECT * FROM src")
+records <- sql("SELECT * FROM records")
+head(join(broadcast(src), records, src$key == records$key))
+{% endhighlight %}
+
+</div>
+
+<div data-lang="sql"  markdown="1">
+
+{% highlight sql %}
+-- We accept BROADCAST, BROADCASTJOIN and MAPJOIN for broadcast hint
+SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
+{% endhighlight %}
+
+</div>
+</div>
+
 # Distributed SQL Engine
 
 Spark SQL can also act as a distributed query engine using its JDBC/ODBC or command-line interface.
@@ -1553,6 +1645,153 @@ options.
 ## Upgrading From Spark SQL 2.2 to 2.3
 
   - Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the referenced columns only include the internal corrupt record column (named `_corrupt_record` by default). For example, `spark.read.schema(schema).json(file).filter($"_corrupt_record".isNotNull).count()` and `spark.read.schema(schema).json(file).select("_corrupt_record").show()`. Instead, you can cache or save the parsed results and then send the same query. For example, `val df = spark.read.schema(schema).json(file).cache()` and then `df.filter($"_corrupt_record".isNotNull).count()`.
+  - The `percentile_approx` function previously accepted numeric type input and output double type results. Now it supports date type, timestamp type and numeric types as input types. The result type is also changed to be the same as the input type, which is more reasonable for percentiles.
+  - Since Spark 2.3, the Join/Filter's deterministic predicates that are after the first non-deterministic predicates are also pushed down/through the child operators, if possible. In prior Spark versions, these filters are not eligible for predicate pushdown.
+  - Partition column inference previously found incorrect common type for different inferred types, for example, previously it ended up with double type as the common type for double type and date type. Now it finds the correct common type for such conflicts. The conflict resolution follows the table below:
+
+    <table class="table">
+      <tr>
+        <th>
+          <b>InputA \ InputB</b>
+        </th>
+        <th>
+          <b>NullType</b>
+        </th>
+        <th>
+          <b>IntegerType</b>
+        </th>
+        <th>
+          <b>LongType</b>
+        </th>
+        <th>
+          <b>DecimalType(38,0)*</b>
+        </th>
+        <th>
+          <b>DoubleType</b>
+        </th>
+        <th>
+          <b>DateType</b>
+        </th>
+        <th>
+          <b>TimestampType</b>
+        </th>
+        <th>
+          <b>StringType</b>
+        </th>
+      </tr>
+      <tr>
+        <td>
+          <b>NullType</b>
+        </td>
+        <td>NullType</td>
+        <td>IntegerType</td>
+        <td>LongType</td>
+        <td>DecimalType(38,0)</td>
+        <td>DoubleType</td>
+        <td>DateType</td>
+        <td>TimestampType</td>
+        <td>StringType</td>
+      </tr>
+      <tr>
+        <td>
+          <b>IntegerType</b>
+        </td>
+        <td>IntegerType</td>
+        <td>IntegerType</td>
+        <td>LongType</td>
+        <td>DecimalType(38,0)</td>
+        <td>DoubleType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+      </tr>
+      <tr>
+        <td>
+          <b>LongType</b>
+        </td>
+        <td>LongType</td>
+        <td>LongType</td>
+        <td>LongType</td>
+        <td>DecimalType(38,0)</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+      </tr>
+      <tr>
+        <td>
+          <b>DecimalType(38,0)*</b>
+        </td>
+        <td>DecimalType(38,0)</td>
+        <td>DecimalType(38,0)</td>
+        <td>DecimalType(38,0)</td>
+        <td>DecimalType(38,0)</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+      </tr>
+      <tr>
+        <td>
+          <b>DoubleType</b>
+        </td>
+        <td>DoubleType</td>
+        <td>DoubleType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>DoubleType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+      </tr>
+      <tr>
+        <td>
+          <b>DateType</b>
+        </td>
+        <td>DateType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>DateType</td>
+        <td>TimestampType</td>
+        <td>StringType</td>
+      </tr>
+      <tr>
+        <td>
+          <b>TimestampType</b>
+        </td>
+        <td>TimestampType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>TimestampType</td>
+        <td>TimestampType</td>
+        <td>StringType</td>
+      </tr>
+      <tr>
+        <td>
+          <b>StringType</b>
+        </td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+        <td>StringType</td>
+      </tr>
+    </table>
+
+    Note that, for <b>DecimalType(38,0)*</b>, the table above intentionally does not cover all other combinations of scales and precisions because currently we only infer decimal type like `BigInteger`/`BigInt`. For example, 1.1 is inferred as double type.
+  - In PySpark, now we need Pandas 0.19.2 or upper if you want to use Pandas related functionalities, such as `toPandas`, `createDataFrame` from Pandas DataFrame, etc.
+  - In PySpark, the behavior of timestamp values for Pandas related functionalities was changed to respect session timezone. If you want to use the old behavior, you need to set a configuration `spark.sql.execution.pandas.respectSessionTimeZone` to `False`. See [SPARK-22395](https://issues.apache.org/jira/browse/SPARK-22395) for details.
+  - In PySpark, `na.fill()` or `fillna` also accepts boolean and replaces nulls with booleans. In prior Spark versions, PySpark just ignores it and returns the original Dataset/DataFrame.  
+  - Since Spark 2.3, when either broadcast hash join or broadcast nested loop join is applicable, we prefer to broadcasting the table that is explicitly specified in a broadcast hint. For details, see the section [Broadcast Hint](#broadcast-hint-for-sql-queries) and [SPARK-22489](https://issues.apache.org/jira/browse/SPARK-22489).
+  - Since Spark 2.3, when all inputs are binary, `functions.concat()` returns an output as binary. Otherwise, it returns as a string. Until Spark 2.3, it always returns as a string despite of input types. To keep the old behavior, set `spark.sql.function.concatBinaryAsString` to `true`.
+  - Since Spark 2.3, when all inputs are binary, SQL `elt()` returns an output as binary. Otherwise, it returns as a string. Until Spark 2.3, it always returns as a string despite of input types. To keep the old behavior, set `spark.sql.function.eltOutputAsString` to `true`.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 
@@ -1934,6 +2173,14 @@ Not all the APIs of the Hive UDF/UDTF/UDAF are supported by Spark SQL. Below are
   Spark SQL currently does not support the reuse of aggregation.
 * `getWindowingEvaluator` (`GenericUDAFEvaluator`) is a function to optimize aggregation by evaluating
   an aggregate over a fixed window.
+
+### Incompatible Hive UDF
+
+Below are the scenarios in which Hive and Spark generate different results:
+
+* `SQRT(n)` If n < 0, Hive returns null, Spark SQL returns NaN.
+* `ACOS(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
+* `ASIN(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
 
 # Reference
 

@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util.Date
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
@@ -36,10 +37,13 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.security.GroupMappingServiceProvider
+import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
@@ -66,9 +70,15 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     new File(logPath)
   }
 
-  test("Parse application logs") {
+  Seq(true, false).foreach { inMemory =>
+    test(s"Parse application logs (inMemory = $inMemory)") {
+      testAppLogParsing(inMemory)
+    }
+  }
+
+  private def testAppLogParsing(inMemory: Boolean) {
     val clock = new ManualClock(12345678)
-    val provider = new FsHistoryProvider(createTestConf(), clock)
+    val provider = new FsHistoryProvider(createTestConf(inMemory = inMemory), clock)
 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)
@@ -106,9 +116,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           end: Long,
           lastMod: Long,
           user: String,
-          completed: Boolean): ApplicationHistoryInfo = {
-        ApplicationHistoryInfo(id, name,
-          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed, "")))
+          completed: Boolean): ApplicationInfo = {
+
+        val duration = if (end > 0) end - start else 0
+        new ApplicationInfo(id, name, None, None, None, None,
+          List(ApplicationAttemptInfo(None, new Date(start),
+            new Date(end), new Date(lastMod), duration, user, completed, "")))
       }
 
       // For completed files, lastUpdated would be lastModified time.
@@ -172,20 +185,18 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     )
     updateAndCheck(provider) { list =>
       list.size should be (1)
-      list.head.attempts.head.asInstanceOf[FsApplicationAttemptInfo].logPath should
-        endWith(EventLoggingListener.IN_PROGRESS)
+      provider.getAttempt("app1", None).logPath should endWith(EventLoggingListener.IN_PROGRESS)
     }
 
     logFile1.renameTo(newLogFile("app1", None, inProgress = false))
     updateAndCheck(provider) { list =>
       list.size should be (1)
-      list.head.attempts.head.asInstanceOf[FsApplicationAttemptInfo].logPath should not
-        endWith(EventLoggingListener.IN_PROGRESS)
+      provider.getAttempt("app1", None).logPath should not endWith(EventLoggingListener.IN_PROGRESS)
     }
   }
 
   test("Parse logs that application is not started") {
-    val provider = new FsHistoryProvider((createTestConf()))
+    val provider = new FsHistoryProvider(createTestConf())
 
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
@@ -342,17 +353,23 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     provider.checkForLogs()
 
     // This should not trigger any cleanup
-    updateAndCheck(provider)(list => list.size should be(2))
+    updateAndCheck(provider) { list =>
+      list.size should be(2)
+    }
 
     // Should trigger cleanup for first file but not second one
     clock.setTime(firstFileModifiedTime + maxAge + 1)
-    updateAndCheck(provider)(list => list.size should be(1))
+    updateAndCheck(provider) { list =>
+      list.size should be(1)
+    }
     assert(!log1.exists())
     assert(log2.exists())
 
     // Should cleanup the second file as well.
     clock.setTime(secondFileModifiedTime + maxAge + 1)
-    updateAndCheck(provider)(list => list.size should be(0))
+    updateAndCheck(provider) { list =>
+      list.size should be(0)
+    }
     assert(!log1.exists())
     assert(!log2.exists())
   }
@@ -580,7 +597,71 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       securityManager.checkUIViewPermissions("user4") should be (false)
       securityManager.checkUIViewPermissions("user5") should be (false)
     }
- }
+  }
+
+  test("mismatched version discards old listing") {
+    val conf = createTestConf()
+    val oldProvider = new FsHistoryProvider(conf)
+
+    val logFile1 = newLogFile("app1", None, inProgress = false)
+    writeFile(logFile1, true, None,
+      SparkListenerLogStart("2.3"),
+      SparkListenerApplicationStart("test", Some("test"), 1L, "test", None),
+      SparkListenerApplicationEnd(5L)
+    )
+
+    updateAndCheck(oldProvider) { list =>
+      list.size should be (1)
+    }
+    assert(oldProvider.listing.count(classOf[ApplicationInfoWrapper]) === 1)
+
+    // Manually overwrite the version in the listing db; this should cause the new provider to
+    // discard all data because the versions don't match.
+    val meta = new FsHistoryProviderMetadata(FsHistoryProvider.CURRENT_LISTING_VERSION + 1,
+      AppStatusStore.CURRENT_VERSION, conf.get(LOCAL_STORE_DIR).get)
+    oldProvider.listing.setMetadata(meta)
+    oldProvider.stop()
+
+    val mistatchedVersionProvider = new FsHistoryProvider(conf)
+    assert(mistatchedVersionProvider.listing.count(classOf[ApplicationInfoWrapper]) === 0)
+  }
+
+  test("invalidate cached UI") {
+    val provider = new FsHistoryProvider(createTestConf())
+    val appId = "new1"
+
+    // Write an incomplete app log.
+    val appLog = newLogFile(appId, None, inProgress = true)
+    writeFile(appLog, true, None,
+      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None)
+      )
+    provider.checkForLogs()
+
+    // Load the app UI.
+    val oldUI = provider.getAppUI(appId, None)
+    assert(oldUI.isDefined)
+    intercept[NoSuchElementException] {
+      oldUI.get.ui.store.job(0)
+    }
+
+    // Add more info to the app log, and trigger the provider to update things.
+    writeFile(appLog, true, None,
+      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None),
+      SparkListenerJobStart(0, 1L, Nil, null),
+      SparkListenerApplicationEnd(5L)
+      )
+    provider.checkForLogs()
+
+    // Manually detach the old UI; ApplicationCache would do this automatically in a real SHS
+    // when the app's UI was requested.
+    provider.onUIDetached(appId, None, oldUI.get.ui)
+
+    // Load the UI again and make sure we can get the new info added to the logs.
+    val freshUI = provider.getAppUI(appId, None)
+    assert(freshUI.isDefined)
+    assert(freshUI != oldUI)
+    freshUI.get.ui.store.job(0)
+  }
 
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
@@ -591,7 +672,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
    *     }
    */
   private def updateAndCheck(provider: FsHistoryProvider)
-      (checkFn: Seq[ApplicationHistoryInfo] => Unit): Unit = {
+      (checkFn: Seq[ApplicationInfo] => Unit): Unit = {
     provider.checkForLogs()
     provider.cleanLogs()
     checkFn(provider.getListing().toSeq)
@@ -623,8 +704,15 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     new FileOutputStream(file).close()
   }
 
-  private def createTestConf(): SparkConf = {
-    new SparkConf().set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
+  private def createTestConf(inMemory: Boolean = false): SparkConf = {
+    val conf = new SparkConf()
+      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
+
+    if (!inMemory) {
+      conf.set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
+    }
+
+    conf
   }
 
   private class SafeModeTestProvider(conf: SparkConf, clock: Clock)

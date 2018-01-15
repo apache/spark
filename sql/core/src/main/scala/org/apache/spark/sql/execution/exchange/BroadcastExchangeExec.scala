@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -48,7 +48,7 @@ case class BroadcastExchangeExec(
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
-  override lazy val canonicalized: SparkPlan = {
+  override def doCanonicalize(): SparkPlan = {
     BroadcastExchangeExec(mode.canonicalized, child.canonicalized)
   }
 
@@ -72,26 +72,39 @@ case class BroadcastExchangeExec(
       SQLExecution.withExecutionId(sparkContext, executionId) {
         try {
           val beforeCollect = System.nanoTime()
-          // Note that we use .executeCollect() because we don't want to convert data to Scala types
-          val input: Array[InternalRow] = child.executeCollect()
-          if (input.length >= 512000000) {
+          // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
+          val (numRows, input) = child.executeCollectIterator()
+          if (numRows >= 512000000) {
             throw new SparkException(
-              s"Cannot broadcast the table with more than 512 millions rows: ${input.length} rows")
+              s"Cannot broadcast the table with more than 512 millions rows: $numRows rows")
           }
+
           val beforeBuild = System.nanoTime()
           longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
-          val dataSize = input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+
+          // Construct the relation.
+          val relation = mode.transform(input, Some(numRows))
+
+          val dataSize = relation match {
+            case map: HashedRelation =>
+              map.estimatedSize
+            case arr: Array[InternalRow] =>
+              arr.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+            case _ =>
+              throw new SparkException("[BUG] BroadcastMode.transform returned unexpected type: " +
+                  relation.getClass.getName)
+          }
+
           longMetric("dataSize") += dataSize
           if (dataSize >= (8L << 30)) {
             throw new SparkException(
               s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
           }
 
-          // Construct and broadcast the relation.
-          val relation = mode.transform(input)
           val beforeBroadcast = System.nanoTime()
           longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
 
+          // Broadcast the relation
           val broadcasted = sparkContext.broadcast(relation)
           longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
 

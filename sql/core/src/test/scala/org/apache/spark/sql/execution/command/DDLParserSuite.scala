@@ -54,6 +54,13 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     }
   }
 
+  private def intercept(sqlCommand: String, messages: String*): Unit = {
+    val e = intercept[ParseException](parser.parsePlan(sqlCommand)).getMessage
+    messages.foreach { message =>
+      assert(e.contains(message))
+    }
+  }
+
   private def parseAs[T: ClassTag](query: String): T = {
     parser.parsePlan(query) match {
       case t: T => t
@@ -494,6 +501,37 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     }
   }
 
+  test("Duplicate clauses - create table") {
+    def createTableHeader(duplicateClause: String, isNative: Boolean): String = {
+      val fileFormat = if (isNative) "USING parquet" else "STORED AS parquet"
+      s"CREATE TABLE my_tab(a INT, b STRING) $fileFormat $duplicateClause $duplicateClause"
+    }
+
+    Seq(true, false).foreach { isNative =>
+      intercept(createTableHeader("TBLPROPERTIES('test' = 'test2')", isNative),
+        "Found duplicate clauses: TBLPROPERTIES")
+      intercept(createTableHeader("LOCATION '/tmp/file'", isNative),
+        "Found duplicate clauses: LOCATION")
+      intercept(createTableHeader("COMMENT 'a table'", isNative),
+        "Found duplicate clauses: COMMENT")
+      intercept(createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS", isNative),
+        "Found duplicate clauses: CLUSTERED BY")
+    }
+
+    // Only for native data source tables
+    intercept(createTableHeader("PARTITIONED BY (b)", isNative = true),
+      "Found duplicate clauses: PARTITIONED BY")
+
+    // Only for Hive serde tables
+    intercept(createTableHeader("PARTITIONED BY (k int)", isNative = false),
+      "Found duplicate clauses: PARTITIONED BY")
+    intercept(createTableHeader("STORED AS parquet", isNative = false),
+      "Found duplicate clauses: STORED AS/BY")
+    intercept(
+      createTableHeader("ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'", isNative = false),
+      "Found duplicate clauses: ROW FORMAT")
+  }
+
   test("create table - with location") {
     val v1 = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
 
@@ -523,6 +561,25 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       parser.parsePlan(v2)
     }
     assert(e.message.contains("you can only specify one of them."))
+  }
+
+  test("create table - byte length literal table name") {
+    val sql = "CREATE TABLE 1m.2g(a INT) USING parquet"
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("2g", Some("1m")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("a", IntegerType),
+      provider = Some("parquet"))
+
+    parser.parsePlan(sql) match {
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $sql")
+    }
   }
 
   test("insert overwrite directory") {
@@ -1134,38 +1191,119 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     }
   }
 
+  test("Test CTAS against data source tables") {
+    val s1 =
+      """
+        |CREATE TABLE IF NOT EXISTS mydb.page_view
+        |USING parquet
+        |COMMENT 'This is the staging page view table'
+        |LOCATION '/user/external/page_view'
+        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+        |AS SELECT * FROM src
+      """.stripMargin
+
+    val s2 =
+      """
+        |CREATE TABLE IF NOT EXISTS mydb.page_view
+        |USING parquet
+        |LOCATION '/user/external/page_view'
+        |COMMENT 'This is the staging page view table'
+        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+        |AS SELECT * FROM src
+      """.stripMargin
+
+    val s3 =
+      """
+        |CREATE TABLE IF NOT EXISTS mydb.page_view
+        |USING parquet
+        |COMMENT 'This is the staging page view table'
+        |LOCATION '/user/external/page_view'
+        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+        |AS SELECT * FROM src
+      """.stripMargin
+
+    checkParsing(s1)
+    checkParsing(s2)
+    checkParsing(s3)
+
+    def checkParsing(sql: String): Unit = {
+      val (desc, exists) = extractTableDesc(sql)
+      assert(exists)
+      assert(desc.identifier.database == Some("mydb"))
+      assert(desc.identifier.table == "page_view")
+      assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
+      assert(desc.schema.isEmpty) // will be populated later when the table is actually created
+      assert(desc.comment == Some("This is the staging page view table"))
+      assert(desc.viewText.isEmpty)
+      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewQueryColumnNames.isEmpty)
+      assert(desc.partitionColumnNames.isEmpty)
+      assert(desc.provider == Some("parquet"))
+      assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
+    }
+  }
+
   test("Test CTAS #1") {
     val s1 =
-      """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
+      """
+        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
         |COMMENT 'This is the staging page view table'
         |STORED AS RCFILE
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT * FROM src""".stripMargin
+        |AS SELECT * FROM src
+      """.stripMargin
 
-    val (desc, exists) = extractTableDesc(s1)
-    assert(exists)
-    assert(desc.identifier.database == Some("mydb"))
-    assert(desc.identifier.table == "page_view")
-    assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
-    assert(desc.schema.isEmpty) // will be populated later when the table is actually created
-    assert(desc.comment == Some("This is the staging page view table"))
-    // TODO will be SQLText
-    assert(desc.viewText.isEmpty)
-    assert(desc.viewDefaultDatabase.isEmpty)
-    assert(desc.viewQueryColumnNames.isEmpty)
-    assert(desc.partitionColumnNames.isEmpty)
-    assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(desc.storage.serde ==
-      Some("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
-    assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
+    val s2 =
+      """
+        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
+        |STORED AS RCFILE
+        |COMMENT 'This is the staging page view table'
+        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+        |LOCATION '/user/external/page_view'
+        |AS SELECT * FROM src
+      """.stripMargin
+
+    val s3 =
+      """
+        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
+        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+        |LOCATION '/user/external/page_view'
+        |STORED AS RCFILE
+        |COMMENT 'This is the staging page view table'
+        |AS SELECT * FROM src
+      """.stripMargin
+
+    checkParsing(s1)
+    checkParsing(s2)
+    checkParsing(s3)
+
+    def checkParsing(sql: String): Unit = {
+      val (desc, exists) = extractTableDesc(sql)
+      assert(exists)
+      assert(desc.identifier.database == Some("mydb"))
+      assert(desc.identifier.table == "page_view")
+      assert(desc.tableType == CatalogTableType.EXTERNAL)
+      assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
+      assert(desc.schema.isEmpty) // will be populated later when the table is actually created
+      assert(desc.comment == Some("This is the staging page view table"))
+      // TODO will be SQLText
+      assert(desc.viewText.isEmpty)
+      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewQueryColumnNames.isEmpty)
+      assert(desc.partitionColumnNames.isEmpty)
+      assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+      assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+      assert(desc.storage.serde ==
+        Some("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
+      assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
+    }
   }
 
   test("Test CTAS #2") {
-    val s2 =
-      """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
+    val s1 =
+      """
+        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
         |COMMENT 'This is the staging page view table'
         |ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'
         | STORED AS
@@ -1173,26 +1311,45 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
         | OUTPUTFORMAT 'parquet.hive.DeprecatedParquetOutputFormat'
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT * FROM src""".stripMargin
+        |AS SELECT * FROM src
+      """.stripMargin
 
-    val (desc, exists) = extractTableDesc(s2)
-    assert(exists)
-    assert(desc.identifier.database == Some("mydb"))
-    assert(desc.identifier.table == "page_view")
-    assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
-    assert(desc.schema.isEmpty) // will be populated later when the table is actually created
-    // TODO will be SQLText
-    assert(desc.comment == Some("This is the staging page view table"))
-    assert(desc.viewText.isEmpty)
-    assert(desc.viewDefaultDatabase.isEmpty)
-    assert(desc.viewQueryColumnNames.isEmpty)
-    assert(desc.partitionColumnNames.isEmpty)
-    assert(desc.storage.properties == Map())
-    assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
-    assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
-    assert(desc.storage.serde == Some("parquet.hive.serde.ParquetHiveSerDe"))
-    assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
+    val s2 =
+      """
+        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
+        |LOCATION '/user/external/page_view'
+        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+        |ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'parquet.hive.DeprecatedParquetInputFormat'
+        | OUTPUTFORMAT 'parquet.hive.DeprecatedParquetOutputFormat'
+        |COMMENT 'This is the staging page view table'
+        |AS SELECT * FROM src
+      """.stripMargin
+
+    checkParsing(s1)
+    checkParsing(s2)
+
+    def checkParsing(sql: String): Unit = {
+      val (desc, exists) = extractTableDesc(sql)
+      assert(exists)
+      assert(desc.identifier.database == Some("mydb"))
+      assert(desc.identifier.table == "page_view")
+      assert(desc.tableType == CatalogTableType.EXTERNAL)
+      assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
+      assert(desc.schema.isEmpty) // will be populated later when the table is actually created
+      // TODO will be SQLText
+      assert(desc.comment == Some("This is the staging page view table"))
+      assert(desc.viewText.isEmpty)
+      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewQueryColumnNames.isEmpty)
+      assert(desc.partitionColumnNames.isEmpty)
+      assert(desc.storage.properties == Map())
+      assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
+      assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
+      assert(desc.storage.serde == Some("parquet.hive.serde.ParquetHiveSerDe"))
+      assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
+    }
   }
 
   test("Test CTAS #3") {

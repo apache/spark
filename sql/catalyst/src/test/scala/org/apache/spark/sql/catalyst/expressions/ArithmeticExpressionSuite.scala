@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -333,5 +334,24 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
     }
+  }
+
+  test("SPARK-22499: Least and greatest should not generate codes beyond 64KB") {
+    val N = 3000
+    val strings = (1 to N).map(x => "s" * x)
+    val inputsExpr = strings.map(Literal.create(_, StringType))
+
+    checkEvaluation(Least(inputsExpr), "s" * 1, EmptyRow)
+    checkEvaluation(Greatest(inputsExpr), "s" * N, EmptyRow)
+  }
+
+  test("SPARK-22704: Least and greatest use less global variables") {
+    val ctx1 = new CodegenContext()
+    Least(Seq(Literal(1), Literal(1))).genCode(ctx1)
+    assert(ctx1.inlinedMutableStates.size == 1)
+
+    val ctx2 = new CodegenContext()
+    Greatest(Seq(Literal(1), Literal(1))).genCode(ctx2)
+    assert(ctx2.inlinedMutableStates.size == 1)
   }
 }

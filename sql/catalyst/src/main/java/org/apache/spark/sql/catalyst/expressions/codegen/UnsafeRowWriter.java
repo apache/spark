@@ -109,22 +109,6 @@ public class UnsafeRowWriter {
     Platform.putLong(holder.buffer, fieldOffset, offsetAndSize);
   }
 
-  // Do word alignment for this row and grow the row buffer if needed.
-  // todo: remove this after we make unsafe array data word align.
-  public void alignToWords(int numBytes) {
-    final int remainder = numBytes & 0x07;
-
-    if (remainder > 0) {
-      final int paddingBytes = 8 - remainder;
-      holder.grow(paddingBytes);
-
-      for (int i = 0; i < paddingBytes; i++) {
-        Platform.putByte(holder.buffer, holder.cursor, (byte) 0);
-        holder.cursor++;
-      }
-    }
-  }
-
   public void write(int ordinal, boolean value) {
     final long offset = getFieldOffset(ordinal);
     Platform.putLong(holder.buffer, offset, 0L);

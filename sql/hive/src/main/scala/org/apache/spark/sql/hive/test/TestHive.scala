@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.test
 
 import java.io.File
+import java.net.URI
 import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
@@ -497,6 +498,11 @@ private[hive] class TestHiveSparkSession(
           logger.setLevel(org.apache.log4j.Level.WARN)
         }
       }
+
+      // Clean out the Hive warehouse between each suite
+      val warehouseDir = new File(new URI(sparkContext.conf.get("spark.sql.warehouse.dir")).getPath)
+      Utils.deleteRecursively(warehouseDir)
+      warehouseDir.mkdir()
 
       sharedState.cacheManager.clearCache()
       loadedTables.clear()

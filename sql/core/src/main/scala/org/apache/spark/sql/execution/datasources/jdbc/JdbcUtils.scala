@@ -96,12 +96,13 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Truncates a table from the JDBC database.
+   * Truncates a table from the JDBC database without side effects.
    */
-  def truncateTable(conn: Connection, table: String): Unit = {
+  def truncateTable(conn: Connection, options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
-      statement.executeUpdate(s"TRUNCATE TABLE $table")
+      statement.executeUpdate(dialect.getTruncateQuery(options.table))
     } finally {
       statement.close()
     }
@@ -226,11 +227,10 @@ object JdbcUtils extends Logging {
       case java.sql.Types.STRUCT        => StringType
       case java.sql.Types.TIME          => TimestampType
       case java.sql.Types.TIME_WITH_TIMEZONE
-                                        => TimestampType
+                                        => null
       case java.sql.Types.TIMESTAMP     => TimestampType
       case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
-                                        => TimestampType
-      case -101                         => TimestampType // Value for Timestamp with Time Zone in Oracle
+                                        => null
       case java.sql.Types.TINYINT       => IntegerType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
@@ -301,12 +301,11 @@ object JdbcUtils extends Logging {
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
-      val metadata = new MetadataBuilder()
-        .putLong("scale", fieldScale)
+      val metadata = new MetadataBuilder().putLong("scale", fieldScale)
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-      fields(i) = StructField(columnName, columnType, nullable, metadata.build())
+      fields(i) = StructField(columnName, columnType, nullable)
       i = i + 1
     }
     new StructType(fields)
@@ -458,8 +457,9 @@ object JdbcUtils extends Logging {
 
         case StringType =>
           (array: Object) =>
-            array.asInstanceOf[Array[java.lang.String]]
-              .map(UTF8String.fromString)
+            // some underling types are not String such as uuid, inet, cidr, etc.
+            array.asInstanceOf[Array[java.lang.Object]]
+              .map(obj => if (obj == null) null else UTF8String.fromString(obj.toString))
 
         case DateType =>
           (array: Object) =>
@@ -768,31 +768,30 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Parses the user specified customSchema option value to DataFrame schema,
-   * and returns it if it's all columns are equals to default schema's.
+   * Parses the user specified customSchema option value to DataFrame schema, and
+   * returns a schema that is replaced by the custom schema's dataType if column name is matched.
    */
   def getCustomSchema(
       tableSchema: StructType,
       customSchema: String,
       nameEquality: Resolver): StructType = {
-    val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
+    if (null != customSchema && customSchema.nonEmpty) {
+      val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
-    SchemaUtils.checkColumnNameDuplication(
-      userSchema.map(_.name), "in the customSchema option value", nameEquality)
+      SchemaUtils.checkColumnNameDuplication(
+        userSchema.map(_.name), "in the customSchema option value", nameEquality)
 
-    val colNames = tableSchema.fieldNames.mkString(",")
-    val errorMsg = s"Please provide all the columns, all columns are: $colNames"
-    if (userSchema.size != tableSchema.size) {
-      throw new AnalysisException(errorMsg)
-    }
-
-    // This is resolved by names, only check the column names.
-    userSchema.fieldNames.foreach { col =>
-      tableSchema.find(f => nameEquality(f.name, col)).getOrElse {
-        throw new AnalysisException(errorMsg)
+      // This is resolved by names, use the custom filed dataType to replace the default dataType.
+      val newSchema = tableSchema.map { col =>
+        userSchema.find(f => nameEquality(f.name, col.name)) match {
+          case Some(c) => col.copy(dataType = c.dataType)
+          case None => col
+        }
       }
+      StructType(newSchema)
+    } else {
+      tableSchema
     }
-    userSchema
   }
 
   /**
