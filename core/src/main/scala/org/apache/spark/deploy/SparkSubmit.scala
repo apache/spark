@@ -328,7 +328,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")
-      case (_, CLUSTER) if isThriftServer(args.mainClass) =>
+      case (_, CLUSTER) if (clusterManager != KUBERNETES) && isThriftServer(args.mainClass) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark Thrift server.")
       case _ =>
     }
