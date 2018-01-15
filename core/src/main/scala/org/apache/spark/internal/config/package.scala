@@ -419,7 +419,7 @@ package object config {
 
   private[spark] val SHUFFLE_FILE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.file.buffer")
-      .doc("Size of the in-memory buffer for each shuffle file output stream. " +
+      .doc("Size (in KiB) of the in-memory buffer for each shuffle file output stream. " +
         "These buffers reduce the number of disk seeks and system calls made " +
         "in creating intermediate shuffle files.")
       .bytesConf(ByteUnit.KiB)

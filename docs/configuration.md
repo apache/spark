@@ -58,6 +58,8 @@ The following format is accepted:
     1t or 1tb (tebibytes = 1024 gibibytes)
     1p or 1pb (pebibytes = 1024 tebibytes)
 
+Without specification the unit depends on the configuration entry where KiB are typically assumed.
+
 ## Dynamically Loading Spark Properties
 
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
@@ -150,6 +152,7 @@ of the most common options to set are:
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
     (e.g. <code>1g</code>, <code>2g</code>).
+    Default unit: MiB
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -572,9 +575,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The remote block will be fetched to disk when size of the block is above this threshold.
     This is to avoid a giant request takes too much memory. We can enable this config by setting
-    a specific value(e.g. 200m). Note this configuration will affect both shuffle fetch 
+    a specific value(e.g. 200m). Note this configuration will affect both shuffle fetch
     and block manager remote block fetch. For users who enabled external shuffle service,
     this feature can only be worked when external shuffle service is newer than Spark 2.2.
+    Default unit: Bytes.
   </td>
 </tr>
 <tr>
@@ -591,6 +595,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Size of the in-memory buffer for each shuffle file output stream. These buffers
     reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
+    Default unit: KiB
   </td>
 </tr>
 <tr>
@@ -688,6 +693,7 @@ Apart from these, the following properties are also available, and may be useful
     When we compress the size of shuffle blocks in HighlyCompressedMapStatus, we will record the
     size accurately if it's above this config. This helps to prevent OOM by avoiding
     underestimating shuffle block size when fetch shuffle blocks.
+    Default unit: Bytes
   </td>
 </tr>
 <tr>
