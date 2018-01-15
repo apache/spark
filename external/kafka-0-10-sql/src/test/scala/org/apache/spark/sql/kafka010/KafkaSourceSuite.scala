@@ -318,7 +318,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
-  test("union bug in failover") {
+  test("SPARK-22956: currentPartitionOffsets should be set when no new data comes in") {
     def getSpecificDF(range: Range.Inclusive): org.apache.spark.sql.Dataset[Int] = {
       val topic = newTopic()
       testUtils.createTopic(topic, partitions = 1)
@@ -362,37 +362,24 @@ class KafkaSourceSuite extends KafkaSourceTest {
       StartStream(ProcessingTime(100), clock),
       waitUntilBatchProcessed,
       // 5 from smaller topic, 5 from bigger one
-      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104),
+      CheckLastBatch((0 to 4) ++ (100 to 104): _*),
       AdvanceManualClock(100),
       waitUntilBatchProcessed,
       // 5 from smaller topic, 5 from bigger one
-      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104,
-        5, 6, 7, 8, 9, 105, 106, 107, 108, 109
-      ),
-      // smaller topic empty, 5 from bigger one
+      CheckLastBatch((5 to 9) ++ (105 to 109): _*),
       AdvanceManualClock(100),
       waitUntilBatchProcessed,
-      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104,
-        5, 6, 7, 8, 9, 105, 106, 107, 108, 109,
-        110, 111, 112, 113, 114
-      ),
+      // smaller topic empty, 5 from bigger one
+      CheckLastBatch(110 to 114: _*),
       StopStream,
       StartStream(ProcessingTime(100), clock),
       waitUntilBatchProcessed,
       // smallest now empty, 5 from bigger one
-      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104,
-        5, 6, 7, 8, 9, 105, 106, 107, 108, 109,
-        110, 111, 112, 113, 114,
-        115, 116, 117, 118, 119
-      ),
+      CheckLastBatch(115 to 119: _*),
       AdvanceManualClock(100),
       waitUntilBatchProcessed,
-      CheckAnswer(0, 1, 2, 3, 4, 100, 101, 102, 103, 104,
-        5, 6, 7, 8, 9, 105, 106, 107, 108, 109,
-        110, 111, 112, 113, 114,
-        115, 116, 117, 118, 119,
-        120, 121, 122, 123, 124
-      )
+      // smallest now empty, 5 from bigger one
+      CheckLastBatch(120 to 124: _*)
     )
   }
 
