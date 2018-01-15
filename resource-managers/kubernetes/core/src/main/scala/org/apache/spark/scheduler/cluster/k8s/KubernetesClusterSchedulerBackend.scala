@@ -18,7 +18,8 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.Closeable
 import java.net.InetAddress
-import java.util.concurrent.{ConcurrentHashMap, ExecutorService, ScheduledExecutorService, TimeUnit}
+import java.util.Collections
+import java.util.concurrent.{ConcurrentHashMap, ExecutorService, ScheduledExecutorService, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
 import io.fabric8.kubernetes.api.model._

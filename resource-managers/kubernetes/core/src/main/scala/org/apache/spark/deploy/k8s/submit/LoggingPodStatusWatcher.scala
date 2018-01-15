@@ -109,7 +109,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
       ("namespace", pod.getMetadata.getNamespace()),
       ("labels", pod.getMetadata.getLabels().asScala.mkString(", ")),
       ("pod uid", pod.getMetadata.getUid),
-      ("creation time", pod.getMetadata.getCreationTimestamp()),
+      ("creation time", pod.getMetadata.getCreationTimestamp.getTime),
 
       // spec details
       ("service account name", pod.getSpec.getServiceAccountName()),
@@ -117,7 +117,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
       ("node name", pod.getSpec.getNodeName()),
 
       // status
-      ("start time", pod.getStatus.getStartTime),
+      ("start time", pod.getStatus.getStartTime.getTime),
       ("container images",
         pod.getStatus.getContainerStatuses()
           .asScala
@@ -162,7 +162,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
           case running: ContainerStateRunning =>
             Seq(
               ("Container state", "Running"),
-              ("Container started at", running.getStartedAt))
+              ("Container started at", running.getStartedAt.getTime))
           case waiting: ContainerStateWaiting =>
             Seq(
               ("Container state", "Waiting"),

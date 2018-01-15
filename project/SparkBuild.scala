@@ -57,12 +57,12 @@ object BuildCommons {
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     streamingFlumeSink, streamingFlume,
     streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
-    dockerIntegrationTests, hadoopCloud) =
+    dockerIntegrationTests, hadoopCloud, _*) =
     Seq("kubernetes", "mesos", "yarn",
       "streaming-flume-sink", "streaming-flume",
       "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests", "hadoop-cloud",
-      "kubernetes", "kubernetes-integration-tests",
+      "kubernetes-integration-tests",
       "kubernetes-integration-tests-spark-jobs", "kubernetes-integration-tests-spark-jobs-helpers",
       "kubernetes-docker-minimal-bundle"
     ).map(ProjectRef(buildLocation, _))

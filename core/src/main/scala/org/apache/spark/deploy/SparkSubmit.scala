@@ -99,7 +99,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private[deploy] val REST_CLUSTER_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
   private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
   private[deploy] val KUBERNETES_CLUSTER_SUBMIT_CLASS =
-    "org.apache.spark.deploy.k8s.submit.KubernetesClientApplication"
+    "org.apache.spark.deploy.k8s.submit.Client"
 
   // scalastyle:off println
   private[spark] def printVersionAndExit(): Unit = {
@@ -324,8 +324,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
         printErrorAndExit("Python applications are currently not supported for Kubernetes.")
       case (KUBERNETES, _) if args.isR =>
         printErrorAndExit("R applications are currently not supported for Kubernetes.")
-      case (KUBERNETES, CLIENT) =>
-        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
