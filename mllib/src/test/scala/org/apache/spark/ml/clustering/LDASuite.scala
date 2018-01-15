@@ -53,6 +53,7 @@ object LDASuite {
     "maxIter" -> 2,
     "checkpointInterval" -> 30,
     "learningOffset" -> 1023.0,
+    "epsilon" -> 1e-3,
     "learningDecay" -> 0.52,
     "subsamplingRate" -> 0.051,
     "docConcentration" -> Array(2.0)
@@ -86,6 +87,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     assert(lda.getOptimizer === "online")
     assert(lda.getLearningDecay === 0.51)
     assert(lda.getLearningOffset === 1024)
+    assert(lda.getEpsilon === 1e-3)
     assert(lda.getSubsamplingRate === 0.05)
     assert(lda.getOptimizeDocConcentration)
     assert(lda.getTopicDistributionCol === "topicDistribution")
@@ -119,6 +121,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     assert(lda.getLearningDecay === 0.53)
     lda.setLearningOffset(1027)
     assert(lda.getLearningOffset === 1027)
+    lda.setEpsilon(1e-5)
+    assert(lda.getEpsilon === 1e-5)
     lda.setSubsamplingRate(0.06)
     assert(lda.getSubsamplingRate === 0.06)
     lda.setOptimizeDocConcentration(false)
@@ -160,6 +164,9 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     // Online LDA
     intercept[IllegalArgumentException] {
       new LDA().setLearningOffset(0)
+    }
+    intercept[IllegalArgumentException] {
+      new LDA().setEpsilon(0)
     }
     intercept[IllegalArgumentException] {
       new LDA().setLearningDecay(0)

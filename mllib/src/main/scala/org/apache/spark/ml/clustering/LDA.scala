@@ -224,6 +224,25 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   /**
    * For Online optimizer only: [[optimizer]] = "online".
    *
+   * A (positive) learning parameter that controls the convergence of variational inference.
+   * Smaller value will lead to a more converged model and longer training time.
+   * Default: 1e-3.
+   *
+   * @group expertParam
+   */
+  @Since("2.3.0")
+  final val epsilon = new DoubleParam(this, "epsilon", "(For online optimizer)" +
+    " A (positive) learning parameter that controls the convergence of variational inference." +
+    " Smaller value will lead to a more converged model and longer training time.",
+    ParamValidators.gt(0))
+
+  /** @group expertGetParam */
+  @Since("2.3.0")
+  def getEpsilon: Double = $(epsilon)
+
+  /**
+   * For Online optimizer only: [[optimizer]] = "online".
+   *
    * Learning rate, set as an exponential decay rate.
    * This should be between (0.5, 1.0] to guarantee asymptotic convergence.
    * This is called "kappa" in the Online LDA paper (Hoffman et al., 2010).
@@ -355,6 +374,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
         new OldOnlineLDAOptimizer()
           .setTau0($(learningOffset))
           .setKappa($(learningDecay))
+          .setEpsilon($(epsilon))
           .setMiniBatchFraction($(subsamplingRate))
           .setOptimizeDocConcentration($(optimizeDocConcentration))
       case "em" =>
@@ -819,7 +839,7 @@ class LDA @Since("1.6.0") (
   def this() = this(Identifiable.randomUID("lda"))
 
   setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
-    learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
+    learningOffset -> 1024, learningDecay -> 0.51, epsilon -> 1e-3, subsamplingRate -> 0.05,
     optimizeDocConcentration -> true, keepLastCheckpoint -> true)
 
   /**
@@ -870,6 +890,10 @@ class LDA @Since("1.6.0") (
   /** @group expertSetParam */
   @Since("1.6.0")
   def setLearningOffset(value: Double): this.type = set(learningOffset, value)
+
+  /** @group expertSetParam */
+  @Since("2.3.0")
+  def setEpsilon(value: Double): this.type = set(epsilon, value)
 
   /** @group expertSetParam */
   @Since("1.6.0")
