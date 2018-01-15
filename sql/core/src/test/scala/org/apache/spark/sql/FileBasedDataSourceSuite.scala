@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.sql
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
 
 class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
