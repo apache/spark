@@ -291,9 +291,13 @@ final class ChiSqSelectorModel private[ml] (
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
     } else {
-      Array.fill[Attribute](selector.size)(NominalAttribute.defaultAttr)
+      null
     }
-    val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
+    val newAttributeGroup = if (featureAttributes != null) {
+      new AttributeGroup($(outputCol), featureAttributes)
+    } else {
+      new AttributeGroup($(outputCol))
+    }
     newAttributeGroup.toStructField()
   }
 
