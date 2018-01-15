@@ -38,9 +38,8 @@ import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger, EpochCoordinatorRef, IncrementAndGetEpoch}
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.StreamingQueryListener._
@@ -80,9 +79,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     super.afterAll()
     StateStore.stop() // stop the state store maintenance thread and unload store providers
   }
-
-  protected val defaultTrigger = Trigger.ProcessingTime(0)
-  protected val defaultUseV2Sink = false
 
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
@@ -193,7 +189,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
   /** Starts the stream, resuming if data has already been processed. It must not be running. */
   case class StartStream(
-      trigger: Trigger = defaultTrigger,
+      trigger: Trigger = Trigger.ProcessingTime(0),
       triggerClock: Clock = new SystemClock,
       additionalConfs: Map[String, String] = Map.empty,
       checkpointLocation: String = null)
@@ -280,7 +276,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   def testStream(
       _stream: Dataset[_],
       outputMode: OutputMode = OutputMode.Append,
-      useV2Sink: Boolean = defaultUseV2Sink)(actions: StreamAction*): Unit = synchronized {
+      useV2Sink: Boolean = false)(actions: StreamAction*): Unit = synchronized {
     import org.apache.spark.sql.streaming.util.StreamManualClock
 
     // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
@@ -407,11 +403,18 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     def fetchStreamAnswer(currentStream: StreamExecution, lastOnly: Boolean) = {
       verify(currentStream != null, "stream not running")
+      // Get the map of source index to the current source objects
+      val indexToSource = currentStream
+        .logicalPlan
+        .collect { case StreamingExecutionRelation(s, _) => s }
+        .zipWithIndex
+        .map(_.swap)
+        .toMap
 
       // Block until all data added has been processed for all the source
       awaiting.foreach { case (sourceIndex, offset) =>
         failAfter(streamingTimeout) {
-          currentStream.awaitOffset(sourceIndex, offset)
+          currentStream.awaitOffset(indexToSource(sourceIndex), offset)
         }
       }
 
@@ -470,12 +473,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             // after starting the query.
             try {
               currentStream.awaitInitialization(streamingTimeout.toMillis)
-              currentStream match {
-                case s: ContinuousExecution => eventually("IncrementalExecution was not created") {
-                    s.lastExecution.executedPlan // will fail if lastExecution is null
-                  }
-                case _ =>
-              }
             } catch {
               case _: StreamingQueryException =>
                 // Ignore the exception. `StopStream` or `ExpectFailure` will catch it as well.
@@ -603,10 +600,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
               def findSourceIndex(plan: LogicalPlan): Option[Int] = {
                 plan
-                  .collect {
-                    case StreamingExecutionRelation(s, _) => s
-                    case DataSourceV2Relation(_, r) => r
-                  }
+                  .collect { case StreamingExecutionRelation(s, _) => s }
                   .zipWithIndex
                   .find(_._1 == source)
                   .map(_._2)
@@ -619,13 +613,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                   findSourceIndex(query.logicalPlan)
                 }.orElse {
                   findSourceIndex(stream.logicalPlan)
-                }.orElse {
-                  queryToUse.flatMap { q =>
-                    findSourceIndex(q.lastExecution.logical)
-                  }
                 }.getOrElse {
                   throw new IllegalArgumentException(
-                    "Could not find index of the source to which data was added")
+                    "Could find index of the source to which data was added")
                 }
 
               // Store the expected offset of added data to wait for it later

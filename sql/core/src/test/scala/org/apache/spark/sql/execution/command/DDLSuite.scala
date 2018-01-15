@@ -835,6 +835,31 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("rename temporary view - destination table with database name,with:CREATE TEMPORARY view") {
+    withTempView("view1") {
+      sql(
+        """
+          |CREATE TEMPORARY VIEW view1
+          |USING org.apache.spark.sql.sources.DDLScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10',
+          |  Table 'test1'
+          |)
+        """.stripMargin)
+
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE view1 RENAME TO default.tab2")
+      }
+      assert(e.getMessage.contains(
+        "RENAME TEMPORARY VIEW from '`view1`' to '`default`.`tab2`': " +
+          "cannot specify database name 'default' in the destination table"))
+
+      val catalog = spark.sessionState.catalog
+      assert(catalog.listTables("default") == Seq(TableIdentifier("view1")))
+    }
+  }
+
   test("rename temporary view") {
     withTempView("tab1", "tab2") {
       spark.range(10).createOrReplaceTempView("tab1")
@@ -880,6 +905,42 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
+    }
+  }
+
+  test("rename temporary view - destination table already exists, with: CREATE TEMPORARY view") {
+    withTempView("view1", "view2") {
+      sql(
+        """
+          |CREATE TEMPORARY VIEW view1
+          |USING org.apache.spark.sql.sources.DDLScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10',
+          |  Table 'test1'
+          |)
+        """.stripMargin)
+
+      sql(
+        """
+          |CREATE TEMPORARY VIEW view2
+          |USING org.apache.spark.sql.sources.DDLScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10',
+          |  Table 'test1'
+          |)
+        """.stripMargin)
+
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE view1 RENAME TO view2")
+      }
+      assert(e.getMessage.contains(
+        "RENAME TEMPORARY VIEW from '`view1`' to '`view2`': destination table already exists"))
+
+      val catalog = spark.sessionState.catalog
+      assert(catalog.listTables("default") ==
+        Seq(TableIdentifier("view1"), TableIdentifier("view2")))
     }
   }
 
@@ -989,6 +1050,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A'"),
+      Row("showdb1a") :: Nil)
+
+    checkAnswer(
+      sql("SHOW DATABASES '*db1A'"),
       Row("showdb1a") :: Nil)
 
     checkAnswer(
@@ -1724,12 +1789,22 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("block creating duplicate temp table") {
-    withView("t_temp") {
+    withTempView("t_temp") {
       sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
       val e = intercept[TempTableAlreadyExistsException] {
         sql("CREATE TEMPORARY TABLE t_temp (c3 int, c4 string) USING JSON")
       }.getMessage
-      assert(e.contains("Temporary table 't_temp' already exists"))
+      assert(e.contains("Temporary view 't_temp' already exists"))
+    }
+  }
+
+  test("block creating duplicate temp view") {
+    withTempView("t_temp") {
+      sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
+      val e = intercept[TempTableAlreadyExistsException] {
+        sql("CREATE TEMPORARY VIEW t_temp (c3 int, c4 string) USING JSON")
+      }.getMessage
+      assert(e.contains("Temporary view 't_temp' already exists"))
     }
   }
 

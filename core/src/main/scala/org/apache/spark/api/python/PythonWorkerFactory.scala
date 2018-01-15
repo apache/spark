@@ -38,16 +38,38 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
 
   import PythonWorkerFactory._
 
-  // Because forking processes from Java is expensive, we prefer to launch a single Python daemon
-  // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
-  // only works on UNIX-based systems now because it uses signals for child management, so we can
-  // also fall back to launching workers (pyspark/worker.py) directly.
+  // Because forking processes from Java is expensive, we prefer to launch a single Python daemon,
+  // pyspark/daemon.py (by default) and tell it to fork new workers for our tasks. This daemon
+  // currently only works on UNIX-based systems now because it uses signals for child management,
+  // so we can also fall back to launching workers, pyspark/worker.py (by default) directly.
   val useDaemon = {
     val useDaemonEnabled = SparkEnv.get.conf.getBoolean("spark.python.use.daemon", true)
 
     // This flag is ignored on Windows as it's unable to fork.
     !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
   }
+
+  // WARN: Both configurations, 'spark.python.daemon.module' and 'spark.python.worker.module' are
+  // for very advanced users and they are experimental. This should be considered
+  // as expert-only option, and shouldn't be used before knowing what it means exactly.
+
+  // This configuration indicates the module to run the daemon to execute its Python workers.
+  val daemonModule = SparkEnv.get.conf.getOption("spark.python.daemon.module").map { value =>
+    logInfo(
+      s"Python daemon module in PySpark is set to [$value] in 'spark.python.daemon.module', " +
+      "using this to start the daemon up. Note that this configuration only has an effect when " +
+      "'spark.python.use.daemon' is enabled and the platform is not Windows.")
+    value
+  }.getOrElse("pyspark.daemon")
+
+  // This configuration indicates the module to run each Python worker.
+  val workerModule = SparkEnv.get.conf.getOption("spark.python.worker.module").map { value =>
+    logInfo(
+      s"Python worker module in PySpark is set to [$value] in 'spark.python.worker.module', " +
+      "using this to start the worker up. Note that this configuration only has an effect when " +
+      "'spark.python.use.daemon' is disabled or the platform is Windows.")
+    value
+  }.getOrElse("pyspark.worker")
 
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
@@ -97,8 +119,9 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
   }
 
   /**
-   * Connect to a worker launched through pyspark/daemon.py, which forks python processes itself
-   * to avoid the high cost of forking from Java. This currently only works on UNIX-based systems.
+   * Connect to a worker launched through pyspark/daemon.py (by default), which forks python
+   * processes itself to avoid the high cost of forking from Java. This currently only works
+   * on UNIX-based systems.
    */
   private def createThroughDaemon(): Socket = {
 
@@ -131,7 +154,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
   }
 
   /**
-   * Launch a worker by executing worker.py directly and telling it to connect to us.
+   * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
   private def createSimpleWorker(): Socket = {
     var serverSocket: ServerSocket = null
@@ -139,7 +162,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
       serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
 
       // Create and start the worker
-      val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", "pyspark.worker"))
+      val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", workerModule))
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
       workerEnv.put("PYTHONPATH", pythonPath)
@@ -182,7 +205,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
 
       try {
         // Create and start the daemon
-        val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", "pyspark.daemon"))
+        val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", daemonModule))
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
