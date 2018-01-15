@@ -44,9 +44,9 @@ import org.apache.spark.sql.types._
  *   e1 % e2      min(p1-s1, p2-s2) + max(s1, s2)         max(s1, s2)
  *   e1 union e2  max(s1, s2) + max(p1-s1, p2-s2)         max(s1, s2)
  *
- * When `spark.sql.decimalOperations.allowTruncat` is set to true, if the precision / scale needed
- * are out of the range of available values, the scale is reduced up to 6, in order to prevent the
- * truncation of the integer part of the decimals.
+ * When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
+ * needed are out of the range of available values, the scale is reduced up to 6, in order to
+ * prevent the truncation of the integer part of the decimals.
  *
  * To implement the rules for fixed-precision types, we introduce casts to turn them to unlimited
  * precision, do the math on unlimited-precision numbers, then introduce casts back to the
@@ -97,7 +97,7 @@ object DecimalPrecision extends TypeCoercionRule {
     case e: BinaryArithmetic if e.left.isInstanceOf[PromotePrecision] => e
 
     case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowTruncat) {
+      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         val resultScale = max(s1, s2)
         DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
           resultScale)
@@ -108,7 +108,7 @@ object DecimalPrecision extends TypeCoercionRule {
         resultType)
 
     case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowTruncat) {
+      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         val resultScale = max(s1, s2)
         DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
           resultScale)
@@ -119,7 +119,7 @@ object DecimalPrecision extends TypeCoercionRule {
         resultType)
 
     case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowTruncat) {
+      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(p1 + p2 + 1, s1 + s2)
       } else {
         DecimalType.bounded(p1 + p2 + 1, s1 + s2)
@@ -129,7 +129,7 @@ object DecimalPrecision extends TypeCoercionRule {
         resultType)
 
     case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowTruncat) {
+      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         // Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
         // Scale: max(6, s1 + p2 + 1)
         val intDig = p1 - s1 + s2
@@ -151,7 +151,7 @@ object DecimalPrecision extends TypeCoercionRule {
         resultType)
 
     case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowTruncat) {
+      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
       } else {
         DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
@@ -162,7 +162,7 @@ object DecimalPrecision extends TypeCoercionRule {
         resultType)
 
     case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowTruncat) {
+      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
       } else {
         DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))

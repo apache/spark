@@ -42,11 +42,11 @@ struct<id:int,(CAST(a AS DECIMAL(38,18)) * CAST(CAST(10 AS DECIMAL(2,0)) AS DECI
 
 
 -- !query 4
-set spark.sql.decimalOperations.allowTruncat=true
+set spark.sql.decimalOperations.allowPrecisionLoss=true
 -- !query 4 schema
 struct<key:string,value:string>
 -- !query 4 output
-spark.sql.decimalOperations.allowTruncat	true
+spark.sql.decimalOperations.allowPrecisionLoss	true
 
 
 -- !query 5

@@ -158,7 +158,7 @@ object DecimalType extends AbstractDataType {
    * {@link #MAX_PRECISION}, the corresponding scale is reduced to prevent the integral part of a
    * result from being truncated.
    *
-   * This method is used only when `spark.sql.decimalOperations.allowTruncat` is set to true.
+   * This method is used only when `spark.sql.decimalOperations.allowPrecisionLoss` is set to true.
    *
    * @param precision
    * @param scale

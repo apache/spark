@@ -28,7 +28,7 @@ select id, a+b, a-b, a*b, a/b from decimals_test order by id;
 select id, a*10, b/10 from decimals_test order by id;
 
 -- use rounding instead of returning NULL, according to new Hive's behavior and SQL standard
-set spark.sql.decimalOperations.allowTruncat=true;
+set spark.sql.decimalOperations.allowPrecisionLoss=true;
 
 -- test decimal operations
 select id, a+b, a-b, a*b, a/b from decimals_test order by id;

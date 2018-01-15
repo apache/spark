@@ -1048,8 +1048,8 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val DECIMAL_OPERATIONS_ALLOW_TRUNCAT =
-    buildConf("spark.sql.decimalOperations.allowTruncat")
+  val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
+    buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
       .internal()
       .doc("When true, establishing the result type of an arithmetic operation happens " +
         "according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the decimal " +
@@ -1433,7 +1433,7 @@ class SQLConf extends Serializable with Logging {
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
-  def decimalOperationsAllowTruncat: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_TRUNCAT)
+  def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
