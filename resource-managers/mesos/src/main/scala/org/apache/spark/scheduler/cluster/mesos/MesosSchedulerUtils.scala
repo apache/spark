@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
+import java.io.File
+import java.nio.charset.Charset
 import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
 
@@ -25,6 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.google.common.base.Splitter
+import com.google.common.io.Files
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.FrameworkInfo.Capability
@@ -71,43 +74,15 @@ trait MesosSchedulerUtils extends Logging {
       failoverTimeout: Option[Double] = None,
       frameworkId: Option[String] = None): SchedulerDriver = {
     val fwInfoBuilder = FrameworkInfo.newBuilder().setUser(sparkUser).setName(appName)
-    val credBuilder = Credential.newBuilder()
+    fwInfoBuilder.setHostname(Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
+      conf.get(DRIVER_HOST_ADDRESS)))
     webuiUrl.foreach { url => fwInfoBuilder.setWebuiUrl(url) }
     checkpoint.foreach { checkpoint => fwInfoBuilder.setCheckpoint(checkpoint) }
     failoverTimeout.foreach { timeout => fwInfoBuilder.setFailoverTimeout(timeout) }
     frameworkId.foreach { id =>
       fwInfoBuilder.setId(FrameworkID.newBuilder().setValue(id).build())
     }
-    fwInfoBuilder.setHostname(Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
-      conf.get(DRIVER_HOST_ADDRESS)))
-    conf.getOption("spark.mesos.principal.file")
-      .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL_FILE"))
-      .foreach { principalFile =>
-        val file = io.Source.fromFile(principalFile)
-        val principal = file.getLines.next()
-        file.close
-        fwInfoBuilder.setPrincipal(principal)
-        credBuilder.setPrincipal(principal)
-      }
-    conf.getOption("spark.mesos.principal").foreach { principal =>
-      fwInfoBuilder.setPrincipal(principal)
-      credBuilder.setPrincipal(principal)
-    }
-    conf.getOption("spark.mesos.secret.file")
-      .orElse(Option(conf.getenv("SPARK_MESOS_SECRET_FILE"))
-      .foreach { secretFile =>
-       val file = io.Source.fromFile(secretFile)
-       val secret = file.getLines.next()
-       file.close
-       credBuilder.setSecret(secret)
-      }
-    conf.getOption("spark.mesos.secret").foreach { secret =>
-      credBuilder.setSecret(secret)
-    }
-    if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
-      throw new SparkException(
-        "spark.mesos.principal must be configured when spark.mesos.secret is set")
-    }
+
     conf.getOption("spark.mesos.role").foreach { role =>
       fwInfoBuilder.setRole(role)
     }
@@ -115,12 +90,45 @@ trait MesosSchedulerUtils extends Logging {
     if (maxGpus > 0) {
       fwInfoBuilder.addCapabilities(Capability.newBuilder().setType(Capability.Type.GPU_RESOURCES))
     }
+    val credBuilder = buildCredentials(conf, fwInfoBuilder)
     if (credBuilder.hasPrincipal) {
       new MesosSchedulerDriver(
         scheduler, fwInfoBuilder.build(), masterUrl, credBuilder.build())
     } else {
       new MesosSchedulerDriver(scheduler, fwInfoBuilder.build(), masterUrl)
     }
+  }
+  
+  def buildCredentials(
+      conf: SparkConf, 
+      fwInfoBuilder: Protos.FrameworkInfo.Builder): Protos.Credential.Builder = {
+    val credBuilder = Credential.newBuilder()
+    conf.getOption("spark.mesos.principal")
+      .orElse(
+        conf.getOption("spark.mesos.principal.file")
+          .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL_FILE")))
+          .map { principalFile =>
+            Files.toString(new File(principalFile), Charset.forName("UTF-8"))
+          }
+      ).foreach { principal =>
+        fwInfoBuilder.setPrincipal(principal)
+        credBuilder.setPrincipal(principal)
+    }
+    conf.getOption("spark.mesos.secret")
+      .orElse(
+        conf.getOption("spark.mesos.secret.file")
+         .orElse(Option(conf.getenv("SPARK_MESOS_SECRET_FILE")))
+         .map { secretFile =>
+           Files.toString(new File(secretFile), Charset.forName("UTF-8"))
+         }
+      ).foreach { secret =>
+      credBuilder.setSecret(secret)
+    }
+    if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
+      throw new SparkException(
+        "spark.mesos.principal must be configured when spark.mesos.secret is set")
+    }
+    credBuilder
   }
 
   /**
