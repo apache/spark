@@ -77,23 +77,27 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       </div>
       <div class="row-fluid"> <!-- Executors and Drivers -->
         <div class="span12">
-          <h4 class="collapse-aggregated-runningExecutors collapse-table"
+          <span class="collapse-aggregated-runningExecutors collapse-table"
               onClick="collapseTable('collapse-aggregated-runningExecutors',
               'aggregated-runningExecutors')">
-            <span class="collapse-table-arrow arrow-open"></span>
-            <a>Running Executors ({runningExecutors.size})</a>
-          </h4>
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Running Executors ({runningExecutors.size})</a>
+            </h4>
+          </span>
           <div class="aggregated-runningExecutors collapsible-table">
             {runningExecutorTable}
           </div>
           {
             if (runningDrivers.nonEmpty) {
-              <h4 class="collapse-aggregated-runningDrivers collapse-table"
+              <span class="collapse-aggregated-runningDrivers collapse-table"
                   onClick="collapseTable('collapse-aggregated-runningDrivers',
                   'aggregated-runningDrivers')">
-                <span class="collapse-table-arrow arrow-open"></span>
-                <a>Running Drivers ({runningDrivers.size})</a>
-              </h4> ++
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Running Drivers ({runningDrivers.size})</a>
+                </h4>
+              </span> ++
               <div class="aggregated-runningDrivers collapsible-table">
                 {runningDriverTable}
               </div>
@@ -101,12 +105,14 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
           }
           {
             if (finishedExecutors.nonEmpty) {
-              <h4 class="collapse-aggregated-finishedExecutors collapse-table"
+              <span class="collapse-aggregated-finishedExecutors collapse-table"
                   onClick="collapseTable('collapse-aggregated-finishedExecutors',
                   'aggregated-finishedExecutors')">
-                <span class="collapse-table-arrow arrow-open"></span>
-                <a>Finished Executors ({finishedExecutors.size})</a>
-              </h4> ++
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Finished Executors ({finishedExecutors.size})</a>
+                </h4>
+              </span> ++
               <div class="aggregated-finishedExecutors collapsible-table">
                 {finishedExecutorTable}
               </div>
@@ -114,12 +120,14 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
           }
           {
             if (finishedDrivers.nonEmpty) {
-              <h4 class="collapse-aggregated-finishedDrivers collapse-table"
+              <span class="collapse-aggregated-finishedDrivers collapse-table"
                   onClick="collapseTable('collapse-aggregated-finishedDrivers',
                   'aggregated-finishedDrivers')">
-                <span class="collapse-table-arrow arrow-open"></span>
-                <a>Finished Drivers ({finishedDrivers.size})</a>
-              </h4> ++
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Finished Drivers ({finishedDrivers.size})</a>
+                </h4>
+              </span> ++
               <div class="aggregated-finishedDrivers collapsible-table">
                 {finishedDriverTable}
               </div>

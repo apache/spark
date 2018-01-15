@@ -556,11 +556,13 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
       aggMetrics ++
       maybeAccumulableTable ++
-      <h4 id="tasks-section" class="collapse-aggregated-tasks collapse-table"
+      <span id="tasks-section" class="collapse-aggregated-tasks collapse-table"
           onClick="collapseTable('collapse-aggregated-tasks','aggregated-tasks')">
-        <span class="collapse-table-arrow arrow-open"></span>
-        <a>Tasks ({totalTasksNumStr})</a>
-      </h4> ++
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Tasks ({totalTasksNumStr})</a>
+        </h4>
+      </span> ++
       <div class="aggregated-tasks collapsible-table">
         {taskTableHTML ++ jsForScrollingDownToTaskTable}
       </div>

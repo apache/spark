@@ -341,58 +341,68 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     if (shouldShowActiveStages) {
       content ++=
-        <h4 id="active" class="collapse-aggregated-activeStages collapse-table"
+        <span id="active" class="collapse-aggregated-activeStages collapse-table"
             onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Active Stages ({activeStages.size})</a>
-        </h4> ++
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Active Stages ({activeStages.size})</a>
+          </h4>
+        </span> ++
         <div class="aggregated-activeStages collapsible-table">
           {activeStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowPendingStages) {
       content ++=
-        <h4 id="pending" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
+        <span id="pending" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
             'aggregated-pendingOrSkippedStages')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Pending Stages ({pendingOrSkippedStages.size})</a>
-        </h4> ++
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Pending Stages ({pendingOrSkippedStages.size})</a>
+          </h4>
+        </span> ++
         <div class="aggregated-pendingOrSkippedStages collapsible-table">
           {pendingOrSkippedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowCompletedStages) {
       content ++=
-        <h4 id="completed" class="collapse-aggregated-completedStages collapse-table"
+        <span id="completed" class="collapse-aggregated-completedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-completedStages',
             'aggregated-completedStages')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Completed Stages ({completedStages.size})</a>
-        </h4> ++
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Completed Stages ({completedStages.size})</a>
+          </h4>
+        </span> ++
         <div class="aggregated-completedStages collapsible-table">
           {completedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowSkippedStages) {
       content ++=
-        <h4 id="skipped" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
+        <span id="skipped" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
             'aggregated-pendingOrSkippedStages')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Skipped Stages ({pendingOrSkippedStages.size})</a>
-        </h4> ++
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Skipped Stages ({pendingOrSkippedStages.size})</a>
+          </h4>
+        </span> ++
         <div class="aggregated-pendingOrSkippedStages collapsible-table">
           {pendingOrSkippedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowFailedStages) {
       content ++=
-        <h4 id ="failed" class="collapse-aggregated-failedStages collapse-table"
+        <span id ="failed" class="collapse-aggregated-failedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-failedStages','aggregated-failedStages')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Failed Stages ({failedStages.size})</a>
-        </h4> ++
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Failed Stages ({failedStages.size})</a>
+          </h4>
+        </span> ++
         <div class="aggregated-failedStages collapsible-table">
           {failedStagesTable.toNodeSeq}
         </div>

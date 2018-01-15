@@ -128,11 +128,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4 class="collapse-aggregated-workers collapse-table"
+            <span class="collapse-aggregated-workers collapse-table"
                 onClick="collapseTable('collapse-aggregated-workers','aggregated-workers')">
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Workers ({workers.length})</a>
-            </h4>
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Workers ({workers.length})</a>
+              </h4>
+            </span>
             <div class="aggregated-workers collapsible-table">
               {workerTable}
             </div>
@@ -141,11 +143,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4 id="running-app" class="collapse-aggregated-activeApps collapse-table"
+            <span id="running-app" class="collapse-aggregated-activeApps collapse-table"
                 onClick="collapseTable('collapse-aggregated-activeApps','aggregated-activeApps')">
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Running Applications ({activeApps.length})</a>
-            </h4>
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Running Applications ({activeApps.length})</a>
+              </h4>
+            </span>
             <div class="aggregated-activeApps collapsible-table">
               {activeAppsTable}
             </div>
@@ -156,12 +160,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           {if (hasDrivers) {
              <div class="row-fluid">
                <div class="span12">
-                 <h4 class="collapse-aggregated-activeDrivers collapse-table"
+                 <span class="collapse-aggregated-activeDrivers collapse-table"
                      onClick="collapseTable('collapse-aggregated-activeDrivers',
                      'aggregated-activeDrivers')">
-                   <span class="collapse-table-arrow arrow-open"></span>
-                   <a>Running Drivers ({activeDrivers.length})</a>
-                 </h4>
+                   <h4>
+                     <span class="collapse-table-arrow arrow-open"></span>
+                     <a>Running Drivers ({activeDrivers.length})</a>
+                   </h4>
+                 </span>
                  <div class="aggregated-activeDrivers collapsible-table">
                    {activeDriversTable}
                  </div>
@@ -173,12 +179,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4 id="completed-app" class="collapse-aggregated-completedApps collapse-table"
+            <span id="completed-app" class="collapse-aggregated-completedApps collapse-table"
                 onClick="collapseTable('collapse-aggregated-completedApps',
                 'aggregated-completedApps')">
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Completed Applications ({completedApps.length})</a>
-            </h4>
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Completed Applications ({completedApps.length})</a>
+              </h4>
+            </span>
             <div class="aggregated-completedApps collapsible-table">
               {completedAppsTable}
             </div>
@@ -190,12 +198,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
             if (hasDrivers) {
               <div class="row-fluid">
                 <div class="span12">
-                  <h4 class="collapse-aggregated-completedDrivers collapse-table"
+                  <span class="collapse-aggregated-completedDrivers collapse-table"
                       onClick="collapseTable('collapse-aggregated-completedDrivers',
                       'aggregated-completedDrivers')">
-                    <span class="collapse-table-arrow arrow-open"></span>
-                    <a>Completed Drivers ({completedDrivers.length})</a>
-                  </h4>
+                    <h4>
+                      <span class="collapse-table-arrow arrow-open"></span>
+                      <a>Completed Drivers ({completedDrivers.length})</a>
+                    </h4>
+                  </span>
                   <div class="aggregated-completedDrivers collapsible-table">
                     {completedDriversTable}
                   </div>

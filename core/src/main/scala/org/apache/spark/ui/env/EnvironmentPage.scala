@@ -48,39 +48,47 @@ private[ui] class EnvironmentPage(
       classPathHeaders, classPathRow, appEnv.classpathEntries, fixedWidth = true)
     val content =
       <span>
-        <h4 class="collapse-aggregated-runtimeInformation collapse-table"
+        <span class="collapse-aggregated-runtimeInformation collapse-table"
             onClick="collapseTable('collapse-aggregated-runtimeInformation',
             'aggregated-runtimeInformation')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Runtime Information</a>
-        </h4>
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Runtime Information</a>
+          </h4>
+        </span>
         <div class="aggregated-runtimeInformation collapsible-table">
           {runtimeInformationTable}
         </div>
-        <h4 class="collapse-aggregated-sparkProperties collapse-table"
+        <span class="collapse-aggregated-sparkProperties collapse-table"
             onClick="collapseTable('collapse-aggregated-sparkProperties',
             'aggregated-sparkProperties')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Spark Properties</a>
-        </h4>
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Spark Properties</a>
+          </h4>
+        </span>
         <div class="aggregated-sparkProperties collapsible-table">
           {sparkPropertiesTable}
         </div>
-        <h4 class="collapse-aggregated-systemProperties collapse-table"
+        <span class="collapse-aggregated-systemProperties collapse-table"
             onClick="collapseTable('collapse-aggregated-systemProperties',
             'aggregated-systemProperties')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>System Properties</a>
-        </h4>
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>System Properties</a>
+          </h4>
+        </span>
         <div class="aggregated-systemProperties collapsible-table">
           {systemPropertiesTable}
         </div>
-        <h4 class="collapse-aggregated-classpathEntries collapse-table"
+        <span class="collapse-aggregated-classpathEntries collapse-table"
             onClick="collapseTable('collapse-aggregated-classpathEntries',
             'aggregated-classpathEntries')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Classpath Entries</a>
-        </h4>
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Classpath Entries</a>
+          </h4>
+        </span>
         <div class="aggregated-classpathEntries collapsible-table">
           {classpathEntriesTable}
         </div>

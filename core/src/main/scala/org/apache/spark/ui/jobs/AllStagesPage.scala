@@ -116,11 +116,13 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     var content = summary ++
       {
         if (sc.isDefined && isFairScheduler) {
-          <h4 class="collapse-aggregated-poolTable collapse-table"
+          <span class="collapse-aggregated-poolTable collapse-table"
               onClick="collapseTable('collapse-aggregated-poolTable','aggregated-poolTable')">
-            <span class="collapse-table-arrow arrow-open"></span>
-            <a>Fair Scheduler Pools ({pools.size})</a>
-          </h4> ++
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Fair Scheduler Pools ({pools.size})</a>
+            </h4>
+          </span> ++
           <div class="aggregated-poolTable collapsible-table">
             {poolTable.toNodeSeq}
           </div>
@@ -130,46 +132,54 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       }
     if (shouldShowActiveStages) {
       content ++=
-        <h4 id="active" class="collapse-aggregated-activeStages collapse-table"
+        <span id="active" class="collapse-aggregated-activeStages collapse-table"
             onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Active Stages ({activeStages.size})</a>
-        </h4> ++
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Active Stages ({activeStages.size})</a>
+          </h4>
+        </span> ++
         <div class="aggregated-activeStages collapsible-table">
           {activeStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowPendingStages) {
       content ++=
-        <h4 id="pending" class="collapse-aggregated-pendingStages collapse-table"
+        <span id="pending" class="collapse-aggregated-pendingStages collapse-table"
             onClick="collapseTable('collapse-aggregated-pendingStages','aggregated-pendingStages')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Pending Stages ({pendingStages.size})</a>
-        </h4> ++
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Pending Stages ({pendingStages.size})</a>
+          </h4>
+        </span> ++
         <div class="aggregated-pendingStages collapsible-table">
           {pendingStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowCompletedStages) {
       content ++=
-        <h4 id="completed" class="collapse-aggregated-completedStages collapse-table"
+        <span id="completed" class="collapse-aggregated-completedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-completedStages',
             'aggregated-completedStages')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Completed Stages ({completedStageNumStr})</a>
-        </h4> ++
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Completed Stages ({completedStageNumStr})</a>
+          </h4>
+        </span> ++
         <div class="aggregated-completedStages collapsible-table">
           {completedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowFailedStages) {
       content ++=
-        <h4 id ="failed" class="collapse-aggregated-failedStages collapse-table"
+        <span id ="failed" class="collapse-aggregated-failedStages collapse-table"
             onClick="collapseTable('collapse-aggregated-failedStages',
             'aggregated-failedStages')">
-          <span class="collapse-table-arrow arrow-open"></span>
-          <a>Failed Stages ({numFailedStages})</a>
-        </h4> ++
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Failed Stages ({numFailedStages})</a>
+          </h4>
+        </span> ++
         <div class="aggregated-failedStages collapsible-table">
           {failedStagesTable.toNodeSeq}
         </div>
