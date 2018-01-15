@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.tree.impl
 
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity._
 
 
@@ -74,7 +75,15 @@ private[spark] class DTStatsAggregator(
    * Index for start of stats for a (feature, bin) is:
    *   index = featureOffsets(featureIndex) + binIndex * statsSize
    */
-  private val allStats: Array[Double] = new Array[Double](allStatsSize)
+  @transient private var allStats: Array[Double] = new Array[Double](allStatsSize)
+
+  // This is used for reducing shuffle communication cost
+  private var compressedAllStats: Vector = null
+
+  def compressAllStats(): DTStatsAggregator = {
+    compressedAllStats = Vectors.dense(allStats).compressed
+    this
+  }
 
   /**
    * Array of parent node sufficient stats.
@@ -91,6 +100,10 @@ private[spark] class DTStatsAggregator(
    *                           from [[getFeatureOffset]].
    */
   def getImpurityCalculator(featureOffset: Int, binIndex: Int): ImpurityCalculator = {
+    if (allStats == null) {
+      allStats = compressedAllStats.toArray
+    }
+
     impurityAggregator.getCalculator(allStats, featureOffset + binIndex * statsSize)
   }
 
@@ -147,6 +160,10 @@ private[spark] class DTStatsAggregator(
    * @param otherBinIndex  This bin is not modified.
    */
   def mergeForFeature(featureOffset: Int, binIndex: Int, otherBinIndex: Int): Unit = {
+    if (allStats == null) {
+      allStats = compressedAllStats.toArray
+    }
+
     impurityAggregator.merge(allStats, featureOffset + binIndex * statsSize,
       featureOffset + otherBinIndex * statsSize)
   }
@@ -159,12 +176,12 @@ private[spark] class DTStatsAggregator(
     require(allStatsSize == other.allStatsSize,
       s"DTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
         + s" This aggregator is of length $allStatsSize, but the other is ${other.allStatsSize}.")
-    var i = 0
-    // TODO: Test BLAS.axpy
-    while (i < allStatsSize) {
-      allStats(i) += other.allStats(i)
-      i += 1
+
+    if (allStats == null) {
+      allStats = compressedAllStats.toArray
     }
+
+    other.compressedAllStats.foreachActive((i, v) => allStats(i) += v)
 
     require(statsSize == other.statsSize,
       s"DTStatsAggregator.merge requires that both aggregators have the same length parent " +
