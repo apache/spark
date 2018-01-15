@@ -97,23 +97,23 @@ object DecimalPrecision extends TypeCoercionRule {
     case e: BinaryArithmetic if e.left.isInstanceOf[PromotePrecision] => e
 
     case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+      val resultScale = max(s1, s2)
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
-        val resultScale = max(s1, s2)
         DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
           resultScale)
       } else {
-        DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+        DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
       }
       CheckOverflow(Add(promotePrecision(e1, resultType), promotePrecision(e2, resultType)),
         resultType)
 
     case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+      val resultScale = max(s1, s2)
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
-        val resultScale = max(s1, s2)
         DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
           resultScale)
       } else {
-        DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+        DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
       }
       CheckOverflow(Subtract(promotePrecision(e1, resultType), promotePrecision(e2, resultType)),
         resultType)
