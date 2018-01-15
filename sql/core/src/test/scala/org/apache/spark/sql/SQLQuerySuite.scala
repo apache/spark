@@ -1518,7 +1518,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("decimal precision with multiply/division") {
-    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_TRUNCAT.key -> "false") {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "false") {
       checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
       checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
       checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
@@ -1535,7 +1535,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
         Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
     }
-    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_TRUNCAT.key -> "true") {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "true") {
       checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
       checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
       checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
