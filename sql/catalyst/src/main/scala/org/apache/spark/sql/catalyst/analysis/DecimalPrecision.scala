@@ -59,7 +59,7 @@ import org.apache.spark.sql.types._
  * - INT gets turned into DECIMAL(10, 0)
  * - LONG gets turned into DECIMAL(20, 0)
  * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE
- * - Literals INT and LONG gets turned into DECIMAL with the precision strictly needed by the value
+ * - Literals INT and LONG get turned into DECIMAL with the precision strictly needed by the value
  */
 // scalastyle:on
 object DecimalPrecision extends TypeCoercionRule {
