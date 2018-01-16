@@ -159,24 +159,24 @@ object DecimalType extends AbstractDataType {
    * result from being truncated.
    *
    * This method is used only when `spark.sql.decimalOperations.allowPrecisionLoss` is set to true.
-   *
-   * @param precision
-   * @param scale
-   * @return
    */
   private[sql] def adjustPrecisionScale(precision: Int, scale: Int): DecimalType = {
     // Assumptions:
-    // precision >= scale
-    // scale >= 0
+    assert(precision >= scale)
+    assert(scale >= 0)
+
     if (precision <= MAX_PRECISION) {
       // Adjustment only needed when we exceed max precision
       DecimalType(precision, scale)
     } else {
       // Precision/scale exceed maximum precision. Result must be adjusted to MAX_PRECISION.
       val intDigits = precision - scale
-      // If original scale less than MINIMUM_ADJUSTED_SCALE, use original scale value; otherwise
+      // If original scale is less than MINIMUM_ADJUSTED_SCALE, use original scale value; otherwise
       // preserve at least MINIMUM_ADJUSTED_SCALE fractional digits
       val minScaleValue = Math.min(scale, MINIMUM_ADJUSTED_SCALE)
+      // The resulting scale is the maximum between what is available without causing a loss of
+      // digits for the integer part of the decimal and the minimum guaranteed scale, which is
+      // computed above
       val adjustedScale = Math.max(MAX_PRECISION - intDigits, minScaleValue)
 
       DecimalType(MAX_PRECISION, adjustedScale)
