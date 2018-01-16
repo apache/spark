@@ -318,6 +318,71 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
+  test("SPARK-22956: currentPartitionOffsets should be set when no new data comes in") {
+    def getSpecificDF(range: Range.Inclusive): org.apache.spark.sql.Dataset[Int] = {
+      val topic = newTopic()
+      testUtils.createTopic(topic, partitions = 1)
+      testUtils.sendMessages(topic, range.map(_.toString).toArray, Some(0))
+
+      val reader = spark
+        .readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.metadata.max.age.ms", "1")
+        .option("maxOffsetsPerTrigger", 5)
+        .option("subscribe", topic)
+        .option("startingOffsets", "earliest")
+
+      reader.load()
+        .selectExpr("CAST(value AS STRING)")
+        .as[String]
+        .map(k => k.toInt)
+    }
+
+    val df1 = getSpecificDF(0 to 9)
+    val df2 = getSpecificDF(100 to 199)
+
+    val kafka = df1.union(df2)
+
+    val clock = new StreamManualClock
+
+    val waitUntilBatchProcessed = AssertOnQuery { q =>
+      eventually(Timeout(streamingTimeout)) {
+        if (!q.exception.isDefined) {
+          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+        }
+      }
+      if (q.exception.isDefined) {
+        throw q.exception.get
+      }
+      true
+    }
+
+    testStream(kafka)(
+      StartStream(ProcessingTime(100), clock),
+      waitUntilBatchProcessed,
+      // 5 from smaller topic, 5 from bigger one
+      CheckLastBatch((0 to 4) ++ (100 to 104): _*),
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed,
+      // 5 from smaller topic, 5 from bigger one
+      CheckLastBatch((5 to 9) ++ (105 to 109): _*),
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed,
+      // smaller topic empty, 5 from bigger one
+      CheckLastBatch(110 to 114: _*),
+      StopStream,
+      StartStream(ProcessingTime(100), clock),
+      waitUntilBatchProcessed,
+      // smallest now empty, 5 from bigger one
+      CheckLastBatch(115 to 119: _*),
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed,
+      // smallest now empty, 5 from bigger one
+      CheckLastBatch(120 to 124: _*)
+    )
+  }
+
   test("cannot stop Kafka stream") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 5)
