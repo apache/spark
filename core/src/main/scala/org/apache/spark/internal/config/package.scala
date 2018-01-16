@@ -65,7 +65,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_OUTPUT_BUFFER_SIZE = ConfigBuilder("spark.eventLog.buffer.kb")
-    .docs("Buffer size to use when writing to output streams, in KiB unless otherwise specified.")
+    .doc("Buffer size to use when writing to output streams, in KiB unless otherwise specified.")
     .bytesConf(ByteUnit.KiB)
     .createWithDefaultString("100k")
 
@@ -85,7 +85,7 @@ package object config {
     ConfigBuilder("spark.executor.userClassPathFirst").booleanConf.createWithDefault(false)
 
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
-    .conf("Amount of memory to use per executor process, in MiB unless otherwise specified.")
+    .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
