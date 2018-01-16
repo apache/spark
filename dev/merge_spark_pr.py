@@ -308,6 +308,8 @@ def choose_jira_assignee(issue, asf_jira):
             candidates = list(candidates)
             print("JIRA is unassigned, choose assignee")
             for idx, author in enumerate(candidates):
+                if author.key == "apachespark":
+                  continue
                 annotations = ["Reporter"] if author == reporter else []
                 if author in commentors:
                     annotations.append("Commentor")
@@ -316,13 +318,13 @@ def choose_jira_assignee(issue, asf_jira):
             if raw_assignee == "":
                 return None
             else:
-                # if its an int, pull it from the list, otherwise assume its a user id
                 try:
                   id = int(raw_assignee)
-                  assignee = candidates[id].key
+                  assignee = candidates[id]
                 except:
-                  assignee = raw_assignee
-                asf_jira.assign_issue(issue.key, assignee)
+                  # assume its a user id, and try to assign (might fail, then we just prompt again)
+                  assignee = asf_jira.user(raw_assignee)
+                asf_jira.assign_issue(issue.key, assignee.key)
                 return assignee
         except:
             traceback.print_exc()
