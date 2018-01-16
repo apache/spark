@@ -25,7 +25,7 @@ import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, Wr
 
 /**
  * A simple [[DataWriterFactory]] whose tasks just pack rows into the commit message for delivery
- * to the [[org.apache.spark.sql.sources.v2.writer.DataSourceV2Writer]] on the driver.
+ * to a [[org.apache.spark.sql.sources.v2.writer.DataSourceV2Writer]] on the driver.
  */
 case object PackedRowWriterFactory extends DataWriterFactory[Row] {
   def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
