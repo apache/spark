@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types.DataType
 
 /**
- * Helper functions for PythonUDF
+ * Helper functions for [[PythonUDF]]
  */
 object PythonUDF {
   private[this] val SCALAR_TYPES = Set(

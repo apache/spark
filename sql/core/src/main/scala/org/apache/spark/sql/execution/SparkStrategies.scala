@@ -289,9 +289,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        require(
-          !aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF),
-          "Streaming aggregation doesn't support group aggregate pandas UDF")
+        if (!aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF)) {
+          throw new AnalysisException(
+            "Streaming aggregation doesn't support group aggregate pandas UDF")
+        }
 
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
@@ -338,52 +339,52 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalAggregation(
-          groupingExpressions, aggExpressions, resultExpressions, child) =>
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+        if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
 
-        if (aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression])) {
+        val aggregateExpressions = aggExpressions.map(expr =>
+          expr.asInstanceOf[AggregateExpression])
 
-          val aggregateExpressions = aggExpressions.map(expr =>
-            expr.asInstanceOf[AggregateExpression])
-
-          val (functionsWithDistinct, functionsWithoutDistinct) =
-            aggregateExpressions.partition(_.isDistinct)
-          if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
-            // This is a sanity check. We should not reach here when we have multiple distinct
-            // column sets. Our MultipleDistinctRewriter should take care this case.
-            sys.error("You hit a query analyzer bug. Please report your query to " +
-              "Spark user mailing list.")
-          }
-
-          val aggregateOperator =
-            if (functionsWithDistinct.isEmpty) {
-              aggregate.AggUtils.planAggregateWithoutDistinct(
-                groupingExpressions,
-                aggregateExpressions,
-                resultExpressions,
-                planLater(child))
-            } else {
-              aggregate.AggUtils.planAggregateWithOneDistinct(
-                groupingExpressions,
-                functionsWithDistinct,
-                functionsWithoutDistinct,
-                resultExpressions,
-                planLater(child))
-            }
-
-          aggregateOperator
-        } else if (aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF])) {
-          val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
-
-          Seq(execution.python.AggregateInPandasExec(
-            groupingExpressions,
-            udfExpressions,
-            resultExpressions,
-            planLater(child)))
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+        val (functionsWithDistinct, functionsWithoutDistinct) =
+          aggregateExpressions.partition(_.isDistinct)
+        if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
+          // This is a sanity check. We should not reach here when we have multiple distinct
+          // column sets. Our MultipleDistinctRewriter should take care this case.
+          sys.error("You hit a query analyzer bug. Please report your query to " +
+            "Spark user mailing list.")
         }
+
+        val aggregateOperator =
+          if (functionsWithDistinct.isEmpty) {
+            aggregate.AggUtils.planAggregateWithoutDistinct(
+              groupingExpressions,
+              aggregateExpressions,
+              resultExpressions,
+              planLater(child))
+          } else {
+            aggregate.AggUtils.planAggregateWithOneDistinct(
+              groupingExpressions,
+              functionsWithDistinct,
+              functionsWithoutDistinct,
+              resultExpressions,
+              planLater(child))
+          }
+        aggregateOperator
+
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+        if aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF]) =>
+        val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
+
+        Seq(execution.python.AggregateInPandasExec(
+          groupingExpressions,
+          udfExpressions,
+          resultExpressions,
+          planLater(child)))
+
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child) =>
+        // If cannot match the two cases above, then it's an error
+        throw new AnalysisException(
+          "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
 
       case _ => Nil
     }
