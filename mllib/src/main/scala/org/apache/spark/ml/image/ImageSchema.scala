@@ -38,10 +38,13 @@ import org.apache.spark.sql.types._
 object ImageSchema {
 
   /**
-   * OpenCv type representation
+   * OpenCv type representation.
+   *
+   * @see <a href="https://docs.opencv.org/2.4/modules/core/doc/basic_structures.html">
+   * OpenCv/basic_structures</a>
    *
    * @param mode ordinal for the type
-   * @param dataType open cv data type
+   * @param dataType OpenCv data type
    * @param nChannels number of color channels
    */
   case class OpenCvType(mode: Int, dataType: String, nChannels: Int) {
@@ -57,7 +60,7 @@ object ImageSchema {
    */
   def ocvTypeByName(name: String): OpenCvType = {
     ocvTypes.find(x => x.name == name).getOrElse(
-      throw new IllegalArgumentException("Unknown open cv type " + name))
+      throw new IllegalArgumentException("Unknown OpenCv type " + name))
   }
 
   /**
@@ -68,7 +71,7 @@ object ImageSchema {
    */
   def ocvTypeByMode(mode: Int): OpenCvType = {
     ocvTypes.find(x => x.mode == mode).getOrElse(
-      throw new IllegalArgumentException("Unknown open cv mode " + mode))
+      throw new IllegalArgumentException("Unknown OpenCv mode " + mode))
   }
 
   val undefinedImageType = OpenCvType(-1, "N/A", -1)
@@ -76,14 +79,16 @@ object ImageSchema {
   /**
    * A Mapping of Type to Numbers in OpenCV
    *
-   *        C1 C2  C3  C4
-   * CV_8U   0  8  16  24
-   * CV_8S   1  9  17  25
-   * CV_16U  2 10  18  26
-   * CV_16S  3 11  19  27
-   * CV_32S  4 12  20  28
-   * CV_32F  5 13  21  29
-   * CV_64F  6 14  22  30
+   * name   |  num channels
+   *        | C1 C2  C3  C4
+   * -------+--------------
+   * CV_8U  |  0  8  16  24
+   * CV_8S  |  1  9  17  25
+   * CV_16U |  2 10  18  26
+   * CV_16S |  3 11  19  27
+   * CV_32S |  4 12  20  28
+   * CV_32F |  5 13  21  29
+   * CV_64F |  6 14  22  30
    */
   val ocvTypes: IndexedSeq[OpenCvType] = {
     val types =

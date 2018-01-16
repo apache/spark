@@ -185,7 +185,7 @@ class _ImageSchema(object):
         ocvType = self.ocvTypeByMode(image.mode)
         if nChannels != ocvType.nChannels:
             raise ValueError(
-                "Image has %d channels but OcvType '%s' expects %d channels." %
+                "Image has %d channels but its OcvType '%s' expects %d channels." %
                 (nChannels, ocvType.name, ocvType.nChannels))
         itemSz = ocvType.nptype.itemsize
         return np.ndarray(

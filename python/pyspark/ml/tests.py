@@ -1855,11 +1855,11 @@ class ImageReaderTest(SparkSessionTestCase):
 
     def test_conversions(self):
         s = np.random.RandomState(seed=987)
-        ary_src = s.rand(4, 10, 10)
+        array_src = s.rand(10, 10, 4)
         for ocvType in ImageSchema.ocvTypes:
             if ocvType.name == 'Undefined':
                 continue
-            npary0 = ary_src[..., 0:ocvType.nChannels].astype(ocvType.nptype)
+            npary0 = array_src[..., 0:ocvType.nChannels].astype(ocvType.nptype)
             img = ImageSchema.toImage(npary0)
             self.assertEqual(ocvType, ImageSchema.ocvTypeByMode(img.mode))
             npary1 = ImageSchema.toNDArray(img)
