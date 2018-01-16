@@ -332,18 +332,18 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     >>> df = spark.createDataFrame(values, ["values1", "values2"])
     >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
     ...     inputCol="values1", outputCol="buckets")
-    >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df)
+    >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df.select("values1"))
     >>> bucketed.show(truncate=False)
-    +-------+-------+-------+
-    |values1|values2|buckets|
-    +-------+-------+-------+
-    |0.1    |0.0    |0.0    |
-    |0.4    |1.0    |0.0    |
-    |1.2    |1.3    |1.0    |
-    |1.5    |NaN    |2.0    |
-    |NaN    |1.0    |3.0    |
-    |NaN    |0.0    |3.0    |
-    +-------+-------+-------+
+    +-------+-------+
+    |values1|buckets|
+    +-------+-------+
+    |0.1    |0.0    |
+    |0.4    |0.0    |
+    |1.2    |1.0    |
+    |1.5    |2.0    |
+    |NaN    |3.0    |
+    |NaN    |3.0    |
+    +-------+-------+
     ...
     >>> bucketizer.setParams(outputCol="b").transform(df).head().b
     0.0
@@ -444,14 +444,14 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
         """
         return self.getOrDefault(self.splits)
 
-    @since("2.3.0")
+    @since("2.4.0")
     def setSplitsArray(self, value):
         """
         Sets the value of :py:attr:`splitsArray`.
         """
         return self._set(splitsArray=value)
 
-    @since("2.3.0")
+    @since("2.4.0")
     def getSplitsArray(self):
         """
         Gets the array of split points or its default value.
