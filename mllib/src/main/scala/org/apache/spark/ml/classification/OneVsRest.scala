@@ -164,19 +164,20 @@ final class OneVsRestModel private[ml] (
     val initUDF = udf { () => Map[Int, Double]() }
     val newDataset = dataset.withColumn(accColName, initUDF())
 
+    // temporary column to store intermediate raw prediction
+    val tmpRawPredictionColName = "rawPrediction_" + UUID.randomUUID().toString
+
+    val columns = origCols ++ List(col(tmpRawPredictionColName), col(accColName))
+
     // persist if underlying dataset is not persistent.
     val handlePersistence = !dataset.isStreaming && dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) {
       newDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    // temporary column to store intermediate raw prediction
-    val tmpRawPredictionColName = "rawPrediction_" + UUID.randomUUID().toString
-
     // update the accumulator column with the result of prediction of models
     val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
       case (df, (model, index)) =>
-        val columns = origCols ++ List(col(tmpRawPredictionColName), col(accColName))
 
         // add temporary column to store intermediate scores and update
         val tmpColName = "update_" + UUID.randomUUID().toString
