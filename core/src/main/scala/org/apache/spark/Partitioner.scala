@@ -43,17 +43,19 @@ object Partitioner {
   /**
    * Choose a partitioner to use for a cogroup-like operation between a number of RDDs.
    *
-   * If any of the RDDs already has a partitioner, and the number of partitions of the
-   * partitioner is either greater than or is less than and within a single order of
-   * magnitude of the max number of upstream partitions, choose that one.
+   * If spark.default.parallelism is set, we'll use the value of SparkContext defaultParallelism
+   * as the default partitions number, otherwise we'll use the max number of upstream partitions.
    *
-   * Otherwise, we use a default HashPartitioner. For the number of partitions, if
-   * spark.default.parallelism is set, then we'll use the value from SparkContext
-   * defaultParallelism, otherwise we'll use the max number of upstream partitions.
+   * If any of the RDDs already has a partitioner, and the partitioner is an eligible one (with a
+   * partitions number that is not less than the max number of upstream partitions by an order of
+   * magnitude), or the number of partitions is larger than the default one, we'll choose the
+   * exsiting partitioner.
    *
-   * Unless spark.default.parallelism is set, the number of partitions will be the
-   * same as the number of partitions in the largest upstream RDD, as this should
-   * be least likely to cause out-of-memory errors.
+   * Otherwise, we'll use a new HashPartitioner with the default partitions number.
+   *
+   * Unless spark.default.parallelism is set, the number of partitions will be the same as the
+   * number of partitions in the largest upstream RDD, as this should be least likely to cause
+   * out-of-memory errors.
    *
    * We use two method parameters (rdd, others) to enforce callers passing at least 1 RDD.
    */
@@ -67,31 +69,32 @@ object Partitioner {
       None
     }
 
-    if (isEligiblePartitioner(hasMaxPartitioner, rdds)) {
+    val defaultNumPartitions = if (rdd.context.conf.contains("spark.default.parallelism")) {
+      rdd.context.defaultParallelism
+    } else {
+      rdds.map(_.partitions.length).max
+    }
+
+    // If the existing max partitioner is an eligible one, or its partitions number is larger
+    // than the default number of partitions, use the existing partitioner.
+    if (hasMaxPartitioner.nonEmpty && (isEligiblePartitioner(hasMaxPartitioner.get, rdds) ||
+        defaultNumPartitions < hasMaxPartitioner.get.getNumPartitions)) {
       hasMaxPartitioner.get.partitioner.get
     } else {
-      if (rdd.context.conf.contains("spark.default.parallelism")) {
-        new HashPartitioner(rdd.context.defaultParallelism)
-      } else {
-        new HashPartitioner(rdds.map(_.partitions.length).max)
-      }
+      new HashPartitioner(defaultNumPartitions)
     }
   }
 
   /**
-   * Returns true if the number of partitions of the RDD is either greater
-   * than or is less than and within a single order of magnitude of the
-   * max number of upstream partitions;
-   * otherwise, returns false
+   * Returns true if the number of partitions of the RDD is either greater than or is less than and
+   * within a single order of magnitude of the max number of upstream partitions, otherwise returns
+   * false.
    */
   private def isEligiblePartitioner(
-     hasMaxPartitioner: Option[RDD[_]],
+     hasMaxPartitioner: RDD[_],
      rdds: Seq[RDD[_]]): Boolean = {
-    if (hasMaxPartitioner.isEmpty) {
-      return false
-    }
     val maxPartitions = rdds.map(_.partitions.length).max
-    log10(maxPartitions) - log10(hasMaxPartitioner.get.getNumPartitions) < 1
+    log10(maxPartitions) - log10(hasMaxPartitioner.getNumPartitions) < 1
   }
 }
 
