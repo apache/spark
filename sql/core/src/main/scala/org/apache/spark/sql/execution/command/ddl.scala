@@ -790,7 +790,7 @@ case class AlterTableSetLocationCommand(
           sparkSession, table, "ALTER TABLE ... SET LOCATION")
         // Partition spec is specified, so we set the location only for this partition
         val part = catalog.getPartition(table.identifier, spec)
-        val newProperties = updatePathInProps(part.storage, Some(locUri.toString))
+        val newProperties = updatePathInProps(part.storage, locUri.toString)
         val newPart = part.copy(storage = part.storage.copy(
           locationUri = Some(locUri), properties = newProperties))
         catalog.alterPartitions(table.identifier, Seq(newPart))
@@ -805,11 +805,11 @@ case class AlterTableSetLocationCommand(
 
   private def updatePathInProps(
       storage: CatalogStorageFormat,
-      newPath: Option[String]): Map[String, String] = {
+      newPath: String): Map[String, String] = {
     val propsWithoutPath = storage.properties.filter {
       case (k, _) => k.toLowerCase(Locale.ROOT) != "path"
     }
-    propsWithoutPath ++ newPath.map("path" -> _)
+    propsWithoutPath ++ Map("path" -> newPath)
   }
 }
 

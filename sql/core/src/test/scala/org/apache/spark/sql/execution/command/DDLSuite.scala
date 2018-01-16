@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
@@ -2013,23 +2013,32 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           .getTableMetadata(TableIdentifier("tbl_partition")).storage.locationUri.get
         try {
           // before set location of partition col1 =1 and 2
-          checkPath(defaultTablePath.toString, Map("col1" -> "1"), "tbl_partition")
-          checkPath(defaultTablePath.toString, Map("col1" -> "2"), "tbl_partition")
-          val path = dir.getCanonicalPath
+          import DDLSuite._
+          if (isUsingHiveMetastore) {
+            checkPath(spark, defaultTablePath.toString, Map("col1" -> "1"), "tbl_partition")
+            checkPath(spark, defaultTablePath.toString, Map("col1" -> "2"), "tbl_partition")
+          }
 
           // set location of partition col1 =1
-          sql(s"ALTER TABLE tbl_partition PARTITION (col1='1') SET LOCATION '$path'")
-          checkPath(dir.getCanonicalPath, Map("col1" -> "1"), "tbl_partition")
-          checkPath(defaultTablePath.toString, Map("col1" -> "2"), "tbl_partition")
+          sql(s"ALTER TABLE tbl_partition PARTITION (col1='1') " +
+            s"SET LOCATION '${dir.getCanonicalPath}'")
+          if (isUsingHiveMetastore) {
+            checkPath(spark, dir.getCanonicalPath, Map("col1" -> "1"), "tbl_partition")
+            checkPath(spark, defaultTablePath.toString, Map("col1" -> "2"), "tbl_partition")
+          }
 
           // set location of partition col1 =2
-          sql(s"ALTER TABLE tbl_partition PARTITION (col1='2') SET LOCATION '$path'")
-          checkPath(dir.getCanonicalPath, Map("col1" -> "1"), "tbl_partition")
-          checkPath(dir.getCanonicalPath, Map("col1" -> "2"), "tbl_partition")
+          sql(s"ALTER TABLE tbl_partition PARTITION (col1='2') " +
+            s"SET LOCATION '${dir.getCanonicalPath}'")
+          if (isUsingHiveMetastore) {
+            checkPath(spark, dir.getCanonicalPath, Map("col1" -> "1"), "tbl_partition")
+            checkPath(spark, dir.getCanonicalPath, Map("col1" -> "2"), "tbl_partition")
+          }
 
           spark.catalog.refreshTable("tbl_partition")
           // SET LOCATION won't move data from previous table path to new table path.
           assert(spark.table("tbl_partition").count() == 0)
+          assert(dir.listFiles().isEmpty)
           // the previous table path should be still there.
           assert(new File(defaultTablePath).exists())
 
@@ -2047,19 +2056,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  def checkPath(path: String, partSpec: Map[String, String], table: String): Unit = {
-    val catalog = spark.sessionState.catalog
-    val spec = Some(partSpec)
-    val tableIdent = TableIdentifier(table)
-    val storageFormat = spec
-      .map { s => catalog.getPartition(tableIdent, s).storage }
-      .getOrElse {
-        catalog.getTableMetadata(tableIdent).storage
-      }
-    if (isUsingHiveMetastore) {
-      assert(storageFormat.properties.get("path").get.toString === path)
-    }
-  }
+
 
   test("insert data to a data source table which has a non-existing location should succeed") {
     withTable("t") {
@@ -2600,4 +2597,25 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+}
+
+object DDLSuite {
+  /**
+    * Check table partition path
+    *
+    * @param spark SparkSession
+    * @param path expect path
+    * @param partSpec  TablePartitionSpec
+    * @param table table name
+    */
+  def checkPath(
+      spark: SparkSession,
+      path: String,
+      partSpec: Map[String, String],
+      table: String): Unit = {
+    val catalog = spark.sessionState.catalog
+    val tableIdent = TableIdentifier(table)
+    val storageFormat = catalog.getPartition(tableIdent, partSpec).storage
+    assert(storageFormat.properties.get("path").get.toString.equals(path))
+    }
 }

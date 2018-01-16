@@ -757,16 +757,8 @@ class HiveDDLSuite
       sql("INSERT OVERWRITE TABLE boxes PARTITION (width=4) SELECT 4, 4")
       val expected = "/path/to/part/ways"
       sql(s"ALTER TABLE boxes PARTITION (width=4) SET LOCATION '$expected'")
-      val catalog = spark.sessionState.catalog
       val partSpec = Map("width" -> "4")
-      val spec = Some(partSpec)
-      val tableIdent = TableIdentifier("boxes", Some("default"))
-      val storageFormat = spec
-        .map { s => catalog.getPartition(tableIdent, s).storage }
-        .getOrElse {
-          catalog.getTableMetadata(tableIdent).storage
-        }
-      assert(storageFormat.properties.get("path").get === expected)
+      DDLSuite.checkPath(spark, expected, partSpec, "boxes")
     }
   }
 
