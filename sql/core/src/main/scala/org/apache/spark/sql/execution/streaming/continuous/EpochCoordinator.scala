@@ -70,7 +70,7 @@ private[sql] case class ReportPartitionOffset(
 
 /** Helper object used to create reference to [[EpochCoordinator]]. */
 private[sql] object EpochCoordinatorRef extends Logging {
-  private def endpointName(runId: String) = s"EpochCoordinator-$runId"
+  private def endpointName(id: String) = s"EpochCoordinator-$id"
 
   /**
    * Create a reference to a new [[EpochCoordinator]].
@@ -79,18 +79,19 @@ private[sql] object EpochCoordinatorRef extends Logging {
       writer: ContinuousWriter,
       reader: ContinuousReader,
       query: ContinuousExecution,
+      epochCoordinatorId: String,
       startEpoch: Long,
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
     val coordinator = new EpochCoordinator(
       writer, reader, query, startEpoch, session, env.rpcEnv)
-    val ref = env.rpcEnv.setupEndpoint(endpointName(query.runId.toString()), coordinator)
+    val ref = env.rpcEnv.setupEndpoint(endpointName(epochCoordinatorId), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
   }
 
-  def get(runId: String, env: SparkEnv): RpcEndpointRef = synchronized {
-    val rpcEndpointRef = RpcUtils.makeDriverRef(endpointName(runId), env.conf, env.rpcEnv)
+  def get(id: String, env: SparkEnv): RpcEndpointRef = synchronized {
+    val rpcEndpointRef = RpcUtils.makeDriverRef(endpointName(id), env.conf, env.rpcEnv)
     logDebug("Retrieved existing EpochCoordinator endpoint")
     rpcEndpointRef
   }

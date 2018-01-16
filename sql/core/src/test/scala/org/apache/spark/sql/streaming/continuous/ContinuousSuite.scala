@@ -21,6 +21,7 @@ import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
@@ -29,7 +30,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkContext, SparkEnv}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -244,6 +245,29 @@ class ContinuousSuite extends ContinuousSuiteBase {
 
 class ContinuousStressSuite extends ContinuousSuiteBase {
   import testImplicits._
+
+  // Continuous processing tasks end asynchronously, so test that they actually end.
+  private val tasksEndedListener = new SparkListener() {
+    val activeTaskIds = mutable.Set[Long]()
+
+    override def onTaskStart(start: SparkListenerTaskStart): Unit = {
+      activeTaskIds.add(start.taskInfo.taskId)
+    }
+
+    override def onTaskEnd(end: SparkListenerTaskEnd): Unit = {
+      activeTaskIds.remove(end.taskInfo.taskId)
+    }
+  }
+  override def beforeEach(): Unit = {
+    spark.sparkContext.addSparkListener(tasksEndedListener)
+  }
+
+  override def afterEach(): Unit = {
+    eventually(timeout(streamingTimeout)) {
+      assert(tasksEndedListener.activeTaskIds.isEmpty)
+    }
+    spark.sparkContext.removeSparkListener(tasksEndedListener)
+  }
 
   test("only one epoch") {
     val df = spark.readStream

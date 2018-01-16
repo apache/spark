@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -54,6 +55,9 @@ class ContinuousExecution(
 
   @volatile protected var continuousSources: Seq[ContinuousReader] = Seq.empty
   override protected def sources: Seq[BaseStreamingSource] = continuousSources
+
+  // For use only in test harnesses.
+  private[sql] var currentEpochCoordinatorId: String = _
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -210,15 +214,17 @@ class ContinuousExecution(
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
-    sparkSession.sparkContext.setLocalProperty(
+    sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.START_EPOCH_KEY, currentBatchId.toString)
-    sparkSession.sparkContext.setLocalProperty(
-      ContinuousExecution.RUN_ID_KEY, runId.toString)
+    val epochCoordinatorId = UUID.randomUUID.toString
+    currentEpochCoordinatorId = epochCoordinatorId
+    sparkSessionForQuery.sparkContext.setLocalProperty(
+      ContinuousExecution.EPOCH_COORDINATOR_ID_KEY, epochCoordinatorId)
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint =
       EpochCoordinatorRef.create(
-        writer.get(), reader, this, currentBatchId, sparkSession, SparkEnv.get)
+        writer.get(), reader, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {
@@ -346,5 +352,5 @@ class ContinuousExecution(
 
 object ContinuousExecution {
   val START_EPOCH_KEY = "__continuous_start_epoch"
-  val RUN_ID_KEY = "__run_id"
+  val EPOCH_COORDINATOR_ID_KEY = "__epoch_coordinator_id"
 }
