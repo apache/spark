@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.log4j.{Level, Logger}
+import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.SparkConf
@@ -291,10 +291,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   private val console = new SessionState.LogHelper(LOG)
 
-  if (sessionState.getIsSilent) {
-    Logger.getRootLogger.setLevel(Level.WARN)
-  }
-
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)
   }
@@ -306,6 +302,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // because the Hive unit tests do not go through the main() code path.
   if (!isRemoteMode) {
     SparkSQLEnv.init()
+    if (sessionState.getIsSilent) {
+      SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+    }
   } else {
     // Hive 1.2 + not supported in CLI
     throw new RuntimeException("Remote operations not supported")
