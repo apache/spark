@@ -278,44 +278,28 @@ object DecimalPrecision extends TypeCoercionRule {
   private val nondecimalAndDecimal: PartialFunction[Expression, Expression] = {
     // Promote integers inside a binary expression with fixed-precision decimals to decimals,
     // and fixed-precision decimals in an expression with floats / doubles to doubles
-    case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
-      nondecimalLiteralAndDecimal(b).lift((left, right)).getOrElse(
-        nondecimalNonliteralAndDecimal(b).applyOrElse((left.dataType, right.dataType),
-          (_: (DataType, DataType)) => b))
-  }
-
-  /**
-   * Type coercion for BinaryOperator in which one side is a non-decimal literal numeric, and the
-   * other side is a decimal.
-   */
-  private def nondecimalLiteralAndDecimal(
-      b: BinaryOperator): PartialFunction[(Expression, Expression), Expression] = {
-    // Promote literal integers inside a binary expression with fixed-precision decimals to
-    // decimals. The precision and scale are the ones needed by the integer value.
-    case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType]
-      && l.dataType.isInstanceOf[IntegralType] =>
-      b.makeCopy(Array(Cast(l, DecimalType.forLiteral(l)), r))
-    case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType]
-      && r.dataType.isInstanceOf[IntegralType] =>
-      b.makeCopy(Array(l, Cast(r, DecimalType.forLiteral(r))))
-  }
-
-  /**
-   * Type coercion for BinaryOperator in which one side is a non-decimal non-literal numeric, and
-   * the other side is a decimal.
-   */
-  private def nondecimalNonliteralAndDecimal(
-      b: BinaryOperator): PartialFunction[(DataType, DataType), Expression] = {
-    // Promote integers inside a binary expression with fixed-precision decimals to decimals,
-    // and fixed-precision decimals in an expression with floats / doubles to doubles
-    case (t: IntegralType, DecimalType.Fixed(p, s)) =>
-      b.makeCopy(Array(Cast(b.left, DecimalType.forType(t)), b.right))
-    case (DecimalType.Fixed(_, _), t: IntegralType) =>
-      b.makeCopy(Array(b.left, Cast(b.right, DecimalType.forType(t))))
-    case (t, DecimalType.Fixed(_, _)) if isFloat(t) =>
-      b.makeCopy(Array(b.left, Cast(b.right, DoubleType)))
-    case (DecimalType.Fixed(_, _), t) if isFloat(t) =>
-      b.makeCopy(Array(Cast(b.left, DoubleType), b.right))
+    case b@BinaryOperator(left, right) if left.dataType != right.dataType =>
+      (left, right) match {
+        // Promote literal integers inside a binary expression with fixed-precision decimals to
+        // decimals. The precision and scale are the ones needed by the integer value.
+        case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType]
+          && l.dataType.isInstanceOf[IntegralType] =>
+          b.makeCopy(Array(Cast(l, DecimalType.forLiteral(l)), r))
+        case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType]
+          && r.dataType.isInstanceOf[IntegralType] =>
+          b.makeCopy(Array(l, Cast(r, DecimalType.forLiteral(r))))
+        // Promote integers inside a binary expression with fixed-precision decimals to decimals,
+        // and fixed-precision decimals in an expression with floats / doubles to doubles
+        case (l @ IntegralType(), r @ DecimalType.Expression(_, _)) =>
+          b.makeCopy(Array(Cast(l, DecimalType.forType(l.dataType)), r))
+        case (l @ DecimalType.Expression(_, _), r @ IntegralType()) =>
+          b.makeCopy(Array(l, Cast(r, DecimalType.forType(r.dataType))))
+        case (l, r @ DecimalType.Expression(_, _)) if isFloat(l.dataType) =>
+          b.makeCopy(Array(l, Cast(r, DoubleType)))
+        case (l @ DecimalType.Expression(_, _), r) if isFloat(r.dataType) =>
+          b.makeCopy(Array(Cast(l, DoubleType), r))
+        case _ => b
+      }
   }
 
 }
