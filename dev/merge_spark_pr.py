@@ -299,30 +299,34 @@ def choose_jira_assignee(issue, asf_jira):
     Prompt the user to choose who to assign the issue to in jira, given a list of candidates,
     including the original reporter and all commentors
     """
-    try:
-        reporter = issue.fields.reporter
-        commentors = map(lambda x: x.author, issue.fields.comment.comments)
-        candidates = set(commentors)
-        candidates.add(reporter)
-        candidates = list(candidates)
-        print("JIRA is unassigned, choose assignee")
-        for idx, author in enumerate(candidates):
-            annotations = ["Reporter"] if author == reporter else []
-            if author in commentors:
-                annotations.append("Commentor")
-            print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
-        assignee = raw_input("Enter number of user to assign to (blank to leave unassigned):")
-        if assignee == "":
-            return None
-        else:
-            assignee = candidates[int(assignee)]
-            asf_jira.assign_issue(issue.key, assignee.key)
-            return assignee
-    except:
-        print("Error assigning JIRA")
-        traceback.print_exc()
-        print("Leaving JIRA unassigned")
-        return None
+    while True:
+        try:
+            reporter = issue.fields.reporter
+            commentors = map(lambda x: x.author, issue.fields.comment.comments)
+            candidates = set(commentors)
+            candidates.add(reporter)
+            candidates = list(candidates)
+            print("JIRA is unassigned, choose assignee")
+            for idx, author in enumerate(candidates):
+                annotations = ["Reporter"] if author == reporter else []
+                if author in commentors:
+                    annotations.append("Commentor")
+                print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
+            raw_assignee = raw_input("Enter number of user, or userid,  to assign to (blank to leave unassigned):")
+            if raw_assignee == "":
+                return None
+            else:
+                # if its an int, pull it from the list, otherwise assume its a user id
+                try:
+                  id = int(raw_assignee)
+                  assignee = candidates[id].key
+                except:
+                  assignee = raw_assignee
+                asf_jira.assign_issue(issue.key, assignee)
+                return assignee
+        except:
+            traceback.print_exc()
+            print("Error assigning JIRA, try again (or leave blank and fix manually)")
 
 
 def resolve_jira_issues(title, merge_branches, comment):
