@@ -281,7 +281,15 @@ object DecimalPrecision extends TypeCoercionRule {
     case b@BinaryOperator(left, right) if left.dataType != right.dataType =>
       (left, right) match {
         // Promote literal integers inside a binary expression with fixed-precision decimals to
-        // decimals. The precision and scale are the ones needed by the integer value.
+        // decimals. The precision and scale are the ones strictly needed by the integer value.
+        // Requiring more precision than necessary may lead to a useless loss of precision.
+        // Consider the following example: multiplying a column which is DECIMAL(38, 18) by 2.
+        // If we use the default precision and scale for the integer type, 2 is considered a
+        // DECIMAL(10, 0). According to the rules, the result would be DECIMAL(38 + 10 + 1, 18),
+        // which is out of range and therefore it will becomes DECIMAL(38, 7), leading to
+        // potentially loosing 11 digits of the fractional part. Using only the precision needed
+        // by the Literal, instead, the result would be DECIMAL(38 + 1 + 1, 18), which would
+        // become DECIMAL(38, 16), safely having a much lower precision loss.
         case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType]
           && l.dataType.isInstanceOf[IntegralType] =>
           b.makeCopy(Array(Cast(l, DecimalType.forLiteral(l)), r))
