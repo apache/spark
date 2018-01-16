@@ -53,7 +53,7 @@ trait ProgressReporter extends Logging {
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
-  protected def newData: Map[BaseStreamingSource, DataFrame]
+  protected def newData: Map[BaseStreamingSource, LogicalPlan]
   protected def availableOffsets: StreamProgress
   protected def committedOffsets: StreamProgress
   protected def sources: Seq[BaseStreamingSource]
@@ -225,8 +225,8 @@ trait ProgressReporter extends Logging {
     //
     // 3. For each source, we sum the metrics of the associated execution plan leaves.
     //
-    val logicalPlanLeafToSource = newData.flatMap { case (source, df) =>
-      df.logicalPlan.collectLeaves().map { leaf => leaf -> source }
+    val logicalPlanLeafToSource = newData.flatMap { case (source, logicalPlan) =>
+      logicalPlan.collectLeaves().map { leaf => leaf -> source }
     }
     val allLogicalPlanLeaves = lastExecution.logical.collectLeaves() // includes non-streaming
     val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()

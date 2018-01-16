@@ -94,6 +94,8 @@ private[spark] class ExecutorPodFactory(
   private val executorCores = sparkConf.getDouble("spark.executor.cores", 1)
   private val executorLimitCores = sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
+  private val executorJarsDownloadDir = sparkConf.get(JARS_DOWNLOAD_LOCATION)
+
   /**
    * Configure and construct an executor pod with the given parameters.
    */
@@ -126,7 +128,7 @@ private[spark] class ExecutorPodFactory(
       .build()
     val executorExtraClasspathEnv = executorExtraClasspath.map { cp =>
       new EnvVarBuilder()
-        .withName(ENV_EXECUTOR_EXTRA_CLASSPATH)
+        .withName(ENV_CLASSPATH)
         .withValue(cp)
         .build()
     }
@@ -145,7 +147,8 @@ private[spark] class ExecutorPodFactory(
       (ENV_EXECUTOR_CORES, math.ceil(executorCores).toInt.toString),
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId),
-      (ENV_EXECUTOR_ID, executorId)) ++ executorEnvs)
+      (ENV_EXECUTOR_ID, executorId),
+      (ENV_MOUNTED_CLASSPATH, s"$executorJarsDownloadDir/*")) ++ executorEnvs)
       .map(env => new EnvVarBuilder()
         .withName(env._1)
         .withValue(env._2)
@@ -178,6 +181,7 @@ private[spark] class ExecutorPodFactory(
         .endResources()
       .addAllToEnv(executorEnv.asJava)
       .withPorts(requiredPorts.asJava)
+      .addToArgs("executor")
       .build()
 
     val executorPod = new PodBuilder()

@@ -261,6 +261,9 @@ class TaskMetricDistributions private[spark](
     val resultSize: IndexedSeq[Double],
     val jvmGcTime: IndexedSeq[Double],
     val resultSerializationTime: IndexedSeq[Double],
+    val gettingResultTime: IndexedSeq[Double],
+    val schedulerDelay: IndexedSeq[Double],
+    val peakExecutionMemory: IndexedSeq[Double],
     val memoryBytesSpilled: IndexedSeq[Double],
     val diskBytesSpilled: IndexedSeq[Double],
 
