@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.StreamExecution
@@ -55,25 +58,28 @@ trait KafkaContinuousTest extends KafkaSourceTest {
 
   // Continuous processing tasks end asynchronously, so test that they actually end.
   private val tasksEndedListener = new SparkListener() {
-    val activeTaskIds = mutable.Set[Long]()
+    val activeTaskIdCount = new AtomicInteger(0)
 
     override def onTaskStart(start: SparkListenerTaskStart): Unit = {
-      activeTaskIds.add(start.taskInfo.taskId)
+      activeTaskIdCount.incrementAndGet()
     }
 
     override def onTaskEnd(end: SparkListenerTaskEnd): Unit = {
-      activeTaskIds.remove(end.taskInfo.taskId)
+      activeTaskIdCount.decrementAndGet()
     }
   }
+
   override def beforeEach(): Unit = {
+    super.beforeEach()
     spark.sparkContext.addSparkListener(tasksEndedListener)
   }
 
   override def afterEach(): Unit = {
     eventually(timeout(streamingTimeout)) {
-      assert(tasksEndedListener.activeTaskIds.isEmpty)
+      assert(tasksEndedListener.activeTaskIdCount.get() == 0)
     }
     spark.sparkContext.removeSparkListener(tasksEndedListener)
+    super.afterEach()
   }
 
 
