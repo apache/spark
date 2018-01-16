@@ -25,8 +25,6 @@ import java.util.List;
 
 import org.apache.spark.ml.feature.OneHotEncoderEstimator;
 import org.apache.spark.ml.feature.OneHotEncoderModel;
-import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.ml.feature.StringIndexerModel;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -44,41 +42,29 @@ public class JavaOneHotEncoderEstimatorExample {
       .getOrCreate();
 
     // $example on$
+    // Notice: this categorical features are usually encoded with `StringIndexer`.
     List<Row> data = Arrays.asList(
-      RowFactory.create(0, "a", "x"),
-      RowFactory.create(1, "b", "y"),
-      RowFactory.create(2, "c", "y"),
-      RowFactory.create(3, "a", "z"),
-      RowFactory.create(4, "a", "y"),
-      RowFactory.create(5, "c", "z")
+      RowFactory.create(0.0, 1.0),
+      RowFactory.create(1.0, 0.0),
+      RowFactory.create(2.0, 1.0),
+      RowFactory.create(0.0, 2.0),
+      RowFactory.create(0.0, 1.0),
+      RowFactory.create(2.0, 0.0)
     );
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-      new StructField("category1", DataTypes.StringType, false, Metadata.empty()),
-      new StructField("category2", DataTypes.StringType, false, Metadata.empty())
+      new StructField("categoryIndex1", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("categoryIndex2", DataTypes.DoubleType, false, Metadata.empty())
     });
 
     Dataset<Row> df = spark.createDataFrame(data, schema);
-
-    // TODO: Replace this with multi-column API of StringIndexer once SPARK-11215 is merged.
-    StringIndexerModel indexer1 = new StringIndexer()
-      .setInputCol("category1")
-      .setOutputCol("categoryIndex1")
-      .fit(df);
-    StringIndexerModel indexer2 = new StringIndexer()
-      .setInputCol("category2")
-      .setOutputCol("categoryIndex2")
-      .fit(df);
-    Dataset<Row> indexed1 = indexer1.transform(df);
-    Dataset<Row> indexed2 = indexer2.transform(indexed1);
 
     OneHotEncoderEstimator encoder = new OneHotEncoderEstimator()
       .setInputCols(new String[] {"categoryIndex1", "categoryIndex2"})
       .setOutputCols(new String[] {"categoryVec1", "categoryVec2"});
 
-    OneHotEncoderModel model = encoder.fit(indexed2);
-    Dataset<Row> encoded = model.transform(indexed2);
+    OneHotEncoderModel model = encoder.fit(df);
+    Dataset<Row> encoded = model.transform(df);
     encoded.show();
     // $example off$
 

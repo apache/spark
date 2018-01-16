@@ -19,7 +19,7 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.feature.{OneHotEncoderEstimator, StringIndexer}
+import org.apache.spark.ml.feature.OneHotEncoderEstimator
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -31,33 +31,22 @@ object OneHotEncoderEstimatorExample {
       .getOrCreate()
 
     // $example on$
+    // Notice: this categorical features are usually encoded with `StringIndexer`.
     val df = spark.createDataFrame(Seq(
-      (0, "a", "x"),
-      (1, "b", "y"),
-      (2, "c", "y"),
-      (3, "a", "z"),
-      (4, "a", "y"),
-      (5, "c", "z")
-    )).toDF("id", "category1", "category2")
-
-    // TODO: Replace this with multi-column API of StringIndexer once SPARK-11215 is merged.
-    val indexer1 = new StringIndexer()
-      .setInputCol("category1")
-      .setOutputCol("categoryIndex1")
-      .fit(df)
-    val indexer2 = new StringIndexer()
-      .setInputCol("category2")
-      .setOutputCol("categoryIndex2")
-      .fit(df)
-    val indexed1 = indexer1.transform(df)
-    val indexed2 = indexer2.transform(indexed1)
+      (0.0, 1.0),
+      (1.0, 0.0),
+      (2.0, 1.0),
+      (0.0, 2.0),
+      (0.0, 1.0),
+      (2.0, 0.0)
+    )).toDF("categoryIndex1", "categoryIndex2")
 
     val encoder = new OneHotEncoderEstimator()
       .setInputCols(Array("categoryIndex1", "categoryIndex2"))
       .setOutputCols(Array("categoryVec1", "categoryVec2"))
-    val model = encoder.fit(indexed2)
+    val model = encoder.fit(df)
 
-    val encoded = model.transform(indexed2)
+    val encoded = model.transform(df)
     encoded.show()
     // $example off$
 

@@ -18,7 +18,7 @@
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.feature import OneHotEncoderEstimator, StringIndexer
+from pyspark.ml.feature import OneHotEncoderEstimator
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -29,28 +29,20 @@ if __name__ == "__main__":
         .getOrCreate()
 
     # $example on$
+    # Notice: this categorical features are usually encoded with `StringIndexer`.
     df = spark.createDataFrame([
-        (0, "a", "x"),
-        (1, "b", "y"),
-        (2, "c", "y"),
-        (3, "a", "z"),
-        (4, "a", "y"),
-        (5, "c", "z")
-    ], ["id", "category1", "category2"])
-
-    # TODO: Replace this with multi-column API of StringIndexer once SPARK-11215 is merged.
-    stringIndexer1 = StringIndexer(inputCol="category1", outputCol="categoryIndex1")
-    stringIndexer2 = StringIndexer(inputCol="category2", outputCol="categoryIndex2")
-
-    stringIndexerModel1 = stringIndexer1.fit(df)
-    indexed1 = stringIndexerModel1.transform(df)
-    stringIndexerModel2 = stringIndexer2.fit(indexed1)
-    indexed2 = stringIndexerModel2.transform(indexed1)
+        (0.0, 1.0),
+        (1.0, 0.0),
+        (2.0, 1.0),
+        (0.0, 2.0),
+        (0.0, 1.0),
+        (2.0, 0.0)
+    ], ["categoryIndex1", "categoryIndex2"])
 
     encoder = OneHotEncoderEstimator(inputCols=["categoryIndex1", "categoryIndex2"],
                                      outputCols=["categoryVec1", "categoryVec2"])
-    model = encoder.fit(indexed2)
-    encoded = model.transform(indexed2)
+    model = encoder.fit(df)
+    encoded = model.transform(df)
     encoded.show()
     # $example off$
 
