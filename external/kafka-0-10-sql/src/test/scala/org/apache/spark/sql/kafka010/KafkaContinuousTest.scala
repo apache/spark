@@ -19,10 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkContext
-
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.StreamExecution
