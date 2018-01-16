@@ -492,16 +492,16 @@ class StreamSuite extends StreamTest {
 
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
-      assert("LocalRelation".r.findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("LocalTableScan".r.findAllMatchIn(explainWithoutExtended).size === 1)
+      assert("StreamingDataSourceV2Relation".r.findAllMatchIn(explainWithoutExtended).size === 0)
+      assert("DataSourceV2Scan".r.findAllMatchIn(explainWithoutExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithoutExtended.contains("StateStoreRestore"))
 
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("LocalRelation".r.findAllMatchIn(explainWithExtended).size === 3)
-      assert("LocalTableScan".r.findAllMatchIn(explainWithExtended).size === 1)
+      assert("StreamingDataSourceV2Relation".r.findAllMatchIn(explainWithExtended).size === 3)
+      assert("DataSourceV2Scan".r.findAllMatchIn(explainWithExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithExtended.contains("StateStoreRestore"))
     } finally {

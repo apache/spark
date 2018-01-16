@@ -94,7 +94,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def addData(data: TraversableOnce[A]): Offset = {
     val encoded = data.toVector.map(d => encoder.toRow(d).copy())
-    val plan = new LocalRelation(attributes, encoded, isStreaming = true)
+    val plan = new LocalRelation(attributes, encoded, isStreaming = false)
     val ds = Dataset[A](sqlContext.sparkSession, plan)
     logDebug(s"Adding ds: $ds")
     this.synchronized {
