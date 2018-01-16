@@ -20,8 +20,10 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.util.Utils
 
 class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
@@ -60,6 +62,33 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
+  }
+
+  test("SPARK-22972: hive orc source") {
+    val tableName = "normal_orc_as_source_hive"
+    withTable(tableName) {
+      sql(
+        s"""
+          |CREATE TABLE $tableName
+          |USING org.apache.spark.sql.hive.orc
+          |OPTIONS (
+          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
+          |)
+        """.stripMargin)
+
+      val tableMetadata = spark.sessionState.catalog.getTableMetadata(
+        TableIdentifier(tableName))
+      assert(tableMetadata.storage.inputFormat ==
+        Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
+      assert(tableMetadata.storage.outputFormat ==
+        Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
+      assert(tableMetadata.storage.serde ==
+        Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+      assert(HiveSerDe.sourceToSerDe("org.apache.spark.sql.hive.orc")
+        .equals(HiveSerDe.sourceToSerDe("orc")))
+      assert(HiveSerDe.sourceToSerDe("org.apache.spark.sql.orc")
+        .equals(HiveSerDe.sourceToSerDe("orc")))
+    }
   }
 
   test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {

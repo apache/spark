@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.vectorized;
+package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
@@ -23,8 +23,7 @@ import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * Array abstraction in {@link ColumnVector}. The instance of this class is intended
- * to be reused, callers should copy the data out if it needs to be stored.
+ * Array abstraction in {@link ColumnVector}.
  */
 public final class ColumnarArray extends ArrayData {
   // The data for this array. This array contains elements from
@@ -33,7 +32,7 @@ public final class ColumnarArray extends ArrayData {
   private final int offset;
   private final int length;
 
-  ColumnarArray(ColumnVector data, int offset, int length) {
+  public ColumnarArray(ColumnVector data, int offset, int length) {
     this.data = data;
     this.offset = offset;
     this.length = length;

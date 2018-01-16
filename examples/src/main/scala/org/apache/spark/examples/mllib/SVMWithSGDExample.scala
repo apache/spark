@@ -57,7 +57,7 @@ object SVMWithSGDExample {
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val auROC = metrics.areaUnderROC()
 
-    println("Area under ROC = " + auROC)
+    println(s"Area under ROC = $auROC")
 
     // Save and load model
     model.save(sc, "target/tmp/scalaSVMWithSGDModel")

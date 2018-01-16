@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.vectorized;
+package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.DataType;
@@ -22,24 +22,31 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * This class represents in-memory values of a column and provides the main APIs to access the data.
- * It supports all the types and contains get APIs as well as their batched versions. The batched
- * versions are considered to be faster and preferable whenever possible.
- *
- * To handle nested schemas, ColumnVector has two types: Arrays and Structs. In both cases these
- * columns have child columns. All of the data are stored in the child columns and the parent column
- * only contains nullability. In the case of Arrays, the lengths and offsets are saved in the child
- * column and are encoded identically to INTs.
- *
- * Maps are just a special case of a two field struct.
+ * An interface representing in-memory columnar data in Spark. This interface defines the main APIs
+ * to access the data, as well as their batched versions. The batched versions are considered to be
+ * faster and preferable whenever possible.
  *
  * Most of the APIs take the rowId as a parameter. This is the batch local 0-based row id for values
- * in the current batch.
+ * in this ColumnVector.
+ *
+ * ColumnVector supports all the data types including nested types. To handle nested types,
+ * ColumnVector can have children and is a tree structure. For struct type, it stores the actual
+ * data of each field in the corresponding child ColumnVector, and only stores null information in
+ * the parent ColumnVector. For array type, it stores the actual array elements in the child
+ * ColumnVector, and stores null information, array offsets and lengths in the parent ColumnVector.
+ *
+ * ColumnVector is expected to be reused during the entire data loading process, to avoid allocating
+ * memory again and again.
+ *
+ * ColumnVector is meant to maximize CPU efficiency but not to minimize storage footprint.
+ * Implementations should prefer computing efficiency over storage efficiency when design the
+ * format. Since it is expected to reuse the ColumnVector instance while loading data, the storage
+ * footprint is negligible.
  */
 public abstract class ColumnVector implements AutoCloseable {
 
   /**
-   * Returns the data type of this column.
+   * Returns the data type of this column vector.
    */
   public final DataType dataType() { return type; }
 

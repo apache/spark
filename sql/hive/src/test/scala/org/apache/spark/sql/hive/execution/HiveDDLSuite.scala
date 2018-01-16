@@ -875,12 +875,13 @@ class HiveDDLSuite
 
   test("desc table for Hive table - bucketed + sorted table") {
     withTable("tbl") {
-      sql(s"""
-        CREATE TABLE tbl (id int, name string)
-        PARTITIONED BY (ds string)
-        CLUSTERED BY(id)
-        SORTED BY(id, name) INTO 1024 BUCKETS
-        """)
+      sql(
+        s"""
+          |CREATE TABLE tbl (id int, name string)
+          |CLUSTERED BY(id)
+          |SORTED BY(id, name) INTO 1024 BUCKETS
+          |PARTITIONED BY (ds string)
+        """.stripMargin)
 
       val x = sql("DESC FORMATTED tbl").collect()
       assert(x.containsSlice(

@@ -330,7 +330,7 @@ private[hive] class HiveClientImpl(
     Option(client.getDatabase(dbName)).map { d =>
       CatalogDatabase(
         name = d.getName,
-        description = d.getDescription,
+        description = Option(d.getDescription).getOrElse(""),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
@@ -823,7 +823,8 @@ private[hive] class HiveClientImpl(
   }
 
   def reset(): Unit = withHiveState {
-    client.getAllTables("default").asScala.foreach { t =>
+    try {
+      client.getAllTables("default").asScala.foreach { t =>
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
         client.getIndexes("default", t, 255).asScala.foreach { index =>
@@ -837,6 +838,9 @@ private[hive] class HiveClientImpl(
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }
+    } finally {
+      runSqlHive("USE default")
+    }
   }
 }
 

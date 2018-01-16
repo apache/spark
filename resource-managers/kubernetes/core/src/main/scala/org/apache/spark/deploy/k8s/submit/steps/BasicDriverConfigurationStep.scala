@@ -66,7 +66,7 @@ private[spark] class BasicDriverConfigurationStep(
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     val driverExtraClasspathEnv = driverExtraClasspath.map { classPath =>
       new EnvVarBuilder()
-        .withName(ENV_SUBMIT_EXTRA_CLASSPATH)
+        .withName(ENV_CLASSPATH)
         .withValue(classPath)
         .build()
     }
@@ -119,7 +119,7 @@ private[spark] class BasicDriverConfigurationStep(
         .endEnv()
       .addNewEnv()
         .withName(ENV_DRIVER_ARGS)
-        .withValue(appArgs.map(arg => "\"" + arg + "\"").mkString(" "))
+        .withValue(appArgs.mkString(" "))
         .endEnv()
       .addNewEnv()
         .withName(ENV_DRIVER_BIND_ADDRESS)
@@ -133,6 +133,7 @@ private[spark] class BasicDriverConfigurationStep(
         .addToLimits("memory", driverMemoryLimitQuantity)
         .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
         .endResources()
+      .addToArgs("driver")
       .build()
 
     val baseDriverPod = new PodBuilder(driverSpec.driverPod)

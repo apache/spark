@@ -17,15 +17,15 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.sql.{DataFrame, Encoder, Row}
 import org.apache.spark.sql.types.DoubleType
 
-class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class RFormulaSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -557,5 +557,32 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     assert(result3.collect() === expected3.collect())
     assert(result4.collect() === expected4.collect())
+  }
+
+  test("Use Vectors as inputs to formula.") {
+    val original = Seq(
+      (1, 4, Vectors.dense(0.0, 0.0, 4.0)),
+      (2, 4, Vectors.dense(1.0, 0.0, 4.0)),
+      (3, 5, Vectors.dense(1.0, 0.0, 5.0)),
+      (4, 5, Vectors.dense(0.0, 1.0, 5.0))
+    ).toDF("id", "a", "b")
+    val formula = new RFormula().setFormula("id ~ a + b")
+    val (first +: rest) = Seq("id", "a", "b", "features", "label")
+    testTransformer[(Int, Int, Vector)](original, formula.fit(original), first, rest: _*) {
+      case Row(id: Int, a: Int, b: Vector, features: Vector, label: Double) =>
+        assert(label === id)
+        assert(features.toArray === a +: b.toArray)
+    }
+
+    val group = new AttributeGroup("b", 3)
+    val vectorColWithMetadata = original("b").as("b", group.toMetadata())
+    val dfWithMetadata = original.withColumn("b", vectorColWithMetadata)
+    val model = formula.fit(dfWithMetadata)
+    // model should work even when applied to dataframe without metadata.
+    testTransformer[(Int, Int, Vector)](original, model, first, rest: _*) {
+      case Row(id: Int, a: Int, b: Vector, features: Vector, label: Double) =>
+        assert(label === id)
+        assert(features.toArray === a +: b.toArray)
+    }
   }
 }
