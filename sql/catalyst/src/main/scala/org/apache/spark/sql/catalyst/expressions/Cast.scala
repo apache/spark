@@ -282,6 +282,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         builder.append("]")
         builder.build()
       })
+    case udt: UserDefinedType[_] =>
+      buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -835,6 +837,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
              |$writeStructCode
              |$evPrim = $buffer.build();
            """.stripMargin
+        }
+      case udt: UserDefinedType[_] =>
+        val udtRef = ctx.addReferenceObj("udt", udt)
+        (c, evPrim, evNull) => {
+          s"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
         }
       case _ =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"

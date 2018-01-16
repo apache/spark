@@ -903,6 +903,7 @@ case class Deduplicate(
  * This analysis barrier will be removed at the end of analysis stage.
  */
 case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
+  override protected def innerChildren: Seq[LogicalPlan] = Seq(child)
   override def output: Seq[Attribute] = child.output
   override def isStreaming: Boolean = child.isStreaming
   override def doCanonicalize(): LogicalPlan = child.canonicalized

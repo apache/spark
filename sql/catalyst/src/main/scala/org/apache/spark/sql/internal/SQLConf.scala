@@ -249,7 +249,7 @@ object SQLConf {
   val CONSTRAINT_PROPAGATION_ENABLED = buildConf("spark.sql.constraintPropagation.enabled")
     .internal()
     .doc("When true, the query optimizer will infer and propagate data constraints in the query " +
-      "plan to optimize them. Constraint propagation can sometimes be computationally expensive" +
+      "plan to optimize them. Constraint propagation can sometimes be computationally expensive " +
       "for certain kinds of query plans (such as those with a large number of predicates and " +
       "aliases) which might negatively impact overall runtime.")
     .booleanConf
@@ -262,6 +262,15 @@ object SQLConf {
       "prior to Spark 2.0.")
     .booleanConf
     .createWithDefault(false)
+
+  val FILE_COMRESSION_FACTOR = buildConf("spark.sql.sources.fileCompressionFactor")
+    .internal()
+    .doc("When estimating the output data size of a table scan, multiply the file size with this " +
+      "factor as the estimated data size, in case the data is compressed in the file and lead to" +
+      " a heavily underestimated result.")
+    .doubleConf
+    .checkValue(_ > 0, "the value of fileDataSizeFactor must be larger than 0")
+    .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
@@ -1254,6 +1263,8 @@ class SQLConf extends Serializable with Logging {
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+
+  def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
 
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
