@@ -2601,13 +2601,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
 object DDLSuite {
   /**
-    * Check table partition path
-    *
-    * @param spark SparkSession
-    * @param path expect path
-    * @param partSpec  TablePartitionSpec
-    * @param table table name
-    */
+   * Check table partition path
+   *
+   * @param spark    SparkSession
+   * @param path     expect path
+   * @param partSpec TablePartitionSpec
+   * @param table    table name
+   */
   def checkPath(
       spark: SparkSession,
       path: String,
