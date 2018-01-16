@@ -199,6 +199,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     val parsedFormula = RFormulaParser.parse($(formula))
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
     val encoderStages = ArrayBuffer[PipelineStage]()
+    val oneHotEncodeColumns = ArrayBuffer[(String, String)]()
 
     val prefixesToRewrite = mutable.Map[String, String]()
     val tempColumns = ArrayBuffer[String]()
@@ -242,16 +243,17 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     val encodedTerms = resolvedFormula.terms.map {
       case Seq(term) if dataset.schema(term).dataType == StringType =>
         val encodedCol = tmpColumn("onehot")
-        var encoder = new OneHotEncoder()
-          .setInputCol(indexed(term))
-          .setOutputCol(encodedCol)
         // Formula w/o intercept, one of the categories in the first category feature is
         // being used as reference category, we will not drop any category for that feature.
         if (!hasIntercept && !keepReferenceCategory) {
-          encoder = encoder.setDropLast(false)
+          encoderStages += new OneHotEncoderEstimator(uid)
+            .setInputCols(Array(indexed(term)))
+            .setOutputCols(Array(encodedCol))
+            .setDropLast(false)
           keepReferenceCategory = true
+        } else {
+          oneHotEncodeColumns += indexed(term) -> encodedCol
         }
-        encoderStages += encoder
         prefixesToRewrite(encodedCol + "_") = term + "_"
         encodedCol
       case Seq(term) =>
@@ -263,6 +265,14 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           .setOutputCol(interactionCol)
         prefixesToRewrite(interactionCol + "_") = ""
         interactionCol
+    }
+
+    if (oneHotEncodeColumns.nonEmpty) {
+      val (inputCols, outputCols) = oneHotEncodeColumns.toArray.unzip
+      encoderStages += new OneHotEncoderEstimator(uid)
+        .setInputCols(inputCols)
+        .setOutputCols(outputCols)
+        .setDropLast(true)
     }
 
     encoderStages += new VectorAssembler(uid)
