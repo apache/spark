@@ -5,3 +5,7 @@ org.apache.spark.sql.sources.FakeSourceFour
 org.apache.fakesource.FakeExternalSourceOne
 org.apache.fakesource.FakeExternalSourceTwo
 org.apache.fakesource.FakeExternalSourceThree
+org.apache.spark.sql.streaming.sources.FakeStreamingMicroBatchOnly
+org.apache.spark.sql.streaming.sources.FakeStreamingContinuousOnly
+org.apache.spark.sql.streaming.sources.FakeStreamingBothModes
+org.apache.spark.sql.streaming.sources.FakeStreamingNeitherMode
