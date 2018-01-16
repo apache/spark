@@ -39,6 +39,7 @@ object ImageSchema {
 
   /**
    * OpenCv type representation
+   *
    * @param mode ordinal for the type
    * @param dataType open cv data type
    * @param nChannels number of color channels
@@ -48,11 +49,23 @@ object ImageSchema {
     override def toString: String = s"OpenCvType(mode = $mode, name = $name)"
   }
 
+  /**
+   * Return the supported OpenCvType with matching name or raise error if there is no matching type.
+   *
+   * @param name: name of existing OpenCvType
+   * @return OpenCvType that matches the given name
+   */
   def ocvTypeByName(name: String): OpenCvType = {
     ocvTypes.find(x => x.name == name).getOrElse(
       throw new IllegalArgumentException("Unknown open cv type " + name))
   }
 
+  /**
+   * Return the supported OpenCvType with matching mode or raise error if there is no matching type.
+   *
+   * @param mode: mode of existing OpenCvType
+   * @return OpenCvType that matches the given mode
+   */
   def ocvTypeByMode(mode: Int): OpenCvType = {
     ocvTypes.find(x => x.mode == mode).getOrElse(
       throw new IllegalArgumentException("Unknown open cv mode " + mode))
@@ -72,7 +85,7 @@ object ImageSchema {
    * CV_32F  5 13  21  29
    * CV_64F  6 14  22  30
    */
-  val ocvTypes = {
+  val ocvTypes: IndexedSeq[OpenCvType] = {
     val types =
       for (nc <- Array(1, 2, 3, 4);
            dt <- Array("8U", "8S", "16U", "16S", "32S", "32F", "64F"))
@@ -82,9 +95,9 @@ object ImageSchema {
   }
 
   /**
-   *  (Java Specific) list of OpenCv types
+   * (Java-specific) list of OpenCv types
    */
-  val javaOcvTypes = ocvTypes.asJava
+  val javaOcvTypes: java.util.List[OpenCvType] = ocvTypes.asJava
 
   /**
    * Schema for the image column: Row(String, Int, Int, Int, Int, Array[Byte])

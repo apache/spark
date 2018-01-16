@@ -80,9 +80,9 @@ class _ImageSchema(object):
     @property
     def ocvTypes(self):
         """
-        Returns the OpenCV type mapping supported.
+        Return the supported OpenCV types.
 
-        :return: a dictionary containing the OpenCV type mapping supported.
+        :return: a list containing the supported OpenCV types.
 
         .. versionadded:: 2.3.0
         """
@@ -99,6 +99,14 @@ class _ImageSchema(object):
         return self._ocvTypes[:]
 
     def ocvTypeByName(self, name):
+        """
+        Return the OpenCvType with matching name or raise error if there is no matching type.
+
+        :param: str name: OpenCv type name; must be equal to name of one of the supported types.
+        :return: OpenCvType with matching name.
+
+        """
+
         if self._ocvTypesByName is None:
             self._ocvTypesByName = {x.name: x for x in self.ocvTypes}
         if name not in self._ocvTypesByName:
@@ -108,6 +116,14 @@ class _ImageSchema(object):
         return self._ocvTypesByName[name]
 
     def ocvTypeByMode(self, mode):
+        """
+        Return the OpenCvType with matching mode or raise error if there is no matching type.
+
+        :param: int mode: OpenCv type mode; must be equal to mode of one of the supported types.
+        :return: OpenCvType with matching mode.
+
+        """
+
         if self._ocvTypesByMode is None:
             self._ocvTypesByMode = {x.mode: x for x in self.ocvTypes}
         if mode not in self._ocvTypesByMode:
