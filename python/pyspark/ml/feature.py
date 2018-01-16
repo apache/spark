@@ -329,20 +329,22 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
 
     >>> values = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, float("nan")),
     ...     (float("nan"), 1.0), (float("nan"), 0.0)]
-    >>> df = spark.createDataFrame(values, ["values", "numbers"])
+    >>> df = spark.createDataFrame(values, ["values1", "values2"])
     >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
-    ...     inputCol="values", outputCol="buckets")
-    >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df).collect()
-    >>> len(bucketed)
-    6
-    >>> bucketed[0].buckets
-    0.0
-    >>> bucketed[1].buckets
-    0.0
-    >>> bucketed[2].buckets
-    1.0
-    >>> bucketed[3].buckets
-    2.0
+    ...     inputCol="values1", outputCol="buckets")
+    >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df)
+    >>> bucketed.show(truncate=False)
+    +-------+-------+-------+
+    |values1|values2|buckets|
+    +-------+-------+-------+
+    |0.1    |0.0    |0.0    |
+    |0.4    |1.0    |0.0    |
+    |1.2    |1.3    |1.0    |
+    |1.5    |NaN    |2.0    |
+    |NaN    |1.0    |3.0    |
+    |NaN    |0.0    |3.0    |
+    +-------+-------+-------+
+    ...
     >>> bucketizer.setParams(outputCol="b").transform(df).head().b
     0.0
     >>> bucketizerPath = temp_path + "/bucketizer"
@@ -355,26 +357,20 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     4
     >>> bucketizer2 = Bucketizer(splitsArray=
     ...     [[-float("inf"), 0.5, 1.4, float("inf")], [-float("inf"), 0.5, float("inf")]],
-    ...     inputCols=["values", "numbers"], outputCols=["buckets1", "buckets2"])
-    >>> bucketed2 = bucketizer2.setHandleInvalid("keep").transform(df).collect()
-    >>> len(bucketed2)
-    6
-    >>> bucketed2[0].buckets1
-    0.0
-    >>> bucketed2[1].buckets1
-    0.0
-    >>> bucketed2[2].buckets1
-    1.0
-    >>> bucketed2[3].buckets1
-    2.0
-    >>> bucketed2[0].buckets2
-    0.0
-    >>> bucketed2[1].buckets2
-    1.0
-    >>> bucketed2[2].buckets2
-    1.0
-    >>> bucketed2[3].buckets2
-    2.0
+    ...     inputCols=["values1", "values2"], outputCols=["buckets1", "buckets2"])
+    >>> bucketed2 = bucketizer2.setHandleInvalid("keep").transform(df)
+    >>> bucketed2.show(truncate=False)
+    +-------+-------+--------+--------+
+    |values1|values2|buckets1|buckets2|
+    +-------+-------+--------+--------+
+    |0.1    |0.0    |0.0     |0.0     |
+    |0.4    |1.0    |0.0     |1.0     |
+    |1.2    |1.3    |1.0     |1.0     |
+    |1.5    |NaN    |2.0     |2.0     |
+    |NaN    |1.0    |3.0     |1.0     |
+    |NaN    |0.0    |3.0     |0.0     |
+    +-------+-------+--------+--------+
+    ...
 
     .. versionadded:: 1.4.0
     """
