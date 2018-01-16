@@ -2333,8 +2333,8 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_toDF_with_positional_Row_class(self):
         TestRow = Row("b", "a")
-        data = [TestRow(i, str(i)) for i in range(100)]
-        rdd = self.sc.parallelize(data, 5)
+        data = [TestRow(i, str(i)) for i in range(10)]
+        rdd = self.sc.parallelize(data, 2)
 
         # field names can differ as long as types are in expected position.
         df = rdd.toDF(" key: int, value: string ")
