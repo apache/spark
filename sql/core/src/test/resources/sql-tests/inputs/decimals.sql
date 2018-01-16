@@ -27,13 +27,27 @@ select id, a+b, a-b, a*b, a/b from decimals_test order by id;
 -- test operations between decimals and constants
 select id, a*10, b/10 from decimals_test order by id;
 
--- use rounding instead of returning NULL, according to new Hive's behavior and SQL standard
-set spark.sql.decimalOperations.allowPrecisionLoss=true;
+-- test operations on constants
+select 10.3 * 3.0;
+select 10.3000 * 3.0;
+select 10.30000 * 30.0;
+select 10.300000000000000000 * 3.000000000000000000;
+select 10.300000000000000000 * 3.0000000000000000000;
+
+-- return NULL instead of rounding, according to old Spark versions' behavior
+set spark.sql.decimalOperations.allowPrecisionLoss=false;
 
 -- test decimal operations
 select id, a+b, a-b, a*b, a/b from decimals_test order by id;
 
 -- test operations between decimals and constants
 select id, a*10, b/10 from decimals_test order by id;
+
+-- test operations on constants
+select 10.3 * 3.0;
+select 10.3000 * 3.0;
+select 10.30000 * 30.0;
+select 10.300000000000000000 * 3.000000000000000000;
+select 10.300000000000000000 * 3.0000000000000000000;
 
 drop table decimals_test;

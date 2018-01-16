@@ -1051,12 +1051,12 @@ object SQLConf {
   val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
     buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
       .internal()
-      .doc("When true, establishing the result type of an arithmetic operation happens " +
-        "according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the decimal " +
-        "part of the result if an exact representation is not possible. Otherwise, NULL is" +
-        "returned in those cases, as previously (default).")
+      .doc("When true (default), establishing the result type of an arithmetic operation " +
+        "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
+        "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
+        "is returned in those cases, as previously.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val SQL_STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.sql.redaction.string.regex")
