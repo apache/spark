@@ -2306,18 +2306,20 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<key:string,value:string>")
         self.assertEqual(df.collect(), [Row(key=str(i), value=str(i)) for i in range(100)])
 
-        # field names can differ.
-        df = rdd.toDF(" a: int, b: string ")
-        self.assertEqual(df.schema.simpleString(), "struct<a:int,b:string>")
-        self.assertEqual(df.collect(), data)
+        # field order can differ since Rows have kwargs.
+        df = rdd.toDF(" value: string, key: int ")
+        self.assertEqual(df.schema.simpleString(), "struct<value:string,key:int>")
+        self.assertEqual(df.select("key", "value").collect(), data)
 
-        # number of fields must match.
-        self.assertRaisesRegexp(Exception, "Length of object",
-                                lambda: rdd.toDF("key: int").collect())
+        # schema field must be a kwarg of the row.
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(Exception, "ValueError: foo",
+                                    lambda: rdd.toDF("foo: int").collect())
 
         # field types mismatch will cause exception at runtime.
-        self.assertRaisesRegexp(Exception, "FloatType can not accept",
-                                lambda: rdd.toDF("key: float, value: string").collect())
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(Exception, "FloatType can not accept",
+                                    lambda: rdd.toDF("key: float, value: string").collect())
 
         # flat schema values will be wrapped into row.
         df = rdd.map(lambda row: row.key).toDF("int")
@@ -2328,6 +2330,21 @@ class SQLTests(ReusedSQLTestCase):
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+    def test_toDF_with_positional_Row_class(self):
+        TestRow = Row("b", "a")
+        data = [TestRow(i, str(i)) for i in range(100)]
+        rdd = self.sc.parallelize(data, 5)
+
+        # field names can differ as long as types are in expected position.
+        df = rdd.toDF(" key: int, value: string ")
+        self.assertEqual(df.schema.simpleString(), "struct<key:int,value:string>")
+        self.assertEqual(df.collect(), data)
+
+        # number of fields must match.
+        with QuietTest(self.sc):
+            self.assertRaisesRegexp(Exception, "Length of object",
+                                    lambda: rdd.toDF("key: int").collect())
 
     def test_join_without_on(self):
         df1 = self.spark.range(1).toDF("a")

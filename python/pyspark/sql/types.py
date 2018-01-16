@@ -1431,9 +1431,11 @@ def _create_row_inbound_converter(dataType):
     return lambda *a: dataType.fromInternal(a)
 
 
-def _create_row(fields, values):
+def _create_row(fields, values, from_dict=False):
     row = Row(*values)
     row.__fields__ = fields
+    if from_dict:
+        row.__from_dict__ = True
     return row
 
 
@@ -1571,7 +1573,8 @@ class Row(tuple):
     def __reduce__(self):
         """Returns a tuple so Python knows how to pickle Row."""
         if hasattr(self, "__fields__"):
-            return (_create_row, (self.__fields__, tuple(self)))
+            from_dict = getattr(self, "__from_dict__", False)
+            return (_create_row, (self.__fields__, tuple(self), from_dict))
         else:
             return tuple.__reduce__(self)
 
