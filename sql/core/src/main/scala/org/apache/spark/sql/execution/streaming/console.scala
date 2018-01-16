@@ -46,7 +46,7 @@ class ConsoleSinkProvider extends DataSourceV2
       schema: StructType,
       mode: OutputMode,
       options: DataSourceV2Options): Optional[DataSourceV2Writer] = {
-    Optional.of(new ConsoleWriter(epochId, schema, options.asMap.asScala.toMap))
+    Optional.of(new ConsoleWriter(epochId, schema, options))
   }
 
   def createRelation(

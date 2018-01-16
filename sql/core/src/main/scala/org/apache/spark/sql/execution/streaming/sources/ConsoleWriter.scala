@@ -19,16 +19,17 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.sources.v2.DataSourceV2Options
 import org.apache.spark.sql.sources.v2.writer.{DataSourceV2Writer, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 
-class ConsoleWriter(batchId: Long, schema: StructType, options: Map[String, String])
+class ConsoleWriter(batchId: Long, schema: StructType, options: DataSourceV2Options)
     extends DataSourceV2Writer with Logging {
   // Number of rows to display, by default 20 rows
-  private val numRowsToShow = options.get("numRows").map(_.toInt).getOrElse(20)
+  private val numRowsToShow = options.getInt("numRows", 20)
 
   // Truncate the displayed data if it is too long, by default it is true
-  private val isTruncated = options.get("truncate").map(_.toBoolean).getOrElse(true)
+  private val isTruncated = options.getBoolean("truncate", true)
 
   assert(SparkSession.getActiveSession.isDefined)
   private val spark = SparkSession.getActiveSession.get
