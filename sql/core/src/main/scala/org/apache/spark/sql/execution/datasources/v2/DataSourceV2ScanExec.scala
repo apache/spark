@@ -58,7 +58,8 @@ case class DataSourceV2ScanExec(
 
     case _: ContinuousReader =>
       EpochCoordinatorRef.get(
-        sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), sparkContext.env)
+          sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+          sparkContext.env)
         .askSync[Unit](SetReaderPartitions(readTasks.size()))
       new ContinuousDataSourceRDD(sparkContext, sqlContext, readTasks)
         .asInstanceOf[RDD[InternalRow]]

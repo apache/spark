@@ -216,7 +216,9 @@ class ContinuousExecution(
 
     sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.START_EPOCH_KEY, currentBatchId.toString)
-    val epochCoordinatorId = UUID.randomUUID.toString
+    // Add another random ID on top of the run ID, to distinguish epoch coordinators across
+    // reconfigurations.
+    val epochCoordinatorId = s"$runId--${UUID.randomUUID}"
     currentEpochCoordinatorId = epochCoordinatorId
     sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.EPOCH_COORDINATOR_ID_KEY, epochCoordinatorId)
