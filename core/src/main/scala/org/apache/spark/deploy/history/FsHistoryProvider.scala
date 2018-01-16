@@ -452,7 +452,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             override def run(): Unit = mergeApplicationListing(entry, newLastScanTime)
           })
         } catch {
-          // let the iteration over logInfos break, since an exception on
+          // let the iteration over the updated entries break, since an exception on
           // replayExecutor.submit (..) indicates the ExecutorService is unable
           // to take any more submissions at this time
           case e: Exception =>
@@ -636,6 +636,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         (Some(app.info.id), app.attempts.head.info.attemptId)
 
       case _ =>
+        // If the app hasn't written down its app ID to the logs, still record the entry in the
+        // listing db, with an empty ID. This will make the log eligible for deletion if the app
+        // does not make progress after the configured max log age.
         (None, None)
     }
     listing.write(LogInfo(logPath.toString(), scanTime, appId, attemptId, fileStatus.getLen()))
@@ -904,6 +907,11 @@ private[history] case class FsHistoryProviderMetadata(
     uiVersion: Long,
     logDir: String)
 
+/**
+ * Tracking info for event logs detected in the configured log directory. Tracks both valid and
+ * invalid logs (e.g. unparseable logs, recorded as logs with no app ID) so that the cleaner
+ * can know what log files are safe to delete.
+ */
 private[history] case class LogInfo(
     @KVIndexParam logPath: String,
     @KVIndexParam("lastProcessed") lastProcessed: Long,
