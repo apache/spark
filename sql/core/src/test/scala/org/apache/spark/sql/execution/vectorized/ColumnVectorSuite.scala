@@ -199,8 +199,8 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   val structType: StructType = new StructType().add("int", IntegerType).add("double", DoubleType)
   testVectors("struct", 10, structType) { testVector =>
-    val c1 = testVector.getChildColumn(0)
-    val c2 = testVector.getChildColumn(1)
+    val c1 = testVector.getChild(0)
+    val c2 = testVector.getChild(1)
     c1.putInt(0, 123)
     c2.putDouble(0, 3.45)
     c1.putInt(1, 456)

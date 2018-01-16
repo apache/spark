@@ -732,8 +732,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     "Struct Column",
     10,
     new StructType().add("int", IntegerType).add("double", DoubleType)) { column =>
-      val c1 = column.getChildColumn(0)
-      val c2 = column.getChildColumn(1)
+      val c1 = column.getChild(0)
+      val c2 = column.getChild(1)
       assert(c1.dataType() == IntegerType)
       assert(c2.dataType() == DoubleType)
 
@@ -787,8 +787,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     10,
     new ArrayType(structType, true)) { column =>
       val data = column.arrayData()
-      val c0 = data.getChildColumn(0)
-      val c1 = data.getChildColumn(1)
+      val c0 = data.getChild(0)
+      val c1 = data.getChild(1)
       // Structs in child column: (0, 0), (1, 10), (2, 20), (3, 30), (4, 40), (5, 50)
       (0 until 6).foreach { i =>
         c0.putInt(i, i)
@@ -815,8 +815,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     new StructType()
       .add("int", IntegerType)
       .add("array", new ArrayType(IntegerType, true))) { column =>
-      val c0 = column.getChildColumn(0)
-      val c1 = column.getChildColumn(1)
+      val c0 = column.getChild(0)
+      val c1 = column.getChild(1)
       c0.putInt(0, 0)
       c0.putInt(1, 1)
       c0.putInt(2, 2)
@@ -844,13 +844,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
     "Nest Struct in Struct",
     10,
     new StructType().add("int", IntegerType).add("struct", subSchema)) { column =>
-      val c0 = column.getChildColumn(0)
-      val c1 = column.getChildColumn(1)
+      val c0 = column.getChild(0)
+      val c1 = column.getChild(1)
       c0.putInt(0, 0)
       c0.putInt(1, 1)
       c0.putInt(2, 2)
-      val c1c0 = c1.getChildColumn(0)
-      val c1c1 = c1.getChildColumn(1)
+      val c1c0 = c1.getChild(0)
+      val c1c1 = c1.getChild(1)
       // Structs in c1: (7, 70), (8, 80), (9, 90)
       c1c0.putInt(0, 7)
       c1c0.putInt(1, 8)

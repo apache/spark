@@ -302,10 +302,9 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         toColumn.putDoubles(0, batchSize, ((DoubleColumnVector)fromColumn).vector[0]);
       } else if (type instanceof StringType || type instanceof BinaryType) {
         BytesColumnVector data = (BytesColumnVector)fromColumn;
-        WritableColumnVector arrayData = toColumn.getChildColumn(0);
         int size = data.vector[0].length;
-        arrayData.reserve(size);
-        arrayData.putBytes(0, size, data.vector[0], 0);
+        toColumn.arrayData().reserve(size);
+        toColumn.arrayData().putBytes(0, size, data.vector[0], 0);
         for (int index = 0; index < batchSize; index++) {
           toColumn.putArray(index, 0, size);
         }
@@ -365,7 +364,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       toColumn.putDoubles(0, batchSize, ((DoubleColumnVector)fromColumn).vector, 0);
     } else if (type instanceof StringType || type instanceof BinaryType) {
       BytesColumnVector data = ((BytesColumnVector)fromColumn);
-      WritableColumnVector arrayData = toColumn.getChildColumn(0);
+      WritableColumnVector arrayData = toColumn.arrayData();
       int totalNumBytes = IntStream.of(data.length).sum();
       arrayData.reserve(totalNumBytes);
       for (int index = 0, pos = 0; index < batchSize; pos += data.length[index], index++) {
@@ -376,8 +375,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       DecimalType decimalType = (DecimalType)type;
       DecimalColumnVector data = ((DecimalColumnVector)fromColumn);
       if (decimalType.precision() > Decimal.MAX_LONG_DIGITS()) {
-        WritableColumnVector arrayData = toColumn.getChildColumn(0);
-        arrayData.reserve(batchSize * 16);
+        toColumn.arrayData().reserve(batchSize * 16);
       }
       for (int index = 0; index < batchSize; index++) {
         putDecimalWritable(
@@ -472,7 +470,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       }
     } else if (type instanceof StringType || type instanceof BinaryType) {
       BytesColumnVector vector = (BytesColumnVector)fromColumn;
-      WritableColumnVector arrayData = toColumn.getChildColumn(0);
+      WritableColumnVector arrayData = toColumn.arrayData();
       int totalNumBytes = IntStream.of(vector.length).sum();
       arrayData.reserve(totalNumBytes);
       for (int index = 0, pos = 0; index < batchSize; pos += vector.length[index], index++) {
@@ -487,8 +485,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       DecimalType decimalType = (DecimalType)type;
       HiveDecimalWritable[] vector = ((DecimalColumnVector)fromColumn).vector;
       if (decimalType.precision() > Decimal.MAX_LONG_DIGITS()) {
-        WritableColumnVector arrayData = toColumn.getChildColumn(0);
-        arrayData.reserve(batchSize * 16);
+        toColumn.arrayData().reserve(batchSize * 16);
       }
       for (int index = 0; index < batchSize; index++) {
         if (fromColumn.isNull[index]) {
@@ -534,8 +531,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       toColumn.putLong(index, value.toUnscaledLong());
     } else {
       byte[] bytes = value.toJavaBigDecimal().unscaledValue().toByteArray();
-      WritableColumnVector arrayData = toColumn.getChildColumn(0);
-      arrayData.putBytes(index * 16, bytes.length, bytes, 0);
+      toColumn.arrayData().putBytes(index * 16, bytes.length, bytes, 0);
       toColumn.putArray(index, index * 16, bytes.length);
     }
   }
@@ -560,9 +556,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       toColumn.putLongs(0, size, value.toUnscaledLong());
     } else {
       byte[] bytes = value.toJavaBigDecimal().unscaledValue().toByteArray();
-      WritableColumnVector arrayData = toColumn.getChildColumn(0);
-      arrayData.reserve(bytes.length);
-      arrayData.putBytes(0, bytes.length, bytes, 0);
+      toColumn.arrayData().reserve(bytes.length);
+      toColumn.arrayData().putBytes(0, bytes.length, bytes, 0);
       for (int index = 0; index < size; index++) {
         toColumn.putArray(index, 0, bytes.length);
       }
