@@ -208,10 +208,8 @@ class MicroBatchExecution(
                * batch will be executed before getOffset is called again. */
               availableOffsets.foreach {
                 case (source: Source, end: Offset) =>
-                  if (committedOffsets.get(source).map(_ != end).getOrElse(true)) {
-                    val start = committedOffsets.get(source)
-                    source.getBatch(start, end)
-                  }
+                  val start = committedOffsets.get(source)
+                  source.getBatch(start, end)
                 case nonV1Tuple =>
                   // The V2 API does not have the same edge case requiring getBatch to be called
                   // here, so we do nothing here.

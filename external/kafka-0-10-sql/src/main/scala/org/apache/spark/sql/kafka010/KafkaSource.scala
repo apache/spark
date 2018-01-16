@@ -223,6 +223,14 @@ private[kafka010] class KafkaSource(
 
     logInfo(s"GetBatch called with start = $start, end = $end")
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
+    // On recovery, getBatch will get called before getOffset
+    if (currentPartitionOffsets.isEmpty) {
+      currentPartitionOffsets = Some(untilPartitionOffsets)
+    }
+    if (start.isDefined && start.get == end) {
+      return sqlContext.internalCreateDataFrame(
+        sqlContext.sparkContext.emptyRDD, schema, isStreaming = true)
+    }
     val fromPartitionOffsets = start match {
       case Some(prevBatchEndOffset) =>
         KafkaSourceOffset.getPartitionOffsets(prevBatchEndOffset)
@@ -304,11 +312,6 @@ private[kafka010] class KafkaSource(
 
     logInfo("GetBatch generating RDD of offset range: " +
       offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
-
-    // On recovery, getBatch will get called before getOffset
-    if (currentPartitionOffsets.isEmpty) {
-      currentPartitionOffsets = Some(untilPartitionOffsets)
-    }
 
     sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
   }
