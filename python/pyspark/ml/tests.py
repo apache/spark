@@ -245,6 +245,7 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[0]]))
         self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[1]]))
         self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=["a", 1.0]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=[[-5, 1.5], ["a", 1.0]]))
 
 
 class PipelineTests(PySparkTestCase):
