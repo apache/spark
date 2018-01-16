@@ -130,12 +130,27 @@ private[kafka010] class KafkaSource(
       val offsets = startingOffsets match {
         case EarliestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchLatestOffsets())
-        case SpecificOffsetRangeLimit(p) => kafkaReader.fetchSpecificOffsets(p, reportDataLoss)
+        case SpecificOffsetRangeLimit(p) => fetchAndVerify(p)
       }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")
       offsets
     }.partitionToOffsets
+  }
+
+  private def fetchAndVerify(specificOffsets: Map[TopicPartition, Long]) = {
+    val result = kafkaReader.fetchSpecificOffsets(specificOffsets)
+    specificOffsets.foreach {
+      case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
+          off != KafkaOffsetRangeLimit.EARLIEST =>
+        if (result(tp) != off) {
+          reportDataLoss(
+            s"startingOffsets for $tp was $off but consumer reset to ${result(tp)}")
+        }
+      case _ =>
+      // no real way to check that beginning or end is reasonable
+    }
+    KafkaSourceOffset(result)
   }
 
   private var currentPartitionOffsets: Option[Map[TopicPartition, Long]] = None
@@ -208,6 +223,14 @@ private[kafka010] class KafkaSource(
 
     logInfo(s"GetBatch called with start = $start, end = $end")
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
+    // On recovery, getBatch will get called before getOffset
+    if (currentPartitionOffsets.isEmpty) {
+      currentPartitionOffsets = Some(untilPartitionOffsets)
+    }
+    if (start.isDefined && start.get == end) {
+      return sqlContext.internalCreateDataFrame(
+        sqlContext.sparkContext.emptyRDD, schema, isStreaming = true)
+    }
     val fromPartitionOffsets = start match {
       case Some(prevBatchEndOffset) =>
         KafkaSourceOffset.getPartitionOffsets(prevBatchEndOffset)
@@ -289,11 +312,6 @@ private[kafka010] class KafkaSource(
 
     logInfo("GetBatch generating RDD of offset range: " +
       offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
-
-    // On recovery, getBatch will get called before getOffset
-    if (currentPartitionOffsets.isEmpty) {
-      currentPartitionOffsets = Some(untilPartitionOffsets)
-    }
 
     sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
   }

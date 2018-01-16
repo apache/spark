@@ -52,7 +52,7 @@ class ContinuousDataSourceRDD(
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
-    val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createDataReader()
+    val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readTask.createDataReader()
 
     val runId = context.getLocalProperty(ContinuousExecution.RUN_ID_KEY)
 
@@ -77,6 +77,7 @@ class ContinuousDataSourceRDD(
     dataReaderThread.start()
 
     context.addTaskCompletionListener(_ => {
+      reader.close()
       dataReaderThread.interrupt()
       epochPollExecutor.shutdown()
     })
@@ -131,7 +132,7 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[DataSourceRDDPartition].readTask.preferredLocations()
+    split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readTask.preferredLocations()
   }
 }
 
@@ -200,8 +201,6 @@ class DataReaderThread(
         failedFlag.set(true)
         // Don't rethrow the exception in this thread. It's not needed, and the default Spark
         // exception handler will kill the executor.
-    } finally {
-      reader.close()
     }
   }
 }

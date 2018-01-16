@@ -91,7 +91,7 @@ so C libraries like NumPy can be used. It also works with PyPy 2.3+.
 
 Python 2.6 support was removed in Spark 2.2.0.
 
-Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including including it in your setup.py as:
+Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including it in your setup.py as:
 
 {% highlight python %}
     install_requires=[
