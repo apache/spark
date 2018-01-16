@@ -178,10 +178,13 @@ class SQLContext(object):
         """Registers a Python function (including lambda function) or a :class:`UserDefinedFunction`
         as a UDF. The registered UDF can be used in SQL statements.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When f is a :class:`UserDefinedFunction`, returnType is the returnType of f by default. If
-        the return type is given, they must match. When f is a Python function, returnType defaults
-        to a string. The prodcued object must match the specified type.
+        :func:`spark.udf.register` is an alias for :func:`sqlContext.registerFunction`.
+
+        In addition to a name and the function itself, `returnType` can be optionally specified.
+        1) When f is a Python function, `returnType` defaults to a string. The produced object must
+        match the specified type. 2) When f is a :class:`UserDefinedFunction`, Spark uses the return
+        type of the given UDF as the return type of the registered UDF. The input parameter
+        `returnType` is None by default. If given by users, the value must be None.
 
         :param name: name of the UDF in SQL statements.
         :param f: a Python function, or a wrapped/native UserDefinedFunction. The UDF can be either
@@ -217,10 +220,10 @@ class SQLContext(object):
         >>> from pyspark.sql.functions import udf
         >>> from pyspark.sql.types import IntegerType
         >>> random_udf = udf(lambda: random.randint(0, 100), IntegerType()).asNondeterministic()
-        >>> newRandom_udf = sqlContext.udf.register("random_udf", random_udf)
+        >>> new_random_udf = sqlContext.registerFunction("random_udf", random_udf)
         >>> sqlContext.sql("SELECT random_udf()").collect()  # doctest: +SKIP
         [Row(random_udf()=82)]
-        >>> sqlContext.range(1).select(newRandom_udf()).collect()  # doctest: +SKIP
+        >>> sqlContext.range(1).select(new_random_udf()).collect()  # doctest: +SKIP
         [Row(<lambda>()=26)]
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType

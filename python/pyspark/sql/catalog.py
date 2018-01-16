@@ -22,7 +22,7 @@ from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.udf import UserDefinedFunction
-from pyspark.sql.types import DataType, IntegerType, StringType, StructType, _parse_datatype_string
+from pyspark.sql.types import IntegerType, StringType, StructType
 
 
 Database = namedtuple("Database", "name description locationUri")
@@ -230,10 +230,13 @@ class Catalog(object):
         """Registers a Python function (including lambda function) or a :class:`UserDefinedFunction`
         as a UDF. The registered UDF can be used in SQL statements.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When f is a :class:`UserDefinedFunction`, returnType is the returnType of f by default. If
-        the return type is given, they must match. When f is a Python function, returnType defaults
-        to a string. The produced object must match the specified type.
+        :func:`spark.udf.register` is an alias for :func:`spark.catalog.registerFunction`.
+
+        In addition to a name and the function itself, `returnType` can be optionally specified.
+        1) When f is a Python function, `returnType` defaults to a string. The produced object must
+        match the specified type. 2) When f is a :class:`UserDefinedFunction`, Spark uses the return
+        type of the given UDF as the return type of the registered UDF. The input parameter
+        `returnType` is None by default. If given by users, the value must be None.
 
         :param name: name of the UDF in SQL statements.
         :param f: a Python function, or a wrapped/native UserDefinedFunction. The UDF can be either
@@ -241,7 +244,7 @@ class Catalog(object):
         :param returnType: the return type of the registered UDF.
         :return: a wrapped/native :class:`UserDefinedFunction`
 
-        >>> strlen = spark.udf.register("stringLengthString", len)
+        >>> strlen = spark.catalog.registerFunction("stringLengthString", len)
         >>> spark.sql("SELECT stringLengthString('test')").collect()
         [Row(stringLengthString(test)=u'4')]
 
@@ -249,7 +252,7 @@ class Catalog(object):
         [Row(stringLengthString(text)=u'3')]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> _ = spark.udf.register("stringLengthInt", len, IntegerType())
+        >>> _ = spark.catalog.registerFunction("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
 
@@ -269,10 +272,10 @@ class Catalog(object):
         >>> from pyspark.sql.functions import udf
         >>> from pyspark.sql.types import IntegerType
         >>> random_udf = udf(lambda: random.randint(0, 100), IntegerType()).asNondeterministic()
-        >>> newRandom_udf = spark.udf.register("random_udf", random_udf)
+        >>> new_random_udf = spark.udf.register("random_udf", random_udf)
         >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
         [Row(random_udf()=82)]
-        >>> spark.range(1).select(newRandom_udf()).collect()  # doctest: +SKIP
+        >>> spark.range(1).select(new_random_udf()).collect()  # doctest: +SKIP
         [Row(<lambda>()=26)]
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -287,17 +290,14 @@ class Catalog(object):
 
         # This is to check whether the input function is a wrapped/native UserDefinedFunction
         if hasattr(f, 'asNondeterministic'):
+            if returnType is not None:
+                raise TypeError(
+                    "Invalid returnType: None is expected when f is a UserDefinedFunction, "
+                    "but got %s." % returnType)
             if f.evalType not in [PythonEvalType.SQL_BATCHED_UDF,
                                   PythonEvalType.SQL_PANDAS_SCALAR_UDF]:
                 raise ValueError(
                     "Invalid f: f must be either SQL_BATCHED_UDF or SQL_PANDAS_SCALAR_UDF")
-            if returnType is not None and not isinstance(returnType, DataType):
-                returnType = _parse_datatype_string(returnType)
-            if returnType is not None and returnType != f.returnType:
-                raise ValueError(
-                    "Invalid returnType: the provided returnType (%s) is inconsistent with "
-                    "the returnType (%s) of the provided f. When the provided f is a UDF, "
-                    "returnType is not needed." % (returnType, f.returnType))
             register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
                                                evalType=f.evalType,
                                                deterministic=f.deterministic)
