@@ -314,16 +314,17 @@ def choose_jira_assignee(issue, asf_jira):
                 if author in commentors:
                     annotations.append("Commentor")
                 print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
-            raw_assignee = raw_input("Enter number of user, or userid,  to assign to (blank to leave unassigned):")
+            raw_assignee = raw_input(
+                "Enter number of user, or userid,  to assign to (blank to leave unassigned):")
             if raw_assignee == "":
                 return None
             else:
                 try:
-                  id = int(raw_assignee)
-                  assignee = candidates[id]
+                    id = int(raw_assignee)
+                    assignee = candidates[id]
                 except:
-                  # assume its a user id, and try to assign (might fail, then we just prompt again)
-                  assignee = asf_jira.user(raw_assignee)
+                    # assume it's a user id, and try to assign (might fail, we just prompt again)
+                    assignee = asf_jira.user(raw_assignee)
                 asf_jira.assign_issue(issue.key, assignee.key)
                 return assignee
         except:
