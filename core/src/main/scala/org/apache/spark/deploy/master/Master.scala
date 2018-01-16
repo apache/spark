@@ -125,7 +125,7 @@ private[deploy] class Master(
   private var restServer: Option[StandaloneRestServer] = None
   private var restServerBoundPort: Option[Int] = None
 
-  private var startupTime: Long = 0
+  var startupTime: Long = 0
 
   override def onStart(): Unit = {
     logInfo("Starting Spark master at " + masterUrl)
@@ -486,7 +486,7 @@ private[deploy] class Master(
       context.reply(MasterStateResponse(
         address.host, address.port, restServerBoundPort,
         workers.toArray, apps.toArray, completedApps.toArray,
-        drivers.toArray, completedDrivers.toArray, state, startupTime))
+        drivers.toArray, completedDrivers.toArray, state))
 
     case BoundPortsRequest =>
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))

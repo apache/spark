@@ -20,6 +20,7 @@ package org.apache.spark.deploy.master
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.ui.UIUtils
 
 private[spark] class MasterSource(val master: Master) extends Source {
   override val metricRegistry = new MetricRegistry()
@@ -44,4 +45,10 @@ private[spark] class MasterSource(val master: Master) extends Source {
   metricRegistry.register(MetricRegistry.name("waitingApps"), new Gauge[Int] {
     override def getValue: Int = master.apps.count(_.state == ApplicationState.WAITING)
   })
+
+  // Gauge for master startup time in cluster
+  metricRegistry.register(MetricRegistry.name("startupTime"), new Gauge[String] {
+    override def getValue: String = UIUtils.formatDate(master.startupTime)
+  })
+
 }

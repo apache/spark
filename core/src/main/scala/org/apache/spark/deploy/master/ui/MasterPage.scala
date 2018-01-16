@@ -122,8 +122,6 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 {state.activeDrivers.length} Running,
                 {state.completedDrivers.length} Completed </li>
               <li><strong>Status:</strong> {state.status}</li>
-              <li><strong>Startup Time:</strong>
-                {UIUtils.formatDate(state.startupTime)}</li>
             </ul>
           </div>
         </div>

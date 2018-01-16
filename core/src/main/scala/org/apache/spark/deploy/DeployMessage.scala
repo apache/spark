@@ -202,8 +202,7 @@ private[deploy] object DeployMessages {
       completedApps: Array[ApplicationInfo],
       activeDrivers: Array[DriverInfo],
       completedDrivers: Array[DriverInfo],
-      status: MasterState,
-      startupTime: Long) {
+      status: MasterState) {
 
     Utils.checkHost(host)
     assert (port > 0)
