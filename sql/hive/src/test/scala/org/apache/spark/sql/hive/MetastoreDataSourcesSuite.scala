@@ -1344,18 +1344,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
-    test(s"SPARK-22146: read files containing special characters using $format") {
-      val nameWithSpecialChars = s"sp&cial%chars"
-      withTempDir { dir =>
-        val tmpFile = s"$dir/$nameWithSpecialChars"
-        spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
-        val fileContent = spark.read.format(format).load(tmpFile)
-        checkAnswer(fileContent, Seq(Row("a"), Row("b")))
-      }
-    }
-  }
-
   private def withDebugMode(f: => Unit): Unit = {
     val previousValue = sparkSession.sparkContext.conf.get(DEBUG_MODE)
     try {

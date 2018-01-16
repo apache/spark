@@ -31,7 +31,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
   }
 
   Seq("orc", "parquet", "csv", "json").foreach { format =>
-    test(s"Write and read back unicode schema - $format") {
+    test(s"SPARK-23072 Write and read back unicode schema - $format") {
       withTempPath { path =>
         val dir = path.getCanonicalPath
 
@@ -58,6 +58,18 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
         val df = spark.read.format(format).load(path)
         assert(df.schema.sameType(emptyDf.schema))
         checkAnswer(df, emptyDf)
+      }
+    }
+  }
+
+  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
+    test(s"SPARK-22146 read files containing special characters using $format") {
+      val nameWithSpecialChars = s"sp&cial%chars"
+      withTempDir { dir =>
+        val tmpFile = s"$dir/$nameWithSpecialChars"
+        spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
+        val fileContent = spark.read.format(format).load(tmpFile)
+        checkAnswer(fileContent, Seq(Row("a"), Row("b")))
       }
     }
   }
