@@ -4603,7 +4603,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
 
         self.assertPandasEqual(expected1, result1)
 
-    def test_complex_grouping(self):
+    def test_complex_groupby(self):
         from pyspark.sql.functions import lit, sum
 
         df = self.data
