@@ -663,3 +663,4 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
  - The `stringsAsFactors` parameter was previously ignored with `collect`, for example, in `collect(createDataFrame(iris), stringsAsFactors = TRUE))`. It has been corrected.
  - For `summary`, option for statistics to compute has been added. Its output is changed from that from `describe`.
  - A warning can be raised if versions of SparkR package and the Spark JVM do not match.
+ - Previously, we don't check the validity of the size of the last layer in `spark.mlp`. For example, if the training data only has two labels, a `layers` param like `c(1, 3)` doesn't cause an error previously. Now it will throw an exception.
