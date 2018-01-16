@@ -289,7 +289,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        if (!aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF)) {
+        if (aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF)) {
           throw new AnalysisException(
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
