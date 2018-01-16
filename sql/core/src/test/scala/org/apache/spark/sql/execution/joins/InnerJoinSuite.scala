@@ -76,11 +76,11 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       testName: String,
       leftRows: => DataFrame,
       rightRows: => DataFrame,
-      condition: () => Expression,
+      condition: => Expression,
       expectedAnswer: Seq[Product]): Unit = {
 
     def extractJoinParts(): Option[ExtractEquiJoinKeys.ReturnType] = {
-      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition()))
+      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
       ExtractEquiJoinKeys.unapply(join)
     }
 
@@ -190,7 +190,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
         SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          CartesianProductExec(left, right, Some(condition())),
+          CartesianProductExec(left, right, Some(condition)),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
@@ -199,7 +199,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using BroadcastNestedLoopJoin build left") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoinExec(left, right, BuildLeft, Inner, Some(condition())),
+          BroadcastNestedLoopJoinExec(left, right, BuildLeft, Inner, Some(condition)),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
@@ -208,7 +208,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using BroadcastNestedLoopJoin build right") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoinExec(left, right, BuildRight, Inner, Some(condition())),
+          BroadcastNestedLoopJoinExec(left, right, BuildRight, Inner, Some(condition)),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
@@ -219,7 +219,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     "inner join, one match per row",
     myUpperCaseData,
     myLowerCaseData,
-    () => (myUpperCaseData.col("N") === myLowerCaseData.col("n")).expr,
+    (myUpperCaseData.col("N") === myLowerCaseData.col("n")).expr,
     Seq(
       (1, "A", 1, "a"),
       (2, "B", 2, "b"),
@@ -235,7 +235,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "inner join, multiple matches",
       left,
       right,
-      () => (left.col("a") === right.col("a")).expr,
+      (left.col("a") === right.col("a")).expr,
       Seq(
         (1, 1, 1, 1),
         (1, 1, 1, 2),
@@ -252,7 +252,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "inner join, no matches",
       left,
       right,
-      () => (left.col("a") === right.col("a")).expr,
+      (left.col("a") === right.col("a")).expr,
       Seq.empty
     )
   }
@@ -264,7 +264,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "inner join, null safe",
       left,
       right,
-      () => (left.col("b") <=> right.col("b")).expr,
+      (left.col("b") <=> right.col("b")).expr,
       Seq(
         (1, 0, 1, 0),
         (2, null, 2, null)
@@ -280,7 +280,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "SPARK-15822 - test structs as keys",
       left,
       right,
-      () => (left.col("key") === right.col("key")).expr,
+      (left.col("key") === right.col("key")).expr,
       Seq(
         (Row(0, 0), "L0", Row(0, 0), "R0"),
         (Row(1, 1), "L1", Row(1, 1), "R1"),

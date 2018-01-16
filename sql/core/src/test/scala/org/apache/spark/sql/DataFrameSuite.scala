@@ -2256,4 +2256,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df, Row(0, 10) :: Nil)
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
+
+  test("SPARK-14948: join DataFrames derived from the same DataFrame") {
+    val left = spark.range(5)
+    val right = left.filter($"id" < 1)
+    checkAnswer(left.join(right, left("id") === right("id") + 1, "cross"), Row(1, 0))
+
+    val df = Seq("a" -> 1, "b" -> 2, "a" -> 2).toDF("key", "value")
+    val agg = df.groupBy($"key").agg(count($"value").as("count"))
+    checkAnswer(
+      agg.join(df, agg("key") === df("key") && agg("count") === df("value")), Row("a", 2, "a", 2))
+  }
 }

@@ -902,9 +902,18 @@ case class Deduplicate(
  *
  * This analysis barrier will be removed at the end of analysis stage.
  */
-case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
+case class AnalysisBarrier(child: LogicalPlan, id: Long) extends LeafNode {
   override protected def innerChildren: Seq[LogicalPlan] = Seq(child)
   override def output: Seq[Attribute] = child.output
   override def isStreaming: Boolean = child.isStreaming
   override def doCanonicalize(): LogicalPlan = child.canonicalized
+  override protected def stringArgs: Iterator[Any] = Iterator(child)
+}
+
+object AnalysisBarrier {
+  private val curId = new java.util.concurrent.atomic.AtomicLong()
+
+  def apply(child: LogicalPlan): AnalysisBarrier = {
+    AnalysisBarrier(child, curId.getAndIncrement())
+  }
 }

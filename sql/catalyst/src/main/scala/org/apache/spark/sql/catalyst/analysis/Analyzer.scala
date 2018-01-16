@@ -318,7 +318,10 @@ class Analyzer(
         gid: Expression): Expression = {
       expr transform {
         case e: GroupingID =>
-          if (e.groupByExprs.isEmpty || e.groupByExprs == groupByExprs) {
+          def sameExpressions(e1: Seq[Expression], e2: Seq[Expression]): Boolean = {
+            e1.length == e2.length && e1.zip(e2).forall { case (l ,r) => l.semanticEquals(r) }
+          }
+          if (e.groupByExprs.isEmpty || sameExpressions(e.groupByExprs, groupByExprs)) {
             Alias(gid, toPrettySQL(e))()
           } else {
             throw new AnalysisException(
@@ -678,7 +681,7 @@ class Analyzer(
      * Generate a new logical plan for the right child with different expression IDs
      * for all conflicting attributes.
      */
-    private def dedupRight (left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
+    private def dedupRight(left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
       val conflictingAttributes = left.outputSet.intersect(right.outputSet)
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
@@ -688,7 +691,7 @@ class Analyzer(
         case oldVersion: AnalysisBarrier
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           val newVersion = dedupRight(left, oldVersion.child)
-          (oldVersion, AnalysisBarrier(newVersion))
+          (oldVersion, oldVersion.copy(child = newVersion))
 
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
@@ -730,12 +733,28 @@ class Analyzer(
           right
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
+          // If we de-duplicated an `AnalysisBarrier`, then we should only replace
+          // `AttributeReference` that refers to this `AnalysisBarrier`.
+          val barrierId = oldRelation match {
+            case b: AnalysisBarrier => Some(b.id)
+            case _ => None
+          }
           right transformUp {
             case r if r == oldRelation => newRelation
           } transformUp {
             case other => other transformExpressions {
-              case a: Attribute =>
-                dedupAttr(a, attributeRewrites)
+              case a: AttributeReference =>
+                // Only replace `AttributeReference` when the de-duplicated relation is not a
+                // `AnalysisBarrier`, or this `AttributeReference` is not associated with any
+                // `AnalysisBarrier`, or this `AttributeReference` refers to the de-duplicated
+                // `AnalysisBarrier`, i.e. barrierId matches.
+                if (barrierId.isEmpty || !a.metadata.contains("barrierId") ||
+                  barrierId.get == a.metadata.getLong("barrierId")) {
+                  dedupAttr(a, attributeRewrites)
+                } else {
+                  a
+                }
+
               case s: SubqueryExpression =>
                 s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
             }
@@ -744,7 +763,7 @@ class Analyzer(
     }
 
     private def dedupAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
-      attrMap.get(attr).getOrElse(attr).withQualifier(attr.qualifier)
+      attrMap.getOrElse(attr, attr).withQualifier(attr.qualifier)
     }
 
     /**
@@ -842,6 +861,12 @@ class Analyzer(
         failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
+      case j @ Join(left, right, _, Some(cond)) if !j.duplicateResolved =>
+        // Create a fake Filter, so that we can also update the join condition if we de-duplicate
+        // the right side. It's possible that the join condition is constructed via DataFrame API
+        // and contains ambiguous attributes, we need to disambiguate it via `AnalysisBarrier`.
+        val newRight = dedupRight(left, Filter(cond, right)).asInstanceOf[Filter]
+        j.copy(right = newRight.child, condition = Some(newRight.condition))
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
       case i @ Intersect(left, right) if !i.duplicateResolved =>
@@ -1093,7 +1118,7 @@ class Analyzer(
   object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
-      case sa @ Sort(_, _, AnalysisBarrier(child: Aggregate)) => sa
+      case sa @ Sort(_, _, AnalysisBarrier(child: Aggregate, _)) => sa
       case sa @ Sort(_, _, child: Aggregate) => sa
 
       case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
@@ -1129,7 +1154,7 @@ class Analyzer(
           // its child.
           case barrier: AnalysisBarrier =>
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(exprs, barrier.child)
-            (newExprs, AnalysisBarrier(newChild))
+            (newExprs, barrier.copy(child = newChild))
 
           case p: Project =>
             val maybeResolvedExprs = exprs.map(resolveExpression(_, p))
@@ -1395,8 +1420,8 @@ class Analyzer(
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-      case Filter(cond, AnalysisBarrier(agg: Aggregate)) =>
-        apply(Filter(cond, agg)).mapChildren(AnalysisBarrier)
+      case Filter(cond, AnalysisBarrier(agg: Aggregate, id)) =>
+        apply(Filter(cond, agg)).mapChildren(AnalysisBarrier(_, id))
       case f @ Filter(cond, agg @ Aggregate(grouping, originalAggExprs, child)) if agg.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
@@ -1454,8 +1479,8 @@ class Analyzer(
           case ae: AnalysisException => f
         }
 
-      case Sort(sortOrder, global, AnalysisBarrier(aggregate: Aggregate)) =>
-        apply(Sort(sortOrder, global, aggregate)).mapChildren(AnalysisBarrier)
+      case Sort(sortOrder, global, AnalysisBarrier(aggregate: Aggregate, id)) =>
+        apply(Sort(sortOrder, global, aggregate)).mapChildren(AnalysisBarrier(_, id))
       case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
 
         // Try resolving the ordering as though it is in the aggregate clause.
@@ -2330,7 +2355,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
 /** Remove the barrier nodes of analysis */
 object EliminateBarriers extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case AnalysisBarrier(child) => child
+    case AnalysisBarrier(child, _) => child
   }
 }
 
