@@ -52,7 +52,7 @@ class ContinuousDataSourceRDD(
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
-    val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createDataReader()
+    val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readTask.createDataReader()
 
     val runId = context.getLocalProperty(ContinuousExecution.RUN_ID_KEY)
 
@@ -132,7 +132,7 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[DataSourceRDDPartition].readTask.preferredLocations()
+    split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readTask.preferredLocations()
   }
 }
 
