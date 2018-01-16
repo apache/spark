@@ -272,7 +272,7 @@ class Catalog(object):
         >>> from pyspark.sql.functions import udf
         >>> from pyspark.sql.types import IntegerType
         >>> random_udf = udf(lambda: random.randint(0, 100), IntegerType()).asNondeterministic()
-        >>> new_random_udf = spark.udf.register("random_udf", random_udf)
+        >>> new_random_udf = spark.catalog.registerFunction("random_udf", random_udf)
         >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
         [Row(random_udf()=82)]
         >>> spark.range(1).select(new_random_udf()).collect()  # doctest: +SKIP
