@@ -24,8 +24,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
 
   Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
     test(s"Writing empty datasets should not fail - $format") {
-      withTempDir { dir =>
-        Seq("str").toDS.limit(0).write.format(format).save(dir.getCanonicalPath + "/tmp")
+      withTempPath { dir =>
+        Seq("str").toDS().limit(0).write.format(format).save(dir.getCanonicalPath)
       }
     }
   }
@@ -48,13 +48,11 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  // Only New OrcFileFormat supports this
-  Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
-      "parquet").foreach { format =>
+  Seq("orc", "parquet").foreach { format =>
     test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
       withTempPath { file =>
         val path = file.getCanonicalPath
-        val emptyDf = Seq((true, 1, "str")).toDF.limit(0)
+        val emptyDf = Seq((true, 1, "str")).toDF().limit(0)
         emptyDf.write.format(format).save(path)
 
         val df = spark.read.format(format).load(path)
