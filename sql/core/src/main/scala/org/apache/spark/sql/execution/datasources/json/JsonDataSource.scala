@@ -17,27 +17,23 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.InputStream
+import java.io.ByteArrayInputStream
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.TaskContext
-import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
-import org.apache.spark.rdd.{BinaryFileRDD, RDD}
-import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, SparkSession}
+import org.apache.spark.input.PortableDataStream
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
 
 /**
  * Common functions for parsing JSON files
@@ -143,28 +139,20 @@ object MultiLineJsonDataSource extends JsonDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
-    val json: RDD[PortableDataStream] = createBaseRdd(sparkSession, inputPaths)
-    val sampled: RDD[PortableDataStream] = JsonUtils.sample(json, parsedOptions)
-    JsonInferSchema.infer(sampled, parsedOptions, createParser)
+    val json: RDD[String] = createBaseRdd(sparkSession, inputPaths)
+    val sampled: RDD[String] = JsonUtils.sample(json, parsedOptions)
+    JsonInferSchema.infer(sampled, parsedOptions, CreateJacksonParser.string)
   }
 
   private def createBaseRdd(
       sparkSession: SparkSession,
-      inputPaths: Seq[FileStatus]): RDD[PortableDataStream] = {
-    val paths = inputPaths.map(_.getPath)
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
-    val conf = job.getConfiguration
-    val name = paths.mkString(",")
-    FileInputFormat.setInputPaths(job, paths: _*)
-    new BinaryFileRDD(
-      sparkSession.sparkContext,
-      classOf[StreamInputFormat],
-      classOf[String],
-      classOf[PortableDataStream],
-      conf,
-      sparkSession.sparkContext.defaultMinPartitions)
-      .setName(s"JsonFile: $name")
-      .values
+      inputPaths: Seq[FileStatus]): RDD[String] = {
+    val inputPathsString = inputPaths.map(_.getPath).mkString(",")
+    val wholeFilesRDD = sparkSession.sparkContext.wholeTextFiles(inputPathsString)
+    wholeFilesRDD.flatMap { fileContent =>
+      val is = new ByteArrayInputStream(fileContent._2.getBytes)
+      JacksonParser.splitDocuments(is)
+    }
   }
 
   private def createParser(jsonFactory: JsonFactory, record: PortableDataStream): JsonParser = {
@@ -178,21 +166,15 @@ object MultiLineJsonDataSource extends JsonDataSource {
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
-    def partitionedFileString(ignored: Any): UTF8String = {
-      Utils.tryWithResource {
-        CodecStreams.createInputStreamWithCloseResource(conf, file.filePath)
-      } { inputStream =>
-        UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
-      }
-    }
 
-    val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse(input, CreateJacksonParser.inputStream, partitionedFileString),
+    val safeParser = new FailureSafeParser[String](
+      input => parser.parse(input, CreateJacksonParser.string, UTF8String.fromString),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
 
-    safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath))
+    JacksonParser.splitDocuments(
+      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath)
+    ).flatMap(safeParser.parse)
   }
 }

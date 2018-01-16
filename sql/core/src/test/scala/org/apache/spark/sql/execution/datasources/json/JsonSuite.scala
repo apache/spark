@@ -29,9 +29,9 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{functions => F, _}
+import org.apache.spark.sql.{functions => F, Row, _}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, DropMalformedMode, FailFastMode, PermissiveMode}
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.json.JsonInferSchema.compatibleType
@@ -1853,7 +1853,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("SPARK-18352: Expect one JSON document per file") {
+  ignore("SPARK-18352: Expect one JSON document per file") {
     // the json parser terminates as soon as it sees a matching END_OBJECT or END_ARRAY token.
     // this might not be the optimal behavior but this test verifies that only the first value
     // is parsed and the rest are discarded.
@@ -2062,5 +2062,52 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row(null) :: Row(null) :: Row("{\"field\": \"3\"}") :: Nil
       )
     }
+  }
+
+  test("SPARK-20990: Read all JSON documents in files in multiline mode") {
+    val testFile = Thread.currentThread().getContextClassLoader
+      .getResource("test-data/cars.json").toString
+    val cars = sqlContext.read.option("multiLine", true).json(testFile)
+    assert(cars.count() == 3)
+  }
+
+  test("SPARK-20990: Read malformed multiline JSON documents with permissive mode") {
+    val testFile = Thread.currentThread().getContextClassLoader
+      .getResource("test-data/cars-malformed.json").toString
+    val cars = sqlContext.read
+      .option("multiLine", true)
+      .option("mode", PermissiveMode.name)
+      .json(testFile)
+      .cache()
+    assert(cars.count() == 5)
+    assert(cars.where($"_corrupt_record".isNotNull).count() == 3)
+  }
+
+  test("SPARK-20990: Read malformed multiline JSON documents with failfast mode") {
+    val testFile = Thread.currentThread().getContextClassLoader
+      .getResource("test-data/cars-malformed.json").toString
+    val ex = intercept[SparkException] {
+      sqlContext.read
+        .option("multiLine", true)
+        .option("mode", FailFastMode.name)
+        .json(testFile)
+    }.getMessage
+    assert(ex.contains(
+      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+  }
+
+  test("SPARK-20990: Read malformed multiline JSON documents with dropmalformed mode") {
+    val testFile = Thread.currentThread().getContextClassLoader
+      .getResource("test-data/cars-malformed.json").toString
+    val cars = sqlContext.read
+      .option("multiLine", true)
+      .option("mode", DropMalformedMode.name)
+      .json(testFile)
+
+    checkAnswer(
+      cars,
+      Row(null, "Porche", "Carrera", Array("CRASH AVOIDANCE", "SMART HEADLIGHTS"), null, 2017) ::
+        Row(null, "Chevy", "Volt", null, 5000.1, 2015):: Nil
+    )
   }
 }
