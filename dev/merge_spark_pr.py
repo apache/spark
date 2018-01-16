@@ -309,7 +309,7 @@ def choose_jira_assignee(issue, asf_jira):
             print("JIRA is unassigned, choose assignee")
             for idx, author in enumerate(candidates):
                 if author.key == "apachespark":
-                  continue
+                    continue
                 annotations = ["Reporter"] if author == reporter else []
                 if author in commentors:
                     annotations.append("Commentor")
