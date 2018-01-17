@@ -23,11 +23,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
@@ -79,35 +75,19 @@ public class SessionManager extends CompositeService {
       initOperationLogRootDir();
     }
     createBackgroundOperationPool();
-    addService(operationManager);
-    super.init(hiveConf);
-  }
-
-  private void createBackgroundOperationPool() {
-    int poolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS);
-    LOG.info("HiveServer2: Background operation thread pool size: " + poolSize);
-    int poolQueueSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_WAIT_QUEUE_SIZE);
-    LOG.info("HiveServer2: Background operation thread wait queue size: " + poolQueueSize);
-    long keepAliveTime = HiveConf.getTimeVar(
-        hiveConf, ConfVars.HIVE_SERVER2_ASYNC_EXEC_KEEPALIVE_TIME, TimeUnit.SECONDS);
-    LOG.info(
-        "HiveServer2: Background operation thread keepalive time: " + keepAliveTime + " seconds");
-
-    // Create a thread pool with #poolSize threads
-    // Threads terminate when they are idle for more than the keepAliveTime
-    // A bounded blocking queue is used to queue incoming operations, if #operations > poolSize
-    String threadPoolName = "HiveServer2-Background-Pool";
-    backgroundOperationPool = new ThreadPoolExecutor(poolSize, poolSize,
-        keepAliveTime, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(poolQueueSize),
-        new ThreadFactoryWithGarbageCleanup(threadPoolName));
-    backgroundOperationPool.allowCoreThreadTimeOut(true);
-
     checkInterval = HiveConf.getTimeVar(
         hiveConf, ConfVars.HIVE_SERVER2_SESSION_CHECK_INTERVAL, TimeUnit.MILLISECONDS);
     sessionTimeout = HiveConf.getTimeVar(
         hiveConf, ConfVars.HIVE_SERVER2_IDLE_SESSION_TIMEOUT, TimeUnit.MILLISECONDS);
     checkOperation = HiveConf.getBoolVar(hiveConf,
         ConfVars.HIVE_SERVER2_IDLE_SESSION_CHECK_OPERATION);
+    addService(operationManager);
+  }
+
+  private void createBackgroundOperationPool() {
+    int backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS);
+    backgroundOperationPool = (ThreadPoolExecutor) Executors.newFixedThreadPool(backgroundPoolSize);
+    LOG.info("HiveServer2: Async execution pool size: " + backgroundPoolSize);
   }
 
   private void initOperationLogRootDir() {
@@ -146,15 +126,6 @@ public class SessionManager extends CompositeService {
     if (checkInterval > 0) {
       startTimeoutChecker();
     }
-  }
-
-  private void initSessionTimeoutCheckerConfig() {
-    checkInterval = HiveConf.getTimeVar(
-        hiveConf, ConfVars.HIVE_SERVER2_SESSION_CHECK_INTERVAL, TimeUnit.MILLISECONDS);
-    sessionTimeout = HiveConf.getTimeVar(
-        hiveConf, ConfVars.HIVE_SERVER2_IDLE_SESSION_TIMEOUT, TimeUnit.MILLISECONDS);
-    checkOperation = HiveConf.getBoolVar(hiveConf,
-        ConfVars.HIVE_SERVER2_IDLE_SESSION_CHECK_OPERATION);
   }
 
   private void startTimeoutChecker() {
