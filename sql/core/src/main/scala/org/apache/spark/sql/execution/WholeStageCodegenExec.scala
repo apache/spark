@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -45,7 +46,12 @@ trait CodegenSupport extends SparkPlan {
     case _: SortMergeJoinExec => "smj"
     case _: RDDScanExec => "rdd"
     case _: DataSourceScanExec => "scan"
-    case _ => nodeName.toLowerCase(Locale.ROOT)
+    case _: LocalTableScanExec => "local_scan"
+    case _: InMemoryTableScanExec => "in_mem_scan"
+    case _ =>
+      // Java variable names can only have alpha-numeric characters, underscores and `$` (the use of
+      // later two is discouraged)
+      nodeName.toLowerCase(Locale.ROOT).replaceAll("\\P{Alnum}", "")
   }
 
   /**
