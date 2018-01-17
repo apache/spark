@@ -2159,12 +2159,4 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
-
-  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
-    test(s"Writing empty datasets should not fail - $format") {
-      withTempDir { dir =>
-        Seq("str").toDS.limit(0).write.format(format).save(dir.getCanonicalPath + "/tmp")
-      }
-    }
-  }
 }
