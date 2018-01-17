@@ -26,6 +26,9 @@ import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, Wr
 /**
  * A simple [[DataWriterFactory]] whose tasks just pack rows into the commit message for delivery
  * to a [[org.apache.spark.sql.sources.v2.writer.DataSourceV2Writer]] on the driver.
+ *
+ * Note that, because it sends all rows to the driver, this factory will generally be unsuitable
+ * for production-quality sinks. It's intended for use in tests.
  */
 case object PackedRowWriterFactory extends DataWriterFactory[Row] {
   def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
@@ -33,8 +36,15 @@ case object PackedRowWriterFactory extends DataWriterFactory[Row] {
   }
 }
 
+/**
+ * Commit message for a [[PackedRowDataWriter]], containing all the rows written in the most
+ * recent interval.
+ */
 case class PackedRowCommitMessage(rows: Array[Row]) extends WriterCommitMessage
 
+/**
+ * A simple [[DataWriter]] that just sends all the rows it's received as a commit message.
+ */
 class PackedRowDataWriter() extends DataWriter[Row] with Logging {
   private val data = mutable.Buffer[Row]()
 
