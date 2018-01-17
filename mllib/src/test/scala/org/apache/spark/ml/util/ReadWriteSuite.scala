@@ -129,6 +129,4 @@ class ReadWriteSuite extends MLTest {
     }
     assert(thrown.getMessage().contains("Multiple writers found for"))
   }
-
-  // TODO (save wrong format model)
 }
