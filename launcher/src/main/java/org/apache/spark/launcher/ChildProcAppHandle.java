@@ -48,16 +48,14 @@ class ChildProcAppHandle extends AbstractAppHandle {
 
   @Override
   public synchronized void kill() {
-    if (!isDisposed()) {
-      setState(State.KILLED);
-      disconnect();
-      if (childProc != null) {
-        if (childProc.isAlive()) {
-          childProc.destroyForcibly();
-        }
-        childProc = null;
+    disconnect();
+    if (childProc != null) {
+      if (childProc.isAlive()) {
+        childProc.destroyForcibly();
       }
+      childProc = null;
     }
+    setState(State.KILLED);
   }
 
   void setChildProc(Process childProc, String loggerName, InputStream logStream) {
@@ -96,6 +94,8 @@ class ChildProcAppHandle extends AbstractAppHandle {
         return;
       }
 
+      disconnect();
+
       int ec;
       try {
         ec = proc.exitValue();
@@ -118,8 +118,6 @@ class ChildProcAppHandle extends AbstractAppHandle {
       if (newState != null) {
         setState(newState, true);
       }
-
-      disconnect();
     }
   }
 

@@ -2717,6 +2717,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23079: constraints should be inferred correctly with aliases") {
+    withTable("t") {
+      spark.range(5).write.saveAsTable("t")
+      val t = spark.read.table("t")
+      val left = t.withColumn("xid", $"id" + lit(1)).as("x")
+      val right = t.withColumnRenamed("id", "xid").as("y")
+      val df = left.join(right, "xid").filter("id = 3").toDF()
+      checkAnswer(df, Row(4, 3))
+    }
+  }
+
   test("SRARK-22266: the same aggregate function was calculated multiple times") {
     val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
@@ -2754,22 +2765,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         // The DESC TABLE should report same schema as table scan.
         assert(sql("desc t").select("col_name")
           .as[String].collect().mkString(",").contains("i,p,j"))
-      }
-    }
-  }
-
-  // Only New OrcFileFormat supports this
-  Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
-      "parquet").foreach { format =>
-    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
-      withTempPath { file =>
-        val path = file.getCanonicalPath
-        val emptyDf = Seq((true, 1, "str")).toDF.limit(0)
-        emptyDf.write.format(format).save(path)
-
-        val df = spark.read.format(format).load(path)
-        assert(df.schema.sameType(emptyDf.schema))
-        checkAnswer(df, emptyDf)
       }
     }
   }
