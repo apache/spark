@@ -1246,7 +1246,7 @@ class Dataset[T] private[sql](
         // used to disambiguate the attributes in join condition when resolving self-join and
         // de-duplicating the right side plan. This special metadata will be remove after analysis.
         val metadata = new MetadataBuilder().withMetadata(a.metadata)
-          .putLong("barrierId", planWithBarrier.id).build()
+          .putLong(AnalysisBarrier.metadataKey, planWithBarrier.id).build()
         a.withMetadata(metadata)
     }
     Column(expr)

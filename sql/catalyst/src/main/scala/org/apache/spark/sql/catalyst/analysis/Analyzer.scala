@@ -748,8 +748,8 @@ class Analyzer(
                 // `AnalysisBarrier`, or this `AttributeReference` is not associated with any
                 // `AnalysisBarrier`, or this `AttributeReference` refers to the de-duplicated
                 // `AnalysisBarrier`, i.e. barrierId matches.
-                if (barrierId.isEmpty || !a.metadata.contains("barrierId") ||
-                  barrierId.get == a.metadata.getLong("barrierId")) {
+                if (barrierId.isEmpty || !a.metadata.contains(AnalysisBarrier.metadataKey) ||
+                  barrierId.get == a.metadata.getLong(AnalysisBarrier.metadataKey)) {
                   dedupAttr(a, attributeRewrites)
                 } else {
                   a
@@ -2358,8 +2358,9 @@ object EliminateBarriers extends Rule[LogicalPlan] {
     case AnalysisBarrier(child, _) => child
 
     case other => other transformExpressions {
-      case a: AttributeReference if a.metadata.contains("barrierId") =>
-        val metadata = new MetadataBuilder().withMetadata(a.metadata).remove("barrierId").build()
+      case a: AttributeReference if a.metadata.contains(AnalysisBarrier.metadataKey) =>
+        val metadata = new MetadataBuilder()
+          .withMetadata(a.metadata).remove(AnalysisBarrier.metadataKey).build()
         a.withMetadata(metadata)
     }
   }

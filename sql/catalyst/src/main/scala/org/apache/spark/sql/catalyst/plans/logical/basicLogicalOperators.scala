@@ -913,6 +913,8 @@ case class AnalysisBarrier(child: LogicalPlan, id: Long) extends LeafNode {
 object AnalysisBarrier {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
 
+  final val metadataKey = "BARRIER_ID"
+
   def apply(child: LogicalPlan): AnalysisBarrier = {
     AnalysisBarrier(child, curId.getAndIncrement())
   }
