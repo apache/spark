@@ -74,7 +74,7 @@ abstract class FileStreamSourceTest
     protected def addData(source: FileStreamSource): Unit
   }
 
-  case class AddTextFileData(content: String, src: File, tmp: File, tmpFileNamePrefix:String = "text")
+  case class AddTextFileData(content: String, src: File, tmp: File, tmpFileNamePrefix: String = "text")
     extends AddFileData {
 
     override def addData(source: FileStreamSource): Unit = {
