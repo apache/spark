@@ -26,6 +26,7 @@ import signal
 import shlex
 import socket
 import platform
+import warnings
 from subprocess import Popen, PIPE
 from threading import Thread
 
@@ -49,13 +50,13 @@ def launch_gateway(conf=None):
     redirect_shells = ["ZMQInteractiveShell", "StringIO"]
     grab_jvm_output = (sys.stdout != sys.__stdout__ and
                        sys.stdout.__class__.__name__ in redirect_shells)
-    if grab_jvm_output:
-        print("Grabbing JVM output cause magic.....")
 
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
         if grab_jvm_output:
-            print("Gateway already launched, can not grab output")
+            warnings.warn(
+                "Gateway already launched, can not grab output. JVM messages may not be delivered.",
+                RuntimeWarning)
     else:
         SPARK_HOME = _find_spark_home()
         # Launch the Py4j gateway using Spark's run command so that we pick up the
@@ -106,10 +107,8 @@ def launch_gateway(conf=None):
         def connect(input_pipe, out_pipe):
             """Connect the input pipe to the output. We can't use os.dup for IPython
             or directly write to them (see https://github.com/ipython/ipython/pull/3072/)."""
-            print("Connecting pipes....")
             for line in iter(input_pipe.readline, b''):
                 print(line, file=out_pipe)
-            print("Pipe finished...")
             input_pipe.close()
 
         if grab_jvm_output:

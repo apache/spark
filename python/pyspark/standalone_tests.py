@@ -34,7 +34,7 @@ else:
 if __name__ == "__main__":
     gateway_already_started = "PYSPARK_GATEWAY_PORT" in os.environ
     try:
-        if not gateway_already_started:
+        if not gateway_already_started and not hasattr(sys, "pypy_translation_info"):
             print("Running redirection tests since not in existing gateway")
             _old_stdout = sys.stdout
             _old_stderr = sys.stderr
@@ -42,6 +42,8 @@ if __name__ == "__main__":
             sys.stdout = new_stdout = StringIO()
             sys.stderr = new_stderr = StringIO()
             print("Redirected to {0} / {1}".format(sys.stdout, sys.stderr), file=_old_stdout)
+        elif hasattr(sys, "pypy_translation_info"):
+            print("Skipping redirection tests in pypy")
         else:
             print("Skipping redirection tests since gateway already exists")
 
