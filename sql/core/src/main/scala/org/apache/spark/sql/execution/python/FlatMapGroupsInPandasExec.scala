@@ -75,6 +75,12 @@ case class FlatMapGroupsInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
+    /*
+    Use argOffsets[0] as a split index between grouping column and actual data column, i.e.,
+    column 0, 1, .., groupingAttributes.length - 1 are grouping columns
+    column groupingAttributes.length ... child.output.length - 1 are data columns
+    If a grouping column is a data column, then the column will be sent twice.
+     */
     val argOffsets = Array((groupingAttributes.length until child.output.length).toArray)
     val schema = child.schema
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
