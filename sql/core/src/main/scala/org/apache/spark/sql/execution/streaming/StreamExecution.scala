@@ -142,8 +142,7 @@ abstract class StreamExecution(
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
-  override def runId: UUID = currentRunId
-  protected var currentRunId = UUID.randomUUID
+  override val runId: UUID = UUID.randomUUID
 
   /**
    * Pretty identified string of printing in logs. Format is
