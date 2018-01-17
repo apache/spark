@@ -97,6 +97,7 @@ private[util] sealed trait BaseReadWrite {
  * @since 2.3.0
  */
 @InterfaceStability.Evolving
+@Since("2.3.0")
 trait MLWriterFormat {
   /**
    * Function to write the provided pipeline stage out.
@@ -120,6 +121,7 @@ trait MLWriterFormat {
  * @since 2.3.0
  */
 @InterfaceStability.Evolving
+@Since("2.3.0")
 trait MLFormatRegister extends MLWriterFormat {
   /**
    * The string that represents the format that this format provider uses. This is, along with
@@ -163,6 +165,7 @@ trait MLFormatRegister extends MLWriterFormat {
  */
 @Since("1.6.0")
 abstract class MLWriter extends BaseReadWrite with Logging {
+
   protected var shouldOverwrite: Boolean = false
 
   /**
@@ -219,6 +222,8 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 /**
  * A ML Writer which delegates based on the requested format.
  */
+@InterfaceStability.Evolving
+@Since("2.3.0")
 class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
   private var source: String = "internal"
 
@@ -303,6 +308,7 @@ trait MLWritable {
  * Trait for classes that provide `GeneralMLWriter`.
  */
 @Since("2.3.0")
+@InterfaceStability.Evolving
 trait GeneralMLWritable extends MLWritable {
   /**
    * Returns an `MLWriter` instance for this ML instance.
