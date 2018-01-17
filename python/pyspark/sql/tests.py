@@ -372,6 +372,12 @@ class SQLTests(ReusedSQLTestCase):
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
         self.assertEqual(row[0], 5)
 
+        # This is to check if a deprecated 'SQLContext.registerFunction' can call its alias.
+        sqlContext = self.spark._wrapped
+        sqlContext.registerFunction("oneArg", lambda x: len(x), IntegerType())
+        [row] = sqlContext.sql("SELECT oneArg('test')").collect()
+        self.assertEqual(row[0], 4)
+
     def test_udf2(self):
         self.spark.catalog.registerFunction("strlen", lambda string: len(string), IntegerType())
         self.spark.createDataFrame(self.sc.parallelize([Row(a="test")]))\
@@ -582,10 +588,20 @@ class SQLTests(ReusedSQLTestCase):
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
                                 lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"))
 
+        # This is to check if a deprecated 'SQLContext.registerJavaFunction' can call its alias.
+        sqlContext = spark._wrapped
+        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
+                                lambda: sqlContext.registerJavaFunction("udf1", "non_existed_udf"))
+
     def test_non_existed_udaf(self):
         spark = self.spark
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
                                 lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
+
+        # This is to check if a deprecated 'SQLContext.registerJavaUDAF' can call its alias.
+        sqlContext = spark._wrapped
+        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
+                                lambda: sqlContext.registerJavaUDAF("udaf1", "non_existed_udaf"))
 
     def test_multiLine_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")
