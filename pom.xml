@@ -135,7 +135,7 @@
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.3.20.v20170531</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
-    <chill.version>0.8.4</chill.version>
+    <chill.version>0.9.2</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.5</codahale.metrics.version>
@@ -1760,6 +1760,10 @@
           <exclusion>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-storage-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId> com.esotericsoftware</groupId>
+            <artifactId>kryo-shaded</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
