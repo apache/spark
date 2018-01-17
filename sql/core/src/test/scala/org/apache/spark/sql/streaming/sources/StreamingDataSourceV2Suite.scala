@@ -153,7 +153,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     query.stop()
   }
 
-  private def testUnsupportedOperationCase(
+  private def testNegativeCase(
       readFormat: String,
       writeFormat: String,
       trigger: Trigger,
@@ -164,7 +164,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     assert(ex.getMessage.contains(errorMsg))
   }
 
-  private def testLogicalPlanCase(
+  private def testLogicalPlanNegativeCase(
       readFormat: String,
       writeFormat: String,
       trigger: Trigger,
@@ -211,37 +211,37 @@ class StreamingDataSourceV2Suite extends StreamTest {
         case (r, _, _)
             if !r.isInstanceOf[MicroBatchReadSupport]
               && !r.isInstanceOf[ContinuousReadSupport] =>
-          testUnsupportedOperationCase(read, write, trigger,
+          testNegativeCase(read, write, trigger,
             s"Data source $read does not support streamed reading")
 
         // Invalid - trigger is continuous but writer is not
         case (_, w, _: ContinuousTrigger) if !w.isInstanceOf[ContinuousWriteSupport] =>
-          testUnsupportedOperationCase(read, write, trigger,
+          testNegativeCase(read, write, trigger,
             s"Data source $write does not support continuous writing")
 
         // Invalid - can't write at all
         case (_, w, _)
             if !w.isInstanceOf[MicroBatchWriteSupport]
               && !w.isInstanceOf[ContinuousWriteSupport] =>
-          testUnsupportedOperationCase(read, write, trigger,
+          testNegativeCase(read, write, trigger,
             s"Data source $write does not support streamed writing")
 
         // Invalid - trigger and writer are continuous but reader is not
         case (r, _: ContinuousWriteSupport, _: ContinuousTrigger)
             if !r.isInstanceOf[ContinuousReadSupport] =>
-          testLogicalPlanCase(read, write, trigger,
+          testLogicalPlanNegativeCase(read, write, trigger,
             s"Data source $read does not support continuous processing")
 
         // Invalid - trigger is microbatch but writer is not
         case (_, w, t)
             if !w.isInstanceOf[MicroBatchWriteSupport] && !t.isInstanceOf[ContinuousTrigger] =>
-          testUnsupportedOperationCase(read, write, trigger,
+          testNegativeCase(read, write, trigger,
             s"Data source $write does not support streamed writing")
 
         // Invalid - trigger and writer are microbatch but reader is not
         case (r, _, t)
            if !r.isInstanceOf[MicroBatchReadSupport] && !t.isInstanceOf[ContinuousTrigger] =>
-          testLogicalPlanCase(read, write, trigger,
+          testLogicalPlanNegativeCase(read, write, trigger,
             s"Data source $read does not support microbatch processing")
       }
     }
