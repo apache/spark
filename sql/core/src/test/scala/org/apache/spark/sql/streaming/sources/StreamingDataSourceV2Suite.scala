@@ -164,7 +164,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     assert(ex.getMessage.contains(errorMsg))
   }
 
-  private def testLogicalPlanNegativeCase(
+  private def testPostCreationNegativeCase(
       readFormat: String,
       writeFormat: String,
       trigger: Trigger,
@@ -229,7 +229,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
         // Invalid - trigger and writer are continuous but reader is not
         case (r, _: ContinuousWriteSupport, _: ContinuousTrigger)
             if !r.isInstanceOf[ContinuousReadSupport] =>
-          testLogicalPlanNegativeCase(read, write, trigger,
+          testNegativeCase(read, write, trigger,
             s"Data source $read does not support continuous processing")
 
         // Invalid - trigger is microbatch but writer is not
@@ -241,7 +241,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
         // Invalid - trigger and writer are microbatch but reader is not
         case (r, _, t)
            if !r.isInstanceOf[MicroBatchReadSupport] && !t.isInstanceOf[ContinuousTrigger] =>
-          testLogicalPlanNegativeCase(read, write, trigger,
+          testPostCreationNegativeCase(read, write, trigger,
             s"Data source $read does not support microbatch processing")
       }
     }

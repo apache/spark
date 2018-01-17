@@ -57,10 +57,7 @@ class ContinuousExecution(
   @volatile protected var continuousSources: Seq[ContinuousReader] = Seq()
   override protected def sources: Seq[BaseStreamingSource] = continuousSources
 
-  override lazy val logicalPlan: LogicalPlan = {
-    assert(queryExecutionThread eq Thread.currentThread,
-      "logicalPlan must be initialized in StreamExecutionThread " +
-        s"but the current thread was ${Thread.currentThread}")
+  override val logicalPlan: LogicalPlan = {
     val toExecutionRelationMap = MutableMap[StreamingRelationV2, ContinuousExecutionRelation]()
     analyzedPlan.transform {
       case r @ StreamingRelationV2(
