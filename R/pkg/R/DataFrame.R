@@ -2853,7 +2853,7 @@ setMethod("intersect",
 #' except
 #'
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
-#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT} in SQL.
+#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT DISTINCT} in SQL.
 #'
 #' @param x a SparkDataFrame.
 #' @param y a SparkDataFrame.

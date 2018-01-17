@@ -479,11 +479,6 @@ class KafkaMicroBatchSourceSuite extends KafkaSourceSuiteBase {
     // `failOnDataLoss` is `false`, we should not fail the query
     assert(query.exception.isEmpty)
   }
-}
-
-class KafkaSourceSuiteBase extends KafkaSourceTest {
-
-  import testImplicits._
 
   test("SPARK-22956: currentPartitionOffsets should be set when no new data comes in") {
     def getSpecificDF(range: Range.Inclusive): org.apache.spark.sql.Dataset[Int] = {
@@ -549,6 +544,11 @@ class KafkaSourceSuiteBase extends KafkaSourceTest {
       CheckLastBatch(120 to 124: _*)
     )
   }
+}
+
+class KafkaSourceSuiteBase extends KafkaSourceTest {
+
+  import testImplicits._
 
   test("cannot stop Kafka stream") {
     val topic = newTopic()

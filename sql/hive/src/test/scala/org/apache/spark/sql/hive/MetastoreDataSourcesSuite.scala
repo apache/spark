@@ -23,14 +23,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -1340,18 +1338,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           sql(s"INSERT OVERWRITE TABLE $tableName SELECT 1")
           checkAnswer(spark.table(tableName), Row(1))
         }
-      }
-    }
-  }
-
-  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
-    test(s"SPARK-22146: read files containing special characters using $format") {
-      val nameWithSpecialChars = s"sp&cial%chars"
-      withTempDir { dir =>
-        val tmpFile = s"$dir/$nameWithSpecialChars"
-        spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
-        val fileContent = spark.read.format(format).load(tmpFile)
-        checkAnswer(fileContent, Seq(Row("a"), Row("b")))
       }
     }
   }

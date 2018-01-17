@@ -17,7 +17,6 @@
 
 package org.apache.spark.launcher;
 
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,7 +31,6 @@ import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.SparkContext;
-import org.apache.spark.SparkContext$;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.util.Utils;
 
@@ -139,9 +137,7 @@ public class SparkLauncherSuite extends BaseSuite {
       // Here DAGScheduler is stopped, while SparkContext.clearActiveContext may not be called yet.
       // Wait for a reasonable amount of time to avoid creating two active SparkContext in JVM.
       // See SPARK-23019 and SparkContext.stop() for details.
-      eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () -> {
-        assertTrue("SparkContext is still alive.", SparkContext$.MODULE$.getActive().isEmpty());
-      });
+      TimeUnit.MILLISECONDS.sleep(500);
     }
   }
 
@@ -150,35 +146,26 @@ public class SparkLauncherSuite extends BaseSuite {
     SparkAppHandle.Listener listener = mock(SparkAppHandle.Listener.class);
     doAnswer(invocation -> {
       SparkAppHandle h = (SparkAppHandle) invocation.getArguments()[0];
-      synchronized (transitions) {
-        transitions.add(h.getState());
-      }
+      transitions.add(h.getState());
       return null;
     }).when(listener).stateChanged(any(SparkAppHandle.class));
 
-    SparkAppHandle handle = null;
-    try {
-      handle = new InProcessLauncher()
-        .setMaster("local")
-        .setAppResource(SparkLauncher.NO_RESOURCE)
-        .setMainClass(InProcessTestApp.class.getName())
-        .addAppArgs("hello")
-        .startApplication(listener);
+    SparkAppHandle handle = new InProcessLauncher()
+      .setMaster("local")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
+      .setMainClass(InProcessTestApp.class.getName())
+      .addAppArgs("hello")
+      .startApplication(listener);
 
-      waitFor(handle);
-      assertEquals(SparkAppHandle.State.FINISHED, handle.getState());
+    waitFor(handle);
+    assertEquals(SparkAppHandle.State.FINISHED, handle.getState());
 
-      // Matches the behavior of LocalSchedulerBackend.
-      List<SparkAppHandle.State> expected = Arrays.asList(
-        SparkAppHandle.State.CONNECTED,
-        SparkAppHandle.State.RUNNING,
-        SparkAppHandle.State.FINISHED);
-      assertEquals(expected, transitions);
-    } finally {
-      if (handle != null) {
-        handle.kill();
-      }
-    }
+    // Matches the behavior of LocalSchedulerBackend.
+    List<SparkAppHandle.State> expected = Arrays.asList(
+      SparkAppHandle.State.CONNECTED,
+      SparkAppHandle.State.RUNNING,
+      SparkAppHandle.State.FINISHED);
+    assertEquals(expected, transitions);
   }
 
   public static class SparkLauncherTestApp {
