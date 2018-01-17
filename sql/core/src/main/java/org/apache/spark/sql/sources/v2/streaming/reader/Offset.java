@@ -27,7 +27,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * to reconstruct a position in the stream up to which data has been seen/processed.
  *
  * Note: This class currently extends {@link org.apache.spark.sql.execution.streaming.Offset} to
- * maintain compatibility with DataSource V1 APIs. This will be extension will be removed once we
+ * maintain compatibility with DataSource V1 APIs. This extension will be removed once we
  * get rid of V1 completely.
  */
 @InterfaceStability.Evolving

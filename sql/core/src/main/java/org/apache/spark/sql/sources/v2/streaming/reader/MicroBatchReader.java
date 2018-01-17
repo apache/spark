@@ -28,7 +28,7 @@ import java.util.Optional;
  * interface to indicate they allow micro-batch streaming reads.
  *
  * Note: This class currently extends {@link BaseStreamingSource} to maintain compatibility with
- * DataSource V1 APIs. This will be extension will be removed once we get rid of V1 completely.
+ * DataSource V1 APIs. This extension will be removed once we get rid of V1 completely.
  */
 @InterfaceStability.Evolving
 public interface MicroBatchReader extends DataSourceV2Reader, BaseStreamingSource {
