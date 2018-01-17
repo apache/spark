@@ -54,7 +54,7 @@ class ContinuousExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
-  @volatile protected var continuousSources: Seq[ContinuousReader] = _
+  @volatile protected var continuousSources: Seq[ContinuousReader] = Seq()
   override protected def sources: Seq[BaseStreamingSource] = continuousSources
 
   override lazy val logicalPlan: LogicalPlan = {
@@ -69,7 +69,7 @@ class ContinuousExecution(
           ContinuousExecutionRelation(source, extraReaderOptions, output)(sparkSession)
         })
       case StreamingRelationV2(_, sourceName, _, _, _) =>
-        throw new AnalysisException(
+        throw new UnsupportedOperationException(
           s"Data source $sourceName does not support continuous processing.")
     }
   }

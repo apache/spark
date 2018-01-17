@@ -169,18 +169,19 @@ class StreamingDataSourceV2Suite extends StreamTest {
       writeFormat: String,
       trigger: Trigger,
       errorMsg: String) = {
-    val ex = intercept[StreamingQueryException] {
-      spark.readStream
-        .format(readFormat)
-        .load()
-        .writeStream
-        .format(writeFormat)
-        .trigger(trigger)
-        .start()
-        .processAllAvailable()
+    val query = spark.readStream
+      .format(readFormat)
+      .load()
+      .writeStream
+      .format(writeFormat)
+      .trigger(trigger)
+      .start()
+
+    eventually(timeout(streamingTimeout)) {
+      assert(query.exception.isDefined)
+      assert(query.exception.get.cause != null)
+      assert(query.exception.get.cause.getMessage.contains(errorMsg))
     }
-    assert(ex.cause != null)
-    assert(ex.cause.getMessage.contains(errorMsg))
   }
 
   // Get a list of (read, write, trigger) tuples for test cases.
