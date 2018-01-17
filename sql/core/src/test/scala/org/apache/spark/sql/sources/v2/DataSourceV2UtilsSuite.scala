@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.sources.v2
 
+import java.net.URI
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DataSourceV2UtilsSuite extends SparkFunSuite {
+class DataSourceV2UtilsSuite extends SparkFunSuite with SharedSQLContext {
 
   private val keyPrefix = new DataSourceV2WithSessionConfig().keyPrefix
 
@@ -40,6 +45,32 @@ class DataSourceV2UtilsSuite extends SparkFunSuite {
     assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
     assert(confs.keySet.contains("foo.bar"))
     assert(confs.keySet.contains("whateverConfigName"))
+  }
+
+  test("parseTableLocation") {
+    import DataSourceV2Utils.parseTableLocation
+    // no location
+    assert((None, None) === parseTableLocation(spark, None))
+
+    // file paths
+    val s3Path = "s3://bucket/path/file.ext"
+    assert((Some(s3Path), None) === parseTableLocation(spark, Some(s3Path)))
+    val hdfsPath = "hdfs://nn:8020/path/file.ext"
+    assert((Some(hdfsPath), None) === parseTableLocation(spark, Some(hdfsPath)))
+    val localPath = "/path/file.ext"
+    assert((Some(localPath), None) === parseTableLocation(spark, Some(localPath)))
+
+    // table names
+    assert(
+      (None, Some(TableIdentifier("t", Some("default")))) === parseTableLocation(spark, Some("t")))
+    assert(
+      (None, Some(TableIdentifier("t", Some("db")))) === parseTableLocation(spark, Some("db.t")))
+
+    spark.sessionState.catalog.createDatabase(
+      CatalogDatabase("test", "test", URI.create("file:/tmp"), Map.empty), ignoreIfExists = true)
+    spark.sessionState.catalog.setCurrentDatabase("test")
+    assert(
+      (None, Some(TableIdentifier("t", Some("test")))) === parseTableLocation(spark, Some("t")))
   }
 }
 

@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.regex.Pattern
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceV2, SessionConfigSupport}
 
@@ -54,5 +56,33 @@ private[sql] object DataSourceV2Utils extends Logging {
       }
 
     case _ => Map.empty
+  }
+
+  /**
+   * Helper method to parse the argument passed to load or save. If the path doesn't contain '/'
+   * and cannot be a fully-qualified location, parse it as a table identifier. Otherwise, return
+   * the path.
+   *
+   * @param sparkSession a [[SparkSession]]
+   * @param pathOrTable some string passed to load or save, or None
+   * @return
+   */
+  def parseTableLocation(
+      sparkSession: SparkSession,
+      pathOrTable: Option[String]): (Option[String], Option[TableIdentifier]) = {
+    pathOrTable match {
+      case Some(path) if !path.contains("/") =>
+        // without "/", this cannot be a full path. parse it as a table name
+        val ident = sparkSession.sessionState.sqlParser.parseTableIdentifier(path)
+        // ensure the database is set correctly
+        val db = ident.database.getOrElse(sparkSession.catalog.currentDatabase)
+        (None, Some(ident.copy(database = Some(db))))
+
+      case Some(path) =>
+        (Some(path), None)
+
+      case _ =>
+        (None, None)
+    }
   }
 }
