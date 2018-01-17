@@ -57,6 +57,9 @@ class ContinuousExecution(
   @volatile protected var continuousSources: Seq[ContinuousReader] = _
   override protected def sources: Seq[BaseStreamingSource] = continuousSources
 
+  // For use only in test harnesses.
+  private[sql] var currentEpochCoordinatorId: String = _
+
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
       "logicalPlan must be initialized in StreamExecutionThread " +
@@ -149,7 +152,6 @@ class ContinuousExecution(
    * @param sparkSessionForQuery Isolated [[SparkSession]] to run the continuous query with.
    */
   private def runContinuous(sparkSessionForQuery: SparkSession): Unit = {
-    currentRunId = UUID.randomUUID
     // A list of attributes that will need to be updated.
     val replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Translate from continuous relation to the underlying data source.
@@ -219,15 +221,19 @@ class ContinuousExecution(
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
-    sparkSession.sparkContext.setLocalProperty(
+    sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.START_EPOCH_KEY, currentBatchId.toString)
-    sparkSession.sparkContext.setLocalProperty(
-      ContinuousExecution.RUN_ID_KEY, runId.toString)
+    // Add another random ID on top of the run ID, to distinguish epoch coordinators across
+    // reconfigurations.
+    val epochCoordinatorId = s"$runId--${UUID.randomUUID}"
+    currentEpochCoordinatorId = epochCoordinatorId
+    sparkSessionForQuery.sparkContext.setLocalProperty(
+      ContinuousExecution.EPOCH_COORDINATOR_ID_KEY, epochCoordinatorId)
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint =
       EpochCoordinatorRef.create(
-        writer.get(), reader, this, currentBatchId, sparkSession, SparkEnv.get)
+        writer.get(), reader, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {
@@ -359,5 +365,5 @@ class ContinuousExecution(
 
 object ContinuousExecution {
   val START_EPOCH_KEY = "__continuous_start_epoch"
-  val RUN_ID_KEY = "__run_id"
+  val EPOCH_COORDINATOR_ID_KEY = "__epoch_coordinator_id"
 }
