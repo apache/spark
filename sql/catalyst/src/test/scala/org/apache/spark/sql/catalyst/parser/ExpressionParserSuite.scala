@@ -282,6 +282,7 @@ class ExpressionParserSuite extends PlanTest {
       "sum(product + 1) over (order by a + b desc)",
       WindowExpression('sum.function('product + 1),
         WindowSpecDefinition(Seq.empty, Seq(('a + 'b).desc), UnspecifiedFrame)))
+  }  
 
   test("range/rows window function expressions") {
     val func = 'foo.function(star())
