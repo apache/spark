@@ -21,8 +21,7 @@ from collections import namedtuple
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.session import UDFRegistration
-from pyspark.sql.udf import UserDefinedFunction
+from pyspark.sql.udf import UserDefinedFunction, UDFRegistration
 from pyspark.sql.types import IntegerType, StringType, StructType
 
 
