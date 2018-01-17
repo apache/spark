@@ -51,11 +51,18 @@ def launch_gateway(conf=None):
     grab_jvm_output = (sys.stdout != sys.__stdout__ and
                        sys.stdout.__class__.__name__ in redirect_shells)
 
+    if hasattr(sys, "pypy_translation_info") and grab_jvm_output:
+        warnings.warn(
+            "Unable to grab JVM output with PyPy."
+            "JVM log messages may not be delivered to the notebook.")
+        grab_jvm_putput = False
+
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
         if grab_jvm_output:
             warnings.warn(
-                "Gateway already launched, can not grab output. JVM messages may not be delivered.",
+                "Gateway already launched, can not grab output."
+                "JVM messages may not be delivered to the notebook.",
                 RuntimeWarning)
     else:
         SPARK_HOME = _find_spark_home()
