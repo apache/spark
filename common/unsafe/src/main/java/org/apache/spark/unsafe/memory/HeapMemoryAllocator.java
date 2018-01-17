@@ -82,7 +82,8 @@ public class HeapMemoryAllocator implements MemoryAllocator {
       "page has already been freed";
     assert ((memory.pageNumber == MemoryBlock.NO_PAGE_NUMBER)
             || (memory.pageNumber == MemoryBlock.FREED_IN_TMM_PAGE_NUMBER)) :
-      "TMM-allocated pages must first be freed via TMM.freePage(), not directly in allocator free()";
+      "TMM-allocated pages must first be freed via TMM.freePage(), not directly in allocator " +
+        "free()";
 
     final long size = memory.size();
     if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
