@@ -65,10 +65,13 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }.map { job =>
       val jobId = job.jobId
       val status = job.status
-      val jobDescription = store.lastStageAttempt(job.stageIds.max).description
-      val displayJobDescription = jobDescription
-        .map(UIUtils.makeDescription(_, "", plainText = true).text)
-        .getOrElse("")
+      var displayJobDescription = ""
+      try {
+        displayJobDescription = store.lastStageAttempt(job.stageIds.max).description
+          .map(UIUtils.makeDescription(_, "", plainText = true).text).getOrElse("")
+      } catch {
+        case e => displayJobDescription = job.description.getOrElse("")
+      }
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
       val classNameByStatus = status match {
@@ -427,9 +430,16 @@ private[ui] class JobDataSource(
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
     val submissionTime = jobData.submissionTime
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-    val lastStageAttempt = store.lastStageAttempt(jobData.stageIds.max)
-    val lastStageDescription = lastStageAttempt.description.getOrElse("")
-
+    var lastStageDescription = ""
+    var lastStageAttemptName = ""
+    try {
+      val lastStageAttempt = store.lastStageAttempt(jobData.stageIds.max)
+      lastStageDescription = lastStageAttempt.description.getOrElse("")
+    } catch {
+      case e =>
+        lastStageDescription = jobData.description.getOrElse("")
+        lastStageAttemptName = jobData.name
+    }
     val formattedJobDescription =
       UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
 
@@ -437,7 +447,7 @@ private[ui] class JobDataSource(
 
     new JobTableRowData(
       jobData,
-      lastStageAttempt.name,
+      lastStageAttemptName,
       lastStageDescription,
       duration.getOrElse(-1),
       formattedDuration,

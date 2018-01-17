@@ -335,9 +335,12 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
       store.executorList(false), appStartTime)
-
-    content ++= UIUtils.showDagVizForJob(
-      jobId, store.operationGraphForJob(jobId))
+    try {
+      content ++= UIUtils.showDagVizForJob(
+        jobId, store.operationGraphForJob(jobId))
+    } catch {
+      case e => None
+    }
 
     if (shouldShowActiveStages) {
       content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
