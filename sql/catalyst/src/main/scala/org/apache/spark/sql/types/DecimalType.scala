@@ -137,7 +137,7 @@ object DecimalType extends AbstractDataType {
     case DoubleType => DoubleDecimal
   }
 
-  private[sql] def forLiteral(literal: Literal): DecimalType = literal.value match {
+  private[sql] def fromLiteral(literal: Literal): DecimalType = literal.value match {
     case v: Short => fromBigDecimal(BigDecimal(v))
     case v: Int => fromBigDecimal(BigDecimal(v))
     case v: Long => fromBigDecimal(BigDecimal(v))
