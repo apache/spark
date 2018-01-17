@@ -278,7 +278,7 @@ object DecimalPrecision extends TypeCoercionRule {
   private val nondecimalAndDecimal: PartialFunction[Expression, Expression] = {
     // Promote integers inside a binary expression with fixed-precision decimals to decimals,
     // and fixed-precision decimals in an expression with floats / doubles to doubles
-    case b@BinaryOperator(left, right) if left.dataType != right.dataType =>
+    case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
       (left, right) match {
         // Promote literal integers inside a binary expression with fixed-precision decimals to
         // decimals. The precision and scale are the ones strictly needed by the integer value.
