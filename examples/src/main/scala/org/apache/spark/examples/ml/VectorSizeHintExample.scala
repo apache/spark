@@ -28,7 +28,7 @@ object VectorSizeHintExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder
-      .appName("VectorAssemblerExample")
+      .appName("VectorSizeHintExample")
       .getOrCreate()
 
     // $example on$

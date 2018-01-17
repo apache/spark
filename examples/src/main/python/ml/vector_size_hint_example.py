@@ -26,7 +26,7 @@ from pyspark.sql import SparkSession
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("VectorAssemblerExample")\
+        .appName("VectorSizeHintExample")\
         .getOrCreate()
 
     # $example on$
@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     sizeHint = VectorSizeHint(
         inputCol="userFeatures",
-        handleInvalid="sip",
+        handleInvalid="skip",
         size=3)
 
     datasetWithSize = sizeHint.transform(dataset)

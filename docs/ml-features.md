@@ -1285,7 +1285,7 @@ for more details on the API.
 
 ## VectorSizeHint
 
-It can sometimes be useful to explicitly specify the size of the vectors an a column of
+It can sometimes be useful to explicitly specify the size of the vectors a column of
 `VectorType`. For example, `VectorAssembler` uses size information from its input columns to
 produce size information and metadata for its output column. While in some cases this information
 can be obtained by inspecting the contents of the column, in a streaming dataframe the contents are
@@ -1299,7 +1299,7 @@ the vector size. Downstream operations on the resulting dataframe can get this s
 meatadata.
 
 `VectorSizeHint` can also take an optional `handleInvalid` parameter which controls its
-behaviour when the vector column contains nulls for vectors of the wrong size. By default
+behaviour when the vector column contains nulls or vectors of the wrong size. By default
 `handleInvalid` is set to "error", indicating an exception should be thrown. This parameter can
 also be set to "skip", indicating that rows containing invalid values should be filtered out from
 the resulting dataframe, or `optimistic` indicating that all rows should be kept. When
