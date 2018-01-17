@@ -319,7 +319,7 @@ class Analyzer(
       expr transform {
         case e: GroupingID =>
           def sameExpressions(e1: Seq[Expression], e2: Seq[Expression]): Boolean = {
-            e1.length == e2.length && e1.zip(e2).forall { case (l ,r) => l.semanticEquals(r) }
+            e1.length == e2.length && e1.zip(e2).forall { case (l, r) => l.semanticEquals(r) }
           }
           if (e.groupByExprs.isEmpty || sameExpressions(e.groupByExprs, groupByExprs)) {
             Alias(gid, toPrettySQL(e))()
@@ -2352,10 +2352,16 @@ object CleanupAliases extends Rule[LogicalPlan] {
   }
 }
 
-/** Remove the barrier nodes of analysis */
+/** Remove the barrier nodes of analysis, and related barrier id metadata from AttributeReference */
 object EliminateBarriers extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case AnalysisBarrier(child, _) => child
+
+    case other => other transformExpressions {
+      case a: AttributeReference if a.metadata.contains("barrierId") =>
+        val metadata = new MetadataBuilder().withMetadata(a.metadata).remove("barrierId").build()
+        a.withMetadata(metadata)
+    }
   }
 }
 

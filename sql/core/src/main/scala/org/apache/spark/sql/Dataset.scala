@@ -1244,7 +1244,7 @@ class Dataset[T] private[sql](
         // Associate the returned `AttributeReference` with the `AnalysisBarrier` of this Dataset,
         // by putting the barrier id into `AttributeReference.metadata`. This information is only
         // used to disambiguate the attributes in join condition when resolving self-join and
-        // de-duplicating the right side plan.
+        // de-duplicating the right side plan. This special metadata will be remove after analysis.
         val metadata = new MetadataBuilder().withMetadata(a.metadata)
           .putLong("barrierId", planWithBarrier.id).build()
         a.withMetadata(metadata)
