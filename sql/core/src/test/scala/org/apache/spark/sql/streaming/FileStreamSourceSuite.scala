@@ -74,11 +74,11 @@ abstract class FileStreamSourceTest
     protected def addData(source: FileStreamSource): Unit
   }
 
-  case class AddTextFileData(content: String, src: File, tmp: File, tmpFileNamePrefix: String = "text")
+  case class AddTextFileData(content: String, src: File, tmp: File, tmpFilePrefix: String = "text")
     extends AddFileData {
 
     override def addData(source: FileStreamSource): Unit = {
-      val tempFile = Utils.tempFileWith(new File(tmp, tmpFileNamePrefix))
+      val tempFile = Utils.tempFileWith(new File(tmp, tmpFilePrefix))
       val finalFile = new File(src, tempFile.getName)
       src.mkdirs()
       require(stringToFile(tempFile, content).renameTo(finalFile))
