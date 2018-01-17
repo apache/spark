@@ -41,8 +41,8 @@ public class JavaOneHotEncoderEstimatorExample {
       .appName("JavaOneHotEncoderEstimatorExample")
       .getOrCreate();
 
+    // Note: categorical features are usually first encoded with StringIndexer
     // $example on$
-    // Notice: this categorical features are usually encoded with `StringIndexer`.
     List<Row> data = Arrays.asList(
       RowFactory.create(0.0, 1.0),
       RowFactory.create(1.0, 0.0),

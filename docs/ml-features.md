@@ -777,17 +777,17 @@ for more details on the API.
 
 ## OneHotEncoder (Deprecated since 2.3.0)
 
-Because this existing `OneHotEncoder` is a stateless transformer, it is not usable on new data where the number of categories may differ from the training data. In order to fix this, a new `OneHotEncoderEstimator` was created that produces an `OneHotEncoderModel` when fitting. For more detail, please see the JIRA ticket (https://issues.apache.org/jira/browse/SPARK-13030).
+Because this existing `OneHotEncoder` is a stateless transformer, it is not usable on new data where the number of categories may differ from the training data. In order to fix this, a new `OneHotEncoderEstimator` was created that produces an `OneHotEncoderModel` when fitting. For more detail, please see [SPARK-13030](https://issues.apache.org/jira/browse/SPARK-13030).
 
-`OneHotEncoder` has been deprecated in 2.3.0 and will be removed in 3.0.0. Please use [OneHotEncoderEstimator](ml-features.html#onehotencoderestimator) for one-hot encoding instead.
+`OneHotEncoder` has been deprecated in 2.3.0 and will be removed in 3.0.0. Please use [OneHotEncoderEstimator](ml-features.html#onehotencoderestimator) instead.
 
 ## OneHotEncoderEstimator
 
-[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
+[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, and each output binary vector includes at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
 
-`OneHotEncoderEstimator` can handle multi-column. By specifying multiple input columns, it returns a one-hot-encoded output vector column for each input column.
+`OneHotEncoderEstimator` can transform multiple columns, returning a one-hot-encoded output vector column for each input column.
 
-`OneHotEncoderEstimator` supports `handleInvalid` parameter to choose how to handle invalid data during transforming data. Available options include 'keep' (invalid data presented as an extra categorical feature) and 'error' (throw an error).
+`OneHotEncoderEstimator` supports the `handleInvalid` parameter to choose how to handle invalid input during transforming data. Available options include 'keep' (any invalid inputs are assigned to an extra categorical number) and 'error' (throw an error).
 
 **Examples**
 

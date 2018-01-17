@@ -28,8 +28,8 @@ if __name__ == "__main__":
         .appName("OneHotEncoderEstimatorExample")\
         .getOrCreate()
 
+    # Note: categorical features are usually first encoded with StringIndexer
     # $example on$
-    # Notice: this categorical features are usually encoded with `StringIndexer`.
     df = spark.createDataFrame([
         (0.0, 1.0),
         (1.0, 0.0),

@@ -30,8 +30,8 @@ object OneHotEncoderEstimatorExample {
       .appName("OneHotEncoderEstimatorExample")
       .getOrCreate()
 
+    // Note: categorical features are usually first encoded with StringIndexer
     // $example on$
-    // Notice: this categorical features are usually encoded with `StringIndexer`.
     val df = spark.createDataFrame(Seq(
       (0.0, 1.0),
       (1.0, 0.0),
