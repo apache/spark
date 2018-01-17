@@ -280,7 +280,10 @@ class ArrowStreamPandasSerializer(Serializer):
             pdf = batch.to_pandas()
             pdf = _check_dataframe_convert_date(pdf, schema)
             pdf = _check_dataframe_localize_timestamps(pdf, self._timezone)
-            yield [c for _, c in pdf.iteritems()]
+            # NOTE: changed from pa.Columns.to_pandas, timezone issue in conversion fixed in 0.7.1
+            # TODO: Fix timestamp
+            #pdf = _check_dataframe_localize_timestamps(batch.to_pandas(), self._timezone)
+            yield [c.to_pandas() for c in pa.Table.from_batches([batch]).itercolumns()]
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"

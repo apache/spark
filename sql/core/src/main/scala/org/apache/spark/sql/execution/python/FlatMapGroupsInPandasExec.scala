@@ -75,8 +75,8 @@ case class FlatMapGroupsInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-    val argOffsets = Array((0 until (child.output.length - groupingAttributes.length)).toArray)
-    val schema = StructType(child.schema.drop(groupingAttributes.length))
+    val argOffsets = Array((groupingAttributes.length until child.output.length).toArray)
+    val schema = child.schema
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
 
@@ -85,11 +85,7 @@ case class FlatMapGroupsInPandasExec(
         Iterator(iter)
       } else {
         val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
-        val dropGrouping =
-          UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
-        groupedIter.map {
-          case (_, groupedRowIter) => groupedRowIter.map(dropGrouping)
-        }
+        groupedIter.map(_._2)
       }
 
       val context = TaskContext.get()

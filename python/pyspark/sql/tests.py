@@ -4416,7 +4416,8 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
         df = self.data.withColumn("arr", array(col("id")))
 
-        foo_udf = pandas_udf(
+        # Different forms of group map pandas UDF, results of these are the same
+        udf1 = pandas_udf(
             lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
             StructType(
                 [StructField('id', LongType()),
@@ -4427,9 +4428,30 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             PandasUDFType.GROUPED_MAP
         )
 
-        result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
-        expected = df.toPandas().groupby('id').apply(foo_udf.func).reset_index(drop=True)
-        self.assertPandasEqual(expected, result)
+        udf2 = pandas_udf(
+            lambda _, pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            'id long, v int, v1 double, v2 long',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        udf3 = pandas_udf(
+            lambda key, pdf: pdf.assign(id=key[0], v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            'id long, v int, v1 double, v2 long',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        result1 = df.groupby('id').apply(udf1).sort('id').toPandas()
+        expected1 = df.toPandas().groupby('id').apply(udf1.func).reset_index(drop=True)
+
+        result2 = df.groupby('id').apply(udf2).sort('id').toPandas()
+        expected2 = expected1
+
+        result3 = df.groupby('id').apply(udf3).sort('id').toPandas()
+        expected3 = expected1
+
+        self.assertFramesEqual(expected1, result1)
+        self.assertFramesEqual(expected2, result2)
+        self.assertFramesEqual(expected3, result3)
 
     def test_register_grouped_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
