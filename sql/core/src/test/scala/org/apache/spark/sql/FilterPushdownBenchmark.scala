@@ -110,87 +110,87 @@ object FilterPushdownBenchmark {
 
     Select 0 row (id IS NULL):              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            7906 / 7955          2.0         502.6       1.0X
-    Parquet Vectorized (Pushdown)                   56 /   60        281.1           3.6     141.3X
-    Native ORC Vectorized                         5655 / 5700          2.8         359.5       1.4X
-    Native ORC Vectorized (Pushdown)                68 /   71        233.0           4.3     117.1X
+    Parquet Vectorized                            7882 / 7957          2.0         501.1       1.0X
+    Parquet Vectorized (Pushdown)                   55 /   60        285.2           3.5     142.9X
+    Native ORC Vectorized                         5592 / 5627          2.8         355.5       1.4X
+    Native ORC Vectorized (Pushdown)                66 /   70        237.2           4.2     118.9X
 
     Select 0 row (7864320 < id < 7864320):  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            7891 / 7922          2.0         501.7       1.0X
-    Parquet Vectorized (Pushdown)                  746 /  769         21.1          47.5      10.6X
-    Native ORC Vectorized                         5645 / 5686          2.8         358.9       1.4X
-    Native ORC Vectorized (Pushdown)                82 /   84        192.9           5.2      96.8X
+    Parquet Vectorized                            7884 / 7909          2.0         501.2       1.0X
+    Parquet Vectorized (Pushdown)                  739 /  752         21.3          47.0      10.7X
+    Native ORC Vectorized                         5614 / 5646          2.8         356.9       1.4X
+    Native ORC Vectorized (Pushdown)                81 /   83        195.2           5.1      97.8X
 
     Select 1 row (id = 7864320):            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            7963 / 8069          2.0         506.3       1.0X
-    Parquet Vectorized (Pushdown)                  752 /  778         20.9          47.8      10.6X
-    Native ORC Vectorized                         5726 / 5789          2.7         364.1       1.4X
-    Native ORC Vectorized (Pushdown)                78 /   81        201.4           5.0     102.0X
+    Parquet Vectorized                            7905 / 8027          2.0         502.6       1.0X
+    Parquet Vectorized (Pushdown)                  740 /  766         21.2          47.1      10.7X
+    Native ORC Vectorized                         5684 / 5738          2.8         361.4       1.4X
+    Native ORC Vectorized (Pushdown)                78 /   81        202.4           4.9     101.7X
 
     Select 1 row (id <=> 7864320):          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            7983 / 8015          2.0         507.5       1.0X
-    Parquet Vectorized (Pushdown)                  753 /  774         20.9          47.9      10.6X
-    Native ORC Vectorized                         5772 / 5814          2.7         367.0       1.4X
-    Native ORC Vectorized (Pushdown)                76 /   78        207.3           4.8     105.2X
+    Parquet Vectorized                            7928 / 7993          2.0         504.1       1.0X
+    Parquet Vectorized (Pushdown)                  747 /  772         21.0          47.5      10.6X
+    Native ORC Vectorized                         5728 / 5753          2.7         364.2       1.4X
+    Native ORC Vectorized (Pushdown)                76 /   78        207.9           4.8     104.8X
 
     Select 1 row (7864320 <= id <= 7864320):Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            7929 / 7999          2.0         504.1       1.0X
-    Parquet Vectorized (Pushdown)                  747 /  770         21.1          47.5      10.6X
-    Native ORC Vectorized                         5756 / 5810          2.7         366.0       1.4X
-    Native ORC Vectorized (Pushdown)                76 /   79        206.4           4.8     104.0X
+    Parquet Vectorized                            7939 / 8021          2.0         504.8       1.0X
+    Parquet Vectorized (Pushdown)                  746 /  770         21.1          47.4      10.6X
+    Native ORC Vectorized                         5690 / 5734          2.8         361.7       1.4X
+    Native ORC Vectorized (Pushdown)                76 /   79        206.7           4.8     104.3X
 
     Select 1 row (7864319 < id < 7864321):  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            7968 / 8027          2.0         506.6       1.0X
-    Parquet Vectorized (Pushdown)                  750 /  771         21.0          47.7      10.6X
-    Native ORC Vectorized                         5776 / 5811          2.7         367.2       1.4X
-    Native ORC Vectorized (Pushdown)                75 /   78        208.5           4.8     105.6X
+    Parquet Vectorized                            7972 / 8019          2.0         506.9       1.0X
+    Parquet Vectorized (Pushdown)                  742 /  764         21.2          47.2      10.7X
+    Native ORC Vectorized                         5704 / 5743          2.8         362.6       1.4X
+    Native ORC Vectorized (Pushdown)                76 /   78        207.9           4.8     105.4X
 
     Select 10% rows (id < 1572864):         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8156 / 8257          1.9         518.5       1.0X
-    Parquet Vectorized (Pushdown)                 1620 / 1684          9.7         103.0       5.0X
-    Native ORC Vectorized                         5951 / 5990          2.6         378.3       1.4X
-    Native ORC Vectorized (Pushdown)               803 /  810         19.6          51.0      10.2X
+    Parquet Vectorized                            8733 / 8808          1.8         555.2       1.0X
+    Parquet Vectorized (Pushdown)                 2213 / 2267          7.1         140.7       3.9X
+    Native ORC Vectorized                         6420 / 6463          2.4         408.2       1.4X
+    Native ORC Vectorized (Pushdown)              1313 / 1331         12.0          83.5       6.7X
 
     Select 50% rows (id < 7864320):         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8690 / 8717          1.8         552.5       1.0X
-    Parquet Vectorized (Pushdown)                 5067 / 5099          3.1         322.2       1.7X
-    Native ORC Vectorized                         6530 / 6552          2.4         415.1       1.3X
-    Native ORC Vectorized (Pushdown)              3630 / 3670          4.3         230.8       2.4X
+    Parquet Vectorized                          11518 / 11591          1.4         732.3       1.0X
+    Parquet Vectorized (Pushdown)                 7962 / 7991          2.0         506.2       1.4X
+    Native ORC Vectorized                         8927 / 8985          1.8         567.6       1.3X
+    Native ORC Vectorized (Pushdown)              6102 / 6160          2.6         387.9       1.9X
 
     Select 90% rows (id < 14155776):        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9241 / 9293          1.7         587.5       1.0X
-    Parquet Vectorized (Pushdown)                 8474 / 8505          1.9         538.8       1.1X
-    Native ORC Vectorized                         7080 / 7107          2.2         450.1       1.3X
-    Native ORC Vectorized (Pushdown)              6507 / 6552          2.4         413.7       1.4X
+    Parquet Vectorized                          14255 / 14389          1.1         906.3       1.0X
+    Parquet Vectorized (Pushdown)               13564 / 13594          1.2         862.4       1.1X
+    Native ORC Vectorized                       11442 / 11608          1.4         727.5       1.2X
+    Native ORC Vectorized (Pushdown)            10991 / 11029          1.4         698.8       1.3X
 
     Select all rows (id IS NOT NULL):       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9317 / 9366          1.7         592.4       1.0X
-    Parquet Vectorized (Pushdown)                 9316 / 9367          1.7         592.3       1.0X
-    Native ORC Vectorized                         7148 / 7210          2.2         454.5       1.3X
-    Native ORC Vectorized (Pushdown)              7092 / 7152          2.2         450.9       1.3X
+    Parquet Vectorized                          14917 / 14938          1.1         948.4       1.0X
+    Parquet Vectorized (Pushdown)               14910 / 14964          1.1         948.0       1.0X
+    Native ORC Vectorized                       11986 / 12069          1.3         762.0       1.2X
+    Native ORC Vectorized (Pushdown)            12037 / 12123          1.3         765.3       1.2X
 
     Select all rows (id > -1):              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9307 / 9353          1.7         591.7       1.0X
-    Parquet Vectorized (Pushdown)                 9303 / 9340          1.7         591.5       1.0X
-    Native ORC Vectorized                         7192 / 7249          2.2         457.2       1.3X
-    Native ORC Vectorized (Pushdown)              7182 / 7216          2.2         456.6       1.3X
+    Parquet Vectorized                          14951 / 14976          1.1         950.6       1.0X
+    Parquet Vectorized (Pushdown)               14934 / 15016          1.1         949.5       1.0X
+    Native ORC Vectorized                       12000 / 12156          1.3         763.0       1.2X
+    Native ORC Vectorized (Pushdown)            12079 / 12113          1.3         767.9       1.2X
 
     Select all rows (id != -1):             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -----------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9145 / 9328          1.7         581.4       1.0X
-    Parquet Vectorized (Pushdown)                 9320 / 9368          1.7         592.5       1.0X
-    Native ORC Vectorized                         7202 / 7230          2.2         457.9       1.3X
-    Native ORC Vectorized (Pushdown)              7170 / 7206          2.2         455.9       1.3X
+    Parquet Vectorized                          14930 / 14972          1.1         949.3       1.0X
+    Parquet Vectorized (Pushdown)               15015 / 15047          1.0         954.6       1.0X
+    Native ORC Vectorized                       12090 / 12259          1.3         768.7       1.2X
+    Native ORC Vectorized (Pushdown)            12021 / 12096          1.3         764.2       1.2X
     */
     benchmark.run()
   }
@@ -219,7 +219,7 @@ object FilterPushdownBenchmark {
           filterPushDownBenchmark(numRows, title, whereExpr)
         }
 
-        val selectExpr = (1 to width).map(i => s"LENGTH(c$i)").mkString("SUM(", "+", ")")
+        val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(id)")
 
         Seq(10, 50, 90).foreach { percent =>
           filterPushDownBenchmark(
