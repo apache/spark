@@ -311,7 +311,7 @@ class UDFRegistration(object):
         >>> spark.sql("SELECT javaStringLength('test')").collect()
         [Row(UDF:javaStringLength(test)=4)]
         >>> spark.udf.registerJavaFunction(
-        ...    "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength")
+        ...     "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength")
         >>> spark.sql("SELECT javaStringLength2('test')").collect()
         [Row(UDF:javaStringLength2(test)=4)]
         """
