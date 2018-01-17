@@ -41,12 +41,14 @@ if __name__ == "__main__":
         size=3)
 
     datasetWithSize = sizeHint.transform(dataset)
+    print("Rows where 'userFeatures' is not the right size are filtered out")
     datasetWithSize.show(truncate=False)
 
     assembler = VectorAssembler(
         inputCols=["hour", "mobile", "userFeatures"],
         outputCol="features")
 
+    # This dataframe can be used by used by downstream transformers as before
     output = assembler.transform(datasetWithSize)
     print("Assembled columns 'hour', 'mobile', 'userFeatures' to vector column 'features'")
     output.select("features", "clicked").show(truncate=False)

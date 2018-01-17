@@ -44,13 +44,16 @@ object VectorSizeHintExample {
       .setSize(3)
 
     val datasetWithSize = sizeHint.transform(dataset)
+    println("Rows where 'userFeatures' is not the right size are filtered out")
     datasetWithSize.show(false)
 
     val assembler = new VectorAssembler()
       .setInputCols(Array("hour", "mobile", "userFeatures"))
       .setOutputCol("features")
 
+    // This dataframe can be used by used by downstream transformers as before
     val output = assembler.transform(datasetWithSize)
+    println("Assembled columns 'hour', 'mobile', 'userFeatures' to vector column 'features'")
     output.select("features", "clicked").show(false)
     // $example off$
 
