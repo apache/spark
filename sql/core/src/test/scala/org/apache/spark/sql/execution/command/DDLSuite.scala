@@ -117,6 +117,21 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
     }
   }
 
+  test("SPARK-22431: table with nested type col with special char") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
+      checkAnswer(spark.table("t"), Nil)
+    }
+  }
+
+  test("SPARK-22431: view with nested type") {
+    withView("t", "v") {
+      spark.sql("CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      checkAnswer(spark.table("t"), Row(Row("a", 1)) :: Nil)
+      spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
+      checkAnswer(spark.table("t"), Row(Row("a", 1)) :: Nil)
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -1956,8 +1971,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING parquet
-             |PARTITIONED BY(a, b)
              |LOCATION "${dir.toURI}"
+             |PARTITIONED BY(a, b)
            """.stripMargin)
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)

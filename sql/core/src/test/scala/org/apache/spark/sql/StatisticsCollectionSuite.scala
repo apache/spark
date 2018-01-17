@@ -85,13 +85,24 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyze empty table") {
     val table = "emptyTable"
     withTable(table) {
-      sql(s"CREATE TABLE $table (key STRING, value STRING) USING PARQUET")
+      val df = Seq.empty[Int].toDF("key")
+      df.write.format("json").saveAsTable(table)
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS noscan")
       val fetchedStats1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
       assert(fetchedStats1.get.sizeInBytes == 0)
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
       val fetchedStats2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
       assert(fetchedStats2.get.sizeInBytes == 0)
+
+      val expectedColStat =
+        "key" -> ColumnStat(0, None, None, 0, IntegerType.defaultSize, IntegerType.defaultSize)
+
+      // There won't be histogram for empty column.
+      Seq("true", "false").foreach { histogramEnabled =>
+        withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
+          checkColStats(df, mutable.LinkedHashMap(expectedColStat))
+        }
+      }
     }
   }
 
@@ -142,10 +153,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("column stats round trip serialization") {
     // Make sure we serialize and then deserialize and we will get the result data
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-    stats.zip(df.schema).foreach { case ((k, v), field) =>
-      withClue(s"column $k with type ${field.dataType}") {
-        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
-        assert(roundtrip == Some(v))
+    Seq(stats, statsWithHgms).foreach { s =>
+      s.zip(df.schema).foreach { case ((k, v), field) =>
+        withClue(s"column $k with type ${field.dataType}") {
+          val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
+          assert(roundtrip == Some(v))
+        }
       }
     }
   }
@@ -155,6 +168,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     assert(stats.size == data.head.productArity - 1)
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
     checkColStats(df, stats)
+
+    // test column stats with histograms
+    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
+      checkColStats(df, statsWithHgms)
+    }
   }
 
   test("column stats collection for null columns") {
@@ -171,7 +189,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     val expectedColStats = dataTypes.map { case (tpe, idx) =>
       (s"col$idx", ColumnStat(0, None, None, 1, tpe.defaultSize.toLong, tpe.defaultSize.toLong))
     }
-    checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+
+    // There won't be histograms for null columns.
+    Seq("true", "false").foreach { histogramEnabled =>
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
+        checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+      }
+    }
   }
 
   test("number format in statistics") {

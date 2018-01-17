@@ -668,7 +668,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schema = restoreTableMetadata(rawTable).schema
 
     // convert table statistics to properties so that we can persist them through hive client
-    var statsProperties =
+    val statsProperties =
       if (stats.isDefined) {
         statsToProperties(stats.get, schema)
       } else {
@@ -1032,8 +1032,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       stats: CatalogStatistics,
       schema: StructType): Map[String, String] = {
 
-    var statsProperties: Map[String, String] =
-      Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
+    val statsProperties = new mutable.HashMap[String, String]()
+    statsProperties += STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString()
     if (stats.rowCount.isDefined) {
       statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
     }
@@ -1046,7 +1046,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
     }
 
-    statsProperties
+    statsProperties.toMap
   }
 
   private def statsFromProperties(
@@ -1072,9 +1072,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           val colStatMap = statsProps.filterKeys(_.startsWith(keyPrefix)).map { case (k, v) =>
             (k.drop(keyPrefix.length), v)
           }
-
-          ColumnStat.fromMap(table, field, colStatMap).foreach {
-            colStat => colStats += field.name -> colStat
+          ColumnStat.fromMap(table, field, colStatMap).foreach { cs =>
+            colStats += field.name -> cs
           }
         }
       }
@@ -1099,14 +1098,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schema = restoreTableMetadata(rawTable).schema
 
     // convert partition statistics to properties so that we can persist them through hive api
-    val withStatsProps = lowerCasedParts.map(p => {
+    val withStatsProps = lowerCasedParts.map { p =>
       if (p.stats.isDefined) {
         val statsProperties = statsToProperties(p.stats.get, schema)
         p.copy(parameters = p.parameters ++ statsProperties)
       } else {
         p
       }
-    })
+    }
 
     // Note: Before altering table partitions in Hive, you *must* set the current database
     // to the one that contains the table of interest. Otherwise you will end up with the

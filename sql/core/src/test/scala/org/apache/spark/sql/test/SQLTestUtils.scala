@@ -113,7 +113,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
       if (thread.isAlive) {
         thread.interrupt()
         // If this interrupt does not work, then this thread is most likely running something that
-        // is not interruptible. There is not much point to wait for the thread to termniate, and
+        // is not interruptible. There is not much point to wait for the thread to terminate, and
         // we rather let the JVM terminate the thread on exit.
         fail(
           s"Test '$name' running on o.a.s.util.UninterruptibleThread timed out after" +
@@ -254,13 +254,26 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
-   * Drops temporary table `tableName` after calling `f`.
+   * Drops temporary view `viewNames` after calling `f`.
    */
-  protected def withTempView(tableNames: String*)(f: => Unit): Unit = {
+  protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
-      // temp tables that never got created.
-      try tableNames.foreach(spark.catalog.dropTempView) catch {
+      // temp views that never got created.
+      try viewNames.foreach(spark.catalog.dropTempView) catch {
+        case _: NoSuchTableException =>
+      }
+    }
+  }
+
+  /**
+   * Drops global temporary view `viewNames` after calling `f`.
+   */
+  protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      // If the test failed part way, we don't want to mask the failure by failing to remove
+      // global temp views that never got created.
+      try viewNames.foreach(spark.catalog.dropGlobalTempView) catch {
         case _: NoSuchTableException =>
       }
     }

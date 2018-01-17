@@ -23,8 +23,32 @@ import org.apache.spark.internal.config._
 
 private[spark] object config {
 
+  val ASYNC_TRACKING_ENABLED = ConfigBuilder("spark.appStateStore.asyncTracking.enable")
+    .booleanConf
+    .createWithDefault(true)
+
   val LIVE_ENTITY_UPDATE_PERIOD = ConfigBuilder("spark.ui.liveUpdate.period")
     .timeConf(TimeUnit.NANOSECONDS)
     .createWithDefaultString("100ms")
+
+  val MAX_RETAINED_JOBS = ConfigBuilder("spark.ui.retainedJobs")
+    .intConf
+    .createWithDefault(1000)
+
+  val MAX_RETAINED_STAGES = ConfigBuilder("spark.ui.retainedStages")
+    .intConf
+    .createWithDefault(1000)
+
+  val MAX_RETAINED_TASKS_PER_STAGE = ConfigBuilder("spark.ui.retainedTasks")
+    .intConf
+    .createWithDefault(100000)
+
+  val MAX_RETAINED_DEAD_EXECUTORS = ConfigBuilder("spark.ui.retainedDeadExecutors")
+    .intConf
+    .createWithDefault(100)
+
+  val MAX_RETAINED_ROOT_NODES = ConfigBuilder("spark.ui.dagGraph.retainedRootRDDs")
+    .intConf
+    .createWithDefault(Int.MaxValue)
 
 }

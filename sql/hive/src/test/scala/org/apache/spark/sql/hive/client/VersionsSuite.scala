@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.io.{ByteArrayOutputStream, File, PrintStream, PrintWriter}
 import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
@@ -161,6 +161,15 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
+    }
+
+    test(s"$version: createDatabase with null description") {
+      withTempDir { tmpDir =>
+        val dbWithNullDesc =
+          CatalogDatabase("dbWithNullDesc", description = null, tmpDir.toURI, Map())
+        client.createDatabase(dbWithNullDesc, ignoreIfExists = true)
+        assert(client.getDatabase("dbWithNullDesc").description == "")
+      }
     }
 
     test(s"$version: setCurrentDatabase") {
@@ -773,7 +782,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
            """.stripMargin
           )
 
-          val errorMsg = "data type mismatch: cannot cast DecimalType(2,1) to BinaryType"
+          val errorMsg = "data type mismatch: cannot cast decimal(2,1) to binary"
 
           if (isPartitioned) {
             val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"
@@ -802,7 +811,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: read avro file containing decimal") {
       val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
-      val location = new File(url.getFile)
+      val location = new File(url.getFile).toURI.toString
 
       val tableName = "tab1"
       val avroSchema =
@@ -841,6 +850,75 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
+    test(s"$version: SPARK-17920: Insert into/overwrite avro table") {
+      // skipped because it's failed in the condition on Windows
+      assume(!(Utils.isWindows && version == "0.12"))
+      withTempDir { dir =>
+        val avroSchema =
+          """
+            |{
+            |  "name": "test_record",
+            |  "type": "record",
+            |  "fields": [{
+            |    "name": "f0",
+            |    "type": [
+            |      "null",
+            |      {
+            |        "precision": 38,
+            |        "scale": 2,
+            |        "type": "bytes",
+            |        "logicalType": "decimal"
+            |      }
+            |    ]
+            |  }]
+            |}
+          """.stripMargin
+        val schemaFile = new File(dir, "avroDecimal.avsc")
+        val writer = new PrintWriter(schemaFile)
+        writer.write(avroSchema)
+        writer.close()
+        val schemaPath = schemaFile.toURI.toString
+
+        val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
+        val srcLocation = new File(url.getFile).toURI.toString
+        val destTableName = "tab1"
+        val srcTableName = "tab2"
+
+        withTable(srcTableName, destTableName) {
+          versionSpark.sql(
+            s"""
+               |CREATE EXTERNAL TABLE $srcTableName
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+               |WITH SERDEPROPERTIES ('respectSparkSchema' = 'true')
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+               |LOCATION '$srcLocation'
+               |TBLPROPERTIES ('avro.schema.url' = '$schemaPath')
+           """.stripMargin
+          )
+
+          versionSpark.sql(
+            s"""
+               |CREATE TABLE $destTableName
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+               |WITH SERDEPROPERTIES ('respectSparkSchema' = 'true')
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+               |TBLPROPERTIES ('avro.schema.url' = '$schemaPath')
+           """.stripMargin
+          )
+          versionSpark.sql(
+            s"""INSERT OVERWRITE TABLE $destTableName SELECT * FROM $srcTableName""")
+          val result = versionSpark.table(srcTableName).collect()
+          assert(versionSpark.table(destTableName).collect() === result)
+          versionSpark.sql(
+            s"""INSERT INTO TABLE $destTableName SELECT * FROM $srcTableName""")
+          assert(versionSpark.table(destTableName).collect().toSeq === result ++ result)
+        }
+      }
+    }
     // TODO: add more tests.
   }
 }

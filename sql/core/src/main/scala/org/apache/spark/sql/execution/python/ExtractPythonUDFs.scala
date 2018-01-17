@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
@@ -148,15 +149,18 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           udf.references.subsetOf(child.outputSet)
         }
         if (validUdfs.nonEmpty) {
-          if (validUdfs.exists(_.pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF)) {
-            throw new IllegalArgumentException("Can not use grouped vectorized UDFs")
-          }
+          require(validUdfs.forall(udf =>
+            udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
+            udf.evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF
+          ), "Can only extract scalar vectorized udf or sql batch udf")
 
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
 
-          val evaluation = validUdfs.partition(_.pythonUdfType == PythonUdfType.PANDAS_UDF) match {
+          val evaluation = validUdfs.partition(
+            _.evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF
+          ) match {
             case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
               ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
             case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
@@ -198,12 +202,12 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   private def trySplitFilter(plan: SparkPlan): SparkPlan = {
     plan match {
       case filter: FilterExec =>
-        val (candidates, containingNonDeterministic) =
-          splitConjunctivePredicates(filter.condition).span(_.deterministic)
+        val (candidates, nonDeterministic) =
+          splitConjunctivePredicates(filter.condition).partition(_.deterministic)
         val (pushDown, rest) = candidates.partition(!hasPythonUDF(_))
         if (pushDown.nonEmpty) {
           val newChild = FilterExec(pushDown.reduceLeft(And), filter.child)
-          FilterExec((rest ++ containingNonDeterministic).reduceLeft(And), newChild)
+          FilterExec((rest ++ nonDeterministic).reduceLeft(And), newChild)
         } else {
           filter
         }

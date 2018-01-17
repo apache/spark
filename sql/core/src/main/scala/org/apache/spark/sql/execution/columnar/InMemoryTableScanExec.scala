@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -26,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 
 case class InMemoryTableScanExec(
@@ -37,7 +39,13 @@ case class InMemoryTableScanExec(
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override def vectorTypes: Option[Seq[String]] =
-    Option(Seq.fill(attributes.length)(classOf[OnHeapColumnVector].getName))
+    Option(Seq.fill(attributes.length)(
+      if (!conf.offHeapColumnVectorEnabled) {
+        classOf[OnHeapColumnVector].getName
+      } else {
+        classOf[OffHeapColumnVector].getName
+      }
+    ))
 
   /**
    * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
@@ -62,7 +70,12 @@ case class InMemoryTableScanExec(
 
   private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
     val rowCount = cachedColumnarBatch.numRows
-    val columnVectors = OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
+    val taskContext = Option(TaskContext.get())
+    val columnVectors = if (!conf.offHeapColumnVectorEnabled || taskContext.isEmpty) {
+      OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
+    } else {
+      OffHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
+    }
     val columnarBatch = new ColumnarBatch(
       columnarBatchSchema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
     columnarBatch.setNumRows(rowCount)
@@ -73,6 +86,7 @@ case class InMemoryTableScanExec(
         columnarBatch.column(i).asInstanceOf[WritableColumnVector],
         columnarBatchSchema.fields(i).dataType, rowCount)
     }
+    taskContext.foreach(_.addTaskCompletionListener(_ => columnarBatch.close()))
     columnarBatch
   }
 

@@ -169,7 +169,7 @@ class OptimizeInSuite extends PlanTest {
       val optimizedPlan = OptimizeIn(plan)
       optimizedPlan match {
         case Filter(cond, _)
-          if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].getSet().size == 3 =>
+          if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].set.size == 3 =>
         // pass
         case _ => fail("Unexpected result for OptimizedIn")
       }

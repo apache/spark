@@ -16,10 +16,10 @@
 #
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
+from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import PythonUdfType, UserDefinedFunction
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -214,15 +214,15 @@ class GroupedData(object):
 
         :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
 
-        >>> from pyspark.sql.functions import pandas_udf
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
-        >>> @pandas_udf(returnType=df.schema)
+        >>> @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)  # doctest: +SKIP
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
-        >>> df.groupby('id').apply(normalize).show()  # doctest: +SKIP
+        >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
@@ -236,44 +236,13 @@ class GroupedData(object):
         .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """
-        import inspect
-
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
-           or udf.pythonUdfType != PythonUdfType.PANDAS_UDF \
-           or len(inspect.getargspec(udf.func).args) != 1:
-            raise ValueError("The argument to apply must be a 1-arg pandas_udf")
-        if not isinstance(udf.returnType, StructType):
-            raise ValueError("The returnType of the pandas_udf must be a StructType")
-
+           or udf.evalType != PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
+                             "GROUP_MAP.")
         df = self._df
-        func = udf.func
-        returnType = udf.returnType
-
-        # The python executors expects the function to use pd.Series as input and output
-        # So we to create a wrapper function that turns that to a pd.DataFrame before passing
-        # down to the user function, then turn the result pd.DataFrame back into pd.Series
-        columns = df.columns
-
-        def wrapped(*cols):
-            from pyspark.sql.types import to_arrow_type
-            import pandas as pd
-            result = func(pd.concat(cols, axis=1, keys=columns))
-            if not isinstance(result, pd.DataFrame):
-                raise TypeError("Return type of the user-defined function should be "
-                                "Pandas.DataFrame, but is {}".format(type(result)))
-            if not len(result.columns) == len(returnType):
-                raise RuntimeError(
-                    "Number of columns of the returned Pandas.DataFrame "
-                    "doesn't match specified schema. "
-                    "Expected: {} Actual: {}".format(len(returnType), len(result.columns)))
-            arrow_return_types = (to_arrow_type(field.dataType) for field in returnType)
-            return [(result[result.columns[i]], arrow_type)
-                    for i, arrow_type in enumerate(arrow_return_types)]
-
-        udf_obj = UserDefinedFunction(
-            wrapped, returnType, name=udf.__name__, pythonUdfType=PythonUdfType.PANDAS_GROUPED_UDF)
-        udf_column = udf_obj(*[df[col] for col in df.columns])
+        udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
 

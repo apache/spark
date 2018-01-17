@@ -28,6 +28,8 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.vectorized.ColumnarArray;
+import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -98,21 +100,13 @@ public class ColumnVectorUtils {
    * For example, an array of IntegerType will return an int[].
    * Throws exceptions for unhandled schemas.
    */
-  public static Object toPrimitiveJavaArray(ColumnVector.Array array) {
-    DataType dt = array.data.dataType();
-    if (dt instanceof IntegerType) {
-      int[] result = new int[array.length];
-      ColumnVector data = array.data;
-      for (int i = 0; i < result.length; i++) {
-        if (data.isNullAt(array.offset + i)) {
-          throw new RuntimeException("Cannot handle NULL values.");
-        }
-        result[i] = data.getInt(array.offset + i);
+  public static int[] toJavaIntArray(ColumnarArray array) {
+    for (int i = 0; i < array.numElements(); i++) {
+      if (array.isNullAt(i)) {
+        throw new RuntimeException("Cannot handle NULL values.");
       }
-      return result;
-    } else {
-      throw new UnsupportedOperationException();
     }
+    return array.toIntArray();
   }
 
   private static void appendValue(WritableColumnVector dst, DataType t, Object o) {

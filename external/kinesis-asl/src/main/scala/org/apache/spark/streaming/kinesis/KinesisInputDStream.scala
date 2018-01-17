@@ -28,6 +28,7 @@ import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 import org.apache.spark.streaming.api.java.JavaStreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions.Latest
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 
@@ -36,7 +37,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     val streamName: String,
     val endpointUrl: String,
     val regionName: String,
-    val initialPositionInStream: InitialPositionInStream,
+    val initialPosition: KinesisInitialPosition,
     val checkpointAppName: String,
     val checkpointInterval: Duration,
     val _storageLevel: StorageLevel,
@@ -77,7 +78,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
   }
 
   override def getReceiver(): Receiver[T] = {
-    new KinesisReceiver(streamName, endpointUrl, regionName, initialPositionInStream,
+    new KinesisReceiver(streamName, endpointUrl, regionName, initialPosition,
       checkpointAppName, checkpointInterval, _storageLevel, messageHandler,
       kinesisCreds, dynamoDBCreds, cloudWatchCreds)
   }
@@ -100,7 +101,7 @@ object KinesisInputDStream {
     // Params with defaults
     private var endpointUrl: Option[String] = None
     private var regionName: Option[String] = None
-    private var initialPositionInStream: Option[InitialPositionInStream] = None
+    private var initialPosition: Option[KinesisInitialPosition] = None
     private var checkpointInterval: Option[Duration] = None
     private var storageLevel: Option[StorageLevel] = None
     private var kinesisCredsProvider: Option[SparkAWSCredentials] = None
@@ -182,14 +183,30 @@ object KinesisInputDStream {
 
     /**
      * Sets the initial position data is read from in the Kinesis stream. Defaults to
+     * [[KinesisInitialPositions.Latest]] if no custom value is specified.
+     *
+     * @param initialPosition [[KinesisInitialPosition]] value specifying where Spark Streaming
+     *                        will start reading records in the Kinesis stream from
+     * @return Reference to this [[KinesisInputDStream.Builder]]
+     */
+    def initialPosition(initialPosition: KinesisInitialPosition): Builder = {
+      this.initialPosition = Option(initialPosition)
+      this
+    }
+
+    /**
+     * Sets the initial position data is read from in the Kinesis stream. Defaults to
      * [[InitialPositionInStream.LATEST]] if no custom value is specified.
+     * This function would be removed when we deprecate the KinesisUtils.
      *
      * @param initialPosition InitialPositionInStream value specifying where Spark Streaming
      *                        will start reading records in the Kinesis stream from
      * @return Reference to this [[KinesisInputDStream.Builder]]
      */
+    @deprecated("use initialPosition(initialPosition: KinesisInitialPosition)", "2.3.0")
     def initialPositionInStream(initialPosition: InitialPositionInStream): Builder = {
-      initialPositionInStream = Option(initialPosition)
+      this.initialPosition = Option(
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPosition))
       this
     }
 
@@ -266,7 +283,7 @@ object KinesisInputDStream {
         getRequiredParam(streamName, "streamName"),
         endpointUrl.getOrElse(DEFAULT_KINESIS_ENDPOINT_URL),
         regionName.getOrElse(DEFAULT_KINESIS_REGION_NAME),
-        initialPositionInStream.getOrElse(DEFAULT_INITIAL_POSITION_IN_STREAM),
+        initialPosition.getOrElse(DEFAULT_INITIAL_POSITION),
         getRequiredParam(checkpointAppName, "checkpointAppName"),
         checkpointInterval.getOrElse(ssc.graph.batchDuration),
         storageLevel.getOrElse(DEFAULT_STORAGE_LEVEL),
@@ -293,7 +310,6 @@ object KinesisInputDStream {
    * Creates a [[KinesisInputDStream.Builder]] for constructing [[KinesisInputDStream]] instances.
    *
    * @since 2.2.0
-   *
    * @return [[KinesisInputDStream.Builder]] instance
    */
   def builder: Builder = new Builder
@@ -309,7 +325,6 @@ object KinesisInputDStream {
   private[kinesis] val DEFAULT_KINESIS_ENDPOINT_URL: String =
     "https://kinesis.us-east-1.amazonaws.com"
   private[kinesis] val DEFAULT_KINESIS_REGION_NAME: String = "us-east-1"
-  private[kinesis] val DEFAULT_INITIAL_POSITION_IN_STREAM: InitialPositionInStream =
-    InitialPositionInStream.LATEST
+  private[kinesis] val DEFAULT_INITIAL_POSITION: KinesisInitialPosition = new Latest()
   private[kinesis] val DEFAULT_STORAGE_LEVEL: StorageLevel = StorageLevel.MEMORY_AND_DISK_2
 }
