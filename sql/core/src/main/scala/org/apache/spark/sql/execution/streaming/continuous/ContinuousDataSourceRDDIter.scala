@@ -77,7 +77,6 @@ class ContinuousDataSourceRDD(
     dataReaderThread.start()
 
     context.addTaskCompletionListener(_ => {
-      reader.close()
       dataReaderThread.interrupt()
       epochPollExecutor.shutdown()
     })
@@ -177,6 +176,7 @@ class DataReaderThread(
   private[continuous] var failureReason: Throwable = _
 
   override def run(): Unit = {
+    TaskContext.setTaskContext(context)
     val baseReader = ContinuousDataSourceRDD.getBaseReader(reader)
     try {
       while (!context.isInterrupted && !context.isCompleted()) {
@@ -201,6 +201,8 @@ class DataReaderThread(
         failedFlag.set(true)
         // Don't rethrow the exception in this thread. It's not needed, and the default Spark
         // exception handler will kill the executor.
+    } finally {
+      reader.close()
     }
   }
 }
