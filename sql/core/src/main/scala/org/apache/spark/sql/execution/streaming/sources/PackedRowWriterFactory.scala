@@ -51,7 +51,7 @@ class PackedRowDataWriter() extends DataWriter[Row] with Logging {
   override def write(row: Row): Unit = data.append(row)
 
   override def commit(): PackedRowCommitMessage = {
-    val msg = PackedRowCommitMessage(data.clone().toArray)
+    val msg = PackedRowCommitMessage(data.toArray)
     data.clear()
     msg
   }
