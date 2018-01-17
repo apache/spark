@@ -22,7 +22,9 @@ import org.apache.spark.sql.test.SharedSQLContext
 class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
+  private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
+
+  allFileBasedDataSources.foreach { format =>
     test(s"Writing empty datasets should not fail - $format") {
       withTempPath { dir =>
         Seq("str").toDS().limit(0).write.format(format).save(dir.getCanonicalPath)
@@ -30,8 +32,9 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  Seq("orc", "parquet", "csv", "json").foreach { format =>
-    test(s"SPARK-23072 Write and read back unicode schema - $format") {
+  // `TEXT` data source always has a single column whose name is `value`.
+  allFileBasedDataSources.filterNot(_ == "text").foreach { format =>
+    test(s"SPARK-23072 Write and read back unicode column names - $format") {
       withTempPath { path =>
         val dir = path.getCanonicalPath
 
@@ -42,12 +45,14 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
         df.write.format(format).option("header", "true").save(dir)
         val answerDf = spark.read.format(format).option("header", "true").load(dir)
 
-        assert(df.schema === answerDf.schema)
+        assert(df.schema.sameType(answerDf.schema))
         checkAnswer(df, answerDf)
       }
     }
   }
 
+  // Only ORC/Parquet support this. `CSV` and `JSON` returns an empty schema.
+  // `TEXT` data source always has a single column whose name is `value`.
   Seq("orc", "parquet").foreach { format =>
     test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
       withTempPath { file =>
@@ -62,7 +67,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
+  allFileBasedDataSources.foreach { format =>
     test(s"SPARK-22146 read files containing special characters using $format") {
       val nameWithSpecialChars = s"sp&cial%chars"
       withTempDir { dir =>
