@@ -28,8 +28,6 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2756,22 +2754,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         // The DESC TABLE should report same schema as table scan.
         assert(sql("desc t").select("col_name")
           .as[String].collect().mkString(",").contains("i,p,j"))
-      }
-    }
-  }
-
-  // Only New OrcFileFormat supports this
-  Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
-      "parquet").foreach { format =>
-    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
-      withTempPath { file =>
-        val path = file.getCanonicalPath
-        val emptyDf = Seq((true, 1, "str")).toDF.limit(0)
-        emptyDf.write.format(format).save(path)
-
-        val df = spark.read.format(format).load(path)
-        assert(df.schema.sameType(emptyDf.schema))
-        checkAnswer(df, emptyDf)
       }
     }
   }

@@ -139,7 +139,7 @@ case class BroadcastHashJoinExec(
     // At the end of the task, we update the avg hash probe.
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
 
-    // inline mutable state since not many join operations in a task
+    // Inline mutable state since not many join operations in a task
     val relationTerm = ctx.addMutableState(clsName, "relation",
       v => s"""
          | $v = (($clsName) $broadcast.value()).asReadOnlyCopy();

@@ -260,6 +260,14 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     assert(res2(1).isEmpty)
   }
 
+  // SPARK-22957: check for 32bit overflow when computing rank.
+  // ignored - takes 4 minutes to run.
+  ignore("approx quantile 4: test for Int overflow") {
+    val res = spark.range(3000000000L).stat.approxQuantile("id", Array(0.8, 0.9), 0.05)
+    assert(res(0) > 2200000000.0)
+    assert(res(1) > 2200000000.0)
+  }
+
   test("crosstab") {
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
       val rng = new Random()
