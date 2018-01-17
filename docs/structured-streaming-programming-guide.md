@@ -1290,7 +1290,7 @@ impressionsWithWatermark.join(
 
 However, note that the outer NULL results will be generated with a delay (depends on the specified
 watermark delay and the time range condition) because the engine has to wait for that long to ensure
- there were no matches and there will be no more matches in future.
+there were no matches and there will be no more matches in future.
 
 ##### Support matrix for joins in streaming queries
 
@@ -1393,8 +1393,7 @@ Additional details on supported joins:
   - Cannot use streaming aggregations before joins.
 
   - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode cannot before joins.
-
-
+  
 
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
@@ -1463,13 +1462,13 @@ Some of them are as follows.
 
 - Limit and take first N rows are not supported on streaming Datasets.
 
-- Distinct operations on streaming Datasets are not supported. See the
-  <a href="#support-matrix-for-joins-in-streaming-queries">support matrix in the Join Operations section</a>
-  for more details
+- Distinct operations on streaming Datasets are not supported.
 
 - Sorting operations are supported on streaming Datasets only after an aggregation and in Complete Output Mode.
 
 - Few types of outer joins on streaming Datasets are not supported. See the
+  <a href="#support-matrix-for-joins-in-streaming-queries">support matrix in the Join Operations section</a>
+  for more details.
 
 In addition, there are some Dataset methods that will not work on streaming Datasets. They are actions that will immediately run queries and return results, which does not make sense on a streaming Dataset. Rather, those functionalities can be done by explicitly starting a streaming query (see the next section regarding that).
 
