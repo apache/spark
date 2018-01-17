@@ -283,7 +283,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val sink = (ds.newInstance(), trigger) match {
         case (w: ContinuousWriteSupport, _: ContinuousTrigger) => w
-        case (_, _: ContinuousTrigger) => throw new AnalysisException(
+        case (_, _: ContinuousTrigger) => throw new UnsupportedOperationException(
             s"Data source $source does not support continuous writing")
         case (w: MicroBatchWriteSupport, _) => w
         case _ =>
