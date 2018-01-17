@@ -1393,7 +1393,7 @@ Additional details on supported joins:
   - Cannot use streaming aggregations before joins.
 
   - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode cannot before joins.
-  
+
 
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
@@ -2451,7 +2451,11 @@ write.stream(aggDF, "memory", outputMode = "complete", checkpointLocation = "pat
 
 **Talks**
 
-- Spark Summit Europe 2017 Talks -
-  - [Easy, Scalable, Fault-tolerant Stream Processing with Structured Streaming in Apache Spark](https://spark-summit.org/2017/events/easy-scalable-fault-tolerant-stream-processing-with-structured-streaming-in-apache-spark/)
-- Spark Summit 2016 Talk - [A Deep Dive into Structured Streaming](https://spark-summit.org/2016/events/a-deep-dive-into-structured-streaming/)
+- Spark Summit Europe 2017
+  - Easy, Scalable, Fault-tolerant Stream Processing with Structured Streaming in Apache Spark -
+    [Part 1 slides/video](https://databricks.com/session/easy-scalable-fault-tolerant-stream-processing-with-structured-streaming-in-apache-spark), [Part 2 slides/video](https://databricks.com/session/easy-scalable-fault-tolerant-stream-processing-with-structured-streaming-in-apache-spark-continues)
+  - Deep Dive into Stateful Stream Processing in Structured Streaming - [slides/video](https://databricks.com/session/deep-dive-into-stateful-stream-processing-in-structured-streaming)
+- Spark Summit 2016
+  - A Deep Dive into Structured Streaming - [slides/video](https://spark-summit.org/2016/events/a-deep-dive-into-structured-streaming/)
+
 
