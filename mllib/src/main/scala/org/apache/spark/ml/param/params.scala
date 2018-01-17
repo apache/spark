@@ -27,11 +27,11 @@ import scala.collection.mutable
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+import org.slf4j.LoggerFactory
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.linalg.{JsonMatrixConverter, JsonVectorConverter, Matrix, Vector}
-import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 
 /**
@@ -167,6 +167,8 @@ private[ml] object Param {
 @DeveloperApi
 object ParamValidators {
 
+  private val LOGGER = LoggerFactory.getLogger(ParamValidators.getClass)
+
   /** (private[param]) Default validation always return true */
   private[param] def alwaysTrue[T]: T => Boolean = (_: T) => true
 
@@ -252,24 +254,22 @@ object ParamValidators {
   }
 
   /**
-   * Checks that either inputCols and outputCols are set or inputCol and outputCol are set. If
-   * this is not true, an `IllegalArgumentException` is raised.
-   * @param model
+   * Checks that only one of the params passed as arguments is set. If this is not true, an
+   * `IllegalArgumentException` is raised.
    */
-  private[spark] def checkMultiColumnParams(model: Params): Unit = {
-    model match {
-      case m: HasInputCols with HasInputCol if m.isSet(m.inputCols) && m.isSet(m.inputCol) =>
-        raiseIncompatibleParamsException("inputCols", "inputCol")
-      case m: HasOutputCols with HasOutputCol if m.isSet(m.outputCols) && m.isSet(m.outputCol) =>
-        raiseIncompatibleParamsException("outputCols", "outputCol")
-      case _ =>
+  def checkExclusiveParams(model: Params, params: String*): Unit = {
+    val (existingParams, nonExistingParams) = params.partition(model.hasParam)
+    if (nonExistingParams.nonEmpty) {
+      val pronoun = if (nonExistingParams.size == 1) "It" else "They"
+      LOGGER.warn(s"Ignored ${nonExistingParams.mkString("`", "`, `", "`")} while checking " +
+        s"exclusive params. $pronoun don't exist for the specified model the model.")
     }
-  }
 
-  private[spark] def raiseIncompatibleParamsException(
-      paramName1: String,
-      paramName2: String): Unit = {
-    throw new IllegalArgumentException(s"`$paramName1` and `$paramName2` cannot both be set.")
+    if (existingParams.count(paramName => model.isSet(model.getParam(paramName))) > 1) {
+      val paramString = existingParams.mkString("`", "`, `", "`")
+      throw new IllegalArgumentException(s"$paramString are exclusive, " +
+        "but more than one among them are set.")
+    }
   }
 }
 

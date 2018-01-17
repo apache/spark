@@ -435,43 +435,24 @@ object ParamsSuite extends SparkFunSuite {
   }
 
   /**
-   * Checks that the class throws an exception in case both `inputCols` and `inputCol` are set and
-   * in case both `outputCols` and `outputCol` are set.
-   * These checks are performed only when the class extends respectively both `HasInputCols` and
-   * `HasInputCol` and both `HasOutputCols` and `HasOutputCol`.
-   *
-   * @param paramsClass The Class to be checked
-   * @param dataset A `Dataset` to use in the tests
+   * Checks that the class throws an exception in case multiple exclusive params are set
+   * The params to be checked are passed as arguments with their value.
+   * The checks are performed only if all the passed params are defined for the given model.
    */
-  def testMultiColumnParams(paramsClass: Class[_ <: Params], dataset: Dataset[_]): Unit = {
-    val cols = dataset.columns
-
-    if (paramsClass.isAssignableFrom(classOf[HasInputCols])
-        && paramsClass.isAssignableFrom(classOf[HasInputCol])) {
-      val model = paramsClass.newInstance()
-      model.set(model.asInstanceOf[HasInputCols].inputCols, cols)
-      model.set(model.asInstanceOf[HasInputCol].inputCol, cols(0))
+  def testExclusiveParams(model: Params, dataset: Dataset[_],
+      paramsAndValues: (String, Any)*): Unit = {
+    val params = paramsAndValues.map(_._1)
+    if (params.forall(model.hasParam)) {
+      paramsAndValues.foreach { case (paramName, paramValue) =>
+        model.set(model.getParam(paramName), paramValue)
+      }
       val e = intercept[IllegalArgumentException] {
         model match {
           case t: Transformer => t.transform(dataset)
           case e: Estimator[_] => e.fit(dataset)
         }
       }
-      assert(e.getMessage.contains("cannot be both set"))
-    }
-
-    if (paramsClass.isAssignableFrom(classOf[HasOutputCols])
-      && paramsClass.isAssignableFrom(classOf[HasOutputCol])) {
-      val model = paramsClass.newInstance()
-      model.set(model.asInstanceOf[HasOutputCols].outputCols, cols)
-      model.set(model.asInstanceOf[HasOutputCol].outputCol, cols(0))
-      val e = intercept[IllegalArgumentException] {
-        model match {
-          case t: Transformer => t.transform(dataset)
-          case e: Estimator[_] => e.fit(dataset)
-        }
-      }
-      assert(e.getMessage.contains("cannot be both set"))
+      assert(e.getMessage.contains("are exclusive, but more than one"))
     }
   }
 }

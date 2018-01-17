@@ -184,16 +184,13 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    ParamValidators.checkMultiColumnParams(this)
-    if (isSet(inputCol) && isSet(splitsArray)) {
-      ParamValidators.raiseIncompatibleParamsException("inputCol", "splitsArray")
-    }
-    if (isSet(inputCols) && isSet(splits)) {
-      ParamValidators.raiseIncompatibleParamsException("inputCols", "splits")
-    }
+    ParamValidators.checkExclusiveParams(this, "inputCol", "inputCols")
+    ParamValidators.checkExclusiveParams(this, "outputCol", "outputCols")
+    ParamValidators.checkExclusiveParams(this, "splits", "splitsArray")
+
     if (isSet(inputCols)) {
       var transformedSchema = schema
-      $(inputCols).zip($(outputCols)).zipWithIndex.map { case ((inputCol, outputCol), idx) =>
+      $(inputCols).zip($(outputCols)).zipWithIndex.foreach { case ((inputCol, outputCol), idx) =>
         SchemaUtils.checkNumericType(transformedSchema, inputCol)
         transformedSchema = SchemaUtils.appendColumn(transformedSchema,
           prepOutputField($(splitsArray)(idx), outputCol))
