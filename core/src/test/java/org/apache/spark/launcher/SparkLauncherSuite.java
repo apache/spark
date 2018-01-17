@@ -18,30 +18,28 @@
 package org.apache.spark.launcher;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
+import org.junit.Ignore;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.slf4j.bridge.SLF4JBridgeHandler;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.*;
 
+import org.apache.spark.SparkContext;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.util.Utils;
 
 /**
  * These tests require the Spark assembly to be built before they can be run.
  */
-public class SparkLauncherSuite {
+public class SparkLauncherSuite extends BaseSuite {
 
-  static {
-    SLF4JBridgeHandler.removeHandlersForRootLogger();
-    SLF4JBridgeHandler.install();
-  }
-
-  private static final Logger LOG = LoggerFactory.getLogger(SparkLauncherSuite.class);
   private static final NamedThreadFactory TF = new NamedThreadFactory("SparkLauncherSuite-%d");
 
   private final SparkLauncher launcher = new SparkLauncher();
@@ -123,6 +121,55 @@ public class SparkLauncherSuite {
     assertEquals(0, app.waitFor());
   }
 
+  // TODO: [SPARK-23020] Re-enable this
+  @Ignore
+  public void testInProcessLauncher() throws Exception {
+    // Because this test runs SparkLauncher in process and in client mode, it pollutes the system
+    // properties, and that can cause test failures down the test pipeline. So restore the original
+    // system properties after this test runs.
+    Map<Object, Object> properties = new HashMap<>(System.getProperties());
+    try {
+      inProcessLauncherTestImpl();
+    } finally {
+      Properties p = new Properties();
+      for (Map.Entry<Object, Object> e : properties.entrySet()) {
+        p.put(e.getKey(), e.getValue());
+      }
+      System.setProperties(p);
+      // Here DAGScheduler is stopped, while SparkContext.clearActiveContext may not be called yet.
+      // Wait for a reasonable amount of time to avoid creating two active SparkContext in JVM.
+      // See SPARK-23019 and SparkContext.stop() for details.
+      TimeUnit.MILLISECONDS.sleep(500);
+    }
+  }
+
+  private void inProcessLauncherTestImpl() throws Exception {
+    final List<SparkAppHandle.State> transitions = new ArrayList<>();
+    SparkAppHandle.Listener listener = mock(SparkAppHandle.Listener.class);
+    doAnswer(invocation -> {
+      SparkAppHandle h = (SparkAppHandle) invocation.getArguments()[0];
+      transitions.add(h.getState());
+      return null;
+    }).when(listener).stateChanged(any(SparkAppHandle.class));
+
+    SparkAppHandle handle = new InProcessLauncher()
+      .setMaster("local")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
+      .setMainClass(InProcessTestApp.class.getName())
+      .addAppArgs("hello")
+      .startApplication(listener);
+
+    waitFor(handle);
+    assertEquals(SparkAppHandle.State.FINISHED, handle.getState());
+
+    // Matches the behavior of LocalSchedulerBackend.
+    List<SparkAppHandle.State> expected = Arrays.asList(
+      SparkAppHandle.State.CONNECTED,
+      SparkAppHandle.State.RUNNING,
+      SparkAppHandle.State.FINISHED);
+    assertEquals(expected, transitions);
+  }
+
   public static class SparkLauncherTestApp {
 
     public static void main(String[] args) throws Exception {
@@ -130,6 +177,16 @@ public class SparkLauncherSuite {
       assertEquals("proc", args[0]);
       assertEquals("bar", System.getProperty("foo"));
       assertEquals("local", System.getProperty(SparkLauncher.SPARK_MASTER));
+    }
+
+  }
+
+  public static class InProcessTestApp {
+
+    public static void main(String[] args) throws Exception {
+      assertNotEquals(0, args.length);
+      assertEquals(args[0], "hello");
+      new SparkContext().stop();
     }
 
   }

@@ -827,8 +827,8 @@ df.isStreaming()
 {% endhighlight %}
 </div>
 <div data-lang="r"  markdown="1">
-{% highlight bash %}
-Not available.
+{% highlight r %}
+isStreaming(df)
 {% endhighlight %}
 </div>
 </div>
@@ -883,6 +883,19 @@ windowedCounts = words.groupBy(
     window(words.timestamp, "10 minutes", "5 minutes"),
     words.word
 ).count()
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+words <- ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
+
+# Group the data by window and word and compute the count of each group
+windowedCounts <- count(
+                    groupBy(
+                      words,
+                      window(words$timestamp, "10 minutes", "5 minutes"),
+                      words$word))
 {% endhighlight %}
 
 </div>
@@ -957,6 +970,21 @@ windowedCounts = words \
         window(words.timestamp, "10 minutes", "5 minutes"),
         words.word) \
     .count()
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+words <- ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
+
+# Group the data by window and word and compute the count of each group
+
+words <- withWatermark(words, "timestamp", "10 minutes")
+windowedCounts <- count(
+                    groupBy(
+                      words,
+                      window(words$timestamp, "10 minutes", "5 minutes"),
+                      words$word))
 {% endhighlight %}
 
 </div>

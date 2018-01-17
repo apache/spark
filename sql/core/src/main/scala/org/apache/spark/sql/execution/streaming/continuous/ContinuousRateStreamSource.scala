@@ -27,14 +27,15 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.{RateSourceProvider, RateStreamOffset, ValueRunTimeMsPair}
 import org.apache.spark.sql.execution.streaming.sources.RateStreamSourceV2
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceV2, DataSourceV2Options}
+import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
 import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 
-case class ContinuousRateStreamPartitionOffset(
+case class RateStreamPartitionOffset(
    partition: Int, currentValue: Long, currentTimeMs: Long) extends PartitionOffset
 
-class ContinuousRateStreamReader(options: DataSourceV2Options)
+class RateStreamContinuousReader(options: DataSourceV2Options)
   extends ContinuousReader {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
@@ -47,7 +48,7 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
   override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
     assert(offsets.length == numPartitions)
     val tuples = offsets.map {
-      case ContinuousRateStreamPartitionOffset(i, currVal, nextRead) =>
+      case RateStreamPartitionOffset(i, currVal, nextRead) =>
         (i, ValueRunTimeMsPair(currVal, nextRead))
     }
     RateStreamOffset(Map(tuples: _*))
@@ -85,7 +86,7 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
       val start = partitionStartMap(i)
       // Have each partition advance by numPartitions each row, with starting points staggered
       // by their partition index.
-      RateStreamReadTask(
+      RateStreamContinuousReadTask(
         start.value,
         start.runTimeMs,
         i,
@@ -100,7 +101,7 @@ class ContinuousRateStreamReader(options: DataSourceV2Options)
 
 }
 
-case class RateStreamReadTask(
+case class RateStreamContinuousReadTask(
     startValue: Long,
     startTimeMs: Long,
     partitionIndex: Int,
@@ -108,10 +109,11 @@ case class RateStreamReadTask(
     rowsPerSecond: Double)
   extends ReadTask[Row] {
   override def createDataReader(): DataReader[Row] =
-    new RateStreamDataReader(startValue, startTimeMs, partitionIndex, increment, rowsPerSecond)
+    new RateStreamContinuousDataReader(
+      startValue, startTimeMs, partitionIndex, increment, rowsPerSecond)
 }
 
-class RateStreamDataReader(
+class RateStreamContinuousDataReader(
     startValue: Long,
     startTimeMs: Long,
     partitionIndex: Int,
@@ -150,5 +152,5 @@ class RateStreamDataReader(
   override def close(): Unit = {}
 
   override def getOffset(): PartitionOffset =
-    ContinuousRateStreamPartitionOffset(partitionIndex, currentValue, nextReadTime)
+    RateStreamPartitionOffset(partitionIndex, currentValue, nextReadTime)
 }

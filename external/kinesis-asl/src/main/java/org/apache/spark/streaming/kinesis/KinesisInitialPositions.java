@@ -67,9 +67,10 @@ public class KinesisInitialPositions {
 
 
     /**
-     * Returns instance of [[KinesisInitialPosition]] based on the passed [[InitialPositionInStream]].
-     * This method is used in KinesisUtils for translating the InitialPositionInStream
-     * to InitialPosition. This function would be removed when we deprecate the KinesisUtils.
+     * Returns instance of [[KinesisInitialPosition]] based on the passed
+     * [[InitialPositionInStream]]. This method is used in KinesisUtils for translating the
+     * InitialPositionInStream to InitialPosition. This function would be removed when we deprecate
+     * the KinesisUtils.
      *
      * @return [[InitialPosition]]
      */
@@ -83,9 +84,10 @@ public class KinesisInitialPositions {
             // InitialPositionInStream.AT_TIMESTAMP is not supported.
             // Use InitialPosition.atTimestamp(timestamp) instead.
             throw new UnsupportedOperationException(
-                    "Only InitialPositionInStream.LATEST and InitialPositionInStream.TRIM_HORIZON " +
-                            "supported in initialPositionInStream(). Please use the initialPosition() from " +
-                            "builder API in KinesisInputDStream for using InitialPositionInStream.AT_TIMESTAMP");
+                    "Only InitialPositionInStream.LATEST and InitialPositionInStream." +
+                            "TRIM_HORIZON supported in initialPositionInStream(). Please use " +
+                            "the initialPosition() from builder API in KinesisInputDStream for " +
+                            "using InitialPositionInStream.AT_TIMESTAMP");
         }
     }
 }

@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceV2}
+import org.apache.spark.sql.sources.v2.DataSourceV2
+import org.apache.spark.sql.sources.v2.streaming.ContinuousReadSupport
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
@@ -60,7 +61,7 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  */
 case class StreamingExecutionRelation(
-    source: Source,
+    source: BaseStreamingSource,
     output: Seq[Attribute])(session: SparkSession)
   extends LeafNode {
 
@@ -91,7 +92,7 @@ case class StreamingRelationV2(
     sourceName: String,
     extraOptions: Map[String, String],
     output: Seq[Attribute],
-    v1DataSource: DataSource)(session: SparkSession)
+    v1Relation: Option[StreamingRelation])(session: SparkSession)
   extends LeafNode {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName

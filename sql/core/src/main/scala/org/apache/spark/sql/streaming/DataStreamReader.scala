@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.Locale
+import java.util.{Locale, Optional}
 
 import scala.collection.JavaConverters._
 
@@ -27,7 +27,9 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceV2Options, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.sources.v2.DataSourceV2Options
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -165,19 +167,31 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       userSpecifiedSchema = userSpecifiedSchema,
       className = source,
       options = extraOptions.toMap)
+    val v1Relation = ds match {
+      case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
+      case _ => None
+    }
     ds match {
-      case s: ContinuousReadSupport =>
-        val tempReader = s.createContinuousReader(
-          java.util.Optional.ofNullable(userSpecifiedSchema.orNull),
+      case s: MicroBatchReadSupport =>
+        val tempReader = s.createMicroBatchReader(
+          Optional.ofNullable(userSpecifiedSchema.orNull),
           Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
           options)
-        // Generate the V1 node to catch errors thrown within generation.
-        StreamingRelation(v1DataSource)
         Dataset.ofRows(
           sparkSession,
           StreamingRelationV2(
             s, source, extraOptions.toMap,
-            tempReader.readSchema().toAttributes, v1DataSource)(sparkSession))
+            tempReader.readSchema().toAttributes, v1Relation)(sparkSession))
+      case s: ContinuousReadSupport =>
+        val tempReader = s.createContinuousReader(
+          Optional.ofNullable(userSpecifiedSchema.orNull),
+          Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
+          options)
+        Dataset.ofRows(
+          sparkSession,
+          StreamingRelationV2(
+            s, source, extraOptions.toMap,
+            tempReader.readSchema().toAttributes, v1Relation)(sparkSession))
       case _ =>
         // Code path for data source v1.
         Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
@@ -261,17 +275,20 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
-   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * <li>`sep` (default `,`): sets a single character as a separator for each
    * field and value.</li>
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
-   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
+   * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
    * the separator can be part of the value. If you would like to turn off quotations, you need to
    * set not `null` but an empty string. This behaviour is different form
    * `com.databricks.spark.csv`.</li>
-   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
    * an already quoted value.</li>
-   * <li>`comment` (default empty string): sets the single character used for skipping lines
+   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
+   * escaping the escape for the quote character. The default value is escape character when escape
+   * and quote characters are different, `\0` otherwise.</li>
+   * <li>`comment` (default empty string): sets a single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It

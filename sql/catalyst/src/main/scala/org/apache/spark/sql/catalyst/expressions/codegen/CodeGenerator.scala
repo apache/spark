@@ -190,7 +190,7 @@ class CodegenContext {
 
     /**
      * Returns the reference of next available slot in current compacted array. The size of each
-     * compacted array is controlled by the config `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
+     * compacted array is controlled by the constant `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
      * Once reaching the threshold, new compacted array is created.
      */
     def getNextSlot(): String = {
@@ -352,7 +352,7 @@ class CodegenContext {
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    val initCodes = mutableStateInitCode.distinct
+    val initCodes = mutableStateInitCode.distinct.map(_ + "\n")
 
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.

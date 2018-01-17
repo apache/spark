@@ -164,7 +164,7 @@ object KinesisUtils {
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    * @param stsAssumeRoleArn ARN of IAM role to assume when using STS sessions to read from
    *                         Kinesis stream.
-   * @param stsSessionName Name to uniquely identify STS sessions if multiple princples assume
+   * @param stsSessionName Name to uniquely identify STS sessions if multiple principals assume
    *                       the same role.
    * @param stsExternalId External ID that can be used to validate against the assumed IAM role's
    *                      trust policy.
@@ -434,7 +434,7 @@ object KinesisUtils {
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    * @param stsAssumeRoleArn ARN of IAM role to assume when using STS sessions to read from
    *                         Kinesis stream.
-   * @param stsSessionName Name to uniquely identify STS sessions if multiple princples assume
+   * @param stsSessionName Name to uniquely identify STS sessions if multiple princpals assume
    *                       the same role.
    * @param stsExternalId External ID that can be used to validate against the assumed IAM role's
    *                      trust policy.

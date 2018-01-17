@@ -26,8 +26,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
-import org.apache.spark.sql.sources.v2.reader.{ContinuousReader, PartitionOffset}
-import org.apache.spark.sql.sources.v2.writer.{ContinuousWriter, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, PartitionOffset}
+import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
+import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
 import org.apache.spark.util.RpcUtils
 
 private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
@@ -37,6 +38,15 @@ private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
  * Atomically increment the current epoch and get the new value.
  */
 private[sql] case object IncrementAndGetEpoch extends EpochCoordinatorMessage
+
+/**
+ * The RpcEndpoint stop() will wait to clear out the message queue before terminating the
+ * object. This can lead to a race condition where the query restarts at epoch n, a new
+ * EpochCoordinator starts at epoch n, and then the old epoch coordinator commits epoch n + 1.
+ * The framework doesn't provide a handle to wait on the message queue, so we use a synchronous
+ * message to stop any writes to the ContinuousExecution object.
+ */
+private[sql] case object StopContinuousExecutionWrites extends EpochCoordinatorMessage
 
 // Init messages
 /**
@@ -115,6 +125,8 @@ private[continuous] class EpochCoordinator(
     override val rpcEnv: RpcEnv)
   extends ThreadSafeRpcEndpoint with Logging {
 
+  private var queryWritesStopped: Boolean = false
+
   private var numReaderPartitions: Int = _
   private var numWriterPartitions: Int = _
 
@@ -146,12 +158,16 @@ private[continuous] class EpochCoordinator(
         partitionCommits.remove(k)
       }
       for (k <- partitionOffsets.keys.filter { case (e, _) => e < epoch }) {
-        partitionCommits.remove(k)
+        partitionOffsets.remove(k)
       }
     }
   }
 
   override def receive: PartialFunction[Any, Unit] = {
+    // If we just drop these messages, we won't do any writes to the query. The lame duck tasks
+    // won't shed errors or anything.
+    case _ if queryWritesStopped => ()
+
     case CommitPartitionEpoch(partitionId, epoch, message) =>
       logDebug(s"Got commit from partition $partitionId at epoch $epoch: $message")
       if (!partitionCommits.isDefinedAt((epoch, partitionId))) {
@@ -186,6 +202,10 @@ private[continuous] class EpochCoordinator(
 
     case SetWriterPartitions(numPartitions) =>
       numWriterPartitions = numPartitions
+      context.reply(())
+
+    case StopContinuousExecutionWrites =>
+      queryWritesStopped = true
       context.reply(())
   }
 }

@@ -226,18 +226,23 @@ class Catalog(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a python function (including lambda function) as a UDF
-        so it can be used in SQL statements.
+    def registerFunction(self, name, f, returnType=None):
+        """Registers a Python function (including lambda function) or a :class:`UserDefinedFunction`
+        as a UDF. The registered UDF can be used in SQL statements.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it default to a string and conversion will automatically
-        be done.  For any other return type, the produced object must match the specified type.
+        :func:`spark.udf.register` is an alias for :func:`spark.catalog.registerFunction`.
 
-        :param name: name of the UDF
-        :param f: python function
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
-        :return: a wrapped :class:`UserDefinedFunction`
+        In addition to a name and the function itself, `returnType` can be optionally specified.
+        1) When f is a Python function, `returnType` defaults to a string. The produced object must
+        match the specified type. 2) When f is a :class:`UserDefinedFunction`, Spark uses the return
+        type of the given UDF as the return type of the registered UDF. The input parameter
+        `returnType` is None by default. If given by users, the value must be None.
+
+        :param name: name of the UDF in SQL statements.
+        :param f: a Python function, or a wrapped/native UserDefinedFunction. The UDF can be either
+            row-at-a-time or vectorized.
+        :param returnType: the return type of the registered UDF.
+        :return: a wrapped/native :class:`UserDefinedFunction`
 
         >>> strlen = spark.catalog.registerFunction("stringLengthString", len)
         >>> spark.sql("SELECT stringLengthString('test')").collect()
@@ -255,11 +260,56 @@ class Catalog(object):
         >>> _ = spark.udf.register("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
+
+        >>> from pyspark.sql.types import IntegerType
+        >>> from pyspark.sql.functions import udf
+        >>> slen = udf(lambda s: len(s), IntegerType())
+        >>> _ = spark.udf.register("slen", slen)
+        >>> spark.sql("SELECT slen('test')").collect()
+        [Row(slen(test)=4)]
+
+        >>> import random
+        >>> from pyspark.sql.functions import udf
+        >>> from pyspark.sql.types import IntegerType
+        >>> random_udf = udf(lambda: random.randint(0, 100), IntegerType()).asNondeterministic()
+        >>> new_random_udf = spark.catalog.registerFunction("random_udf", random_udf)
+        >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
+        [Row(random_udf()=82)]
+        >>> spark.range(1).select(new_random_udf()).collect()  # doctest: +SKIP
+        [Row(<lambda>()=26)]
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> @pandas_udf("integer", PandasUDFType.SCALAR)  # doctest: +SKIP
+        ... def add_one(x):
+        ...     return x + 1
+        ...
+        >>> _ = spark.udf.register("add_one", add_one)  # doctest: +SKIP
+        >>> spark.sql("SELECT add_one(id) FROM range(3)").collect()  # doctest: +SKIP
+        [Row(add_one(id)=1), Row(add_one(id)=2), Row(add_one(id)=3)]
         """
-        udf = UserDefinedFunction(f, returnType=returnType, name=name,
-                                  evalType=PythonEvalType.SQL_BATCHED_UDF)
-        self._jsparkSession.udf().registerPython(name, udf._judf)
-        return udf._wrapped()
+
+        # This is to check whether the input function is a wrapped/native UserDefinedFunction
+        if hasattr(f, 'asNondeterministic'):
+            if returnType is not None:
+                raise TypeError(
+                    "Invalid returnType: None is expected when f is a UserDefinedFunction, "
+                    "but got %s." % returnType)
+            if f.evalType not in [PythonEvalType.SQL_BATCHED_UDF,
+                                  PythonEvalType.SQL_PANDAS_SCALAR_UDF]:
+                raise ValueError(
+                    "Invalid f: f must be either SQL_BATCHED_UDF or SQL_PANDAS_SCALAR_UDF")
+            register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
+                                               evalType=f.evalType,
+                                               deterministic=f.deterministic)
+            return_udf = f
+        else:
+            if returnType is None:
+                returnType = StringType()
+            register_udf = UserDefinedFunction(f, returnType=returnType, name=name,
+                                               evalType=PythonEvalType.SQL_BATCHED_UDF)
+            return_udf = register_udf._wrapped()
+        self._jsparkSession.udf().registerPython(name, register_udf._judf)
+        return return_udf
 
     @since(2.0)
     def isCached(self, tableName):

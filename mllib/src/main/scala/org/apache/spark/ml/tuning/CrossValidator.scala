@@ -94,7 +94,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * Set the mamixum level of parallelism to evaluate models in parallel.
+   * Set the maximum level of parallelism to evaluate models in parallel.
    * Default is 1 for serial evaluation
    *
    * @group expertSetParam
@@ -160,8 +160,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
         } (executionContext)
       }
 
-      // Wait for metrics to be calculated before unpersisting validation dataset
+      // Wait for metrics to be calculated
       val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+
+      // Unpersist training & validation set once all metrics have been produced
       trainingDataset.unpersist()
       validationDataset.unpersist()
       foldMetrics
